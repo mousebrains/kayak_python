@@ -1,0 +1,12 @@
+<h4>
+<script>
+document.write('<a href="' + document.referrer + '">Back,</a> ');
+</script>
+<a href="http://www.wkcc.org">
+Willamette Kayak and Canoe Club Home,
+</a>
+for
+<a href="/">other states,</a>
+or for additional information please visit my
+<a href="/kayak.html">kayaking page.</a>
+</h4>

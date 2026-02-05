@@ -1,0 +1,7 @@
+DirectoryIndex cgi/display
+
+ErrorDocument 400 /errors/badRequest.html
+ErrorDocument 401 /errors/unauthorized.html
+ErrorDocument 403 /errors/forbidden.html
+ErrorDocument 404 /errors/notFound.html
+ErrorDocument 500 /errors/internalServerError.html

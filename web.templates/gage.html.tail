@@ -1,0 +1,43 @@
+<dl>
+<dd><span style="color:silver">&uarr;&darr;</span>Changing between 0.5% and 1.5% per hour</dd>
+<dd><span style="color:lime">&uarr;&darr;</span>Changing between 1.5% and 2.5% per hour</dd>
+<dd><span style="color:green">&uarr;&darr;</span>Changing between 2.5% and 3.5% per hour</dd>
+<dd><span style="color:teal">&uarr;&darr;</span>Changing between 3.5% and 4.5% per hour</dd>
+<dd><span style="color:navy">&uarr;&darr;</span>Changing between 4.5% and 5.5% per hour</dd>
+<dd><span style="color:blue">&uarr;&darr;</span>Changing between 5.5% and 6.5% per hour</dd>
+<dd><span style="color:aqua">&uarr;&darr;</span>Changing between 6.5% and 7.5% per hour</dd>
+<dd><span style="color:purple">&uarr;&darr;</span>Changing between 7.5% and 8.5% per hour</dd>
+<dd><span style="color:maroon">&uarr;&darr;</span>Changing between 8.5% and 9.5% per hour</dd>
+<dd><span style="color:red">&uarr;&darr;</span>Changing between 9.5% and 10.5% per hour</dd>
+<dd><span style="color:fuchsia">&uarr;&darr;</span>Changing more than 10.5% per hour</dd>
+</dl>
+
+<div id='Units'>
+<p>
+<b>CFS</b> stands for cubic feet per second. 
+This is an estimate of the volume of water flowing past the gauge.
+100 CFS is equivalent to 45,000 gallons per minute. A lot of water!
+</p>
+
+<p>
+<b>Feet</b> is the height of the water above a reference point at the gauge.
+There is no uniform standard for the reference point between gauges.
+A gauge's height should only be thought of in terms of that gauge, no others.
+</p>
+<p>
+<b>F</b> is the temperature in degrees Fahrenheit.
+</p>
+</div>
+
+<script>
+document.write('<h4><a href="' + document.referrer + '">Back</a></h4>');
+</script>
+<h4>
+<a href="http://www.wkcc.org">
+Willamette Kayak and Canoe Club Home,
+</a>
+for
+<a href="/">other states,</a>
+or for additional information please visit my
+<a href="/kayak.html">kayaking page.</a>
+</h4>
