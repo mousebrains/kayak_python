@@ -1,0 +1,12 @@
+#
+# Water Resources Division, Oregon
+#
+
+# usbr http://hydromet.pn.usbr.gov/~dataaccess/dfcgi_v2.exe/?conf=co_rivers
+# hydromet http://www.wrd.state.or.us/cgi-bin/current-hydromet.pl
+
+# crohms ftp://ftp.wrd.state.or.us/pub/crohms/CROHMSAM.FRI
+# crohms ftp://ftp.wrd.state.or.us/pub/crohms/CROHMSAM.MON
+# crohms ftp://ftp.wrd.state.or.us/pub/crohms/CROHMSAM.THU
+# crohms ftp://ftp.wrd.state.or.us/pub/crohms/CROHMSAM.TUE
+# crohms ftp://ftp.wrd.state.or.us/pub/crohms/CROHMSAM.WED

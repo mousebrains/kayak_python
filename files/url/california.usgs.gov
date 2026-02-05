@@ -1,0 +1,5 @@
+#
+# State of California USGS page
+#
+# usgs.rdb https://waterdata.usgs.gov/ca/nwis/current/?format=rdb
+usgs.rdb https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=ca&modifiedSince=PT24H&siteStatus=active&siteType=ST

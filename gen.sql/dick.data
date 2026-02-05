@@ -1,0 +1,28 @@
+drop table if exists levels_page.WAS1_rt;
+drop table if exists levels_page.WASW1_rt;
+create table levels_page.WASW1_rt (feet double, cfs double);
+
+replace into levels_page.WASW1_rt values
+(3.0,15),
+(3.5,50),
+(4.0,90),
+(4.5,180),
+(5.0,295),
+(5.5,450),
+(6.0,750),
+(6.5,1060),
+(7.0,1520),
+(7.5,1850),
+(8.0,2275),
+(8.5,3000),
+(9.0,3800),
+(10.0,5600),
+(11.0,7300),
+(12.0,9000),
+(13.0,11300),
+(14.0,14400),
+(16.0,20400),
+(18.0,29000)
+;
+
+select * from levels_page.WASW1_rt;

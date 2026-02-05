@@ -1,0 +1,109 @@
+#
+# Northwest River Forecast Center
+#
+# Here we have to generate the plot first, which we do nothing with,
+# then we can fetch the data!
+#
+# wiley creek
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WNFO3&pe=HG&dtype=b&numdays=2
+#
+# N.Umpqua at Glide
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=GLIO3&pe=HG&dtype=b&numdays=2
+#
+# Washougal
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WASW1&pe=HG&dtype=b&numdays=2
+#
+# Fall Creek
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=FALO3&pe=HG&dtype=b&numdays=2
+#
+# Willamette at Eugene
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=EUGO3&pe=HG&dtype=b&numdays=2
+#
+# NF Coquille near Myrtle Point
+#
+# nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MYNO3&pe=HG&dtype=b&numdays=2
+#
+# SF Coquille near Myrtle Point
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MYPO3&pe=HG&dtype=b&numdays=2
+#
+# Coquille near Coquille
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=COQO3&pe=HG&dtype=b&numdays=2
+#
+# Cow Creek near Glendale
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=CWMO3&pe=HG&dtype=b&numdays=2
+#
+# Cow Creek near Glendale
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=ECDO3&pe=HG&dtype=b&numdays=2
+#
+# Grande Ronde near Perry
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LGNO3&pe=HG&dtype=b&numdays=2
+#
+# Pudding at Aurora
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=AURO3&pe=HG&dtype=b&numdays=2
+#
+# Sprague near Beatty
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=BTYO3&pe=HG&dtype=b&numdays=2
+#
+# Umatilla at Pendleton
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=PDTO3&pe=HG&dtype=b&numdays=2
+#
+# N Umpqua Winchester Dam
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WINO3&pe=HG&dtype=b&numdays=2
+#
+# S Umpqua Tiller
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=TILO3&pe=HG&dtype=b&numdays=2
+#
+# S Umpqua Winston
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WSNO3&pe=HG&dtype=b&numdays=2
+#
+# S Umpqua Roseburge
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=RSBO3&pe=HG&dtype=b&numdays=2
+#
+# Coast Fork Willamette near Goshen
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=GOSO3&pe=HG&dtype=b&numdays=2
+#
+# Coast Fork Willamette near London
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LONO3&pe=HG&dtype=b&numdays=2
+#
+# Willamette near Corvallis
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=CORO3&pe=HG&dtype=b&numdays=2
+#
+# South Yamhill near Willamina
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WLAO3&pe=HG&dtype=b&numdays=2
+#
+# Nestucca near Beaver
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=BEAO3&pe=HG&dtype=b&numdays=2
+#
+# Blue River below Tidbits Creek
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=BRTO3&pe=HG&dtype=b&numdays=2
+#
+# McKenzie River above South Fork near Rainbow
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=CMRO3&pe=HG&dtype=b&numdays=2
+#
+# West Fork Hood near Dee
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WFHO3&pe=HG&dtype=b&numdays=2

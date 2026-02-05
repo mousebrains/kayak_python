@@ -1,0 +1,20 @@
+#
+# State of Washington pages
+#
+# Little Klickatat
+#
+# Gauge
+wa.gov https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/30C070/30C070_STG_FM.TXT
+# Flow
+wa.gov https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/30C070/30C070_DSG_FM.TXT
+# Temperature
+wa.gov https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/30C070/30C070_WTM_FM.TXT
+#
+# Wind
+#
+# Gauge
+wa.gov https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_STG_FM.TXT
+# Flow
+wa.gov https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_DSG_FM.TXT
+# Temperature
+wa.gov https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_WTM_FM.TXT

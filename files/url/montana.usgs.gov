@@ -1,0 +1,5 @@
+#
+# State of Montana USGS page
+#
+# usgs.rdb https://waterdata.usgs.gov/mt/nwis/current/?format=rdb
+usgs.rdb https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=mt&modifiedSince=PT24H&siteStatus=active&siteType=ST

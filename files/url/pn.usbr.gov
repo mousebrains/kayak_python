@@ -1,0 +1,137 @@
+#
+# Pacific Nortwest USBR
+#
+
+# back=#hours into past
+
+# Upper Snake, Idaho/Wyoming
+# FLGY Snake River near Flagg Ranch, WY
+# PCKY Pacific Creek at Moran, WY
+# MSEY Snake River at Moose, WY
+# JKSY Snake River below Flat Creek near Jackson, WY
+# ALPY Snake River above Reservoir near Alpine, WY
+# GREY Greys River above Reservoir near Alpine, WY
+# SALY Salt River above Reservoir near Etna, WY
+# PALI Snake River near Irwin, ID
+# HEII Snake River near Heisse, ID
+# DRYI Dry Bed near Ririe, ID
+# LORI Snake River at Lorenzo, ID
+# MNNI Snake River near Menan, ID
+# SHYI Snake River near Shelley, ID
+# SIFI Snake River near Idaho Falls, ID
+usbr https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=FLGY,PCKY,MSEY,JKSY,ALPY,GREY,SALY,PALI,DRYI,LORI,MNNI,SHYI,SIFI
+
+# Idaho
+
+# HENI Henrys Fork near Lake
+# ISLI Henrys Fork near Island Park
+# HFAI Henrys Fork near Ashton
+# CHEI Falls River near Chester
+# ANTI Henrys Fork at St Anthony
+# TEAI Teton River near St Anthony
+# REXI Henrys Fork near Rexburg
+# usbr https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=HENI,ISLI,HFAI,CHEI,ANTI,TEAI,REXI
+usbr https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=HENI,HFAI,CHEI,ANTI,REXI
+
+# SNAI Snake River at Blackfoot
+# AMFI Snake River at Neeley
+# MINI Snake River near Minidoka
+# MILI Snake River at Milner
+# MHPI Snake River at Milner Powerplant discharge
+# SKHI Snake River at King Hill
+usbr https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=SNAI,AMFI,MINI,MILI,MHPI,SKHI
+
+# LWOI Little Wood River above High Five Creek
+# WODI Little Wood River near Carey
+# usbr https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=LWOI,WODI
+usbr https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=LWOI
+
+# BRFI SF Boise River near Featherville
+# ANDI SF Boise River at Anderson Ranch Dam
+# BTSI Boise River near Twin Springs
+# MORI Mores Creek above Robie Creek
+# BIGI Boise River at Glenwood Bridge
+# BOMI Boise River near Middleton
+# PARI Boise River near Parma
+usbr https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=BRFI,ANDI,BTSI,MORI,BIGI,BOMI,PARI
+
+# PRLI SF Payette River at Lowman
+# DEDI Deadwood River below Deadwood Dam
+# MFPI MF Payette River at Crouch
+# PAYI NF Payette River at McCall
+# CSCI NF Payette River at Cascade
+# HRSI Payette River near Horseshoe Bend
+# PLEI Payette River near Letha
+# PRPI Payette River near Payette
+usbr https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=PRLI,DEDI,MVPI,PAYI,CSCI,HRSI,PLEI,PRPI
+
+# Lower Snake Oregon/Idaho
+
+# SWAI Snake River near Murphy, Idaho
+# SNYI Snake River at Nyssa, Oregon
+# WEII Snake River at Weiser, Idaho
+# HCDI Snake River at Hells Canyon Dam, Idaho
+usbr https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=SWAI,SNYI,WEII,HCDI
+
+# Oregon
+
+# ROMO Owhyee River near Rome
+usbr https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=ROMO
+
+# MADO Malheur River near Drewsey
+# WARO Malheur River below Warm Springs Reservoir near Riverside
+# SFMO SF Malheur River near Riverside
+# MABO NF Malheur River above Beulah Reservoir
+# BEUO NF Malheur River at Beulah
+# VALO Malheur River below Nevada Dame near Vale
+# MALO Malheur River at 36th Street bridge near Ontario
+usbr https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=MADO,WARO,SFMO,MABO,BEUO,VALO,MALO
+
+# PRHO Powder River at Hudspeth Lane near Sumpter
+# PWDO Powder River at Baker
+##  usbr https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=PRHO,PWDO
+
+# WCRO Wildhorse Creek at Pendleton
+# PDTO Umatilla River at Pendleton
+# MYKO Mckay Creek near Pilot Rock
+# MCKO Mckay Creek near Pendleton
+# BIRO Birch Creek near Rieth
+# YOKO Umatilla River at Yoakum
+# UMUO Umatilla River near Echo
+# UMDO Umatilla River at I84 near Stanfield
+# UMAO Umatilla River near Umatilla
+usbr https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=WCRO,PDTO,MYKO,MCKO,BIRO,YOKO,UMUO,UMDO,UMAO
+
+# CRAO Deschutes River below Crane Praire Reservoir
+# WICO Deschutes River below Wickiup Reservoir
+# LAPO Deschutes River near La Pine
+# BENO Deschutes River at Benham Falls
+usbr https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=CRAO,WICO,LAPO,BENO,DEBO
+
+# CRPO Crooked River above Prineville Reservoir
+# PRVO Crooked River near Prineville
+# MLCO Mill Creek near Prineville
+# ORCO Ochoco Creek above Reservoir near Prineville
+# OCHO Ochoco Creek below Ochoco Reservoir
+# CRSO Crooked River at Smith Rock State Park
+usbr https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=CRPO,PRVO,MLCO,OCRO,OCHO,CRSO
+
+# LEFO Tualatin River below Lee Falls near Cherry Grove
+# GSTO Tualatin River at Gaston
+# SCLO Scoggins Creek above Henry Hagg Lake
+# SCOO Scoggins Creek below Henry Hagg Lake
+# DLLO Tualatin River near Dilley
+usbr https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=LEFO,GSTO,SCLO,SCOO,DLLO
+
+# BASO Bear Creek below Ashland Creek
+# BCSO Beaver Creek and Beaver Siphon at Howard Prairie Canal
+# BCTO Bear Creek below Phoneix Diversion near Talent
+# EGSO Emigrant Creek above Green Springs powerplant
+# FSHO NF Little Butte Creek below Fish Lake
+# MFDO Bear Creek at Medford
+# SDCO Soad Creek at Howard Prairie delivery canal
+usbr https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=BASO,BCSO,BCTO,EGSO,FSHO,MFDO,SDCO
+
+# Washington
+# HGHM SF Flathead River near Columbia Falls at Hungry Horse
+usbr https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=HGHM

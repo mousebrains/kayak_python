@@ -1,0 +1,120 @@
+#
+# NOAA Pendleton
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=GIBO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=IMNO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=JHNO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MODO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MONO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SERO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=TRYO3&pe=HG&dtype=b&numdays=2
+#
+# NOAA Medford
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=AGNO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=APRO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=ARWO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=AZAO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=CHTO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=COGO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=EGLO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=EKTO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=ELKO3&pe=HG&dtype=b&numdays=2
+# nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=FTJC1&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=GLNO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=GRAO3&pe=HG&dtype=b&numdays=2
+# nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=HAPC1&pe=HG&dtype=b&numdays=2
+# nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=IRGC1&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=KRBO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MFDO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=POWO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=RDLO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=RYGO3&pe=HG&dtype=b&numdays=2
+# nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SBRC1&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SCRO3&pe=HG&dtype=b&numdays=2
+# nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SEIC1&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SURO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=TILO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WMSO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WNRO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WSNO3&pe=HG&dtype=b&numdays=2
+# nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=YREC1&pe=HG&dtype=b&numdays=2
+#
+# Portland NOAA
+#
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=ALBO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=BCKO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=BCLO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=BLUO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=BONO3&pe=HG&dtype=b&numdays=2
+# nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=BRBO3&pe=HG&dtype=b&numdays=2
+# nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=BURO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=CANO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=CASW1&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=CBAO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=CGRO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=COCO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=DLLO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=ESTO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=FNNO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=FRMO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=FRNO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=FSSO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=GASO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=HARO3&pe=HG&dtype=b&numdays=2
+# nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=HCRO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=HODO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=HSSW1&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=JASO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=JFFO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=KELW1&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LOCO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LOPW1&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LRWW1&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LSMO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MAYW1&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MCMO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MCZO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MEHO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MERW1&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MIWO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MKLO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MNRO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MPLO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MUDW1&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=NASW1&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=NEBO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=OAKO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=OCUO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=ORCO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=PHIO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=PRTO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=PUWO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=QCCO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SCLO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SFCO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SHNO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SILO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SKAW1&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SLMO3&pe=HG&dtype=b&numdays=2
+# nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SMCW1&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SNDO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SPRO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SSCO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SSFO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SUVO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SYCO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=TIDO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=TLMO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=TLYO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=TOTW1&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=TRAO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=TSFW1&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=UNDW1&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=VANW1&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=VENO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=VIDO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WAUO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WILW1&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WSLO3&pe=HG&dtype=b&numdays=2
+nwrfc.xml https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WTLO3&pe=HG&dtype=b&numdays=2

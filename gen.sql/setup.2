@@ -1,0 +1,23 @@
+#! /bin/bash
+#
+# Define users and passwords
+#
+# Pipe into mysql to actually do it
+
+user=tpw
+passwd=kayak
+
+cat << EOI
+delete ignore from mysql.user where user='$tpw';
+flush privileges;
+set password for 'root'@'localhost'=password('Oregon.1');
+set password for 'root'@'kayak.science.oregonstate.edu'=password('Oregon.1');
+EOI
+
+for db in Information Data Page; do
+  echo "drop database if exists $db;"
+  echo "create database $db;"
+  echo "grant all on $db.* to '$user'@'localhost' identified by '$passwd';"
+done
+
+echo "flush privileges;"

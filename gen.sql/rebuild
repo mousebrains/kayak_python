@@ -1,0 +1,21 @@
+#! /bin/bash
+#
+# Rebuild all my mysql databases
+
+user=levels
+password=Deschutes
+
+myPath=`dirname $0`
+
+doit () {
+  $myPath/$1 | tee $myPath/$1.output | mysql -u $user --password=$password
+}
+
+# doit setup
+doit mkParameters
+doit mkEdit
+doit mkDescription
+doit mkURLs
+doit mkBuilder 
+doit mkMaster
+doit mkFlows 

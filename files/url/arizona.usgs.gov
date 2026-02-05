@@ -1,0 +1,5 @@
+#
+# State of Arizona USGS page
+#
+# usgs.rdb https://waterdata.usgs.gov/az/nwis/current/?format=rdb
+usgs.rdb https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=az&modifiedSince=PT24H&siteStatus=active&siteType=ST

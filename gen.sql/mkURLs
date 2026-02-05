@@ -1,0 +1,39 @@
+#! /bin/bash
+#
+# build the URL/parser table in mysql
+#
+# pipe through mysql
+
+DB=levels_information
+TABLE=URLparse
+DIR=/home/tpw/kayaking/files/url
+GAWK=$0.gawk
+
+f() { 
+  echo "#"
+  echo "# $file"
+  echo "#"
+  case `basename $file` in
+    water.california) echo "# Skipped" ;;
+    water.oregon*) echo "# Skipped" ;;
+    *) gawk -f $0.gawk $1 ;;
+  esac
+}
+
+cat << EOI
+create database if not exists $DB;
+use $DB;
+drop table if exists $TABLE;
+create table $TABLE (
+  URL text not null comment 'URL to fetch information from',
+  parser text not null comment 'Type of parser to use',
+  hours text not null comment 'Hours allowed, empty means all the time',
+  inActive text comment 'Is this entry inactive, not null means inactive'
+  );
+EOI
+
+for file in $DIR/*; do
+  f $file
+done;
+
+echo "select * from $TABLE;"

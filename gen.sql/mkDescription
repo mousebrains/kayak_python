@@ -1,0 +1,70 @@
+#! /bin/bash
+#
+# Replace the description table in mysql
+#
+# Pipe into mysql to actually do it
+
+DB=levels_information
+TABLE=Description
+insert="insert into $TABLE values"
+
+cat << EOI
+
+create database if not exists $DB;
+use $DB;
+
+drop table if exists $TABLE;
+
+create table $TABLE
+ (sortKey int key comment 'How to sort the rows',
+  columnName text not null comment 'Column name in master table',
+  type text not null comment 'How to process this field',
+  prefix text not null comment 'Text to place before data contents',
+  suffix text not null comment 'Text to place after data contents',
+  info text comment 'Informational message')
+comment 'Information used to construct a description page';
+
+$insert (   0, 'hashValue',	'noop',	'',	'', 'Must be first');
+$insert (   1, 'display_name',	'noop',	'',	'', 'Must be second');
+$insert ( 100, 'Class',		'text',	'Class','<br />', null);
+$insert ( 200, 'Section',	'text',	'Section',	'<br />', null);
+$insert ( 300, 'State',		'text',	'State(s)',	'<br />', null);
+$insert ( 400, 'Drainage',	'text',	'Drainage',	'<br />', null);
+$insert ( 500, 'Region',	'text',	'Region',	'<br />', null);
+$insert ( 600, 'Gauge_Location','text',	'Gauge Location',	'<br />', null);
+$insert ( 700, 'StationNumber',	'text',	'Station #',	'<br />', null);
+$insert ( 701, 'usgs_id',	'text',	'USGS ID #',	'<br />', null);
+$insert ( 702, 'nwsli_id',	'text',	'NWS ID ',	'<br />', null);
+$insert ( 703, 'geos_id',	'text',	'GEOS ID ',	'<br />', null);
+$insert ( 800, 'Latitude',	'text',	'Latitude',	'', null);
+$insert ( 900, 'Longitude',	'text',	'Longitude',	'<br />', null);
+$insert (1000, 'Guide_Book',	'text',	'Guide Book',	'', null);
+$insert (1100, 'RunNumber',	'text',	'Run #',	'', null);
+$insert (1200, 'PageNumber',	'text',	'Page ',	'<br />', null);
+$insert (1300, 'Season',	'text',	'Season',	'<br />', null);
+$insert (1400, 'Length',	'text',	'Length',	' miles<br />', null);
+$insert (1500, 'Gradient',	'text',	'Gradient',	' feet/mile<br />', null);
+$insert (1600, 'Elevation_Lost','text',	'Elevation Lost',	'feet<br />', null);
+$insert (1700, 'Scenery',	'text',	'Scenery',	'<br />', null);
+$insert (1800, 'Features',	'text',	'Features',	'<br />', null);
+$insert (1900, 'Remoteness',	'text',	'Remoteness',	'<br />', null);
+$insert (2000, 'Nature',	'text',	'Character',	'<br />', null);
+$insert (2100, 'Difficulties',	'text',	'Difficulties',	'<br />', null);
+$insert (2200, 'Watershed_type','text',	'Watershed type',	'<br />', null);
+$insert (2300, 'Low_Flow',	'text',	'Low Flow',	' CFS<br />', null);
+$insert (2400, 'High_Flow',	'text',	'High Flow',	' CFS<br />', null);
+$insert (2500, 'Optimal_Flow',	'text',	'Optimal Flow',	' CFS<br />', null);
+$insert (2600, 'Bank_Full',	'text',	'Bank Full',	' CFS<br />', null);
+$insert (2700, 'Flood_Stage',	'text',	'Flood Stage',	' CFS<br />', null);
+$insert (2800, 'Merged_DBs',	'noop',	'',	'', null);
+$insert (2801, 'DB_Name',	'DB',	'View',	'<br />', 'Must be right after Merged_DBs');
+$insert (2900, 'Calc_time',	'noop',	'',	'', null);
+$insert (2901, 'Calc_expr',	'calc',	'Calculation',	'<br />', 'Must be right after Calc_time');
+$insert (3000, 'Calc_notes',	'ptxt',	'Calculation Notes',	'<br />', null);
+$insert (3100, 'CFS_To_Gauge_Data',	'URL',	'Rating table',	'<br />', null);
+$insert (3200, 'Description',	'text',	'Description',	'', null);
+$insert (3300, 'Notes',		'ptxt',	'Notes',	'', null);
+
+select * from $TABLE;
+
+EOI

@@ -1,0 +1,10 @@
+#
+# Reseviour outflow
+#
+# Green Peter
+#
+usace.outflow http://www.nwd-wc.usace.army.mil/ftppub/project_data/hourly/gpr_0daysback.txt -0,-1,-2,-3
+#
+# Hills Creek
+#
+usace.outflow http://www.nwd-wc.usace.army.mil/ftppub/project_data/hourly/hcr_0daysback.txt -0,-1,-2,-3

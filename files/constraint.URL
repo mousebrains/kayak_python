@@ -1,0 +1,19 @@
+array set constraints {
+  a.pattern {http://*.spk-wc.usace.army.mil*}
+  a.start 2/15/2001
+  a.end 8/22/2001
+  a.ignore 0
+
+  b.pattern {ftp://ftp.wrd.state.or.us/pub/crohms*}
+  b.ignore 1
+  b.hours {08}
+
+  c.pattern {http://cdec.*}
+  c.ignore 1
+  c.hours {06 14 18}
+
+  d.pattern {http://*.cbrfc.gov*}
+  d.start 2/15/2001
+  d.end 8/22/2001
+  d.ignore 0
+}

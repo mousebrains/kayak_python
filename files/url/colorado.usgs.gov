@@ -1,0 +1,5 @@
+#
+# State of Colorado USGS page
+#
+# usgs.rdb https://waterdata.usgs.gov/co/nwis/current/?format=rdb
+usgs.rdb https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=co&modifiedSince=PT24H&siteStatus=active&siteType=ST
