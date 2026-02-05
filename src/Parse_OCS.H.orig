@@ -1,0 +1,27 @@
+#ifndef INC_Parse_OCS_H_
+#define INC_Parse_OCS_H_
+
+#include <Parse.H>
+#include <map>
+
+class Curl;
+
+namespace Parsers {
+class OCS : public Parsers::Parse {
+private:
+  int mState;
+  time_t mTime;
+  std::string::size_type mColLocation;
+  std::string::size_type mColFlow;
+  std::string::size_type mColStage;
+  std::string::size_type mColChange;
+
+  std::string mName;
+ 
+  bool line(const std::string& l);
+public:
+  OCS(const Curl& curl, const bool qVerbose, const bool qDryRun, DataDB& db);
+};
+}
+
+#endif // INC_Parse_OCS_H_

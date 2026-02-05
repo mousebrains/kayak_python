@@ -1,0 +1,117 @@
+#include <Canvas.H>
+#include <Points.H>
+#include <iostream>
+
+Canvas::Canvas(const Properties& prop
+               const double width,
+               const double height)
+  : mProperties(prop),
+    mWidth(width),
+    mHeight(height)
+{
+  if (!mProperties.stroke())
+    mProperties.stroke("black");
+
+  if (!mProperties.fill())
+    mProperties.fill("black");
+
+  if (isnan(mProperties.strokeWidth()))
+    mProperties.strokeWidth(1);
+
+  if (!mProperties.background())
+    mProperties.background("white");
+
+  if (!mProperties.fontAnchor().empty())
+    mProperties.fontAnchor("middle");
+}
+
+bool 
+Canvas::point(const Point& pt, 
+              const Properties& prop)
+{
+  return line(pt, pt, prop);
+}
+
+bool 
+Canvas::polyline(const Points& pts, 
+                 const Properties& prop)
+{
+  if (pts.empty())
+    return true;
+
+  if (pts.size() == 1)
+    return point(*(pts.begin()), prop);
+
+  const bool pushed(maybePush(prop));
+   
+  const Properties p;
+  bool rc(true);
+  Points::const_iterator it(pts.begin());
+ 
+  for (Points::const_iterator jt = it; ++jt != pts.end(); it = jt)
+    if (!line(*it, *jt, p))
+	rc = false;
+
+  if (pushed)
+    pop();
+
+  return rc;
+}
+
+bool 
+Canvas::rectangle(const Point& pt0, 
+                  const Point& size, 
+                  const Properties& prop)
+{
+  const double dx(size.x());
+  const double dy(size.y());
+
+  const Point pt1(pt0.x(), pt0.y() + dy);
+  const Point pt2(pt1.x() + dx, pt1.y());
+  const Point pt3(pt0.x() + dx, pt0.y());
+
+  const Properties p;
+  const bool pushed(maybePush(prop));
+   
+  const bool rc(line(pt0, pt1, p) &&
+	        line(pt1, pt2, p) &&
+	        line(pt2, pt3, p) &&
+	        line(pt3, pt0, p));
+
+  if (pushed)
+    pop();
+
+  return rc;
+}
+
+bool
+Canvas::maybePush(const Properties& p)
+{
+  const Properties c(mProperties | p);
+  if (c == mProperties)
+    return false;
+
+  mStack.push_back(mProperties);
+  mProperties = c;
+
+  return true;
+}
+
+void
+Canvas::push(const Properties& p)
+{
+  mStack.push_back(mProperties);
+  mProperties |= p;
+}
+
+bool
+Canvas::pop()
+{
+  if (mStack.empty())
+    return false;
+
+  mProperties = *(mStack.rbegin());
+  mStack.pop_back();
+
+  return true;
+}
