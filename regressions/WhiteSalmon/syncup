@@ -1,0 +1,3 @@
+#! /bin/bash
+
+rsync -z4 --archive --verbose * tpw@www.wkcc.org:kayaking/regressions/WhiteSalmon
