@@ -29,7 +29,7 @@ dev = [
 ]
 
 [project.scripts]
-kayak = "kayak.cli.main:cli"
+levels = "kayak.cli.main:cli"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/kayak"]

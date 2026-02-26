@@ -4,9 +4,9 @@ import click
 
 
 @click.group()
-@click.version_option(version="0.1.0", prog_name="kayak")
+@click.version_option(version="0.1.0", prog_name="levels")
 def cli():
-    """Kayak - River level data aggregation from government agencies."""
+    """levels - River level data aggregation from government agencies."""
 
 
 # Import and register all subcommands
