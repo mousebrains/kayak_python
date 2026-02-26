@@ -1,0 +1,21 @@
+# ---------------------------------- WARNING ----------------------------------------
+# Provisional data subject to revision.
+#
+# USGS Real-Time Instantaneous Values
+# Data for the following site(s) are contained in this file
+#    USGS 14321000 NORTH UMPQUA RIVER NEAR GLIDE, OR
+# -----------------------------------------------------------------------------------
+#
+# Data provided for site 14321000
+#            TS   parameter   Description
+#         89658       00060   Discharge, cubic feet per second
+#         89660       00065   Gage height, feet
+#
+# Data-value qualification codes included in this output:
+#     P  Provisional data subject to revision.
+#
+agency_cd	site_no	datetime	tz_cd	01_00060	01_00060_cd	02_00065	02_00065_cd
+5s	15s	20d	6s	14n	10s	14n	10s
+USGS	14321000	2024-06-15 12:00	PDT	1520	P	3.45	P
+USGS	14321000	2024-06-15 12:15	PDT	1530	P	3.46	P
+USGS	14321000	2024-06-15 12:30	PDT	1525	P	3.46	P

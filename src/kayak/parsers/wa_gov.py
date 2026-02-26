@@ -1,0 +1,91 @@
+"""Washington State DOE parser (replaces Parse_Wa_Gov.C).
+
+Format: Space/tab delimited with "DATE TIME" header.
+States: 0=Wait for header, 1=Skip separator, 2+=Data rows
+
+Type detection from header: Water=TEMPERATURE, Stage=GAGE, else FLOW
+Quality field (last column) must be 0-200 for valid data.
+"""
+
+from __future__ import annotations
+
+import logging
+import math
+
+from kayak.db.models import DataType
+from kayak.parsers.base import BaseParser
+from kayak.parsers.registry import register
+from kayak.utils.conversions import celsius_to_fahrenheit, parse_datetime, safe_float
+
+logger = logging.getLogger(__name__)
+
+
+@register("wa.gov")
+class WaGovParser(BaseParser):
+    name = "wa.gov"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._state = 0
+        self._station = ""
+        self._data_type = DataType.FLOW
+
+    def parse_line(self, line: str) -> bool:
+        if not line.strip():
+            return True
+
+        parts = line.split()
+        if len(parts) < 2:
+            return True
+
+        if self._state == 0:
+            if parts[0] == "DATE" and parts[1] == "TIME":
+                self._state = 1
+                self._data_type = DataType.FLOW
+                if len(parts) >= 3:
+                    type_hint = parts[2].lower()
+                    if type_hint.startswith("water"):
+                        self._data_type = DataType.TEMPERATURE
+                    elif type_hint.startswith("stage"):
+                        self._data_type = DataType.GAGE
+            else:
+                # Look for station name (format: STATIONID--description)
+                if "--" in parts[0]:
+                    self._station = parts[0].split("--")[0]
+            return True
+
+        if self._state == 1:
+            if parts[0].startswith("---"):
+                self._state = 2
+            return True
+
+        # State 2+: Data rows
+        if parts[0] == "Quality":
+            self._state = 0
+            return True
+
+        if not self._station or len(parts) <= 3:
+            return True
+
+        if "No Data" in line:
+            return True
+
+        # Last column is quality
+        quality = safe_float(parts[-1])
+        if quality is None or quality <= 0 or quality >= 200:
+            return True
+
+        time_str = parts[0] + " " + parts[1]
+        when = parse_datetime(time_str)
+        if when is None:
+            return True
+
+        val = safe_float(parts[2])
+        if val is None or not math.isfinite(val):
+            return True
+
+        if self._data_type == DataType.TEMPERATURE:
+            val = celsius_to_fahrenheit(val)
+
+        self.dump_to_db(self._station, self._data_type, when, val)
+        return True
