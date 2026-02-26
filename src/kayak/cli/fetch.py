@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from pathlib import Path
 
 import click
 
@@ -37,6 +38,8 @@ def _hour_allowed(hours_spec: str) -> bool:
 @click.command("fetch")
 @click.option("-d", "--dry-run", is_flag=True, help="Do not store data")
 @click.option("-f", "--fetch-only", is_flag=True, help="Fetch but do not parse")
+@click.option("-I", "--input-dir", type=click.Path(exists=True),
+              help="Read previously saved files instead of fetching from network")
 @click.option("-i", "--ignore-constraints", is_flag=True, help="Ignore hour constraints")
 @click.option("-n", "--show-name", is_flag=True, help="Show URL being fetched")
 @click.option("-o", "--output-dir", type=click.Path(), help="Save fetched data to directory")
@@ -47,13 +50,11 @@ def _hour_allowed(hours_spec: str) -> bool:
 @click.option("-U", "--single-url", default=None, help="Fetch a single URL")
 @click.option("-v", "--verbose", is_flag=True, help="Verbose output")
 def fetch_cmd(
-    dry_run, fetch_only, ignore_constraints, show_name,
+    dry_run, fetch_only, input_dir, ignore_constraints, show_name,
     output_dir, url_prefix, parser_filter, parser_type,
     url_filter, single_url, verbose,
 ):
     """Fetch data from remote agencies, parse, and store in database."""
-    from kayak.utils.http_client import fetch
-
     if verbose:
         logging.basicConfig(level=logging.DEBUG)
     else:
@@ -64,9 +65,12 @@ def fetch_cmd(
     if dry_run:
         click.echo("Dry run mode — no data will be stored")
 
+    if input_dir:
+        click.echo(f"Reading from saved files in {input_dir}")
+
     if single_url and parser_type:
         _fetch_single(single_url, parser_type, url_prefix, output_dir,
-                       verbose, dry_run, fetch_only)
+                       input_dir, verbose, dry_run, fetch_only)
         return
 
     # Load sources from YAML config
@@ -78,7 +82,7 @@ def fetch_cmd(
     if url_filter:
         yaml_sources = [s for s in yaml_sources if url_filter in s["url"]]
 
-    click.echo(f"Found {len(yaml_sources)} URL sources to fetch")
+    click.echo(f"Found {len(yaml_sources)} URL sources to process")
 
     session = get_session()
     try:
@@ -93,24 +97,14 @@ def fetch_cmd(
             parser_name = parser_type or src_def["parser"]
 
             if show_name or verbose:
-                click.echo(f"Fetching {url} parser={parser_name}")
+                click.echo(f"Processing {url} parser={parser_name}")
 
             try:
-                result = fetch(url)
-                if not result.ok:
-                    click.echo(f"  Error: {result.error}", err=True)
+                text_content = _get_content(
+                    url, src_def["url"], input_dir, output_dir, verbose
+                )
+                if text_content is None:
                     continue
-
-                if result.status_code >= 400:
-                    click.echo(
-                        f"  HTTP {result.status_code} for {url}", err=True
-                    )
-                    continue
-
-                if output_dir:
-                    from pathlib import Path
-                    out_path = str(Path(output_dir) / src_def["url"].lstrip("/"))
-                    result.write_file(out_path)
 
                 if not fetch_only:
                     parser_cls = get_parser_class(parser_name)
@@ -130,9 +124,9 @@ def fetch_cmd(
                         source_id=fetch_url.id if fetch_url else None,
                         verbose=verbose, dry_run=dry_run,
                     )
-                    count = parser.parse(result.text)
+                    count = parser.parse(text_content)
 
-                    if fetch_url and not dry_run:
+                    if fetch_url and not dry_run and not input_dir:
                         fetch_url.last_fetched_at = datetime.utcnow()
 
                     if verbose:
@@ -152,28 +146,49 @@ def fetch_cmd(
         session.close()
 
 
+def _get_content(url, raw_url, input_dir, output_dir, verbose):
+    """Get text content either from a saved file or by fetching the URL.
+
+    Returns the text content, or None if the content could not be obtained.
+    """
+    if input_dir:
+        file_path = Path(input_dir) / raw_url.lstrip("/")
+        if not file_path.exists():
+            if verbose:
+                click.echo(f"  No saved file: {file_path}", err=True)
+            return None
+        if verbose:
+            click.echo(f"  Reading {file_path}")
+        return file_path.read_text(encoding="utf-8", errors="replace")
+
+    from kayak.utils.http_client import fetch
+
+    result = fetch(url)
+    if not result.ok:
+        click.echo(f"  Error: {result.error}", err=True)
+        return None
+
+    if result.status_code >= 400:
+        click.echo(f"  HTTP {result.status_code} for {url}", err=True)
+        return None
+
+    if output_dir:
+        out_path = Path(output_dir) / raw_url.lstrip("/")
+        result.write_file(str(out_path))
+
+    return result.text
+
+
 def _fetch_single(
-    url, parser_name, url_prefix, output_dir,
+    url, parser_name, url_prefix, output_dir, input_dir,
     verbose, dry_run, fetch_only,
 ):
     """Fetch and parse a single URL (the -U -t mode)."""
-    from kayak.utils.http_client import fetch
-
     full_url = url_prefix + url
 
-    result = fetch(full_url)
-    if not result.ok:
-        click.echo(f"Error: {result.error}", err=True)
+    text_content = _get_content(full_url, url, input_dir, output_dir, verbose)
+    if text_content is None:
         return
-
-    if result.status_code >= 400:
-        click.echo(f"HTTP {result.status_code} for {full_url}", err=True)
-        return
-
-    if output_dir:
-        from pathlib import Path
-        out_path = str(Path(output_dir) / url.lstrip("/"))
-        result.write_file(out_path)
 
     if not fetch_only:
         parser_cls = get_parser_class(parser_name)
@@ -187,7 +202,7 @@ def _fetch_single(
                 url=full_url, session=session,
                 verbose=verbose, dry_run=dry_run,
             )
-            count = parser.parse(result.text)
+            count = parser.parse(text_content)
             click.echo(f"{count} database updates")
             if not dry_run:
                 session.commit()
