@@ -1,48 +1,53 @@
-"""SQLAlchemy ORM models.
+"""SQLAlchemy 2.x ORM models for the wkcclevels database.
 
-Consolidates the three C++ databases (levels_information, levels_data, levels_page)
-into a single schema suitable for both SQLite and MySQL.
-
-Key design change: Instead of dynamically creating per-station tables
-(flow_X, gage_X, etc.), we use a single ``measurements`` table with a
-composite index on (station, data_type, time).
+Normalized schema with 18 tables (16 from production + Page/PageAction).
+Replaces the flat Master/MergedMaster/Correction schema with proper
+Section/Gauge/Source relationships.
 """
 
 from __future__ import annotations
 
 import enum
 from datetime import datetime
+from decimal import Decimal
+from typing import Optional
 
 from sqlalchemy import (
-    Column,
-    DateTime,
-    Enum,
-    Float,
+    CheckConstraint,
+    ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
-    UniqueConstraint,
     func,
+    text,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-
-
-class Base(DeclarativeBase):
-    pass
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    mapped_column,
+    relationship,
+)
 
 
 # ---------------------------------------------------------------------------
-# Enums
+# ENUMs
 # ---------------------------------------------------------------------------
 
 class DataType(str, enum.Enum):
     """Measurement types (replaces DataDB::TYPE)."""
-    FLOW = "flow"
-    INFLOW = "inflow"
-    OUTFLOW = "outflow"
-    GAGE = "gage"
-    TEMPERATURE = "temperature"
+    gauge = "gauge"
+    flow = "flow"
+    inflow = "inflow"
+    temperature = "temperature"
+
+
+class FlowLevel(str, enum.Enum):
+    """Flow level classifications for section_level."""
+    low = "low"
+    okay = "okay"
+    high = "high"
 
 
 class PageAction(str, enum.Enum):
@@ -57,331 +62,398 @@ class PageAction(str, enum.Enum):
 
 
 # ---------------------------------------------------------------------------
-# levels_information tables
+# Base
 # ---------------------------------------------------------------------------
 
-class Master(Base):
-    """River/section master metadata (replaces Master table in levels_information)."""
-    __tablename__ = "master"
-
-    hash_value: Mapped[str] = mapped_column(String(8), primary_key=True)
-    approved: Mapped[str | None] = mapped_column(Text)
-    random_key: Mapped[str | None] = mapped_column(Text)
-    display_name: Mapped[str | None] = mapped_column(Text)
-    gauge_location: Mapped[str | None] = mapped_column(Text)
-    sort_key: Mapped[str | None] = mapped_column(Text)
-    state: Mapped[str | None] = mapped_column(Text)
-    section: Mapped[str | None] = mapped_column(Text)
-    drainage: Mapped[str | None] = mapped_column(Text)
-    region: Mapped[str | None] = mapped_column(Text)
-    river_name: Mapped[str | None] = mapped_column(Text)
-    river_class: Mapped[str | None] = mapped_column("class", Text)
-    class_flow: Mapped[str | None] = mapped_column(Text)
-    length: Mapped[str | None] = mapped_column(Text)
-    gradient: Mapped[str | None] = mapped_column(Text)
-    elevation_lost: Mapped[str | None] = mapped_column(Text)
-    elevation: Mapped[str | None] = mapped_column(Text)
-    season: Mapped[str | None] = mapped_column(Text)
-    scenery: Mapped[str | None] = mapped_column(Text)
-    features: Mapped[str | None] = mapped_column(Text)
-    remoteness: Mapped[str | None] = mapped_column(Text)
-    character: Mapped[str | None] = mapped_column("nature", Text)
-    difficulties: Mapped[str | None] = mapped_column(Text)
-    watershed_type: Mapped[str | None] = mapped_column(Text)
-    low_flow: Mapped[str | None] = mapped_column(Text)
-    high_flow: Mapped[str | None] = mapped_column(Text)
-    optimal_flow: Mapped[str | None] = mapped_column(Text)
-    bank_full: Mapped[str | None] = mapped_column(Text)
-    flood_stage: Mapped[str | None] = mapped_column(Text)
-    latitude: Mapped[str | None] = mapped_column(Text)
-    longitude: Mapped[str | None] = mapped_column(Text)
-    guide_book: Mapped[str | None] = mapped_column(Text)
-    run_number: Mapped[str | None] = mapped_column("runnumber", Text)
-    page_number: Mapped[str | None] = mapped_column("pagenumber", Text)
-    station_number: Mapped[str | None] = mapped_column("stationnumber", Text)
-    usgs_id: Mapped[str | None] = mapped_column(Text)
-    nwsli_id: Mapped[str | None] = mapped_column(Text)
-    cbtt_id: Mapped[str | None] = mapped_column(Text)
-    nws_id: Mapped[str | None] = mapped_column(Text)
-    geos_id: Mapped[str | None] = mapped_column(Text)
-    snotel_id: Mapped[str | None] = mapped_column(Text)
-    db_name: Mapped[str | None] = mapped_column(Text)
-    merged_dbs: Mapped[str | None] = mapped_column(Text)
-    calc_type: Mapped[str | None] = mapped_column(Text)
-    calc_expr: Mapped[str | None] = mapped_column(Text)
-    calc_time: Mapped[str | None] = mapped_column(Text)
-    calc_notes: Mapped[str | None] = mapped_column(Text)
-    cfs_to_gauge_converter: Mapped[str | None] = mapped_column(Text)
-    cfs_to_gauge_data: Mapped[str | None] = mapped_column(Text)
-    description: Mapped[str | None] = mapped_column(Text)
-    notes: Mapped[str | None] = mapped_column(Text)
-    map_name: Mapped[str | None] = mapped_column(Text)
-    data_source: Mapped[str | None] = mapped_column(Text)
-    db_source: Mapped[str | None] = mapped_column(Text)
-    source_name: Mapped[str | None] = mapped_column(Text)
-    drainage_area: Mapped[str | None] = mapped_column(Text)
-    no_show: Mapped[str | None] = mapped_column(Text)
-    date: Mapped[datetime | None] = mapped_column(DateTime, default=func.now())
-    user_name: Mapped[str | None] = mapped_column("username", Text)
-    email: Mapped[str | None] = mapped_column(Text)
-    name: Mapped[str | None] = mapped_column(Text)
-
-
-class Correction(Base):
-    """User-submitted corrections (replaces Corrections table)."""
-    __tablename__ = "corrections"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    hash_value: Mapped[str] = mapped_column(String(8), index=True)
-    approved: Mapped[str | None] = mapped_column(Text)
-    random_key: Mapped[str | None] = mapped_column(Text)
-    display_name: Mapped[str | None] = mapped_column(Text)
-    gauge_location: Mapped[str | None] = mapped_column(Text)
-    sort_key: Mapped[str | None] = mapped_column(Text)
-    state: Mapped[str | None] = mapped_column(Text)
-    section: Mapped[str | None] = mapped_column(Text)
-    drainage: Mapped[str | None] = mapped_column(Text)
-    region: Mapped[str | None] = mapped_column(Text)
-    river_name: Mapped[str | None] = mapped_column(Text)
-    river_class: Mapped[str | None] = mapped_column("class", Text)
-    class_flow: Mapped[str | None] = mapped_column(Text)
-    length: Mapped[str | None] = mapped_column(Text)
-    gradient: Mapped[str | None] = mapped_column(Text)
-    elevation_lost: Mapped[str | None] = mapped_column(Text)
-    elevation: Mapped[str | None] = mapped_column(Text)
-    season: Mapped[str | None] = mapped_column(Text)
-    scenery: Mapped[str | None] = mapped_column(Text)
-    features: Mapped[str | None] = mapped_column(Text)
-    remoteness: Mapped[str | None] = mapped_column(Text)
-    character: Mapped[str | None] = mapped_column("nature", Text)
-    difficulties: Mapped[str | None] = mapped_column(Text)
-    watershed_type: Mapped[str | None] = mapped_column(Text)
-    low_flow: Mapped[str | None] = mapped_column(Text)
-    high_flow: Mapped[str | None] = mapped_column(Text)
-    optimal_flow: Mapped[str | None] = mapped_column(Text)
-    bank_full: Mapped[str | None] = mapped_column(Text)
-    flood_stage: Mapped[str | None] = mapped_column(Text)
-    latitude: Mapped[str | None] = mapped_column(Text)
-    longitude: Mapped[str | None] = mapped_column(Text)
-    guide_book: Mapped[str | None] = mapped_column(Text)
-    run_number: Mapped[str | None] = mapped_column("runnumber", Text)
-    page_number: Mapped[str | None] = mapped_column("pagenumber", Text)
-    station_number: Mapped[str | None] = mapped_column("stationnumber", Text)
-    usgs_id: Mapped[str | None] = mapped_column(Text)
-    nwsli_id: Mapped[str | None] = mapped_column(Text)
-    cbtt_id: Mapped[str | None] = mapped_column(Text)
-    nws_id: Mapped[str | None] = mapped_column(Text)
-    geos_id: Mapped[str | None] = mapped_column(Text)
-    snotel_id: Mapped[str | None] = mapped_column(Text)
-    db_name: Mapped[str | None] = mapped_column(Text)
-    merged_dbs: Mapped[str | None] = mapped_column(Text)
-    calc_type: Mapped[str | None] = mapped_column(Text)
-    calc_expr: Mapped[str | None] = mapped_column(Text)
-    calc_time: Mapped[str | None] = mapped_column(Text)
-    calc_notes: Mapped[str | None] = mapped_column(Text)
-    cfs_to_gauge_converter: Mapped[str | None] = mapped_column(Text)
-    cfs_to_gauge_data: Mapped[str | None] = mapped_column(Text)
-    description: Mapped[str | None] = mapped_column(Text)
-    notes: Mapped[str | None] = mapped_column(Text)
-    map_name: Mapped[str | None] = mapped_column(Text)
-    data_source: Mapped[str | None] = mapped_column(Text)
-    db_source: Mapped[str | None] = mapped_column(Text)
-    source_name: Mapped[str | None] = mapped_column(Text)
-    drainage_area: Mapped[str | None] = mapped_column(Text)
-    no_show: Mapped[str | None] = mapped_column(Text)
-    date: Mapped[datetime | None] = mapped_column(DateTime, default=func.now())
-    user_name: Mapped[str | None] = mapped_column("username", Text)
-    email: Mapped[str | None] = mapped_column(Text)
-    name: Mapped[str | None] = mapped_column(Text)
-
-
-class MergedMaster(Base):
-    """Master + approved corrections (replaces MergedMaster table)."""
-    __tablename__ = "merged_master"
-
-    hash_value: Mapped[str] = mapped_column(String(8), primary_key=True)
-    approved: Mapped[str | None] = mapped_column(Text)
-    random_key: Mapped[str | None] = mapped_column(Text)
-    display_name: Mapped[str | None] = mapped_column(Text)
-    gauge_location: Mapped[str | None] = mapped_column(Text)
-    sort_key: Mapped[str | None] = mapped_column(Text)
-    state: Mapped[str | None] = mapped_column(Text)
-    section: Mapped[str | None] = mapped_column(Text)
-    drainage: Mapped[str | None] = mapped_column(Text)
-    region: Mapped[str | None] = mapped_column(Text)
-    river_name: Mapped[str | None] = mapped_column(Text)
-    river_class: Mapped[str | None] = mapped_column("class", Text)
-    class_flow: Mapped[str | None] = mapped_column(Text)
-    length: Mapped[str | None] = mapped_column(Text)
-    gradient: Mapped[str | None] = mapped_column(Text)
-    elevation_lost: Mapped[str | None] = mapped_column(Text)
-    elevation: Mapped[str | None] = mapped_column(Text)
-    season: Mapped[str | None] = mapped_column(Text)
-    scenery: Mapped[str | None] = mapped_column(Text)
-    features: Mapped[str | None] = mapped_column(Text)
-    remoteness: Mapped[str | None] = mapped_column(Text)
-    character: Mapped[str | None] = mapped_column("nature", Text)
-    difficulties: Mapped[str | None] = mapped_column(Text)
-    watershed_type: Mapped[str | None] = mapped_column(Text)
-    low_flow: Mapped[str | None] = mapped_column(Text)
-    high_flow: Mapped[str | None] = mapped_column(Text)
-    optimal_flow: Mapped[str | None] = mapped_column(Text)
-    bank_full: Mapped[str | None] = mapped_column(Text)
-    flood_stage: Mapped[str | None] = mapped_column(Text)
-    latitude: Mapped[str | None] = mapped_column(Text)
-    longitude: Mapped[str | None] = mapped_column(Text)
-    guide_book: Mapped[str | None] = mapped_column(Text)
-    run_number: Mapped[str | None] = mapped_column("runnumber", Text)
-    page_number: Mapped[str | None] = mapped_column("pagenumber", Text)
-    station_number: Mapped[str | None] = mapped_column("stationnumber", Text)
-    usgs_id: Mapped[str | None] = mapped_column(Text)
-    nwsli_id: Mapped[str | None] = mapped_column(Text)
-    cbtt_id: Mapped[str | None] = mapped_column(Text)
-    nws_id: Mapped[str | None] = mapped_column(Text)
-    geos_id: Mapped[str | None] = mapped_column(Text)
-    snotel_id: Mapped[str | None] = mapped_column(Text)
-    db_name: Mapped[str | None] = mapped_column(Text)
-    merged_dbs: Mapped[str | None] = mapped_column(Text)
-    calc_type: Mapped[str | None] = mapped_column(Text)
-    calc_expr: Mapped[str | None] = mapped_column(Text)
-    calc_time: Mapped[str | None] = mapped_column(Text)
-    calc_notes: Mapped[str | None] = mapped_column(Text)
-    cfs_to_gauge_converter: Mapped[str | None] = mapped_column(Text)
-    cfs_to_gauge_data: Mapped[str | None] = mapped_column(Text)
-    description: Mapped[str | None] = mapped_column(Text)
-    notes: Mapped[str | None] = mapped_column(Text)
-    map_name: Mapped[str | None] = mapped_column(Text)
-    data_source: Mapped[str | None] = mapped_column(Text)
-    db_source: Mapped[str | None] = mapped_column(Text)
-    source_name: Mapped[str | None] = mapped_column(Text)
-    drainage_area: Mapped[str | None] = mapped_column(Text)
-    no_show: Mapped[str | None] = mapped_column(Text)
-    date: Mapped[datetime | None] = mapped_column(DateTime, default=func.now())
-    user_name: Mapped[str | None] = mapped_column("username", Text)
-    email: Mapped[str | None] = mapped_column(Text)
-    name: Mapped[str | None] = mapped_column(Text)
+class Base(DeclarativeBase):
+    pass
 
 
 # ---------------------------------------------------------------------------
-# levels_information supporting tables
+# gauge
 # ---------------------------------------------------------------------------
 
-class Parameter(Base):
-    """System configuration key-value pairs (replaces Parameters table)."""
-    __tablename__ = "parameters"
+class Gauge(Base):
+    __tablename__ = "gauge"
 
-    ident: Mapped[str] = mapped_column(String(128), primary_key=True)
-    value: Mapped[str | None] = mapped_column(Text)
-
-
-class URLParse(Base):
-    """Data source URLs and parser types (replaces URLparse table)."""
-    __tablename__ = "url_parse"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    url: Mapped[str] = mapped_column(Text, nullable=False)
-    parser: Mapped[str] = mapped_column(Text, nullable=False)
-    hours: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    inactive: Mapped[str | None] = mapped_column(Text)
-
-
-class DescriptionField(Base):
-    """Field display metadata for description pages (replaces Description table)."""
-    __tablename__ = "description_fields"
-
-    sort_key: Mapped[int] = mapped_column(Integer, primary_key=True)
-    column_name: Mapped[str] = mapped_column(Text, nullable=False)
-    type: Mapped[str] = mapped_column(Text, nullable=False)
-    prefix: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    suffix: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    info: Mapped[str | None] = mapped_column(Text)
-
-
-class BuilderColumn(Base):
-    """Output generation configuration (replaces Builder table)."""
-    __tablename__ = "builder_columns"
-
-    sort_key: Mapped[int] = mapped_column(Integer, primary_key=True)
-    use: Mapped[str] = mapped_column(Text, nullable=False)
-    type: Mapped[str] = mapped_column(Text, nullable=False)
-    field: Mapped[str] = mapped_column(Text, nullable=False)
-    length: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    name_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    name_html: Mapped[str] = mapped_column(Text, nullable=False, default="")
-
-
-# ---------------------------------------------------------------------------
-# levels_data tables (consolidated)
-# ---------------------------------------------------------------------------
-
-class Measurement(Base):
-    """Time-series measurement data.
-
-    Replaces the C++ pattern of dynamically creating per-station tables
-    (flow_X, gage_X, etc.) with a single indexed table.
-    """
-    __tablename__ = "measurements"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    station: Mapped[str] = mapped_column(String(255), nullable=False)
-    data_type: Mapped[DataType] = mapped_column(Enum(DataType), nullable=False)
-    time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    value: Mapped[float] = mapped_column(Float, nullable=False)
-
-    __table_args__ = (
-        UniqueConstraint("station", "data_type", "time", name="uq_measurement"),
-        Index("ix_station_type_time", "station", "data_type", "time"),
-        Index("ix_station_type", "station", "data_type"),
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(256), unique=True, nullable=False)
+    bank_full: Mapped[Optional[float]] = mapped_column()
+    flood_stage: Mapped[Optional[float]] = mapped_column()
+    location: Mapped[Optional[str]] = mapped_column(Text)
+    latitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
+    longitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
+    station_id: Mapped[Optional[str]] = mapped_column(Text)
+    cbtt_id: Mapped[Optional[str]] = mapped_column(Text)
+    geos_id: Mapped[Optional[str]] = mapped_column(Text)
+    nws_id: Mapped[Optional[str]] = mapped_column(Text)
+    nwsli_id: Mapped[Optional[str]] = mapped_column(Text)
+    snotel_id: Mapped[Optional[str]] = mapped_column(Text)
+    usgs_id: Mapped[Optional[str]] = mapped_column(String(32))
+    rating_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("rating.id", ondelete="SET NULL")
     )
 
-
-class Latest(Base):
-    """Latest measurement per station/type (replaces Latest table in levels_data)."""
-    __tablename__ = "latest"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    station: Mapped[str] = mapped_column(String(255), nullable=False)
-    data_type: Mapped[DataType] = mapped_column(Enum(DataType), nullable=False)
-    time: Mapped[datetime | None] = mapped_column(DateTime)
-    value: Mapped[float | None] = mapped_column(Float)
-    prev_time: Mapped[datetime | None] = mapped_column(DateTime)
-    prev_value: Mapped[float | None] = mapped_column(Float)
-    delta: Mapped[float | None] = mapped_column(Float)
-
-    __table_args__ = (
-        UniqueConstraint("station", "data_type", name="uq_latest"),
+    # relationships
+    rating: Mapped[Optional["Rating"]] = relationship(back_populates="gauges")
+    sources: Mapped[list["Source"]] = relationship(
+        secondary="gauge_source", back_populates="gauges"
     )
-
-
-class URL2Name(Base):
-    """URL source tracking (replaces url2name table in levels_data)."""
-    __tablename__ = "url2name"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    time: Mapped[datetime] = mapped_column(DateTime, default=func.now())
-    url: Mapped[str] = mapped_column(Text, nullable=False)
-    name: Mapped[str] = mapped_column(Text, nullable=False)
-
-
-class RatingTable(Base):
-    """Rating table entries for gage height <-> flow conversion.
-
-    Replaces the dynamic {dbName}_rt tables in levels_page.
-    """
-    __tablename__ = "rating_tables"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    db_name: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
-    feet: Mapped[float] = mapped_column(Float, nullable=False)
-    cfs: Mapped[float] = mapped_column(Float, nullable=False)
+    sections: Mapped[list["Section"]] = relationship(back_populates="gauge")
 
     __table_args__ = (
-        UniqueConstraint("db_name", "feet", name="uq_rating"),
+        Index("ix_gauge_usgs_id", "usgs_id"),
     )
 
 
 # ---------------------------------------------------------------------------
-# levels_page tables
+# source
+# ---------------------------------------------------------------------------
+
+class Source(Base):
+    __tablename__ = "source"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    agency: Mapped[Optional[str]] = mapped_column(String(64))
+    fetch_url_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("fetch_url.id", ondelete="SET NULL")
+    )
+    calc_expression_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("calc_expression.id", ondelete="SET NULL")
+    )
+
+    # relationships
+    fetch_url: Mapped[Optional["FetchUrl"]] = relationship(back_populates="sources")
+    calc_expression: Mapped[Optional["CalcExpression"]] = relationship(
+        back_populates="sources"
+    )
+    gauges: Mapped[list["Gauge"]] = relationship(
+        secondary="gauge_source", back_populates="sources"
+    )
+    observations: Mapped[list["Observation"]] = relationship(back_populates="source")
+    latest_observations: Mapped[list["LatestObservation"]] = relationship(
+        back_populates="source"
+    )
+
+    __table_args__ = (
+        Index("ix_source_name", "name"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# gauge_source (M2M junction)
+# ---------------------------------------------------------------------------
+
+class GaugeSource(Base):
+    __tablename__ = "gauge_source"
+
+    gauge_id: Mapped[int] = mapped_column(
+        ForeignKey("gauge.id", ondelete="CASCADE"), primary_key=True
+    )
+    source_id: Mapped[int] = mapped_column(
+        ForeignKey("source.id", ondelete="CASCADE"), primary_key=True
+    )
+
+
+# ---------------------------------------------------------------------------
+# fetch_url
+# ---------------------------------------------------------------------------
+
+class FetchUrl(Base):
+    __tablename__ = "fetch_url"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    url: Mapped[str] = mapped_column(String(512), unique=True, nullable=False)
+    parser: Mapped[Optional[str]] = mapped_column(String(32))
+    hours: Mapped[Optional[str]] = mapped_column(String(128))
+    is_active: Mapped[bool] = mapped_column(default=False, server_default=text("0"))
+    last_fetched_at: Mapped[Optional[datetime]] = mapped_column()
+
+    # relationships
+    sources: Mapped[list["Source"]] = relationship(back_populates="fetch_url")
+
+    __table_args__ = (
+        Index("ix_fetch_url_is_active", "is_active"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# calc_expression
+# ---------------------------------------------------------------------------
+
+class CalcExpression(Base):
+    __tablename__ = "calc_expression"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    data_type: Mapped[DataType] = mapped_column(nullable=False)
+    expression: Mapped[str] = mapped_column(String(512), nullable=False)
+    time_expression: Mapped[Optional[str]] = mapped_column(Text)
+    note: Mapped[Optional[str]] = mapped_column(Text)
+
+    # relationships
+    sources: Mapped[list["Source"]] = relationship(back_populates="calc_expression")
+
+
+# ---------------------------------------------------------------------------
+# rating
+# ---------------------------------------------------------------------------
+
+class Rating(Base):
+    __tablename__ = "rating"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    url: Mapped[Optional[str]] = mapped_column(String(512))
+    parser: Mapped[Optional[str]] = mapped_column(String(32))
+
+    # relationships
+    gauges: Mapped[list["Gauge"]] = relationship(back_populates="rating")
+    data_points: Mapped[list["RatingData"]] = relationship(back_populates="rating")
+
+
+# ---------------------------------------------------------------------------
+# rating_data
+# ---------------------------------------------------------------------------
+
+class RatingData(Base):
+    __tablename__ = "rating_data"
+
+    rating_id: Mapped[int] = mapped_column(
+        ForeignKey("rating.id", ondelete="CASCADE"), primary_key=True
+    )
+    gauge_height_ft: Mapped[float] = mapped_column(primary_key=True)
+    flow_cfs: Mapped[float] = mapped_column(nullable=False)
+
+    # relationships
+    rating: Mapped["Rating"] = relationship(back_populates="data_points")
+
+
+# ---------------------------------------------------------------------------
+# observation
+# ---------------------------------------------------------------------------
+
+class Observation(Base):
+    __tablename__ = "observation"
+
+    source_id: Mapped[int] = mapped_column(
+        ForeignKey("source.id", ondelete="CASCADE"), primary_key=True
+    )
+    observed_at: Mapped[datetime] = mapped_column(primary_key=True)
+    data_type: Mapped[DataType] = mapped_column(primary_key=True)
+    value: Mapped[float] = mapped_column(nullable=False)
+
+    # relationships
+    source: Mapped["Source"] = relationship(back_populates="observations")
+
+
+# ---------------------------------------------------------------------------
+# latest_observation (cache table)
+# ---------------------------------------------------------------------------
+
+class LatestObservation(Base):
+    __tablename__ = "latest_observation"
+
+    source_id: Mapped[int] = mapped_column(
+        ForeignKey("source.id", ondelete="CASCADE"), primary_key=True
+    )
+    data_type: Mapped[DataType] = mapped_column(primary_key=True)
+    observed_at: Mapped[datetime] = mapped_column(nullable=False)
+    value: Mapped[float] = mapped_column(nullable=False)
+    prev_observed_at: Mapped[Optional[datetime]] = mapped_column()
+    prev_value: Mapped[Optional[float]] = mapped_column()
+    delta_per_hour: Mapped[Optional[float]] = mapped_column()
+
+    # relationships
+    source: Mapped["Source"] = relationship(back_populates="latest_observations")
+
+
+# ---------------------------------------------------------------------------
+# section
+# ---------------------------------------------------------------------------
+
+class Section(Base):
+    __tablename__ = "section"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    updated_at: Mapped[Optional[datetime]] = mapped_column()
+    gauge_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("gauge.id", ondelete="SET NULL")
+    )
+    name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    display_name: Mapped[Optional[str]] = mapped_column(Text)
+    sort_name: Mapped[Optional[str]] = mapped_column(String(256))
+    nature: Mapped[Optional[str]] = mapped_column(Text)
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    difficulties: Mapped[Optional[str]] = mapped_column(Text)
+    basin: Mapped[Optional[str]] = mapped_column(Text)
+    basin_area: Mapped[Optional[float]] = mapped_column()
+    elevation: Mapped[Optional[float]] = mapped_column()
+    elevation_lost: Mapped[Optional[float]] = mapped_column()
+    length: Mapped[Optional[float]] = mapped_column()
+    gradient: Mapped[Optional[float]] = mapped_column()
+    features: Mapped[Optional[str]] = mapped_column(Text)
+    latitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
+    longitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
+    latitude_start: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
+    longitude_start: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
+    latitude_end: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
+    longitude_end: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
+    map_name: Mapped[Optional[str]] = mapped_column(Text)
+    no_show: Mapped[bool] = mapped_column(default=False, server_default=text("0"))
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+    optimal_flow: Mapped[Optional[float]] = mapped_column()
+    region: Mapped[Optional[str]] = mapped_column(Text)
+    remoteness: Mapped[Optional[str]] = mapped_column(Text)
+    scenery: Mapped[Optional[str]] = mapped_column(Text)
+    season: Mapped[Optional[str]] = mapped_column(Text)
+    watershed_type: Mapped[Optional[str]] = mapped_column(Text)
+    aw_id: Mapped[Optional[int]] = mapped_column()
+
+    # relationships
+    gauge: Mapped[Optional["Gauge"]] = relationship(back_populates="sections")
+    states: Mapped[list["State"]] = relationship(
+        secondary="section_state", back_populates="sections"
+    )
+    classes: Mapped[list["SectionClass"]] = relationship(back_populates="section")
+    levels: Mapped[list["SectionLevel"]] = relationship(back_populates="section")
+    guidebooks: Mapped[list["Guidebook"]] = relationship(
+        secondary="section_guidebook", back_populates="sections"
+    )
+
+    __table_args__ = (
+        Index("ix_section_sort_name", "sort_name"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# state
+# ---------------------------------------------------------------------------
+
+class State(Base):
+    __tablename__ = "state"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    abbreviation: Mapped[Optional[str]] = mapped_column(String(2))
+
+    # relationships
+    sections: Mapped[list["Section"]] = relationship(
+        secondary="section_state", back_populates="states"
+    )
+
+
+# ---------------------------------------------------------------------------
+# section_state (M2M junction)
+# ---------------------------------------------------------------------------
+
+class SectionState(Base):
+    __tablename__ = "section_state"
+
+    section_id: Mapped[int] = mapped_column(
+        ForeignKey("section.id", ondelete="CASCADE"), primary_key=True
+    )
+    state_id: Mapped[int] = mapped_column(
+        ForeignKey("state.id", ondelete="CASCADE"), primary_key=True
+    )
+
+    __table_args__ = (
+        Index("ix_section_state_state_id", "state_id"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# section_class
+# ---------------------------------------------------------------------------
+
+class SectionClass(Base):
+    __tablename__ = "section_class"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    section_id: Mapped[int] = mapped_column(
+        ForeignKey("section.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(32), nullable=False)
+    low: Mapped[Optional[float]] = mapped_column()
+    low_data_type: Mapped[Optional[DataType]] = mapped_column()
+    high: Mapped[Optional[float]] = mapped_column()
+    high_data_type: Mapped[Optional[DataType]] = mapped_column()
+
+    # relationships
+    section: Mapped["Section"] = relationship(back_populates="classes")
+
+
+# ---------------------------------------------------------------------------
+# section_level
+# ---------------------------------------------------------------------------
+
+class SectionLevel(Base):
+    __tablename__ = "section_level"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    section_id: Mapped[int] = mapped_column(
+        ForeignKey("section.id", ondelete="CASCADE"), nullable=False
+    )
+    level: Mapped[FlowLevel] = mapped_column(nullable=False)
+    low: Mapped[Optional[float]] = mapped_column()
+    low_data_type: Mapped[Optional[DataType]] = mapped_column()
+    high: Mapped[Optional[float]] = mapped_column()
+    high_data_type: Mapped[Optional[DataType]] = mapped_column()
+
+    # relationships
+    section: Mapped["Section"] = relationship(back_populates="levels")
+
+
+# ---------------------------------------------------------------------------
+# class_description
+# ---------------------------------------------------------------------------
+
+class ClassDescription(Base):
+    __tablename__ = "class_description"
+
+    name: Mapped[str] = mapped_column(String(32), primary_key=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+# ---------------------------------------------------------------------------
+# guidebook
+# ---------------------------------------------------------------------------
+
+class Guidebook(Base):
+    __tablename__ = "guidebook"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(256), nullable=False)
+    subtitle: Mapped[Optional[str]] = mapped_column(String(256))
+    edition: Mapped[Optional[str]] = mapped_column(String(24))
+    author: Mapped[Optional[str]] = mapped_column(Text)
+    url: Mapped[Optional[str]] = mapped_column(Text)
+
+    # relationships
+    sections: Mapped[list["Section"]] = relationship(
+        secondary="section_guidebook", back_populates="guidebooks"
+    )
+
+
+# ---------------------------------------------------------------------------
+# section_guidebook (M2M junction with extra columns)
+# ---------------------------------------------------------------------------
+
+class SectionGuidebook(Base):
+    __tablename__ = "section_guidebook"
+
+    section_id: Mapped[int] = mapped_column(
+        ForeignKey("section.id", ondelete="CASCADE"), primary_key=True
+    )
+    guidebook_id: Mapped[int] = mapped_column(
+        ForeignKey("guidebook.id", ondelete="CASCADE"), primary_key=True
+    )
+    page: Mapped[Optional[str]] = mapped_column(Text)
+    run: Mapped[Optional[str]] = mapped_column(Text)
+    url: Mapped[Optional[str]] = mapped_column(Text)
+
+
+# ---------------------------------------------------------------------------
+# page (cache table — kept from original schema)
 # ---------------------------------------------------------------------------
 
 class Page(Base):
@@ -389,8 +461,8 @@ class Page(Base):
     __tablename__ = "pages"
 
     name: Mapped[str] = mapped_column(String(128), primary_key=True)
-    action: Mapped[PageAction] = mapped_column(Enum(PageAction), nullable=False)
-    expires: Mapped[int | None] = mapped_column(Integer)
-    modified: Mapped[datetime | None] = mapped_column(DateTime, default=func.now())
-    mimetype: Mapped[str | None] = mapped_column(Text)
-    body: Mapped[str | None] = mapped_column(Text)
+    action: Mapped[PageAction] = mapped_column(nullable=False)
+    expires: Mapped[Optional[int]] = mapped_column(Integer)
+    modified: Mapped[Optional[datetime]] = mapped_column(default=func.now())
+    mimetype: Mapped[Optional[str]] = mapped_column(Text)
+    body: Mapped[Optional[str]] = mapped_column(Text)

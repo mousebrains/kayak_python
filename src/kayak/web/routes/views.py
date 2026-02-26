@@ -2,9 +2,10 @@
 
 from flask import Blueprint, abort, render_template_string
 
-from kayak.db.data_db import get_latest, get_measurements
+from kayak.db.data_db import get_latest
 from kayak.db.engine import get_session
-from kayak.db.models import DataType, MergedMaster
+from kayak.db.info_db import get_section
+from kayak.db.models import DataType, GaugeSource
 
 views_bp = Blueprint("views", __name__)
 
@@ -21,8 +22,8 @@ VIEW_TEMPLATE = """\
 <tr>
   <td>{{ dtype }}</td>
   <td>{{ "%.2f"|format(latest.value) if latest.value is not none else "N/A" }}</td>
-  <td>{{ latest.time.strftime("%Y-%m-%d %H:%M") if latest.time else "N/A" }}</td>
-  <td>{{ "%.2f"|format(latest.delta) if latest.delta is not none else "N/A" }}</td>
+  <td>{{ latest.observed_at.strftime("%Y-%m-%d %H:%M") if latest.observed_at else "N/A" }}</td>
+  <td>{{ "%.2f"|format(latest.delta_per_hour) if latest.delta_per_hour is not none else "N/A" }}</td>
 </tr>
 {% endif %}
 {% endfor %}
@@ -32,23 +33,28 @@ VIEW_TEMPLATE = """\
 """
 
 
-@views_bp.route("/view/<key>")
-def view(key: str):
-    """View current data for a station."""
+@views_bp.route("/view/<int:section_id>")
+def view(section_id: int):
+    """View current data for a section."""
     session = get_session()
     try:
-        station = session.query(MergedMaster).filter_by(hash_value=key).first()
-        if station is None:
+        section = get_section(session, section_id)
+        if section is None:
             abort(404)
 
-        db_name = station.db_name or key
-        name = station.display_name or db_name
+        name = section.display_name or section.name
+        gauge = section.gauge
 
         data = {}
-        for dtype in DataType:
-            latest = get_latest(session, db_name, dtype)
-            if latest and latest.value is not None:
-                data[dtype.value] = latest
+        if gauge:
+            gs = session.query(GaugeSource).filter(
+                GaugeSource.gauge_id == gauge.id
+            ).first()
+            if gs:
+                for dtype in DataType:
+                    latest = get_latest(session, gs.source_id, dtype)
+                    if latest and latest.value is not None:
+                        data[dtype.value] = latest
 
         return render_template_string(VIEW_TEMPLATE, name=name, data=data)
     finally:

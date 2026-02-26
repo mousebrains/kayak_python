@@ -21,12 +21,12 @@ from kayak.utils.conversions import parse_datetime, safe_float
 logger = logging.getLogger(__name__)
 
 _TYPE_MAP = {
-    "GD": DataType.GAGE,
-    "GH": DataType.GAGE,
-    "GH/Q": DataType.GAGE,
-    "Q": DataType.FLOW,
-    "QD": DataType.FLOW,
-    "QT": DataType.FLOW,
+    "GD": DataType.gauge,
+    "GH": DataType.gauge,
+    "GH/Q": DataType.gauge,
+    "Q": DataType.flow,
+    "QD": DataType.flow,
+    "QT": DataType.flow,
 }
 
 

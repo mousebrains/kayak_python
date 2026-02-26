@@ -2,9 +2,16 @@
 
 import pytest
 from sqlalchemy import create_engine, event
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session
 
-from kayak.db.models import Base
+from kayak.db.models import (
+    Base,
+    FetchUrl,
+    Gauge,
+    GaugeSource,
+    Section,
+    Source,
+)
 
 
 @pytest.fixture()
@@ -35,3 +42,47 @@ def session(engine):
     sess.close()
     transaction.rollback()
     connection.close()
+
+
+@pytest.fixture()
+def sample_source(session) -> Source:
+    """Create a Source with a FetchUrl for testing."""
+    fetch_url = FetchUrl(url="https://example.com/data", parser="usgs", is_active=True)
+    session.add(fetch_url)
+    session.flush()
+
+    source = Source(name="test_source", agency="USGS", fetch_url_id=fetch_url.id)
+    session.add(source)
+    session.flush()
+    return source
+
+
+@pytest.fixture()
+def sample_gauge(session) -> Gauge:
+    """Create a Gauge for testing."""
+    gauge = Gauge(name="test_gauge", usgs_id="12345678")
+    session.add(gauge)
+    session.flush()
+    return gauge
+
+
+@pytest.fixture()
+def sample_section(session, sample_gauge) -> Section:
+    """Create a Section with a Gauge for testing."""
+    section = Section(
+        name="test_section",
+        display_name="Test River - Upper",
+        sort_name="Test River",
+        gauge_id=sample_gauge.id,
+    )
+    session.add(section)
+    session.flush()
+    return section
+
+
+@pytest.fixture()
+def linked_source_gauge(session, sample_source, sample_gauge) -> tuple[Source, Gauge]:
+    """Create a Source linked to a Gauge via gauge_source."""
+    session.add(GaugeSource(gauge_id=sample_gauge.id, source_id=sample_source.id))
+    session.flush()
+    return sample_source, sample_gauge

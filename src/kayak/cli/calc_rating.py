@@ -12,13 +12,13 @@ import logging
 import click
 
 from kayak.db.data_db import (
-    get_measurements,
+    get_observations,
     get_rating_table,
-    store_measurement,
+    store_observation,
     update_latest,
 )
 from kayak.db.engine import get_session
-from kayak.db.models import DataType, MergedMaster
+from kayak.db.models import DataType, Gauge, GaugeSource, Source
 from kayak.utils.conversions import interpolate_rating
 
 logger = logging.getLogger(__name__)
@@ -35,30 +35,24 @@ def calc_rating_cmd(verbose):
 
     session = get_session()
     try:
-        # Find stations with rating table data
-        records = (
-            session.query(MergedMaster)
+        # Find gauges with rating tables
+        gauges = (
+            session.query(Gauge)
             .filter(
-                MergedMaster.db_name.isnot(None),
-                MergedMaster.db_name != "",
-                MergedMaster.cfs_to_gauge_data.isnot(None),
-                MergedMaster.cfs_to_gauge_data != "",
+                Gauge.rating_id.isnot(None),
             )
             .all()
         )
 
-        click.echo(f"Found {len(records)} stations with rating tables")
+        click.echo(f"Found {len(gauges)} gauges with rating tables")
 
-        for record in records:
-            db_name = record.db_name
-            rating_name = record.cfs_to_gauge_data
-
+        for gauge in gauges:
             try:
                 # Load rating table (feet -> cfs)
-                feet_to_cfs = get_rating_table(session, rating_name)
+                feet_to_cfs = get_rating_table(session, gauge.rating_id)
                 if not feet_to_cfs or len(feet_to_cfs) < 2:
                     if verbose:
-                        click.echo(f"  {db_name}: no rating table entries")
+                        click.echo(f"  {gauge.name}: no rating table entries")
                     continue
 
                 # Build reverse table (cfs -> feet)
@@ -67,69 +61,74 @@ def calc_rating_cmd(verbose):
                     key=lambda x: x[0],
                 )
 
-                # Get existing measurements
-                feet_records = get_measurements(session, db_name, DataType.GAGE)
-                cfs_records = get_measurements(session, db_name, DataType.FLOW)
+                # Get source IDs for this gauge
+                source_ids = [
+                    gs.source_id
+                    for gs in session.query(GaugeSource)
+                    .filter(GaugeSource.gauge_id == gauge.id)
+                    .all()
+                ]
 
-                if verbose:
-                    click.echo(
-                        f"  {db_name}: {len(feet_to_cfs)} rating entries, "
-                        f"{len(feet_records)} gage, {len(cfs_records)} flow"
-                    )
+                for source_id in source_ids:
+                    gauge_records = get_observations(session, source_id, DataType.gauge)
+                    flow_records = get_observations(session, source_id, DataType.flow)
 
-                new_feet = False
-                new_cfs = False
+                    if verbose:
+                        click.echo(
+                            f"  {gauge.name} src={source_id}: {len(feet_to_cfs)} rating entries, "
+                            f"{len(gauge_records)} gauge, {len(flow_records)} flow"
+                        )
 
-                if not feet_records:
-                    # Convert all CFS to feet
-                    for rec in cfs_records:
-                        val = interpolate_rating(cfs_to_feet, rec.value, 0.1)
-                        if val is not None:
-                            if store_measurement(
-                                session, db_name, DataType.GAGE, rec.time, val
-                            ):
-                                new_feet = True
-                elif not cfs_records:
-                    # Convert all feet to CFS
-                    for rec in feet_records:
-                        val = interpolate_rating(feet_to_cfs, rec.value, 1.0)
-                        if val is not None and val > 0:
-                            if store_measurement(
-                                session, db_name, DataType.FLOW, rec.time, val
-                            ):
-                                new_cfs = True
-                else:
-                    # Both exist — fill gaps
-                    cfs_times = {rec.time for rec in cfs_records}
-                    feet_times = {rec.time for rec in feet_records}
+                    new_gauge = False
+                    new_flow = False
 
-                    for rec in cfs_records:
-                        if rec.time not in feet_times:
+                    if not gauge_records:
+                        for rec in flow_records:
                             val = interpolate_rating(cfs_to_feet, rec.value, 0.1)
                             if val is not None:
-                                if store_measurement(
-                                    session, db_name, DataType.GAGE,
-                                    rec.time, val,
+                                if store_observation(
+                                    session, source_id, DataType.gauge, rec.observed_at, val
                                 ):
-                                    new_feet = True
-
-                    for rec in feet_records:
-                        if rec.time not in cfs_times:
+                                    new_gauge = True
+                    elif not flow_records:
+                        for rec in gauge_records:
                             val = interpolate_rating(feet_to_cfs, rec.value, 1.0)
                             if val is not None and val > 0:
-                                if store_measurement(
-                                    session, db_name, DataType.FLOW,
-                                    rec.time, val,
+                                if store_observation(
+                                    session, source_id, DataType.flow, rec.observed_at, val
                                 ):
-                                    new_cfs = True
+                                    new_flow = True
+                    else:
+                        flow_times = {rec.observed_at for rec in flow_records}
+                        gauge_times = {rec.observed_at for rec in gauge_records}
 
-                if new_cfs:
-                    update_latest(session, db_name, DataType.FLOW)
-                if new_feet:
-                    update_latest(session, db_name, DataType.GAGE)
+                        for rec in flow_records:
+                            if rec.observed_at not in gauge_times:
+                                val = interpolate_rating(cfs_to_feet, rec.value, 0.1)
+                                if val is not None:
+                                    if store_observation(
+                                        session, source_id, DataType.gauge,
+                                        rec.observed_at, val,
+                                    ):
+                                        new_gauge = True
+
+                        for rec in gauge_records:
+                            if rec.observed_at not in flow_times:
+                                val = interpolate_rating(feet_to_cfs, rec.value, 1.0)
+                                if val is not None and val > 0:
+                                    if store_observation(
+                                        session, source_id, DataType.flow,
+                                        rec.observed_at, val,
+                                    ):
+                                        new_flow = True
+
+                    if new_flow:
+                        update_latest(session, source_id, DataType.flow)
+                    if new_gauge:
+                        update_latest(session, source_id, DataType.gauge)
 
             except Exception as e:
-                click.echo(f"  Error for {db_name}: {e}", err=True)
+                click.echo(f"  Error for {gauge.name}: {e}", err=True)
 
         session.commit()
         click.echo("Rating calculations complete")

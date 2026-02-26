@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 
 # USBR Special type codes
 _TYPE_MAP = {
-    "QRIRG": DataType.FLOW,
-    "HGIRG": DataType.GAGE,
+    "QRIRG": DataType.flow,
+    "HGIRG": DataType.gauge,
 }
 
 # Timezone zone codes

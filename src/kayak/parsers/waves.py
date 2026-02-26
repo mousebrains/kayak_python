@@ -53,6 +53,6 @@ class WavesParser(BaseParser):
             if raw is not None and math.isfinite(raw):
                 # Convert cm to feet, round to 0.1
                 feet = cm_to_feet(raw)
-                self.dump_to_db(self._station, DataType.GAGE, when, feet)
+                self.dump_to_db(self._station, DataType.gauge, when, feet)
 
         return True

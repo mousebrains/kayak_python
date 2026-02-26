@@ -21,19 +21,19 @@ logger = logging.getLogger(__name__)
 
 # USBR data type code to DataType mapping
 _CODE_MAP: dict[str, DataType | None] = {
-    "Q": DataType.FLOW,
-    "QD": DataType.FLOW,
-    "QI": DataType.INFLOW,
-    "QJ": DataType.FLOW,
-    "QR": DataType.FLOW,
-    "QU": DataType.FLOW,
-    "GH": DataType.GAGE,
-    "HP": DataType.GAGE,
-    "HT": DataType.GAGE,
-    "FB": DataType.GAGE,
-    "WC": DataType.TEMPERATURE,  # Celsius
-    "WF": DataType.TEMPERATURE,  # Fahrenheit
-    "WS": DataType.TEMPERATURE,
+    "Q": DataType.flow,
+    "QD": DataType.flow,
+    "QI": DataType.inflow,
+    "QJ": DataType.flow,
+    "QR": DataType.flow,
+    "QU": DataType.flow,
+    "GH": DataType.gauge,
+    "HP": DataType.gauge,
+    "HT": DataType.gauge,
+    "FB": DataType.gauge,
+    "WC": DataType.temperature,  # Celsius
+    "WF": DataType.temperature,  # Fahrenheit
+    "WS": DataType.temperature,
 }
 
 # Codes whose values are in Celsius and need conversion

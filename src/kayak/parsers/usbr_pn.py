@@ -18,12 +18,12 @@ logger = logging.getLogger(__name__)
 
 # USBR PN type codes
 _TYPE_MAP = {
-    "GH": DataType.GAGE,
-    "CH": DataType.GAGE,
-    "Q": DataType.FLOW,
-    "QC": DataType.FLOW,
-    "QD": DataType.FLOW,
-    "WF": DataType.TEMPERATURE,
+    "GH": DataType.gauge,
+    "CH": DataType.gauge,
+    "Q": DataType.flow,
+    "QC": DataType.flow,
+    "QD": DataType.flow,
+    "WF": DataType.temperature,
 }
 
 _CELSIUS_TYPES = set()  # USBR_PN WF is already Fahrenheit

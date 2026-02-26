@@ -1,0 +1,1344 @@
+# Source URL definitions for data fetching.
+# Converted from files/url/* flat file format.
+#
+# Format per entry:
+#   parser: parser name matching registry
+#   url: data source URL
+#   hours: hour constraints (empty=all hours, comma-separated hour numbers)
+#   group: organizational grouping (original filename)
+
+sources:
+  - parser: "usgs.rdb"
+    url: "https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=az&modifiedSince=PT24H&siteStatus=active&siteType=ST"
+    hours: ""
+    group: "arizona.usgs.gov"
+
+  - parser: "usgs.rdb"
+    url: "https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=ca&modifiedSince=PT24H&siteStatus=active&siteType=ST"
+    hours: ""
+    group: "california.usgs.gov"
+
+  - parser: "usgs.rdb"
+    url: "https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=co&modifiedSince=PT24H&siteStatus=active&siteType=ST"
+    hours: ""
+    group: "colorado.usgs.gov"
+
+  - parser: "usgs.rdb"
+    url: "https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=id&modifiedSince=PT24H&siteStatus=active&siteType=ST"
+    hours: ""
+    group: "idaho.usgs.gov"
+
+  - parser: "usgs.rdb"
+    url: "https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=mt&modifiedSince=PT24H&siteStatus=active&siteType=ST"
+    hours: ""
+    group: "montana.usgs.gov"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=GIBO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=IMNO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=JHNO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MODO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MONO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SERO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=TRYO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=AGNO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=APRO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=ARWO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=AZAO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=CHTO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=COGO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=EGLO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=EKTO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=ELKO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=GLNO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=GRAO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=KRBO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MFDO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=POWO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=RDLO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=RYGO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SCRO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SURO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=TILO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WMSO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WNRO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WSNO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=ALBO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=BCKO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=BCLO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=BLUO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=BONO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=CANO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=CASW1&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=CBAO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=CGRO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=COCO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=DLLO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=ESTO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=FNNO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=FRMO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=FRNO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=FSSO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=GASO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=HARO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=HODO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=HSSW1&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=JASO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=JFFO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=KELW1&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LOCO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LOPW1&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LRWW1&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LSMO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MAYW1&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MCMO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MCZO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MEHO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MERW1&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MIWO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MKLO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MNRO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MPLO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MUDW1&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=NASW1&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=NEBO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=OAKO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=OCUO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=ORCO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=PHIO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=PRTO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=PUWO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=QCCO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SCLO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SFCO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SHNO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SILO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SKAW1&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SLMO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SNDO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SPRO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SSCO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SSFO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SUVO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SYCO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=TIDO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=TLMO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=TLYO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=TOTW1&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=TRAO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=TSFW1&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=UNDW1&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=VANW1&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=VENO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=VIDO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WAUO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WILW1&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WSLO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WTLO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nimbo.wrh.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WNFO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nwrfc.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=GLIO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nwrfc.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WASW1&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nwrfc.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=FALO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nwrfc.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=EUGO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nwrfc.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MYPO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nwrfc.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=COQO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nwrfc.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=CWMO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nwrfc.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=ECDO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nwrfc.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LGNO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nwrfc.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=AURO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nwrfc.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=BTYO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nwrfc.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=PDTO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nwrfc.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WINO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nwrfc.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=TILO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nwrfc.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WSNO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nwrfc.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=RSBO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nwrfc.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=GOSO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nwrfc.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LONO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nwrfc.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=CORO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nwrfc.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WLAO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nwrfc.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=BEAO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nwrfc.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=BRTO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nwrfc.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=CMRO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nwrfc.noaa"
+
+  - parser: "nwrfc.xml"
+    url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WFHO3&pe=HG&dtype=b&numdays=2"
+    hours: ""
+    group: "nwrfc.noaa"
+
+  - parser: "usgs.rdb"
+    url: "https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=or&modifiedSince=PT24H&siteStatus=active&siteType=ST"
+    hours: ""
+    group: "oregon.usgs.gov"
+
+  - parser: "usbr"
+    url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=FLGY,PCKY,MSEY,JKSY,ALPY,GREY,SALY,PALI,DRYI,LORI,MNNI,SHYI,SIFI"
+    hours: ""
+    group: "pn.usbr.gov"
+
+  - parser: "usbr"
+    url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=HENI,HFAI,CHEI,ANTI,REXI"
+    hours: ""
+    group: "pn.usbr.gov"
+
+  - parser: "usbr"
+    url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=SNAI,AMFI,MINI,MILI,MHPI,SKHI"
+    hours: ""
+    group: "pn.usbr.gov"
+
+  - parser: "usbr"
+    url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=LWOI"
+    hours: ""
+    group: "pn.usbr.gov"
+
+  - parser: "usbr"
+    url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=BRFI,ANDI,BTSI,MORI,BIGI,BOMI,PARI"
+    hours: ""
+    group: "pn.usbr.gov"
+
+  - parser: "usbr"
+    url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=PRLI,DEDI,MVPI,PAYI,CSCI,HRSI,PLEI,PRPI"
+    hours: ""
+    group: "pn.usbr.gov"
+
+  - parser: "usbr"
+    url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=SWAI,SNYI,WEII,HCDI"
+    hours: ""
+    group: "pn.usbr.gov"
+
+  - parser: "usbr"
+    url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=ROMO"
+    hours: ""
+    group: "pn.usbr.gov"
+
+  - parser: "usbr"
+    url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=MADO,WARO,SFMO,MABO,BEUO,VALO,MALO"
+    hours: ""
+    group: "pn.usbr.gov"
+
+  - parser: "usbr"
+    url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=WCRO,PDTO,MYKO,MCKO,BIRO,YOKO,UMUO,UMDO,UMAO"
+    hours: ""
+    group: "pn.usbr.gov"
+
+  - parser: "usbr"
+    url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=CRAO,WICO,LAPO,BENO,DEBO"
+    hours: ""
+    group: "pn.usbr.gov"
+
+  - parser: "usbr"
+    url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=CRPO,PRVO,MLCO,OCRO,OCHO,CRSO"
+    hours: ""
+    group: "pn.usbr.gov"
+
+  - parser: "usbr"
+    url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=LEFO,GSTO,SCLO,SCOO,DLLO"
+    hours: ""
+    group: "pn.usbr.gov"
+
+  - parser: "usbr"
+    url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=BASO,BCSO,BCTO,EGSO,FSHO,MFDO,SDCO"
+    hours: ""
+    group: "pn.usbr.gov"
+
+  - parser: "usbr"
+    url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=HGHM"
+    hours: ""
+    group: "pn.usbr.gov"
+
+  - parser: "usace.outflow"
+    url: "http://www.nwd-wc.usace.army.mil/ftppub/project_data/hourly/gpr_0daysback.txt"
+    hours: "-0,-1,-2,-3"
+    group: "usace.resv"
+
+  - parser: "usace.outflow"
+    url: "http://www.nwd-wc.usace.army.mil/ftppub/project_data/hourly/hcr_0daysback.txt"
+    hours: "-0,-1,-2,-3"
+    group: "usace.resv"
+
+  - parser: "usgs.rdb"
+    url: "https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=ut&modifiedSince=PT24H&siteStatus=active&siteType=ST"
+    hours: ""
+    group: "utah.usgs.gov"
+
+  - parser: "wa.gov"
+    url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/30C070/30C070_STG_FM.TXT"
+    hours: ""
+    group: "washington.gov"
+
+  - parser: "wa.gov"
+    url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/30C070/30C070_DSG_FM.TXT"
+    hours: ""
+    group: "washington.gov"
+
+  - parser: "wa.gov"
+    url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/30C070/30C070_WTM_FM.TXT"
+    hours: ""
+    group: "washington.gov"
+
+  - parser: "wa.gov"
+    url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_STG_FM.TXT"
+    hours: ""
+    group: "washington.gov"
+
+  - parser: "wa.gov"
+    url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_DSG_FM.TXT"
+    hours: ""
+    group: "washington.gov"
+
+  - parser: "wa.gov"
+    url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_WTM_FM.TXT"
+    hours: ""
+    group: "washington.gov"
+
+  - parser: "usgs.rdb"
+    url: "https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=wa&modifiedSince=PT24H&siteStatus=active&siteType=ST"
+    hours: ""
+    group: "washington.usgs.gov"
+
+  - parser: "cdec"
+    url: "http://cdec.water.ca.gov/cgi-progs/current/PAGE1"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec"
+    url: "http://cdec.water.ca.gov/cgi-progs/current/PAGE4"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?acc"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?acd"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?ahd"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?aln"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?arc"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?avl"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?bat"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?bcd"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?bcg"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?bck"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?bic"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?bnd"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?bra"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?bri"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?brw"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?bsc"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?btc"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?bwc"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?cbr"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?cfw"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?cht"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?clv"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?clw"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?col"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?cot"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?cow"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?crs"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?cvc"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?dcs"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?dcv"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?dlt"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?drf"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?dry"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?dsn"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?eda"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?est"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?far"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?fbl"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?fer"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?flo"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?fpt"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?fsw"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?gal"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?grl"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?hac"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?hea"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?hib"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?hmc"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?hop"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?hpa"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?hst"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?igo"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?jbr"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?jed"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?kzk"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?lcb"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?leg"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?lgc"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?ltk"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?mlm"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?mlw"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?mmf"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?mrd"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?mrt"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?mry"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?mrz"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?msn"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?mss"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?mst"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?nap"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?nfc"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?nfd"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?nic"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?nyr"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?okn"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?ols"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?ord"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?orh"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?ork"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?oxb"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?pas"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?pmn"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?poh"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?prs"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?ptk"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?put"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?rdf"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?sco"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?sim"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?spr"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?sth"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?teh"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?tho"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?tis"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?trk"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?ttc"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?tur"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?vin"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?von"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?wlk"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?wrt"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?yrs"
+    hours: ""
+    group: "water.california"
+
+  - parser: "cdec.station"
+    url: "http://cdec.water.ca.gov/cgi-progs/queryF?yub"
+    hours: ""
+    group: "water.california"
+
+  - parser: "crohms"
+    url: "ftp://ftp.wrd.state.or.us/pub/crohms/CROHMSAM.FRI"
+    hours: ""
+    group: "water.oregon.Friday"
+
+  - parser: "crohms"
+    url: "ftp://ftp.wrd.state.or.us/pub/crohms/CROHMSAM.MON"
+    hours: ""
+    group: "water.oregon.Monday"
+
+  - parser: "crohms"
+    url: "ftp://ftp.wrd.state.or.us/pub/crohms/CROHMSAM.THU"
+    hours: ""
+    group: "water.oregon.Thursday"
+
+  - parser: "crohms"
+    url: "ftp://ftp.wrd.state.or.us/pub/crohms/CROHMSAM.TUE"
+    hours: ""
+    group: "water.oregon.Tuesday"
+
+  - parser: "crohms"
+    url: "ftp://ftp.wrd.state.or.us/pub/crohms/CROHMSAM.WED"
+    hours: ""
+    group: "water.oregon.Wednesday"

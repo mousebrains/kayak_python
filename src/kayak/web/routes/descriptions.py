@@ -2,8 +2,9 @@
 
 from flask import Blueprint, abort, render_template_string
 
+from kayak.config_data import load_description_fields
 from kayak.db.engine import get_session
-from kayak.db.models import DescriptionField, MergedMaster
+from kayak.db.info_db import get_section
 
 descriptions_bp = Blueprint("descriptions", __name__)
 
@@ -27,63 +28,67 @@ DESC_TEMPLATE = """\
 """
 
 
-@descriptions_bp.route("/description/<key>")
-def description(key: str):
-    """Show detailed description page for a station."""
+@descriptions_bp.route("/description/<int:section_id>")
+def description(section_id: int):
+    """Show detailed description page for a section."""
     session = get_session()
     try:
-        station = session.query(MergedMaster).filter_by(hash_value=key).first()
-        if station is None:
+        section = get_section(session, section_id)
+        if section is None:
             abort(404)
 
-        name = station.display_name or key
+        name = section.display_name or section.name
 
-        # Get description field definitions
-        desc_fields = (
-            session.query(DescriptionField)
-            .order_by(DescriptionField.sort_key)
-            .all()
-        )
+        # Load field definitions from YAML
+        desc_field_defs = load_description_fields()
+
+        # Build attribute map from section + gauge
+        attr_map = {}
+        for attr_name in dir(section):
+            if not attr_name.startswith("_"):
+                val = getattr(section, attr_name, None)
+                if isinstance(val, (str, int, float)):
+                    attr_map[attr_name] = val
+
+        gauge = section.gauge
+        if gauge:
+            attr_map["gauge_location"] = gauge.location or ""
+            attr_map["usgs_id"] = gauge.usgs_id or ""
+            attr_map["nwsli_id"] = gauge.nwsli_id or ""
+            attr_map["geos_id"] = gauge.geos_id or ""
+            attr_map["station_number"] = gauge.station_id or ""
+            attr_map["bank_full"] = gauge.bank_full
+            attr_map["flood_stage"] = gauge.flood_stage
+
+        if section.states:
+            attr_map["state"] = ", ".join(s.name for s in section.states)
+        if section.classes:
+            attr_map["class"] = ", ".join(c.name for c in section.classes)
 
         fields = []
-        for df in desc_fields:
-            if df.type == "noop":
+        for df in sorted(desc_field_defs, key=lambda d: d["sort_key"]):
+            if df["type"] == "noop":
                 continue
 
-            # Map column_name to model attribute
-            col = df.column_name.lower()
-            val = getattr(station, col, None)
-            if val is None:
-                # Try common mappings
-                attr_map = {
-                    "class": "river_class",
-                    "nature": "character",
-                    "runnumber": "run_number",
-                    "pagenumber": "page_number",
-                    "stationnumber": "station_number",
-                    "username": "user_name",
-                }
-                mapped = attr_map.get(col)
-                if mapped:
-                    val = getattr(station, mapped, None)
+            col = df["column"]
+            val = attr_map.get(col)
 
             if val is None or str(val).strip() == "":
                 continue
 
-            if df.type == "DB":
-                # Link to database view
-                val = f'<a href="/view/{key}">{val}</a>'
-            elif df.type == "URL":
-                val = f'<a href="/plot/flow/{key}">{val}</a>'
-            elif df.type == "calc":
-                val = str(val)
-            elif df.type == "ptxt":
+            val = str(val)
+
+            if df["type"] == "DB":
+                val = f'<a href="/view/{section_id}">{val}</a>'
+            elif df["type"] == "URL":
+                val = f'<a href="/plot/flow/{section_id}">{val}</a>'
+            elif df["type"] == "ptxt":
                 val = f"<pre>{val}</pre>"
 
             fields.append({
-                "prefix": df.prefix,
+                "prefix": df["prefix"],
                 "value": val,
-                "suffix": df.suffix,
+                "suffix": df["suffix"],
             })
 
         return render_template_string(DESC_TEMPLATE, name=name, fields=fields)

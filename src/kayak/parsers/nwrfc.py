@@ -76,12 +76,12 @@ class NWRFCParser(BaseParser):
         if self._gage_col >= 0 and self._gage_col < len(parts):
             val = safe_float(parts[self._gage_col])
             if val is not None and math.isfinite(val):
-                self.dump_to_db(station, DataType.GAGE, when, val)
+                self.dump_to_db(station, DataType.gauge, when, val)
 
         if self._flow_col >= 0 and self._flow_col < len(parts):
             val = safe_float(parts[self._flow_col])
             if val is not None and math.isfinite(val) and val >= 0:
-                dtype = DataType.INFLOW if self._is_inflow else DataType.FLOW
+                dtype = DataType.inflow if self._is_inflow else DataType.flow
                 self.dump_to_db(station, dtype, when, val)
 
         return True

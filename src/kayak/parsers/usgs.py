@@ -54,7 +54,7 @@ def _build_parameters() -> dict[int, _Parameter]:
         p(60, "flow", "flow", min_val=0),
         p(61, "flow", "flow", min_val=0),
         # Gage parameters
-        p(65, "gage", "gage"),
+        p(65, "gage", "gauge"),
         # Everything else — no db_key means we skip it
         p(3, "samplingDepth"),
         p(9, "gotMe"),

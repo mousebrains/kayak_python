@@ -96,11 +96,11 @@ class OCSParser(BaseParser):
                 if self._is_kcfs:
                     val = kcfs_to_cfs(val)
                 if 0 <= val <= 2e6:
-                    self.dump_to_db(self._station, DataType.FLOW, when, val)
+                    self.dump_to_db(self._station, DataType.flow, when, val)
 
         if self._gage_pos >= 0 and self._gage_pos < len(parts):
             val = safe_float(parts[self._gage_pos])
             if val is not None and math.isfinite(val):
-                self.dump_to_db(self._station, DataType.GAGE, when, val)
+                self.dump_to_db(self._station, DataType.gauge, when, val)
 
         return True

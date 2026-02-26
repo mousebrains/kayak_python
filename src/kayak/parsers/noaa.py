@@ -82,11 +82,11 @@ class NOAAParser(BaseParser):
         if self._has_flow and self._flow_col < len(cols):
             val = safe_float(cols[self._flow_col])
             if val is not None and not math.isinf(val):
-                self.dump_to_db(self._station, DataType.FLOW, when, val)
+                self.dump_to_db(self._station, DataType.flow, when, val)
 
         if self._has_gage and self._gage_col < len(cols):
             val = safe_float(cols[self._gage_col])
             if val is not None and not math.isinf(val):
-                self.dump_to_db(self._station, DataType.GAGE, when, val)
+                self.dump_to_db(self._station, DataType.gauge, when, val)
 
         return True

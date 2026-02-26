@@ -1,6 +1,7 @@
 """Merger command (replaces merger.C).
 
-Combines data from multiple source stations into merged tables.
+Combines data from multiple source stations into merged gauges via
+the GaugeSource relationships.
 """
 
 from __future__ import annotations
@@ -9,9 +10,9 @@ import logging
 
 import click
 
-from kayak.db.data_db import merge_stations, update_latest
+from kayak.db.data_db import merge_sources, update_latest
 from kayak.db.engine import get_session
-from kayak.db.models import DataType, MergedMaster
+from kayak.db.models import DataType, Gauge, GaugeSource, Source
 
 logger = logging.getLogger(__name__)
 
@@ -27,38 +28,42 @@ def merge_cmd(verbose):
 
     session = get_session()
     try:
-        # Query records that have both merged_dbs and db_name
-        records = (
-            session.query(MergedMaster)
-            .filter(
-                MergedMaster.merged_dbs.isnot(None),
-                MergedMaster.db_name.isnot(None),
-            )
-            .all()
-        )
+        # Find gauges that have multiple sources (candidates for merging)
+        gauges = session.query(Gauge).all()
 
-        click.echo(f"Found {len(records)} stations to merge")
+        types = [DataType.flow, DataType.inflow, DataType.gauge, DataType.temperature]
 
-        types = [
-            DataType.FLOW, DataType.INFLOW, DataType.OUTFLOW,
-            DataType.GAGE, DataType.TEMPERATURE,
-        ]
+        merge_count = 0
+        for gauge in gauges:
+            source_ids = [
+                gs.source_id
+                for gs in session.query(GaugeSource)
+                .filter(GaugeSource.gauge_id == gauge.id)
+                .all()
+            ]
 
-        for record in records:
-            db_name = record.db_name
-            source_dbs = record.merged_dbs.split()
+            if len(source_ids) < 2:
+                continue
+
+            # Use the first source as the merge target
+            target_id = source_ids[0]
+            input_ids = source_ids[1:]
 
             for dtype in types:
                 try:
-                    count = merge_stations(session, db_name, source_dbs, dtype)
+                    count = merge_sources(session, target_id, input_ids, dtype)
                     if verbose and count > 0:
-                        click.echo(f"  {db_name}/{dtype.value}: {count} rows merged")
+                        click.echo(f"  {gauge.name}/{dtype.value}: {count} rows merged")
+                    if count > 0:
+                        update_latest(session, target_id, dtype)
+                        merge_count += count
                 except Exception as e:
                     click.echo(
-                        f"  Error merging {db_name}/{dtype.value}: {e}",
+                        f"  Error merging {gauge.name}/{dtype.value}: {e}",
                         err=True,
                     )
 
+        click.echo(f"Found {merge_count} observations merged")
         session.commit()
         click.echo("Merge complete")
     finally:

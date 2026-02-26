@@ -1,7 +1,7 @@
 """Data fetcher command (replaces fetcher.C).
 
 Fetches data from remote government agencies, parses it, and stores
-measurements in the database.
+observations in the database.
 """
 
 from __future__ import annotations
@@ -11,10 +11,10 @@ from datetime import datetime
 
 import click
 
+from kayak.config_data import load_sources
 from kayak.db.engine import get_session
-from kayak.db.models import URLParse
-from kayak.parsers.registry import ensure_all_loaded, get_parser_class, get_parser_names
-from kayak.utils.http_client import fetch
+from kayak.db.models import FetchUrl
+from kayak.parsers.registry import ensure_all_loaded, get_parser_class
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +52,8 @@ def fetch_cmd(
     url_filter, single_url, verbose,
 ):
     """Fetch data from remote agencies, parse, and store in database."""
+    from kayak.utils.http_client import fetch
+
     if verbose:
         logging.basicConfig(level=logging.DEBUG)
     else:
@@ -67,26 +69,28 @@ def fetch_cmd(
                        verbose, dry_run, fetch_only)
         return
 
+    # Load sources from YAML config
+    yaml_sources = load_sources()
+
+    # Apply filters
+    if parser_filter:
+        yaml_sources = [s for s in yaml_sources if s["parser"] == parser_filter]
+    if url_filter:
+        yaml_sources = [s for s in yaml_sources if url_filter in s["url"]]
+
+    click.echo(f"Found {len(yaml_sources)} URL sources to fetch")
+
     session = get_session()
     try:
-        # Query URL sources from database
-        query = session.query(URLParse).filter(URLParse.inactive.is_(None))
-        if parser_filter:
-            query = query.filter(URLParse.parser == parser_filter)
-        if url_filter:
-            query = query.filter(URLParse.url.contains(url_filter))
-
-        records = query.all()
-        click.echo(f"Found {len(records)} URL sources to fetch")
-
-        for record in records:
-            if not ignore_constraints and not _hour_allowed(record.hours):
+        for src_def in yaml_sources:
+            hours = src_def.get("hours", "")
+            if not ignore_constraints and not _hour_allowed(hours):
                 if verbose:
-                    click.echo(f"Skipping {record.url} (hour constraint)")
+                    click.echo(f"Skipping {src_def['url']} (hour constraint)")
                 continue
 
-            url = url_prefix + record.url
-            parser_name = parser_type or record.parser
+            url = url_prefix + src_def["url"]
+            parser_name = parser_type or src_def["parser"]
 
             if show_name or verbose:
                 click.echo(f"Fetching {url} parser={parser_name}")
@@ -105,7 +109,7 @@ def fetch_cmd(
 
                 if output_dir:
                     from pathlib import Path
-                    out_path = str(Path(output_dir) / record.url.lstrip("/"))
+                    out_path = str(Path(output_dir) / src_def["url"].lstrip("/"))
                     result.write_file(out_path)
 
                 if not fetch_only:
@@ -116,11 +120,21 @@ def fetch_cmd(
                         )
                         continue
 
+                    # Look up the FetchUrl to update last_fetched_at
+                    fetch_url = session.query(FetchUrl).filter_by(
+                        url=src_def["url"]
+                    ).first()
+
                     parser = parser_cls(
                         url=url, session=session,
+                        source_id=fetch_url.id if fetch_url else None,
                         verbose=verbose, dry_run=dry_run,
                     )
                     count = parser.parse(result.text)
+
+                    if fetch_url and not dry_run:
+                        fetch_url.last_fetched_at = datetime.utcnow()
+
                     if verbose:
                         click.echo(f"  {count} updates")
 
@@ -143,6 +157,8 @@ def _fetch_single(
     verbose, dry_run, fetch_only,
 ):
     """Fetch and parse a single URL (the -U -t mode)."""
+    from kayak.utils.http_client import fetch
+
     full_url = url_prefix + url
 
     result = fetch(full_url)

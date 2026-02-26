@@ -1,10 +1,7 @@
 """Calculator for synthetic/derived gage readings (replaces calculator.C).
 
-Evaluates calc_expr expressions that reference other stations' Latest values
-to produce derived measurements.
-
-Expression format: "hash1::key1::type1 + hash2::key2::type2"
-where hash is the station hash, key is the station name, type is flow/gage/etc.
+Evaluates CalcExpression entries that reference other sources' Latest values
+to produce derived observations.
 """
 
 from __future__ import annotations
@@ -15,14 +12,11 @@ from datetime import datetime, timezone
 
 import click
 
-from kayak.db.data_db import get_latest, store_measurement, update_latest
+from kayak.db.data_db import get_latest, store_observation, update_latest
 from kayak.db.engine import get_session
-from kayak.db.models import DataType, MergedMaster
+from kayak.db.models import CalcExpression, DataType, Source
 
 logger = logging.getLogger(__name__)
-
-# Regex to match hash::name::type references in expressions
-_REF_PATTERN = re.compile(r"(\w+)::\w+::(\w+)")
 
 
 @click.command("calculator")
@@ -36,81 +30,78 @@ def calculator_cmd(verbose):
 
     session = get_session()
     try:
-        # Find stations with calculation expressions
-        records = (
-            session.query(MergedMaster)
-            .filter(
-                MergedMaster.calc_time.isnot(None),
-                MergedMaster.calc_time != "",
-                MergedMaster.calc_expr.isnot(None),
-                MergedMaster.calc_expr != "",
-                MergedMaster.calc_type.isnot(None),
-                MergedMaster.calc_type != "",
-                MergedMaster.db_name.isnot(None),
-                MergedMaster.db_name != "",
-            )
+        # Find sources with calculation expressions
+        calc_sources = (
+            session.query(Source)
+            .filter(Source.calc_expression_id.isnot(None))
             .all()
         )
 
-        click.echo(f"Found {len(records)} calculated stations")
+        click.echo(f"Found {len(calc_sources)} calculated sources")
 
-        # Build hash -> db_name lookup
-        all_records = session.query(MergedMaster).filter(
-            MergedMaster.db_name.isnot(None)
-        ).all()
-        hash_to_db = {r.hash_value: r.db_name for r in all_records}
+        # Build source name -> id lookup
+        all_sources = session.query(Source).all()
+        name_to_id = {s.name: s.id for s in all_sources}
 
-        for record in records:
+        for source in calc_sources:
             try:
-                calc_time_refs = record.calc_time.split()
-                calc_expr = record.calc_expr
-                calc_type = record.calc_type
-                db_name = record.db_name
+                calc_expr = source.calc_expression
+                if calc_expr is None:
+                    continue
+
+                expression = calc_expr.expression
+                time_expression = calc_expr.time_expression
+                data_type = calc_expr.data_type
 
                 if verbose:
                     click.echo(
-                        f"  Calculating {db_name}: type={calc_type} "
-                        f"expr={calc_expr}"
+                        f"  Calculating {source.name}: type={data_type.value} "
+                        f"expr={expression}"
                     )
 
+                if not time_expression:
+                    logger.warning("No time_expression for source %s", source.name)
+                    continue
+
                 # Resolve all references to actual values
+                # time_expression contains source references like "source_name::type"
                 values = {}
                 times = []
                 skip = False
 
-                for ref in calc_time_refs:
-                    # ref format: hash::name::type
+                for ref in time_expression.split():
                     parts = ref.split("::")
-                    if len(parts) != 3:
+                    if len(parts) < 2:
                         logger.error("Invalid ref format: %s", ref)
                         skip = True
                         break
 
-                    ref_hash, ref_name, ref_type = parts
-                    ref_db = hash_to_db.get(ref_hash)
-                    if not ref_db:
-                        logger.error("No db_name for hash %s", ref_hash)
+                    ref_name = parts[0]
+                    ref_type_str = parts[1] if len(parts) > 1 else data_type.value
+
+                    ref_source_id = name_to_id.get(ref_name)
+                    if not ref_source_id:
+                        logger.error("No source_id for name %s", ref_name)
                         skip = True
                         break
 
                     try:
-                        ref_dtype = DataType(ref_type)
+                        ref_dtype = DataType(ref_type_str)
                     except ValueError:
-                        logger.error("Unknown type: %s", ref_type)
+                        logger.error("Unknown type: %s", ref_type_str)
                         skip = True
                         break
 
-                    latest = get_latest(session, ref_db, ref_dtype)
+                    latest = get_latest(session, ref_source_id, ref_dtype)
                     if latest is None or latest.value is None:
                         logger.warning(
-                            "No latest value for %s/%s", ref_db, ref_type
+                            "No latest value for %s/%s", ref_name, ref_type_str
                         )
                         skip = True
                         break
 
                     values[ref] = latest.value
-                    if latest.time:
-                        times.append(latest.time)
+                    times.append(latest.observed_at)
 
                 if skip or not times:
                     continue
@@ -119,12 +110,11 @@ def calculator_cmd(verbose):
                 when = min(times)
 
                 # Evaluate the expression by substituting values
-                expr = calc_expr
+                expr = expression
                 for ref, val in values.items():
                     expr = expr.replace(ref, str(val))
 
                 # Clean up SQL functions for Python eval
-                expr = expr.replace("round(", "round(")
                 expr = expr.replace("greatest(", "max(")
                 expr = expr.replace("least(", "min(")
 
@@ -136,19 +126,13 @@ def calculator_cmd(verbose):
 
                 result = max(0, float(result))
 
-                try:
-                    dtype = DataType(calc_type)
-                except ValueError:
-                    logger.error("Unknown calc_type: %s", calc_type)
-                    continue
-
-                if store_measurement(session, db_name, dtype, when, result):
-                    update_latest(session, db_name, dtype)
+                if store_observation(session, source.id, data_type, when, result):
+                    update_latest(session, source.id, data_type)
                     if verbose:
                         click.echo(f"    = {result:.1f} at {when}")
 
             except Exception as e:
-                click.echo(f"  Error for {record.db_name}: {e}", err=True)
+                click.echo(f"  Error for {source.name}: {e}", err=True)
 
         session.commit()
         click.echo("Calculations complete")

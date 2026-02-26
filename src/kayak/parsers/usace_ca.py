@@ -95,7 +95,7 @@ class USACECaParser(BaseParser):
             token_upper = token.upper()
 
             if token_upper in ("FLOW", "OUTFLOW"):
-                dtype = DataType.FLOW if token_upper == "FLOW" else DataType.FLOW
+                dtype = DataType.flow if token_upper == "FLOW" else DataType.flow
                 pos = line.rfind(token)
                 if pos >= 0:
                     name = self._extract_name(pos)
@@ -109,7 +109,7 @@ class USACECaParser(BaseParser):
                 if pos >= 0:
                     name = self._extract_name(pos)
                     self._columns.append(_ColumnDef(
-                        name=name, data_type=DataType.INFLOW,
+                        name=name, data_type=DataType.inflow,
                         start=pos, length=max(len(token), 8),
                     ))
 
@@ -118,7 +118,7 @@ class USACECaParser(BaseParser):
                 if pos >= 0:
                     name = self._extract_name(pos)
                     self._columns.append(_ColumnDef(
-                        name=name, data_type=DataType.GAGE,
+                        name=name, data_type=DataType.gauge,
                         start=pos, length=max(len(token), 6),
                     ))
 

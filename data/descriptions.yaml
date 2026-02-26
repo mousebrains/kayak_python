@@ -1,0 +1,251 @@
+# Description field definitions for river detail pages.
+# Converted from init_db.py _seed_description_fields().
+#
+# type: rendering mode
+#   noop=internal/skip, text=plain text, DB=link to data view,
+#   URL=link to plot, calc=calculation display, ptxt=preformatted text
+
+fields:
+  - sort_key: 0
+    column: "hash_value"
+    type: "noop"
+    prefix: ""
+    suffix: ""
+    info: "Must be first"
+
+  - sort_key: 1
+    column: "display_name"
+    type: "noop"
+    prefix: ""
+    suffix: ""
+    info: "Must be second"
+
+  - sort_key: 100
+    column: "class"
+    type: "text"
+    prefix: "Class"
+    suffix: "<br />"
+
+  - sort_key: 200
+    column: "section"
+    type: "text"
+    prefix: "Section"
+    suffix: "<br />"
+
+  - sort_key: 300
+    column: "state"
+    type: "text"
+    prefix: "State(s)"
+    suffix: "<br />"
+
+  - sort_key: 400
+    column: "drainage"
+    type: "text"
+    prefix: "Drainage"
+    suffix: "<br />"
+
+  - sort_key: 500
+    column: "region"
+    type: "text"
+    prefix: "Region"
+    suffix: "<br />"
+
+  - sort_key: 600
+    column: "gauge_location"
+    type: "text"
+    prefix: "Gauge Location"
+    suffix: "<br />"
+
+  - sort_key: 700
+    column: "station_number"
+    type: "text"
+    prefix: "Station #"
+    suffix: "<br />"
+
+  - sort_key: 701
+    column: "usgs_id"
+    type: "text"
+    prefix: "USGS ID #"
+    suffix: "<br />"
+
+  - sort_key: 702
+    column: "nwsli_id"
+    type: "text"
+    prefix: "NWS ID "
+    suffix: "<br />"
+
+  - sort_key: 703
+    column: "geos_id"
+    type: "text"
+    prefix: "GEOS ID "
+    suffix: "<br />"
+
+  - sort_key: 800
+    column: "latitude"
+    type: "text"
+    prefix: "Latitude"
+    suffix: ""
+
+  - sort_key: 900
+    column: "longitude"
+    type: "text"
+    prefix: "Longitude"
+    suffix: "<br />"
+
+  - sort_key: 1000
+    column: "guide_book"
+    type: "text"
+    prefix: "Guide Book"
+    suffix: ""
+
+  - sort_key: 1100
+    column: "run_number"
+    type: "text"
+    prefix: "Run #"
+    suffix: ""
+
+  - sort_key: 1200
+    column: "page_number"
+    type: "text"
+    prefix: "Page "
+    suffix: "<br />"
+
+  - sort_key: 1300
+    column: "season"
+    type: "text"
+    prefix: "Season"
+    suffix: "<br />"
+
+  - sort_key: 1400
+    column: "length"
+    type: "text"
+    prefix: "Length"
+    suffix: " miles<br />"
+
+  - sort_key: 1500
+    column: "gradient"
+    type: "text"
+    prefix: "Gradient"
+    suffix: " feet/mile<br />"
+
+  - sort_key: 1600
+    column: "elevation_lost"
+    type: "text"
+    prefix: "Elevation Lost"
+    suffix: "feet<br />"
+
+  - sort_key: 1700
+    column: "scenery"
+    type: "text"
+    prefix: "Scenery"
+    suffix: "<br />"
+
+  - sort_key: 1800
+    column: "features"
+    type: "text"
+    prefix: "Features"
+    suffix: "<br />"
+
+  - sort_key: 1900
+    column: "remoteness"
+    type: "text"
+    prefix: "Remoteness"
+    suffix: "<br />"
+
+  - sort_key: 2000
+    column: "character"
+    type: "text"
+    prefix: "Character"
+    suffix: "<br />"
+
+  - sort_key: 2100
+    column: "difficulties"
+    type: "text"
+    prefix: "Difficulties"
+    suffix: "<br />"
+
+  - sort_key: 2200
+    column: "watershed_type"
+    type: "text"
+    prefix: "Watershed type"
+    suffix: "<br />"
+
+  - sort_key: 2300
+    column: "low_flow"
+    type: "text"
+    prefix: "Low Flow"
+    suffix: " CFS<br />"
+
+  - sort_key: 2400
+    column: "high_flow"
+    type: "text"
+    prefix: "High Flow"
+    suffix: " CFS<br />"
+
+  - sort_key: 2500
+    column: "optimal_flow"
+    type: "text"
+    prefix: "Optimal Flow"
+    suffix: " CFS<br />"
+
+  - sort_key: 2600
+    column: "bank_full"
+    type: "text"
+    prefix: "Bank Full"
+    suffix: " CFS<br />"
+
+  - sort_key: 2700
+    column: "flood_stage"
+    type: "text"
+    prefix: "Flood Stage"
+    suffix: " CFS<br />"
+
+  - sort_key: 2800
+    column: "merged_dbs"
+    type: "noop"
+    prefix: ""
+    suffix: ""
+
+  - sort_key: 2801
+    column: "db_name"
+    type: "DB"
+    prefix: "View"
+    suffix: "<br />"
+    info: "Must be right after Merged_DBs"
+
+  - sort_key: 2900
+    column: "calc_time"
+    type: "noop"
+    prefix: ""
+    suffix: ""
+
+  - sort_key: 2901
+    column: "calc_expr"
+    type: "calc"
+    prefix: "Calculation"
+    suffix: "<br />"
+    info: "Must be right after Calc_time"
+
+  - sort_key: 3000
+    column: "calc_notes"
+    type: "ptxt"
+    prefix: "Calculation Notes"
+    suffix: "<br />"
+
+  - sort_key: 3100
+    column: "cfs_to_gauge_data"
+    type: "URL"
+    prefix: "Rating table"
+    suffix: "<br />"
+
+  - sort_key: 3200
+    column: "description"
+    type: "text"
+    prefix: "Description"
+    suffix: ""
+
+  - sort_key: 3300
+    column: "notes"
+    type: "ptxt"
+    prefix: "Notes"
+    suffix: ""

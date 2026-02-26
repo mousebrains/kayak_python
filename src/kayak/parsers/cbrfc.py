@@ -75,9 +75,9 @@ class CBRFCParser(BaseParser):
                 continue
 
             if "cfs" in col_lower or "flow" in col_lower:
-                data_type = DataType.FLOW
+                data_type = DataType.flow
             elif "ft" in col_lower or "stage" in col_lower:
-                data_type = DataType.GAGE
+                data_type = DataType.gauge
             else:
                 continue
 

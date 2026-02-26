@@ -82,13 +82,13 @@ class NWRFCXMLParser(BaseParser):
                 if "feet" in units.lower() or "ft" in units.lower():
                     val = safe_float(text)
                     if val is not None and math.isfinite(val):
-                        self.dump_to_db(station, DataType.GAGE, when, val)
+                        self.dump_to_db(station, DataType.gauge, when, val)
             elif tag == "discharge" and when and text:
                 units = elem.get("units", "")
                 if "cubic" in units.lower() or "cfs" in units.lower():
                     val = safe_float(text)
                     if val is not None and math.isfinite(val) and val >= 0:
-                        self.dump_to_db(station, DataType.FLOW, when, val)
+                        self.dump_to_db(station, DataType.flow, when, val)
 
     def parse_line(self, line: str) -> bool:
         return True

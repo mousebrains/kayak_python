@@ -28,7 +28,7 @@ class WaGovParser(BaseParser):
         super().__init__(*args, **kwargs)
         self._state = 0
         self._station = ""
-        self._data_type = DataType.FLOW
+        self._data_type = DataType.flow
 
     def parse_line(self, line: str) -> bool:
         if not line.strip():
@@ -41,13 +41,13 @@ class WaGovParser(BaseParser):
         if self._state == 0:
             if parts[0] == "DATE" and parts[1] == "TIME":
                 self._state = 1
-                self._data_type = DataType.FLOW
+                self._data_type = DataType.flow
                 if len(parts) >= 3:
                     type_hint = parts[2].lower()
                     if type_hint.startswith("water"):
-                        self._data_type = DataType.TEMPERATURE
+                        self._data_type = DataType.temperature
                     elif type_hint.startswith("stage"):
-                        self._data_type = DataType.GAGE
+                        self._data_type = DataType.gauge
             else:
                 # Look for station name (format: STATIONID--description)
                 if "--" in parts[0]:
@@ -84,7 +84,7 @@ class WaGovParser(BaseParser):
         if val is None or not math.isfinite(val):
             return True
 
-        if self._data_type == DataType.TEMPERATURE:
+        if self._data_type == DataType.temperature:
             val = celsius_to_fahrenheit(val)
 
         self.dump_to_db(self._station, self._data_type, when, val)

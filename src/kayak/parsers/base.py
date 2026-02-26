@@ -15,7 +15,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from kayak.db.data_db import store_measurement, store_url
+from kayak.db.data_db import store_observation
 from kayak.db.models import DataType
 
 logger = logging.getLogger(__name__)
@@ -34,11 +34,13 @@ class BaseParser(ABC):
         url: str,
         session: Session,
         *,
+        source_id: int | None = None,
         verbose: bool = False,
         dry_run: bool = False,
     ):
         self.url = url
         self.session = session
+        self.source_id = source_id
         self.verbose = verbose
         self.dry_run = dry_run
         self._db_updates = 0
@@ -89,7 +91,13 @@ class BaseParser(ABC):
         when: datetime,
         value: float,
     ) -> bool:
-        """Store a measurement and record the URL source."""
+        """Store an observation.
+
+        The station parameter is used for logging/identification but the
+        actual DB key is source_id. If source_id is not set (e.g. USGS
+        parsers that discover stations dynamically), the station name is
+        used for logging only and the observation is stored by source_id.
+        """
         self._db_updates += 1
 
         if self.verbose:
@@ -100,10 +108,14 @@ class BaseParser(ABC):
         if self.dry_run:
             return True
 
-        ok = store_measurement(self.session, station, data_type, when, value)
-        if ok:
-            store_url(self.session, self.url, station)
-        else:
+        if self.source_id is None:
+            logger.error(
+                "No source_id set for %s/%s — cannot store", station, data_type,
+            )
+            return False
+
+        ok = store_observation(self.session, self.source_id, data_type, when, value)
+        if not ok:
             logger.error(
                 "dumpToDatabase failed for %s/%s %s %s %s %s",
                 station, data_type, value, when, self.url, self.name,

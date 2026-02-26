@@ -72,13 +72,13 @@ class NOAAXMLParser(BaseParser):
                         continue
 
                     if units == "ft":
-                        self.dump_to_db(station_id, DataType.GAGE, when, val)
+                        self.dump_to_db(station_id, DataType.gauge, when, val)
                     elif units == "cfs":
                         if 0 <= val <= 2e6:
-                            self.dump_to_db(station_id, DataType.FLOW, when, val)
+                            self.dump_to_db(station_id, DataType.flow, when, val)
                     elif units == "kcfs":
                         if 0 <= val <= 2e6:
-                            self.dump_to_db(station_id, DataType.FLOW, when, val * 1000)
+                            self.dump_to_db(station_id, DataType.flow, when, val * 1000)
                     else:
                         logger.warning("Unrecognized units '%s' for %s", units, station_id)
 

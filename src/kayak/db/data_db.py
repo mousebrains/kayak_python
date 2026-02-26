@@ -1,27 +1,60 @@
-"""Measurement storage and query helpers (replaces DataDB.C)."""
+"""Observation storage and query helpers (replaces DataDB.C).
+
+All queries are keyed by source_id (int FK) instead of station name strings.
+"""
 
 from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import and_, select
+from sqlalchemy import select
 from sqlalchemy.dialects.sqlite import insert as sqlite_upsert
 from sqlalchemy.orm import Session
 
-from kayak.db.models import DataType, Latest, Measurement, RatingTable, URL2Name
+from kayak.db.models import (
+    DataType,
+    Gauge,
+    LatestObservation,
+    Observation,
+    Rating,
+    RatingData,
+    Source,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def store_measurement(
+# ---------------------------------------------------------------------------
+# Source / Gauge lookups
+# ---------------------------------------------------------------------------
+
+def get_source_by_name(session: Session, name: str) -> Source | None:
+    """Fetch a Source by its name."""
+    return session.execute(
+        select(Source).where(Source.name == name)
+    ).scalar_one_or_none()
+
+
+def get_gauge_by_name(session: Session, name: str) -> Gauge | None:
+    """Fetch a Gauge by its name."""
+    return session.execute(
+        select(Gauge).where(Gauge.name == name)
+    ).scalar_one_or_none()
+
+
+# ---------------------------------------------------------------------------
+# Observation storage
+# ---------------------------------------------------------------------------
+
+def store_observation(
     session: Session,
-    station: str,
+    source_id: int,
     data_type: DataType | str,
     when: datetime,
     value: float,
 ) -> bool:
-    """Store a single measurement, rejecting invalid data.
+    """Store a single observation, rejecting invalid data.
 
     Mirrors DataDB::operator() validation:
     - Rejects timestamps in the future
@@ -41,190 +74,195 @@ def store_measurement(
         when_utc = when.astimezone(timezone.utc)
 
     if when_utc > now + timedelta(hours=1):
-        logger.warning("Rejecting future timestamp %s for %s", when, station)
+        logger.warning("Rejecting future timestamp %s for source_id=%d", when, source_id)
         return False
 
-    if data_type == DataType.FLOW and value < 0:
-        logger.error("Rejecting negative flow %s for %s", value, station)
+    if data_type == DataType.flow and value < 0:
+        logger.error("Rejecting negative flow %s for source_id=%d", value, source_id)
         return False
 
-    # Use INSERT OR REPLACE for SQLite, ON DUPLICATE KEY UPDATE for MySQL
-    stmt = sqlite_upsert(Measurement).values(
-        station=station,
+    stmt = sqlite_upsert(Observation).values(
+        source_id=source_id,
+        observed_at=when,
         data_type=data_type,
-        time=when,
         value=value,
     ).on_conflict_do_update(
-        index_elements=["station", "data_type", "time"],
+        index_elements=["source_id", "observed_at", "data_type"],
         set_={"value": value},
     )
     session.execute(stmt)
     return True
 
 
-def store_url(session: Session, url: str, station: str) -> None:
-    """Record URL-to-station mapping (replaces DataDB::url)."""
-    session.add(URL2Name(url=url, name=station))
-
+# ---------------------------------------------------------------------------
+# Latest observation
+# ---------------------------------------------------------------------------
 
 def update_latest(
     session: Session,
-    station: str,
+    source_id: int,
     data_type: DataType,
 ) -> None:
-    """Recompute the Latest row for a station/type from measurements.
+    """Recompute the LatestObservation row for a source/type from observations.
 
     Mirrors DataDB::wrapup() latest-value logic:
-    - Latest value is the most recent measurement
-    - Previous value is the most recent measurement > 24 hours before latest
-    - Delta is the hourly rate of change
+    - Latest value is the most recent observation
+    - Previous value is the most recent observation > 1 hour before latest
+    - delta_per_hour is the hourly rate of change
     """
-    # Get most recent measurement
     latest_row = session.execute(
-        select(Measurement)
+        select(Observation)
         .where(
-            Measurement.station == station,
-            Measurement.data_type == data_type,
+            Observation.source_id == source_id,
+            Observation.data_type == data_type,
         )
-        .order_by(Measurement.time.desc())
+        .order_by(Observation.observed_at.desc())
         .limit(1)
     ).scalar_one_or_none()
 
     if latest_row is None:
         return
 
-    # Get previous measurement (1-25 hours before latest)
-    cutoff = latest_row.time - timedelta(hours=1)
+    cutoff = latest_row.observed_at - timedelta(hours=1)
     prev_row = session.execute(
-        select(Measurement)
+        select(Observation)
         .where(
-            Measurement.station == station,
-            Measurement.data_type == data_type,
-            Measurement.time <= cutoff,
+            Observation.source_id == source_id,
+            Observation.data_type == data_type,
+            Observation.observed_at <= cutoff,
         )
-        .order_by(Measurement.time.desc())
+        .order_by(Observation.observed_at.desc())
         .limit(1)
     ).scalar_one_or_none()
 
     delta = None
-    prev_time = None
+    prev_observed_at = None
     prev_value = None
     if prev_row is not None:
-        prev_time = prev_row.time
+        prev_observed_at = prev_row.observed_at
         prev_value = prev_row.value
-        hours_diff = (latest_row.time - prev_row.time).total_seconds() / 3600
+        hours_diff = (latest_row.observed_at - prev_row.observed_at).total_seconds() / 3600
         if hours_diff > 0:
             delta = (latest_row.value - prev_row.value) / hours_diff
 
-    # Upsert Latest
     existing = session.execute(
-        select(Latest).where(
-            Latest.station == station,
-            Latest.data_type == data_type,
+        select(LatestObservation).where(
+            LatestObservation.source_id == source_id,
+            LatestObservation.data_type == data_type,
         )
     ).scalar_one_or_none()
 
     if existing:
-        existing.time = latest_row.time
+        existing.observed_at = latest_row.observed_at
         existing.value = latest_row.value
-        existing.prev_time = prev_time
+        existing.prev_observed_at = prev_observed_at
         existing.prev_value = prev_value
-        existing.delta = delta
+        existing.delta_per_hour = delta
     else:
-        session.add(Latest(
-            station=station,
+        session.add(LatestObservation(
+            source_id=source_id,
             data_type=data_type,
-            time=latest_row.time,
+            observed_at=latest_row.observed_at,
             value=latest_row.value,
-            prev_time=prev_time,
+            prev_observed_at=prev_observed_at,
             prev_value=prev_value,
-            delta=delta,
+            delta_per_hour=delta,
         ))
 
 
 def get_latest(
     session: Session,
-    station: str,
+    source_id: int,
     data_type: DataType,
-) -> Latest | None:
-    """Fetch the Latest row for a station/type."""
+) -> LatestObservation | None:
+    """Fetch the LatestObservation row for a source/type."""
     return session.execute(
-        select(Latest).where(
-            Latest.station == station,
-            Latest.data_type == data_type,
+        select(LatestObservation).where(
+            LatestObservation.source_id == source_id,
+            LatestObservation.data_type == data_type,
         )
     ).scalar_one_or_none()
 
 
-def get_measurements(
+# ---------------------------------------------------------------------------
+# Observation queries
+# ---------------------------------------------------------------------------
+
+def get_observations(
     session: Session,
-    station: str,
+    source_id: int,
     data_type: DataType,
     since: datetime | None = None,
     until: datetime | None = None,
-) -> list[Measurement]:
-    """Fetch measurement records for a station/type in time range."""
+) -> list[Observation]:
+    """Fetch observation records for a source/type in time range."""
     if since is None:
         since = datetime.now(timezone.utc) - timedelta(days=60)
 
     stmt = (
-        select(Measurement)
+        select(Observation)
         .where(
-            Measurement.station == station,
-            Measurement.data_type == data_type,
-            Measurement.time >= since,
+            Observation.source_id == source_id,
+            Observation.data_type == data_type,
+            Observation.observed_at >= since,
         )
     )
     if until is not None:
-        stmt = stmt.where(Measurement.time <= until)
-    stmt = stmt.order_by(Measurement.time.desc())
+        stmt = stmt.where(Observation.observed_at <= until)
+    stmt = stmt.order_by(Observation.observed_at.desc())
     return list(session.scalars(stmt))
 
 
+# ---------------------------------------------------------------------------
+# Rating tables
+# ---------------------------------------------------------------------------
+
 def get_rating_table(
     session: Session,
-    db_name: str,
+    rating_id: int,
 ) -> list[tuple[float, float]]:
-    """Fetch rating table entries sorted by feet (replaces DataDB::getRatingTable)."""
+    """Fetch rating table entries sorted by gauge_height_ft."""
     rows = session.execute(
-        select(RatingTable.feet, RatingTable.cfs)
-        .where(RatingTable.db_name == db_name)
-        .order_by(RatingTable.feet)
+        select(RatingData.gauge_height_ft, RatingData.flow_cfs)
+        .where(RatingData.rating_id == rating_id)
+        .order_by(RatingData.gauge_height_ft)
     ).all()
-    return [(r.feet, r.cfs) for r in rows]
+    return [(r.gauge_height_ft, r.flow_cfs) for r in rows]
 
 
 def put_rating_table(
     session: Session,
-    db_name: str,
+    rating_id: int,
     entries: list[tuple[float, float]],
 ) -> None:
-    """Store rating table entries (replaces DataDB::putRatingTable)."""
-    # Clear existing entries
-    session.query(RatingTable).filter(RatingTable.db_name == db_name).delete()
+    """Store rating table entries for a rating_id."""
+    session.query(RatingData).filter(RatingData.rating_id == rating_id).delete()
     for feet, cfs in entries:
-        session.add(RatingTable(db_name=db_name, feet=feet, cfs=cfs))
+        session.add(RatingData(rating_id=rating_id, gauge_height_ft=feet, flow_cfs=cfs))
 
 
-def merge_stations(
+# ---------------------------------------------------------------------------
+# Merge sources
+# ---------------------------------------------------------------------------
+
+def merge_sources(
     session: Session,
-    target_station: str,
-    source_stations: list[str],
+    target_source_id: int,
+    input_source_ids: list[int],
     data_type: DataType,
     since: datetime | None = None,
 ) -> int:
-    """Merge measurements from multiple source stations into a target.
+    """Merge observations from multiple sources into a target.
 
-    Replaces DataDB::merge(). Uses INSERT OR IGNORE to skip duplicates.
     Returns count of new rows inserted.
     """
     if since is None:
         since = datetime.now(timezone.utc) - timedelta(days=10)
 
     count = 0
-    for source in source_stations:
-        rows = get_measurements(session, source, data_type, since=since)
+    for src_id in input_source_ids:
+        rows = get_observations(session, src_id, data_type, since=since)
         for row in rows:
-            if store_measurement(session, target_station, data_type, row.time, row.value):
+            if store_observation(session, target_source_id, data_type, row.observed_at, row.value):
                 count += 1
     return count

@@ -97,12 +97,12 @@ class NOAA2Parser(BaseParser):
             if val is not None and not math.isinf(val):
                 if self._flow_type == "kcfs":
                     val = kcfs_to_cfs(val)
-                self.dump_to_db(self._station, DataType.FLOW, when, val)
+                self.dump_to_db(self._station, DataType.flow, when, val)
             data_idx += 1
 
         if self._has_gage and data_idx < len(parts):
             val = safe_float(parts[data_idx])
             if val is not None and not math.isinf(val):
-                self.dump_to_db(self._station, DataType.GAGE, when, val)
+                self.dump_to_db(self._station, DataType.gauge, when, val)
 
         return True

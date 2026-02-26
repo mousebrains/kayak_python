@@ -80,9 +80,9 @@ class USACEResvParser(BaseParser):
             outflow = safe_float(tokens[-1])
 
             if inflow is not None and math.isfinite(inflow):
-                self.dump_to_db(project, DataType.INFLOW, self._time, inflow)
+                self.dump_to_db(project, DataType.inflow, self._time, inflow)
             if outflow is not None and math.isfinite(outflow):
-                self.dump_to_db(project, DataType.FLOW, self._time, outflow)
+                self.dump_to_db(project, DataType.flow, self._time, outflow)
             return True
 
         if self._state == 20:
@@ -105,9 +105,9 @@ class USACEResvParser(BaseParser):
                     project = _mk_name(self._project + " " + tokens[0])
                 self._stacked = False
                 if math.isfinite(self._flow):
-                    self.dump_to_db(project, DataType.FLOW, self._time, self._flow)
+                    self.dump_to_db(project, DataType.flow, self._time, self._flow)
                 if math.isfinite(self._gage):
-                    self.dump_to_db(project, DataType.GAGE, self._time, self._gage)
+                    self.dump_to_db(project, DataType.gauge, self._time, self._gage)
 
             flow = safe_float(tokens[-1])
             gage = safe_float(tokens[-3]) if len(tokens) >= 3 else None
@@ -127,7 +127,7 @@ class USACEResvParser(BaseParser):
     def _flush_stacked(self):
         project = _mk_name(self._project)
         if math.isfinite(self._flow):
-            self.dump_to_db(project, DataType.FLOW, self._time, self._flow)
+            self.dump_to_db(project, DataType.flow, self._time, self._flow)
         if math.isfinite(self._gage):
-            self.dump_to_db(project, DataType.GAGE, self._time, self._gage)
+            self.dump_to_db(project, DataType.gauge, self._time, self._gage)
         self._stacked = False

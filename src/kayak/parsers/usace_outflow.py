@@ -70,7 +70,7 @@ class USACEOutflowParser(BaseParser):
                         if when:
                             # Values are in thousands
                             self.dump_to_db(
-                                self._project, DataType.FLOW,
+                                self._project, DataType.flow,
                                 when, val * 1000,
                             )
                         else:
