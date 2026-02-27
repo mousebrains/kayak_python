@@ -45,22 +45,9 @@ def ensure_all_loaded():
     """
     # Import each parser module — the @register decorator runs on import
     from kayak.parsers import (  # noqa: F401
-        cbrfc,
-        idaho_power,
-        idwr,
-        noaa,
-        noaa2,
-        noaa_xml,
-        nwrfc,
         nwrfc_xml,
-        ocs,
-        usace_ca,
         usace_outflow,
-        usace_resv,
         usbr,
-        usbr_pn,
-        usbr_special,
         usgs,
         wa_gov,
-        waves,
     )
