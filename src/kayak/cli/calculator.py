@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 
 from kayak.db.data_db import get_latest, store_observation, update_latest
 from kayak.db.engine import get_session
-from kayak.db.models import CalcExpression, DataType, Source
+from kayak.db.models import CalcExpression, DataType, Gauge, GaugeSource, Source
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +39,17 @@ def calculator(args):
 
         print(f"Found {len(calc_sources)} calculated sources")
 
-        # Build source name -> id lookup
+        # Build name -> source_id lookup from Source names and Gauge names
         all_sources = session.query(Source).all()
         name_to_id = {s.name: s.id for s in all_sources}
+
+        # Also map gauge names to their primary source_id
+        for gauge in session.query(Gauge).all():
+            gs = session.query(GaugeSource).filter_by(
+                gauge_id=gauge.id
+            ).first()
+            if gs and gauge.name not in name_to_id:
+                name_to_id[gauge.name] = gs.source_id
 
         for source in calc_sources:
             try:
@@ -63,7 +71,8 @@ def calculator(args):
                     continue
 
                 # Resolve all references to actual values
-                # time_expression contains source references like "source_name::type"
+                # time_expression refs are "key::source_name::type" (3-part)
+                # or "source_name::type" (2-part)
                 values = {}
                 times = []
                 skip = False
@@ -75,8 +84,12 @@ def calculator(args):
                         skip = True
                         break
 
-                    ref_name = parts[0]
-                    ref_type_str = parts[1] if len(parts) > 1 else data_type.value
+                    if len(parts) >= 3:
+                        ref_name = parts[1]
+                        ref_type_str = parts[2]
+                    else:
+                        ref_name = parts[0]
+                        ref_type_str = parts[1]
 
                     ref_source_id = name_to_id.get(ref_name)
                     if not ref_source_id:
