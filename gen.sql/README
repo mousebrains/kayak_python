@@ -1,2 +1,0 @@
-mysql -h mysql.wkcc.org -u levels --password=Deschutes --database=levels_information <tpw.master.2014.12.09
-mkMergedMaster
