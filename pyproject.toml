@@ -25,6 +25,8 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=4.1",
     "httpx>=0.27",         # Flask test client
+    "ruff>=0.5",
+    "mypy>=1.10",
 ]
 
 [project.scripts]
@@ -36,6 +38,51 @@ packages = ["src/kayak"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+addopts = "-ra --strict-markers"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks integration tests",
+]
+
+[tool.coverage.run]
+source = ["kayak"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.",
+    "if TYPE_CHECKING:",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["E501", "SIM108"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["kayak"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+check_untyped_defs = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "kayak.db.models"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "kayak.utils.*"
+disallow_untyped_defs = true
 
 [tool.hatch.envs.default]
 features = ["dev"]

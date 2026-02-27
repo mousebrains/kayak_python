@@ -1,13 +1,13 @@
 """Raw data API routes (replaces data.C)."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from flask import Blueprint, abort, jsonify, request
 
 from kayak.db.data_db import get_latest, get_observations
 from kayak.db.engine import get_session
-from kayak.db.info_db import get_section
-from kayak.db.models import DataType, GaugeSource
+from kayak.db.info_db import get_primary_source_id, get_section
+from kayak.db.models import DataType
 
 data_api_bp = Blueprint("data_api", __name__, url_prefix="/api")
 
@@ -30,16 +30,14 @@ def get_data(section_id: int, data_type: str):
         if gauge is None:
             return jsonify({"section": section.name, "type": data_type, "count": 0, "data": []})
 
-        gs = session.query(GaugeSource).filter(
-            GaugeSource.gauge_id == gauge.id
-        ).first()
-        if gs is None:
+        source_id = get_primary_source_id(session, gauge.id)
+        if source_id is None:
             return jsonify({"section": section.name, "type": data_type, "count": 0, "data": []})
 
         days = int(request.args.get("days", 60))
-        since = datetime.now(timezone.utc) - timedelta(days=days)
+        since = datetime.now(UTC) - timedelta(days=days)
 
-        records = get_observations(session, gs.source_id, dtype, since=since)
+        records = get_observations(session, source_id, dtype, since=since)
 
         return jsonify({
             "section": section.name,
@@ -68,18 +66,17 @@ def get_latest_data(section_id: int):
 
         name = section.display_name or section.name
 
-        result = {"section": section.name, "name": name, "types": {}}
+        types: dict[str, dict[str, object]] = {}
+        result: dict[str, object] = {"section": section.name, "name": name, "types": types}
 
         gauge = section.gauge
         if gauge:
-            gs = session.query(GaugeSource).filter(
-                GaugeSource.gauge_id == gauge.id
-            ).first()
-            if gs:
+            source_id = get_primary_source_id(session, gauge.id)
+            if source_id:
                 for dtype in DataType:
-                    latest = get_latest(session, gs.source_id, dtype)
+                    latest = get_latest(session, source_id, dtype)
                     if latest and latest.value is not None:
-                        result["types"][dtype.value] = {
+                        types[dtype.value] = {
                             "value": latest.value,
                             "time": latest.observed_at.isoformat() if latest.observed_at else None,
                             "delta_per_hour": latest.delta_per_hour,

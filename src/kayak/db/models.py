@@ -10,10 +10,8 @@ from __future__ import annotations
 import enum
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
 
 from sqlalchemy import (
-    CheckConstraint,
     ForeignKey,
     Index,
     Integer,
@@ -30,12 +28,11 @@ from sqlalchemy.orm import (
     relationship,
 )
 
-
 # ---------------------------------------------------------------------------
 # ENUMs
 # ---------------------------------------------------------------------------
 
-class DataType(str, enum.Enum):
+class DataType(enum.StrEnum):
     """Measurement types (replaces DataDB::TYPE)."""
     gauge = "gauge"
     flow = "flow"
@@ -43,14 +40,14 @@ class DataType(str, enum.Enum):
     temperature = "temperature"
 
 
-class FlowLevel(str, enum.Enum):
+class FlowLevel(enum.StrEnum):
     """Flow level classifications for section_level."""
     low = "low"
     okay = "okay"
     high = "high"
 
 
-class PageAction(str, enum.Enum):
+class PageAction(enum.StrEnum):
     """Page cache action types (replaces PageDB::ACTION)."""
     PAGE = "page"
     FILE = "file"
@@ -78,28 +75,28 @@ class Gauge(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(256), unique=True, nullable=False)
-    bank_full: Mapped[Optional[float]] = mapped_column()
-    flood_stage: Mapped[Optional[float]] = mapped_column()
-    location: Mapped[Optional[str]] = mapped_column(Text)
-    latitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
-    longitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
-    station_id: Mapped[Optional[str]] = mapped_column(Text)
-    cbtt_id: Mapped[Optional[str]] = mapped_column(Text)
-    geos_id: Mapped[Optional[str]] = mapped_column(Text)
-    nws_id: Mapped[Optional[str]] = mapped_column(Text)
-    nwsli_id: Mapped[Optional[str]] = mapped_column(Text)
-    snotel_id: Mapped[Optional[str]] = mapped_column(Text)
-    usgs_id: Mapped[Optional[str]] = mapped_column(String(32))
-    rating_id: Mapped[Optional[int]] = mapped_column(
+    bank_full: Mapped[float | None] = mapped_column()
+    flood_stage: Mapped[float | None] = mapped_column()
+    location: Mapped[str | None] = mapped_column(Text)
+    latitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    longitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    station_id: Mapped[str | None] = mapped_column(Text)
+    cbtt_id: Mapped[str | None] = mapped_column(Text)
+    geos_id: Mapped[str | None] = mapped_column(Text)
+    nws_id: Mapped[str | None] = mapped_column(Text)
+    nwsli_id: Mapped[str | None] = mapped_column(Text)
+    snotel_id: Mapped[str | None] = mapped_column(Text)
+    usgs_id: Mapped[str | None] = mapped_column(String(32))
+    rating_id: Mapped[int | None] = mapped_column(
         ForeignKey("rating.id", ondelete="SET NULL")
     )
 
     # relationships
-    rating: Mapped[Optional["Rating"]] = relationship(back_populates="gauges")
-    sources: Mapped[list["Source"]] = relationship(
+    rating: Mapped[Rating | None] = relationship(back_populates="gauges")
+    sources: Mapped[list[Source]] = relationship(
         secondary="gauge_source", back_populates="gauges"
     )
-    sections: Mapped[list["Section"]] = relationship(back_populates="gauge")
+    sections: Mapped[list[Section]] = relationship(back_populates="gauge")
 
     __table_args__ = (
         Index("ix_gauge_usgs_id", "usgs_id"),
@@ -115,24 +112,24 @@ class Source(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(256), nullable=False)
-    agency: Mapped[Optional[str]] = mapped_column(String(64))
-    fetch_url_id: Mapped[Optional[int]] = mapped_column(
+    agency: Mapped[str | None] = mapped_column(String(64))
+    fetch_url_id: Mapped[int | None] = mapped_column(
         ForeignKey("fetch_url.id", ondelete="SET NULL")
     )
-    calc_expression_id: Mapped[Optional[int]] = mapped_column(
+    calc_expression_id: Mapped[int | None] = mapped_column(
         ForeignKey("calc_expression.id", ondelete="SET NULL")
     )
 
     # relationships
-    fetch_url: Mapped[Optional["FetchUrl"]] = relationship(back_populates="sources")
-    calc_expression: Mapped[Optional["CalcExpression"]] = relationship(
+    fetch_url: Mapped[FetchUrl | None] = relationship(back_populates="sources")
+    calc_expression: Mapped[CalcExpression | None] = relationship(
         back_populates="sources"
     )
-    gauges: Mapped[list["Gauge"]] = relationship(
+    gauges: Mapped[list[Gauge]] = relationship(
         secondary="gauge_source", back_populates="sources"
     )
-    observations: Mapped[list["Observation"]] = relationship(back_populates="source")
-    latest_observations: Mapped[list["LatestObservation"]] = relationship(
+    observations: Mapped[list[Observation]] = relationship(back_populates="source")
+    latest_observations: Mapped[list[LatestObservation]] = relationship(
         back_populates="source"
     )
 
@@ -165,13 +162,13 @@ class FetchUrl(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     url: Mapped[str] = mapped_column(String(512), unique=True, nullable=False)
-    parser: Mapped[Optional[str]] = mapped_column(String(32))
-    hours: Mapped[Optional[str]] = mapped_column(String(128))
+    parser: Mapped[str | None] = mapped_column(String(32))
+    hours: Mapped[str | None] = mapped_column(String(128))
     is_active: Mapped[bool] = mapped_column(default=False, server_default=text("0"))
-    last_fetched_at: Mapped[Optional[datetime]] = mapped_column()
+    last_fetched_at: Mapped[datetime | None] = mapped_column()
 
     # relationships
-    sources: Mapped[list["Source"]] = relationship(back_populates="fetch_url")
+    sources: Mapped[list[Source]] = relationship(back_populates="fetch_url")
 
     __table_args__ = (
         Index("ix_fetch_url_is_active", "is_active"),
@@ -188,11 +185,11 @@ class CalcExpression(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     data_type: Mapped[DataType] = mapped_column(nullable=False)
     expression: Mapped[str] = mapped_column(String(512), nullable=False)
-    time_expression: Mapped[Optional[str]] = mapped_column(Text)
-    note: Mapped[Optional[str]] = mapped_column(Text)
+    time_expression: Mapped[str | None] = mapped_column(Text)
+    note: Mapped[str | None] = mapped_column(Text)
 
     # relationships
-    sources: Mapped[list["Source"]] = relationship(back_populates="calc_expression")
+    sources: Mapped[list[Source]] = relationship(back_populates="calc_expression")
 
 
 # ---------------------------------------------------------------------------
@@ -203,12 +200,12 @@ class Rating(Base):
     __tablename__ = "rating"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    url: Mapped[Optional[str]] = mapped_column(String(512))
-    parser: Mapped[Optional[str]] = mapped_column(String(32))
+    url: Mapped[str | None] = mapped_column(String(512))
+    parser: Mapped[str | None] = mapped_column(String(32))
 
     # relationships
-    gauges: Mapped[list["Gauge"]] = relationship(back_populates="rating")
-    data_points: Mapped[list["RatingData"]] = relationship(back_populates="rating")
+    gauges: Mapped[list[Gauge]] = relationship(back_populates="rating")
+    data_points: Mapped[list[RatingData]] = relationship(back_populates="rating")
 
 
 # ---------------------------------------------------------------------------
@@ -225,7 +222,7 @@ class RatingData(Base):
     flow_cfs: Mapped[float] = mapped_column(nullable=False)
 
     # relationships
-    rating: Mapped["Rating"] = relationship(back_populates="data_points")
+    rating: Mapped[Rating] = relationship(back_populates="data_points")
 
 
 # ---------------------------------------------------------------------------
@@ -243,7 +240,7 @@ class Observation(Base):
     value: Mapped[float] = mapped_column(nullable=False)
 
     # relationships
-    source: Mapped["Source"] = relationship(back_populates="observations")
+    source: Mapped[Source] = relationship(back_populates="observations")
 
 
 # ---------------------------------------------------------------------------
@@ -259,12 +256,12 @@ class LatestObservation(Base):
     data_type: Mapped[DataType] = mapped_column(primary_key=True)
     observed_at: Mapped[datetime] = mapped_column(nullable=False)
     value: Mapped[float] = mapped_column(nullable=False)
-    prev_observed_at: Mapped[Optional[datetime]] = mapped_column()
-    prev_value: Mapped[Optional[float]] = mapped_column()
-    delta_per_hour: Mapped[Optional[float]] = mapped_column()
+    prev_observed_at: Mapped[datetime | None] = mapped_column()
+    prev_value: Mapped[float | None] = mapped_column()
+    delta_per_hour: Mapped[float | None] = mapped_column()
 
     # relationships
-    source: Mapped["Source"] = relationship(back_populates="latest_observations")
+    source: Mapped[Source] = relationship(back_populates="latest_observations")
 
 
 # ---------------------------------------------------------------------------
@@ -275,48 +272,48 @@ class Section(Base):
     __tablename__ = "section"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    updated_at: Mapped[Optional[datetime]] = mapped_column()
-    gauge_id: Mapped[Optional[int]] = mapped_column(
+    updated_at: Mapped[datetime | None] = mapped_column()
+    gauge_id: Mapped[int | None] = mapped_column(
         ForeignKey("gauge.id", ondelete="SET NULL")
     )
     name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
-    display_name: Mapped[Optional[str]] = mapped_column(Text)
-    sort_name: Mapped[Optional[str]] = mapped_column(String(256))
-    nature: Mapped[Optional[str]] = mapped_column(Text)
-    description: Mapped[Optional[str]] = mapped_column(Text)
-    difficulties: Mapped[Optional[str]] = mapped_column(Text)
-    basin: Mapped[Optional[str]] = mapped_column(Text)
-    basin_area: Mapped[Optional[float]] = mapped_column()
-    elevation: Mapped[Optional[float]] = mapped_column()
-    elevation_lost: Mapped[Optional[float]] = mapped_column()
-    length: Mapped[Optional[float]] = mapped_column()
-    gradient: Mapped[Optional[float]] = mapped_column()
-    features: Mapped[Optional[str]] = mapped_column(Text)
-    latitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
-    longitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
-    latitude_start: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
-    longitude_start: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
-    latitude_end: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
-    longitude_end: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
-    map_name: Mapped[Optional[str]] = mapped_column(Text)
+    display_name: Mapped[str | None] = mapped_column(Text)
+    sort_name: Mapped[str | None] = mapped_column(String(256))
+    nature: Mapped[str | None] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(Text)
+    difficulties: Mapped[str | None] = mapped_column(Text)
+    basin: Mapped[str | None] = mapped_column(Text)
+    basin_area: Mapped[float | None] = mapped_column()
+    elevation: Mapped[float | None] = mapped_column()
+    elevation_lost: Mapped[float | None] = mapped_column()
+    length: Mapped[float | None] = mapped_column()
+    gradient: Mapped[float | None] = mapped_column()
+    features: Mapped[str | None] = mapped_column(Text)
+    latitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    longitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    latitude_start: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    longitude_start: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    latitude_end: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    longitude_end: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    map_name: Mapped[str | None] = mapped_column(Text)
     no_show: Mapped[bool] = mapped_column(default=False, server_default=text("0"))
-    notes: Mapped[Optional[str]] = mapped_column(Text)
-    optimal_flow: Mapped[Optional[float]] = mapped_column()
-    region: Mapped[Optional[str]] = mapped_column(Text)
-    remoteness: Mapped[Optional[str]] = mapped_column(Text)
-    scenery: Mapped[Optional[str]] = mapped_column(Text)
-    season: Mapped[Optional[str]] = mapped_column(Text)
-    watershed_type: Mapped[Optional[str]] = mapped_column(Text)
-    aw_id: Mapped[Optional[int]] = mapped_column()
+    notes: Mapped[str | None] = mapped_column(Text)
+    optimal_flow: Mapped[float | None] = mapped_column()
+    region: Mapped[str | None] = mapped_column(Text)
+    remoteness: Mapped[str | None] = mapped_column(Text)
+    scenery: Mapped[str | None] = mapped_column(Text)
+    season: Mapped[str | None] = mapped_column(Text)
+    watershed_type: Mapped[str | None] = mapped_column(Text)
+    aw_id: Mapped[int | None] = mapped_column()
 
     # relationships
-    gauge: Mapped[Optional["Gauge"]] = relationship(back_populates="sections")
-    states: Mapped[list["State"]] = relationship(
+    gauge: Mapped[Gauge | None] = relationship(back_populates="sections")
+    states: Mapped[list[State]] = relationship(
         secondary="section_state", back_populates="sections"
     )
-    classes: Mapped[list["SectionClass"]] = relationship(back_populates="section")
-    levels: Mapped[list["SectionLevel"]] = relationship(back_populates="section")
-    guidebooks: Mapped[list["Guidebook"]] = relationship(
+    classes: Mapped[list[SectionClass]] = relationship(back_populates="section")
+    levels: Mapped[list[SectionLevel]] = relationship(back_populates="section")
+    guidebooks: Mapped[list[Guidebook]] = relationship(
         secondary="section_guidebook", back_populates="sections"
     )
 
@@ -334,10 +331,10 @@ class State(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
-    abbreviation: Mapped[Optional[str]] = mapped_column(String(2))
+    abbreviation: Mapped[str | None] = mapped_column(String(2))
 
     # relationships
-    sections: Mapped[list["Section"]] = relationship(
+    sections: Mapped[list[Section]] = relationship(
         secondary="section_state", back_populates="states"
     )
 
@@ -373,13 +370,13 @@ class SectionClass(Base):
         ForeignKey("section.id", ondelete="CASCADE"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(32), nullable=False)
-    low: Mapped[Optional[float]] = mapped_column()
-    low_data_type: Mapped[Optional[DataType]] = mapped_column()
-    high: Mapped[Optional[float]] = mapped_column()
-    high_data_type: Mapped[Optional[DataType]] = mapped_column()
+    low: Mapped[float | None] = mapped_column()
+    low_data_type: Mapped[DataType | None] = mapped_column()
+    high: Mapped[float | None] = mapped_column()
+    high_data_type: Mapped[DataType | None] = mapped_column()
 
     # relationships
-    section: Mapped["Section"] = relationship(back_populates="classes")
+    section: Mapped[Section] = relationship(back_populates="classes")
 
 
 # ---------------------------------------------------------------------------
@@ -394,13 +391,13 @@ class SectionLevel(Base):
         ForeignKey("section.id", ondelete="CASCADE"), nullable=False
     )
     level: Mapped[FlowLevel] = mapped_column(nullable=False)
-    low: Mapped[Optional[float]] = mapped_column()
-    low_data_type: Mapped[Optional[DataType]] = mapped_column()
-    high: Mapped[Optional[float]] = mapped_column()
-    high_data_type: Mapped[Optional[DataType]] = mapped_column()
+    low: Mapped[float | None] = mapped_column()
+    low_data_type: Mapped[DataType | None] = mapped_column()
+    high: Mapped[float | None] = mapped_column()
+    high_data_type: Mapped[DataType | None] = mapped_column()
 
     # relationships
-    section: Mapped["Section"] = relationship(back_populates="levels")
+    section: Mapped[Section] = relationship(back_populates="levels")
 
 
 # ---------------------------------------------------------------------------
@@ -423,13 +420,13 @@ class Guidebook(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(256), nullable=False)
-    subtitle: Mapped[Optional[str]] = mapped_column(String(256))
-    edition: Mapped[Optional[str]] = mapped_column(String(24))
-    author: Mapped[Optional[str]] = mapped_column(Text)
-    url: Mapped[Optional[str]] = mapped_column(Text)
+    subtitle: Mapped[str | None] = mapped_column(String(256))
+    edition: Mapped[str | None] = mapped_column(String(24))
+    author: Mapped[str | None] = mapped_column(Text)
+    url: Mapped[str | None] = mapped_column(Text)
 
     # relationships
-    sections: Mapped[list["Section"]] = relationship(
+    sections: Mapped[list[Section]] = relationship(
         secondary="section_guidebook", back_populates="guidebooks"
     )
 
@@ -447,9 +444,9 @@ class SectionGuidebook(Base):
     guidebook_id: Mapped[int] = mapped_column(
         ForeignKey("guidebook.id", ondelete="CASCADE"), primary_key=True
     )
-    page: Mapped[Optional[str]] = mapped_column(Text)
-    run: Mapped[Optional[str]] = mapped_column(Text)
-    url: Mapped[Optional[str]] = mapped_column(Text)
+    page: Mapped[str | None] = mapped_column(Text)
+    run: Mapped[str | None] = mapped_column(Text)
+    url: Mapped[str | None] = mapped_column(Text)
 
 
 # ---------------------------------------------------------------------------
@@ -462,7 +459,7 @@ class Page(Base):
 
     name: Mapped[str] = mapped_column(String(128), primary_key=True)
     action: Mapped[PageAction] = mapped_column(nullable=False)
-    expires: Mapped[Optional[int]] = mapped_column(Integer)
-    modified: Mapped[Optional[datetime]] = mapped_column(default=func.now())
-    mimetype: Mapped[Optional[str]] = mapped_column(Text)
-    body: Mapped[Optional[str]] = mapped_column(Text)
+    expires: Mapped[int | None] = mapped_column(Integer)
+    modified: Mapped[datetime | None] = mapped_column(default=func.now())
+    mimetype: Mapped[str | None] = mapped_column(Text)
+    body: Mapped[str | None] = mapped_column(Text)

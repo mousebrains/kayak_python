@@ -1,6 +1,5 @@
 """Database initialization command (replaces gen.sql/rebuild)."""
 
-import sys
 
 from kayak.config_data import load_sources
 from kayak.db.engine import get_engine

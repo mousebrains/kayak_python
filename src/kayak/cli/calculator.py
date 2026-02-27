@@ -7,13 +7,11 @@ to produce derived observations.
 from __future__ import annotations
 
 import logging
-import re
-import sys
-from datetime import datetime, timezone
 
 from kayak.db.data_db import get_latest, store_observation, update_latest
 from kayak.db.engine import get_session
-from kayak.db.models import CalcExpression, DataType, Gauge, GaugeSource, Source
+from kayak.db.info_db import get_primary_source_id
+from kayak.db.models import DataType, Gauge, Source
 
 logger = logging.getLogger(__name__)
 
@@ -45,11 +43,9 @@ def calculator(args):
 
         # Also map gauge names to their primary source_id
         for gauge in session.query(Gauge).all():
-            gs = session.query(GaugeSource).filter_by(
-                gauge_id=gauge.id
-            ).first()
-            if gs and gauge.name not in name_to_id:
-                name_to_id[gauge.name] = gs.source_id
+            sid = get_primary_source_id(session, gauge.id)
+            if sid and gauge.name not in name_to_id:
+                name_to_id[gauge.name] = sid
 
         for source in calc_sources:
             try:
@@ -131,7 +127,7 @@ def calculator(args):
                 expr = expr.replace("least(", "min(")
 
                 try:
-                    result = eval(expr)  # noqa: S307 — expressions come from DB seed data
+                    result = eval(expr)
                 except Exception as e:
                     logger.error("Error evaluating '%s': %s", expr, e)
                     continue
@@ -143,7 +139,7 @@ def calculator(args):
                     logger.debug("  = %.1f at %s", result, when)
 
             except Exception as e:
-                print(f"  Error for {source.name}: {e}", file=sys.stderr)
+                logger.error("Error for %s: %s", source.name, e)
 
         session.commit()
         print("Calculations complete")

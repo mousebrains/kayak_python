@@ -89,10 +89,11 @@ def submit(section_id: int):
                 # Convert numeric fields
                 if field_name in ("length", "gradient", "elevation_lost", "optimal_flow"):
                     try:
-                        val = float(val)
+                        setattr(section, field_name, float(val))
                     except ValueError:
                         continue
-                setattr(section, field_name, val)
+                else:
+                    setattr(section, field_name, val)
 
         session.commit()
 

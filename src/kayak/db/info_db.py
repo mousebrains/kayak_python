@@ -9,7 +9,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from kayak.db.models import Gauge, Section, State
+from kayak.db.models import Gauge, GaugeSource, Section, State
 
 
 def all_states(session: Session) -> list[State]:
@@ -44,7 +44,7 @@ def sections_query(
     stmt = select(Section).order_by(Section.sort_name)
 
     if visible_only:
-        stmt = stmt.where(Section.no_show == False)  # noqa: E712
+        stmt = stmt.where(Section.no_show.is_(False))
 
     if with_gauge:
         stmt = stmt.options(joinedload(Section.gauge))
@@ -79,3 +79,19 @@ def get_gauge_for_section(session: Session, section_id: int) -> Gauge | None:
     if section is None or section.gauge_id is None:
         return None
     return session.get(Gauge, section.gauge_id)
+
+
+def get_primary_source_id(session: Session, gauge_id: int) -> int | None:
+    """Return the source_id of the first GaugeSource for a gauge, or None."""
+    gs = session.execute(
+        select(GaugeSource.source_id).where(GaugeSource.gauge_id == gauge_id)
+    ).scalar()
+    return gs
+
+
+def get_source_ids_for_gauge(session: Session, gauge_id: int) -> list[int]:
+    """Return all source_ids linked to a gauge."""
+    rows = session.execute(
+        select(GaugeSource.source_id).where(GaugeSource.gauge_id == gauge_id)
+    ).scalars().all()
+    return list(rows)

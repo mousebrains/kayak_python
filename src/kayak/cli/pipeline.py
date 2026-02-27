@@ -10,10 +10,12 @@ Runs the full data pipeline in order:
 
 from __future__ import annotations
 
-import sys
+import logging
 import time
 
 from kayak.cli import build, calc_rating, calculator, fetch, merge
+
+logger = logging.getLogger(__name__)
 
 
 def addArgs(subparsers):
@@ -51,7 +53,7 @@ def pipeline(args):
         except SystemExit:
             pass
         except Exception as e:
-            print(f"Error in {step_name}: {e}", file=sys.stderr)
+            logger.error("Error in %s: %s", step_name, e)
         elapsed = time.time() - start
         print(f"Completed {step_name} in {elapsed:.1f}s")
 

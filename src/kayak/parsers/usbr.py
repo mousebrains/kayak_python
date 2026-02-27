@@ -55,7 +55,7 @@ class USBRParser(BaseParser):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._state = 0
-        self._columns: list[_StationInfo] = []
+        self._columns: list[_StationInfo | None] = []
 
     def parse_line(self, line: str) -> bool:
         stripped = line.strip()

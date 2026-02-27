@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 
 from kayak.db.models import DataType
 from kayak.parsers.base import BaseParser
@@ -35,7 +36,7 @@ class USACEOutflowParser(BaseParser):
                 idx = parts.index("PROJECT-")
             except ValueError:
                 # Also try as a prefix
-                for i, p in enumerate(parts):
+                for _i, p in enumerate(parts):
                     if p.startswith("PROJECT-"):
                         self._project = p[len("PROJECT-"):]
                         self._state = 1
@@ -51,7 +52,6 @@ class USACEOutflowParser(BaseParser):
                 idx = line.find("REPORT")
                 date_str = line[idx + len("REPORT"):].strip()
                 # Collapse multiple spaces
-                import re
                 self._date = re.sub(r"\s+", " ", date_str).strip()
                 self._state = 2
             else:

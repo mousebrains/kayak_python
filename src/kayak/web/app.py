@@ -22,12 +22,12 @@ def create_app(config: dict | None = None) -> Flask:
         app.config.update(config)
 
     # Register blueprints
+    from kayak.web.routes.data_api import data_api_bp
+    from kayak.web.routes.descriptions import descriptions_bp
+    from kayak.web.routes.editing import editing_bp
     from kayak.web.routes.pages import pages_bp
     from kayak.web.routes.plots import plots_bp
     from kayak.web.routes.views import views_bp
-    from kayak.web.routes.descriptions import descriptions_bp
-    from kayak.web.routes.editing import editing_bp
-    from kayak.web.routes.data_api import data_api_bp
 
     app.register_blueprint(pages_bp)
     app.register_blueprint(plots_bp)
@@ -40,7 +40,7 @@ def create_app(config: dict | None = None) -> Flask:
     @app.route("/cgi/display")
     def legacy_cgi():
         """Redirect legacy CGI URLs to modern routes."""
-        from flask import request, redirect, url_for
+        from flask import redirect, request, url_for
 
         if "M" in request.args or not request.args:
             return redirect(url_for("pages.page", name="main"))

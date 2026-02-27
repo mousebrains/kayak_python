@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 
-import requests
+import requests  # type: ignore[import-untyped]
 
 from kayak.config import FETCH_TIMEOUT, FETCH_USER_AGENT
 
@@ -38,28 +38,28 @@ class FetchResult:
         """HTTP status code (mirrors Curl::responseCode)."""
         if self._response is None:
             return 0
-        return self._response.status_code
+        return int(self._response.status_code)
 
     @property
     def content_type(self) -> str:
         """Content-Type header (mirrors Curl::contentType)."""
         if self._response is None:
             return ""
-        return self._response.headers.get("Content-Type", "")
+        return str(self._response.headers.get("Content-Type", ""))
 
     @property
     def text(self) -> str:
         """Response body as text (mirrors Curl::str)."""
         if self._response is None:
             return ""
-        return self._response.text
+        return str(self._response.text)
 
     @property
     def content(self) -> bytes:
         """Response body as bytes."""
         if self._response is None:
             return b""
-        return self._response.content
+        return bytes(self._response.content)
 
     def write_file(self, path: str) -> None:
         """Write response body to file (mirrors Curl::writeFile)."""

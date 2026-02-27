@@ -1,8 +1,9 @@
 """Tests for ORM models and basic database operations."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from kayak.db.models import (
     CalcExpression,
@@ -42,7 +43,7 @@ def test_gauge_unique_name(session):
     session.add(Gauge(name="dup"))
     session.flush()
     session.add(Gauge(name="dup"))
-    with pytest.raises(Exception):
+    with pytest.raises(IntegrityError):
         session.flush()
 
 
@@ -83,7 +84,7 @@ def test_gauge_source_junction(session, sample_source, sample_gauge):
 
 
 def test_create_observation(session, sample_source):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     obs = Observation(
         source_id=sample_source.id,
         observed_at=now,
@@ -101,7 +102,7 @@ def test_create_observation(session, sample_source):
 
 def test_observation_composite_pk(session, sample_source):
     """Duplicate source_id/observed_at/data_type should conflict."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     session.add(Observation(
         source_id=sample_source.id, observed_at=now,
         data_type=DataType.gauge, value=5.0,
@@ -112,12 +113,12 @@ def test_observation_composite_pk(session, sample_source):
         source_id=sample_source.id, observed_at=now,
         data_type=DataType.gauge, value=6.0,
     ))
-    with pytest.raises(Exception):
+    with pytest.raises(IntegrityError):
         session.flush()
 
 
 def test_latest_observation(session, sample_source):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     lo = LatestObservation(
         source_id=sample_source.id,
         data_type=DataType.flow,

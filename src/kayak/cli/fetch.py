@@ -7,8 +7,7 @@ observations in the database.
 from __future__ import annotations
 
 import logging
-import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from kayak.config_data import load_sources
@@ -114,7 +113,7 @@ def fetch(args):
                 if not args.fetch_only:
                     parser_cls = get_parser_class(parser_name)
                     if parser_cls is None:
-                        print(f"  Unknown parser '{parser_name}'", file=sys.stderr)
+                        logger.error("Unknown parser '%s'", parser_name)
                         continue
 
                     # Look up the FetchUrl to update last_fetched_at
@@ -130,12 +129,12 @@ def fetch(args):
                     count = parser.parse(text_content)
 
                     if fetch_url and not args.dry_run and not args.input_dir:
-                        fetch_url.last_fetched_at = datetime.utcnow()
+                        fetch_url.last_fetched_at = datetime.now(UTC)
 
                     logger.debug("  %d updates", count)
 
             except Exception as e:
-                print(f"  Exception for {url}: {e}", file=sys.stderr)
+                logger.error("Exception for %s: %s", url, e)
                 continue
 
         if not args.dry_run:
@@ -165,11 +164,11 @@ def _get_content(url, raw_url, input_dir, output_dir):
 
     result = http_fetch(url)
     if not result.ok:
-        print(f"  Error: {result.error}", file=sys.stderr)
+        logger.error("Fetch error: %s", result.error)
         return None
 
     if result.status_code >= 400:
-        print(f"  HTTP {result.status_code} for {url}", file=sys.stderr)
+        logger.error("HTTP %d for %s", result.status_code, url)
         return None
 
     if output_dir:
@@ -193,7 +192,7 @@ def _fetch_single(
     if not fetch_only:
         parser_cls = get_parser_class(parser_name)
         if parser_cls is None:
-            print(f"Unknown parser '{parser_name}'", file=sys.stderr)
+            logger.error("Unknown parser '%s'", parser_name)
             return
 
         session = get_session()

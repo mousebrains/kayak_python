@@ -4,8 +4,8 @@ from flask import Blueprint, abort, render_template_string
 
 from kayak.db.data_db import get_latest
 from kayak.db.engine import get_session
-from kayak.db.info_db import get_section
-from kayak.db.models import DataType, GaugeSource
+from kayak.db.info_db import get_primary_source_id, get_section
+from kayak.db.models import DataType
 
 views_bp = Blueprint("views", __name__)
 
@@ -47,12 +47,10 @@ def view(section_id: int):
 
         data = {}
         if gauge:
-            gs = session.query(GaugeSource).filter(
-                GaugeSource.gauge_id == gauge.id
-            ).first()
-            if gs:
+            source_id = get_primary_source_id(session, gauge.id)
+            if source_id:
                 for dtype in DataType:
-                    latest = get_latest(session, gs.source_id, dtype)
+                    latest = get_latest(session, source_id, dtype)
                     if latest and latest.value is not None:
                         data[dtype.value] = latest
 

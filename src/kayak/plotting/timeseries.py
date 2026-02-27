@@ -11,6 +11,7 @@ import io
 from datetime import datetime
 
 import matplotlib
+
 matplotlib.use("Agg")  # Non-interactive backend
 
 import matplotlib.dates as mdates
@@ -44,11 +45,11 @@ def generate_plot(
 
     try:
         # Sort by time
-        paired = sorted(zip(times, values), key=lambda x: x[0])
+        paired = sorted(zip(times, values, strict=True), key=lambda x: x[0])
         if not paired:
             return _empty_plot(title, fmt, fig, ax)
 
-        t, v = zip(*paired)
+        t, v = zip(*paired, strict=True)
 
         # Plot the data
         ax.plot(t, v, color="#2060A0", linewidth=1.0)

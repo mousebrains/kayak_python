@@ -4,8 +4,8 @@ from flask import Blueprint, abort, make_response, request
 
 from kayak.db.data_db import get_observations
 from kayak.db.engine import get_session
-from kayak.db.info_db import get_section
-from kayak.db.models import DataType, GaugeSource
+from kayak.db.info_db import get_primary_source_id, get_section
+from kayak.db.models import DataType
 from kayak.plotting.timeseries import generate_plot
 
 plots_bp = Blueprint("plots", __name__)
@@ -24,11 +24,9 @@ def _plot_response(section_id: int, data_type: DataType, title_suffix: str, fmt:
 
         records = []
         if gauge:
-            gs = session.query(GaugeSource).filter(
-                GaugeSource.gauge_id == gauge.id
-            ).first()
-            if gs:
-                records = get_observations(session, gs.source_id, data_type)
+            source_id = get_primary_source_id(session, gauge.id)
+            if source_id:
+                records = get_observations(session, source_id, data_type)
 
         if not records:
             abort(404)

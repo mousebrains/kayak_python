@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from kayak.db.models import DataType
 from kayak.parsers.base import BaseParser
@@ -38,7 +38,7 @@ class NWRFCXMLParser(BaseParser):
             logger.error("XML parse error for %s: %s", self.url, e)
             return 0
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Find all SiteData or observedData blocks
         for site in root.iter():

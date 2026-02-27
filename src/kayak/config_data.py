@@ -20,7 +20,8 @@ def _load_yaml(filename: str) -> dict[str, Any]:
     """Load and parse a YAML file from the data directory."""
     path = _DATA_DIR / filename
     with open(path) as f:
-        return yaml.safe_load(f)
+        result: dict[str, Any] = yaml.safe_load(f)
+        return result
 
 
 @lru_cache(maxsize=1)
@@ -52,7 +53,8 @@ def load_builder_columns() -> list[dict[str, Any]]:
     name_text, name_html.
     """
     data = _load_yaml("builder.yaml")
-    return data.get("columns", [])
+    result: list[dict[str, Any]] = data.get("columns", [])
+    return result
 
 
 @lru_cache(maxsize=1)
@@ -63,4 +65,5 @@ def load_description_fields() -> list[dict[str, Any]]:
     and optionally info.
     """
     data = _load_yaml("descriptions.yaml")
-    return data.get("fields", [])
+    result: list[dict[str, Any]] = data.get("fields", [])
+    return result

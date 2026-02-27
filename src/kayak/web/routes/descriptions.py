@@ -43,7 +43,7 @@ def description(section_id: int):
         desc_field_defs = load_description_fields()
 
         # Build attribute map from section + gauge
-        attr_map = {}
+        attr_map: dict[str, str | int | float | None] = {}
         for attr_name in dir(section):
             if not attr_name.startswith("_"):
                 val = getattr(section, attr_name, None)

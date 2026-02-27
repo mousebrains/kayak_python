@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import math
-import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 # Common timezone abbreviations to UTC offsets (hours)
 TIMEZONE_OFFSETS: dict[str, int] = {
@@ -117,11 +116,11 @@ def parse_datetime(text: str, tz_name: str | None = None) -> datetime | None:
         if offset_hours is not None:
             from datetime import timedelta
             # Convert from local time to UTC
-            dt = dt.replace(tzinfo=timezone.utc) - timedelta(hours=offset_hours)
+            dt = dt.replace(tzinfo=UTC) - timedelta(hours=offset_hours)
         else:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
     else:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
 
     return dt
 

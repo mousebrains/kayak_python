@@ -9,15 +9,14 @@ from __future__ import annotations
 import csv
 import io
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 
 from kayak.config_data import load_builder_columns
 from kayak.db.data_db import get_latest
 from kayak.db.engine import get_session
-from kayak.db.info_db import all_state_names, sections_query
+from kayak.db.info_db import all_state_names, get_primary_source_id, sections_query
 from kayak.db.models import (
     DataType,
-    GaugeSource,
     PageAction,
     Section,
 )
@@ -50,13 +49,9 @@ def _get_row_data(session, section: Section) -> dict:
 
     gauge = section.gauge
     if gauge:
-        # Find primary source for this gauge
-        gs = session.query(GaugeSource).filter(
-            GaugeSource.gauge_id == gauge.id
-        ).first()
+        source_id = get_primary_source_id(session, gauge.id)
 
-        if gs:
-            source_id = gs.source_id
+        if source_id:
             for dtype_name, dtype in [
                 ("flow", DataType.flow),
                 ("gage", DataType.gauge),

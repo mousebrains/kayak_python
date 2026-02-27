@@ -7,11 +7,11 @@ the GaugeSource relationships.
 from __future__ import annotations
 
 import logging
-import sys
 
 from kayak.db.data_db import merge_sources, update_latest
 from kayak.db.engine import get_session
-from kayak.db.models import DataType, Gauge, GaugeSource, Source
+from kayak.db.info_db import get_source_ids_for_gauge
+from kayak.db.models import DataType, Gauge
 
 logger = logging.getLogger(__name__)
 
@@ -35,12 +35,7 @@ def merge(args):
 
         merge_count = 0
         for gauge in gauges:
-            source_ids = [
-                gs.source_id
-                for gs in session.query(GaugeSource)
-                .filter(GaugeSource.gauge_id == gauge.id)
-                .all()
-            ]
+            source_ids = get_source_ids_for_gauge(session, gauge.id)
 
             if len(source_ids) < 2:
                 continue
@@ -58,10 +53,7 @@ def merge(args):
                         update_latest(session, target_id, dtype)
                         merge_count += count
                 except Exception as e:
-                    print(
-                        f"  Error merging {gauge.name}/{dtype.value}: {e}",
-                        file=sys.stderr,
-                    )
+                    logger.error("Error merging %s/%s: %s", gauge.name, dtype.value, e)
 
         print(f"Found {merge_count} observations merged")
         session.commit()

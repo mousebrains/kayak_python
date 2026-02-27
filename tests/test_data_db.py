@@ -1,6 +1,6 @@
 """Tests for data_db observation storage."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from kayak.db.data_db import (
     get_latest,
@@ -27,7 +27,7 @@ def _make_source(session, name="src1"):
 
 def test_store_and_retrieve(session):
     src = _make_source(session)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     assert store_observation(session, src.id, DataType.flow, now, 1500.0)
     session.flush()
 
@@ -38,26 +38,26 @@ def test_store_and_retrieve(session):
 
 def test_reject_future_timestamp(session):
     src = _make_source(session)
-    future = datetime.now(timezone.utc) + timedelta(hours=2)
+    future = datetime.now(UTC) + timedelta(hours=2)
     assert not store_observation(session, src.id, DataType.flow, future, 100.0)
 
 
 def test_reject_negative_flow(session):
     src = _make_source(session)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     assert not store_observation(session, src.id, DataType.flow, now, -10.0)
 
 
 def test_negative_gauge_ok(session):
     """Negative gauge values should be accepted (unlike flow)."""
     src = _make_source(session)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     assert store_observation(session, src.id, DataType.gauge, now, -0.5)
 
 
 def test_update_latest(session):
     src = _make_source(session)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     old = now - timedelta(hours=2)
 
     store_observation(session, src.id, DataType.flow, old, 100.0)
@@ -95,14 +95,14 @@ def test_merge_sources(session):
     src2 = _make_source(session, "src2")
     merged = _make_source(session, "merged")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     store_observation(session, src1.id, DataType.flow, now, 100.0)
     store_observation(
         session, src2.id, DataType.flow, now - timedelta(hours=1), 200.0
     )
     session.flush()
 
-    count = merge_sources(
+    merge_sources(
         session, merged.id, [src1.id, src2.id], DataType.flow,
         since=now - timedelta(days=1),
     )
@@ -118,7 +118,7 @@ def test_merge_sources(session):
 def test_store_observation_string_type(session):
     """DataType can be passed as string."""
     src = _make_source(session)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     assert store_observation(session, src.id, "flow", now, 500.0)
     session.flush()
 
@@ -129,7 +129,7 @@ def test_store_observation_string_type(session):
 def test_store_observation_upsert(session):
     """Duplicate source_id/observed_at/data_type should update value."""
     src = _make_source(session)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     store_observation(session, src.id, DataType.flow, now, 100.0)
     session.flush()
 

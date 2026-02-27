@@ -6,7 +6,7 @@ All queries are keyed by source_id (int FK) instead of station name strings.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.dialects.sqlite import insert as sqlite_upsert
@@ -17,7 +17,6 @@ from kayak.db.models import (
     Gauge,
     LatestObservation,
     Observation,
-    Rating,
     RatingData,
     Source,
 )
@@ -67,11 +66,11 @@ def store_observation(
             logger.error("Unknown data type: %s", data_type)
             return False
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if when.tzinfo is None:
-        when_utc = when.replace(tzinfo=timezone.utc)
+        when_utc = when.replace(tzinfo=UTC)
     else:
-        when_utc = when.astimezone(timezone.utc)
+        when_utc = when.astimezone(UTC)
 
     if when_utc > now + timedelta(hours=1):
         logger.warning("Rejecting future timestamp %s for source_id=%d", when, source_id)
@@ -197,7 +196,7 @@ def get_observations(
 ) -> list[Observation]:
     """Fetch observation records for a source/type in time range."""
     if since is None:
-        since = datetime.now(timezone.utc) - timedelta(days=60)
+        since = datetime.now(UTC) - timedelta(days=60)
 
     stmt = (
         select(Observation)
@@ -257,7 +256,7 @@ def merge_sources(
     Returns count of new rows inserted.
     """
     if since is None:
-        since = datetime.now(timezone.utc) - timedelta(days=10)
+        since = datetime.now(UTC) - timedelta(days=10)
 
     count = 0
     for src_id in input_source_ids:

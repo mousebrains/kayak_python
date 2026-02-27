@@ -8,7 +8,6 @@ If both exist, fills in gaps.
 from __future__ import annotations
 
 import logging
-import sys
 
 from kayak.db.data_db import (
     get_observations,
@@ -17,7 +16,8 @@ from kayak.db.data_db import (
     update_latest,
 )
 from kayak.db.engine import get_session
-from kayak.db.models import DataType, Gauge, GaugeSource, Source
+from kayak.db.info_db import get_source_ids_for_gauge
+from kayak.db.models import DataType, Gauge
 from kayak.utils.conversions import interpolate_rating
 
 logger = logging.getLogger(__name__)
@@ -48,6 +48,8 @@ def calc_rating(args):
 
         for gauge in gauges:
             try:
+                if gauge.rating_id is None:
+                    continue
                 # Load rating table (feet -> cfs)
                 feet_to_cfs = get_rating_table(session, gauge.rating_id)
                 if not feet_to_cfs or len(feet_to_cfs) < 2:
@@ -60,13 +62,7 @@ def calc_rating(args):
                     key=lambda x: x[0],
                 )
 
-                # Get source IDs for this gauge
-                source_ids = [
-                    gs.source_id
-                    for gs in session.query(GaugeSource)
-                    .filter(GaugeSource.gauge_id == gauge.id)
-                    .all()
-                ]
+                source_ids = get_source_ids_for_gauge(session, gauge.id)
 
                 for source_id in source_ids:
                     gauge_records = get_observations(session, source_id, DataType.gauge)
@@ -84,19 +80,21 @@ def calc_rating(args):
                     if not gauge_records:
                         for rec in flow_records:
                             val = interpolate_rating(cfs_to_feet, rec.value, 0.1)
-                            if val is not None:
-                                if store_observation(
-                                    session, source_id, DataType.gauge, rec.observed_at, val
-                                ):
-                                    new_gauge = True
+                            if val is not None and store_observation(
+                                session, source_id, DataType.gauge, rec.observed_at, val
+                            ):
+                                new_gauge = True
                     elif not flow_records:
                         for rec in gauge_records:
                             val = interpolate_rating(feet_to_cfs, rec.value, 1.0)
-                            if val is not None and val > 0:
-                                if store_observation(
+                            if (
+                                val is not None
+                                and val > 0
+                                and store_observation(
                                     session, source_id, DataType.flow, rec.observed_at, val
-                                ):
-                                    new_flow = True
+                                )
+                            ):
+                                new_flow = True
                     else:
                         flow_times = {rec.observed_at for rec in flow_records}
                         gauge_times = {rec.observed_at for rec in gauge_records}
@@ -104,22 +102,24 @@ def calc_rating(args):
                         for rec in flow_records:
                             if rec.observed_at not in gauge_times:
                                 val = interpolate_rating(cfs_to_feet, rec.value, 0.1)
-                                if val is not None:
-                                    if store_observation(
-                                        session, source_id, DataType.gauge,
-                                        rec.observed_at, val,
-                                    ):
-                                        new_gauge = True
+                                if val is not None and store_observation(
+                                    session, source_id, DataType.gauge,
+                                    rec.observed_at, val,
+                                ):
+                                    new_gauge = True
 
                         for rec in gauge_records:
                             if rec.observed_at not in flow_times:
                                 val = interpolate_rating(feet_to_cfs, rec.value, 1.0)
-                                if val is not None and val > 0:
-                                    if store_observation(
+                                if (
+                                    val is not None
+                                    and val > 0
+                                    and store_observation(
                                         session, source_id, DataType.flow,
                                         rec.observed_at, val,
-                                    ):
-                                        new_flow = True
+                                    )
+                                ):
+                                    new_flow = True
 
                     if new_flow:
                         update_latest(session, source_id, DataType.flow)
@@ -127,7 +127,7 @@ def calc_rating(args):
                         update_latest(session, source_id, DataType.gauge)
 
             except Exception as e:
-                print(f"  Error for {gauge.name}: {e}", file=sys.stderr)
+                logger.error("Error for %s: %s", gauge.name, e)
 
         session.commit()
         print("Rating calculations complete")

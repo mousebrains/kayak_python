@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from kayak.db.models import Page, PageAction
@@ -25,7 +24,7 @@ def store_page(
         existing.body = body
         existing.mimetype = mimetype
         existing.expires = expires
-        existing.modified = datetime.utcnow()
+        existing.modified = datetime.now(UTC)
     else:
         session.add(Page(
             name=name,
