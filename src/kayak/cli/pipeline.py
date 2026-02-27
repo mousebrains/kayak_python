@@ -22,7 +22,9 @@ def addArgs(subparsers):
                                    help="Run the full data pipeline")
     parser.set_defaults(func=pipeline)
     parser.add_argument("--skip-fetch", action="store_true", help="Skip the fetch step")
-    parser.add_argument("-d", "--dry-run", action="store_true", help="Dry run (no DB writes)")
+
+    # Include all fetch options (dry-run, input-dir, etc.)
+    fetch.addArgs_options(parser)
 
 
 def pipeline(args):

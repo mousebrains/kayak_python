@@ -34,11 +34,8 @@ def _hour_allowed(hours_spec: str) -> bool:
         return True
 
 
-def addArgs(subparsers):
-    """Register the 'fetch' subcommand."""
-    parser = subparsers.add_parser("fetch",
-                                   help="Fetch data from remote agencies, parse, and store in database")
-    parser.set_defaults(func=fetch)
+def addArgs_options(parser):
+    """Add fetch-specific options to a parser."""
     parser.add_argument("-d", "--dry-run", action="store_true", help="Do not store data")
     parser.add_argument("-f", "--fetch-only", action="store_true", help="Fetch but do not parse")
     parser.add_argument("-I", "--input-dir", default=None,
@@ -54,6 +51,14 @@ def addArgs(subparsers):
     parser.add_argument("-t", "--parser-type", default=None, help="Force parser type")
     parser.add_argument("-u", "--url-filter", default=None, help="Filter by URL substring")
     parser.add_argument("-U", "--single-url", default=None, help="Fetch a single URL")
+
+
+def addArgs(subparsers):
+    """Register the 'fetch' subcommand."""
+    parser = subparsers.add_parser("fetch",
+                                   help="Fetch data from remote agencies, parse, and store in database")
+    parser.set_defaults(func=fetch)
+    addArgs_options(parser)
 
 
 def fetch(args):
