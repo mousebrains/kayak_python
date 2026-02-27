@@ -1,12 +1,13 @@
 <?php
 /**
- * Section description page.
+ * Section description page — readings, plots, map link, metadata.
  *
  * Usage: /description.php?id=<section_id>
  */
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
+require_once __DIR__ . '/includes/svg_plot.php';
 
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 if (!$id) { http_response_code(400); exit('Missing id parameter'); }
@@ -44,6 +45,94 @@ header('Cache-Control: max-age=300');
 include_header("$name - Description");
 
 echo '<h2>' . htmlspecialchars($name) . '</h2>';
+
+// --- Google Maps link ---
+$lat = $gauge['latitude'] ?? $section['latitude'] ?? null;
+$lon = $gauge['longitude'] ?? $section['longitude'] ?? null;
+if ($lat !== null && $lon !== null) {
+    $lat_f = number_format((float)$lat, 6, '.', '');
+    $lon_f = number_format((float)$lon, 6, '.', '');
+    $maps_url = "https://www.google.com/maps?q={$lat_f},{$lon_f}";
+    echo '<p style="margin:.5rem 0"><a href="' . htmlspecialchars($maps_url) . '" target="_blank" rel="noopener">View on Google Maps</a></p>';
+}
+
+// --- Current readings ---
+$source_id = null;
+if ($gauge) {
+    $stmt = $db->prepare('SELECT source_id FROM gauge_source WHERE gauge_id = ? LIMIT 1');
+    $stmt->execute([$gauge['id']]);
+    $gs = $stmt->fetch();
+    if ($gs) {
+        $source_id = $gs['source_id'];
+    }
+}
+
+if ($source_id) {
+    $stmt = $db->prepare(
+        'SELECT data_type, value, observed_at, delta_per_hour
+         FROM latest_observation WHERE source_id = ?'
+    );
+    $stmt->execute([$source_id]);
+    $readings = $stmt->fetchAll();
+
+    if ($readings) {
+        echo '<table class="readings-table">';
+        echo '<tr><th>Type</th><th>Value</th><th>Time</th><th>Change/hr</th><th>Status</th></tr>';
+        foreach ($readings as $r) {
+            $dtype = htmlspecialchars($r['data_type']);
+            $val   = number_format((float)$r['value'], 2);
+            $time  = $r['observed_at'] ? date('m/d H:i', strtotime($r['observed_at'])) : 'N/A';
+            $delta = $r['delta_per_hour'] !== null ? number_format((float)$r['delta_per_hour'], 2) : 'N/A';
+            $status = '';
+            if ($r['delta_per_hour'] !== null) {
+                $dph = (float)$r['delta_per_hour'];
+                if (abs($dph) < 0.5) {
+                    $status = '<span class="stable">stable</span>';
+                } elseif ($dph > 0) {
+                    $status = '<span class="rising">rising</span>';
+                } else {
+                    $status = '<span class="falling">falling</span>';
+                }
+            }
+            echo "<tr><td>$dtype</td><td>$val</td><td>$time</td><td>$delta</td><td>$status</td></tr>\n";
+        }
+        echo '</table>';
+    }
+}
+
+// --- Inline SVG plots (only for data types with observations) ---
+if ($source_id) {
+    $plot_types = [
+        'flow'        => 'Flow (CFS)',
+        'gauge'       => 'Gage Height (Ft)',
+        'temperature' => 'Temperature (F)',
+    ];
+    $since = date('Y-m-d H:i:s', time() - 60 * 86400);
+
+    foreach ($plot_types as $dtype => $y_label) {
+        $stmt = $db->prepare(
+            'SELECT observed_at, value FROM observation
+             WHERE source_id = ? AND data_type = ? AND observed_at >= ?
+             ORDER BY observed_at'
+        );
+        $stmt->execute([$source_id, $dtype, $since]);
+        $rows = $stmt->fetchAll();
+
+        if (count($rows) < 2) continue;
+
+        $times = []; $values = [];
+        foreach ($rows as $r) {
+            $times[]  = strtotime($r['observed_at']);
+            $values[] = (float)$r['value'];
+        }
+
+        $title = htmlspecialchars($name) . " — $y_label";
+        $svg = generate_svg_plot($times, $values, $title, $y_label);
+        echo '<div class="plot-container">' . $svg . '</div>';
+    }
+}
+
+// --- Description fields ---
 echo '<table class="desc-table">';
 
 $fields = [
@@ -71,15 +160,6 @@ foreach ($fields as $label => $value) {
     if ($value === null || trim((string)$value) === '') continue;
     $esc = htmlspecialchars((string)$value);
     echo "<tr><td>$label</td><td>$esc</td></tr>\n";
-}
-
-if ($gauge) {
-    // Data links
-    echo '<tr><td>Data</td><td>';
-    echo '<a href="/view.php?id=' . $id . '">Current readings</a>';
-    echo ' | <a href="/plot.php?type=flow&id=' . $id . '">Flow plot</a>';
-    echo ' | <a href="/plot.php?type=gage&id=' . $id . '">Gage plot</a>';
-    echo '</td></tr>';
 }
 
 echo '</table>';

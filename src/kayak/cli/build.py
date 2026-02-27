@@ -262,7 +262,7 @@ def _build_page(table_html: str, css: str, states: list[str],
     """Wrap the table HTML in a complete HTML document with inlined CSS."""
     nav_links: list[str] = []
     all_cls = ' class="active"' if not current_state else ""
-    nav_links.append(f'<a href="/index.html"{all_cls}>All</a>')
+    nav_links.append(f'<a href="/all.html"{all_cls}>All</a>')
     for s in states:
         cls = ' class="active"' if s == current_state else ""
         nav_links.append(f'<a href="/{s}.html"{cls}>{s}</a>')
@@ -304,6 +304,62 @@ Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.
 
 
 # ---------------------------------------------------------------------------
+# Landing page — lightweight state index
+# ---------------------------------------------------------------------------
+
+def _build_landing_page(css: str, states: list[str]) -> str:
+    """Build index.html as a simple grid of state links."""
+    nav_links: list[str] = []
+    nav_links.append('<a href="/all.html">All</a>')
+    for s in states:
+        nav_links.append(f'<a href="/{s}.html">{s}</a>')
+    nav_html = "\n    ".join(nav_links)
+
+    state_cards: list[str] = []
+    state_cards.append('<a href="/all.html" class="state-card">All States</a>')
+    for s in states:
+        state_cards.append(f'<a href="/{s}.html" class="state-card">{s}</a>')
+    grid_html = "\n".join(state_cards)
+
+    now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>River Levels</title>
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#2060A0">
+<link rel="icon" href="/static/favicon.ico">
+<link rel="apple-touch-icon" href="/static/icon-180.png">
+<style>
+{css}
+</style>
+</head>
+<body>
+<header>
+  <h1><a href="/index.html">River Levels</a></h1>
+  <nav>
+    {nav_html}
+  </nav>
+</header>
+<main>
+<div class="state-grid">
+{grid_html}
+</div>
+<p style="font-size:.7rem;color:#888;margin-top:.5rem">Updated {now}</p>
+<p style="margin-top:1rem"><a href="https://wkcc.org">Washington Kayak Club</a></p>
+</main>
+<footer>
+Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.
+</footer>
+<script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/static/sw.js')</script>
+</body>
+</html>"""
+
+
+# ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
 
@@ -334,7 +390,11 @@ def build(args):
 
         print(f"Building pages for {len(all_sections)} sections across {len(states)} states")
 
-        # All-states page → index.html
+        # Landing page → index.html (lightweight state list)
+        landing_html = _build_landing_page(css, states)
+        (output_dir / "index.html").write_text(landing_html)
+
+        # All-states page → all.html
         _build_and_write(session, all_sections, columns, "", states, css, output_dir)
 
         # Per-state pages
@@ -353,7 +413,7 @@ def _build_and_write(session, sections, columns, state: str,
     """Build and write CSV, text, and HTML for a state (or all)."""
     suffix = f"_{state}" if state else ""
     label = state or "all"
-    filename = f"{state}.html" if state else "index.html"
+    filename = f"{state}.html" if state else "all.html"
     title = f"{state} River Levels" if state else "River Levels"
 
     logger.info("Building %s: %d sections", label, len(sections))
