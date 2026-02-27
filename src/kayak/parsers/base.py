@@ -35,13 +35,11 @@ class BaseParser(ABC):
         session: Session,
         *,
         source_id: int | None = None,
-        verbose: bool = False,
         dry_run: bool = False,
     ):
         self.url = url
         self.session = session
         self.source_id = source_id
-        self.verbose = verbose
         self.dry_run = dry_run
         self._db_updates = 0
 
@@ -100,10 +98,7 @@ class BaseParser(ABC):
         """
         self._db_updates += 1
 
-        if self.verbose:
-            logger.info(
-                "DB dump %s/%s %s %s", station, data_type, value, when
-            )
+        logger.debug("DB dump %s/%s %s %s", station, data_type, value, when)
 
         if self.dry_run:
             return True

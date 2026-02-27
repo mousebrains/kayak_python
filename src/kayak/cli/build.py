@@ -177,14 +177,8 @@ def _build_html(session, sections, columns, state_name: str) -> str:
 
 
 @click.command("build")
-@click.option("-v", "--verbose", is_flag=True, help="Verbose output")
-def build_cmd(verbose):
+def build_cmd():
     """Generate per-state HTML/CSV/text output pages."""
-    if verbose:
-        logging.basicConfig(level=logging.DEBUG)
-    else:
-        logging.basicConfig(level=logging.INFO)
-
     session = get_session()
     try:
         columns = _get_builder_columns()
@@ -193,12 +187,12 @@ def build_cmd(verbose):
 
         click.echo(f"Building pages for {len(sections)} sections across {len(states)} states")
 
-        _build_and_store(session, sections, columns, "", verbose)
+        _build_and_store(session, sections, columns, "")
 
         for state in states:
             state_sections = sections_query(session, state_name=state, visible_only=True)
             if state_sections:
-                _build_and_store(session, state_sections, columns, state, verbose)
+                _build_and_store(session, state_sections, columns, state)
 
         session.commit()
         click.echo("Build complete")
@@ -206,13 +200,12 @@ def build_cmd(verbose):
         session.close()
 
 
-def _build_and_store(session, sections, columns, state: str, verbose: bool):
+def _build_and_store(session, sections, columns, state: str):
     """Build and store CSV, text, and HTML for a state (or all)."""
     suffix = f"_{state}" if state else ""
     label = state or "all"
 
-    if verbose:
-        click.echo(f"  Building {label}: {len(sections)} sections")
+    logger.info("Building %s: %d sections", label, len(sections))
 
     csv_content = _build_csv(session, sections, columns, state)
     store_page(session, f"levels{suffix}.csv", PageAction.FILE, csv_content, "text/csv")

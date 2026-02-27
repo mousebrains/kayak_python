@@ -18,13 +18,8 @@ logger = logging.getLogger(__name__)
 
 
 @click.command("merge")
-@click.option("-v", "--verbose", is_flag=True, help="Verbose output")
-def merge_cmd(verbose):
+def merge_cmd():
     """Merge data from multiple source stations into combined stations."""
-    if verbose:
-        logging.basicConfig(level=logging.DEBUG)
-    else:
-        logging.basicConfig(level=logging.INFO)
 
     session = get_session()
     try:
@@ -52,8 +47,8 @@ def merge_cmd(verbose):
             for dtype in types:
                 try:
                     count = merge_sources(session, target_id, input_ids, dtype)
-                    if verbose and count > 0:
-                        click.echo(f"  {gauge.name}/{dtype.value}: {count} rows merged")
+                    if count > 0:
+                        logger.info("%s/%s: %d rows merged", gauge.name, dtype.value, count)
                     if count > 0:
                         update_latest(session, target_id, dtype)
                         merge_count += count

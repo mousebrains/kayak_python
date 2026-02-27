@@ -25,13 +25,8 @@ logger = logging.getLogger(__name__)
 
 
 @click.command("calc-rating")
-@click.option("-v", "--verbose", is_flag=True, help="Verbose output")
-def calc_rating_cmd(verbose):
+def calc_rating_cmd():
     """Apply rating tables to convert between gage height and flow."""
-    if verbose:
-        logging.basicConfig(level=logging.DEBUG)
-    else:
-        logging.basicConfig(level=logging.INFO)
 
     session = get_session()
     try:
@@ -51,8 +46,7 @@ def calc_rating_cmd(verbose):
                 # Load rating table (feet -> cfs)
                 feet_to_cfs = get_rating_table(session, gauge.rating_id)
                 if not feet_to_cfs or len(feet_to_cfs) < 2:
-                    if verbose:
-                        click.echo(f"  {gauge.name}: no rating table entries")
+                    logger.debug("%s: no rating table entries", gauge.name)
                     continue
 
                 # Build reverse table (cfs -> feet)
@@ -73,11 +67,11 @@ def calc_rating_cmd(verbose):
                     gauge_records = get_observations(session, source_id, DataType.gauge)
                     flow_records = get_observations(session, source_id, DataType.flow)
 
-                    if verbose:
-                        click.echo(
-                            f"  {gauge.name} src={source_id}: {len(feet_to_cfs)} rating entries, "
-                            f"{len(gauge_records)} gauge, {len(flow_records)} flow"
-                        )
+                    logger.info(
+                        "%s src=%s: %d rating entries, %d gauge, %d flow",
+                        gauge.name, source_id, len(feet_to_cfs),
+                        len(gauge_records), len(flow_records),
+                    )
 
                     new_gauge = False
                     new_flow = False

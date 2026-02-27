@@ -20,13 +20,8 @@ logger = logging.getLogger(__name__)
 
 
 @click.command("calculator")
-@click.option("-v", "--verbose", is_flag=True, help="Verbose output")
-def calculator_cmd(verbose):
+def calculator_cmd():
     """Build synthetic/calculated gage readings from expressions."""
-    if verbose:
-        logging.basicConfig(level=logging.DEBUG)
-    else:
-        logging.basicConfig(level=logging.INFO)
 
     session = get_session()
     try:
@@ -53,11 +48,10 @@ def calculator_cmd(verbose):
                 time_expression = calc_expr.time_expression
                 data_type = calc_expr.data_type
 
-                if verbose:
-                    click.echo(
-                        f"  Calculating {source.name}: type={data_type.value} "
-                        f"expr={expression}"
-                    )
+                logger.info(
+                    "Calculating %s: type=%s expr=%s",
+                    source.name, data_type.value, expression,
+                )
 
                 if not time_expression:
                     logger.warning("No time_expression for source %s", source.name)
@@ -128,8 +122,7 @@ def calculator_cmd(verbose):
 
                 if store_observation(session, source.id, data_type, when, result):
                     update_latest(session, source.id, data_type)
-                    if verbose:
-                        click.echo(f"    = {result:.1f} at {when}")
+                    logger.debug("  = %.1f at %s", result, when)
 
             except Exception as e:
                 click.echo(f"  Error for {source.name}: {e}", err=True)

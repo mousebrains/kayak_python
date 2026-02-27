@@ -2,11 +2,16 @@
 
 import click
 
+from kayak.cli.logger import add_logging_options, setup_logging
+
 
 @click.group()
 @click.version_option(version="0.1.0", prog_name="levels")
-def cli():
+@add_logging_options
+@click.pass_context
+def cli(ctx, **kwargs):
     """levels - River level data aggregation from government agencies."""
+    setup_logging(**kwargs)
 
 
 # Import and register all subcommands
