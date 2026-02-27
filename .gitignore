@@ -14,3 +14,9 @@ build/
 *.db
 .env
 .pytest_cache/
+.coverage
+
+# Generated build output (rebuilt by `levels build`)
+public_html/*.html
+public_html/*.csv
+public_html/*.text

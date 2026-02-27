@@ -1,7 +1,8 @@
-"""Builder command (replaces builder.C + Display.C).
+"""Builder command — generates static HTML/CSV/text files to disk.
 
-Generates per-state HTML, CSV, and text output pages with current
-river level data.
+Writes complete, self-contained HTML pages with inlined CSS to an output
+directory (default: public_html/).  Each page has responsive mobile-first
+styling, state navigation links, and inline SVG sparklines.
 """
 
 from __future__ import annotations
@@ -9,31 +10,43 @@ from __future__ import annotations
 import csv
 import io
 import logging
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
+from kayak.config import BASE_DIR
 from kayak.config_data import load_builder_columns
-from kayak.db.data_db import get_latest
+from kayak.db.data_db import get_latest, get_observations
 from kayak.db.engine import get_session
 from kayak.db.info_db import all_state_names, get_primary_source_id, sections_query
-from kayak.db.models import (
-    DataType,
-    PageAction,
-    Section,
-)
-from kayak.db.page_db import store_page
+from kayak.db.models import DataType, Section
+from kayak.utils.lttb import downsample
 
 logger = logging.getLogger(__name__)
 
+# CSS is read once from the source tree and inlined into every page.
+_CSS_PATH = Path(__file__).resolve().parent.parent / "web" / "static" / "style.css"
+
+
+def _load_css() -> str:
+    try:
+        return _CSS_PATH.read_text()
+    except FileNotFoundError:
+        logger.warning("style.css not found at %s", _CSS_PATH)
+        return ""
+
 
 def _get_builder_columns() -> list[dict]:
-    """Get builder column definitions sorted by sort_key from YAML."""
     cols = load_builder_columns()
     return sorted(cols, key=lambda c: c["sort_key"])
 
 
+# ---------------------------------------------------------------------------
+# Row data
+# ---------------------------------------------------------------------------
+
 def _get_row_data(session, section: Section) -> dict:
     """Build a data dict for one river section."""
-    row = {
+    row: dict = {
         "section_id": section.id,
         "display_name": section.display_name or "",
         "gauge_location": (section.gauge.location if section.gauge else "") or "",
@@ -43,14 +56,12 @@ def _get_row_data(session, section: Section) -> dict:
         "db_name": section.name,
     }
 
-    # Get class names
     if section.classes:
         row["class"] = ", ".join(c.name for c in section.classes)
 
     gauge = section.gauge
     if gauge:
         source_id = get_primary_source_id(session, gauge.id)
-
         if source_id:
             for dtype_name, dtype in [
                 ("flow", DataType.flow),
@@ -68,15 +79,64 @@ def _get_row_data(session, section: Section) -> dict:
                             row["status"] = "rising"
                         else:
                             row["status"] = "falling"
-
     return row
 
 
+# ---------------------------------------------------------------------------
+# Sparkline SVG
+# ---------------------------------------------------------------------------
+
+def _build_sparkline(session, section: Section, width: int = 80, height: int = 20) -> str:
+    """Generate a tiny inline SVG sparkline for the last 48h of flow data."""
+    gauge = section.gauge
+    if not gauge:
+        return ""
+    source_id = get_primary_source_id(session, gauge.id)
+    if not source_id:
+        return ""
+
+    since = datetime.now(UTC) - timedelta(hours=48)
+    records = get_observations(session, source_id, DataType.flow, since=since)
+    if len(records) < 3:
+        return ""
+
+    # Build (epoch, value) pairs sorted by time
+    pairs = sorted(
+        [(r.observed_at.timestamp(), r.value) for r in records if r.value is not None],
+        key=lambda p: p[0],
+    )
+    if len(pairs) < 3:
+        return ""
+
+    pairs = downsample(pairs, 60)
+
+    xs = [p[0] for p in pairs]
+    ys = [p[1] for p in pairs]
+    x_min, x_max = xs[0], xs[-1]
+    y_min, y_max = min(ys), max(ys)
+
+    x_range = x_max - x_min or 1
+    y_range = y_max - y_min or 1
+
+    points = " ".join(
+        f"{int((x - x_min) / x_range * width)},{int(height - (y - y_min) / y_range * height)}"
+        for x, y in pairs
+    )
+
+    return (
+        f'<svg class="spark" width="{width}" height="{height}" viewBox="0 0 {width} {height}">'
+        f'<polyline fill="none" stroke="#2060A0" stroke-width="1.5" points="{points}"/>'
+        f"</svg>"
+    )
+
+
+# ---------------------------------------------------------------------------
+# CSV / Text builders (unchanged logic)
+# ---------------------------------------------------------------------------
+
 def _build_csv(session, sections, columns, state_name: str) -> str:
-    """Generate CSV output for a set of sections."""
     output = io.StringIO()
     writer = csv.writer(output)
-
     headers = [c["name_text"] for c in columns if "c" in c["use"] and c["type"] != "noop"]
     writer.writerow(headers)
 
@@ -93,14 +153,11 @@ def _build_csv(session, sections, columns, state_name: str) -> str:
                 val = val.strftime("%Y-%m-%d %H:%M")
             values.append(str(val))
         writer.writerow(values)
-
     return output.getvalue()
 
 
 def _build_text(session, sections, columns, state_name: str) -> str:
-    """Generate fixed-width text output for a set of sections."""
     lines = []
-
     header = ""
     for col in columns:
         if "t" not in col["use"] or col["type"] == "noop":
@@ -122,95 +179,194 @@ def _build_text(session, sections, columns, state_name: str) -> str:
                 val = val.strftime("%m/%d %H:%M")
             line += str(val)[:col["length"]].ljust(col["length"])
         lines.append(line)
-
     return "\n".join(lines)
 
 
-def _build_html(session, sections, columns, state_name: str) -> str:
-    """Generate HTML table output for a set of sections."""
-    rows = []
-    rows.append("<table class='levels'>")
+# ---------------------------------------------------------------------------
+# HTML builder — complete self-contained pages
+# ---------------------------------------------------------------------------
 
-    rows.append("<tr>")
+# Map column type to CSS class for <td>
+_TD_CLASS = {
+    "name": "td-name",
+    "flow": "td-flow",
+    "gage": "td-gage",
+    "temp": "td-temp",
+    "date": "td-date",
+    "status": "td-status",
+    "text": "",
+}
+
+# Columns that get class="secondary" (hidden on phones)
+_SECONDARY_FIELDS = {"drainage", "class"}
+
+
+def _build_html_table(session, sections, columns) -> str:
+    """Build the <table> body for a set of sections."""
+    rows: list[str] = []
+    rows.append('<table class="levels">')
+    rows.append("<thead><tr>")
     for col in columns:
         if "h" not in col["use"] or col["type"] == "noop":
             continue
-        rows.append(f"  <th>{col['name_html']}</th>")
-    rows.append("</tr>")
+        cls = ' class="secondary"' if col["field"] in _SECONDARY_FIELDS else ""
+        rows.append(f"  <th{cls}>{col['name_html']}</th>")
+    rows.append("</tr></thead>")
+    rows.append("<tbody>")
 
     for section in sections:
         row = _get_row_data(session, section)
         section_id = section.id
+        sparkline = _build_sparkline(session, section)
         rows.append("<tr>")
+
         for col in columns:
             if "h" not in col["use"] or col["type"] == "noop":
                 continue
+
             val = row.get(col["field"], "")
+            label = col["name_text"]
+            td_cls = _TD_CLASS.get(col["type"], "")
+            if col["field"] in _SECONDARY_FIELDS:
+                td_cls = (td_cls + " secondary").strip()
 
             if col["type"] == "name":
-                val = f'<a href="?D={section_id}">{val}</a>'
+                val = f'<a href="/description.php?id={section_id}">{val}</a>'
             elif col["type"] == "flow" and isinstance(val, (int, float)):
-                val = f'<a href="?f={section_id}">{val:.0f}</a>'
+                val = (
+                    f'<a href="/plot.php?type=flow&id={section_id}">{val:.0f}</a>'
+                    f"{sparkline}"
+                )
             elif col["type"] == "gage" and isinstance(val, (int, float)):
-                val = f'<a href="?g={section_id}">{val:.2f}</a>'
+                val = f'<a href="/plot.php?type=gage&id={section_id}">{val:.2f}</a>'
             elif col["type"] == "temp" and isinstance(val, (int, float)):
-                val = f'<a href="?t={section_id}">{val:.0f}</a>'
+                val = f'<a href="/plot.php?type=temp&id={section_id}">{val:.0f}</a>'
             elif col["type"] == "date" and isinstance(val, datetime):
                 val = val.strftime("%m/%d %H:%M")
             elif col["type"] == "status":
-                val = row.get("status", "")
+                status = row.get("status", "")
+                val = f'<span class="{status}">{status}</span>' if status else ""
             else:
                 val = str(val) if val else ""
 
-            rows.append(f"  <td>{val}</td>")
+            cls_attr = f' class="{td_cls}"' if td_cls else ""
+            rows.append(f'  <td{cls_attr} data-label="{label}">{val}</td>')
         rows.append("</tr>")
 
-    rows.append("</table>")
+    rows.append("</tbody></table>")
     return "\n".join(rows)
 
 
+def _build_page(table_html: str, css: str, states: list[str],
+                current_state: str, title: str) -> str:
+    """Wrap the table HTML in a complete HTML document with inlined CSS."""
+    nav_links: list[str] = []
+    all_cls = ' class="active"' if not current_state else ""
+    nav_links.append(f'<a href="/index.html"{all_cls}>All</a>')
+    for s in states:
+        cls = ' class="active"' if s == current_state else ""
+        nav_links.append(f'<a href="/{s}.html"{cls}>{s}</a>')
+
+    nav_html = "\n    ".join(nav_links)
+    now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{title}</title>
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#2060A0">
+<link rel="icon" href="/static/favicon.ico">
+<link rel="apple-touch-icon" href="/static/icon-180.png">
+<style>
+{css}
+</style>
+</head>
+<body>
+<header>
+  <h1><a href="/index.html">River Levels</a></h1>
+  <nav>
+    {nav_html}
+  </nav>
+</header>
+<main>
+{table_html}
+<p style="font-size:.7rem;color:#888;margin-top:.5rem">Updated {now}</p>
+</main>
+<footer>
+Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.
+</footer>
+<script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/static/sw.js')</script>
+</body>
+</html>"""
+
+
+# ---------------------------------------------------------------------------
+# CLI entry point
+# ---------------------------------------------------------------------------
+
 def addArgs(subparsers):
     """Register the 'build' subcommand."""
-    parser = subparsers.add_parser("build",
-                                   help="Generate per-state HTML/CSV/text output pages")
+    parser = subparsers.add_parser(
+        "build", help="Generate static HTML/CSV/text files to output directory"
+    )
+    parser.add_argument(
+        "--output-dir",
+        default=str(BASE_DIR / "public_html"),
+        help="Output directory (default: public_html/)",
+    )
     parser.set_defaults(func=build)
 
 
 def build(args):
-    """Generate per-state HTML/CSV/text output pages."""
+    """Generate static HTML/CSV/text files to disk."""
+    output_dir = Path(getattr(args, "output_dir", None) or str(BASE_DIR / "public_html"))
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     session = get_session()
     try:
         columns = _get_builder_columns()
-        sections = sections_query(session, visible_only=True, with_gauge=True)
+        all_sections = sections_query(session, visible_only=True, with_gauge=True)
         states = all_state_names(session)
+        css = _load_css()
 
-        print(f"Building pages for {len(sections)} sections across {len(states)} states")
+        print(f"Building pages for {len(all_sections)} sections across {len(states)} states")
 
-        _build_and_store(session, sections, columns, "")
+        # All-states page → index.html
+        _build_and_write(session, all_sections, columns, "", states, css, output_dir)
 
+        # Per-state pages
         for state in states:
             state_sections = sections_query(session, state_name=state, visible_only=True)
             if state_sections:
-                _build_and_store(session, state_sections, columns, state)
+                _build_and_write(session, state_sections, columns, state, states, css, output_dir)
 
-        session.commit()
-        print("Build complete")
+        print(f"Build complete → {output_dir}")
     finally:
         session.close()
 
 
-def _build_and_store(session, sections, columns, state: str):
-    """Build and store CSV, text, and HTML for a state (or all)."""
+def _build_and_write(session, sections, columns, state: str,
+                     states: list[str], css: str, output_dir: Path):
+    """Build and write CSV, text, and HTML for a state (or all)."""
     suffix = f"_{state}" if state else ""
     label = state or "all"
+    filename = f"{state}.html" if state else "index.html"
+    title = f"{state} River Levels" if state else "River Levels"
 
     logger.info("Building %s: %d sections", label, len(sections))
 
+    # CSV
     csv_content = _build_csv(session, sections, columns, state)
-    store_page(session, f"levels{suffix}.csv", PageAction.FILE, csv_content, "text/csv")
+    (output_dir / f"levels{suffix}.csv").write_text(csv_content)
 
+    # Text
     text_content = _build_text(session, sections, columns, state)
-    store_page(session, f"levels{suffix}.text", PageAction.FILE, text_content, "text/plain")
+    (output_dir / f"levels{suffix}.text").write_text(text_content)
 
-    html_content = _build_html(session, sections, columns, state)
-    store_page(session, f"levels{suffix}.html", PageAction.PAGE, html_content, "text/html")
+    # HTML — complete self-contained page
+    table_html = _build_html_table(session, sections, columns)
+    page_html = _build_page(table_html, css, states, state, title)
+    (output_dir / filename).write_text(page_html)

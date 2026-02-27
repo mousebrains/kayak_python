@@ -21,17 +21,12 @@ DATABASE_URL = os.environ.get(
     f"sqlite:///{BASE_DIR / 'kayak.db'}",
 )
 
-# Flask
-SECRET_KEY = os.environ.get("FLASK_SECRET_KEY", "dev-secret-key")
-DEBUG = os.environ.get("FLASK_DEBUG", "0") == "1"
-
 # Data pipeline
 FETCH_TIMEOUT = int(os.environ.get("FETCH_TIMEOUT", "300"))
 FETCH_USER_AGENT = os.environ.get("FETCH_USER_AGENT", "kayak/1.0")
 
-# Legacy settings (from Parameters table / Paths.C)
-TEMPLATE_DIR = os.environ.get("TEMPLATE_DIR", str(BASE_DIR / "web.templates"))
-DISPLAY_CGI = os.environ.get("DISPLAY_CGI", "cgi/display")
+# Output
+OUTPUT_DIR = os.environ.get("OUTPUT_DIR", str(BASE_DIR / "public_html"))
 
 # Maintainer
 MAINTAINER_EMAIL = "pat.kayak@gmail.com"

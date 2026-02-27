@@ -2,7 +2,7 @@
 
 from unittest import mock
 
-from kayak.cli.build import _build_csv, _build_html, _build_text
+from kayak.cli.build import _build_csv, _build_html_table, _build_text
 from kayak.db.models import Gauge, Section
 
 COLS = [
@@ -49,7 +49,6 @@ def _make_sections(session, count=1):
 
 def test_build_csv_empty_sections(session):
     """_build_csv with no sections returns a header-only CSV."""
-    # Patch _get_row_data so builder does not try to hit data_db
     with mock.patch("kayak.cli.build._get_row_data", return_value={}):
         result = _build_csv(session, [], COLS, "")
 
@@ -92,39 +91,48 @@ def test_build_text_fixed_width(session):
     assert "Deschutes" in lines[2]
 
 
-def test_build_html_produces_table(session):
-    """_build_html wraps output in <table> tags."""
+def test_build_html_table_produces_table(session):
+    """_build_html_table wraps output in <table> tags."""
     sections = _make_sections(session, count=1)
     fake_row = {"display_name": "Clackamas", "flow": 900.0}
 
-    with mock.patch("kayak.cli.build._get_row_data", return_value=fake_row):
-        result = _build_html(session, sections, COLS, "")
+    with (
+        mock.patch("kayak.cli.build._get_row_data", return_value=fake_row),
+        mock.patch("kayak.cli.build._build_sparkline", return_value=""),
+    ):
+        result = _build_html_table(session, sections, COLS)
 
     assert "<table" in result
     assert "</table>" in result
-    assert "<th>Name</th>" in result
-    assert "<th>Flow</th>" in result
+    assert "Name" in result
+    assert "Flow" in result
 
 
-def test_build_html_includes_flow_link(session):
-    """_build_html wraps flow values in an <a> tag with ?f= query param."""
+def test_build_html_table_includes_flow_link(session):
+    """_build_html_table wraps flow values in a link to plot.php."""
     sections = _make_sections(session, count=1)
     fake_row = {"display_name": "Sandy", "flow": 750.0}
 
-    with mock.patch("kayak.cli.build._get_row_data", return_value=fake_row):
-        result = _build_html(session, sections, COLS, "")
+    with (
+        mock.patch("kayak.cli.build._get_row_data", return_value=fake_row),
+        mock.patch("kayak.cli.build._build_sparkline", return_value=""),
+    ):
+        result = _build_html_table(session, sections, COLS)
 
-    assert "?f=" in result
+    assert "plot.php" in result
     assert "750" in result
 
 
-def test_build_html_includes_name_link(session):
-    """_build_html wraps the section name in a description link."""
+def test_build_html_table_includes_name_link(session):
+    """_build_html_table wraps the section name in a link to description.php."""
     sections = _make_sections(session, count=1)
     fake_row = {"display_name": "White Salmon", "flow": ""}
 
-    with mock.patch("kayak.cli.build._get_row_data", return_value=fake_row):
-        result = _build_html(session, sections, COLS, "")
+    with (
+        mock.patch("kayak.cli.build._get_row_data", return_value=fake_row),
+        mock.patch("kayak.cli.build._build_sparkline", return_value=""),
+    ):
+        result = _build_html_table(session, sections, COLS)
 
-    assert "?D=" in result
+    assert "description.php" in result
     assert "White Salmon" in result

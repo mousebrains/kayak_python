@@ -1,59 +1,76 @@
-/* Kayak river levels stylesheet */
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  margin: 0;
-  padding: 0;
-  background: #f5f7fa;
-  color: #333;
+/* Kayak river levels — mobile-first responsive stylesheet */
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f5f7fa;color:#333}
+a{color:#2060A0;text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* Header */
+header{background:#2060A0;color:#fff;padding:.5rem 1rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+header h1{font-size:1.1rem;white-space:nowrap}
+header h1 a{color:#fff}
+header nav{display:flex;flex-wrap:wrap;gap:.3rem}
+header nav a{color:rgba(255,255,255,.85);font-size:.8rem;padding:2px 6px;border-radius:3px}
+header nav a:hover{background:rgba(255,255,255,.15);text-decoration:none}
+header nav a.active{background:rgba(255,255,255,.25);color:#fff}
+
+/* Main */
+main{padding:.5rem}
+@media(min-width:1024px){main{max-width:1200px;margin:0 auto;padding:1rem}}
+
+/* Footer */
+footer{text-align:center;padding:.5rem;color:#888;font-size:.7rem}
+
+/* Table — desktop default */
+table.levels{width:100%;border-collapse:collapse;font-size:.85rem}
+table.levels th{background:#2060A0;color:#fff;padding:4px 8px;text-align:left;white-space:nowrap}
+table.levels th a{color:#fff}
+table.levels td{padding:3px 8px;border-bottom:1px solid #ddd;white-space:nowrap}
+table.levels tr:nth-child(even){background:#f0f4f8}
+table.levels tr:hover{background:#e0e8f0}
+table.levels a{color:#2060A0}
+
+/* Sparkline cell */
+.spark{display:inline-block;vertical-align:middle;margin-left:4px}
+
+/* Status indicators */
+.rising{color:#c00}
+.falling{color:#070}
+.stable{color:#888}
+
+/* Secondary columns (drainage, class) — hidden on small screens */
+@media(max-width:639px){
+  table.levels thead{display:none}
+  table.levels,table.levels tbody,table.levels tr,table.levels td{display:block}
+  table.levels tr{padding:.5rem;margin-bottom:1px;border-bottom:2px solid #2060A0;background:#fff}
+  table.levels tr:nth-child(even){background:#fff}
+  table.levels td{padding:2px 0;border:none;white-space:normal}
+  table.levels td:before{content:attr(data-label);font-weight:700;font-size:.75rem;color:#666;margin-right:.5rem}
+  table.levels td.td-name{font-size:1rem;font-weight:700;padding-bottom:4px}
+  table.levels td.td-name:before{display:none}
+  table.levels td.secondary{display:none}
 }
 
-header {
-  background: #2060A0;
-  color: white;
-  padding: 0.5rem 1rem;
-  display: flex;
-  align-items: center;
-  gap: 2rem;
+/* Tablet — show table but hide secondary */
+@media(min-width:640px) and (max-width:1023px){
+  table.levels .secondary{display:none}
 }
 
-header h1 { margin: 0; font-size: 1.3rem; }
-header a { color: white; text-decoration: none; }
-header nav a { opacity: 0.8; }
-header nav a:hover { opacity: 1; }
+/* Description page */
+.desc-table{border-collapse:collapse;width:100%}
+.desc-table td{padding:4px 8px;border-bottom:1px solid #eee;vertical-align:top}
+.desc-table td:first-child{font-weight:700;white-space:nowrap;width:1%;color:#555}
 
-main {
-  max-width: 1200px;
-  margin: 1rem auto;
-  padding: 0 1rem;
-}
+/* Edit form */
+.edit-form label{display:block;margin:.5rem 0 .2rem;font-weight:700;font-size:.85rem}
+.edit-form input[type=text],.edit-form textarea{width:100%;max-width:600px;padding:4px 8px;border:1px solid #ccc;border-radius:3px;font-size:.85rem}
+.edit-form textarea{height:80px}
+.edit-form button{background:#2060A0;color:#fff;border:none;padding:8px 24px;border-radius:3px;cursor:pointer;margin-top:.5rem}
 
-footer {
-  text-align: center;
-  padding: 1rem;
-  color: #888;
-  font-size: 0.8rem;
-}
+/* View table */
+.view-table{border-collapse:collapse}
+.view-table th,.view-table td{padding:4px 12px;border:1px solid #ddd;text-align:left}
+.view-table th{background:#2060A0;color:#fff}
 
-table.levels {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.85rem;
-}
-
-table.levels th {
-  background: #2060A0;
-  color: white;
-  padding: 4px 8px;
-  text-align: left;
-}
-
-table.levels td {
-  padding: 3px 8px;
-  border-bottom: 1px solid #ddd;
-}
-
-table.levels tr:nth-child(even) { background: #f0f4f8; }
-table.levels tr:hover { background: #e0e8f0; }
-
-table.levels a { color: #2060A0; text-decoration: none; }
-table.levels a:hover { text-decoration: underline; }
+/* Plot container */
+.plot-container{text-align:center;padding:1rem 0}
+.plot-container svg{max-width:100%;height:auto}
