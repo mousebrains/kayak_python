@@ -27,10 +27,21 @@ def _load_yaml(filename: str) -> dict[str, Any]:
 def load_sources() -> list[dict[str, str]]:
     """Load source URL/parser definitions from data/sources.yaml.
 
-    Returns list of dicts with keys: parser, url, hours, group.
+    Returns list of dicts with keys: parser, url, hours.
+    Skips parser sections with ``enabled: false``.
     """
     data = _load_yaml("sources.yaml")
-    return data.get("sources", [])
+    sources: list[dict[str, str]] = []
+    for parser_name, section in data.items():
+        if not section.get("enabled", True):
+            continue
+        for entry in section.get("urls", []):
+            sources.append({
+                "parser": parser_name,
+                "url": entry["url"],
+                "hours": entry.get("hours", ""),
+            })
+    return sources
 
 
 @lru_cache(maxsize=1)
