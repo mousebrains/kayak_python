@@ -1,32 +1,38 @@
-"""Click CLI entry point (replaces individual C++ programs)."""
+"""Argparse CLI entry point (replaces individual C++ programs)."""
 
-import click
+import argparse
+import sys
 
-from kayak.cli.logger import add_logging_options, setup_logging
+from kayak.cli import build, calc_rating, calculator, fetch, init_db, merge, pipeline
+from kayak.cli.logger import addArgs as addLoggerArgs
+from kayak.cli.logger import mkLogger
 
 
-@click.group()
-@click.version_option(version="0.1.0", prog_name="levels")
-@add_logging_options
-@click.pass_context
-def cli(ctx, **kwargs):
+def main():
     """levels - River level data aggregation from government agencies."""
-    setup_logging(**kwargs)
+    parser = argparse.ArgumentParser(
+        prog="levels",
+        description="River level data aggregation from government agencies",
+    )
+    parser.add_argument("--version", action="version", version="%(prog)s 0.1.0")
 
+    addLoggerArgs(parser)
 
-# Import and register all subcommands
-from kayak.cli.build import build_cmd  # noqa: E402
-from kayak.cli.calc_rating import calc_rating_cmd  # noqa: E402
-from kayak.cli.calculator import calculator_cmd  # noqa: E402
-from kayak.cli.fetch import fetch_cmd  # noqa: E402
-from kayak.cli.init_db import init_db  # noqa: E402
-from kayak.cli.merge import merge_cmd  # noqa: E402
-from kayak.cli.pipeline import pipeline_cmd  # noqa: E402
+    subparsers = parser.add_subparsers(dest="command")
 
-cli.add_command(init_db)
-cli.add_command(fetch_cmd)
-cli.add_command(merge_cmd)
-cli.add_command(calc_rating_cmd)
-cli.add_command(calculator_cmd)
-cli.add_command(build_cmd)
-cli.add_command(pipeline_cmd)
+    init_db.addArgs(subparsers)
+    fetch.addArgs(subparsers)
+    merge.addArgs(subparsers)
+    calc_rating.addArgs(subparsers)
+    calculator.addArgs(subparsers)
+    build.addArgs(subparsers)
+    pipeline.addArgs(subparsers)
+
+    args = parser.parse_args()
+    mkLogger(args)
+
+    if not hasattr(args, "func"):
+        parser.print_help()
+        sys.exit(1)
+
+    args.func(args)

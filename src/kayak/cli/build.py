@@ -11,8 +11,6 @@ import io
 import logging
 from datetime import datetime, timezone
 
-import click
-
 from kayak.config_data import load_builder_columns
 from kayak.db.data_db import get_latest
 from kayak.db.engine import get_session
@@ -176,8 +174,14 @@ def _build_html(session, sections, columns, state_name: str) -> str:
     return "\n".join(rows)
 
 
-@click.command("build")
-def build_cmd():
+def addArgs(subparsers):
+    """Register the 'build' subcommand."""
+    parser = subparsers.add_parser("build",
+                                   help="Generate per-state HTML/CSV/text output pages")
+    parser.set_defaults(func=build)
+
+
+def build(args):
     """Generate per-state HTML/CSV/text output pages."""
     session = get_session()
     try:
@@ -185,7 +189,7 @@ def build_cmd():
         sections = sections_query(session, visible_only=True, with_gauge=True)
         states = all_state_names(session)
 
-        click.echo(f"Building pages for {len(sections)} sections across {len(states)} states")
+        print(f"Building pages for {len(sections)} sections across {len(states)} states")
 
         _build_and_store(session, sections, columns, "")
 
@@ -195,7 +199,7 @@ def build_cmd():
                 _build_and_store(session, state_sections, columns, state)
 
         session.commit()
-        click.echo("Build complete")
+        print("Build complete")
     finally:
         session.close()
 

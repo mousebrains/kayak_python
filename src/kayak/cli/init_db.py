@@ -1,6 +1,6 @@
 """Database initialization command (replaces gen.sql/rebuild)."""
 
-import click
+import sys
 
 from kayak.config_data import load_sources
 from kayak.db.engine import get_engine
@@ -42,31 +42,37 @@ def _sync_sources(session):
     return count
 
 
-@click.command("init-db")
-@click.option("--drop", is_flag=True, help="Drop and recreate all tables")
-@click.option("--seed/--no-seed", default=True, help="Seed reference data")
-def init_db(drop, seed):
+def addArgs(subparsers):
+    """Register the 'init-db' subcommand."""
+    parser = subparsers.add_parser("init-db",
+                                   help="Create database tables and optionally seed reference data")
+    parser.set_defaults(func=init_db)
+    parser.add_argument("--drop", action="store_true", help="Drop and recreate all tables")
+    parser.add_argument("--no-seed", action="store_true", help="Skip seeding reference data")
+
+
+def init_db(args):
     """Create database tables and optionally seed reference data."""
     engine = get_engine()
 
-    if drop:
-        click.echo("Dropping all tables...")
+    if args.drop:
+        print("Dropping all tables...")
         Base.metadata.drop_all(engine)
 
-    click.echo("Creating tables...")
+    print("Creating tables...")
     Base.metadata.create_all(engine)
 
-    if seed:
+    if not args.no_seed:
         from kayak.db.engine import get_session
         session = get_session()
         try:
-            click.echo("Seeding states...")
+            print("Seeding states...")
             _seed_states(session)
-            click.echo("Syncing sources from YAML...")
+            print("Syncing sources from YAML...")
             count = _sync_sources(session)
-            click.echo(f"  {count} new FetchUrl records added")
+            print(f"  {count} new FetchUrl records added")
             session.commit()
-            click.echo("Done.")
+            print("Done.")
         except Exception:
             session.rollback()
             raise

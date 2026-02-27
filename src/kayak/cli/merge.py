@@ -7,8 +7,7 @@ the GaugeSource relationships.
 from __future__ import annotations
 
 import logging
-
-import click
+import sys
 
 from kayak.db.data_db import merge_sources, update_latest
 from kayak.db.engine import get_session
@@ -17,8 +16,14 @@ from kayak.db.models import DataType, Gauge, GaugeSource, Source
 logger = logging.getLogger(__name__)
 
 
-@click.command("merge")
-def merge_cmd():
+def addArgs(subparsers):
+    """Register the 'merge' subcommand."""
+    parser = subparsers.add_parser("merge",
+                                   help="Merge data from multiple source stations into combined stations")
+    parser.set_defaults(func=merge)
+
+
+def merge(args):
     """Merge data from multiple source stations into combined stations."""
 
     session = get_session()
@@ -53,13 +58,13 @@ def merge_cmd():
                         update_latest(session, target_id, dtype)
                         merge_count += count
                 except Exception as e:
-                    click.echo(
+                    print(
                         f"  Error merging {gauge.name}/{dtype.value}: {e}",
-                        err=True,
+                        file=sys.stderr,
                     )
 
-        click.echo(f"Found {merge_count} observations merged")
+        print(f"Found {merge_count} observations merged")
         session.commit()
-        click.echo("Merge complete")
+        print("Merge complete")
     finally:
         session.close()

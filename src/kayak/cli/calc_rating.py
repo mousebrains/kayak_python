@@ -8,8 +8,7 @@ If both exist, fills in gaps.
 from __future__ import annotations
 
 import logging
-
-import click
+import sys
 
 from kayak.db.data_db import (
     get_observations,
@@ -24,8 +23,14 @@ from kayak.utils.conversions import interpolate_rating
 logger = logging.getLogger(__name__)
 
 
-@click.command("calc-rating")
-def calc_rating_cmd():
+def addArgs(subparsers):
+    """Register the 'calc-rating' subcommand."""
+    parser = subparsers.add_parser("calc-rating",
+                                   help="Apply rating tables to convert between gage height and flow")
+    parser.set_defaults(func=calc_rating)
+
+
+def calc_rating(args):
     """Apply rating tables to convert between gage height and flow."""
 
     session = get_session()
@@ -39,7 +44,7 @@ def calc_rating_cmd():
             .all()
         )
 
-        click.echo(f"Found {len(gauges)} gauges with rating tables")
+        print(f"Found {len(gauges)} gauges with rating tables")
 
         for gauge in gauges:
             try:
@@ -122,9 +127,9 @@ def calc_rating_cmd():
                         update_latest(session, source_id, DataType.gauge)
 
             except Exception as e:
-                click.echo(f"  Error for {gauge.name}: {e}", err=True)
+                print(f"  Error for {gauge.name}: {e}", file=sys.stderr)
 
         session.commit()
-        click.echo("Rating calculations complete")
+        print("Rating calculations complete")
     finally:
         session.close()

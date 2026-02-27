@@ -8,9 +8,8 @@ from __future__ import annotations
 
 import logging
 import re
+import sys
 from datetime import datetime, timezone
-
-import click
 
 from kayak.db.data_db import get_latest, store_observation, update_latest
 from kayak.db.engine import get_session
@@ -19,8 +18,14 @@ from kayak.db.models import CalcExpression, DataType, Source
 logger = logging.getLogger(__name__)
 
 
-@click.command("calculator")
-def calculator_cmd():
+def addArgs(subparsers):
+    """Register the 'calculator' subcommand."""
+    parser = subparsers.add_parser("calculator",
+                                   help="Build synthetic/calculated gage readings from expressions")
+    parser.set_defaults(func=calculator)
+
+
+def calculator(args):
     """Build synthetic/calculated gage readings from expressions."""
 
     session = get_session()
@@ -32,7 +37,7 @@ def calculator_cmd():
             .all()
         )
 
-        click.echo(f"Found {len(calc_sources)} calculated sources")
+        print(f"Found {len(calc_sources)} calculated sources")
 
         # Build source name -> id lookup
         all_sources = session.query(Source).all()
@@ -125,9 +130,9 @@ def calculator_cmd():
                     logger.debug("  = %.1f at %s", result, when)
 
             except Exception as e:
-                click.echo(f"  Error for {source.name}: {e}", err=True)
+                print(f"  Error for {source.name}: {e}", file=sys.stderr)
 
         session.commit()
-        click.echo("Calculations complete")
+        print("Calculations complete")
     finally:
         session.close()

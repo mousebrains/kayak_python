@@ -7,10 +7,9 @@ observations in the database.
 from __future__ import annotations
 
 import logging
+import sys
 from datetime import datetime
 from pathlib import Path
-
-import click
 
 from kayak.config_data import load_sources
 from kayak.db.engine import get_session
@@ -35,79 +34,82 @@ def _hour_allowed(hours_spec: str) -> bool:
         return True
 
 
-@click.command("fetch")
-@click.option("-d", "--dry-run", is_flag=True, help="Do not store data")
-@click.option("-f", "--fetch-only", is_flag=True, help="Fetch but do not parse")
-@click.option("-I", "--input-dir", type=click.Path(exists=True),
-              help="Read previously saved files instead of fetching from network")
-@click.option("-i", "--ignore-constraints", is_flag=True, help="Ignore hour constraints")
-@click.option("-n", "--show-name", is_flag=True, help="Show URL being fetched")
-@click.option("-o", "--output-dir", type=click.Path(), help="Save fetched data to directory")
-@click.option("-P", "--url-prefix", default="", help="Prepend to all URLs")
-@click.option("-p", "--parser-filter", default=None, help="Filter by parser type")
-@click.option("-t", "--parser-type", default=None, help="Force parser type")
-@click.option("-u", "--url-filter", default=None, help="Filter by URL substring")
-@click.option("-U", "--single-url", default=None, help="Fetch a single URL")
-def fetch_cmd(
-    dry_run, fetch_only, input_dir, ignore_constraints, show_name,
-    output_dir, url_prefix, parser_filter, parser_type,
-    url_filter, single_url,
-):
+def addArgs(subparsers):
+    """Register the 'fetch' subcommand."""
+    parser = subparsers.add_parser("fetch",
+                                   help="Fetch data from remote agencies, parse, and store in database")
+    parser.set_defaults(func=fetch)
+    parser.add_argument("-d", "--dry-run", action="store_true", help="Do not store data")
+    parser.add_argument("-f", "--fetch-only", action="store_true", help="Fetch but do not parse")
+    parser.add_argument("-I", "--input-dir", default=None,
+                        help="Read previously saved files instead of fetching from network")
+    parser.add_argument("-i", "--ignore-constraints", action="store_true",
+                        help="Ignore hour constraints")
+    parser.add_argument("-n", "--show-name", action="store_true",
+                        help="Show URL being fetched")
+    parser.add_argument("-o", "--output-dir", default=None,
+                        help="Save fetched data to directory")
+    parser.add_argument("-P", "--url-prefix", default="", help="Prepend to all URLs")
+    parser.add_argument("-p", "--parser-filter", default=None, help="Filter by parser type")
+    parser.add_argument("-t", "--parser-type", default=None, help="Force parser type")
+    parser.add_argument("-u", "--url-filter", default=None, help="Filter by URL substring")
+    parser.add_argument("-U", "--single-url", default=None, help="Fetch a single URL")
+
+
+def fetch(args):
     """Fetch data from remote agencies, parse, and store in database."""
 
     ensure_all_loaded()
 
-    if dry_run:
-        click.echo("Dry run mode — no data will be stored")
+    if args.dry_run:
+        print("Dry run mode — no data will be stored")
 
-    if input_dir:
-        click.echo(f"Reading from saved files in {input_dir}")
+    if args.input_dir:
+        print(f"Reading from saved files in {args.input_dir}")
 
-    if single_url and parser_type:
-        _fetch_single(single_url, parser_type, url_prefix, output_dir,
-                       input_dir, dry_run, fetch_only)
+    if args.single_url and args.parser_type:
+        _fetch_single(args.single_url, args.parser_type, args.url_prefix,
+                       args.output_dir, args.input_dir, args.dry_run, args.fetch_only)
         return
 
     # Load sources from YAML config
     yaml_sources = load_sources()
 
     # Apply filters
-    if parser_filter:
-        yaml_sources = [s for s in yaml_sources if s["parser"] == parser_filter]
-    if url_filter:
-        yaml_sources = [s for s in yaml_sources if url_filter in s["url"]]
+    if args.parser_filter:
+        yaml_sources = [s for s in yaml_sources if s["parser"] == args.parser_filter]
+    if args.url_filter:
+        yaml_sources = [s for s in yaml_sources if args.url_filter in s["url"]]
 
-    click.echo(f"Found {len(yaml_sources)} URL sources to process")
+    print(f"Found {len(yaml_sources)} URL sources to process")
 
     session = get_session()
     try:
         for src_def in yaml_sources:
             hours = src_def.get("hours", "")
-            if not ignore_constraints and not _hour_allowed(hours):
+            if not args.ignore_constraints and not _hour_allowed(hours):
                 logger.debug("Skipping %s (hour constraint)", src_def['url'])
                 continue
 
-            url = url_prefix + src_def["url"]
-            parser_name = parser_type or src_def["parser"]
+            url = args.url_prefix + src_def["url"]
+            parser_name = args.parser_type or src_def["parser"]
 
-            if show_name:
-                click.echo(f"Processing {url} parser={parser_name}")
+            if args.show_name:
+                print(f"Processing {url} parser={parser_name}")
             else:
                 logger.info("Processing %s parser=%s", url, parser_name)
 
             try:
                 text_content = _get_content(
-                    url, src_def["url"], input_dir, output_dir,
+                    url, src_def["url"], args.input_dir, args.output_dir,
                 )
                 if text_content is None:
                     continue
 
-                if not fetch_only:
+                if not args.fetch_only:
                     parser_cls = get_parser_class(parser_name)
                     if parser_cls is None:
-                        click.echo(
-                            f"  Unknown parser '{parser_name}'", err=True
-                        )
+                        print(f"  Unknown parser '{parser_name}'", file=sys.stderr)
                         continue
 
                     # Look up the FetchUrl to update last_fetched_at
@@ -118,22 +120,22 @@ def fetch_cmd(
                     parser = parser_cls(
                         url=url, session=session,
                         source_id=fetch_url.id if fetch_url else None,
-                        dry_run=dry_run,
+                        dry_run=args.dry_run,
                     )
                     count = parser.parse(text_content)
 
-                    if fetch_url and not dry_run and not input_dir:
+                    if fetch_url and not args.dry_run and not args.input_dir:
                         fetch_url.last_fetched_at = datetime.utcnow()
 
                     logger.debug("  %d updates", count)
 
             except Exception as e:
-                click.echo(f"  Exception for {url}: {e}", err=True)
+                print(f"  Exception for {url}: {e}", file=sys.stderr)
                 continue
 
-        if not dry_run:
+        if not args.dry_run:
             session.commit()
-            click.echo("Committed to database")
+            print("Committed to database")
         else:
             session.rollback()
 
@@ -154,15 +156,15 @@ def _get_content(url, raw_url, input_dir, output_dir):
         logger.debug("Reading %s", file_path)
         return file_path.read_text(encoding="utf-8", errors="replace")
 
-    from kayak.utils.http_client import fetch
+    from kayak.utils.http_client import fetch as http_fetch
 
-    result = fetch(url)
+    result = http_fetch(url)
     if not result.ok:
-        click.echo(f"  Error: {result.error}", err=True)
+        print(f"  Error: {result.error}", file=sys.stderr)
         return None
 
     if result.status_code >= 400:
-        click.echo(f"  HTTP {result.status_code} for {url}", err=True)
+        print(f"  HTTP {result.status_code} for {url}", file=sys.stderr)
         return None
 
     if output_dir:
@@ -186,7 +188,7 @@ def _fetch_single(
     if not fetch_only:
         parser_cls = get_parser_class(parser_name)
         if parser_cls is None:
-            click.echo(f"Unknown parser '{parser_name}'", err=True)
+            print(f"Unknown parser '{parser_name}'", file=sys.stderr)
             return
 
         session = get_session()
@@ -196,7 +198,7 @@ def _fetch_single(
                 dry_run=dry_run,
             )
             count = parser.parse(text_content)
-            click.echo(f"{count} database updates")
+            print(f"{count} database updates")
             if not dry_run:
                 session.commit()
         finally:

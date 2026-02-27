@@ -10,48 +10,48 @@ Runs the full data pipeline in order:
 
 from __future__ import annotations
 
+import sys
 import time
 
-import click
+from kayak.cli import build, calc_rating, calculator, fetch, merge
 
 
-@click.command("pipeline")
-@click.option("--skip-fetch", is_flag=True, help="Skip the fetch step")
-@click.option("--dry-run", is_flag=True, help="Dry run (no DB writes)")
-@click.pass_context
-def pipeline_cmd(ctx, skip_fetch, dry_run):
-    """Run the full data pipeline (fetch → calc-rating → merge → calculator → build)."""
+def addArgs(subparsers):
+    """Register the 'pipeline' subcommand."""
+    parser = subparsers.add_parser("pipeline",
+                                   help="Run the full data pipeline")
+    parser.set_defaults(func=pipeline)
+    parser.add_argument("--skip-fetch", action="store_true", help="Skip the fetch step")
+    parser.add_argument("-d", "--dry-run", action="store_true", help="Dry run (no DB writes)")
+
+
+def pipeline(args):
+    """Run the full data pipeline (fetch -> calc-rating -> merge -> calculator -> build)."""
     steps = []
 
-    if not skip_fetch:
-        from kayak.cli.fetch import fetch_cmd
-        steps.append(("fetch", fetch_cmd, {"dry_run": dry_run}))
-
-    from kayak.cli.calc_rating import calc_rating_cmd
-    from kayak.cli.merge import merge_cmd
-    from kayak.cli.calculator import calculator_cmd
-    from kayak.cli.build import build_cmd
+    if not args.skip_fetch:
+        steps.append(("fetch", fetch.fetch))
 
     steps.extend([
-        ("calc-rating", calc_rating_cmd, {}),
-        ("merge", merge_cmd, {}),
-        ("calculator", calculator_cmd, {}),
-        ("build", build_cmd, {}),
+        ("calc-rating", calc_rating.calc_rating),
+        ("merge", merge.merge),
+        ("calculator", calculator.calculator),
+        ("build", build.build),
     ])
 
-    for step_name, cmd, kwargs in steps:
-        click.echo(f"\n{'='*60}")
-        click.echo(f"Running: {step_name}")
-        click.echo(f"{'='*60}")
+    for step_name, func in steps:
+        print(f"\n{'='*60}")
+        print(f"Running: {step_name}")
+        print(f"{'='*60}")
         start = time.time()
         try:
-            ctx.invoke(cmd, **kwargs)
+            func(args)
         except SystemExit:
             pass
         except Exception as e:
-            click.echo(f"Error in {step_name}: {e}", err=True)
+            print(f"Error in {step_name}: {e}", file=sys.stderr)
         elapsed = time.time() - start
-        click.echo(f"Completed {step_name} in {elapsed:.1f}s")
+        print(f"Completed {step_name} in {elapsed:.1f}s")
 
-    click.echo(f"\n{'='*60}")
-    click.echo("Pipeline complete")
+    print(f"\n{'='*60}")
+    print("Pipeline complete")
