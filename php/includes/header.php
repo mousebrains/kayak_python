@@ -17,6 +17,7 @@ function get_inline_css(): string {
 function include_header(string $title = 'River Levels', string $active = ''): void {
     $css = get_inline_css();
     $esc_title = htmlspecialchars($title);
+    $picker_cls = $active === 'picker' ? ' class="active"' : '';
     echo <<<HTML
 <!DOCTYPE html>
 <html lang="en">
@@ -35,7 +36,7 @@ $css
 <body>
 <header>
   <h1><a href="/index.html">River Levels</a></h1>
-  <nav><a href="/index.html">Home</a></nav>
+  <nav><a href="/index.html">Home</a> <a href="/picker.php"$picker_cls>Picker</a></nav>
 </header>
 <main>
 HTML;

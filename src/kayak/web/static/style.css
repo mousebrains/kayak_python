@@ -71,6 +71,50 @@ table.levels a{color:#2060A0}
 .view-table th,.view-table td{padding:4px 12px;border:1px solid #ddd;text-align:left}
 .view-table th{background:#2060A0;color:#fff}
 
+/* Landing page state grid */
+.state-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:.5rem;padding:.5rem 0}
+.state-grid a.state-card{display:block;padding:.75rem 1rem;background:#fff;border:1px solid #ddd;border-radius:4px;text-align:center;font-weight:600;color:#2060A0;transition:background .15s,border-color .15s}
+.state-grid a.state-card:hover{background:#e8f0fa;border-color:#2060A0;text-decoration:none}
+@media(min-width:480px){.state-grid{grid-template-columns:repeat(3,1fr)}}
+@media(min-width:768px){.state-grid{grid-template-columns:repeat(4,1fr)}}
+
+/* Readings table on description page */
+.readings-table{border-collapse:collapse;width:100%;margin:.5rem 0}
+.readings-table th,.readings-table td{padding:4px 10px;border:1px solid #ddd;text-align:left}
+.readings-table th{background:#2060A0;color:#fff;font-size:.8rem}
+.readings-table td{font-size:.85rem}
+
 /* Plot container */
 .plot-container{text-align:center;padding:1rem 0}
 .plot-container svg{max-width:100%;height:auto}
+
+/* Picker — state pills */
+.picker-states{display:flex;flex-wrap:wrap;gap:.4rem;padding:.5rem 0}
+.picker-states label{display:block;padding:4px 12px;background:#fff;border:1px solid #ccc;border-radius:16px;font-size:.8rem;cursor:pointer;user-select:none;transition:background .15s,border-color .15s}
+.picker-states input{display:none}
+.picker-states input:checked+span{color:#fff}
+.picker-states label:has(input:checked){background:#2060A0;border-color:#2060A0;color:#fff}
+
+/* Picker — search */
+.picker-search{width:100%;max-width:400px;padding:6px 10px;border:1px solid #ccc;border-radius:3px;font-size:.85rem;margin:.5rem 0}
+
+/* Picker — section table */
+.picker-sections{width:100%;border-collapse:collapse;font-size:.85rem}
+.picker-sections th{background:#2060A0;color:#fff;padding:4px 8px;text-align:left;white-space:nowrap}
+.picker-sections td{padding:3px 8px;border-bottom:1px solid #ddd;white-space:nowrap}
+.picker-sections tr:nth-child(even){background:#f0f4f8}
+.picker-sections tr:hover{background:#e0e8f0}
+.picker-sections input[type=checkbox]{margin:0}
+
+/* Picker — sticky action bar */
+.picker-actions{position:sticky;bottom:0;background:#fff;border-top:2px solid #2060A0;padding:.5rem 1rem;display:flex;align-items:center;gap:1rem;font-size:.85rem;z-index:10}
+.picker-actions .count{font-weight:700}
+.picker-actions a,.picker-actions button{display:inline-block;padding:6px 16px;background:#2060A0;color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:.8rem;text-decoration:none}
+.picker-actions a:hover,.picker-actions button:hover{background:#184a80;text-decoration:none}
+.picker-actions a.disabled{opacity:.4;pointer-events:none}
+.picker-actions .copied{color:#070;font-size:.75rem}
+
+/* Picker responsive */
+@media(max-width:639px){
+  .picker-sections .col-location,.picker-sections .col-flow,.picker-sections .col-gage{display:none}
+}
