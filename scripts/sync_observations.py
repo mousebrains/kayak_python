@@ -47,9 +47,6 @@ except ImportError:
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
-# Add src/ to path so we can import kayak modules
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
 logging.basicConfig(
     format="%(asctime)s %(levelname)s: %(message)s",
     level=logging.INFO,
@@ -84,14 +81,21 @@ def build_source_map(session):
 
 
 def build_high_water_marks(session):
-    """Build a dict of (source_id, data_type) → max observed_at from target DB."""
-    rows = session.execute(
-        text(
-            "SELECT source_id, data_type, MAX(observed_at) "
-            "FROM observation GROUP BY source_id, data_type"
-        )
-    ).fetchall()
-    return {(r[0], r[1]): r[2] for r in rows}
+    """Build a dict of (source_id, data_type) → max observed_at from target DB.
+
+    Returns an empty dict if the observation table doesn't exist yet.
+    """
+    try:
+        rows = session.execute(
+            text(
+                "SELECT source_id, data_type, MAX(observed_at) "
+                "FROM observation GROUP BY source_id, data_type"
+            )
+        ).fetchall()
+        return {(r[0], r[1]): r[2] for r in rows}
+    except Exception:
+        session.rollback()
+        return {}
 
 
 def get_legacy_observation_tables(legacy_engine):
