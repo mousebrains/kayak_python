@@ -32,6 +32,17 @@ logger = logging.getLogger(__name__)
 # CSS is read once from the source tree and inlined into every page.
 _CSS_PATH = Path(__file__).resolve().parent.parent / "web" / "static" / "style.css"
 
+# JS snippet to convert <time> elements to the browser's local timezone.
+_LOCAL_TIME_JS = """<script>
+document.querySelectorAll('time[datetime]').forEach(function(el){
+  var d=new Date(el.getAttribute('datetime'));
+  if(isNaN(d))return;
+  var mm=d.getMonth()+1,dd=d.getDate();
+  var hh=d.getHours(),mi=d.getMinutes();
+  el.textContent=(mm<10?'0':'')+mm+'/'+(dd<10?'0':'')+dd+' '+(hh<10?'0':'')+hh+':'+(mi<10?'0':'')+mi;
+});
+</script>"""
+
 
 def _load_css() -> str:
     try:
@@ -276,7 +287,9 @@ def _build_html_table(session, sections, columns) -> str:
             elif col["type"] == "temp" and isinstance(val, (int, float)):
                 val = f'<a href="/plot.php?type=temp&id={section_id}">{val:.0f}</a>'
             elif col["type"] == "date" and isinstance(val, datetime):
-                val = val.strftime("%m/%d %H:%M")
+                iso = val.strftime("%Y-%m-%dT%H:%M:%SZ")
+                display = val.strftime("%m/%d %H:%M")
+                val = f'<time datetime="{iso}">{display}</time>'
             elif col["type"] == "status":
                 status = row.get("status", "")
                 val = f'<span class="{status}">{status}</span>' if status else ""
@@ -302,7 +315,9 @@ def _build_page(table_html: str, css: str, states: list[str],
         nav_links.append(f'<a href="/{s}.html"{cls}>{s}</a>')
 
     nav_html = "\n    ".join(nav_links)
-    now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+    now_utc = datetime.now(UTC)
+    now_iso = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+    now_display = now_utc.strftime("%Y-%m-%d %H:%M UTC")
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -327,11 +342,12 @@ def _build_page(table_html: str, css: str, states: list[str],
 </header>
 <main>
 {table_html}
-<p style="font-size:.7rem;color:#888;margin-top:.5rem">Updated {now}</p>
+<p style="font-size:.7rem;color:#888;margin-top:.5rem">Updated <time datetime="{now_iso}">{now_display}</time></p>
 </main>
 <footer>
 Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.
 </footer>
+{_LOCAL_TIME_JS}
 <script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/static/sw.js')</script>
 </body>
 </html>"""
@@ -355,7 +371,9 @@ def _build_landing_page(css: str, states: list[str]) -> str:
         state_cards.append(f'<a href="/{s}.html" class="state-card">{s}</a>')
     grid_html = "\n".join(state_cards)
 
-    now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+    now_utc = datetime.now(UTC)
+    now_iso = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+    now_display = now_utc.strftime("%Y-%m-%d %H:%M UTC")
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -382,12 +400,13 @@ def _build_landing_page(css: str, states: list[str]) -> str:
 <div class="state-grid">
 {grid_html}
 </div>
-<p style="font-size:.7rem;color:#888;margin-top:.5rem">Updated {now}</p>
+<p style="font-size:.7rem;color:#888;margin-top:.5rem">Updated <time datetime="{now_iso}">{now_display}</time></p>
 <p style="margin-top:1rem"><a href="https://wkcc.org">Washington Kayak Club</a></p>
 </main>
 <footer>
 Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.
 </footer>
+{_LOCAL_TIME_JS}
 <script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/static/sw.js')</script>
 </body>
 </html>"""
