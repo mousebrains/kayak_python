@@ -205,8 +205,31 @@ if ($gauge) {
                 $url = htmlspecialchars($src['fetch_url']);
                 echo "<tr><td>$label</td><td><a href=\"$url\" target=\"_blank\" rel=\"noopener\">$url</a></td></tr>\n";
             } elseif ($src['calc_expr']) {
-                $expr = htmlspecialchars($src['calc_expr']);
-                echo "<tr><td>$label</td><td>Calculated: $expr</td></tr>\n";
+                // Link gauge references like "nP::S_Santiam_Cascadia_merge::flow"
+                // The middle token is a gauge name; find a section that uses it.
+                $expr_html = preg_replace_callback(
+                    '/(\w+)::(\w+)::(\w+)/',
+                    function ($m) use ($db) {
+                        $gauge_name = $m[2];
+                        $stmt = $db->prepare(
+                            'SELECT sec.id, sec.display_name
+                             FROM section sec
+                             JOIN gauge g ON sec.gauge_id = g.id
+                             WHERE g.name = ?
+                             LIMIT 1'
+                        );
+                        $stmt->execute([$gauge_name]);
+                        $sec = $stmt->fetch();
+                        $full = htmlspecialchars($m[0]);
+                        if ($sec) {
+                            $display = htmlspecialchars($sec['display_name'] ?: $gauge_name);
+                            return "<a href=\"/description.php?id={$sec['id']}\" title=\"$full\">$display</a>::{$m[3]}";
+                        }
+                        return $full;
+                    },
+                    $src['calc_expr']
+                );
+                echo "<tr><td>$label</td><td>Calculated: $expr_html</td></tr>\n";
             } else {
                 echo "<tr><td>$label</td><td>—</td></tr>\n";
             }

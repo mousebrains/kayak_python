@@ -401,7 +401,7 @@ def _build_landing_page(css: str, states: list[str]) -> str:
 {grid_html}
 </div>
 <p style="font-size:.7rem;color:#888;margin-top:.5rem">Updated <time datetime="{now_iso}">{now_display}</time></p>
-<p style="margin-top:1rem"><a href="https://wkcc.org">Washington Kayak Club</a></p>
+<p style="margin-top:1rem"><a href="https://wkcc.org">Willamette Kayak and Canoe Club</a></p>
 </main>
 <footer>
 Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.
