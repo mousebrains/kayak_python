@@ -108,40 +108,6 @@ if ($source_id) {
     }
 }
 
-// --- Data sources ---
-if ($gauge) {
-    $src_stmt = $db->prepare(
-        'SELECT s.name, s.agency, f.url AS fetch_url, c.expression AS calc_expr
-         FROM source s
-         JOIN gauge_source gs ON gs.source_id = s.id
-         LEFT JOIN fetch_url f ON s.fetch_url_id = f.id
-         LEFT JOIN calc_expression c ON s.calc_expression_id = c.id
-         WHERE gs.gauge_id = ?'
-    );
-    $src_stmt->execute([$gauge['id']]);
-    $sources = $src_stmt->fetchAll();
-
-    if ($sources) {
-        echo '<h3 style="margin-top:1rem">Data Sources</h3>';
-        echo '<table class="desc-table">';
-        foreach ($sources as $src) {
-            $src_name = htmlspecialchars($src['name']);
-            $agency = $src['agency'] ? htmlspecialchars($src['agency']) : '';
-            $label = $agency ? "$agency — $src_name" : $src_name;
-            if ($src['fetch_url']) {
-                $url = htmlspecialchars($src['fetch_url']);
-                echo "<tr><td>$label</td><td><a href=\"$url\" target=\"_blank\" rel=\"noopener\">$url</a></td></tr>\n";
-            } elseif ($src['calc_expr']) {
-                $expr = htmlspecialchars($src['calc_expr']);
-                echo "<tr><td>$label</td><td>Calculated: $expr</td></tr>\n";
-            } else {
-                echo "<tr><td>$label</td><td>—</td></tr>\n";
-            }
-        }
-        echo '</table>';
-    }
-}
-
 // --- Inline SVG plots (only for data types with observations) ---
 if ($source_id) {
     $plot_types = [
@@ -205,6 +171,41 @@ foreach ($fields as $label => $value) {
 }
 
 echo '</table>';
+
+// --- Data sources ---
+if ($gauge) {
+    $src_stmt = $db->prepare(
+        'SELECT s.name, s.agency, f.url AS fetch_url, c.expression AS calc_expr
+         FROM source s
+         JOIN gauge_source gs ON gs.source_id = s.id
+         LEFT JOIN fetch_url f ON s.fetch_url_id = f.id
+         LEFT JOIN calc_expression c ON s.calc_expression_id = c.id
+         WHERE gs.gauge_id = ?'
+    );
+    $src_stmt->execute([$gauge['id']]);
+    $sources = $src_stmt->fetchAll();
+
+    if ($sources) {
+        echo '<h3 style="margin-top:1rem">Data Sources</h3>';
+        echo '<table class="desc-table">';
+        foreach ($sources as $src) {
+            $src_name = htmlspecialchars($src['name']);
+            $agency = $src['agency'] ? htmlspecialchars($src['agency']) : '';
+            $label = $agency ? "$agency — $src_name" : $src_name;
+            if ($src['fetch_url']) {
+                $url = htmlspecialchars($src['fetch_url']);
+                echo "<tr><td>$label</td><td><a href=\"$url\" target=\"_blank\" rel=\"noopener\">$url</a></td></tr>\n";
+            } elseif ($src['calc_expr']) {
+                $expr = htmlspecialchars($src['calc_expr']);
+                echo "<tr><td>$label</td><td>Calculated: $expr</td></tr>\n";
+            } else {
+                echo "<tr><td>$label</td><td>—</td></tr>\n";
+            }
+        }
+        echo '</table>';
+    }
+}
+
 echo '<p style="margin-top:1rem"><a href="/index.html">Back to main page</a>';
 echo ' | <a href="/edit.php?id=' . $id . '">Edit</a></p>';
 
