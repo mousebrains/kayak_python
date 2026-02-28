@@ -6,6 +6,8 @@ All queries are keyed by source_id (int FK) instead of station name strings.
 from __future__ import annotations
 
 import logging
+import statistics
+from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
@@ -253,15 +255,24 @@ def merge_sources(
 ) -> int:
     """Merge observations from multiple sources into a target.
 
+    When multiple sources have data at the same timestamp, the median
+    value is used instead of last-write-wins.
+
     Returns count of new rows inserted.
     """
     if since is None:
         since = datetime.now(UTC) - timedelta(days=10)
 
-    count = 0
+    # Collect all values grouped by timestamp
+    by_time: defaultdict[datetime, list[float]] = defaultdict(list)
     for src_id in input_source_ids:
         rows = get_observations(session, src_id, data_type, since=since)
         for row in rows:
-            if store_observation(session, target_source_id, data_type, row.observed_at, row.value):
-                count += 1
+            by_time[row.observed_at].append(row.value)
+
+    count = 0
+    for observed_at, values in by_time.items():
+        median_val = statistics.median(values)
+        if store_observation(session, target_source_id, data_type, observed_at, median_val):
+            count += 1
     return count

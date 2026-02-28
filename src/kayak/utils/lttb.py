@@ -6,6 +6,47 @@ visual shape — peaks and troughs are retained.
 
 from __future__ import annotations
 
+import statistics
+
+
+def running_median(
+    data: list[tuple[float, float]],
+    window_seconds: float,
+) -> list[tuple[float, float]]:
+    """Smooth a time series with a running median filter.
+
+    Args:
+        data: List of (timestamp, value) tuples, sorted by timestamp.
+        window_seconds: Width of the sliding window in seconds.
+
+    Returns:
+        List of (timestamp, median_value) for each original timestamp.
+    """
+    if len(data) <= 1:
+        return list(data)
+
+    half = window_seconds / 2
+    result: list[tuple[float, float]] = []
+    n = len(data)
+
+    for i in range(n):
+        t = data[i][0]
+        lo = t - half
+        hi = t + half
+        # Collect values within the window — scan outward from i
+        vals: list[float] = [data[i][1]]
+        j = i - 1
+        while j >= 0 and data[j][0] >= lo:
+            vals.append(data[j][1])
+            j -= 1
+        j = i + 1
+        while j < n and data[j][0] <= hi:
+            vals.append(data[j][1])
+            j += 1
+        result.append((t, statistics.median(vals)))
+
+    return result
+
 
 def downsample(data: list[tuple[float, float]], threshold: int) -> list[tuple[float, float]]:
     """Downsample data using LTTB.

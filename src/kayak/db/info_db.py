@@ -9,7 +9,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from kayak.db.models import Gauge, GaugeSource, Section, State
+from kayak.db.models import DataType, FlowLevel, Gauge, GaugeSource, Section, Source, State
 
 
 def all_states(session: Session) -> list[State]:
@@ -95,3 +95,33 @@ def get_source_ids_for_gauge(session: Session, gauge_id: int) -> list[int]:
         select(GaugeSource.source_id).where(GaugeSource.gauge_id == gauge_id)
     ).scalars().all()
     return list(rows)
+
+
+def is_source_calculated(session: Session, source_id: int) -> bool:
+    """Return True if the source uses a calc_expression instead of a fetch URL."""
+    src = session.get(Source, source_id)
+    return src is not None and src.calc_expression_id is not None
+
+
+def classify_level(
+    section: Section,
+    data_type: DataType,
+    value: float,
+) -> FlowLevel | None:
+    """Return the FlowLevel for a value given a section's level ranges.
+
+    Checks the section.levels list for a matching range where the
+    data_type matches and value falls within [low, high].
+    """
+    for sl in section.levels:
+        # Match on data_type — low_data_type and high_data_type should
+        # both match the queried type (when set).
+        if sl.low_data_type and sl.low_data_type != data_type:
+            continue
+        if sl.high_data_type and sl.high_data_type != data_type:
+            continue
+        low = sl.low if sl.low is not None else float("-inf")
+        high = sl.high if sl.high is not None else float("inf")
+        if low <= value <= high:
+            return sl.level
+    return None

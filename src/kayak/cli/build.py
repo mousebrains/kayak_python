@@ -17,9 +17,15 @@ from kayak.config import BASE_DIR
 from kayak.config_data import load_builder_columns
 from kayak.db.data_db import get_latest, get_observations
 from kayak.db.engine import get_session
-from kayak.db.info_db import all_state_names, get_primary_source_id, sections_query
+from kayak.db.info_db import (
+    all_state_names,
+    classify_level,
+    get_primary_source_id,
+    is_source_calculated,
+    sections_query,
+)
 from kayak.db.models import DataType, Section
-from kayak.utils.lttb import downsample
+from kayak.utils.lttb import downsample, running_median
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +69,10 @@ def _get_row_data(session, section: Section) -> dict:
     if gauge:
         source_id = get_primary_source_id(session, gauge.id)
         if source_id:
+            # Check if source is calculated (estimated)
+            if is_source_calculated(session, source_id):
+                row["is_estimated"] = True
+
             for dtype_name, dtype in [
                 ("flow", DataType.flow),
                 ("gage", DataType.gauge),
@@ -79,6 +89,20 @@ def _get_row_data(session, section: Section) -> dict:
                             row["status"] = "rising"
                         else:
                             row["status"] = "falling"
+
+                    # Classify flow/gage level
+                    if dtype_name in ("flow", "gage"):
+                        level = classify_level(section, dtype, latest.value)
+                        if level:
+                            row[f"{dtype_name}_level"] = str(level)
+
+            # Stale / expired detection
+            if "time" in row:
+                age = datetime.now(UTC) - row["time"]
+                if age > timedelta(days=7):
+                    row["expired"] = True
+                elif age > timedelta(hours=48):
+                    row["stale"] = True
     return row
 
 
@@ -108,6 +132,7 @@ def _build_sparkline(session, section: Section, width: int = 80, height: int = 2
     if len(pairs) < 3:
         return ""
 
+    pairs = running_median(pairs, window_seconds=3 * 3600)
     pairs = downsample(pairs, 60)
 
     xs = [p[0] for p in pairs]
@@ -216,9 +241,12 @@ def _build_html_table(session, sections, columns) -> str:
 
     for section in sections:
         row = _get_row_data(session, section)
+        if row.get("expired"):
+            continue
         section_id = section.id
         sparkline = _build_sparkline(session, section)
-        rows.append("<tr>")
+        tr_cls = ' class="stale"' if row.get("stale") else ""
+        rows.append(f"<tr{tr_cls}>")
 
         for col in columns:
             if "h" not in col["use"] or col["type"] == "noop":
@@ -231,14 +259,17 @@ def _build_html_table(session, sections, columns) -> str:
                 td_cls = (td_cls + " secondary").strip()
 
             if col["type"] == "name":
-                val = f'<a href="/description.php?id={section_id}">{val}</a>'
+                est = '<span class="est"> (est)</span>' if row.get("is_estimated") else ""
+                val = f'<a href="/description.php?id={section_id}">{val}</a>{est}'
             elif col["type"] == "flow" and isinstance(val, (int, float)):
+                lvl_cls = f' class="level-{row["flow_level"]}"' if row.get("flow_level") else ""
                 val = (
-                    f'<a href="/plot.php?type=flow&id={section_id}">{val:.0f}</a>'
+                    f'<a{lvl_cls} href="/plot.php?type=flow&id={section_id}">{val:.0f}</a>'
                     f"{sparkline}"
                 )
             elif col["type"] == "gage" and isinstance(val, (int, float)):
-                val = f'<a href="/plot.php?type=gage&id={section_id}">{val:.2f}</a>'
+                lvl_cls = f' class="level-{row["gage_level"]}"' if row.get("gage_level") else ""
+                val = f'<a{lvl_cls} href="/plot.php?type=gage&id={section_id}">{val:.2f}</a>'
             elif col["type"] == "temp" and isinstance(val, (int, float)):
                 val = f'<a href="/plot.php?type=temp&id={section_id}">{val:.0f}</a>'
             elif col["type"] == "date" and isinstance(val, datetime):

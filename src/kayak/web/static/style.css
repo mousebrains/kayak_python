@@ -37,6 +37,17 @@ table.levels a{color:#2060A0}
 .falling{color:#070}
 .stable{color:#888}
 
+/* Level indicators */
+.level-low{color:#c00}
+.level-okay{color:#070}
+.level-high{color:#c00}
+
+/* Stale data */
+tr.stale td{color:#aaa;font-style:italic}
+
+/* Estimated marker */
+.est{color:#c00;font-size:.75rem}
+
 /* Secondary columns (drainage, class) — hidden on small screens */
 @media(max-width:639px){
   table.levels thead{display:none}

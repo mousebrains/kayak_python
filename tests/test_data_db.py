@@ -139,3 +139,57 @@ def test_store_observation_upsert(session):
     rows = get_observations(session, src.id, DataType.flow)
     assert len(rows) == 1
     assert rows[0].value == 200.0
+
+
+def test_merge_sources_median(session):
+    """When two sources have data at the same timestamp, merge uses the median."""
+    src1 = _make_source(session, "med_src1")
+    src2 = _make_source(session, "med_src2")
+    merged = _make_source(session, "med_merged")
+
+    now = datetime.now(UTC)
+    # Both sources report at the same time with different values
+    store_observation(session, src1.id, DataType.flow, now, 100.0)
+    store_observation(session, src2.id, DataType.flow, now, 200.0)
+    session.flush()
+
+    merge_sources(
+        session, merged.id, [src1.id, src2.id], DataType.flow,
+        since=now - timedelta(days=1),
+    )
+    session.flush()
+
+    merged_obs = get_observations(
+        session, merged.id, DataType.flow,
+        since=now - timedelta(days=1),
+    )
+    assert len(merged_obs) == 1
+    # median of [100, 200] = 150
+    assert merged_obs[0].value == 150.0
+
+
+def test_merge_sources_median_three(session):
+    """Three sources at the same timestamp — median picks the middle value."""
+    src1 = _make_source(session, "m3_src1")
+    src2 = _make_source(session, "m3_src2")
+    src3 = _make_source(session, "m3_src3")
+    merged = _make_source(session, "m3_merged")
+
+    now = datetime.now(UTC)
+    store_observation(session, src1.id, DataType.flow, now, 100.0)
+    store_observation(session, src2.id, DataType.flow, now, 300.0)
+    store_observation(session, src3.id, DataType.flow, now, 200.0)
+    session.flush()
+
+    merge_sources(
+        session, merged.id, [src1.id, src2.id, src3.id], DataType.flow,
+        since=now - timedelta(days=1),
+    )
+    session.flush()
+
+    merged_obs = get_observations(
+        session, merged.id, DataType.flow,
+        since=now - timedelta(days=1),
+    )
+    assert len(merged_obs) == 1
+    assert merged_obs[0].value == 200.0
