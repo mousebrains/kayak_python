@@ -126,7 +126,7 @@ def test_build_html_table_includes_flow_link(session):
 def test_build_html_table_includes_name_link(session):
     """_build_html_table wraps the section name in a link to description.php."""
     sections = _make_sections(session, count=1)
-    fake_row = {"display_name": "White Salmon", "flow": ""}
+    fake_row = {"display_name": "White Salmon", "flow": 1200.0}
 
     with (
         mock.patch("kayak.cli.build._get_row_data", return_value=fake_row),

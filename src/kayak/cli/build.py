@@ -257,6 +257,11 @@ def _build_html_table(session, sections, columns) -> str:
         row = _get_row_data(session, section)
         if row.get("expired"):
             continue
+        # Skip sections with no data at all
+        has_data = any(row.get(k) is not None and row.get(k) != ""
+                       for k in ("flow", "gage", "temperature"))
+        if not has_data:
+            continue
         section_id = section.id
         sparkline = _build_sparkline(session, section)
         tr_cls = ' class="stale"' if row.get("stale") else ""
@@ -304,8 +309,25 @@ def _build_html_table(session, sections, columns) -> str:
     return "\n".join(rows)
 
 
+def _build_reach_directory(sections) -> str:
+    """Build a collapsible alphabetical directory of all reaches."""
+    lines: list[str] = []
+    lines.append('<details class="reach-dir">')
+    lines.append(f'<summary>All Reaches ({len(sections)})</summary>')
+    lines.append('<ul class="reach-list">')
+    for section in sections:
+        name = section.display_name or section.name
+        lines.append(
+            f'<li><a href="/description.php?id={section.id}">{name}</a></li>'
+        )
+    lines.append('</ul>')
+    lines.append('</details>')
+    return "\n".join(lines)
+
+
 def _build_page(table_html: str, css: str, states: list[str],
-                current_state: str, title: str) -> str:
+                current_state: str, title: str,
+                directory_html: str = "") -> str:
     """Wrap the table HTML in a complete HTML document with inlined CSS."""
     nav_links: list[str] = []
     all_cls = ' class="active"' if not current_state else ""
@@ -342,6 +364,7 @@ def _build_page(table_html: str, css: str, states: list[str],
 </header>
 <main>
 {table_html}
+{directory_html}
 <p style="font-size:.7rem;color:#888;margin-top:.5rem">Updated <time datetime="{now_iso}">{now_display}</time></p>
 </main>
 <footer>
@@ -481,5 +504,7 @@ def _build_and_write(session, sections, columns, state: str,
 
     # HTML — complete self-contained page
     table_html = _build_html_table(session, sections, columns)
-    page_html = _build_page(table_html, css, states, state, title)
+    directory_html = _build_reach_directory(sections)
+    page_html = _build_page(table_html, css, states, state, title,
+                            directory_html=directory_html)
     (output_dir / filename).write_text(page_html)
