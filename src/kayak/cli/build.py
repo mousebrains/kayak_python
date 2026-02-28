@@ -98,7 +98,10 @@ def _get_row_data(session, section: Section) -> dict:
 
             # Stale / expired detection
             if "time" in row:
-                age = datetime.now(UTC) - row["time"]
+                obs_time = row["time"]
+                if obs_time.tzinfo is None:
+                    obs_time = obs_time.replace(tzinfo=UTC)
+                age = datetime.now(UTC) - obs_time
                 if age > timedelta(days=7):
                     row["expired"] = True
                 elif age > timedelta(hours=48):
