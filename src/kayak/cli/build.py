@@ -283,12 +283,12 @@ def _build_html_table(session, sections, columns) -> str:
             elif col["type"] == "flow" and isinstance(val, (int, float)):
                 lvl_cls = f' class="level-{row["flow_level"]}"' if row.get("flow_level") else ""
                 val = (
-                    f'<a{lvl_cls} href="/plot.php?type=flow&id={section_id}">{val:.0f}</a>'
+                    f'<a{lvl_cls} href="/plot.php?type=flow&id={section_id}">{val:,.0f}</a>'
                     f"{sparkline}"
                 )
             elif col["type"] == "gage" and isinstance(val, (int, float)):
                 lvl_cls = f' class="level-{row["gage_level"]}"' if row.get("gage_level") else ""
-                val = f'<a{lvl_cls} href="/plot.php?type=gage&id={section_id}">{val:.1f}</a>'
+                val = f'<a{lvl_cls} href="/plot.php?type=gage&id={section_id}">{val:,.1f}</a>'
             elif col["type"] == "temp" and isinstance(val, (int, float)):
                 val = f'<a href="/plot.php?type=temp&id={section_id}">{val:.1f}</a>'
             elif col["type"] == "date" and isinstance(val, datetime):
