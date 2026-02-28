@@ -94,6 +94,38 @@ Each subcommand module in `src/kayak/cli/` exposes `addArgs(subparsers)` and set
 - **Test fixtures:** `tests/conftest.py` provides `engine`, `session`, `sample_source`, `sample_gauge`, `sample_section`, `linked_source_gauge`
 - **PHP DB connection:** `php/includes/db.php` reads `DATABASE_URL` env var; supports both MySQL PDO and SQLite PDO
 
+## Migration & Sync Scripts
+
+Scripts in `scripts/` handle data migration between the legacy MySQL databases and the new schema:
+
+| Script | Purpose |
+|---|---|
+| `migrate_legacy_to_wkcclevels.py` | Full one-time migration from legacy `levels_todo`/`levels_data`/`levels_page` → `wkcclevels` MySQL. Drops and recreates all 18 tables. |
+| `sync_observations.py` | Incremental sync from `levels_data` → `wkcclevels`. Uses high-water marks (`MAX(observed_at)` per source/data_type) to fetch only new rows. Runs on cron (twice daily at 6:00/18:00). |
+| `sync_legacy_observations.py` | Sync legacy observations into local SQLite or MySQL. Supports `--days N` window. Used for dev setup. |
+| `load_observations_sqlite.py` | Load `observation.csv` and `latest_observation.csv` dumps into a SQLite database. Self-contained (stdlib only, no dependencies). |
+
+```bash
+# Full migration (destructive — drops target tables first)
+python3 scripts/migrate_legacy_to_wkcclevels.py
+
+# Incremental sync (production cron job)
+python3 scripts/sync_observations.py              # high-water mark (default)
+python3 scripts/sync_observations.py --days 7     # force last 7 days
+python3 scripts/sync_observations.py --dry-run    # show counts only
+
+# Dump observations from MySQL for SQLite import
+python3 scripts/load_observations_sqlite.py --db kayak.db
+
+# Via SSH tunnel (all MySQL scripts)
+ssh -L 3307:mysql.wkcc.dreamhosters.com:3306 tpw@levels.wkcc.org -N &
+python3 scripts/sync_observations.py --legacy-host 127.0.0.1 --legacy-port 3307
+```
+
 ## Legacy C++ Code
 
-The original C++ codebase remains in `src/*.C`/`src/*.H` with `src/Makefile`. It used `.C`/`.H` extensions, mysql++ library, three separate MySQL databases, and CGI binaries. This code is no longer built but is retained for reference. The legacy per-station table schema (e.g., `flow_14306500`) can be synced to the new normalized schema via `scripts/sync_legacy_observations.py`.
+The original C++ codebase remains in `src/*.C`/`src/*.H` with `src/Makefile`. It used `.C`/`.H` extensions, mysql++ library, three separate MySQL databases, and CGI binaries. This code is no longer built but is retained for reference.
+
+## Python Version Compatibility
+
+The codebase targets Python 3.11+ (`datetime.UTC`, `enum.StrEnum`). The production server runs Python 3.10, so `src/kayak/db/models.py` includes a `StrEnum` compatibility shim. The migration/sync scripts in `scripts/` avoid importing modules that use `datetime.UTC` and work on Python 3.10.
