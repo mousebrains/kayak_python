@@ -283,9 +283,9 @@ def _build_html_table(session, sections, columns) -> str:
                 )
             elif col["type"] == "gage" and isinstance(val, (int, float)):
                 lvl_cls = f' class="level-{row["gage_level"]}"' if row.get("gage_level") else ""
-                val = f'<a{lvl_cls} href="/plot.php?type=gage&id={section_id}">{val:.2f}</a>'
+                val = f'<a{lvl_cls} href="/plot.php?type=gage&id={section_id}">{val:.1f}</a>'
             elif col["type"] == "temp" and isinstance(val, (int, float)):
-                val = f'<a href="/plot.php?type=temp&id={section_id}">{val:.0f}</a>'
+                val = f'<a href="/plot.php?type=temp&id={section_id}">{val:.1f}</a>'
             elif col["type"] == "date" and isinstance(val, datetime):
                 iso = val.strftime("%Y-%m-%dT%H:%M:%SZ")
                 display = val.strftime("%m/%d %H:%M")

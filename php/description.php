@@ -80,8 +80,16 @@ if ($source_id) {
         echo '<tr><th>Type</th><th>Value</th><th>Time</th><th>Change/hr</th><th>Status</th></tr>';
         foreach ($readings as $r) {
             $dtype = htmlspecialchars($r['data_type']);
-            $val   = number_format((float)$r['value'], 2);
-            $time  = $r['observed_at'] ? date('m/d H:i', strtotime($r['observed_at'])) : 'N/A';
+            // Format value by data type: flow=integer, gauge/temperature=1 decimal
+            $raw = (float)$r['value'];
+            if ($r['data_type'] === 'flow') {
+                $val = number_format($raw, 0);
+            } else {
+                $val = number_format($raw, 1);
+            }
+            $time_iso = $r['observed_at'] ? date('Y-m-d\TH:i:s\Z', strtotime($r['observed_at'])) : '';
+            $time_display = $r['observed_at'] ? date('m/d H:i', strtotime($r['observed_at'])) : 'N/A';
+            $time_html = $time_iso ? "<time datetime=\"$time_iso\">$time_display</time>" : 'N/A';
             $delta = $r['delta_per_hour'] !== null ? number_format((float)$r['delta_per_hour'], 2) : 'N/A';
             $status = '';
             if ($r['delta_per_hour'] !== null) {
@@ -94,7 +102,41 @@ if ($source_id) {
                     $status = '<span class="falling">falling</span>';
                 }
             }
-            echo "<tr><td>$dtype</td><td>$val</td><td>$time</td><td>$delta</td><td>$status</td></tr>\n";
+            echo "<tr><td>$dtype</td><td>$val</td><td>$time_html</td><td>$delta</td><td>$status</td></tr>\n";
+        }
+        echo '</table>';
+    }
+}
+
+// --- Data sources ---
+if ($gauge) {
+    $src_stmt = $db->prepare(
+        'SELECT s.name, s.agency, f.url AS fetch_url, c.expression AS calc_expr
+         FROM source s
+         JOIN gauge_source gs ON gs.source_id = s.id
+         LEFT JOIN fetch_url f ON s.fetch_url_id = f.id
+         LEFT JOIN calc_expression c ON s.calc_expression_id = c.id
+         WHERE gs.gauge_id = ?'
+    );
+    $src_stmt->execute([$gauge['id']]);
+    $sources = $src_stmt->fetchAll();
+
+    if ($sources) {
+        echo '<h3 style="margin-top:1rem">Data Sources</h3>';
+        echo '<table class="desc-table">';
+        foreach ($sources as $src) {
+            $src_name = htmlspecialchars($src['name']);
+            $agency = $src['agency'] ? htmlspecialchars($src['agency']) : '';
+            $label = $agency ? "$agency — $src_name" : $src_name;
+            if ($src['fetch_url']) {
+                $url = htmlspecialchars($src['fetch_url']);
+                echo "<tr><td>$label</td><td><a href=\"$url\" target=\"_blank\" rel=\"noopener\">$url</a></td></tr>\n";
+            } elseif ($src['calc_expr']) {
+                $expr = htmlspecialchars($src['calc_expr']);
+                echo "<tr><td>$label</td><td>Calculated: $expr</td></tr>\n";
+            } else {
+                echo "<tr><td>$label</td><td>—</td></tr>\n";
+            }
         }
         echo '</table>';
     }
