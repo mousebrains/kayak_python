@@ -162,6 +162,15 @@ $fields = [
     'Difficulties' => $section['difficulties'],
     'Description' => $section['description'],
     'Notes' => $section['notes'],
+    'Gauge Location' => ($gauge && $gauge['latitude'] !== null && $gauge['longitude'] !== null)
+        ? number_format((float)$gauge['latitude'], 6) . ', ' . number_format((float)$gauge['longitude'], 6)
+        : null,
+    'Put-in' => ($section['latitude_start'] !== null && $section['longitude_start'] !== null)
+        ? number_format((float)$section['latitude_start'], 6) . ', ' . number_format((float)$section['longitude_start'], 6)
+        : null,
+    'Take-out' => ($section['latitude_end'] !== null && $section['longitude_end'] !== null)
+        ? number_format((float)$section['latitude_end'], 6) . ', ' . number_format((float)$section['longitude_end'], 6)
+        : null,
 ];
 
 foreach ($fields as $label => $value) {
