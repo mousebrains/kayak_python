@@ -8,8 +8,15 @@ Section/Gauge/Source relationships.
 from __future__ import annotations
 
 import enum
+import sys
 from datetime import datetime
 from decimal import Decimal
+
+# Python 3.10 compatibility: StrEnum was added in 3.11
+if sys.version_info < (3, 11):
+    class _StrEnum(str, enum.Enum):
+        pass
+    enum.StrEnum = _StrEnum
 
 from sqlalchemy import (
     ForeignKey,
