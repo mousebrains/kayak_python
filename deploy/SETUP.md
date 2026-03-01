@@ -156,6 +156,7 @@ systemctl list-timers kayak-*
 Expected schedule:
 - **kayak-pipeline.timer** — every hour at `:12` (fetches data, builds HTML)
 - **kayak-decimate.timer** — daily at 02:32 (thins old observations)
+- **kayak-backup.timer** — weekly Sunday at 03:15 (SQLite backup with 4-copy retention)
 
 ## 9. Verify
 
