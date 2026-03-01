@@ -365,6 +365,18 @@ def _build_page(table_html: str, css: str, states: list[str],
 <main>
 {table_html}
 {directory_html}
+<div style="font-size:.75rem;color:#555;margin-top:1rem;line-height:1.6">
+<p><b>Flow colors:</b>
+<span style="color:#c00">Low</span> &ndash;
+<span style="color:#0a0">Okay</span> &ndash;
+<span style="color:#e80">High</span>
+(thresholds set per reach)</p>
+<p><b>Status:</b>
+<span class="rising">rising</span> = increasing &gt; 0.5/hr &bull;
+<span class="falling">falling</span> = decreasing &gt; 0.5/hr &bull;
+<span class="stable">stable</span> = change &lt; 0.5/hr
+(based on delta between latest reading and the previous reading at least 1 hour earlier)</p>
+</div>
 <p style="font-size:.7rem;color:#888;margin-top:.5rem">Updated <time datetime="{now_iso}">{now_display}</time></p>
 </main>
 <footer>

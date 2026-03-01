@@ -39,8 +39,8 @@ table.levels a{color:#2060A0}
 
 /* Level indicators — override table.levels a and visited */
 table.levels a.level-low,table.levels a.level-low:visited{color:#c00}
-table.levels a.level-okay,table.levels a.level-okay:visited{color:#070}
-table.levels a.level-high,table.levels a.level-high:visited{color:#c00}
+table.levels a.level-okay,table.levels a.level-okay:visited{color:#0a0}
+table.levels a.level-high,table.levels a.level-high:visited{color:#e80}
 
 /* Stale data */
 tr.stale td{color:#aaa;font-style:italic}
