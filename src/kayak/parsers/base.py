@@ -16,7 +16,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from kayak.db.data_db import store_observations
-from kayak.db.models import DataType
+from kayak.db.models import DataType, Source
 
 logger = logging.getLogger(__name__)
 
@@ -37,12 +37,16 @@ class BaseParser(ABC):
         source_id: int | None = None,
         source_map: dict[str, int] | None = None,
         dry_run: bool = False,
+        fetch_url_id: int | None = None,
+        agency: str | None = None,
     ):
         self.url = url
         self.session = session
         self.source_id = source_id
         self.source_map = source_map or {}
         self.dry_run = dry_run
+        self.fetch_url_id = fetch_url_id
+        self.agency = agency
         self._db_updates = 0
         self._obs_buffer: list[dict] = []
 
@@ -113,10 +117,13 @@ class BaseParser(ABC):
         # back to the single source_id set at construction time.
         sid = self.source_map.get(station) or self.source_id
         if sid is None:
-            logger.error(
-                "No source_id set for %s/%s — cannot store", station, data_type,
-            )
-            return False
+            if self.fetch_url_id is not None:
+                sid = self._auto_create_source(station)
+            else:
+                logger.error(
+                    "No source_id set for %s/%s — cannot store", station, data_type,
+                )
+                return False
 
         self._obs_buffer.append({
             "source_id": sid,
@@ -125,6 +132,18 @@ class BaseParser(ABC):
             "value": value,
         })
         return True
+
+    def _auto_create_source(self, station: str) -> int:
+        """Auto-create a Source record for an unknown station.
+
+        Returns the new source_id and caches it in source_map.
+        """
+        src = Source(name=station, agency=self.agency, fetch_url_id=self.fetch_url_id)
+        self.session.add(src)
+        self.session.flush()
+        self.source_map[station] = src.id
+        logger.info("Auto-created Source id=%d for station %s", src.id, station)
+        return src.id
 
     def _flush_buffer(self) -> None:
         """Flush buffered observations to the database in a single batch."""

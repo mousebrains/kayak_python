@@ -200,6 +200,8 @@ def fetch(args):
                     source_id=w.source_id,
                     source_map=w.source_map,
                     dry_run=args.dry_run,
+                    fetch_url_id=w.fetch_url.id if w.fetch_url else None,
+                    agency=w.parser_name,
                 )
                 count = parser.parse(text_content)
 

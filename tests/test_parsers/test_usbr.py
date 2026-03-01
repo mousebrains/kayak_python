@@ -175,3 +175,38 @@ class TestUSBREdgeCases:
             .all()
         )
         assert len(waro_gauges) == 2
+
+    def test_multi_station_auto_creates_missing_sources(self, session):
+        """Multi-station CSV with missing Source records should auto-create them."""
+        fu = FetchUrl(url="https://example.com/multi_auto", parser="usbr", is_active=True)
+        session.add(fu)
+        session.flush()
+
+        # Only create MADO — WARO is missing and should be auto-created
+        src_mado = Source(name="MADO", fetch_url_id=fu.id)
+        session.add(src_mado)
+        session.flush()
+
+        source_map = {"MADO": src_mado.id}
+        parser = USBRParser(
+            url="https://example.com/multi_auto", session=session,
+            source_map=source_map,
+            fetch_url_id=fu.id, agency="usbr",
+        )
+        count = parser.parse(USBR_MULTI_STATION)
+
+        # All 10 observations should be stored (6 MADO + 4 WARO)
+        assert count == 10
+
+        # WARO source was auto-created
+        waro_src = session.query(Source).filter_by(name="WARO").one()
+        assert waro_src.agency == "usbr"
+        assert waro_src.fetch_url_id == fu.id
+
+        # WARO observations were stored
+        waro_obs = (
+            session.query(Observation)
+            .filter_by(source_id=waro_src.id)
+            .all()
+        )
+        assert len(waro_obs) == 4
