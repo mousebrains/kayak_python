@@ -47,6 +47,7 @@ def ensure_all_loaded():
     from kayak.parsers import (  # noqa: F401
         nwps,
         nwrfc_xml,
+        usace_cda,
         usace_outflow,
         usbr,
         usgs,

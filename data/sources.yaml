@@ -150,12 +150,10 @@ usbr:
     - url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=BASO,BCSO,BCTO,EGSO,FSHO,MFDO,SDCO"
     - url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&list=HGHM"
 
-usace.outflow:
+usace.cda:
   urls:
-    - url: "http://www.nwd-wc.usace.army.mil/ftppub/project_data/hourly/gpr_0daysback.txt"
-      hours: "-0,-1,-2,-3"
-    - url: "http://www.nwd-wc.usace.army.mil/ftppub/project_data/hourly/hcr_0daysback.txt"
-      hours: "-0,-1,-2,-3"
+    - url: "https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22GPR.Flow-Out.Inst.0.0.Best%22,%22GPR.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d"
+    - url: "https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22HCR.Flow-Out.Inst.0.0.Best%22,%22HCR.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d"
 
 wa.gov:
   urls:
