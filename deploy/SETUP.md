@@ -188,6 +188,70 @@ add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" alway
 
 Then reload: `sudo nginx -t && sudo systemctl reload nginx`
 
+## 11. Cloud backup (future — Hetzner Storage Box)
+
+The local backup retains 4 weekly copies on the VPS. For off-site redundancy,
+add a Hetzner Storage Box (BX11: 1 TB, ~3.80 EUR/month). Transfers stay
+within the Hetzner network — no egress fees.
+
+### Storage Box setup
+
+1. Order a Storage Box from the Hetzner console. Note the credentials
+   (e.g. `u123456`, hostname `u123456.your-storagebox.de`).
+
+2. Enable SSH support in the Storage Box settings panel (disabled by default).
+
+3. Set up SSH key auth from the VPS (the backup runs as user `tpw`):
+
+   ```bash
+   # Generate a key if tpw doesn't have one
+   sudo -u tpw ssh-keygen -t ed25519 -C "kayak-backup" -f /home/tpw/.ssh/id_storagebox
+
+   # Install the key on the Storage Box (port 23 for SSH)
+   ssh-copy-id -p 23 -i /home/tpw/.ssh/id_storagebox.pub u123456@u123456.your-storagebox.de
+
+   # Create the backup directory
+   ssh -p 23 -i /home/tpw/.ssh/id_storagebox u123456@u123456.your-storagebox.de mkdir -p backups
+   ```
+
+4. Add the rsync step to `systemd/kayak-backup.sh`, after the local backup
+   and before the retention cleanup:
+
+   ```bash
+   # Off-site copy to Hetzner Storage Box
+   STORAGEBOX="u123456@u123456.your-storagebox.de"
+   SSH_KEY="/home/tpw/.ssh/id_storagebox"
+   rsync -az -e "ssh -p 23 -i $SSH_KEY" "$DEST" "$STORAGEBOX:backups/"
+   ```
+
+5. Test manually:
+
+   ```bash
+   sudo -u tpw /home/tpw/kayak/systemd/kayak-backup.sh
+   ssh -p 23 -i /home/tpw/.ssh/id_storagebox u123456@u123456.your-storagebox.de ls -lh backups/
+   ```
+
+### Storage Box retention
+
+The rsync copies each weekly backup to the Storage Box but does not
+delete old remote copies. This is intentional — disk is cheap and the
+DB is small. To apply the same 4-copy retention remotely, add after
+the rsync:
+
+```bash
+# Clean remote backups: keep positions 0, 1, 3, 5 (same as local)
+ssh -p 23 -i "$SSH_KEY" "$STORAGEBOX" bash -s <<'REMOTE'
+cd backups
+mapfile -t backups < <(ls -1r kayak-*.db 2>/dev/null)
+keep=(0 1 3 5)
+for i in "${!backups[@]}"; do
+    skip=false
+    for k in "${keep[@]}"; do [[ "$i" -eq "$k" ]] && skip=true && break; done
+    [[ "$skip" == false ]] && rm -f "${backups[$i]}"
+done
+REMOTE
+```
+
 ## Troubleshooting
 
 **PHP returns 502 Bad Gateway:**
