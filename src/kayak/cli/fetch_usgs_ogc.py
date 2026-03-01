@@ -209,8 +209,8 @@ def fetch_usgs_ogc(args):
         print("USGS_API_KEY not set — skipping OGC fetch")
         return
 
-    hours = args.hours
-    dry_run = args.dry_run
+    hours = getattr(args, "hours", 24)
+    dry_run = getattr(args, "dry_run", False)
     batch_size = getattr(args, "batch_size", BATCH_SIZE)
 
     if dry_run:

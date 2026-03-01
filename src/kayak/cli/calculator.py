@@ -6,7 +6,9 @@ to produce derived observations.
 
 from __future__ import annotations
 
+import ast
 import logging
+import operator
 
 from kayak.db.data_db import get_latest, store_observation, update_latest
 from kayak.db.engine import get_session
@@ -14,6 +16,56 @@ from kayak.db.info_db import get_primary_source_id
 from kayak.db.models import DataType, Gauge, Source
 
 logger = logging.getLogger(__name__)
+
+_BINOPS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.Pow: operator.pow,
+}
+
+_UNARYOPS = {
+    ast.UAdd: operator.pos,
+    ast.USub: operator.neg,
+}
+
+_SAFE_FUNCS = {"max": max, "min": min}
+
+
+def _safe_eval(expr: str) -> float:
+    """Evaluate a simple arithmetic expression safely via AST.
+
+    Supports: numeric constants, +, -, *, /, **, unary +/-, max(), min().
+    Raises ValueError for any unsupported constructs.
+    """
+    tree = ast.parse(expr, mode="eval")
+
+    def _eval(node):
+        if isinstance(node, ast.Expression):
+            return _eval(node.body)
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return float(node.value)
+        if isinstance(node, ast.BinOp):
+            op_fn = _BINOPS.get(type(node.op))
+            if op_fn is None:
+                raise ValueError(f"Unsupported operator: {type(node.op).__name__}")
+            return op_fn(_eval(node.left), _eval(node.right))
+        if isinstance(node, ast.UnaryOp):
+            op_fn = _UNARYOPS.get(type(node.op))
+            if op_fn is None:
+                raise ValueError(f"Unsupported unary op: {type(node.op).__name__}")
+            return op_fn(_eval(node.operand))
+        if isinstance(node, ast.Call):
+            if not isinstance(node.func, ast.Name):
+                raise ValueError(f"Unsupported call: {ast.dump(node.func)}")
+            fn = _SAFE_FUNCS.get(node.func.id)
+            if fn is None:
+                raise ValueError(f"Unsupported function: {node.func.id}")
+            return fn(*(_eval(arg) for arg in node.args))
+        raise ValueError(f"Unsupported expression: {ast.dump(node)}")
+
+    return float(_eval(tree))
 
 
 def addArgs(subparsers):
@@ -127,8 +179,8 @@ def calculator(args):
                 expr = expr.replace("least(", "min(")
 
                 try:
-                    result = eval(expr)
-                except Exception as e:
+                    result = _safe_eval(expr)
+                except (ValueError, SyntaxError) as e:
                     logger.error("Error evaluating '%s': %s", expr, e)
                     continue
 

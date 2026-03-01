@@ -7,6 +7,7 @@ semantics as the C++ Curl class.
 from __future__ import annotations
 
 import logging
+import time
 
 import requests  # type: ignore[import-untyped]
 
@@ -69,6 +70,10 @@ class FetchResult:
         p.write_bytes(self.content)
 
 
+_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+_MAX_RETRIES = 3
+
+
 def fetch(url: str, timeout: int | None = None) -> FetchResult:
     """Fetch a URL and return a FetchResult.
 
@@ -76,18 +81,44 @@ def fetch(url: str, timeout: int | None = None) -> FetchResult:
     - SSL verification disabled (verify=False)
     - 5-minute default timeout
     - Custom user agent
+    - Retries up to 3 times on transient errors with exponential backoff
     """
     if timeout is None:
         timeout = FETCH_TIMEOUT
 
-    try:
-        response = requests.get(
-            url,
-            timeout=timeout,
-            headers={"User-Agent": FETCH_USER_AGENT},
-            verify=False,
-        )
-        return FetchResult(url=url, response=response)
-    except requests.RequestException as e:
-        logger.error("Fetch error for %s: %s", url, e)
-        return FetchResult(url=url, error=str(e))
+    last_result: FetchResult | None = None
+    for attempt in range(_MAX_RETRIES):
+        try:
+            response = requests.get(
+                url,
+                timeout=timeout,
+                headers={"User-Agent": FETCH_USER_AGENT},
+                verify=False,
+            )
+            if response.status_code in _RETRYABLE_STATUS_CODES and attempt < _MAX_RETRIES - 1:
+                wait = 2 ** attempt
+                logger.warning(
+                    "HTTP %d for %s, retrying in %ds (attempt %d/%d)",
+                    response.status_code, url, wait, attempt + 1, _MAX_RETRIES,
+                )
+                time.sleep(wait)
+                last_result = FetchResult(url=url, response=response)
+                continue
+            return FetchResult(url=url, response=response)
+        except requests.ConnectionError as e:
+            if attempt < _MAX_RETRIES - 1:
+                wait = 2 ** attempt
+                logger.warning(
+                    "Connection error for %s, retrying in %ds (attempt %d/%d): %s",
+                    url, wait, attempt + 1, _MAX_RETRIES, e,
+                )
+                time.sleep(wait)
+                last_result = FetchResult(url=url, error=str(e))
+                continue
+            logger.error("Fetch error for %s: %s", url, e)
+            return FetchResult(url=url, error=str(e))
+        except requests.RequestException as e:
+            logger.error("Fetch error for %s: %s", url, e)
+            return FetchResult(url=url, error=str(e))
+
+    return last_result or FetchResult(url=url, error="Max retries exceeded")

@@ -127,20 +127,25 @@ class TestFetch:
 
     @patch("kayak.utils.http_client.requests.get")
     def test_fetch_passes_verify_false(self, mock_get):
-        mock_get.return_value = MagicMock(spec=requests.Response)
+        mock_resp = MagicMock(spec=requests.Response)
+        mock_resp.status_code = 200
+        mock_get.return_value = mock_resp
         fetch("http://example.com/data")
         _, kwargs = mock_get.call_args
         assert kwargs["verify"] is False
 
     @patch("kayak.utils.http_client.requests.get")
     def test_fetch_passes_user_agent(self, mock_get):
-        mock_get.return_value = MagicMock(spec=requests.Response)
+        mock_resp = MagicMock(spec=requests.Response)
+        mock_resp.status_code = 200
+        mock_get.return_value = mock_resp
         fetch("http://example.com/data")
         _, kwargs = mock_get.call_args
         assert "User-Agent" in kwargs["headers"]
 
+    @patch("kayak.utils.http_client.time.sleep")
     @patch("kayak.utils.http_client.requests.get")
-    def test_fetch_exception_returns_error_result(self, mock_get):
+    def test_fetch_exception_returns_error_result(self, mock_get, mock_sleep):
         mock_get.side_effect = requests.ConnectionError("refused")
         result = fetch("http://example.com/data")
         assert result.ok is False
@@ -148,7 +153,9 @@ class TestFetch:
 
     @patch("kayak.utils.http_client.requests.get")
     def test_fetch_custom_timeout(self, mock_get):
-        mock_get.return_value = MagicMock(spec=requests.Response)
+        mock_resp = MagicMock(spec=requests.Response)
+        mock_resp.status_code = 200
+        mock_get.return_value = mock_resp
         fetch("http://example.com/data", timeout=10)
         _, kwargs = mock_get.call_args
         assert kwargs["timeout"] == 10

@@ -9,6 +9,18 @@ require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
 
+$edit_user = getenv('EDIT_USER') ?: 'admin';
+$edit_password = getenv('EDIT_PASSWORD');
+if ($edit_password) {
+    if (!isset($_SERVER['PHP_AUTH_USER'])
+        || $_SERVER['PHP_AUTH_USER'] !== $edit_user
+        || $_SERVER['PHP_AUTH_PW'] !== $edit_password) {
+        header('WWW-Authenticate: Basic realm="Edit Section"');
+        http_response_code(401);
+        exit('Unauthorized');
+    }
+}
+
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT)
     ?: filter_input(INPUT_POST, 'section_id', FILTER_VALIDATE_INT);
 if (!$id) { http_response_code(400); exit('Missing id parameter'); }

@@ -240,7 +240,7 @@ class Observation(Base):
     __tablename__ = "observation"
 
     source_id: Mapped[int] = mapped_column(
-        ForeignKey("source.id", ondelete="CASCADE"), primary_key=True
+        ForeignKey("source.id", ondelete="RESTRICT"), primary_key=True
     )
     observed_at: Mapped[datetime] = mapped_column(primary_key=True)
     data_type: Mapped[DataType] = mapped_column(primary_key=True)
@@ -248,6 +248,10 @@ class Observation(Base):
 
     # relationships
     source: Mapped[Source] = relationship(back_populates="observations")
+
+    __table_args__ = (
+        Index("ix_observation_source_type_time", "source_id", "data_type", "observed_at"),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -258,7 +262,7 @@ class LatestObservation(Base):
     __tablename__ = "latest_observation"
 
     source_id: Mapped[int] = mapped_column(
-        ForeignKey("source.id", ondelete="CASCADE"), primary_key=True
+        ForeignKey("source.id", ondelete="RESTRICT"), primary_key=True
     )
     data_type: Mapped[DataType] = mapped_column(primary_key=True)
     observed_at: Mapped[datetime] = mapped_column(nullable=False)
