@@ -1,7 +1,7 @@
-"""USBR comma-delimited parser (replaces Parse_USBR.C).
+"""USBR Hydromet CSV parser.
 
-Format: Comma-delimited with BEGIN/END DATA markers.
-States: 0=Wait for BEGIN DATA, 1=Parse header, 2=Data rows
+Format: CSV with header row. Columns are ``station_code`` (e.g. ``mado_gh``).
+URL parameter ``format=csv`` produces clean CSV without HTML wrapping.
 
 Data codes: Q=FLOW, GH=GAGE, WC/WF=TEMPERATURE, etc.
 """
@@ -21,27 +21,27 @@ logger = logging.getLogger(__name__)
 
 # USBR data type code to DataType mapping
 _CODE_MAP: dict[str, DataType | None] = {
-    "Q": DataType.flow,
-    "QD": DataType.flow,
-    "QI": DataType.inflow,
-    "QJ": DataType.flow,
-    "QR": DataType.flow,
-    "QU": DataType.flow,
-    "GH": DataType.gauge,
-    "HP": DataType.gauge,
-    "HT": DataType.gauge,
-    "FB": DataType.gauge,
-    "WC": DataType.temperature,  # Celsius
-    "WF": DataType.temperature,  # Fahrenheit
-    "WS": DataType.temperature,
+    "q": DataType.flow,
+    "qd": DataType.flow,
+    "qi": DataType.inflow,
+    "qj": DataType.flow,
+    "qr": DataType.flow,
+    "qu": DataType.flow,
+    "gh": DataType.gauge,
+    "hp": DataType.gauge,
+    "ht": DataType.gauge,
+    "fb": DataType.gauge,
+    "wc": DataType.temperature,  # Celsius
+    "wf": DataType.temperature,  # Fahrenheit
+    "ws": DataType.temperature,
 }
 
 # Codes whose values are in Celsius and need conversion
-_CELSIUS_CODES = {"WC"}
+_CELSIUS_CODES = {"wc"}
 
 
 @dataclass
-class _StationInfo:
+class _ColumnInfo:
     station: str
     code: str
     data_type: DataType
@@ -54,51 +54,46 @@ class USBRParser(BaseParser):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._state = 0
-        self._columns: list[_StationInfo | None] = []
+        self._columns: list[_ColumnInfo | None] = []
+        self._header_parsed = False
 
     def parse(self, text: str) -> int:
-        """Strip HTML wrapper before parsing lines."""
-        clean = self._strip_html(text)
-        return super().parse(clean)
+        """Strip HTML wrapper (if present) before parsing lines."""
+        if "<" in text:
+            text = self._strip_html(text)
+        return super().parse(text)
 
     def parse_line(self, line: str) -> bool:
         stripped = line.strip()
-
-        if self._state == 0:
-            if stripped.upper().startswith("BEGIN DATA"):
-                self._state = 1
+        if not stripped:
             return True
 
-        if self._state == 1:
-            # Header: "DATE       TIME ,  ROMO    Q  ,  ROMO    GH  , ..."
-            # Comma-delimited; each field after the first is "STN    CODE"
-            parts = [p.strip() for p in stripped.split(",")]
-            self._columns = []
-            for p in parts[1:]:  # Skip DATE TIME
-                tokens = p.split()
-                if len(tokens) < 2:
-                    self._columns.append(None)
-                    continue
-                stn = tokens[0].strip()
-                code = tokens[1].strip().upper()
-                dtype = _CODE_MAP.get(code)
-                if dtype:
-                    self._columns.append(_StationInfo(
-                        station=stn, code=code, data_type=dtype,
-                        is_celsius=(code in _CELSIUS_CODES),
-                    ))
-                else:
-                    self._columns.append(None)
-            self._state = 2
-            return True
+        # CSV format: first line is header, rest are data
+        if not self._header_parsed:
+            return self._parse_header(stripped)
+        return self._parse_data_row(stripped)
 
-        if self._state == 2:
-            if stripped.upper().startswith("END DATA"):
-                self._state = 0
-                return True
-            return self._parse_data_row(stripped)
-
+    def _parse_header(self, line: str) -> bool:
+        """Parse CSV header: ``DateTime,station_code,station_code,...``"""
+        parts = [p.strip() for p in line.split(",")]
+        self._columns = []
+        for col in parts[1:]:  # Skip DateTime
+            # Column format: "station_code" e.g. "mado_gh", "romo_q"
+            underscore = col.rfind("_")
+            if underscore < 1:
+                self._columns.append(None)
+                continue
+            station = col[:underscore].upper()
+            code = col[underscore + 1:]
+            data_type = _CODE_MAP.get(code)
+            if data_type:
+                self._columns.append(_ColumnInfo(
+                    station=station, code=code, data_type=data_type,
+                    is_celsius=(code in _CELSIUS_CODES),
+                ))
+            else:
+                self._columns.append(None)
+        self._header_parsed = True
         return True
 
     def _parse_data_row(self, line: str) -> bool:
@@ -106,7 +101,6 @@ class USBRParser(BaseParser):
         if len(parts) < 2:
             return True
 
-        # First field is "MM/DD/YYYY HH:MM" (date and time together)
         when = parse_datetime(parts[0])
         if when is None:
             return True
@@ -114,7 +108,7 @@ class USBRParser(BaseParser):
         for i, info in enumerate(self._columns):
             if info is None:
                 continue
-            data_idx = i + 1  # offset past date+time field
+            data_idx = i + 1  # offset past DateTime
             if data_idx >= len(parts):
                 continue
 
