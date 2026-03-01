@@ -122,7 +122,7 @@ if ($source_id) {
         'gauge'       => 'Gage Height (Ft)',
         'temperature' => 'Temperature (F)',
     ];
-    $since = date('Y-m-d H:i:s', time() - 60 * 86400);
+    $since = date('Y-m-d H:i:s', time() - 10 * 86400);
 
     foreach ($plot_types as $dtype => $y_label) {
         $stmt = $db->prepare(
@@ -142,7 +142,8 @@ if ($source_id) {
         }
 
         $title = htmlspecialchars($name) . " — $y_label";
-        $svg = generate_svg_plot($times, $values, $title, $y_label);
+        $is_flow = ($dtype === 'flow');
+        $svg = generate_svg_plot($times, $values, $title, $y_label, 800, 350, 200, $is_flow);
         echo '<div class="plot-container">' . $svg . '</div>';
     }
 }

@@ -11,6 +11,7 @@ require_once __DIR__ . '/lttb.php';
  * @param int    $width   SVG width.
  * @param int    $height  SVG height.
  * @param int    $target_points  LTTB target.
+ * @param bool   $is_flow Whether Y-axis values are flow (integer labels).
  * @return string  SVG markup.
  */
 function generate_svg_plot(
@@ -18,9 +19,10 @@ function generate_svg_plot(
     array $values,
     string $title,
     string $y_label,
-    int $width = 600,
-    int $height = 250,
-    int $target_points = 200
+    int $width = 800,
+    int $height = 350,
+    int $target_points = 200,
+    bool $is_flow = false
 ): string {
     $n = count($times);
     if ($n === 0) {
@@ -44,7 +46,7 @@ function generate_svg_plot(
     $pairs = lttb_downsample($pairs, $target_points);
 
     // Margins
-    $ml = 60; $mr = 15; $mt = 30; $mb = 40;
+    $ml = 75; $mr = 15; $mt = 30; $mb = 40;
     $pw = $width - $ml - $mr;   // plot width
     $ph = $height - $mt - $mb;  // plot height
 
@@ -76,7 +78,7 @@ function generate_svg_plot(
     for ($i = 0; $i <= $n_yticks; $i++) {
         $yv = $y_min + ($y_range * $i / $n_yticks);
         $py = $mt + (int)(($y_max - $yv) / $y_range * $ph);
-        $label = number_format($yv, $yv == (int)$yv ? 0 : 1);
+        $label = $is_flow ? number_format($yv, 0) : number_format($yv, $yv == (int)$yv ? 0 : 1);
         $grid .= "<line x1=\"$ml\" y1=\"$py\" x2=\"" . ($ml + $pw) . "\" y2=\"$py\" stroke=\"#ddd\" stroke-width=\"0.5\"/>\n";
         $grid .= "<text x=\"" . ($ml - 5) . "\" y=\"" . ($py + 3) . "\" text-anchor=\"end\" font-size=\"10\" fill=\"#666\">$label</text>\n";
     }
