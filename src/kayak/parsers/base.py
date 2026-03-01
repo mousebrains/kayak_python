@@ -35,11 +35,13 @@ class BaseParser(ABC):
         session: Session,
         *,
         source_id: int | None = None,
+        source_map: dict[str, int] | None = None,
         dry_run: bool = False,
     ):
         self.url = url
         self.session = session
         self.source_id = source_id
+        self.source_map = source_map or {}
         self.dry_run = dry_run
         self._db_updates = 0
 
@@ -103,13 +105,16 @@ class BaseParser(ABC):
         if self.dry_run:
             return True
 
-        if self.source_id is None:
+        # Resolve source_id: use per-station source_map first, then fall
+        # back to the single source_id set at construction time.
+        sid = self.source_map.get(station) or self.source_id
+        if sid is None:
             logger.error(
                 "No source_id set for %s/%s — cannot store", station, data_type,
             )
             return False
 
-        ok = store_observation(self.session, self.source_id, data_type, when, value)
+        ok = store_observation(self.session, sid, data_type, when, value)
         if not ok:
             logger.error(
                 "dumpToDatabase failed for %s/%s %s %s %s %s",

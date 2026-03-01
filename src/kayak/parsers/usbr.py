@@ -57,6 +57,11 @@ class USBRParser(BaseParser):
         self._state = 0
         self._columns: list[_StationInfo | None] = []
 
+    def parse(self, text: str) -> int:
+        """Strip HTML wrapper before parsing lines."""
+        clean = self._strip_html(text)
+        return super().parse(clean)
+
     def parse_line(self, line: str) -> bool:
         stripped = line.strip()
 
@@ -66,15 +71,17 @@ class USBRParser(BaseParser):
             return True
 
         if self._state == 1:
-            # Header: DATE TIME | STN1,CODE1 | STN2,CODE2 | ...
-            parts = [p.strip() for p in stripped.split("|")]
+            # Header: "DATE       TIME ,  ROMO    Q  ,  ROMO    GH  , ..."
+            # Comma-delimited; each field after the first is "STN    CODE"
+            parts = [p.strip() for p in stripped.split(",")]
             self._columns = []
             for p in parts[1:]:  # Skip DATE TIME
-                if "," not in p:
+                tokens = p.split()
+                if len(tokens) < 2:
+                    self._columns.append(None)
                     continue
-                stn, code = p.split(",", 1)
-                stn = stn.strip().replace(" ", "_")
-                code = code.strip().upper()
+                stn = tokens[0].strip()
+                code = tokens[1].strip().upper()
                 dtype = _CODE_MAP.get(code)
                 if dtype:
                     self._columns.append(_StationInfo(
@@ -99,16 +106,15 @@ class USBRParser(BaseParser):
         if len(parts) < 2:
             return True
 
-        # First two parts are date and time
-        time_str = parts[0] + " " + parts[1] if len(parts) > 1 else parts[0]
-        when = parse_datetime(time_str)
+        # First field is "MM/DD/YYYY HH:MM" (date and time together)
+        when = parse_datetime(parts[0])
         if when is None:
             return True
 
         for i, info in enumerate(self._columns):
             if info is None:
                 continue
-            data_idx = i + 2  # offset past date+time
+            data_idx = i + 1  # offset past date+time field
             if data_idx >= len(parts):
                 continue
 

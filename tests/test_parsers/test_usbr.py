@@ -4,34 +4,37 @@ from kayak.db.models import DataType, FetchUrl, Observation, Source
 from kayak.parsers.usbr import USBRParser
 
 USBR_FLOW_SAMPLE = """\
+<HTML><BODY><PRE>
 Some header text
+</PRE><PRE>
 BEGIN DATA
-DATE              TIME  | STN1,Q  | STN2,GH
-2024-06-15,       12:00,  1520.0,    8.45
-2024-06-15,       13:00,  1480.0,    8.40
+DATE       TIME ,  STN1    Q       ,  STN2    GH
+06/15/2024 12:00,     1520.0 ,       8.45
+06/15/2024 13:00,     1480.0 ,       8.40
 END DATA
+</PRE></BODY></HTML>
 """
 
 USBR_GAUGE_SAMPLE = """\
 BEGIN DATA
-DATE              TIME  | GAUGE1,GH
-2024-06-15,       12:00,  8.45
-2024-06-15,       13:00,  8.40
+DATE       TIME ,  GAUGE1    GH
+06/15/2024 12:00,       8.45
+06/15/2024 13:00,       8.40
 END DATA
 """
 
 USBR_TEMP_SAMPLE = """\
 BEGIN DATA
-DATE              TIME  | TEMP1,WC
-2024-06-15,       12:00,  20.0
-2024-06-15,       13:00,  25.0
+DATE       TIME ,  TEMP1    WC
+06/15/2024 12:00,      20.0
+06/15/2024 13:00,      25.0
 END DATA
 """
 
 USBR_NO_END = """\
 BEGIN DATA
-DATE              TIME  | STN1,Q
-2024-06-15,       12:00,  1520.0
+DATE       TIME ,  STN1    Q
+06/15/2024 12:00,     1520.0
 """
 
 
