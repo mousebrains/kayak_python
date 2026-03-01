@@ -5,6 +5,22 @@ Debian 13 (Trixie) with nginx, PHP-FPM, and Let's Encrypt SSL.
 
 Hostnames: `levels.mousebrains.com`, `levels.wkcc.org`
 
+### Alternative: Oracle Cloud Free Tier
+
+Oracle Cloud's Always Free tier provides an ARM VM (4 OCPU Ampere, 24 GB RAM,
+200 GB disk, 10 TB/month egress) at no cost — not a trial, it runs indefinitely.
+The us-portland-1 (Portland, OR) region is available.
+
+To use Oracle Cloud instead of Hetzner:
+- Choose an Ampere A1 (ARM) shape with Oracle Linux or Ubuntu 22.04+
+- ARM instances can be difficult to provision in popular regions; retry or
+  use a provisioning script
+- The rest of this guide applies unchanged (nginx, PHP-FPM, certbot, systemd
+  timers) — just substitute the Oracle instance IP and adjust package manager
+  commands if using Oracle Linux (`dnf` instead of `apt`)
+- Debian 13 is not available as a base image on Oracle Cloud; use Ubuntu 24.04
+  LTS (ships Python 3.12, PHP 8.3) as the closest equivalent
+
 ## 1. System packages
 
 Debian 13 ships Python 3.12 and PHP 8.3.
