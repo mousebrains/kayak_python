@@ -11,8 +11,8 @@ NWPS_BASIC = json.dumps({
     "secondaryName": "Flow",
     "secondaryUnits": "kcfs",
     "data": [
-        {"validTime": "2024-06-15T12:00:00", "primary": 7.57, "secondary": 1.52},
-        {"validTime": "2024-06-15T13:00:00", "primary": 7.60, "secondary": 1.54},
+        {"validTime": "2024-06-15T12:00:00Z", "primary": 7.57, "secondary": 1.52},
+        {"validTime": "2024-06-15T13:00:00Z", "primary": 7.60, "secondary": 1.54},
     ],
 })
 
@@ -22,7 +22,7 @@ NWPS_MISSING_SECONDARY = json.dumps({
     "secondaryName": "Flow",
     "secondaryUnits": "kcfs",
     "data": [
-        {"validTime": "2024-06-15T12:00:00", "primary": 7.57, "secondary": -999},
+        {"validTime": "2024-06-15T12:00:00Z", "primary": 7.57, "secondary": -999},
     ],
 })
 
@@ -32,7 +32,7 @@ NWPS_NEGATIVE_FLOW = json.dumps({
     "secondaryName": "Flow",
     "secondaryUnits": "kcfs",
     "data": [
-        {"validTime": "2024-06-15T12:00:00", "primary": 7.57, "secondary": -0.5},
+        {"validTime": "2024-06-15T12:00:00Z", "primary": 7.57, "secondary": -0.5},
     ],
 })
 
@@ -42,7 +42,7 @@ NWPS_FUTURE = json.dumps({
     "secondaryName": "Flow",
     "secondaryUnits": "kcfs",
     "data": [
-        {"validTime": "2099-01-01T00:00:00", "primary": 5.00, "secondary": 2.0},
+        {"validTime": "2099-01-01T00:00:00Z", "primary": 5.00, "secondary": 2.0},
     ],
 })
 
@@ -60,7 +60,7 @@ NWPS_CFS_UNITS = json.dumps({
     "secondaryName": "Flow",
     "secondaryUnits": "cfs",
     "data": [
-        {"validTime": "2024-06-15T12:00:00", "primary": 3.0, "secondary": 500.0},
+        {"validTime": "2024-06-15T12:00:00Z", "primary": 3.0, "secondary": 500.0},
     ],
 })
 

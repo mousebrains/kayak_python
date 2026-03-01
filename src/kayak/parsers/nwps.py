@@ -55,7 +55,8 @@ class NWPSParser(BaseParser):
             if not valid_time:
                 continue
 
-            when = parse_datetime(valid_time)
+            # Strip trailing "Z" — parse_datetime handles UTC by default
+            when = parse_datetime(valid_time.rstrip("Z"))
             if when is None or when > now:
                 continue
 

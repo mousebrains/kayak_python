@@ -121,9 +121,21 @@ def fetch(args):
                         url=src_def["url"]
                     ).first()
 
+                    # Resolve source_id: use the linked Source when
+                    # exactly one exists (e.g. NWPS, USBR single-station
+                    # URLs).  Multi-source URLs (USGS bulk) pass the
+                    # fetch_url.id and let the parser handle lookup.
+                    source_id = None
+                    if fetch_url is not None:
+                        sources = fetch_url.sources
+                        if len(sources) == 1:
+                            source_id = sources[0].id
+                        elif len(sources) > 1:
+                            source_id = fetch_url.id
+
                     parser = parser_cls(
                         url=url, session=session,
-                        source_id=fetch_url.id if fetch_url else None,
+                        source_id=source_id,
                         dry_run=args.dry_run,
                     )
                     count = parser.parse(text_content)
