@@ -6,7 +6,9 @@ observations in the database.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -50,6 +52,8 @@ def addArgs_options(parser):
     parser.add_argument("-t", "--parser-type", default=None, help="Force parser type")
     parser.add_argument("-u", "--url-filter", default=None, help="Filter by URL substring")
     parser.add_argument("-U", "--single-url", default=None, help="Fetch a single URL")
+    parser.add_argument("--concurrency", type=int, default=8,
+                        help="Max concurrent requests per host (default: 8)")
 
 
 def addArgs(subparsers):
@@ -58,6 +62,18 @@ def addArgs(subparsers):
                                    help="Fetch data from remote agencies, parse, and store in database")
     parser.set_defaults(func=fetch)
     addArgs_options(parser)
+
+
+@dataclass
+class _FetchWork:
+    """A single unit of fetch work prepared before I/O begins."""
+
+    url: str
+    raw_url: str
+    parser_name: str
+    source_id: int | None
+    source_map: dict[str, int] = field(default_factory=dict)
+    fetch_url: FetchUrl | None = None
 
 
 def fetch(args):
@@ -89,6 +105,8 @@ def fetch(args):
 
     session = get_session()
     try:
+        # --- Phase 1: Prepare work items (synchronous) ---
+        work_items: list[_FetchWork] = []
         for src_def in yaml_sources:
             hours = src_def.get("hours", "")
             if not args.ignore_constraints and not _hour_allowed(hours):
@@ -103,52 +121,95 @@ def fetch(args):
             else:
                 logger.info("Processing %s parser=%s", url, parser_name)
 
+            if args.fetch_only:
+                work_items.append(_FetchWork(
+                    url=url, raw_url=src_def["url"],
+                    parser_name=parser_name, source_id=None,
+                ))
+                continue
+
+            parser_cls = get_parser_class(parser_name)
+            if parser_cls is None:
+                logger.error("Unknown parser '%s'", parser_name)
+                continue
+
+            fetch_url = session.query(FetchUrl).filter_by(url=src_def["url"]).first()
+
+            source_id = None
+            source_map: dict[str, int] = {}
+            if fetch_url is not None:
+                sources = fetch_url.sources
+                if len(sources) == 1:
+                    source_id = sources[0].id
+                elif len(sources) > 1:
+                    source_map = {s.name: s.id for s in sources}
+
+            work_items.append(_FetchWork(
+                url=url, raw_url=src_def["url"],
+                parser_name=parser_name, source_id=source_id,
+                source_map=source_map, fetch_url=fetch_url,
+            ))
+
+        # --- Phase 2: Fetch content ---
+        if args.input_dir:
+            # Read from saved files synchronously
+            content_map: dict[str, str | None] = {}
+            for w in work_items:
+                content_map[w.url] = _get_content_from_file(w.raw_url, args.input_dir)
+        elif work_items:
+            # Fetch all URLs concurrently
+            from kayak.utils.http_client import async_fetch_many
+
+            urls = [w.url for w in work_items]
+            results = asyncio.run(async_fetch_many(
+                urls, concurrency_per_host=args.concurrency,
+            ))
+            content_map = {}
+            for w in work_items:
+                result = results[w.url]
+                if not result.ok:
+                    logger.error("Fetch error for %s: %s", w.url, result.error)
+                    content_map[w.url] = None
+                elif result.status_code >= 400:
+                    logger.error("HTTP %d for %s", result.status_code, w.url)
+                    content_map[w.url] = None
+                else:
+                    if args.output_dir:
+                        out_path = Path(args.output_dir) / w.raw_url.lstrip("/")
+                        result.write_file(str(out_path))
+                    content_map[w.url] = result.text
+        else:
+            content_map = {}
+
+        # --- Phase 3: Parse and store (synchronous) ---
+        for w in work_items:
+            text_content = content_map.get(w.url)
+            if text_content is None:
+                continue
+
+            if args.fetch_only:
+                continue
+
             try:
-                text_content = _get_content(
-                    url, src_def["url"], args.input_dir, args.output_dir,
-                )
-                if text_content is None:
+                parser_cls = get_parser_class(w.parser_name)
+                if parser_cls is None:
                     continue
 
-                if not args.fetch_only:
-                    parser_cls = get_parser_class(parser_name)
-                    if parser_cls is None:
-                        logger.error("Unknown parser '%s'", parser_name)
-                        continue
+                parser = parser_cls(
+                    url=w.url, session=session,
+                    source_id=w.source_id,
+                    source_map=w.source_map,
+                    dry_run=args.dry_run,
+                )
+                count = parser.parse(text_content)
 
-                    # Look up the FetchUrl to update last_fetched_at
-                    fetch_url = session.query(FetchUrl).filter_by(
-                        url=src_def["url"]
-                    ).first()
+                if w.fetch_url and not args.dry_run and not args.input_dir:
+                    w.fetch_url.last_fetched_at = datetime.now(UTC)
 
-                    # Resolve source_id: use the linked Source when
-                    # exactly one exists (e.g. NWPS single-station
-                    # URLs).  Multi-source URLs (USBR bulk) build a
-                    # station-name → source_id map for per-station lookup.
-                    source_id = None
-                    source_map = {}
-                    if fetch_url is not None:
-                        sources = fetch_url.sources
-                        if len(sources) == 1:
-                            source_id = sources[0].id
-                        elif len(sources) > 1:
-                            source_map = {s.name: s.id for s in sources}
-
-                    parser = parser_cls(
-                        url=url, session=session,
-                        source_id=source_id,
-                        source_map=source_map,
-                        dry_run=args.dry_run,
-                    )
-                    count = parser.parse(text_content)
-
-                    if fetch_url and not args.dry_run and not args.input_dir:
-                        fetch_url.last_fetched_at = datetime.now(UTC)
-
-                    logger.debug("  %d updates", count)
+                logger.debug("  %d updates", count)
 
             except Exception as e:
-                logger.error("Exception for %s: %s", url, e)
+                logger.error("Exception for %s: %s", w.url, e)
                 continue
 
         if not args.dry_run:
@@ -161,18 +222,27 @@ def fetch(args):
         session.close()
 
 
+def _get_content_from_file(raw_url, input_dir):
+    """Read content from a saved file in input_dir.
+
+    Returns the text content, or None if the file does not exist.
+    """
+    file_path = Path(input_dir) / raw_url.lstrip("/")
+    if not file_path.exists():
+        logger.debug("No saved file: %s", file_path)
+        return None
+    logger.debug("Reading %s", file_path)
+    return file_path.read_text(encoding="utf-8", errors="replace")
+
+
 def _get_content(url, raw_url, input_dir, output_dir):
     """Get text content either from a saved file or by fetching the URL.
 
     Returns the text content, or None if the content could not be obtained.
+    Used by _fetch_single() for single-URL mode.
     """
     if input_dir:
-        file_path = Path(input_dir) / raw_url.lstrip("/")
-        if not file_path.exists():
-            logger.debug("No saved file: %s", file_path)
-            return None
-        logger.debug("Reading %s", file_path)
-        return file_path.read_text(encoding="utf-8", errors="replace")
+        return _get_content_from_file(raw_url, input_dir)
 
     from kayak.utils.http_client import fetch as http_fetch
 

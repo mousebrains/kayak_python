@@ -1,11 +1,13 @@
 """Tests for kayak.utils.http_client."""
 
-from unittest.mock import MagicMock, patch
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import aiohttp
 import pytest
 import requests
 
-from kayak.utils.http_client import FetchResult, fetch
+from kayak.utils.http_client import FetchResult, async_fetch_many, fetch
 
 # ---------------------------------------------------------------------------
 # FetchResult with no response
@@ -159,3 +161,154 @@ class TestFetch:
         fetch("http://example.com/data", timeout=10)
         _, kwargs = mock_get.call_args
         assert kwargs["timeout"] == 10
+
+
+# ---------------------------------------------------------------------------
+# async_fetch_many()
+# ---------------------------------------------------------------------------
+
+
+class _FakeAsyncResponse:
+    """Minimal async context manager mimicking aiohttp response."""
+
+    def __init__(self, status=200, body="ok", headers=None):
+        self.status = status
+        self._body = body
+        self.headers = headers or {"Content-Type": "text/plain"}
+
+    async def text(self, errors="replace"):
+        return self._body
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+
+class _FakeSession:
+    """Minimal async context manager mimicking aiohttp.ClientSession."""
+
+    def __init__(self, responses=None):
+        self._responses = responses or {}
+        self._call_count = 0
+
+    def get(self, url, timeout=None):
+        if url in self._responses:
+            resp = self._responses[url]
+            if isinstance(resp, list):
+                r = resp[self._call_count % len(resp)]
+                self._call_count += 1
+                if isinstance(r, Exception):
+                    raise r
+                return r
+            if isinstance(resp, Exception):
+                raise resp
+            return resp
+        return _FakeAsyncResponse()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+
+class TestAsyncFetchMany:
+    def test_success(self):
+        """async_fetch_many returns results for all URLs."""
+        urls = [
+            "http://host-a.com/data1",
+            "http://host-a.com/data2",
+            "http://host-b.com/data3",
+        ]
+
+        fake_session = _FakeSession({
+            "http://host-a.com/data1": _FakeAsyncResponse(200, "body1"),
+            "http://host-a.com/data2": _FakeAsyncResponse(200, "body2"),
+            "http://host-b.com/data3": _FakeAsyncResponse(200, "body3"),
+        })
+
+        with patch("kayak.utils.http_client.aiohttp.TCPConnector"), \
+             patch("kayak.utils.http_client.aiohttp.ClientSession", return_value=fake_session):
+            results = asyncio.run(async_fetch_many(urls, timeout=10))
+
+        assert len(results) == 3
+        for url in urls:
+            assert results[url].ok is True
+        assert results["http://host-a.com/data1"].text == "body1"
+        assert results["http://host-b.com/data3"].text == "body3"
+
+    def test_error_result(self):
+        """async_fetch_many returns error FetchResult on connection failure."""
+        urls = ["http://fail.com/bad"]
+
+        fake_session = _FakeSession({
+            "http://fail.com/bad": aiohttp.ClientError("refused"),
+        })
+
+        with patch("kayak.utils.http_client.aiohttp.TCPConnector"), \
+             patch("kayak.utils.http_client.aiohttp.ClientSession", return_value=fake_session), \
+             patch("kayak.utils.http_client.asyncio.sleep", new_callable=AsyncMock):
+            results = asyncio.run(async_fetch_many(urls, timeout=10))
+
+        assert len(results) == 1
+        assert results["http://fail.com/bad"].ok is False
+        assert results["http://fail.com/bad"].error is not None
+
+    def test_per_host_grouping(self):
+        """URLs to different hosts get independent semaphores."""
+        urls = [
+            "http://host-a.com/1",
+            "http://host-a.com/2",
+            "http://host-b.com/1",
+        ]
+
+        semaphores_created = []
+        original_semaphore = asyncio.Semaphore
+
+        def tracking_semaphore(n):
+            sem = original_semaphore(n)
+            semaphores_created.append(sem)
+            return sem
+
+        fake_session = _FakeSession()
+
+        with patch("kayak.utils.http_client.aiohttp.TCPConnector"), \
+             patch("kayak.utils.http_client.aiohttp.ClientSession", return_value=fake_session), \
+             patch("kayak.utils.http_client.asyncio.Semaphore", tracking_semaphore):
+            results = asyncio.run(async_fetch_many(urls, concurrency_per_host=4, timeout=10))
+
+        assert len(results) == 3
+        # Two distinct hosts → two semaphores created
+        assert len(semaphores_created) == 2
+
+    def test_retry_on_503(self):
+        """async_fetch_many retries on 503 status codes."""
+        urls = ["http://retry.com/page"]
+
+        call_count = 0
+
+        class RetrySession:
+            def get(self, url, timeout=None):
+                nonlocal call_count
+                call_count += 1
+                if call_count < 3:
+                    return _FakeAsyncResponse(503, "unavailable")
+                return _FakeAsyncResponse(200, "recovered")
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+        with patch("kayak.utils.http_client.aiohttp.TCPConnector"), \
+             patch("kayak.utils.http_client.aiohttp.ClientSession",
+                   return_value=RetrySession()), \
+             patch("kayak.utils.http_client.asyncio.sleep", new_callable=AsyncMock):
+            results = asyncio.run(async_fetch_many(urls, timeout=10))
+
+        assert results["http://retry.com/page"].ok is True
+        assert results["http://retry.com/page"].text == "recovered"
+        assert call_count == 3

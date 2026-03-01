@@ -2,7 +2,7 @@
 
 from unittest import mock
 
-from kayak.cli.fetch import _get_content, _hour_allowed
+from kayak.cli.fetch import _get_content, _get_content_from_file, _hour_allowed
 
 # ---------------------------------------------------------------------------
 # _hour_allowed
@@ -37,7 +37,29 @@ def test_hour_allowed_invalid_spec():
 
 
 # ---------------------------------------------------------------------------
-# _get_content
+# _get_content_from_file
+# ---------------------------------------------------------------------------
+
+
+def test_get_content_from_file_reads(tmp_path):
+    """_get_content_from_file reads from input_dir when file exists."""
+    sub = tmp_path / "data"
+    sub.mkdir()
+    data_file = sub / "feed.txt"
+    data_file.write_text("line1\nline2", encoding="utf-8")
+
+    result = _get_content_from_file("data/feed.txt", str(tmp_path))
+    assert result == "line1\nline2"
+
+
+def test_get_content_from_file_missing(tmp_path):
+    """_get_content_from_file returns None when file does not exist."""
+    result = _get_content_from_file("nofile.txt", str(tmp_path))
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# _get_content (used by _fetch_single)
 # ---------------------------------------------------------------------------
 
 
@@ -75,10 +97,7 @@ def test_get_content_from_url():
     fake_result.status_code = 200
     fake_result.text = "remote-data"
 
-    with (
-        mock.patch("kayak.cli.fetch.http_fetch", create=True),
-        mock.patch("kayak.utils.http_client.fetch", return_value=fake_result),
-    ):
+    with mock.patch("kayak.utils.http_client.fetch", return_value=fake_result):
         result = _get_content(
             url="https://example.com/feed",
             raw_url="feed",
@@ -121,6 +140,30 @@ def test_get_content_url_http_error():
     assert result is None
 
 
+def test_get_content_saves_to_output_dir(tmp_path):
+    """_get_content writes fetched data to output_dir when specified."""
+    fake_result = mock.MagicMock()
+    fake_result.ok = True
+    fake_result.status_code = 200
+    fake_result.text = "saved-data"
+
+    with mock.patch("kayak.utils.http_client.fetch", return_value=fake_result):
+        result = _get_content(
+            url="https://example.com/data/file.txt",
+            raw_url="data/file.txt",
+            input_dir=None,
+            output_dir=str(tmp_path),
+        )
+
+    assert result == "saved-data"
+    fake_result.write_file.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# fetch() command — dry run
+# ---------------------------------------------------------------------------
+
+
 def test_dry_run_does_not_commit():
     """In dry-run mode the session is rolled back, not committed."""
     import argparse
@@ -139,6 +182,7 @@ def test_dry_run_does_not_commit():
         show_name=False,
         fetch_only=False,
         ignore_constraints=False,
+        concurrency=8,
     )
 
     mock_session = mock.MagicMock()
@@ -153,20 +197,52 @@ def test_dry_run_does_not_commit():
     mock_session.rollback.assert_called_once()
 
 
-def test_get_content_saves_to_output_dir(tmp_path):
-    """_get_content writes fetched data to output_dir when specified."""
-    fake_result = mock.MagicMock()
-    fake_result.ok = True
-    fake_result.status_code = 200
-    fake_result.text = "saved-data"
+# ---------------------------------------------------------------------------
+# fetch() command — concurrent fetch path
+# ---------------------------------------------------------------------------
 
-    with mock.patch("kayak.utils.http_client.fetch", return_value=fake_result):
-        result = _get_content(
-            url="https://example.com/data/file.txt",
-            raw_url="data/file.txt",
-            input_dir=None,
-            output_dir=str(tmp_path),
-        )
 
-    assert result == "saved-data"
-    fake_result.write_file.assert_called_once()
+def test_fetch_uses_async_fetch_many():
+    """fetch() calls async_fetch_many for the network path."""
+    import argparse
+
+    from kayak.cli.fetch import fetch as fetch_cmd
+    from kayak.utils.http_client import FetchResult
+
+    args = argparse.Namespace(
+        dry_run=True,
+        input_dir=None,
+        single_url=None,
+        parser_type=None,
+        parser_filter=None,
+        url_filter=None,
+        url_prefix="",
+        output_dir=None,
+        show_name=False,
+        fetch_only=True,
+        ignore_constraints=True,
+        concurrency=4,
+    )
+
+    sources = [{"url": "https://example.com/data", "parser": "test_parser", "hours": ""}]
+
+    fake_result = FetchResult(url="https://example.com/data")
+    fake_result.error = None
+    fake_result._response = mock.MagicMock()
+    fake_result._response.status_code = 200
+    fake_result._response.text = "test-data"
+
+    async def mock_async_fetch(urls, concurrency_per_host=8, timeout=None):
+        return {url: fake_result for url in urls}
+
+    mock_session = mock.MagicMock()
+    with (
+        mock.patch("kayak.cli.fetch.load_sources", return_value=sources),
+        mock.patch("kayak.cli.fetch.ensure_all_loaded"),
+        mock.patch("kayak.cli.fetch.get_session", return_value=mock_session),
+        mock.patch("kayak.utils.http_client.async_fetch_many", mock_async_fetch),
+    ):
+        fetch_cmd(args)
+
+    # dry_run → rollback, not commit
+    mock_session.commit.assert_not_called()
