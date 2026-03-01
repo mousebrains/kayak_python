@@ -134,21 +134,7 @@ nwps:
 
 usbr:
   urls:
-    - url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&format=csv&list=FLGY,PCKY,MSEY,JKSY,ALPY,GREY,SALY,PALI,DRYI,LORI,MNNI,SHYI,SIFI"
-    - url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&format=csv&list=HENI,HFAI,CHEI,ANTI,REXI"
-    - url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&format=csv&list=SNAI,AMFI,MINI,MILI,MHPI,SKHI"
-    - url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&format=csv&list=LWOI"
-    - url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&format=csv&list=BRFI,ANDI,BTSI,MORI,BIGI,BOMI,PARI"
-    - url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&format=csv&list=PRLI,DEDI,MVPI,PAYI,CSCI,HRSI,PLEI,PRPI"
-    - url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&format=csv&list=SWAI,SNYI,WEII,HCDI"
-    - url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&format=csv&list=ROMO"
-    - url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&format=csv&list=MADO,WARO,SFMO,MABO,BEUO,VALO,MALO"
-    - url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&format=csv&list=WCRO,PDTO,MYKO,MCKO,BIRO,YOKO,UMUO,UMDO,UMAO"
-    - url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&format=csv&list=CRAO,WICO,LAPO,BENO,DEBO"
-    - url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&format=csv&list=CRPO,PRVO,MLCO,OCRO,OCHO,CRSO"
-    - url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&format=csv&list=LEFO,GSTO,SCLO,SCOO,DLLO"
-    - url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&format=csv&list=BASO,BCSO,BCTO,EGSO,FSHO,MFDO,SDCO"
-    - url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&format=csv&list=HGHM"
+    - url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&format=csv&list=FLGY,PCKY,MSEY,JKSY,ALPY,GREY,SALY,PALI,DRYI,LORI,MNNI,SHYI,SIFI,HENI,HFAI,CHEI,ANTI,REXI,SNAI,AMFI,MINI,MILI,MHPI,SKHI,LWOI,BRFI,ANDI,BTSI,MORI,BIGI,BOMI,PARI,PRLI,DEDI,MVPI,PAYI,CSCI,HRSI,PLEI,PRPI,SWAI,SNYI,WEII,HCDI,ROMO,MADO,WARO,SFMO,MABO,BEUO,VALO,MALO,PRHO,PWDO,WCRO,PDTO,MYKO,MCKO,BIRO,YOKO,UMUO,UMDO,UMAO,CRAO,WICO,LAPO,BENO,DEBO,CRPO,PRVO,MLCO,OCRO,OCHO,CRSO,LEFO,GSTO,SCLO,SCOO,DLLO,BASO,BCSO,BCTO,EGSO,FSHO,MFDO,SDCO,HGHM"
 
 usace.cda:
   urls:
