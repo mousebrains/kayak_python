@@ -1,24 +1,30 @@
 # VPS Deployment Setup
 
-Deploy kayak on a Debian/Ubuntu VPS with nginx, PHP-FPM, and Let's Encrypt SSL.
+Deploy kayak on a Hetzner CPX21 (3 vCPU AMD, 4 GB RAM, 80 GB disk) running
+Debian 13 (Trixie) with nginx, PHP-FPM, and Let's Encrypt SSL.
 
 Hostnames: `levels.mousebrains.com`, `levels.wkcc.org`
 
 ## 1. System packages
 
+Debian 13 ships Python 3.12 and PHP 8.3.
+
 ```bash
 sudo apt update
-sudo apt install -y nginx php-fpm php-sqlite3 python3 python3-venv certbot
+sudo apt install -y nginx php8.3-fpm php8.3-sqlite3 python3 python3-venv certbot
 ```
 
-Check which PHP-FPM version was installed and note the socket path:
+Verify the PHP-FPM socket path:
 
 ```bash
-php-fpm -v
-ls /run/php/php*-fpm.sock
+ls /run/php/php8.3-fpm.sock
 ```
 
-If the socket path differs from `/run/php/php-fpm.sock`, update the `fastcgi_pass` lines in `deploy/nginx.conf` (e.g. `/run/php/php8.2-fpm.sock`).
+The nginx config expects `/run/php/php-fpm.sock`. Create a symlink so it works across PHP upgrades:
+
+```bash
+sudo ln -sf /run/php/php8.3-fpm.sock /run/php/php-fpm.sock
+```
 
 ## 2. Application user and code
 
