@@ -37,10 +37,10 @@ table.levels a{color:#2060A0}
 .falling{color:#070}
 .stable{color:#888}
 
-/* Level indicators */
-.level-low{color:#c00}
-.level-okay{color:#070}
-.level-high{color:#c00}
+/* Level indicators — a.level-* to override table.levels a */
+a.level-low{color:#c00}
+a.level-okay{color:#070}
+a.level-high{color:#c00}
 
 /* Stale data */
 tr.stale td{color:#aaa;font-style:italic}

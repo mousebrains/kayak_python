@@ -41,6 +41,13 @@ $classes_stmt = $db->prepare('SELECT name FROM section_class WHERE section_id = 
 $classes_stmt->execute([$id]);
 $classes = array_column($classes_stmt->fetchAll(), 'name');
 
+// Load flow levels (low, okay, high)
+$levels_stmt = $db->prepare(
+    'SELECT level, low, low_data_type, high, high_data_type FROM section_level WHERE section_id = ? ORDER BY level'
+);
+$levels_stmt->execute([$id]);
+$flow_levels = $levels_stmt->fetchAll();
+
 header('Cache-Control: max-age=300');
 include_header("$name - Description");
 
@@ -158,7 +165,27 @@ $fields = [
     'Remoteness' => $section['remoteness'],
     'Nature' => $section['nature'],
     'Watershed' => $section['watershed_type'],
-    'Optimal Flow' => $section['optimal_flow'] ? number_format((float)$section['optimal_flow'], 0) : null,
+    'Optimal Flow' => $section['optimal_flow'] ? number_format((float)$section['optimal_flow'], 0) . ' CFS' : null,
+];
+
+// Insert flow level rows
+foreach ($flow_levels as $fl) {
+    $parts = [];
+    if ($fl['low'] !== null) {
+        $unit = $fl['low_data_type'] === 'flow' ? ' CFS' : ' ft';
+        $parts[] = number_format((float)$fl['low'], $fl['low_data_type'] === 'flow' ? 0 : 1) . $unit;
+    }
+    if ($fl['high'] !== null) {
+        $unit = $fl['high_data_type'] === 'flow' ? ' CFS' : ' ft';
+        $parts[] = number_format((float)$fl['high'], $fl['high_data_type'] === 'flow' ? 0 : 1) . $unit;
+    }
+    if ($parts) {
+        $label = ucfirst($fl['level']) . ' Flow';
+        $fields[$label] = implode(' – ', $parts);
+    }
+}
+
+$fields += [
     'Difficulties' => $section['difficulties'],
     'Description' => $section['description'],
     'Notes' => $section['notes'],
