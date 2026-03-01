@@ -38,6 +38,7 @@ class USACECDAParser(BaseParser):
     def parse(self, text: str) -> int:
         """Parse JSON response from USACE web service."""
         self._db_updates = 0
+        self._obs_buffer = []
 
         try:
             data = json.loads(text)
@@ -69,6 +70,8 @@ class USACECDAParser(BaseParser):
                         continue
 
                     self.dump_to_db(station, data_type, when, float(value))
+
+        self._flush_buffer()
 
         if self._db_updates == 0:
             logger.warning(

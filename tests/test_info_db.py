@@ -4,6 +4,8 @@ from kayak.db.info_db import (
     all_state_names,
     all_states,
     display_name,
+    get_all_primary_source_ids,
+    get_calculated_source_ids,
     get_gauge_for_section,
     get_primary_source_id,
     get_section,
@@ -11,7 +13,17 @@ from kayak.db.info_db import (
     get_source_ids_for_gauge,
     sections_query,
 )
-from kayak.db.models import FetchUrl, GaugeSource, Section, SectionState, Source, State
+from kayak.db.models import (
+    CalcExpression,
+    DataType,
+    FetchUrl,
+    Gauge,
+    GaugeSource,
+    Section,
+    SectionState,
+    Source,
+    State,
+)
 
 # ---------------------------------------------------------------------------
 # all_states / all_state_names
@@ -200,3 +212,54 @@ def test_get_source_ids_for_gauge_multiple(session, sample_gauge):
 
     result = get_source_ids_for_gauge(session, sample_gauge.id)
     assert sorted(result) == sorted([src_a.id, src_b.id])
+
+
+# ---------------------------------------------------------------------------
+# get_all_primary_source_ids / get_calculated_source_ids
+# ---------------------------------------------------------------------------
+
+
+def test_get_all_primary_source_ids(session):
+    """get_all_primary_source_ids maps multiple gauge_ids to source_ids."""
+    g1 = Gauge(name="gauge1", usgs_id="111")
+    g2 = Gauge(name="gauge2", usgs_id="222")
+    session.add_all([g1, g2])
+    session.flush()
+
+    s1 = _make_source(session, "src1")
+    s2 = _make_source(session, "src2")
+    session.add(GaugeSource(gauge_id=g1.id, source_id=s1.id))
+    session.add(GaugeSource(gauge_id=g2.id, source_id=s2.id))
+    session.flush()
+
+    result = get_all_primary_source_ids(session, [g1.id, g2.id])
+    assert result[g1.id] == s1.id
+    assert result[g2.id] == s2.id
+
+
+def test_get_all_primary_source_ids_empty(session):
+    """Empty gauge_ids returns empty dict."""
+    assert get_all_primary_source_ids(session, []) == {}
+
+
+def test_get_calculated_source_ids(session):
+    """get_calculated_source_ids returns only sources with calc_expression."""
+    ce = CalcExpression(data_type=DataType.flow, expression="A + B")
+    session.add(ce)
+    session.flush()
+
+    # Source with fetch_url (not calculated)
+    s_fetch = _make_source(session, "fetch_src")
+    # Source with calc_expression (calculated)
+    s_calc = Source(name="calc_src", calc_expression_id=ce.id)
+    session.add(s_calc)
+    session.flush()
+
+    result = get_calculated_source_ids(session, [s_fetch.id, s_calc.id])
+    assert s_calc.id in result
+    assert s_fetch.id not in result
+
+
+def test_get_calculated_source_ids_empty(session):
+    """Empty source_ids returns empty set."""
+    assert get_calculated_source_ids(session, []) == set()

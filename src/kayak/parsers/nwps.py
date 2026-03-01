@@ -31,6 +31,7 @@ class NWPSParser(BaseParser):
     def parse(self, text: str) -> int:
         """Parse JSON response from NWPS stageflow/observed endpoint."""
         self._db_updates = 0
+        self._obs_buffer = []
 
         try:
             data = json.loads(text)
@@ -73,6 +74,8 @@ class NWPSParser(BaseParser):
                     flow_cfs = kcfs_to_cfs(float(secondary)) if flow_is_kcfs else float(secondary)
                     if flow_cfs >= 0:
                         self.dump_to_db(station, DataType.flow, when, flow_cfs)
+
+        self._flush_buffer()
 
         if self._db_updates == 0:
             logger.warning("No database updates from %s parser(%s)", self.url, self.name)

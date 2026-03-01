@@ -3,12 +3,15 @@
 from datetime import UTC, datetime, timedelta
 
 from kayak.db.data_db import (
+    get_all_latest,
+    get_bulk_observations,
     get_latest,
     get_observations,
     get_rating_table,
     merge_sources,
     put_rating_table,
     store_observation,
+    store_observations,
     update_latest,
 )
 from kayak.db.models import DataType, FetchUrl, Rating, Source
@@ -193,3 +196,117 @@ def test_merge_sources_median_three(session):
     )
     assert len(merged_obs) == 1
     assert merged_obs[0].value == 200.0
+
+
+# ---------------------------------------------------------------------------
+# Batch store_observations
+# ---------------------------------------------------------------------------
+
+
+def test_store_observations_batch(session):
+    """Multiple rows stored in one call."""
+    src = _make_source(session)
+    now = datetime.now(UTC)
+    rows = [
+        {"source_id": src.id, "data_type": DataType.flow, "observed_at": now - timedelta(hours=i), "value": 100.0 + i}
+        for i in range(5)
+    ]
+    count = store_observations(session, rows)
+    session.flush()
+    assert count == 5
+    obs = get_observations(session, src.id, DataType.flow)
+    assert len(obs) == 5
+
+
+def test_store_observations_upsert(session):
+    """Batch with conflicts updates existing rows."""
+    src = _make_source(session)
+    now = datetime.now(UTC)
+    store_observation(session, src.id, DataType.flow, now, 100.0)
+    session.flush()
+
+    rows = [
+        {"source_id": src.id, "data_type": DataType.flow, "observed_at": now, "value": 200.0},
+        {"source_id": src.id, "data_type": DataType.flow, "observed_at": now - timedelta(hours=1), "value": 300.0},
+    ]
+    count = store_observations(session, rows)
+    session.flush()
+    assert count == 2
+
+    obs = get_observations(session, src.id, DataType.flow)
+    assert len(obs) == 2
+    # Most recent should be the updated value
+    assert obs[0].value == 200.0
+
+
+def test_store_observations_validation(session):
+    """Invalid rows rejected, valid rows stored."""
+    src = _make_source(session)
+    now = datetime.now(UTC)
+    future = now + timedelta(hours=2)
+    rows = [
+        {"source_id": src.id, "data_type": DataType.flow, "observed_at": now, "value": 100.0},
+        {"source_id": src.id, "data_type": DataType.flow, "observed_at": future, "value": 200.0},  # future
+        {"source_id": src.id, "data_type": DataType.flow, "observed_at": now - timedelta(hours=1), "value": -10.0},  # negative flow
+    ]
+    count = store_observations(session, rows)
+    session.flush()
+    assert count == 1
+
+    obs = get_observations(session, src.id, DataType.flow)
+    assert len(obs) == 1
+    assert obs[0].value == 100.0
+
+
+def test_store_observations_empty(session):
+    """Empty list returns 0."""
+    assert store_observations(session, []) == 0
+
+
+# ---------------------------------------------------------------------------
+# Bulk query functions
+# ---------------------------------------------------------------------------
+
+
+def test_get_all_latest(session):
+    """get_all_latest returns dict keyed by (source_id, data_type)."""
+    src1 = _make_source(session, "lat1")
+    src2 = _make_source(session, "lat2")
+    now = datetime.now(UTC)
+
+    store_observation(session, src1.id, DataType.flow, now, 100.0)
+    store_observation(session, src2.id, DataType.gauge, now, 5.0)
+    session.flush()
+    update_latest(session, src1.id, DataType.flow)
+    update_latest(session, src2.id, DataType.gauge)
+    session.flush()
+
+    result = get_all_latest(session, [src1.id, src2.id])
+    assert (src1.id, DataType.flow) in result
+    assert result[(src1.id, DataType.flow)].value == 100.0
+    assert (src2.id, DataType.gauge) in result
+    assert result[(src2.id, DataType.gauge)].value == 5.0
+
+
+def test_get_all_latest_empty(session):
+    """get_all_latest with empty list returns empty dict."""
+    assert get_all_latest(session, []) == {}
+
+
+def test_get_bulk_observations(session):
+    """get_bulk_observations groups by source_id."""
+    src1 = _make_source(session, "bulk1")
+    src2 = _make_source(session, "bulk2")
+    now = datetime.now(UTC)
+
+    for i in range(3):
+        store_observation(session, src1.id, DataType.flow, now - timedelta(hours=i), 100.0 + i)
+        store_observation(session, src2.id, DataType.flow, now - timedelta(hours=i), 200.0 + i)
+    session.flush()
+
+    since = now - timedelta(hours=5)
+    result = get_bulk_observations(session, [src1.id, src2.id], DataType.flow, since)
+    assert src1.id in result
+    assert src2.id in result
+    assert len(result[src1.id]) == 3
+    assert len(result[src2.id]) == 3

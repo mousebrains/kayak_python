@@ -15,16 +15,16 @@ from pathlib import Path
 
 from kayak.config import BASE_DIR
 from kayak.config_data import load_builder_columns
-from kayak.db.data_db import get_latest, get_observations
+from kayak.db.data_db import get_all_latest, get_bulk_observations
 from kayak.db.engine import get_session
 from kayak.db.info_db import (
     all_state_names,
     classify_level,
-    get_primary_source_id,
-    is_source_calculated,
+    get_all_primary_source_ids,
+    get_calculated_source_ids,
     sections_query,
 )
-from kayak.db.models import DataType, Section
+from kayak.db.models import DataType, LatestObservation, Observation, Section
 from kayak.utils.lttb import downsample, running_median
 
 logger = logging.getLogger(__name__)
@@ -61,8 +61,13 @@ def _get_builder_columns() -> list[dict]:
 # Row data
 # ---------------------------------------------------------------------------
 
-def _get_row_data(session, section: Section) -> dict:
-    """Build a data dict for one river section."""
+def _get_row_data(
+    section: Section,
+    primary_source_ids: dict[int, int],
+    calculated_ids: set[int],
+    all_latest: dict[tuple[int, DataType], LatestObservation],
+) -> dict:
+    """Build a data dict for one river section using pre-loaded data."""
     row: dict = {
         "section_id": section.id,
         "display_name": section.display_name or "",
@@ -78,10 +83,9 @@ def _get_row_data(session, section: Section) -> dict:
 
     gauge = section.gauge
     if gauge:
-        source_id = get_primary_source_id(session, gauge.id)
+        source_id = primary_source_ids.get(gauge.id)
         if source_id:
-            # Check if source is calculated (estimated)
-            if is_source_calculated(session, source_id):
+            if source_id in calculated_ids:
                 row["is_estimated"] = True
 
             for dtype_name, dtype in [
@@ -89,7 +93,7 @@ def _get_row_data(session, section: Section) -> dict:
                 ("gage", DataType.gauge),
                 ("temperature", DataType.temperature),
             ]:
-                latest = get_latest(session, source_id, dtype)
+                latest = all_latest.get((source_id, dtype))
                 if latest and latest.value is not None:
                     row[dtype_name] = latest.value
                     row["time"] = latest.observed_at
@@ -124,17 +128,22 @@ def _get_row_data(session, section: Section) -> dict:
 # Sparkline SVG
 # ---------------------------------------------------------------------------
 
-def _build_sparkline(session, section: Section, width: int = 80, height: int = 20) -> str:
-    """Generate a tiny inline SVG sparkline for the last 48h of flow data."""
+def _build_sparkline(
+    section: Section,
+    primary_source_ids: dict[int, int],
+    sparkline_obs: dict[int, list[Observation]],
+    width: int = 80,
+    height: int = 20,
+) -> str:
+    """Generate a tiny inline SVG sparkline from pre-loaded observation data."""
     gauge = section.gauge
     if not gauge:
         return ""
-    source_id = get_primary_source_id(session, gauge.id)
+    source_id = primary_source_ids.get(gauge.id)
     if not source_id:
         return ""
 
-    since = datetime.now(UTC) - timedelta(hours=48)
-    records = get_observations(session, source_id, DataType.flow, since=since)
+    records = sparkline_obs.get(source_id, [])
     if len(records) < 3:
         return ""
 
@@ -173,14 +182,15 @@ def _build_sparkline(session, section: Section, width: int = 80, height: int = 2
 # CSV / Text builders (unchanged logic)
 # ---------------------------------------------------------------------------
 
-def _build_csv(session, sections, columns, state_name: str) -> str:
+def _build_csv(sections, columns, state_name: str,
+               primary_source_ids, calculated_ids, all_latest) -> str:
     output = io.StringIO()
     writer = csv.writer(output)
     headers = [c["name_text"] for c in columns if "c" in c["use"] and c["type"] != "noop"]
     writer.writerow(headers)
 
     for section in sections:
-        row = _get_row_data(session, section)
+        row = _get_row_data(section, primary_source_ids, calculated_ids, all_latest)
         values = []
         for col in columns:
             if "c" not in col["use"] or col["type"] == "noop":
@@ -195,7 +205,8 @@ def _build_csv(session, sections, columns, state_name: str) -> str:
     return output.getvalue()
 
 
-def _build_text(session, sections, columns, state_name: str) -> str:
+def _build_text(sections, columns, state_name: str,
+                primary_source_ids, calculated_ids, all_latest) -> str:
     lines = []
     header = ""
     for col in columns:
@@ -206,7 +217,7 @@ def _build_text(session, sections, columns, state_name: str) -> str:
     lines.append("-" * len(header))
 
     for section in sections:
-        row = _get_row_data(session, section)
+        row = _get_row_data(section, primary_source_ids, calculated_ids, all_latest)
         line = ""
         for col in columns:
             if "t" not in col["use"] or col["type"] == "noop":
@@ -240,8 +251,9 @@ _TD_CLASS = {
 _SECONDARY_FIELDS = {"drainage", "class"}
 
 
-def _build_html_table(session, sections, columns) -> str:
-    """Build the <table> body for a set of sections."""
+def _build_html_table(sections, columns, primary_source_ids, calculated_ids,
+                      all_latest, sparkline_obs) -> str:
+    """Build the <table> body for a set of sections using pre-loaded data."""
     rows: list[str] = []
     rows.append('<table class="levels">')
     rows.append("<thead><tr>")
@@ -254,7 +266,7 @@ def _build_html_table(session, sections, columns) -> str:
     rows.append("<tbody>")
 
     for section in sections:
-        row = _get_row_data(session, section)
+        row = _get_row_data(section, primary_source_ids, calculated_ids, all_latest)
         if row.get("expired"):
             continue
         # Skip sections with no data at all
@@ -263,7 +275,7 @@ def _build_html_table(session, sections, columns) -> str:
         if not has_data:
             continue
         section_id = section.id
-        sparkline = _build_sparkline(session, section)
+        sparkline = _build_sparkline(section, primary_source_ids, sparkline_obs)
         tr_cls = ' class="stale"' if row.get("stale") else ""
         rows.append(f"<tr{tr_cls}>")
 
@@ -506,16 +518,28 @@ def _build_and_write(session, sections, columns, state: str,
 
     logger.info("Building %s: %d sections", label, len(sections))
 
+    # Pre-load ALL data in ~5 bulk queries
+    gauge_ids = [s.gauge_id for s in sections if s.gauge_id]
+    primary_source_ids = get_all_primary_source_ids(session, gauge_ids)
+    source_ids = list(primary_source_ids.values())
+    calculated_ids = get_calculated_source_ids(session, source_ids)
+    all_latest = get_all_latest(session, source_ids)
+    since_48h = datetime.now(UTC) - timedelta(hours=48)
+    sparkline_obs = get_bulk_observations(session, source_ids, DataType.flow, since_48h)
+
     # CSV
-    csv_content = _build_csv(session, sections, columns, state)
+    csv_content = _build_csv(sections, columns, state,
+                             primary_source_ids, calculated_ids, all_latest)
     (output_dir / f"levels{suffix}.csv").write_text(csv_content)
 
     # Text
-    text_content = _build_text(session, sections, columns, state)
+    text_content = _build_text(sections, columns, state,
+                               primary_source_ids, calculated_ids, all_latest)
     (output_dir / f"levels{suffix}.text").write_text(text_content)
 
     # HTML — complete self-contained page
-    table_html = _build_html_table(session, sections, columns)
+    table_html = _build_html_table(sections, columns, primary_source_ids,
+                                   calculated_ids, all_latest, sparkline_obs)
     directory_html = _build_reach_directory(sections)
     page_html = _build_page(table_html, css, states, state, title,
                             directory_html=directory_html)

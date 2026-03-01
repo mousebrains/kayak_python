@@ -11,11 +11,13 @@ Runs the full data pipeline in order:
 from __future__ import annotations
 
 import logging
+import os
 import time
 
-import os
+from sqlalchemy import text
 
 from kayak.cli import build, calc_rating, calculator, fetch, fetch_usgs_ogc, merge
+from kayak.db.engine import get_engine
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +63,15 @@ def pipeline(args):
             logger.error("Error in %s: %s", step_name, e)
         elapsed = time.time() - start
         print(f"Completed {step_name} in {elapsed:.1f}s")
+
+    # Run PRAGMA optimize to update SQLite query planner statistics
+    try:
+        engine = get_engine()
+        with engine.connect() as conn:
+            conn.execute(text("PRAGMA optimize"))
+            conn.commit()
+    except Exception as e:
+        logger.warning("PRAGMA optimize failed: %s", e)
 
     print(f"\n{'='*60}")
     print("Pipeline complete")

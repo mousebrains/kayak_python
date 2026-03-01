@@ -14,7 +14,7 @@ import time
 import requests
 from sqlalchemy import select
 
-from kayak.db.data_db import store_observation, update_latest
+from kayak.db.data_db import store_observations, update_latest
 from kayak.db.engine import get_session
 from kayak.db.models import DataType, Gauge, GaugeSource, Source
 
@@ -146,6 +146,7 @@ def _fetch_continuous(session, site_map, api_key, hours, batch_size, dry_run):
                     break
 
                 features = data.get("features", [])
+                page_rows = []
                 for feature in features:
                     props = feature.get("properties", {})
                     mon_loc = props.get("monitoring_location_id", "")
@@ -178,12 +179,20 @@ def _fetch_continuous(session, site_map, api_key, hours, batch_size, dry_run):
                         logger.debug("Bad timestamp: %s", timestamp)
                         continue
 
-                    if not dry_run:
-                        if store_observation(session, source_id, data_type, when, value):
-                            updated_pairs.add((source_id, data_type))
-                            total_stored += 1
-                    else:
-                        total_stored += 1
+                    page_rows.append({
+                        "source_id": source_id,
+                        "data_type": data_type,
+                        "observed_at": when,
+                        "value": value,
+                    })
+
+                if not dry_run and page_rows:
+                    stored = store_observations(session, page_rows)
+                    total_stored += stored
+                    for row in page_rows:
+                        updated_pairs.add((row["source_id"], row["data_type"]))
+                else:
+                    total_stored += len(page_rows)
 
                 # Follow pagination
                 url = None

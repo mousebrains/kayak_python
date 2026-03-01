@@ -15,7 +15,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from kayak.db.data_db import store_observation
+from kayak.db.data_db import store_observations
 from kayak.db.models import DataType
 
 logger = logging.getLogger(__name__)
@@ -44,6 +44,7 @@ class BaseParser(ABC):
         self.source_map = source_map or {}
         self.dry_run = dry_run
         self._db_updates = 0
+        self._obs_buffer: list[dict] = []
 
     # ------------------------------------------------------------------
     # Text feeding (mirrors serveUpLines / serveUpCookedLines)
@@ -55,10 +56,13 @@ class BaseParser(ABC):
         Returns the number of database updates made.
         """
         self._db_updates = 0
+        self._obs_buffer = []
         for raw_line in text.splitlines():
             line = raw_line.replace("\r", "")
             if not self.parse_line(line):
                 break
+
+        self._flush_buffer()
 
         if self._db_updates == 0:
             logger.warning(
@@ -114,13 +118,26 @@ class BaseParser(ABC):
             )
             return False
 
-        ok = store_observation(self.session, sid, data_type, when, value)
-        if not ok:
-            logger.error(
-                "dumpToDatabase failed for %s/%s %s %s %s %s",
-                station, data_type, value, when, self.url, self.name,
+        self._obs_buffer.append({
+            "source_id": sid,
+            "data_type": data_type,
+            "observed_at": when,
+            "value": value,
+        })
+        return True
+
+    def _flush_buffer(self) -> None:
+        """Flush buffered observations to the database in a single batch."""
+        if not self._obs_buffer or self.dry_run:
+            self._obs_buffer = []
+            return
+        stored = store_observations(self.session, self._obs_buffer)
+        if stored < len(self._obs_buffer):
+            logger.warning(
+                "Stored %d of %d buffered observations for %s",
+                stored, len(self._obs_buffer), self.name,
             )
-        return ok
+        self._obs_buffer = []
 
     # ------------------------------------------------------------------
     # Utilities

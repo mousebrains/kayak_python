@@ -25,6 +25,7 @@ class NWRFCXMLParser(BaseParser):
     def parse(self, text: str) -> int:
         """XML-based parsing instead of line-by-line."""
         self._db_updates = 0
+        self._obs_buffer = []
 
         try:
             from lxml import etree
@@ -53,6 +54,8 @@ class NWRFCXMLParser(BaseParser):
                             station = (child.text or "").strip()
                             break
                 self._parse_site(site, station, now)
+
+        self._flush_buffer()
 
         if self._db_updates == 0:
             logger.warning("No database updates from %s parser(%s)", self.url, self.name)

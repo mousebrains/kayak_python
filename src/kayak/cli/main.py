@@ -3,7 +3,17 @@
 import argparse
 import sys
 
-from kayak.cli import build, calc_rating, calculator, fetch, fetch_usgs_ogc, init_db, merge, pipeline
+from kayak.cli import (
+    build,
+    calc_rating,
+    calculator,
+    decimate,
+    fetch,
+    fetch_usgs_ogc,
+    init_db,
+    merge,
+    pipeline,
+)
 from kayak.cli.logger import addArgs as addLoggerArgs
 from kayak.cli.logger import mkLogger
 
@@ -27,6 +37,7 @@ def main():
     calc_rating.addArgs(subparsers)
     calculator.addArgs(subparsers)
     build.addArgs(subparsers)
+    decimate.addArgs(subparsers)
     pipeline.addArgs(subparsers)
 
     args = parser.parse_args()

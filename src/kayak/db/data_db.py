@@ -95,6 +95,65 @@ def store_observation(
     return True
 
 
+def store_observations(session: Session, values: list[dict]) -> int:
+    """Store multiple observations in a single batch INSERT.
+
+    Each dict must have keys: source_id, data_type, observed_at, value.
+    Same validation rules as store_observation(): rejects future timestamps
+    and negative flow values. Returns count of rows stored.
+    """
+    now = datetime.now(UTC)
+    future_cutoff = now + timedelta(hours=1)
+    valid_rows = []
+
+    for row in values:
+        data_type = row["data_type"]
+        if isinstance(data_type, str):
+            try:
+                data_type = DataType(data_type)
+            except ValueError:
+                logger.error("Unknown data type: %s", data_type)
+                continue
+
+        when = row["observed_at"]
+        if when.tzinfo is None:
+            when_utc = when.replace(tzinfo=UTC)
+        else:
+            when_utc = when.astimezone(UTC)
+
+        if when_utc > future_cutoff:
+            logger.warning(
+                "Rejecting future timestamp %s for source_id=%d",
+                when, row["source_id"],
+            )
+            continue
+
+        value = row["value"]
+        if data_type == DataType.flow and value < 0:
+            logger.error(
+                "Rejecting negative flow %s for source_id=%d",
+                value, row["source_id"],
+            )
+            continue
+
+        valid_rows.append({
+            "source_id": row["source_id"],
+            "data_type": data_type,
+            "observed_at": when,
+            "value": value,
+        })
+
+    if not valid_rows:
+        return 0
+
+    stmt = sqlite_upsert(Observation).values(valid_rows).on_conflict_do_update(
+        index_elements=["source_id", "observed_at", "data_type"],
+        set_={"value": sqlite_upsert(Observation).excluded.value},
+    )
+    session.execute(stmt)
+    return len(valid_rows)
+
+
 # ---------------------------------------------------------------------------
 # Latest observation
 # ---------------------------------------------------------------------------
@@ -185,6 +244,23 @@ def get_latest(
     ).scalar_one_or_none()
 
 
+def get_all_latest(
+    session: Session,
+    source_ids: list[int],
+) -> dict[tuple[int, DataType], LatestObservation]:
+    """Fetch all LatestObservation rows for a list of source_ids.
+
+    Returns a dict keyed by (source_id, data_type).
+    """
+    if not source_ids:
+        return {}
+    rows = session.scalars(
+        select(LatestObservation)
+        .where(LatestObservation.source_id.in_(source_ids))
+    ).all()
+    return {(r.source_id, r.data_type): r for r in rows}
+
+
 # ---------------------------------------------------------------------------
 # Observation queries
 # ---------------------------------------------------------------------------
@@ -212,6 +288,35 @@ def get_observations(
         stmt = stmt.where(Observation.observed_at <= until)
     stmt = stmt.order_by(Observation.observed_at.desc())
     return list(session.scalars(stmt))
+
+
+def get_bulk_observations(
+    session: Session,
+    source_ids: list[int],
+    data_type: DataType,
+    since: datetime,
+) -> dict[int, list[Observation]]:
+    """Fetch observations for multiple sources in a single query.
+
+    Returns a dict keyed by source_id with lists of Observation sorted
+    descending by observed_at.
+    """
+    if not source_ids:
+        return {}
+    stmt = (
+        select(Observation)
+        .where(
+            Observation.source_id.in_(source_ids),
+            Observation.data_type == data_type,
+            Observation.observed_at >= since,
+        )
+        .order_by(Observation.source_id, Observation.observed_at.desc())
+    )
+    rows = list(session.scalars(stmt))
+    result: dict[int, list[Observation]] = defaultdict(list)
+    for row in rows:
+        result[row.source_id].append(row)
+    return dict(result)
 
 
 # ---------------------------------------------------------------------------
@@ -270,9 +375,13 @@ def merge_sources(
         for row in rows:
             by_time[row.observed_at].append(row.value)
 
-    count = 0
-    for observed_at, values in by_time.items():
-        median_val = statistics.median(values)
-        if store_observation(session, target_source_id, data_type, observed_at, median_val):
-            count += 1
-    return count
+    rows = []
+    for observed_at, vals in by_time.items():
+        median_val = statistics.median(vals)
+        rows.append({
+            "source_id": target_source_id,
+            "data_type": data_type,
+            "observed_at": observed_at,
+            "value": median_val,
+        })
+    return store_observations(session, rows)

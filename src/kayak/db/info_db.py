@@ -7,7 +7,7 @@ instead of the flat Master/MergedMaster approach.
 from __future__ import annotations
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from kayak.db.models import DataType, FlowLevel, Gauge, GaugeSource, Section, Source, State
 
@@ -47,7 +47,12 @@ def sections_query(
         stmt = stmt.where(Section.no_show.is_(False))
 
     if with_gauge:
-        stmt = stmt.options(joinedload(Section.gauge))
+        stmt = stmt.options(
+            joinedload(Section.gauge),
+            selectinload(Section.states),
+            selectinload(Section.classes),
+            selectinload(Section.levels),
+        )
 
     if state_name:
         stmt = stmt.join(Section.states).where(State.name == state_name)
@@ -101,6 +106,37 @@ def is_source_calculated(session: Session, source_id: int) -> bool:
     """Return True if the source uses a calc_expression instead of a fetch URL."""
     src = session.get(Source, source_id)
     return src is not None and src.calc_expression_id is not None
+
+
+def get_all_primary_source_ids(
+    session: Session, gauge_ids: list[int],
+) -> dict[int, int]:
+    """Return a mapping of gauge_id → first source_id for multiple gauges."""
+    if not gauge_ids:
+        return {}
+    rows = session.execute(
+        select(GaugeSource.gauge_id, GaugeSource.source_id)
+        .where(GaugeSource.gauge_id.in_(gauge_ids))
+    ).all()
+    # Keep only the first source_id per gauge (same semantics as get_primary_source_id)
+    result: dict[int, int] = {}
+    for gauge_id, source_id in rows:
+        if gauge_id not in result:
+            result[gauge_id] = source_id
+    return result
+
+
+def get_calculated_source_ids(
+    session: Session, source_ids: list[int],
+) -> set[int]:
+    """Return the subset of source_ids that use calc_expression (estimated)."""
+    if not source_ids:
+        return set()
+    rows = session.execute(
+        select(Source.id)
+        .where(Source.id.in_(source_ids), Source.calc_expression_id.is_not(None))
+    ).scalars().all()
+    return set(rows)
 
 
 def classify_level(
