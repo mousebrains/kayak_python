@@ -1,0 +1,12 @@
+[Unit]
+Description=Kayak observation decimation
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=tpw
+WorkingDirectory=/home/tpw/kayak
+EnvironmentFile=/home/tpw/kayak/.env
+ExecStart=/home/tpw/kayak/.venv/bin/levels decimate --vacuum
+TimeoutStartSec=600
+Nice=15

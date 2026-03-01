@@ -1,0 +1,9 @@
+[Unit]
+Description=Run kayak pipeline hourly
+
+[Timer]
+OnCalendar=*:12
+Persistent=true
+
+[Install]
+WantedBy=timers.target
