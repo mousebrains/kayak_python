@@ -11,7 +11,6 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
-from sqlalchemy.dialects.mysql import insert as mysql_upsert
 from sqlalchemy.dialects.sqlite import insert as sqlite_upsert
 from sqlalchemy.orm import Session
 
@@ -83,25 +82,15 @@ def store_observation(
         logger.error("Rejecting negative flow %s for source_id=%d", value, source_id)
         return False
 
-    dialect = session.bind.dialect.name
-    if dialect == "mysql":
-        stmt = mysql_upsert(Observation).values(
-            source_id=source_id,
-            observed_at=when,
-            data_type=data_type,
-            value=value,
-        )
-        stmt = stmt.on_duplicate_key_update(value=stmt.inserted.value)
-    else:
-        stmt = sqlite_upsert(Observation).values(
-            source_id=source_id,
-            observed_at=when,
-            data_type=data_type,
-            value=value,
-        ).on_conflict_do_update(
-            index_elements=["source_id", "observed_at", "data_type"],
-            set_={"value": value},
-        )
+    stmt = sqlite_upsert(Observation).values(
+        source_id=source_id,
+        observed_at=when,
+        data_type=data_type,
+        value=value,
+    ).on_conflict_do_update(
+        index_elements=["source_id", "observed_at", "data_type"],
+        set_={"value": value},
+    )
     session.execute(stmt)
     return True
 

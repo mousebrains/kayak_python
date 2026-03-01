@@ -59,8 +59,7 @@ $stmt->execute($ids);
 $sections = $stmt->fetchAll();
 
 // Load classes for all sections in one query
-$is_mysql = $db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql';
-$group_expr = $is_mysql ? "GROUP_CONCAT(name SEPARATOR ', ')" : "GROUP_CONCAT(name, ', ')";
+$group_expr = "GROUP_CONCAT(name, ', ')";
 $class_sql = "SELECT section_id, $group_expr AS class
               FROM section_class WHERE section_id IN ($placeholders)
               GROUP BY section_id";
