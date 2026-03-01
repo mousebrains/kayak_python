@@ -9,17 +9,133 @@ Hostnames: `levels.mousebrains.com`, `levels.wkcc.org`
 
 Oracle Cloud's Always Free tier provides an ARM VM (4 OCPU Ampere, 24 GB RAM,
 200 GB disk, 10 TB/month egress) at no cost — not a trial, it runs indefinitely.
-The us-portland-1 (Portland, OR) region is available.
+The us-portland-1 (Portland, OR) region is available. Use Ubuntu 24.04 LTS
+(ships Python 3.12, PHP 8.3) — the closest equivalent to Debian 13. Debian is
+not available as an OCI platform image.
 
-To use Oracle Cloud instead of Hetzner:
-- Choose an Ampere A1 (ARM) shape with Oracle Linux or Ubuntu 22.04+
-- ARM instances can be difficult to provision in popular regions; retry or
-  use a provisioning script
-- The rest of this guide applies unchanged (nginx, PHP-FPM, certbot, systemd
-  timers) — just substitute the Oracle instance IP and adjust package manager
-  commands if using Oracle Linux (`dnf` instead of `apt`)
-- Debian 13 is not available as a base image on Oracle Cloud; use Ubuntu 24.04
-  LTS (ships Python 3.12, PHP 8.3) as the closest equivalent
+#### Oracle Cloud account setup
+
+1. Go to https://cloud.oracle.com and click **Sign Up**.
+2. A credit card is required for identity verification but will not be charged
+   for Always Free resources.
+3. For **Home Region**, choose a US West option (Phoenix or San Jose). You can
+   create resources in any region regardless of home region.
+
+#### Networking (VCN)
+
+1. In the OCI console: hamburger menu > **Networking** > **Virtual cloud networks**.
+2. **Start VCN Wizard** > **Create VCN with Internet Connectivity** > name it
+   `kayak-vcn` > **Next** > **Create**.
+3. Open firewall ports: click into the VCN > **Public Subnet** > **Default
+   Security List** > **Add Ingress Rules**:
+
+   | Source CIDR | Protocol | Dest Port | Description |
+   |-------------|----------|-----------|-------------|
+   | `0.0.0.0/0` | TCP | 80 | HTTP |
+   | `0.0.0.0/0` | TCP | 443 | HTTPS |
+
+   SSH (port 22) is open by default.
+
+#### SSH key
+
+Generate a key for the instance (or use an existing one):
+
+```bash
+ssh-keygen -t ed25519 -C "oracle-kayak" -f ~/.ssh/id_oracle
+```
+
+#### Create the compute instance
+
+1. Hamburger menu > **Compute** > **Instances** > **Create instance**.
+2. **Name:** `kayak`
+3. **Placement:** Select **us-portland-1** in the region selector if available.
+4. **Image and shape:**
+   - Click **Change image** > **Canonical Ubuntu** > **24.04 LTS aarch64** >
+     **Select image**.
+   - Click **Change shape** > **Ampere** > **VM.Standard.A1.Flex**.
+   - Set **OCPUs: 4**, **Memory: 24 GB** (full Always Free allowance).
+   - Confirm it shows **Always Free eligible**.
+5. **Networking:** Select `kayak-vcn` and the public subnet. Ensure **Assign a
+   public IPv4 address** is checked.
+6. **SSH keys:** Paste the contents of `~/.ssh/id_oracle.pub`.
+7. **Boot volume:** Click **Specify a custom boot volume size** > set to
+   **200 GB** (Always Free maximum).
+8. Click **Create**.
+
+#### Capacity issues
+
+ARM instances are frequently out of capacity in popular regions. If you get an
+"Out of capacity" error:
+
+- Retry manually every few minutes — capacity opens unpredictably.
+- Try early morning US time when capacity is more available.
+- Try a different region.
+- Use the OCI CLI to retry in a loop:
+
+  ```bash
+  # Install OCI CLI: https://docs.oracle.com/en-us/iaas/Content/API/SDKDocs/cliinstall.htm
+  while true; do
+      oci compute instance launch \
+          --availability-domain "YOUR_AD" \
+          --compartment-id "YOUR_COMPARTMENT_OCID" \
+          --shape "VM.Standard.A1.Flex" \
+          --shape-config '{"ocpus":4,"memoryInGBs":24}' \
+          --image-id "YOUR_UBUNTU_IMAGE_OCID" \
+          --subnet-id "YOUR_SUBNET_OCID" \
+          --ssh-authorized-keys-file ~/.ssh/id_oracle.pub \
+          --boot-volume-size-in-gbs 200 \
+          --assign-public-ip true && break
+      echo "Out of capacity, retrying in 60s..."
+      sleep 60
+  done
+  ```
+
+#### Connect and verify
+
+Once the instance shows **Running**, find the public IP on the instance details
+page:
+
+```bash
+ssh -i ~/.ssh/id_oracle ubuntu@<PUBLIC_IP>
+uname -m        # aarch64
+lsb_release -a  # Ubuntu 24.04
+free -h         # ~24 GB
+nproc           # 4
+df -h /         # ~200 GB
+```
+
+#### OS firewall (Oracle-specific)
+
+Ubuntu on OCI ships with iptables rules that block ports 80/443 even after
+opening them in the security list. Open them at the OS level:
+
+```bash
+sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT
+sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT
+sudo netfilter-persistent save
+```
+
+#### Create the application user
+
+The default user is `ubuntu`. Create the `tpw` user before proceeding:
+
+```bash
+sudo adduser tpw
+sudo -u tpw mkdir -p /home/tpw/.ssh
+```
+
+Then continue with **section 1** below. All `apt` commands work identically
+on Ubuntu 24.04.
+
+#### Oracle Cloud gotchas
+
+- **Do not terminate the instance** — if you delete an Always Free instance,
+  you may not be able to provision a new one due to capacity.
+- **Set a budget alert** — OCI console > **Billing** > **Budgets** > create a
+  $1 alert to catch anything that leaves the free tier.
+- **Idle reclamation** — Oracle emails after 60 days of inactivity on idle
+  Always Free instances, threatening to reclaim them. The hourly pipeline timer
+  counts as activity, so this is not an issue once deployed.
 
 ## 1. System packages
 
