@@ -9,25 +9,48 @@ Hostnames: `levels.mousebrains.com`, `levels.wkcc.org`
 
 Oracle Cloud's Always Free tier provides an ARM VM (4 OCPU Ampere, 24 GB RAM,
 200 GB disk, 10 TB/month egress) at no cost — not a trial, it runs indefinitely.
-The us-portland-1 (Portland, OR) region is available. Use Ubuntu 24.04 LTS
-(ships Python 3.12, PHP 8.3) — the closest equivalent to Debian 13. Debian is
-not available as an OCI platform image.
+US West regions are San Jose (us-sanjose-1) and Phoenix (us-phoenix-1); San Jose
+is closest to Oregon (~10-15ms latency). Debian 13 is not available as a platform
+image but can be imported as a custom image (arm64 qcow2 from cloud.debian.org).
 
 #### Oracle Cloud account setup
 
 1. Go to https://cloud.oracle.com and click **Sign Up**.
 2. A credit card is required for identity verification but will not be charged
    for Always Free resources.
-3. For **Home Region**, choose a US West option (Phoenix or San Jose). You can
-   create resources in any region regardless of home region.
+3. For **Home Region**, choose **US West (San Jose)** for lowest latency to
+   Oregon. Phoenix is the other US West option.
+
+#### Import Debian 13 custom image
+
+1. Download the Debian 13 arm64 cloud image:
+   ```bash
+   curl -LO https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-arm64.qcow2
+   ```
+2. Create an Object Storage bucket: hamburger menu > **Storage** > **Buckets** >
+   **Create Bucket** > name it `images` > **Create**.
+3. Upload the qcow2 file: click into the bucket > **Upload** > select the file.
+4. Import as a custom image: hamburger menu > **Compute** > **Custom images** >
+   **Import image**:
+   - **Import from:** Object Storage bucket
+   - **Bucket:** `images`
+   - **Object name:** `debian-13-generic-arm64.qcow2`
+   - **Image name:** `debian-13-arm64`
+   - **Image type:** QCOW2
+   - **Launch mode:** Paravirtualized
+   - **Operating system:** Linux
+   - **Compatible shapes:** Ampere
+5. Wait for status to change from **Importing** to **Available** (~5-10 minutes).
+   Refresh the Custom images page to check.
 
 #### Networking (VCN)
 
-1. In the OCI console: hamburger menu > **Networking** > **Virtual cloud networks**.
-2. **Start VCN Wizard** > **Create VCN with Internet Connectivity** > name it
-   `kayak-vcn` > **Next** > **Create**.
-3. Open firewall ports: click into the VCN > **Public Subnet** > **Default
-   Security List** > **Add Ingress Rules**:
+Networking is created automatically when you create the instance (see below).
+After the instance is running, open firewall ports for HTTP/HTTPS:
+
+1. Go to the instance details page > click the **Subnet** link > click the
+   **Default Security List**.
+2. **Add Ingress Rules**:
 
    | Source CIDR | Protocol | Dest Port | Description |
    |-------------|----------|-----------|-------------|
@@ -48,19 +71,19 @@ ssh-keygen -t ed25519 -C "oracle-kayak" -f ~/.ssh/id_oracle
 
 1. Hamburger menu > **Compute** > **Instances** > **Create instance**.
 2. **Name:** `kayak`
-3. **Placement:** Select **us-portland-1** in the region selector if available.
-4. **Image and shape:**
-   - Click **Change image** > **Canonical Ubuntu** > **24.04 LTS aarch64** >
+3. **Image and shape:**
+   - Click **Change image** > **My images** > select `debian-13-arm64` >
      **Select image**.
    - Click **Change shape** > **Ampere** > **VM.Standard.A1.Flex**.
    - Set **OCPUs: 4**, **Memory: 24 GB** (full Always Free allowance).
    - Confirm it shows **Always Free eligible**.
-5. **Networking:** Select `kayak-vcn` and the public subnet. Ensure **Assign a
-   public IPv4 address** is checked.
-6. **SSH keys:** Paste the contents of `~/.ssh/id_oracle.pub`.
-7. **Boot volume:** Click **Specify a custom boot volume size** > set to
+4. **Networking:** Leave defaults — OCI creates a VCN with public subnet and
+   internet gateway automatically. Ensure **Assign a public IPv4 address**
+   is checked.
+5. **SSH keys:** Paste the contents of `~/.ssh/id_oracle.pub`.
+6. **Boot volume:** Click **Specify a custom boot volume size** > set to
    **200 GB** (Always Free maximum).
-8. Click **Create**.
+7. Click **Create**.
 
 #### Capacity issues
 
@@ -80,7 +103,7 @@ ARM instances are frequently out of capacity in popular regions. If you get an
           --compartment-id "YOUR_COMPARTMENT_OCID" \
           --shape "VM.Standard.A1.Flex" \
           --shape-config '{"ocpus":4,"memoryInGBs":24}' \
-          --image-id "YOUR_UBUNTU_IMAGE_OCID" \
+          --image-id "YOUR_DEBIAN_IMAGE_OCID" \
           --subnet-id "YOUR_SUBNET_OCID" \
           --ssh-authorized-keys-file ~/.ssh/id_oracle.pub \
           --boot-volume-size-in-gbs 200 \
@@ -96,9 +119,9 @@ Once the instance shows **Running**, find the public IP on the instance details
 page:
 
 ```bash
-ssh -i ~/.ssh/id_oracle ubuntu@<PUBLIC_IP>
+ssh -i ~/.ssh/id_oracle debian@<PUBLIC_IP>
 uname -m        # aarch64
-lsb_release -a  # Ubuntu 24.04
+cat /etc/os-release  # Debian 13 (Trixie)
 free -h         # ~24 GB
 nproc           # 4
 df -h /         # ~200 GB
@@ -106,26 +129,28 @@ df -h /         # ~200 GB
 
 #### OS firewall (Oracle-specific)
 
-Ubuntu on OCI ships with iptables rules that block ports 80/443 even after
-opening them in the security list. Open them at the OS level:
+The Debian cloud image may ship with iptables rules that block ports 80/443
+even after opening them in the security list. Check and open if needed:
 
 ```bash
+sudo iptables -L INPUT -n --line-numbers  # check current rules
 sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT
 sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT
+sudo apt install -y iptables-persistent
 sudo netfilter-persistent save
 ```
 
 #### Create the application user
 
-The default user is `ubuntu`. Create the `tpw` user before proceeding:
+The default user is `debian`. Create the `tpw` user before proceeding:
 
 ```bash
 sudo adduser tpw
 sudo -u tpw mkdir -p /home/tpw/.ssh
 ```
 
-Then continue with **section 1** below. All `apt` commands work identically
-on Ubuntu 24.04.
+Then continue with **section 1** below — the setup is identical to Hetzner
+since both run Debian 13.
 
 #### Oracle Cloud gotchas
 
