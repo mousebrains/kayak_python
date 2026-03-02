@@ -1,3 +1,6 @@
+# Legacy system dumps to initialize this system.
+legacy
+
 obj
 *.o
 *.d

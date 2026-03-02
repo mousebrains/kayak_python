@@ -164,23 +164,23 @@ since both run Debian 13.
 
 ## 1. System packages
 
-Debian 13 ships Python 3.12 and PHP 8.3.
+Debian 13 ships Python 3.12 and PHP 8.4.
 
 ```bash
 sudo apt update
-sudo apt install -y nginx php8.3-fpm php8.3-sqlite3 python3 python3-venv certbot
+sudo apt install -y nginx php8.4-fpm php8.4-sqlite3 python3 python3-venv certbot
 ```
 
 Verify the PHP-FPM socket path:
 
 ```bash
-ls /run/php/php8.3-fpm.sock
+ls /run/php/php8.4-fpm.sock
 ```
 
 The nginx config expects `/run/php/php-fpm.sock`. Create a symlink so it works across PHP upgrades:
 
 ```bash
-sudo ln -sf /run/php/php8.3-fpm.sock /run/php/php-fpm.sock
+sudo ln -sf /run/php/php8.4-fpm.sock /run/php/php-fpm.sock
 ```
 
 ## 2. Application user and code
