@@ -57,6 +57,23 @@ cp "$DIR/50-unattended-upgrades-local" /etc/apt/apt.conf.d/50-unattended-upgrade
 echo "  installed /etc/apt/apt.conf.d/50-unattended-upgrades-local"
 
 echo ""
+echo "=== msmtp (outgoing mail) ==="
+apt-get install -y msmtp msmtp-mta mailutils
+echo "  packages installed"
+cp "$DIR/msmtprc" /etc/msmtprc
+chown root:msmtp /etc/msmtprc
+chmod 640 /etc/msmtprc
+echo "  installed /etc/msmtprc (640 root:msmtp)"
+cp "$DIR/msmtp-aliases" /etc/msmtp-aliases
+chmod 644 /etc/msmtp-aliases
+echo "  installed /etc/msmtp-aliases"
+if grep -q 'APP_PASSWORD_HERE' /etc/msmtprc; then
+    echo ""
+    echo "  WARNING: /etc/msmtprc still contains APP_PASSWORD_HERE"
+    echo "  Edit it now with: sudo nano /etc/msmtprc"
+fi
+
+echo ""
 echo "=== DB file permissions ==="
 chmod 660 /home/pat/DB/kayak.db
 echo "  kayak.db set to 660"
@@ -92,6 +109,15 @@ grep "Automatic-Reboot" /etc/apt/apt.conf.d/50-unattended-upgrades-local | sed '
 echo ""
 echo "DB permissions:"
 ls -l /home/pat/DB/kayak.db | sed 's/^/  /'
+echo ""
+echo "msmtp:"
+ls -l /etc/msmtprc | sed 's/^/  /'
+if grep -q 'APP_PASSWORD_HERE' /etc/msmtprc; then
+    echo "  PASSWORD NOT SET — edit /etc/msmtprc before sending mail"
+else
+    echo "  Sending test email..."
+    echo "Mail from $(hostname) is working" | mail -s "Test from $(hostname)" pat.kayak@gmail.com && echo "  test email sent" || echo "  test email failed (check: journalctl -t msmtp)"
+fi
 
 echo ""
 echo "Done. IMPORTANT: Test SSH in a NEW terminal before closing this session!"

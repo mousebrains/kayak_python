@@ -409,6 +409,86 @@ done
 REMOTE
 ```
 
+## Local Development Setup
+
+For development on a non-production machine (e.g., Hetzner dev VPS). Uses separated
+paths to keep the venv, database, and document root outside the git repo.
+
+### Paths
+
+| Component | Path |
+|---|---|
+| Git repo | `/home/pat/kayak` |
+| Virtual environment | `/home/pat/.venv` |
+| Configuration | `~/.config/kayak/.env` |
+| SQLite database | `/home/pat/DB/kayak.db` |
+| Document root | `/home/pat/public_html` → symlink to `kayak/public_html` |
+
+### Setup steps
+
+```bash
+# 1. System packages (Debian 13)
+sudo apt install -y nginx php8.4-fpm php8.4-sqlite3 python3 python3-venv sqlite3 acl
+
+# 2. Virtual environment
+python3 -m venv /home/pat/.venv
+/home/pat/.venv/bin/pip install -e "/home/pat/kayak[dev]"
+
+# 3. Directories
+mkdir -p /home/pat/.config/kayak /home/pat/DB
+ln -s /home/pat/kayak/public_html /home/pat/public_html
+
+# 4. Environment file (~/.config/kayak/.env)
+cat > /home/pat/.config/kayak/.env <<'EOF'
+SQLITE_PATH=/home/pat/DB/kayak.db
+DATABASE_URL=sqlite:////home/pat/DB/kayak.db
+OUTPUT_DIR=/home/pat/public_html
+EDIT_USER=admin
+EDIT_PASSWORD=changeme
+EOF
+
+# 5. ACLs for nginx (www-data)
+setfacl -m u:www-data:x /home/pat                         # traverse only
+setfacl -m u:www-data:x /home/pat/kayak                   # traverse only
+setfacl -R -m u:www-data:rX /home/pat/kayak/public_html   # read static files
+setfacl -R -d -m u:www-data:rX /home/pat/kayak/public_html  # default for new files
+setfacl -R -m u:www-data:rX /home/pat/kayak/php            # read PHP files
+setfacl -m u:www-data:rwx /home/pat/DB                     # DB read/write
+setfacl -d -m u:www-data:rw /home/pat/DB                   # default for new DB files
+
+# 6. Initialize and run
+/home/pat/.venv/bin/levels init-db       # schema + seed states/sources/fetch_urls
+/home/pat/.venv/bin/levels pipeline      # fetch live data, generate HTML
+```
+
+### Importing gauges and sections
+
+`init-db` creates the schema and seeds states, sources, and fetch URLs from
+`data/sources.yaml`. **Gauges and sections** must be imported separately from a
+legacy MySQL dump:
+
+```bash
+/home/pat/.venv/bin/python scripts/import_from_dump.py \
+    --dump /path/to/current.sql \
+    --db /home/pat/DB/kayak.db \
+    --skip-timeseries           # metadata only; observations come from the pipeline
+```
+
+Alternatively, observation CSV dumps in `legacy/` can be loaded with:
+
+```bash
+python3 scripts/load_observations_sqlite.py \
+    --db /home/pat/DB/kayak.db \
+    --observations legacy/observation.csv \
+    --latest legacy/latest_observation.csv
+```
+
+### config.py .env resolution
+
+`kayak.config` checks `~/.config/kayak/.env` first, then falls back to the
+default `load_dotenv()` search (current directory upward). PHP gets `SQLITE_PATH`
+from nginx `fastcgi_param`, not from the `.env` file.
+
 ## Troubleshooting
 
 **PHP returns 502 Bad Gateway:**

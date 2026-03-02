@@ -6,6 +6,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Kayak aggregates real-time river level, flow, gage, and temperature data from government agencies (USGS, NOAA, USACE, USBR, IDWR, etc.) for the Willamette Kayak and Canoe Club (levels.wkcc.org). The project has been rewritten from C++ CGI into a Python package (`kayak`) with a PHP web layer. The legacy C++ code remains in `src/*.C`/`src/*.H` but is no longer built.
 
+## Local Development Setup
+
+The development environment uses these paths (configured in `~/.config/kayak/.env`):
+
+| Component | Path |
+|---|---|
+| Virtual environment | `/home/pat/.venv` |
+| Configuration | `~/.config/kayak/.env` |
+| SQLite database | `/home/pat/DB/kayak.db` |
+| Document root | `/home/pat/public_html` → symlink to `kayak/public_html` |
+
+`config.py` checks `~/.config/kayak/.env` before falling back to the default `load_dotenv()` search. PHP gets `SQLITE_PATH` from nginx `fastcgi_param`.
+
+POSIX ACLs grant `www-data` access: execute-only on `/home/pat` and `/home/pat/kayak` (traverse), read on `public_html` and `php/` (with default ACLs for new files), read-write on `/home/pat/DB`.
+
+### Quick start
+
+```bash
+python3 -m venv /home/pat/.venv
+/home/pat/.venv/bin/pip install -e ".[dev]"
+/home/pat/.venv/bin/levels init-db       # Creates schema, seeds states/sources/fetch_urls
+/home/pat/.venv/bin/levels pipeline      # Fetch live data and generate HTML
+```
+
+`init-db` seeds states, sources, and fetch URLs from `data/sources.yaml`. Gauges and sections must be imported separately from the legacy MySQL dump (see Migration & Sync Scripts below).
+
 ## Build and Development Commands
 
 ```bash
@@ -87,7 +113,7 @@ Each subcommand module in `src/kayak/cli/` exposes `addArgs(subparsers)` and set
 ## Key Conventions
 
 - **Source layout:** Python package lives under `src/kayak/`; pytest config sets `pythonpath = ["src"]`
-- **Configuration:** All settings via env vars or `.env` file; `kayak.config` uses `python-dotenv`; `kayak.config_data` uses `@lru_cache` for YAML files in `data/`
+- **Configuration:** All settings via env vars or `.env` file; `kayak.config` checks `~/.config/kayak/.env` first, then falls back to default `load_dotenv()` search; `kayak.config_data` uses `@lru_cache` for YAML files in `data/`
 - **Database access:** `kayak.db.engine.get_session(url)` provides sessions; CLI commands manage session lifecycle
 - **Upsert pattern:** `store_observation()` uses SQLite `ON CONFLICT DO UPDATE` / MySQL `ON DUPLICATE KEY UPDATE`
 - **Test isolation:** Every test gets a fresh in-memory SQLite engine and a transactional session that rolls back
@@ -100,6 +126,7 @@ Scripts in `scripts/` handle data migration between the legacy MySQL databases a
 
 | Script | Purpose |
 |---|---|
+| `import_from_dump.py` | Import production MySQL dump (`levels_todo`) into local SQLite. Populates gauges, sections, ratings, and optionally observations. Required for local dev setup after `init-db`. |
 | `migrate_legacy_to_wkcclevels.py` | Full one-time migration from legacy `levels_todo`/`levels_data`/`levels_page` → `wkcclevels` MySQL. Drops and recreates all 18 tables. |
 | `sync_observations.py` | Incremental sync from `levels_data` → `wkcclevels`. Uses high-water marks (`MAX(observed_at)` per source/data_type) to fetch only new rows. Runs on cron (twice daily at 6:00/18:00). |
 | `sync_legacy_observations.py` | Sync legacy observations into local SQLite or MySQL. Supports `--days N` window. Used for dev setup. |

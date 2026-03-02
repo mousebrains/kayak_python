@@ -9,7 +9,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
+_config_env = Path.home() / ".config" / "kayak" / ".env"
+load_dotenv(_config_env if _config_env.exists() else None)
 
 # Base paths
 BASE_DIR = Path(__file__).resolve().parent.parent.parent

@@ -29,9 +29,6 @@ echo "Opening SSH tunnel (local :$LOCAL_PORT → $SSH_REMOTE)..."
 ssh -f -N -M -S "$SOCK" \
     -L "$LOCAL_PORT:$SSH_REMOTE" \
     -o ExitOnForwardFailure=yes \
-    -o BatchMode=yes \
-    -o ServerAliveInterval=30 \
-    -o ServerAliveCountMax=3 \
     "$SSH_USER"
 
 # Wait for the tunnel to be ready
