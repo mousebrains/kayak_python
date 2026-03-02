@@ -1,3 +1,0 @@
-Options ExecCGI
-Options +FollowSymLinks
-SetHandler cgi-script

@@ -1,0 +1,86 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kayak"
+version = "0.1.0"
+description = "River level data aggregation from government agencies"
+requires-python = ">=3.11"
+dependencies = [
+    "SQLAlchemy>=2.0",
+    "alembic>=1.13",
+    "requests>=2.31",
+    "lxml>=5.0",
+    "beautifulsoup4>=4.12",
+    "python-dotenv>=1.0",
+    "PyYAML>=6.0",
+    "aiohttp>=3.9",
+]
+
+[project.optional-dependencies]
+mysql = ["PyMySQL>=1.1", "cryptography>=42.0"]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.1",
+    "ruff>=0.5",
+    "mypy>=1.10",
+]
+
+[project.scripts]
+levels = "kayak.cli.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kayak"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra --strict-markers"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks integration tests",
+]
+
+[tool.coverage.run]
+source = ["kayak"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.",
+    "if TYPE_CHECKING:",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["E501", "SIM108"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["kayak"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+check_untyped_defs = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "kayak.db.models"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "kayak.utils.*"
+disallow_untyped_defs = true
+
+[tool.hatch.envs.default]
+features = ["dev"]

@@ -1,0 +1,136 @@
+# Builder column definitions for output page generation.
+# Converted from init_db.py _seed_builder_columns().
+#
+# use: which output formats include this column
+#   f=file(csv), h=html, c=csv, t=text
+# type: column rendering type
+#   noop=internal-only, status/name/text/date/flow/gage/temp=visible
+
+columns:
+  - sort_key: 0
+    use: "f"
+    type: "noop"
+    field: "hash_value"
+    length: 0
+    name_text: ""
+    name_html: ""
+
+  - sort_key: 1
+    use: "f"
+    type: "noop"
+    field: "db_name"
+    length: 0
+    name_text: ""
+    name_html: ""
+
+  - sort_key: 2
+    use: "f"
+    type: "noop"
+    field: "state"
+    length: 0
+    name_text: ""
+    name_html: ""
+
+  - sort_key: 3
+    use: "f"
+    type: "noop"
+    field: "calc_expr"
+    length: 0
+    name_text: ""
+    name_html: ""
+
+  - sort_key: 4
+    use: "f"
+    type: "noop"
+    field: "low_flow"
+    length: 0
+    name_text: ""
+    name_html: ""
+
+  - sort_key: 5
+    use: "f"
+    type: "noop"
+    field: "high_flow"
+    length: 0
+    name_text: ""
+    name_html: ""
+
+  - sort_key: 6
+    use: "f"
+    type: "noop"
+    field: "class_flow"
+    length: 0
+    name_text: ""
+    name_html: ""
+
+  - sort_key: 100
+    use: "hct"
+    type: "status"
+    field: "status"
+    length: 4
+    name_text: "Status"
+    name_html: "Status"
+
+  - sort_key: 200
+    use: "fhct"
+    type: "name"
+    field: "display_name"
+    length: 20
+    name_text: "Name"
+    name_html: "Name"
+
+  - sort_key: 300
+    use: "fhct"
+    type: "text"
+    field: "gauge_location"
+    length: 10
+    name_text: "Location"
+    name_html: "Location"
+
+  - sort_key: 400
+    use: "hct"
+    type: "date"
+    field: "time"
+    length: 14
+    name_text: "Date"
+    name_html: "Date"
+
+  - sort_key: 500
+    use: "hct"
+    type: "flow"
+    field: "flow"
+    length: 7
+    name_text: "Flow"
+    name_html: '<a href="#Units">Flow<br />CFS</a>'
+
+  - sort_key: 600
+    use: "hct"
+    type: "gage"
+    field: "gage"
+    length: 7
+    name_text: "Height"
+    name_html: '<a href="#Units">Height<br />Feet</a>'
+
+  - sort_key: 700
+    use: "hct"
+    type: "temp"
+    field: "temperature"
+    length: 4
+    name_text: "Temp"
+    name_html: '<a href="#Units">Temp<br />F</a>'
+
+  - sort_key: 800
+    use: "fhct"
+    type: "text"
+    field: "drainage"
+    length: 10
+    name_text: "Drainage"
+    name_html: "Drainage"
+
+  - sort_key: 900
+    use: "fhct"
+    type: "text"
+    field: "class"
+    length: 7
+    name_text: "Class"
+    name_html: "Class"

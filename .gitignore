@@ -2,3 +2,21 @@ obj
 *.o
 *.d
 tpw.master.2*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+*.db
+.env
+.pytest_cache/
+.coverage
+
+# Generated build output (rebuilt by `levels build`)
+public_html/*.html
+public_html/*.csv
+public_html/*.text

@@ -1,0 +1,10 @@
+[Unit]
+Description=Kayak SQLite database backup
+
+[Service]
+Type=oneshot
+User=tpw
+WorkingDirectory=/home/tpw/kayak
+EnvironmentFile=/home/tpw/kayak/.env
+ExecStart=/home/tpw/kayak/systemd/kayak-backup.sh
+Nice=15

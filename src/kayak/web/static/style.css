@@ -1,0 +1,139 @@
+/* Kayak river levels — mobile-first responsive stylesheet */
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f5f7fa;color:#333}
+a{color:#2060A0;text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* Header */
+header{background:#2060A0;color:#fff;padding:.5rem 1rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+header h1{font-size:1.1rem;white-space:nowrap}
+header h1 a{color:#fff}
+header nav{display:flex;flex-wrap:wrap;gap:.3rem}
+header nav a{color:rgba(255,255,255,.85);font-size:.8rem;padding:2px 6px;border-radius:3px}
+header nav a:hover{background:rgba(255,255,255,.15);text-decoration:none}
+header nav a.active{background:rgba(255,255,255,.25);color:#fff}
+
+/* Main */
+main{padding:.5rem}
+@media(min-width:1024px){main{max-width:1200px;margin:0 auto;padding:1rem}}
+
+/* Footer */
+footer{text-align:center;padding:.5rem;color:#888;font-size:.7rem}
+
+/* Table — desktop default */
+table.levels{width:100%;border-collapse:collapse;font-size:.85rem}
+table.levels th{background:#2060A0;color:#fff;padding:4px 8px;text-align:left;white-space:nowrap}
+table.levels th a{color:#fff}
+table.levels td{padding:3px 8px;border-bottom:1px solid #ddd;white-space:nowrap}
+table.levels tr:nth-child(even){background:#f0f4f8}
+table.levels tr:hover{background:#e0e8f0}
+table.levels a{color:#2060A0}
+
+/* Sparkline cell */
+.spark{display:inline-block;vertical-align:middle;margin-left:4px}
+
+/* Status indicators */
+.rising{color:#c00}
+.falling{color:#070}
+.stable{color:#888}
+
+/* Level indicators — override table.levels a and visited */
+table.levels a.level-low,table.levels a.level-low:visited{color:#c00}
+table.levels a.level-okay,table.levels a.level-okay:visited{color:#0a0}
+table.levels a.level-high,table.levels a.level-high:visited{color:#e80}
+
+/* Stale data */
+tr.stale td{color:#aaa;font-style:italic}
+
+/* Estimated marker */
+.est{color:#c00;font-size:.75rem}
+
+/* Secondary columns (drainage, class) — hidden on small screens */
+@media(max-width:639px){
+  table.levels thead{display:none}
+  table.levels,table.levels tbody,table.levels tr,table.levels td{display:block}
+  table.levels tr{padding:.5rem;margin-bottom:1px;border-bottom:2px solid #2060A0;background:#fff}
+  table.levels tr:nth-child(even){background:#fff}
+  table.levels td{padding:2px 0;border:none;white-space:normal}
+  table.levels td:before{content:attr(data-label);font-weight:700;font-size:.75rem;color:#666;margin-right:.5rem}
+  table.levels td.td-name{font-size:1rem;font-weight:700;padding-bottom:4px}
+  table.levels td.td-name:before{display:none}
+  table.levels td.secondary{display:none}
+}
+
+/* Tablet — show table but hide secondary */
+@media(min-width:640px) and (max-width:1023px){
+  table.levels .secondary{display:none}
+}
+
+/* Reach directory */
+.reach-dir{margin-top:1rem}
+.reach-dir summary{cursor:pointer;font-weight:700;font-size:.9rem;color:#2060A0;padding:4px 0}
+.reach-list{column-count:2;column-gap:1rem;list-style:none;padding:.5rem 0;font-size:.85rem}
+.reach-list li{padding:2px 0;break-inside:avoid}
+@media(min-width:640px){.reach-list{column-count:3}}
+@media(min-width:1024px){.reach-list{column-count:4}}
+
+/* Description page */
+.desc-table{border-collapse:collapse;width:100%}
+.desc-table td{padding:4px 8px;border-bottom:1px solid #eee;vertical-align:top}
+.desc-table td:first-child{font-weight:700;white-space:nowrap;width:1%;color:#555}
+
+/* Edit form */
+.edit-form label{display:block;margin:.5rem 0 .2rem;font-weight:700;font-size:.85rem}
+.edit-form input[type=text],.edit-form textarea{width:100%;max-width:600px;padding:4px 8px;border:1px solid #ccc;border-radius:3px;font-size:.85rem}
+.edit-form textarea{height:80px}
+.edit-form button{background:#2060A0;color:#fff;border:none;padding:8px 24px;border-radius:3px;cursor:pointer;margin-top:.5rem}
+
+/* View table */
+.view-table{border-collapse:collapse}
+.view-table th,.view-table td{padding:4px 12px;border:1px solid #ddd;text-align:left}
+.view-table th{background:#2060A0;color:#fff}
+
+/* Landing page state grid */
+.state-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:.5rem;padding:.5rem 0}
+.state-grid a.state-card{display:block;padding:.75rem 1rem;background:#fff;border:1px solid #ddd;border-radius:4px;text-align:center;font-weight:600;color:#2060A0;transition:background .15s,border-color .15s}
+.state-grid a.state-card:hover{background:#e8f0fa;border-color:#2060A0;text-decoration:none}
+@media(min-width:480px){.state-grid{grid-template-columns:repeat(3,1fr)}}
+@media(min-width:768px){.state-grid{grid-template-columns:repeat(4,1fr)}}
+
+/* Readings table on description page */
+.readings-table{border-collapse:collapse;width:100%;margin:.5rem 0}
+.readings-table th,.readings-table td{padding:4px 10px;border:1px solid #ddd;text-align:left}
+.readings-table th{background:#2060A0;color:#fff;font-size:.8rem}
+.readings-table td{font-size:.85rem}
+
+/* Plot container */
+.plot-container{text-align:center;padding:1rem 0}
+.plot-container svg{max-width:100%;height:auto}
+
+/* Picker — state pills */
+.picker-states{display:flex;flex-wrap:wrap;gap:.4rem;padding:.5rem 0}
+.picker-states label{display:block;padding:4px 12px;background:#fff;border:1px solid #ccc;border-radius:16px;font-size:.8rem;cursor:pointer;user-select:none;transition:background .15s,border-color .15s}
+.picker-states input{display:none}
+.picker-states input:checked+span{color:#fff}
+.picker-states label:has(input:checked){background:#2060A0;border-color:#2060A0;color:#fff}
+
+/* Picker — search */
+.picker-search{width:100%;max-width:400px;padding:6px 10px;border:1px solid #ccc;border-radius:3px;font-size:.85rem;margin:.5rem 0}
+
+/* Picker — section table */
+.picker-sections{width:100%;border-collapse:collapse;font-size:.85rem}
+.picker-sections th{background:#2060A0;color:#fff;padding:4px 8px;text-align:left;white-space:nowrap}
+.picker-sections td{padding:3px 8px;border-bottom:1px solid #ddd;white-space:nowrap}
+.picker-sections tr:nth-child(even){background:#f0f4f8}
+.picker-sections tr:hover{background:#e0e8f0}
+.picker-sections input[type=checkbox]{margin:0}
+
+/* Picker — sticky action bar */
+.picker-actions{position:sticky;bottom:0;background:#fff;border-top:2px solid #2060A0;padding:.5rem 1rem;display:flex;align-items:center;gap:1rem;font-size:.85rem;z-index:10}
+.picker-actions .count{font-weight:700}
+.picker-actions a,.picker-actions button{display:inline-block;padding:6px 16px;background:#2060A0;color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:.8rem;text-decoration:none}
+.picker-actions a:hover,.picker-actions button:hover{background:#184a80;text-decoration:none}
+.picker-actions a.disabled{opacity:.4;pointer-events:none}
+.picker-actions .copied{color:#070;font-size:.75rem}
+
+/* Picker responsive */
+@media(max-width:639px){
+  .picker-sections .col-location,.picker-sections .col-flow,.picker-sections .col-gage{display:none}
+}

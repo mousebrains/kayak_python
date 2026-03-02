@@ -1,0 +1,312 @@
+"""Tests for data_db observation storage."""
+
+from datetime import UTC, datetime, timedelta
+
+from kayak.db.data_db import (
+    get_all_latest,
+    get_bulk_observations,
+    get_latest,
+    get_observations,
+    get_rating_table,
+    merge_sources,
+    put_rating_table,
+    store_observation,
+    store_observations,
+    update_latest,
+)
+from kayak.db.models import DataType, FetchUrl, Rating, Source
+
+
+def _make_source(session, name="src1"):
+    """Helper to create a Source with FetchUrl."""
+    fu = FetchUrl(url=f"https://example.com/{name}", parser="usgs", is_active=True)
+    session.add(fu)
+    session.flush()
+    src = Source(name=name, fetch_url_id=fu.id)
+    session.add(src)
+    session.flush()
+    return src
+
+
+def test_store_and_retrieve(session):
+    src = _make_source(session)
+    now = datetime.now(UTC)
+    assert store_observation(session, src.id, DataType.flow, now, 1500.0)
+    session.flush()
+
+    rows = get_observations(session, src.id, DataType.flow)
+    assert len(rows) == 1
+    assert rows[0].value == 1500.0
+
+
+def test_reject_future_timestamp(session):
+    src = _make_source(session)
+    future = datetime.now(UTC) + timedelta(hours=2)
+    assert not store_observation(session, src.id, DataType.flow, future, 100.0)
+
+
+def test_reject_negative_flow(session):
+    src = _make_source(session)
+    now = datetime.now(UTC)
+    assert not store_observation(session, src.id, DataType.flow, now, -10.0)
+
+
+def test_negative_gauge_ok(session):
+    """Negative gauge values should be accepted (unlike flow)."""
+    src = _make_source(session)
+    now = datetime.now(UTC)
+    assert store_observation(session, src.id, DataType.gauge, now, -0.5)
+
+
+def test_update_latest(session):
+    src = _make_source(session)
+    now = datetime.now(UTC)
+    old = now - timedelta(hours=2)
+
+    store_observation(session, src.id, DataType.flow, old, 100.0)
+    store_observation(session, src.id, DataType.flow, now, 200.0)
+    session.flush()
+
+    update_latest(session, src.id, DataType.flow)
+    session.flush()
+
+    latest = get_latest(session, src.id, DataType.flow)
+    assert latest is not None
+    assert latest.value == 200.0
+    assert latest.prev_value == 100.0
+    assert latest.delta_per_hour is not None
+    assert latest.delta_per_hour > 0  # Rising
+
+
+def test_rating_table(session):
+    rating = Rating(url="https://example.com/rating")
+    session.add(rating)
+    session.flush()
+
+    entries = [(1.0, 100.0), (2.0, 400.0), (3.0, 900.0)]
+    put_rating_table(session, rating.id, entries)
+    session.flush()
+
+    table = get_rating_table(session, rating.id)
+    assert len(table) == 3
+    assert table[0] == (1.0, 100.0)
+    assert table[2] == (3.0, 900.0)
+
+
+def test_merge_sources(session):
+    src1 = _make_source(session, "src1")
+    src2 = _make_source(session, "src2")
+    merged = _make_source(session, "merged")
+
+    now = datetime.now(UTC)
+    store_observation(session, src1.id, DataType.flow, now, 100.0)
+    store_observation(
+        session, src2.id, DataType.flow, now - timedelta(hours=1), 200.0
+    )
+    session.flush()
+
+    merge_sources(
+        session, merged.id, [src1.id, src2.id], DataType.flow,
+        since=now - timedelta(days=1),
+    )
+    session.flush()
+
+    merged_obs = get_observations(
+        session, merged.id, DataType.flow,
+        since=now - timedelta(days=1),
+    )
+    assert len(merged_obs) == 2
+
+
+def test_store_observation_string_type(session):
+    """DataType can be passed as string."""
+    src = _make_source(session)
+    now = datetime.now(UTC)
+    assert store_observation(session, src.id, "flow", now, 500.0)
+    session.flush()
+
+    rows = get_observations(session, src.id, DataType.flow)
+    assert len(rows) == 1
+
+
+def test_store_observation_upsert(session):
+    """Duplicate source_id/observed_at/data_type should update value."""
+    src = _make_source(session)
+    now = datetime.now(UTC)
+    store_observation(session, src.id, DataType.flow, now, 100.0)
+    session.flush()
+
+    store_observation(session, src.id, DataType.flow, now, 200.0)
+    session.flush()
+
+    rows = get_observations(session, src.id, DataType.flow)
+    assert len(rows) == 1
+    assert rows[0].value == 200.0
+
+
+def test_merge_sources_median(session):
+    """When two sources have data at the same timestamp, merge uses the median."""
+    src1 = _make_source(session, "med_src1")
+    src2 = _make_source(session, "med_src2")
+    merged = _make_source(session, "med_merged")
+
+    now = datetime.now(UTC)
+    # Both sources report at the same time with different values
+    store_observation(session, src1.id, DataType.flow, now, 100.0)
+    store_observation(session, src2.id, DataType.flow, now, 200.0)
+    session.flush()
+
+    merge_sources(
+        session, merged.id, [src1.id, src2.id], DataType.flow,
+        since=now - timedelta(days=1),
+    )
+    session.flush()
+
+    merged_obs = get_observations(
+        session, merged.id, DataType.flow,
+        since=now - timedelta(days=1),
+    )
+    assert len(merged_obs) == 1
+    # median of [100, 200] = 150
+    assert merged_obs[0].value == 150.0
+
+
+def test_merge_sources_median_three(session):
+    """Three sources at the same timestamp — median picks the middle value."""
+    src1 = _make_source(session, "m3_src1")
+    src2 = _make_source(session, "m3_src2")
+    src3 = _make_source(session, "m3_src3")
+    merged = _make_source(session, "m3_merged")
+
+    now = datetime.now(UTC)
+    store_observation(session, src1.id, DataType.flow, now, 100.0)
+    store_observation(session, src2.id, DataType.flow, now, 300.0)
+    store_observation(session, src3.id, DataType.flow, now, 200.0)
+    session.flush()
+
+    merge_sources(
+        session, merged.id, [src1.id, src2.id, src3.id], DataType.flow,
+        since=now - timedelta(days=1),
+    )
+    session.flush()
+
+    merged_obs = get_observations(
+        session, merged.id, DataType.flow,
+        since=now - timedelta(days=1),
+    )
+    assert len(merged_obs) == 1
+    assert merged_obs[0].value == 200.0
+
+
+# ---------------------------------------------------------------------------
+# Batch store_observations
+# ---------------------------------------------------------------------------
+
+
+def test_store_observations_batch(session):
+    """Multiple rows stored in one call."""
+    src = _make_source(session)
+    now = datetime.now(UTC)
+    rows = [
+        {"source_id": src.id, "data_type": DataType.flow, "observed_at": now - timedelta(hours=i), "value": 100.0 + i}
+        for i in range(5)
+    ]
+    count = store_observations(session, rows)
+    session.flush()
+    assert count == 5
+    obs = get_observations(session, src.id, DataType.flow)
+    assert len(obs) == 5
+
+
+def test_store_observations_upsert(session):
+    """Batch with conflicts updates existing rows."""
+    src = _make_source(session)
+    now = datetime.now(UTC)
+    store_observation(session, src.id, DataType.flow, now, 100.0)
+    session.flush()
+
+    rows = [
+        {"source_id": src.id, "data_type": DataType.flow, "observed_at": now, "value": 200.0},
+        {"source_id": src.id, "data_type": DataType.flow, "observed_at": now - timedelta(hours=1), "value": 300.0},
+    ]
+    count = store_observations(session, rows)
+    session.flush()
+    assert count == 2
+
+    obs = get_observations(session, src.id, DataType.flow)
+    assert len(obs) == 2
+    # Most recent should be the updated value
+    assert obs[0].value == 200.0
+
+
+def test_store_observations_validation(session):
+    """Invalid rows rejected, valid rows stored."""
+    src = _make_source(session)
+    now = datetime.now(UTC)
+    future = now + timedelta(hours=2)
+    rows = [
+        {"source_id": src.id, "data_type": DataType.flow, "observed_at": now, "value": 100.0},
+        {"source_id": src.id, "data_type": DataType.flow, "observed_at": future, "value": 200.0},  # future
+        {"source_id": src.id, "data_type": DataType.flow, "observed_at": now - timedelta(hours=1), "value": -10.0},  # negative flow
+    ]
+    count = store_observations(session, rows)
+    session.flush()
+    assert count == 1
+
+    obs = get_observations(session, src.id, DataType.flow)
+    assert len(obs) == 1
+    assert obs[0].value == 100.0
+
+
+def test_store_observations_empty(session):
+    """Empty list returns 0."""
+    assert store_observations(session, []) == 0
+
+
+# ---------------------------------------------------------------------------
+# Bulk query functions
+# ---------------------------------------------------------------------------
+
+
+def test_get_all_latest(session):
+    """get_all_latest returns dict keyed by (source_id, data_type)."""
+    src1 = _make_source(session, "lat1")
+    src2 = _make_source(session, "lat2")
+    now = datetime.now(UTC)
+
+    store_observation(session, src1.id, DataType.flow, now, 100.0)
+    store_observation(session, src2.id, DataType.gauge, now, 5.0)
+    session.flush()
+    update_latest(session, src1.id, DataType.flow)
+    update_latest(session, src2.id, DataType.gauge)
+    session.flush()
+
+    result = get_all_latest(session, [src1.id, src2.id])
+    assert (src1.id, DataType.flow) in result
+    assert result[(src1.id, DataType.flow)].value == 100.0
+    assert (src2.id, DataType.gauge) in result
+    assert result[(src2.id, DataType.gauge)].value == 5.0
+
+
+def test_get_all_latest_empty(session):
+    """get_all_latest with empty list returns empty dict."""
+    assert get_all_latest(session, []) == {}
+
+
+def test_get_bulk_observations(session):
+    """get_bulk_observations groups by source_id."""
+    src1 = _make_source(session, "bulk1")
+    src2 = _make_source(session, "bulk2")
+    now = datetime.now(UTC)
+
+    for i in range(3):
+        store_observation(session, src1.id, DataType.flow, now - timedelta(hours=i), 100.0 + i)
+        store_observation(session, src2.id, DataType.flow, now - timedelta(hours=i), 200.0 + i)
+    session.flush()
+
+    since = now - timedelta(hours=5)
+    result = get_bulk_observations(session, [src1.id, src2.id], DataType.flow, since)
+    assert src1.id in result
+    assert src2.id in result
+    assert len(result[src1.id]) == 3
+    assert len(result[src2.id]) == 3
