@@ -52,6 +52,15 @@ class TestSafeEval:
         with pytest.raises(ValueError):
             _safe_eval("x + 1")
 
+    def test_round_no_decimals(self):
+        assert _safe_eval("round(3.7)") == 4.0
+
+    def test_round_with_decimals(self):
+        assert _safe_eval("round(3.14159, 2)") == 3.14
+
+    def test_round_nested(self):
+        assert _safe_eval("round(max(0, 0.25 * 1110.0))") == 278.0
+
     def test_rejects_unsupported_function(self):
         with pytest.raises(ValueError):
             _safe_eval("abs(-5)")

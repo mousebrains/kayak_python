@@ -30,7 +30,13 @@ _UNARYOPS = {
     ast.USub: operator.neg,
 }
 
-_SAFE_FUNCS = {"max": max, "min": min}
+def _safe_round(value, ndigits=None):
+    """round() wrapper that accepts float ndigits from the evaluator."""
+    if ndigits is not None:
+        ndigits = int(ndigits)
+    return round(value, ndigits)
+
+_SAFE_FUNCS = {"max": max, "min": min, "round": _safe_round}
 
 
 def _safe_eval(expr: str) -> float:
