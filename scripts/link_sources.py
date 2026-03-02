@@ -82,6 +82,37 @@ def link_sources(db_path):
                 cur.execute("UPDATE source SET fetch_url_id = ? WHERE id = ?", (fid, src[0]))
                 linked += 1
 
+    # USGS Water Services: remap sources from old per-state URLs to new ones.
+    # Old: https://waterdata.usgs.gov/az/nwis/current/?format=rdb
+    # New: https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=az&...
+    # Build mapping: state code -> new fetch_url id
+    new_usgs = {}
+    for fid, url, parser in fetch_urls:
+        if "waterservices.usgs.gov" not in url:
+            continue
+        m = re.search(r"stateCd=([a-z]{2})", url)
+        if m:
+            new_usgs[m.group(1)] = fid
+
+    if new_usgs:
+        # Find old USGS fetch_urls and remap their sources
+        old_usgs = {}
+        for fid, url, parser in fetch_urls:
+            if "waterdata.usgs.gov" not in url or parser != "usgs":
+                continue
+            m = re.search(r"waterdata\.usgs\.gov/([a-z]{2})/", url)
+            if m:
+                old_usgs[fid] = m.group(1)
+
+        for old_fid, state_cd in old_usgs.items():
+            new_fid = new_usgs.get(state_cd)
+            if new_fid:
+                count = cur.execute(
+                    "UPDATE source SET fetch_url_id = ? WHERE fetch_url_id = ?",
+                    (new_fid, old_fid),
+                ).rowcount
+                linked += count
+
     db.commit()
     print(f"  Linked {linked} sources to fetch_urls ({skipped} stations not in source table)")
 

@@ -15,7 +15,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from kayak.db.data_db import store_observations
+from kayak.db.data_db import store_observations, update_latest
 from kayak.db.models import DataType, Source
 
 logger = logging.getLogger(__name__)
@@ -156,6 +156,12 @@ class BaseParser(ABC):
                 "Stored %d of %d buffered observations for %s",
                 stored, len(self._obs_buffer), self.name,
             )
+
+        # Update latest_observation for each source/type that was stored
+        pairs = {(row["source_id"], row["data_type"]) for row in self._obs_buffer}
+        for source_id, data_type in pairs:
+            update_latest(self.session, source_id, data_type)
+
         self._obs_buffer = []
 
     # ------------------------------------------------------------------

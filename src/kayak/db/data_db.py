@@ -146,11 +146,15 @@ def store_observations(session: Session, values: list[dict]) -> int:
     if not valid_rows:
         return 0
 
-    stmt = sqlite_upsert(Observation).values(valid_rows).on_conflict_do_update(
-        index_elements=["source_id", "observed_at", "data_type"],
-        set_={"value": sqlite_upsert(Observation).excluded.value},
-    )
-    session.execute(stmt)
+    # SQLite has a 999-variable limit; each row uses 4 variables → batch at 200
+    BATCH = 200
+    for i in range(0, len(valid_rows), BATCH):
+        batch = valid_rows[i:i + BATCH]
+        stmt = sqlite_upsert(Observation).values(batch).on_conflict_do_update(
+            index_elements=["source_id", "observed_at", "data_type"],
+            set_={"value": sqlite_upsert(Observation).excluded.value},
+        )
+        session.execute(stmt)
     return len(valid_rows)
 
 
