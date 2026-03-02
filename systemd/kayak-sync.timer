@@ -2,7 +2,8 @@
 Description=Run kayak observation sync twice daily
 
 [Timer]
-OnCalendar=06:15 18:15
+OnCalendar=06:15
+OnCalendar=18:15
 Persistent=true
 
 [Install]

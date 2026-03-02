@@ -43,7 +43,11 @@ fi
 for timer in "${TIMERS[@]}"; do
     if ! systemctl is-enabled --quiet "$timer" 2>/dev/null; then
         echo "  enabling:  $timer"
-        systemctl enable --now "$timer"
+        systemctl enable "$timer"
+    fi
+    if ! systemctl is-active --quiet "$timer" 2>/dev/null; then
+        echo "  starting:  $timer"
+        systemctl start "$timer"
     fi
 done
 
