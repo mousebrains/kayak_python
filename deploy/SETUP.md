@@ -187,7 +187,7 @@ sudo ln -sf /run/php/php8.3-fpm.sock /run/php/php-fpm.sock
 
 ```bash
 # Clone as the tpw user
-sudo -u tpw git clone git@github.com:mousebrains/kayak_cpp.git /home/tpw/kayak
+sudo -u tpw git clone git@github.com:mousebrains/kayak_python.git /home/tpw/kayak
 
 cd /home/tpw/kayak
 python3 -m venv .venv
