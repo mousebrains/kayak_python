@@ -63,6 +63,12 @@ if ($lat !== null && $lon !== null) {
     echo '<p style="margin:.5rem 0"><a href="' . htmlspecialchars($maps_url) . '" target="_blank" rel="noopener">View on Google Maps</a></p>';
 }
 
+if ($section['aw_id']) {
+    $aw_url = "https://www.americanwhitewater.org/content/River/view/river-detail/"
+        . intval($section['aw_id']) . "/";
+    echo '<p style="margin:.5rem 0"><a href="' . htmlspecialchars($aw_url) . '" target="_blank" rel="noopener">American Whitewater</a></p>';
+}
+
 // --- Current readings ---
 $source_id = null;
 if ($gauge) {
