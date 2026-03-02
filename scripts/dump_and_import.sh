@@ -40,7 +40,12 @@ echo "=== Step 2: Importing into $DB ==="
     "${IMPORT_ARGS[@]}"
 
 echo ""
-echo "=== Step 3: Rebuilding HTML ==="
+echo "=== Step 3: Syncing sources.yaml URLs and linking sources ==="
+"$VENV/bin/levels" init-db
+"$VENV/bin/python" "$REPO/scripts/link_sources.py" --db "$DB"
+
+echo ""
+echo "=== Step 4: Running pipeline ==="
 "$VENV/bin/levels" pipeline
 
 echo ""

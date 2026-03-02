@@ -9,12 +9,12 @@ from kayak.db.models import Base, FetchUrl, State
 def _seed_states(session):
     """Seed state reference data."""
     states = [
-        ("UT", "UT"), ("OR", "OR"), ("AZ", "AZ"), ("CA", "CA"),
-        ("WA", "WA"), ("CO", "CO"), ("KS", "KS"), ("MT", "MT"),
-        ("ID", "ID"), ("WY", "WY"), ("NV", "NV"), ("NM", "NM"),
+        ("Utah", "UT"), ("Oregon", "OR"), ("Arizona", "AZ"), ("California", "CA"),
+        ("Washington", "WA"), ("Colorado", "CO"), ("Kansas", "KS"), ("Montana", "MT"),
+        ("Idaho", "ID"), ("Wyoming", "WY"), ("Nevada", "NV"), ("New Mexico", "NM"),
     ]
     for name, abbr in states:
-        existing = session.query(State).filter_by(name=name).first()
+        existing = session.query(State).filter_by(abbreviation=abbr).first()
         if not existing:
             session.add(State(name=name, abbreviation=abbr))
 

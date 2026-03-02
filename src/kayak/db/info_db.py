@@ -20,9 +20,13 @@ def all_states(session: Session) -> list[State]:
 
 
 def all_state_names(session: Session) -> list[str]:
-    """Return sorted list of distinct state names."""
+    """Return sorted list of state names that have visible sections."""
     rows = session.execute(
-        select(State.name).order_by(State.name)
+        select(State.name)
+        .join(State.sections)
+        .where(Section.no_show.is_(False))
+        .group_by(State.name)
+        .order_by(State.name)
     ).scalars().all()
     return list(rows)
 

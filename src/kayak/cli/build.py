@@ -97,19 +97,13 @@ def _get_row_data(
                 if latest and latest.value is not None:
                     row[dtype_name] = latest.value
                     row["time"] = latest.observed_at
-                    if latest.delta_per_hour is not None:
-                        if abs(latest.delta_per_hour) < 0.5:
-                            row["status"] = "stable"
-                        elif latest.delta_per_hour > 0:
-                            row["status"] = "rising"
-                        else:
-                            row["status"] = "falling"
-
                     # Classify flow/gage level
                     if dtype_name in ("flow", "gage"):
                         level = classify_level(section, dtype, latest.value)
                         if level:
                             row[f"{dtype_name}_level"] = str(level)
+                            if "status" not in row:
+                                row["status"] = str(level)
 
             # Stale / expired detection
             if "time" in row:
@@ -309,7 +303,7 @@ def _build_html_table(sections, columns, primary_source_ids, calculated_ids,
                 val = f'<time datetime="{iso}">{display}</time>'
             elif col["type"] == "status":
                 status = row.get("status", "")
-                val = f'<span class="{status}">{status}</span>' if status else ""
+                val = f'<span class="level-{status}">{status}</span>' if status else ""
             else:
                 val = str(val) if val else ""
 
@@ -378,16 +372,11 @@ def _build_page(table_html: str, css: str, states: list[str],
 {table_html}
 {directory_html}
 <div style="font-size:.75rem;color:#555;margin-top:1rem;line-height:1.6">
-<p><b>Flow colors:</b>
-<span style="color:#c00">Low</span> &ndash;
-<span style="color:#0a0">Okay</span> &ndash;
-<span style="color:#e80">High</span>
-(thresholds set per reach)</p>
 <p><b>Status:</b>
-<span class="rising">rising</span> = increasing &gt; 0.5/hr &bull;
-<span class="falling">falling</span> = decreasing &gt; 0.5/hr &bull;
-<span class="stable">stable</span> = change &lt; 0.5/hr
-(based on delta between latest reading and the previous reading at least 1 hour earlier)</p>
+<span class="level-low">Low</span> &ndash;
+<span class="level-okay">Okay</span> &ndash;
+<span class="level-high">High</span>
+(thresholds set per reach based on flow or gage height)</p>
 </div>
 <p style="font-size:.7rem;color:#888;margin-top:.5rem">Updated <time datetime="{now_iso}">{now_display}</time></p>
 </main>
