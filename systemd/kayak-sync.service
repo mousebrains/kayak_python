@@ -1,0 +1,12 @@
+[Unit]
+Description=Kayak observation sync from legacy MySQL
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=pat
+WorkingDirectory=/home/pat/kayak
+EnvironmentFile=/home/pat/.config/kayak/.env
+ExecStart=/home/pat/kayak/systemd/kayak-sync.sh
+TimeoutStartSec=600
+Nice=10

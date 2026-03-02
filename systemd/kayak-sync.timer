@@ -1,0 +1,9 @@
+[Unit]
+Description=Run kayak observation sync twice daily
+
+[Timer]
+OnCalendar=06:15 18:15
+Persistent=true
+
+[Install]
+WantedBy=timers.target
