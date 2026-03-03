@@ -323,55 +323,47 @@ if ($gauge) {
         echo '<h3 style="margin-top:1rem">Data Sources</h3>';
         echo '<table class="desc-table">';
 
-        // Gauge-specific station page links with fetch URL as data source
+        // Build station page URLs for known gauge IDs
+        $station_urls = [];
         if (!empty($gauge['usgs_id'])) {
-            $usgs_site = "https://waterdata.usgs.gov/monitoring-location/USGS-"
-                . urlencode($gauge['usgs_id'])
-                . "/#dataTypeId=continuous-00065-0&period=P7D&showFieldMeasurements=true";
-            // Find the matching USGS fetch URL
-            $usgs_fetch = '';
-            foreach ($sources as $src) {
-                if ($src['fetch_url'] && stripos($src['agency'] ?? '', 'USGS') !== false) {
-                    $usgs_fetch = $src['fetch_url'];
-                    break;
-                }
-            }
-            $data_td = $usgs_fetch
-                ? '<a href="' . htmlspecialchars($usgs_fetch) . '" target="_blank" rel="noopener">data</a>'
-                : '';
-            echo '<tr><td><a href="' . htmlspecialchars($usgs_site) . '" target="_blank" rel="noopener">USGS - '
-                . htmlspecialchars($gauge['usgs_id']) . '</a></td><td>' . $data_td . '</td></tr>' . "\n";
+            $station_urls['USGS'] = [
+                'label' => 'USGS - ' . $gauge['usgs_id'],
+                'url' => "https://waterdata.usgs.gov/monitoring-location/USGS-"
+                    . urlencode($gauge['usgs_id'])
+                    . "/#dataTypeId=continuous-00065-0&period=P7D&showFieldMeasurements=true",
+            ];
         }
         if (!empty($gauge['nwsli_id'])) {
-            $nwrfc_site = "https://www.nwrfc.noaa.gov/river/station/flowplot/flowplot.cgi?lid="
-                . urlencode($gauge['nwsli_id']);
-            // Find the matching NWRFC fetch URL
-            $nwrfc_fetch = '';
-            foreach ($sources as $src) {
-                if ($src['fetch_url'] && stripos($src['agency'] ?? '', 'NWRFC') !== false) {
-                    $nwrfc_fetch = $src['fetch_url'];
+            $station_urls['NWRFC'] = [
+                'label' => 'NWRFC - ' . $gauge['nwsli_id'],
+                'url' => "https://www.nwrfc.noaa.gov/river/station/flowplot/flowplot.cgi?lid="
+                    . urlencode($gauge['nwsli_id']),
+            ];
+        }
+
+        $shown_agencies = [];
+        foreach ($sources as $src) {
+            // Match source to a station page link by agency
+            $matched = null;
+            foreach ($station_urls as $key => $info) {
+                if (stripos($src['agency'] ?? '', $key) !== false && !in_array($key, $shown_agencies)) {
+                    $matched = $key;
                     break;
                 }
             }
-            $data_td = $nwrfc_fetch
-                ? '<a href="' . htmlspecialchars($nwrfc_fetch) . '" target="_blank" rel="noopener">data</a>'
-                : '';
-            echo '<tr><td><a href="' . htmlspecialchars($nwrfc_site) . '" target="_blank" rel="noopener">NWRFC - '
-                . htmlspecialchars($gauge['nwsli_id']) . '</a></td><td>' . $data_td . '</td></tr>' . "\n";
-        }
 
-        foreach ($sources as $src) {
-            $src_name = htmlspecialchars($src['name']);
-            $agency = $src['agency'] ? htmlspecialchars($src['agency']) : '';
-            $label = $agency ? "$agency — $src_name" : $src_name;
+            if ($matched) {
+                $shown_agencies[] = $matched;
+                $info = $station_urls[$matched];
+                $label = '<a href="' . htmlspecialchars($info['url']) . '" target="_blank" rel="noopener">'
+                    . htmlspecialchars($info['label']) . '</a>';
+            } else {
+                $src_name = htmlspecialchars($src['name']);
+                $agency = $src['agency'] ? htmlspecialchars($src['agency']) : '';
+                $label = $agency ? "$agency — $src_name" : $src_name;
+            }
+
             if ($src['fetch_url']) {
-                // Skip sources already shown as gauge-specific links above
-                if (!empty($gauge['usgs_id']) && stripos($src['agency'] ?? '', 'USGS') !== false) {
-                    continue;
-                }
-                if (!empty($gauge['nwsli_id']) && stripos($src['agency'] ?? '', 'NWRFC') !== false) {
-                    continue;
-                }
                 $url = htmlspecialchars($src['fetch_url']);
                 echo "<tr><td>$label</td><td><a href=\"$url\" target=\"_blank\" rel=\"noopener\">$url</a></td></tr>\n";
             } elseif ($src['calc_expr']) {
@@ -402,6 +394,14 @@ if ($gauge) {
                 echo "<tr><td>$label</td><td>Calculated: $expr_html</td></tr>\n";
             } else {
                 echo "<tr><td>$label</td><td>—</td></tr>\n";
+            }
+        }
+        // Show any station page links that didn't match a source row
+        foreach ($station_urls as $key => $info) {
+            if (!in_array($key, $shown_agencies)) {
+                $label = '<a href="' . htmlspecialchars($info['url']) . '" target="_blank" rel="noopener">'
+                    . htmlspecialchars($info['label']) . '</a>';
+                echo "<tr><td>$label</td><td></td></tr>\n";
             }
         }
         echo '</table>';
