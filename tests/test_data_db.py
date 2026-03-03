@@ -61,7 +61,7 @@ def test_negative_gauge_ok(session):
 def test_update_latest(session):
     src = _make_source(session)
     now = datetime.now(UTC)
-    old = now - timedelta(hours=2)
+    old = now - timedelta(hours=7)
 
     store_observation(session, src.id, DataType.flow, old, 100.0)
     store_observation(session, src.id, DataType.flow, now, 200.0)
