@@ -57,7 +57,6 @@ nwps:
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/JASO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/JFFO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/KELW1/stageflow/observed"
-    - url: "https://api.water.noaa.gov/nwps/v1/gauges/LOCO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/LOPW1/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/LRWW1/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/LSMO3/stageflow/observed"
@@ -97,16 +96,13 @@ nwps:
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/TLYO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/TOTW1/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/TRAO3/stageflow/observed"
-    - url: "https://api.water.noaa.gov/nwps/v1/gauges/TSFW1/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/UNDW1/stageflow/observed"
-    - url: "https://api.water.noaa.gov/nwps/v1/gauges/VANW1/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/VENO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/VIDO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/WAUO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/WILW1/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/WSLO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/WTLO3/stageflow/observed"
-    - url: "https://api.water.noaa.gov/nwps/v1/gauges/WNFO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/GLIO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/WASW1/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/FALO3/stageflow/observed"
@@ -120,8 +116,6 @@ nwps:
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/BTYO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/PDTO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/WINO3/stageflow/observed"
-    - url: "https://api.water.noaa.gov/nwps/v1/gauges/TILO3/stageflow/observed"
-    - url: "https://api.water.noaa.gov/nwps/v1/gauges/WSNO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/RSBO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/GOSO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/LONO3/stageflow/observed"
@@ -129,8 +123,13 @@ nwps:
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/WLAO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/BEAO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/BRTO3/stageflow/observed"
-    - url: "https://api.water.noaa.gov/nwps/v1/gauges/CMRO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/WFHO3/stageflow/observed"
+
+nwrfc.xml:
+  urls:
+    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=CMRO3&pe=HG&dtype=b&numdays=2"
+    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LOCO3&pe=HG&dtype=b&numdays=2"
+    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WNFO3&pe=HG&dtype=b&numdays=2"
 
 usgs:
   urls:
