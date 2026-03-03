@@ -53,16 +53,6 @@ include_header("$name - Description");
 
 echo '<h2>' . htmlspecialchars($name) . '</h2>';
 
-// --- Google Maps link ---
-$lat = $gauge['latitude'] ?? $reach['latitude'] ?? null;
-$lon = $gauge['longitude'] ?? $reach['longitude'] ?? null;
-if ($lat !== null && $lon !== null) {
-    $lat_f = number_format((float)$lat, 6, '.', '');
-    $lon_f = number_format((float)$lon, 6, '.', '');
-    $maps_url = "https://www.google.com/maps?q={$lat_f},{$lon_f}";
-    echo '<p style="margin:.5rem 0"><a href="' . htmlspecialchars($maps_url) . '" target="_blank" rel="noopener">View on Google Maps</a></p>';
-}
-
 if ($reach['aw_id']) {
     $aw_url = "https://www.americanwhitewater.org/content/River/view/river-detail/"
         . intval($reach['aw_id']) . "/";
@@ -209,21 +199,115 @@ $fields += [
     'Difficulties' => $reach['difficulties'],
     'Description' => $reach['description'],
     'Notes' => $reach['notes'],
-    'Gauge Location' => ($gauge && $gauge['latitude'] !== null && $gauge['longitude'] !== null)
-        ? number_format((float)$gauge['latitude'], 6) . ', ' . number_format((float)$gauge['longitude'], 6)
-        : null,
-    'Put-in' => ($reach['latitude_start'] !== null && $reach['longitude_start'] !== null)
-        ? number_format((float)$reach['latitude_start'], 6) . ', ' . number_format((float)$reach['longitude_start'], 6)
-        : null,
-    'Take-out' => ($reach['latitude_end'] !== null && $reach['longitude_end'] !== null)
-        ? number_format((float)$reach['latitude_end'], 6) . ', ' . number_format((float)$reach['longitude_end'], 6)
-        : null,
 ];
+
+// Build coordinate fields as Google Maps links
+$map_points = []; // label => "lat,lon" for combined map link
+$coord_fields = [];
+
+if ($gauge && $gauge['latitude'] !== null && $gauge['longitude'] !== null) {
+    $glat = number_format((float)$gauge['latitude'], 6, '.', '');
+    $glon = number_format((float)$gauge['longitude'], 6, '.', '');
+    $coord_fields['Gauge'] = [$glat, $glon];
+    $map_points['Gauge'] = "$glat,$glon";
+}
+if ($reach['latitude_start'] !== null && $reach['longitude_start'] !== null) {
+    $slat = number_format((float)$reach['latitude_start'], 6, '.', '');
+    $slon = number_format((float)$reach['longitude_start'], 6, '.', '');
+    $coord_fields['Put-in'] = [$slat, $slon];
+    $map_points['Put-in'] = "$slat,$slon";
+}
+if ($reach['latitude_end'] !== null && $reach['longitude_end'] !== null) {
+    $elat = number_format((float)$reach['latitude_end'], 6, '.', '');
+    $elon = number_format((float)$reach['longitude_end'], 6, '.', '');
+    $coord_fields['Take-out'] = [$elat, $elon];
+    $map_points['Take-out'] = "$elat,$elon";
+}
+
+foreach ($coord_fields as $label => $coords) {
+    $url = "https://www.google.com/maps?q={$coords[0]},{$coords[1]}";
+    $fields[$label] = "<a href=\"" . htmlspecialchars($url) . "\" target=\"_blank\" rel=\"noopener\">{$coords[0]}, {$coords[1]}</a>";
+}
+
+// Determine flow level for river track color
+$track_color = '#2196F3'; // blue = unknown
+if ($flow_levels && $readings) {
+    // Find current value matching a level's data_type
+    $reading_by_type = [];
+    foreach ($readings as $r) {
+        $reading_by_type[$r['data_type']] = (float)$r['value'];
+    }
+    foreach ($flow_levels as $fl) {
+        $dtype = $fl['low_data_type'] ?: $fl['high_data_type'];
+        if ($dtype && isset($reading_by_type[$dtype])) {
+            $val = $reading_by_type[$dtype];
+            $lo = $fl['low'] !== null ? (float)$fl['low'] : null;
+            $hi = $fl['high'] !== null ? (float)$fl['high'] : null;
+            $in_range = ($lo === null || $val >= $lo) && ($hi === null || $val <= $hi);
+            if ($in_range) {
+                $level_colors = ['low' => '#e8a735', 'okay' => '#4caf50', 'high' => '#e53935'];
+                $track_color = $level_colors[$fl['level']] ?? '#888';
+                break;
+            }
+        }
+    }
+}
+
+// Inline map with labeled markers and river track (Leaflet + OpenStreetMap)
+$geom = $reach['geom'] ?? null;
+if (count($map_points) >= 1 || $geom) {
+    $map_json = json_encode($map_points);
+    // Convert geom "lon lat,lon lat,..." to [[lat,lon],[lat,lon],...]
+    $track_json = 'null';
+    if ($geom) {
+        $track = [];
+        foreach (explode(',', $geom) as $pair) {
+            $parts = preg_split('/\s+/', trim($pair));
+            if (count($parts) === 2) {
+                $track[] = [(float)$parts[1], (float)$parts[0]];
+            }
+        }
+        if ($track) {
+            $track_json = json_encode($track);
+        }
+    }
+    echo '</table>';
+    echo '<div id="reach-map" style="height:350px;margin-top:1rem;border:1px solid #ccc"></div>';
+    echo '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9/dist/leaflet.css"/>';
+    echo '<script src="https://unpkg.com/leaflet@1.9/dist/leaflet.js"></script>';
+    echo '<script>';
+    echo 'var pts=' . $map_json . ';';
+    echo 'var track=' . $track_json . ';';
+    echo 'var trackColor=' . json_encode($track_color) . ';';
+    echo 'var map=L.map("reach-map");';
+    echo 'var street=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"OpenStreetMap",maxZoom:19});';
+    echo 'var topo=L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",{attribution:"OpenTopoMap",maxZoom:17});';
+    echo 'var satellite=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{attribution:"Esri",maxZoom:19});';
+    echo 'topo.addTo(map);';
+    echo 'L.control.layers({"Topo":topo,"Street":street,"Satellite":satellite}).addTo(map);';
+    echo 'var bounds=[];';
+    echo 'var colors={"Put-in":"green","Gauge":"blue","Take-out":"red"};';
+    echo 'for(var k in pts){var c=pts[k].split(",");var ll=[parseFloat(c[0]),parseFloat(c[1])];';
+    echo 'var ic=L.divIcon({className:"",html:\'<div style="background:\'+colors[k]+\';color:#fff;padding:2px 6px;border-radius:3px;font:bold 12px sans-serif;white-space:nowrap;cursor:pointer">\'+k+\'</div>\',iconAnchor:[0,12]});';
+    echo 'var m=L.marker(ll,{icon:ic}).addTo(map);bounds.push(ll);';
+    echo '(function(lat,lon){m.on("click",function(){window.open("https://www.google.com/maps?q="+lat+","+lon,"_blank")})})(ll[0],ll[1]);}';
+    echo 'if(track){L.polyline(track,{color:trackColor,weight:6,opacity:0.6}).addTo(map);track.forEach(function(p){bounds.push(p);})}';
+    echo 'if(bounds.length>1){map.fitBounds(bounds,{padding:[40,40]})}else if(bounds.length===1){map.setView(bounds[0],13)}';
+    echo '</script>';
+    echo '<table class="desc-table">';
+}
+
+// HTML-safe fields list for raw output
+$html_fields = ['Gauge', 'Put-in', 'Take-out'];
 
 foreach ($fields as $label => $value) {
     if ($value === null || trim((string)$value) === '') continue;
-    $esc = htmlspecialchars((string)$value);
-    echo "<tr><td>$label</td><td>$esc</td></tr>\n";
+    if (in_array($label, $html_fields)) {
+        echo "<tr><td>$label</td><td>$value</td></tr>\n";
+    } else {
+        $esc = htmlspecialchars((string)$value);
+        echo "<tr><td>$label</td><td>$esc</td></tr>\n";
+    }
 }
 
 echo '</table>';
