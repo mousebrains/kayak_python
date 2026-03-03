@@ -37,6 +37,7 @@ def reaches_query(
     state_name: str | None = None,
     visible_only: bool = True,
     with_gauge: bool = False,
+    sort_by_state: bool = False,
 ) -> list[Reach]:
     """Query reaches with optional filtering.
 
@@ -44,8 +45,19 @@ def reaches_query(
         state_name: Filter by state name if provided
         visible_only: Exclude no_show reaches (default True)
         with_gauge: Eagerly load gauge relationship
+        sort_by_state: Sort by (state, sort_name) instead of just sort_name
     """
-    stmt = select(Reach).order_by(Reach.sort_name)
+    if sort_by_state:
+        # Multi-state reaches sort by their first state alphabetically;
+        # .distinct() prevents duplicate rows from the join.
+        stmt = (
+            select(Reach)
+            .join(Reach.states)
+            .order_by(State.name, Reach.sort_name)
+            .distinct()
+        )
+    else:
+        stmt = select(Reach).order_by(Reach.sort_name)
 
     if visible_only:
         stmt = stmt.where(Reach.no_show.is_(False))
