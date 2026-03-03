@@ -2,7 +2,7 @@
 /**
  * Latest values API.
  *
- * Usage: /latest.php?id=<section_id>
+ * Usage: /latest.php?id=<reach_id>
  * Returns JSON with latest value for each data type.
  */
 require_once __DIR__ . '/includes/db.php';
@@ -16,17 +16,17 @@ if (!$id) { http_response_code(400); echo json_encode(['error' => 'Missing id'])
 
 $db = get_db();
 
-$stmt = $db->prepare('SELECT gauge_id, name, display_name FROM section WHERE id = ?');
+$stmt = $db->prepare('SELECT gauge_id, name, display_name FROM reach WHERE id = ?');
 $stmt->execute([$id]);
-$section = $stmt->fetch();
-if (!$section) { http_response_code(404); echo json_encode(['error' => 'Not found']); exit; }
+$reach = $stmt->fetch();
+if (!$reach) { http_response_code(404); echo json_encode(['error' => 'Not found']); exit; }
 
-$name = $section['display_name'] ?: $section['name'];
+$name = $reach['display_name'] ?: $reach['name'];
 $types = [];
 
-if ($section['gauge_id']) {
+if ($reach['gauge_id']) {
     $stmt = $db->prepare('SELECT source_id FROM gauge_source WHERE gauge_id = ? LIMIT 1');
-    $stmt->execute([$section['gauge_id']]);
+    $stmt->execute([$reach['gauge_id']]);
     $gs = $stmt->fetch();
 
     if ($gs) {
@@ -48,7 +48,7 @@ if ($section['gauge_id']) {
 }
 
 echo json_encode([
-    'section' => $section['name'],
-    'name'    => $name,
-    'types'   => $types,
+    'reach' => $reach['name'],
+    'name'  => $name,
+    'types' => $types,
 ]);

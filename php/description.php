@@ -1,8 +1,8 @@
 <?php
 /**
- * Section description page — readings, plots, map link, metadata.
+ * Reach description page — readings, plots, map link, metadata.
  *
- * Usage: /description.php?id=<section_id>
+ * Usage: /description.php?id=<reach_id>
  */
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/header.php';
@@ -14,36 +14,36 @@ if (!$id) { http_response_code(400); exit('Missing id parameter'); }
 
 $db = get_db();
 
-$section = $db->prepare('SELECT * FROM section WHERE id = ?');
-$section->execute([$id]);
-$section = $section->fetch();
-if (!$section) { http_response_code(404); exit('Section not found'); }
+$reach = $db->prepare('SELECT * FROM reach WHERE id = ?');
+$reach->execute([$id]);
+$reach = $reach->fetch();
+if (!$reach) { http_response_code(404); exit('Reach not found'); }
 
-$name = $section['display_name'] ?: $section['name'];
+$name = $reach['display_name'] ?: $reach['name'];
 
 // Load gauge info
 $gauge = null;
-if ($section['gauge_id']) {
+if ($reach['gauge_id']) {
     $stmt = $db->prepare('SELECT * FROM gauge WHERE id = ?');
-    $stmt->execute([$section['gauge_id']]);
+    $stmt->execute([$reach['gauge_id']]);
     $gauge = $stmt->fetch();
 }
 
 // Load states
 $states_stmt = $db->prepare(
-    'SELECT s.name FROM state s JOIN section_state ss ON s.id = ss.state_id WHERE ss.section_id = ?'
+    'SELECT s.name FROM state s JOIN reach_state rs ON s.id = rs.state_id WHERE rs.reach_id = ?'
 );
 $states_stmt->execute([$id]);
 $states = array_column($states_stmt->fetchAll(), 'name');
 
 // Load classes
-$classes_stmt = $db->prepare('SELECT name FROM section_class WHERE section_id = ?');
+$classes_stmt = $db->prepare('SELECT name FROM reach_class WHERE reach_id = ?');
 $classes_stmt->execute([$id]);
 $classes = array_column($classes_stmt->fetchAll(), 'name');
 
 // Load flow levels (low, okay, high)
 $levels_stmt = $db->prepare(
-    'SELECT level, low, low_data_type, high, high_data_type FROM section_level WHERE section_id = ? ORDER BY level'
+    'SELECT level, low, low_data_type, high, high_data_type FROM reach_level WHERE reach_id = ? ORDER BY level'
 );
 $levels_stmt->execute([$id]);
 $flow_levels = $levels_stmt->fetchAll();
@@ -54,8 +54,8 @@ include_header("$name - Description");
 echo '<h2>' . htmlspecialchars($name) . '</h2>';
 
 // --- Google Maps link ---
-$lat = $gauge['latitude'] ?? $section['latitude'] ?? null;
-$lon = $gauge['longitude'] ?? $section['longitude'] ?? null;
+$lat = $gauge['latitude'] ?? $reach['latitude'] ?? null;
+$lon = $gauge['longitude'] ?? $reach['longitude'] ?? null;
 if ($lat !== null && $lon !== null) {
     $lat_f = number_format((float)$lat, 6, '.', '');
     $lon_f = number_format((float)$lon, 6, '.', '');
@@ -63,9 +63,9 @@ if ($lat !== null && $lon !== null) {
     echo '<p style="margin:.5rem 0"><a href="' . htmlspecialchars($maps_url) . '" target="_blank" rel="noopener">View on Google Maps</a></p>';
 }
 
-if ($section['aw_id']) {
+if ($reach['aw_id']) {
     $aw_url = "https://www.americanwhitewater.org/content/River/view/river-detail/"
-        . intval($section['aw_id']) . "/";
+        . intval($reach['aw_id']) . "/";
     echo '<p style="margin:.5rem 0"><a href="' . htmlspecialchars($aw_url) . '" target="_blank" rel="noopener">American Whitewater</a></p>';
 }
 
@@ -160,19 +160,19 @@ echo '<table class="desc-table">';
 $fields = [
     'Class' => implode(', ', $classes),
     'State' => implode(', ', $states),
-    'Drainage' => $section['basin'],
-    'Region' => $section['region'],
+    'Drainage' => $reach['basin'],
+    'Region' => $reach['region'],
     'Gauge' => $gauge ? $gauge['location'] : null,
-    'Season' => $section['season'],
-    'Length' => $section['length'] ? $section['length'] . ' mi' : null,
-    'Gradient' => $section['gradient'] ? $section['gradient'] . ' ft/mi' : null,
-    'Elevation Loss' => $section['elevation_lost'] ? $section['elevation_lost'] . ' ft' : null,
-    'Scenery' => $section['scenery'],
-    'Features' => $section['features'],
-    'Remoteness' => $section['remoteness'],
-    'Nature' => $section['nature'],
-    'Watershed' => $section['watershed_type'],
-    'Optimal Flow' => $section['optimal_flow'] ? number_format((float)$section['optimal_flow'], 0) . ' CFS' : null,
+    'Season' => $reach['season'],
+    'Length' => $reach['length'] ? $reach['length'] . ' mi' : null,
+    'Gradient' => $reach['gradient'] ? $reach['gradient'] . ' ft/mi' : null,
+    'Elevation Loss' => $reach['elevation_lost'] ? $reach['elevation_lost'] . ' ft' : null,
+    'Scenery' => $reach['scenery'],
+    'Features' => $reach['features'],
+    'Remoteness' => $reach['remoteness'],
+    'Nature' => $reach['nature'],
+    'Watershed' => $reach['watershed_type'],
+    'Optimal Flow' => $reach['optimal_flow'] ? number_format((float)$reach['optimal_flow'], 0) . ' CFS' : null,
 ];
 
 // Insert flow level rows
@@ -193,17 +193,17 @@ foreach ($flow_levels as $fl) {
 }
 
 $fields += [
-    'Difficulties' => $section['difficulties'],
-    'Description' => $section['description'],
-    'Notes' => $section['notes'],
+    'Difficulties' => $reach['difficulties'],
+    'Description' => $reach['description'],
+    'Notes' => $reach['notes'],
     'Gauge Location' => ($gauge && $gauge['latitude'] !== null && $gauge['longitude'] !== null)
         ? number_format((float)$gauge['latitude'], 6) . ', ' . number_format((float)$gauge['longitude'], 6)
         : null,
-    'Put-in' => ($section['latitude_start'] !== null && $section['longitude_start'] !== null)
-        ? number_format((float)$section['latitude_start'], 6) . ', ' . number_format((float)$section['longitude_start'], 6)
+    'Put-in' => ($reach['latitude_start'] !== null && $reach['longitude_start'] !== null)
+        ? number_format((float)$reach['latitude_start'], 6) . ', ' . number_format((float)$reach['longitude_start'], 6)
         : null,
-    'Take-out' => ($section['latitude_end'] !== null && $section['longitude_end'] !== null)
-        ? number_format((float)$section['latitude_end'], 6) . ', ' . number_format((float)$section['longitude_end'], 6)
+    'Take-out' => ($reach['latitude_end'] !== null && $reach['longitude_end'] !== null)
+        ? number_format((float)$reach['latitude_end'], 6) . ', ' . number_format((float)$reach['longitude_end'], 6)
         : null,
 ];
 
@@ -240,24 +240,24 @@ if ($gauge) {
                 echo "<tr><td>$label</td><td><a href=\"$url\" target=\"_blank\" rel=\"noopener\">$url</a></td></tr>\n";
             } elseif ($src['calc_expr']) {
                 // Link gauge references like "nP::S_Santiam_Cascadia_merge::flow"
-                // The middle token is a gauge name; find a section that uses it.
+                // The middle token is a gauge name; find a reach that uses it.
                 $expr_html = preg_replace_callback(
                     '/(\w+)::(\w+)::(\w+)/',
                     function ($m) use ($db) {
                         $gauge_name = $m[2];
                         $stmt = $db->prepare(
-                            'SELECT sec.id, sec.display_name
-                             FROM section sec
-                             JOIN gauge g ON sec.gauge_id = g.id
+                            'SELECT r.id, r.display_name
+                             FROM reach r
+                             JOIN gauge g ON r.gauge_id = g.id
                              WHERE g.name = ?
                              LIMIT 1'
                         );
                         $stmt->execute([$gauge_name]);
-                        $sec = $stmt->fetch();
+                        $r = $stmt->fetch();
                         $full = htmlspecialchars($m[0]);
-                        if ($sec) {
-                            $display = htmlspecialchars($sec['display_name'] ?: $gauge_name);
-                            return "<a href=\"/description.php?id={$sec['id']}\" title=\"$full\">$display</a>::{$m[3]}";
+                        if ($r) {
+                            $display = htmlspecialchars($r['display_name'] ?: $gauge_name);
+                            return "<a href=\"/description.php?id={$r['id']}\" title=\"$full\">$display</a>::{$m[3]}";
                         }
                         return $full;
                     },

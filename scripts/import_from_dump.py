@@ -374,9 +374,9 @@ def import_gauge_source(session, dump_path):
     log.info("  Imported %d gauge_source rows", count)
 
 
-def import_sections(session, dump_path):
-    """Step 3a: Import sections, renaming camelCase to snake_case."""
-    log.info("--- Importing sections ---")
+def import_reaches(session, dump_path):
+    """Step 3a: Import reaches, renaming camelCase to snake_case."""
+    log.info("--- Importing reaches ---")
     rows = extract_table_data(dump_path, "section")
     for row in rows:
         # section: (id, tUpdate, gauge, name, displayName, sortName, nature,
@@ -387,7 +387,7 @@ def import_sections(session, dump_path):
         #   season, watershedType, awID)
         gauge_id = row[2] if row[2] and row[2] != 0 else None
         session.execute(text(
-            "INSERT OR IGNORE INTO section "
+            "INSERT OR IGNORE INTO reach "
             "(id, updated_at, gauge_id, name, display_name, sort_name, nature, "
             " description, difficulties, basin, basin_area, elevation, elevation_lost, "
             " length, gradient, features, latitude, longitude, "
@@ -417,31 +417,31 @@ def import_sections(session, dump_path):
             "aw_id": row[31] if len(row) > 31 else None,
         })
     session.commit()
-    log.info("  Imported %d sections", len(rows))
+    log.info("  Imported %d reaches", len(rows))
 
 
-def import_section_state(session, dump_path):
-    """Step 3b: Import section-to-state junction."""
-    log.info("--- Importing section_state ---")
+def import_reach_state(session, dump_path):
+    """Step 3b: Import reach-to-state junction."""
+    log.info("--- Importing reach_state ---")
     rows = extract_table_data(dump_path, "section2state")
     count = 0
     for row in rows:
         # section2state: (section, state)
         try:
             session.execute(text(
-                "INSERT OR IGNORE INTO section_state (section_id, state_id) "
+                "INSERT OR IGNORE INTO reach_state (reach_id, state_id) "
                 "VALUES (:sec, :st)"
             ), {"sec": row[0], "st": row[1]})
             count += 1
         except Exception:
             pass
     session.commit()
-    log.info("  Imported %d section_state rows", count)
+    log.info("  Imported %d reach_state rows", count)
 
 
-def import_section_class(session, dump_path):
-    """Step 3c: Import section classes, mapping int dataType to enum string."""
-    log.info("--- Importing section_class ---")
+def import_reach_class(session, dump_path):
+    """Step 3c: Import reach classes, mapping int dataType to enum string."""
+    log.info("--- Importing reach_class ---")
     rows = extract_table_data(dump_path, "class")
     count = 0
     for row in rows:
@@ -452,8 +452,8 @@ def import_section_class(session, dump_path):
             continue
         try:
             session.execute(text(
-                "INSERT OR IGNORE INTO section_class "
-                "(section_id, name, low, low_data_type, high, high_data_type) "
+                "INSERT OR IGNORE INTO reach_class "
+                "(reach_id, name, low, low_data_type, high, high_data_type) "
                 "VALUES (:sec, :name, :low, :low_dt, :high, :high_dt)"
             ), {
                 "sec": row[0], "name": row[1],
@@ -464,12 +464,12 @@ def import_section_class(session, dump_path):
         except Exception:
             pass
     session.commit()
-    log.info("  Imported %d section_class rows", count)
+    log.info("  Imported %d reach_class rows", count)
 
 
-def import_section_level(session, dump_path):
-    """Step 3d: Import section levels, mapping int level/dataType to enum strings."""
-    log.info("--- Importing section_level ---")
+def import_reach_level(session, dump_path):
+    """Step 3d: Import reach levels, mapping int level/dataType to enum strings."""
+    log.info("--- Importing reach_level ---")
     # Try section2level first, fall back to section2levels
     rows = extract_table_data(dump_path, "section2level")
     if not rows:
@@ -484,8 +484,8 @@ def import_section_level(session, dump_path):
             continue
         try:
             session.execute(text(
-                "INSERT OR IGNORE INTO section_level "
-                "(section_id, level, low, low_data_type, high, high_data_type) "
+                "INSERT OR IGNORE INTO reach_level "
+                "(reach_id, level, low, low_data_type, high, high_data_type) "
                 "VALUES (:sec, :level, :low, :low_dt, :high, :high_dt)"
             ), {
                 "sec": row[0], "level": level_str,
@@ -496,20 +496,20 @@ def import_section_level(session, dump_path):
         except Exception:
             pass
     session.commit()
-    log.info("  Imported %d section_level rows", count)
+    log.info("  Imported %d reach_level rows", count)
 
 
-def import_section_guidebook(session, dump_path):
-    """Step 3e: Import section-to-guidebook links."""
-    log.info("--- Importing section_guidebook ---")
+def import_reach_guidebook(session, dump_path):
+    """Step 3e: Import reach-to-guidebook links."""
+    log.info("--- Importing reach_guidebook ---")
     rows = extract_table_data(dump_path, "section2GuideBook")
     count = 0
     for row in rows:
         # section2GuideBook: (section, guideBook, page, run, url)
         try:
             session.execute(text(
-                "INSERT OR IGNORE INTO section_guidebook "
-                "(section_id, guidebook_id, page, run, url) "
+                "INSERT OR IGNORE INTO reach_guidebook "
+                "(reach_id, guidebook_id, page, run, url) "
                 "VALUES (:sec, :gb, :page, :run, :url)"
             ), {
                 "sec": row[0], "gb": row[1],
@@ -521,7 +521,7 @@ def import_section_guidebook(session, dump_path):
         except Exception:
             pass
     session.commit()
-    log.info("  Imported %d section_guidebook rows", count)
+    log.info("  Imported %d reach_guidebook rows", count)
 
 
 def import_rating_data(session, dump_path):
@@ -842,12 +842,12 @@ def main():
         import_sources(session, dump_path)
         import_gauge_source(session, dump_path)
 
-        # Step 3: Sections and junctions
-        import_sections(session, dump_path)
-        import_section_state(session, dump_path)
-        import_section_class(session, dump_path)
-        import_section_level(session, dump_path)
-        import_section_guidebook(session, dump_path)
+        # Step 3: Reaches and junctions
+        import_reaches(session, dump_path)
+        import_reach_state(session, dump_path)
+        import_reach_class(session, dump_path)
+        import_reach_level(session, dump_path)
+        import_reach_guidebook(session, dump_path)
         import_rating_data(session, dump_path)
 
         # Step 4: Time-series data
@@ -872,8 +872,8 @@ def main():
         for table_name in [
             "state", "class_description", "guidebook", "rating", "gauge",
             "fetch_url", "calc_expression", "source", "gauge_source",
-            "section", "section_state", "section_class", "section_level",
-            "section_guidebook", "rating_data", "observation", "latest_observation",
+            "reach", "reach_state", "reach_class", "reach_level",
+            "reach_guidebook", "rating_data", "observation", "latest_observation",
         ]:
             count = session.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
             log.info("  %-25s %8d rows", table_name, count)

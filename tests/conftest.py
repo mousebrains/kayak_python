@@ -9,7 +9,7 @@ from kayak.db.models import (
     FetchUrl,
     Gauge,
     GaugeSource,
-    Section,
+    Reach,
     Source,
 )
 
@@ -67,17 +67,17 @@ def sample_gauge(session) -> Gauge:
 
 
 @pytest.fixture()
-def sample_section(session, sample_gauge) -> Section:
-    """Create a Section with a Gauge for testing."""
-    section = Section(
-        name="test_section",
+def sample_reach(session, sample_gauge) -> Reach:
+    """Create a Reach with a Gauge for testing."""
+    reach = Reach(
+        name="test_reach",
         display_name="Test River - Upper",
         sort_name="Test River",
         gauge_id=sample_gauge.id,
     )
-    session.add(section)
+    session.add(reach)
     session.flush()
-    return section
+    return reach
 
 
 @pytest.fixture()

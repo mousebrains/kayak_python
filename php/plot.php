@@ -2,7 +2,7 @@
 /**
  * Time-series SVG plot.
  *
- * Usage: /plot.php?type=flow&id=<section_id>[&days=60]
+ * Usage: /plot.php?type=flow&id=<reach_id>[&days=60]
  */
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/svg_plot.php';
@@ -27,16 +27,16 @@ if ($type === 'temp') $type = 'temperature';
 
 $db = get_db();
 
-// Look up section → gauge → source
-$stmt = $db->prepare('SELECT gauge_id, display_name, name FROM section WHERE id = ?');
+// Look up reach → gauge → source
+$stmt = $db->prepare('SELECT gauge_id, display_name, name FROM reach WHERE id = ?');
 $stmt->execute([$id]);
-$section = $stmt->fetch();
-if (!$section || !$section['gauge_id']) { http_response_code(404); exit('Not found'); }
+$reach = $stmt->fetch();
+if (!$reach || !$reach['gauge_id']) { http_response_code(404); exit('Not found'); }
 
-$name = $section['display_name'] ?: $section['name'];
+$name = $reach['display_name'] ?: $reach['name'];
 
 $stmt = $db->prepare('SELECT source_id FROM gauge_source WHERE gauge_id = ? LIMIT 1');
-$stmt->execute([$section['gauge_id']]);
+$stmt->execute([$reach['gauge_id']]);
 $gs = $stmt->fetch();
 if (!$gs) { http_response_code(404); exit('No source'); }
 

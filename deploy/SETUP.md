@@ -461,10 +461,10 @@ setfacl -d -m u:www-data:rw /home/pat/DB                   # default for new DB 
 /home/pat/.venv/bin/levels pipeline      # fetch live data, generate HTML
 ```
 
-### Importing gauges and sections
+### Importing gauges and reaches
 
 `init-db` creates the schema and seeds states, sources, and fetch URLs from
-`data/sources.yaml`. **Gauges and sections** must be imported separately from a
+`data/sources.yaml`. **Gauges and reaches** must be imported separately from a
 legacy MySQL dump:
 
 ```bash

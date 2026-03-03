@@ -22,9 +22,9 @@ from kayak.db.info_db import (
     classify_level,
     get_all_primary_source_ids,
     get_calculated_source_ids,
-    sections_query,
+    reaches_query,
 )
-from kayak.db.models import DataType, LatestObservation, Observation, Section
+from kayak.db.models import DataType, LatestObservation, Observation, Reach
 from kayak.utils.lttb import downsample, running_median
 
 logger = logging.getLogger(__name__)
@@ -62,26 +62,26 @@ def _get_builder_columns() -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def _get_row_data(
-    section: Section,
+    reach: Reach,
     primary_source_ids: dict[int, int],
     calculated_ids: set[int],
     all_latest: dict[tuple[int, DataType], LatestObservation],
 ) -> dict:
-    """Build a data dict for one river section using pre-loaded data."""
+    """Build a data dict for one river reach using pre-loaded data."""
     row: dict = {
-        "section_id": section.id,
-        "display_name": section.display_name or "",
-        "gauge_location": (section.gauge.location if section.gauge else "") or "",
-        "drainage": section.basin or "",
+        "reach_id": reach.id,
+        "display_name": reach.display_name or "",
+        "gauge_location": (reach.gauge.location if reach.gauge else "") or "",
+        "drainage": reach.basin or "",
         "class": "",
-        "state": ", ".join(s.name for s in section.states) if section.states else "",
-        "db_name": section.name,
+        "state": ", ".join(s.name for s in reach.states) if reach.states else "",
+        "db_name": reach.name,
     }
 
-    if section.classes:
-        row["class"] = ", ".join(c.name for c in section.classes)
+    if reach.classes:
+        row["class"] = ", ".join(c.name for c in reach.classes)
 
-    gauge = section.gauge
+    gauge = reach.gauge
     if gauge:
         source_id = primary_source_ids.get(gauge.id)
         if source_id:
@@ -99,7 +99,7 @@ def _get_row_data(
                     row["time"] = latest.observed_at
                     # Classify flow/gage level
                     if dtype_name in ("flow", "gage"):
-                        level = classify_level(section, dtype, latest.value)
+                        level = classify_level(reach, dtype, latest.value)
                         if level:
                             row[f"{dtype_name}_level"] = str(level)
                             if "status" not in row:
@@ -123,14 +123,14 @@ def _get_row_data(
 # ---------------------------------------------------------------------------
 
 def _build_sparkline(
-    section: Section,
+    reach: Reach,
     primary_source_ids: dict[int, int],
     sparkline_obs: dict[int, list[Observation]],
     width: int = 80,
     height: int = 20,
 ) -> str:
     """Generate a tiny inline SVG sparkline from pre-loaded observation data."""
-    gauge = section.gauge
+    gauge = reach.gauge
     if not gauge:
         return ""
     source_id = primary_source_ids.get(gauge.id)
@@ -176,15 +176,15 @@ def _build_sparkline(
 # CSV / Text builders (unchanged logic)
 # ---------------------------------------------------------------------------
 
-def _build_csv(sections, columns, state_name: str,
+def _build_csv(reaches, columns, state_name: str,
                primary_source_ids, calculated_ids, all_latest) -> str:
     output = io.StringIO()
     writer = csv.writer(output)
     headers = [c["name_text"] for c in columns if "c" in c["use"] and c["type"] != "noop"]
     writer.writerow(headers)
 
-    for section in sections:
-        row = _get_row_data(section, primary_source_ids, calculated_ids, all_latest)
+    for reach in reaches:
+        row = _get_row_data(reach, primary_source_ids, calculated_ids, all_latest)
         values = []
         for col in columns:
             if "c" not in col["use"] or col["type"] == "noop":
@@ -199,7 +199,7 @@ def _build_csv(sections, columns, state_name: str,
     return output.getvalue()
 
 
-def _build_text(sections, columns, state_name: str,
+def _build_text(reaches, columns, state_name: str,
                 primary_source_ids, calculated_ids, all_latest) -> str:
     lines = []
     header = ""
@@ -210,8 +210,8 @@ def _build_text(sections, columns, state_name: str,
     lines.append(header)
     lines.append("-" * len(header))
 
-    for section in sections:
-        row = _get_row_data(section, primary_source_ids, calculated_ids, all_latest)
+    for reach in reaches:
+        row = _get_row_data(reach, primary_source_ids, calculated_ids, all_latest)
         line = ""
         for col in columns:
             if "t" not in col["use"] or col["type"] == "noop":
@@ -245,9 +245,9 @@ _TD_CLASS = {
 _SECONDARY_FIELDS = {"drainage", "class"}
 
 
-def _build_html_table(sections, columns, primary_source_ids, calculated_ids,
+def _build_html_table(reaches, columns, primary_source_ids, calculated_ids,
                       all_latest, sparkline_obs) -> str:
-    """Build the <table> body for a set of sections using pre-loaded data."""
+    """Build the <table> body for a set of reaches using pre-loaded data."""
     rows: list[str] = []
     rows.append('<table class="levels">')
     rows.append("<thead><tr>")
@@ -259,17 +259,17 @@ def _build_html_table(sections, columns, primary_source_ids, calculated_ids,
     rows.append("</tr></thead>")
     rows.append("<tbody>")
 
-    for section in sections:
-        row = _get_row_data(section, primary_source_ids, calculated_ids, all_latest)
+    for reach in reaches:
+        row = _get_row_data(reach, primary_source_ids, calculated_ids, all_latest)
         if row.get("expired"):
             continue
-        # Skip sections with no data at all
+        # Skip reaches with no data at all
         has_data = any(row.get(k) is not None and row.get(k) != ""
                        for k in ("flow", "gage", "temperature"))
         if not has_data:
             continue
-        section_id = section.id
-        sparkline = _build_sparkline(section, primary_source_ids, sparkline_obs)
+        reach_id = reach.id
+        sparkline = _build_sparkline(reach, primary_source_ids, sparkline_obs)
         tr_cls = ' class="stale"' if row.get("stale") else ""
         rows.append(f"<tr{tr_cls}>")
 
@@ -285,18 +285,18 @@ def _build_html_table(sections, columns, primary_source_ids, calculated_ids,
 
             if col["type"] == "name":
                 est = '<span class="est"> (est)</span>' if row.get("is_estimated") else ""
-                val = f'<a href="/description.php?id={section_id}">{val}</a>{est}'
+                val = f'<a href="/description.php?id={reach_id}">{val}</a>{est}'
             elif col["type"] == "flow" and isinstance(val, (int, float)):
                 lvl_cls = f' class="level-{row["flow_level"]}"' if row.get("flow_level") else ""
                 val = (
-                    f'<a{lvl_cls} href="/plot.php?type=flow&id={section_id}">{val:,.0f}</a>'
+                    f'<a{lvl_cls} href="/plot.php?type=flow&id={reach_id}">{val:,.0f}</a>'
                     f"{sparkline}"
                 )
             elif col["type"] == "gage" and isinstance(val, (int, float)):
                 lvl_cls = f' class="level-{row["gage_level"]}"' if row.get("gage_level") else ""
-                val = f'<a{lvl_cls} href="/plot.php?type=gage&id={section_id}">{val:,.1f}</a>'
+                val = f'<a{lvl_cls} href="/plot.php?type=gage&id={reach_id}">{val:,.1f}</a>'
             elif col["type"] == "temp" and isinstance(val, (int, float)):
-                val = f'<a href="/plot.php?type=temp&id={section_id}">{val:.1f}</a>'
+                val = f'<a href="/plot.php?type=temp&id={reach_id}">{val:.1f}</a>'
             elif col["type"] == "date" and isinstance(val, datetime):
                 iso = val.strftime("%Y-%m-%dT%H:%M:%SZ")
                 display = val.strftime("%m/%d %H:%M")
@@ -315,16 +315,16 @@ def _build_html_table(sections, columns, primary_source_ids, calculated_ids,
     return "\n".join(rows)
 
 
-def _build_reach_directory(sections) -> str:
+def _build_reach_directory(reaches) -> str:
     """Build a collapsible alphabetical directory of all reaches."""
     lines: list[str] = []
     lines.append('<details class="reach-dir">')
-    lines.append(f'<summary>All Reaches ({len(sections)})</summary>')
+    lines.append(f'<summary>All Reaches ({len(reaches)})</summary>')
     lines.append('<ul class="reach-list">')
-    for section in sections:
-        name = section.display_name or section.name
+    for reach in reaches:
+        name = reach.display_name or reach.name
         lines.append(
-            f'<li><a href="/description.php?id={section.id}">{name}</a></li>'
+            f'<li><a href="/description.php?id={reach.id}">{name}</a></li>'
         )
     lines.append('</ul>')
     lines.append('</details>')
@@ -473,31 +473,31 @@ def build(args):
     session = get_session()
     try:
         columns = _get_builder_columns()
-        all_sections = sections_query(session, visible_only=True, with_gauge=True)
+        all_reaches = reaches_query(session, visible_only=True, with_gauge=True)
         states = all_state_names(session)
         css = _load_css()
 
-        print(f"Building pages for {len(all_sections)} sections across {len(states)} states")
+        print(f"Building pages for {len(all_reaches)} reaches across {len(states)} states")
 
         # Landing page → index.html (lightweight state list)
         landing_html = _build_landing_page(css, states)
         (output_dir / "index.html").write_text(landing_html)
 
         # All-states page → all.html
-        _build_and_write(session, all_sections, columns, "", states, css, output_dir)
+        _build_and_write(session, all_reaches, columns, "", states, css, output_dir)
 
         # Per-state pages
         for state in states:
-            state_sections = sections_query(session, state_name=state, visible_only=True)
-            if state_sections:
-                _build_and_write(session, state_sections, columns, state, states, css, output_dir)
+            state_reaches = reaches_query(session, state_name=state, visible_only=True)
+            if state_reaches:
+                _build_and_write(session, state_reaches, columns, state, states, css, output_dir)
 
         print(f"Build complete → {output_dir}")
     finally:
         session.close()
 
 
-def _build_and_write(session, sections, columns, state: str,
+def _build_and_write(session, reaches, columns, state: str,
                      states: list[str], css: str, output_dir: Path):
     """Build and write CSV, text, and HTML for a state (or all)."""
     suffix = f"_{state}" if state else ""
@@ -505,10 +505,10 @@ def _build_and_write(session, sections, columns, state: str,
     filename = f"{state}.html" if state else "all.html"
     title = f"{state} River Levels" if state else "River Levels"
 
-    logger.info("Building %s: %d sections", label, len(sections))
+    logger.info("Building %s: %d reaches", label, len(reaches))
 
     # Pre-load ALL data in ~5 bulk queries
-    gauge_ids = [s.gauge_id for s in sections if s.gauge_id]
+    gauge_ids = [r.gauge_id for r in reaches if r.gauge_id]
     primary_source_ids = get_all_primary_source_ids(session, gauge_ids)
     source_ids = list(primary_source_ids.values())
     calculated_ids = get_calculated_source_ids(session, source_ids)
@@ -517,19 +517,19 @@ def _build_and_write(session, sections, columns, state: str,
     sparkline_obs = get_bulk_observations(session, source_ids, DataType.flow, since_48h)
 
     # CSV
-    csv_content = _build_csv(sections, columns, state,
+    csv_content = _build_csv(reaches, columns, state,
                              primary_source_ids, calculated_ids, all_latest)
     (output_dir / f"levels{suffix}.csv").write_text(csv_content)
 
     # Text
-    text_content = _build_text(sections, columns, state,
+    text_content = _build_text(reaches, columns, state,
                                primary_source_ids, calculated_ids, all_latest)
     (output_dir / f"levels{suffix}.text").write_text(text_content)
 
     # HTML — complete self-contained page
-    table_html = _build_html_table(sections, columns, primary_source_ids,
+    table_html = _build_html_table(reaches, columns, primary_source_ids,
                                    calculated_ids, all_latest, sparkline_obs)
-    directory_html = _build_reach_directory(sections)
+    directory_html = _build_reach_directory(reaches)
     page_html = _build_page(table_html, css, states, state, title,
                             directory_html=directory_html)
     (output_dir / filename).write_text(page_html)

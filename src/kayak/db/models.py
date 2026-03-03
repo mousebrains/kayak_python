@@ -2,7 +2,7 @@
 
 Normalized schema with 18 tables (16 from production + Page/PageAction).
 Replaces the flat Master/MergedMaster/Correction schema with proper
-Section/Gauge/Source relationships.
+Reach/Gauge/Source relationships.
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ class DataType(enum.StrEnum):
 
 
 class FlowLevel(enum.StrEnum):
-    """Flow level classifications for section_level."""
+    """Flow level classifications for reach_level."""
     low = "low"
     okay = "okay"
     high = "high"
@@ -103,7 +103,7 @@ class Gauge(Base):
     sources: Mapped[list[Source]] = relationship(
         secondary="gauge_source", back_populates="gauges"
     )
-    sections: Mapped[list[Section]] = relationship(back_populates="gauge")
+    reaches: Mapped[list[Reach]] = relationship(back_populates="gauge")
 
     __table_args__ = (
         Index("ix_gauge_usgs_id", "usgs_id"),
@@ -276,18 +276,18 @@ class LatestObservation(Base):
 
 
 # ---------------------------------------------------------------------------
-# section
+# reach
 # ---------------------------------------------------------------------------
 
-class Section(Base):
-    __tablename__ = "section"
+class Reach(Base):
+    __tablename__ = "reach"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     updated_at: Mapped[datetime | None] = mapped_column()
     gauge_id: Mapped[int | None] = mapped_column(
         ForeignKey("gauge.id", ondelete="SET NULL")
     )
-    name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    name: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
     display_name: Mapped[str | None] = mapped_column(Text)
     sort_name: Mapped[str | None] = mapped_column(String(256))
     nature: Mapped[str | None] = mapped_column(Text)
@@ -316,20 +316,22 @@ class Section(Base):
     season: Mapped[str | None] = mapped_column(Text)
     watershed_type: Mapped[str | None] = mapped_column(Text)
     aw_id: Mapped[int | None] = mapped_column()
+    river: Mapped[str | None] = mapped_column(Text)
+    max_gradient: Mapped[float | None] = mapped_column()
 
     # relationships
-    gauge: Mapped[Gauge | None] = relationship(back_populates="sections")
+    gauge: Mapped[Gauge | None] = relationship(back_populates="reaches")
     states: Mapped[list[State]] = relationship(
-        secondary="section_state", back_populates="sections"
+        secondary="reach_state", back_populates="reaches"
     )
-    classes: Mapped[list[SectionClass]] = relationship(back_populates="section")
-    levels: Mapped[list[SectionLevel]] = relationship(back_populates="section")
+    classes: Mapped[list[ReachClass]] = relationship(back_populates="reach")
+    levels: Mapped[list[ReachLevel]] = relationship(back_populates="reach")
     guidebooks: Mapped[list[Guidebook]] = relationship(
-        secondary="section_guidebook", back_populates="sections"
+        secondary="reach_guidebook", back_populates="reaches"
     )
 
     __table_args__ = (
-        Index("ix_section_sort_name", "sort_name"),
+        Index("ix_reach_sort_name", "sort_name"),
     )
 
 
@@ -345,40 +347,40 @@ class State(Base):
     abbreviation: Mapped[str | None] = mapped_column(String(2))
 
     # relationships
-    sections: Mapped[list[Section]] = relationship(
-        secondary="section_state", back_populates="states"
+    reaches: Mapped[list[Reach]] = relationship(
+        secondary="reach_state", back_populates="states"
     )
 
 
 # ---------------------------------------------------------------------------
-# section_state (M2M junction)
+# reach_state (M2M junction)
 # ---------------------------------------------------------------------------
 
-class SectionState(Base):
-    __tablename__ = "section_state"
+class ReachState(Base):
+    __tablename__ = "reach_state"
 
-    section_id: Mapped[int] = mapped_column(
-        ForeignKey("section.id", ondelete="CASCADE"), primary_key=True
+    reach_id: Mapped[int] = mapped_column(
+        ForeignKey("reach.id", ondelete="CASCADE"), primary_key=True
     )
     state_id: Mapped[int] = mapped_column(
         ForeignKey("state.id", ondelete="CASCADE"), primary_key=True
     )
 
     __table_args__ = (
-        Index("ix_section_state_state_id", "state_id"),
+        Index("ix_reach_state_state_id", "state_id"),
     )
 
 
 # ---------------------------------------------------------------------------
-# section_class
+# reach_class
 # ---------------------------------------------------------------------------
 
-class SectionClass(Base):
-    __tablename__ = "section_class"
+class ReachClass(Base):
+    __tablename__ = "reach_class"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    section_id: Mapped[int] = mapped_column(
-        ForeignKey("section.id", ondelete="CASCADE"), nullable=False
+    reach_id: Mapped[int] = mapped_column(
+        ForeignKey("reach.id", ondelete="CASCADE"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(32), nullable=False)
     low: Mapped[float | None] = mapped_column()
@@ -387,19 +389,19 @@ class SectionClass(Base):
     high_data_type: Mapped[DataType | None] = mapped_column()
 
     # relationships
-    section: Mapped[Section] = relationship(back_populates="classes")
+    reach: Mapped[Reach] = relationship(back_populates="classes")
 
 
 # ---------------------------------------------------------------------------
-# section_level
+# reach_level
 # ---------------------------------------------------------------------------
 
-class SectionLevel(Base):
-    __tablename__ = "section_level"
+class ReachLevel(Base):
+    __tablename__ = "reach_level"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    section_id: Mapped[int] = mapped_column(
-        ForeignKey("section.id", ondelete="CASCADE"), nullable=False
+    reach_id: Mapped[int] = mapped_column(
+        ForeignKey("reach.id", ondelete="CASCADE"), nullable=False
     )
     level: Mapped[FlowLevel] = mapped_column(nullable=False)
     low: Mapped[float | None] = mapped_column()
@@ -408,7 +410,7 @@ class SectionLevel(Base):
     high_data_type: Mapped[DataType | None] = mapped_column()
 
     # relationships
-    section: Mapped[Section] = relationship(back_populates="levels")
+    reach: Mapped[Reach] = relationship(back_populates="levels")
 
 
 # ---------------------------------------------------------------------------
@@ -437,20 +439,20 @@ class Guidebook(Base):
     url: Mapped[str | None] = mapped_column(Text)
 
     # relationships
-    sections: Mapped[list[Section]] = relationship(
-        secondary="section_guidebook", back_populates="guidebooks"
+    reaches: Mapped[list[Reach]] = relationship(
+        secondary="reach_guidebook", back_populates="guidebooks"
     )
 
 
 # ---------------------------------------------------------------------------
-# section_guidebook (M2M junction with extra columns)
+# reach_guidebook (M2M junction with extra columns)
 # ---------------------------------------------------------------------------
 
-class SectionGuidebook(Base):
-    __tablename__ = "section_guidebook"
+class ReachGuidebook(Base):
+    __tablename__ = "reach_guidebook"
 
-    section_id: Mapped[int] = mapped_column(
-        ForeignKey("section.id", ondelete="CASCADE"), primary_key=True
+    reach_id: Mapped[int] = mapped_column(
+        ForeignKey("reach.id", ondelete="CASCADE"), primary_key=True
     )
     guidebook_id: Mapped[int] = mapped_column(
         ForeignKey("guidebook.id", ondelete="CASCADE"), primary_key=True

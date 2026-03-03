@@ -1,8 +1,8 @@
 <?php
 /**
- * Raw data view — shows latest readings for a section.
+ * Raw data view — shows latest readings for a reach.
  *
- * Usage: /view.php?id=<section_id>
+ * Usage: /view.php?id=<reach_id>
  */
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/header.php';
@@ -13,19 +13,19 @@ if (!$id) { http_response_code(400); exit('Missing id parameter'); }
 
 $db = get_db();
 
-$stmt = $db->prepare('SELECT gauge_id, display_name, name FROM section WHERE id = ?');
+$stmt = $db->prepare('SELECT gauge_id, display_name, name FROM reach WHERE id = ?');
 $stmt->execute([$id]);
-$section = $stmt->fetch();
-if (!$section) { http_response_code(404); exit('Section not found'); }
+$reach = $stmt->fetch();
+if (!$reach) { http_response_code(404); exit('Reach not found'); }
 
-$name = $section['display_name'] ?: $section['name'];
+$name = $reach['display_name'] ?: $reach['name'];
 
 header('Cache-Control: max-age=60');
 include_header("$name - Data");
 
 echo '<h2>' . htmlspecialchars($name) . '</h2>';
 
-if (!$section['gauge_id']) {
+if (!$reach['gauge_id']) {
     echo '<p>No gauge data available.</p>';
     echo '<p><a href="/index.html">Back</a></p>';
     include_footer();
@@ -33,7 +33,7 @@ if (!$section['gauge_id']) {
 }
 
 $stmt = $db->prepare('SELECT source_id FROM gauge_source WHERE gauge_id = ? LIMIT 1');
-$stmt->execute([$section['gauge_id']]);
+$stmt->execute([$reach['gauge_id']]);
 $gs = $stmt->fetch();
 
 if ($gs) {

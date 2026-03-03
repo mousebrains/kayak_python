@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Match American Whitewater reaches to local sections via shared gauge IDs.
+"""Match American Whitewater reaches to local reaches via shared gauge IDs.
 
 Two-phase approach:
   1. Fetch: paginate AW reaches per state, batch-query their gauges, save to
      a JSON cache file.  Throttled to ~60 minutes for ~2,000 reaches.
   2. Process: load cache, match gauge source_ids to our source names, update
-     section.aw_id, put-in/take-out coordinates, and backfill missing gauge
+     reach.aw_id, put-in/take-out coordinates, and backfill missing gauge
      identifiers (usgs_id, cbtt_id).
 
 Usage:
@@ -259,18 +259,18 @@ def _save_cache(cache, cache_path):
 # ---------------------------------------------------------------------------
 
 def build_source_lookup(db):
-    """Build a mapping from source name -> set of (section_id, gauge_id)."""
+    """Build a mapping from source name -> set of (reach_id, gauge_id)."""
     rows = db.execute(
         """
-        SELECT src.name, sec.id, sec.gauge_id
+        SELECT src.name, r.id, r.gauge_id
         FROM source src
         JOIN gauge_source gs ON gs.source_id = src.id
-        JOIN section sec ON sec.gauge_id = gs.gauge_id
+        JOIN reach r ON r.gauge_id = gs.gauge_id
         """
     ).fetchall()
     lookup = {}
-    for source_name, section_id, gauge_id in rows:
-        lookup.setdefault(source_name, set()).add((section_id, gauge_id))
+    for source_name, reach_id, gauge_id in rows:
+        lookup.setdefault(source_name, set()).add((reach_id, gauge_id))
     return lookup
 
 
@@ -283,7 +283,7 @@ def build_gauge_ids(db):
 def match_source_id(aw_source, aw_source_id, lookup):
     """Try to match an AW gauge source_id to our source names.
 
-    Returns set of (section_id, gauge_id) tuples.
+    Returns set of (reach_id, gauge_id) tuples.
     """
     matched = set()
 
@@ -309,10 +309,10 @@ def match_source_id(aw_source, aw_source_id, lookup):
 
 
 def process_cache(cache, db, dry_run):
-    """Match cached AW reaches to DB sections and apply updates."""
+    """Match cached AW reaches to DB reaches and apply updates."""
     lookup = build_source_lookup(db)
     gauge_ids = build_gauge_ids(db)
-    print(f"Built lookup: {len(lookup)} source names -> sections")
+    print(f"Built lookup: {len(lookup)} source names -> reaches")
 
     total_matched = 0
     total_updated = 0
@@ -326,7 +326,7 @@ def process_cache(cache, db, dry_run):
         if not aw_gauges:
             continue
 
-        # Collect all (section_id, gauge_id) matched through any gauge
+        # Collect all (reach_id, gauge_id) matched through any gauge
         matched = set()
         for g in aw_gauges:
             matched.update(
@@ -336,33 +336,33 @@ def process_cache(cache, db, dry_run):
             continue
 
         total_matched += 1
-        reach_id = int(reach["id"])
+        aw_reach_id = int(reach["id"])
         plat = reach.get("plat")
         plon = reach.get("plon")
         tlat = reach.get("tlat")
         tlon = reach.get("tlon")
         aw_name = f"{reach.get('river', '')} - {reach.get('section', '')}"
 
-        matched_sections = {s for s, g in matched}
-        if len(matched_sections) > 1:
+        matched_reaches = {r for r, g in matched}
+        if len(matched_reaches) > 1:
             total_conflicts += 1
 
-        for section_id, gauge_id in matched:
+        for db_reach_id, gauge_id in matched:
             label = "DRY-RUN" if dry_run else "UPDATE"
-            print(f"  [{label}] section {section_id} -> AW {reach_id} ({aw_name})")
+            print(f"  [{label}] reach {db_reach_id} -> AW {aw_reach_id} ({aw_name})")
 
             if not dry_run:
                 updates = ["aw_id = ?"]
-                params = [reach_id]
+                params = [aw_reach_id]
                 if plat and plon:
                     updates += ["latitude_start = ?", "longitude_start = ?"]
                     params += [float(plat), float(plon)]
                 if tlat and tlon:
                     updates += ["latitude_end = ?", "longitude_end = ?"]
                     params += [float(tlat), float(tlon)]
-                params.append(section_id)
+                params.append(db_reach_id)
                 db.execute(
-                    f"UPDATE section SET {', '.join(updates)} WHERE id = ?",
+                    f"UPDATE reach SET {', '.join(updates)} WHERE id = ?",
                     params,
                 )
                 total_updated += 1
@@ -388,10 +388,10 @@ def process_cache(cache, db, dry_run):
 
     print(f"\n=== Summary ===")
     print(f"Total AW reaches in cache: {total_reaches}")
-    print(f"Reaches matched to our sections: {total_matched}")
+    print(f"Reaches matched to our reaches: {total_matched}")
     if not dry_run:
-        print(f"Sections updated: {total_updated}")
-    print(f"Multi-section matches (conflicts): {total_conflicts}")
+        print(f"Reaches updated: {total_updated}")
+    print(f"Multi-reach matches (conflicts): {total_conflicts}")
     print(f"Gauge identifiers backfilled: {gauge_ids_filled}")
 
 
@@ -401,7 +401,7 @@ def process_cache(cache, db, dry_run):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Match AW reaches to local sections via shared gauge IDs"
+        description="Match AW reaches to local reaches via shared gauge IDs"
     )
     parser.add_argument("--db", default="/home/pat/DB/kayak.db",
                         help="SQLite database path")

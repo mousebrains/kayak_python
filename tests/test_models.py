@@ -20,9 +20,9 @@ from kayak.db.models import (
     PageAction,
     Rating,
     RatingData,
-    Section,
-    SectionClass,
-    SectionLevel,
+    Reach,
+    ReachClass,
+    ReachLevel,
     Source,
     State,
 )
@@ -133,49 +133,49 @@ def test_latest_observation(session, sample_source):
     assert result.delta_per_hour == 2.5
 
 
-def test_create_section(session, sample_section):
-    result = session.get(Section, sample_section.id)
+def test_create_reach(session, sample_reach):
+    result = session.get(Reach, sample_reach.id)
     assert result.display_name == "Test River - Upper"
     assert result.gauge is not None
 
 
-def test_section_state_junction(session, sample_section):
+def test_reach_state_junction(session, sample_reach):
     state = State(name="OR", abbreviation="OR")
     session.add(state)
     session.flush()
-    sample_section.states.append(state)
+    sample_reach.states.append(state)
     session.flush()
 
-    section = session.get(Section, sample_section.id)
-    assert len(section.states) == 1
-    assert section.states[0].name == "OR"
+    reach = session.get(Reach, sample_reach.id)
+    assert len(reach.states) == 1
+    assert reach.states[0].name == "OR"
 
 
-def test_section_class(session, sample_section):
-    sc = SectionClass(
-        section_id=sample_section.id, name="III",
+def test_reach_class(session, sample_reach):
+    rc = ReachClass(
+        reach_id=sample_reach.id, name="III",
         low=500.0, low_data_type=DataType.flow,
         high=2000.0, high_data_type=DataType.flow,
     )
-    session.add(sc)
+    session.add(rc)
     session.flush()
 
-    section = session.get(Section, sample_section.id)
-    assert len(section.classes) == 1
-    assert section.classes[0].name == "III"
+    reach = session.get(Reach, sample_reach.id)
+    assert len(reach.classes) == 1
+    assert reach.classes[0].name == "III"
 
 
-def test_section_level(session, sample_section):
-    sl = SectionLevel(
-        section_id=sample_section.id, level=FlowLevel.okay,
+def test_reach_level(session, sample_reach):
+    rl = ReachLevel(
+        reach_id=sample_reach.id, level=FlowLevel.okay,
         low=800.0, low_data_type=DataType.flow,
     )
-    session.add(sl)
+    session.add(rl)
     session.flush()
 
-    section = session.get(Section, sample_section.id)
-    assert len(section.levels) == 1
-    assert section.levels[0].level == FlowLevel.okay
+    reach = session.get(Reach, sample_reach.id)
+    assert len(reach.levels) == 1
+    assert reach.levels[0].level == FlowLevel.okay
 
 
 def test_rating_and_data(session):
@@ -213,16 +213,16 @@ def test_class_description(session):
     assert result.description == "Intermediate"
 
 
-def test_guidebook(session, sample_section):
+def test_guidebook(session, sample_reach):
     gb = Guidebook(title="Oregon Kayaking", author="John Doe")
     session.add(gb)
     session.flush()
 
-    sample_section.guidebooks.append(gb)
+    sample_reach.guidebooks.append(gb)
     session.flush()
 
-    section = session.get(Section, sample_section.id)
-    assert len(section.guidebooks) == 1
+    reach = session.get(Reach, sample_reach.id)
+    assert len(reach.guidebooks) == 1
 
 
 def test_fetch_url(session):

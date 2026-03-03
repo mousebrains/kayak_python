@@ -2,7 +2,7 @@
 /**
  * JSON data API.
  *
- * Usage: /api.php?id=<section_id>&type=<data_type>[&days=60][&points=200][&format=verbose]
+ * Usage: /api.php?id=<reach_id>&type=<data_type>[&days=60][&points=200][&format=verbose]
  *
  * Default compact format: {"ts": [epoch, ...], "v": [value, ...]}
  * Verbose format:         {"data": [{"time": "ISO", "value": 1.0}, ...]}
@@ -28,19 +28,19 @@ if ($type === 'temp') $type = 'temperature';
 
 $db = get_db();
 
-$stmt = $db->prepare('SELECT gauge_id, name FROM section WHERE id = ?');
+$stmt = $db->prepare('SELECT gauge_id, name FROM reach WHERE id = ?');
 $stmt->execute([$id]);
-$section = $stmt->fetch();
-if (!$section || !$section['gauge_id']) {
-    echo json_encode(['section' => $section['name'] ?? '', 'type' => $type, 'count' => 0, 'ts' => [], 'v' => []]);
+$reach = $stmt->fetch();
+if (!$reach || !$reach['gauge_id']) {
+    echo json_encode(['reach' => $reach['name'] ?? '', 'type' => $type, 'count' => 0, 'ts' => [], 'v' => []]);
     exit;
 }
 
 $stmt = $db->prepare('SELECT source_id FROM gauge_source WHERE gauge_id = ? LIMIT 1');
-$stmt->execute([$section['gauge_id']]);
+$stmt->execute([$reach['gauge_id']]);
 $gs = $stmt->fetch();
 if (!$gs) {
-    echo json_encode(['section' => $section['name'], 'type' => $type, 'count' => 0, 'ts' => [], 'v' => []]);
+    echo json_encode(['reach' => $reach['name'], 'type' => $type, 'count' => 0, 'ts' => [], 'v' => []]);
     exit;
 }
 
@@ -77,7 +77,7 @@ if ($format === 'verbose') {
         ];
     }
     echo json_encode([
-        'section' => $section['name'],
+        'reach' => $reach['name'],
         'type'    => $type,
         'count'   => count($data),
         'data'    => $data,
@@ -90,7 +90,7 @@ if ($format === 'verbose') {
         $v[]  = (float)$r['value'];
     }
     echo json_encode([
-        'section' => $section['name'],
+        'reach' => $reach['name'],
         'type'    => $type,
         'count'   => count($ts),
         'ts'      => $ts,

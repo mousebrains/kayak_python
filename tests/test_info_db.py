@@ -6,12 +6,12 @@ from kayak.db.info_db import (
     display_name,
     get_all_primary_source_ids,
     get_calculated_source_ids,
-    get_gauge_for_section,
+    get_gauge_for_reach,
     get_primary_source_id,
-    get_section,
-    get_section_by_name,
+    get_reach,
+    get_reach_by_name,
     get_source_ids_for_gauge,
-    sections_query,
+    reaches_query,
 )
 from kayak.db.models import (
     CalcExpression,
@@ -19,8 +19,8 @@ from kayak.db.models import (
     FetchUrl,
     Gauge,
     GaugeSource,
-    Section,
-    SectionState,
+    Reach,
+    ReachState,
     Source,
     State,
 )
@@ -50,12 +50,22 @@ def test_all_states_sorted(session):
 
 
 def test_all_state_names_sorted(session):
-    """all_state_names returns a sorted list of name strings."""
-    session.add_all([
+    """all_state_names returns sorted names of states that have visible reaches."""
+    states = [
         State(name="WA", abbreviation="WA"),
         State(name="ID", abbreviation="ID"),
         State(name="OR", abbreviation="OR"),
-    ])
+    ]
+    session.add_all(states)
+    session.flush()
+
+    # Link a visible reach to each state
+    for st in states:
+        r = Reach(name=f"r_{st.name}", display_name=f"River {st.name}",
+                  sort_name=f"River {st.name}")
+        session.add(r)
+        session.flush()
+        session.add(ReachState(reach_id=r.id, state_id=st.id))
     session.flush()
 
     result = all_state_names(session)
@@ -63,112 +73,112 @@ def test_all_state_names_sorted(session):
 
 
 # ---------------------------------------------------------------------------
-# sections_query
+# reaches_query
 # ---------------------------------------------------------------------------
 
 
-def _add_section(session, name, sort_name, *, no_show=False, gauge_id=None):
-    """Helper to add a section with minimal required fields."""
-    sec = Section(
+def _add_reach(session, name, sort_name, *, no_show=False, gauge_id=None):
+    """Helper to add a reach with minimal required fields."""
+    reach = Reach(
         name=name,
         display_name=name,
         sort_name=sort_name,
         no_show=no_show,
         gauge_id=gauge_id,
     )
-    session.add(sec)
+    session.add(reach)
     session.flush()
-    return sec
+    return reach
 
 
-def test_sections_query_sorted(session):
-    """sections_query returns sections sorted by sort_name."""
-    _add_section(session, "z_river", "Zeta River")
-    _add_section(session, "a_river", "Alpha River")
-    _add_section(session, "m_river", "Mu River")
+def test_reaches_query_sorted(session):
+    """reaches_query returns reaches sorted by sort_name."""
+    _add_reach(session, "z_river", "Zeta River")
+    _add_reach(session, "a_river", "Alpha River")
+    _add_reach(session, "m_river", "Mu River")
 
-    result = sections_query(session, visible_only=False)
-    names = [s.sort_name for s in result]
+    result = reaches_query(session, visible_only=False)
+    names = [r.sort_name for r in result]
     assert names == ["Alpha River", "Mu River", "Zeta River"]
 
 
-def test_sections_query_visible_only_excludes_no_show(session):
-    """sections_query with visible_only=True filters out no_show sections."""
-    _add_section(session, "visible", "A Visible")
-    _add_section(session, "hidden", "B Hidden", no_show=True)
+def test_reaches_query_visible_only_excludes_no_show(session):
+    """reaches_query with visible_only=True filters out no_show reaches."""
+    _add_reach(session, "visible", "A Visible")
+    _add_reach(session, "hidden", "B Hidden", no_show=True)
 
-    result = sections_query(session, visible_only=True)
+    result = reaches_query(session, visible_only=True)
     assert len(result) == 1
     assert result[0].name == "visible"
 
 
-def test_sections_query_state_filter(session):
-    """sections_query filters by state name through SectionState junction."""
+def test_reaches_query_state_filter(session):
+    """reaches_query filters by state name through ReachState junction."""
     state_or = State(name="OR", abbreviation="OR")
     state_wa = State(name="WA", abbreviation="WA")
     session.add_all([state_or, state_wa])
     session.flush()
 
-    sec_or = _add_section(session, "deschutes", "Deschutes")
-    sec_wa = _add_section(session, "skagit", "Skagit")
-    session.add(SectionState(section_id=sec_or.id, state_id=state_or.id))
-    session.add(SectionState(section_id=sec_wa.id, state_id=state_wa.id))
+    reach_or = _add_reach(session, "deschutes", "Deschutes")
+    reach_wa = _add_reach(session, "skagit", "Skagit")
+    session.add(ReachState(reach_id=reach_or.id, state_id=state_or.id))
+    session.add(ReachState(reach_id=reach_wa.id, state_id=state_wa.id))
     session.flush()
 
-    result = sections_query(session, state_name="OR", visible_only=False)
+    result = reaches_query(session, state_name="OR", visible_only=False)
     assert len(result) == 1
     assert result[0].name == "deschutes"
 
 
 # ---------------------------------------------------------------------------
-# get_section / get_section_by_name / display_name
+# get_reach / get_reach_by_name / display_name
 # ---------------------------------------------------------------------------
 
 
-def test_get_section_valid_id(session, sample_section):
-    """get_section returns the Section for a valid ID."""
-    result = get_section(session, sample_section.id)
+def test_get_reach_valid_id(session, sample_reach):
+    """get_reach returns the Reach for a valid ID."""
+    result = get_reach(session, sample_reach.id)
     assert result is not None
-    assert result.id == sample_section.id
+    assert result.id == sample_reach.id
 
 
-def test_get_section_invalid_id(session):
-    """get_section returns None for a nonexistent ID."""
-    assert get_section(session, 99999) is None
+def test_get_reach_invalid_id(session):
+    """get_reach returns None for a nonexistent ID."""
+    assert get_reach(session, 99999) is None
 
 
-def test_get_section_by_name(session, sample_section):
-    """get_section_by_name returns the Section matching the unique name."""
-    result = get_section_by_name(session, sample_section.name)
+def test_get_reach_by_name(session, sample_reach):
+    """get_reach_by_name returns the Reach matching the unique name."""
+    result = get_reach_by_name(session, sample_reach.name)
     assert result is not None
-    assert result.id == sample_section.id
+    assert result.id == sample_reach.id
 
 
-def test_display_name(session, sample_section):
-    """display_name returns the display_name string for a section ID."""
-    result = display_name(session, sample_section.id)
+def test_display_name(session, sample_reach):
+    """display_name returns the display_name string for a reach ID."""
+    result = display_name(session, sample_reach.id)
     assert result == "Test River - Upper"
 
 
 # ---------------------------------------------------------------------------
-# get_gauge_for_section
+# get_gauge_for_reach
 # ---------------------------------------------------------------------------
 
 
-def test_get_gauge_for_section_linked(session, sample_section, sample_gauge):
-    """get_gauge_for_section returns the linked Gauge."""
-    result = get_gauge_for_section(session, sample_section.id)
+def test_get_gauge_for_reach_linked(session, sample_reach, sample_gauge):
+    """get_gauge_for_reach returns the linked Gauge."""
+    result = get_gauge_for_reach(session, sample_reach.id)
     assert result is not None
     assert result.id == sample_gauge.id
 
 
-def test_get_gauge_for_section_no_gauge(session):
-    """get_gauge_for_section returns None when section has no gauge."""
-    sec = Section(name="no_gauge", display_name="No Gauge", sort_name="No Gauge")
-    session.add(sec)
+def test_get_gauge_for_reach_no_gauge(session):
+    """get_gauge_for_reach returns None when reach has no gauge."""
+    reach = Reach(name="no_gauge", display_name="No Gauge", sort_name="No Gauge")
+    session.add(reach)
     session.flush()
 
-    assert get_gauge_for_section(session, sec.id) is None
+    assert get_gauge_for_reach(session, reach.id) is None
 
 
 # ---------------------------------------------------------------------------

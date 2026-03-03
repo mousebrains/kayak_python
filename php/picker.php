@@ -2,8 +2,8 @@
 /**
  * Picker — "Build Your Own Levels Page"
  *
- * HTML page: state filter pills, text search, section checklist.
- * AJAX endpoint (?ajax=1&states=Washington,Oregon): returns JSON sections.
+ * HTML page: state filter pills, text search, reach checklist.
+ * AJAX endpoint (?ajax=1&states=Washington,Oregon): returns JSON reaches.
  */
 require_once __DIR__ . '/includes/db.php';
 
@@ -26,17 +26,17 @@ if (filter_input(INPUT_GET, 'ajax', FILTER_VALIDATE_INT)) {
     $placeholders = implode(',', array_fill(0, count($state_names), '?'));
 
     $sql = <<<SQL
-SELECT DISTINCT sec.id,
-       COALESCE(sec.display_name, sec.name) AS name,
-       sec.sort_name,
+SELECT DISTINCT r.id,
+       COALESCE(r.display_name, r.name) AS name,
+       r.sort_name,
        g.location,
        lo_flow.value       AS flow,
        lo_gage.value       AS gage,
        lo_flow.delta_per_hour AS flow_delta
-FROM section sec
-JOIN section_state ss ON sec.id = ss.section_id
-JOIN state st ON ss.state_id = st.id
-LEFT JOIN gauge g ON sec.gauge_id = g.id
+FROM reach r
+JOIN reach_state rs ON r.id = rs.reach_id
+JOIN state st ON rs.state_id = st.id
+LEFT JOIN gauge g ON r.gauge_id = g.id
 LEFT JOIN (
     SELECT gauge_id, MIN(source_id) AS source_id
     FROM gauge_source GROUP BY gauge_id
@@ -45,8 +45,8 @@ LEFT JOIN latest_observation lo_flow
        ON gs.source_id = lo_flow.source_id AND lo_flow.data_type = 'flow'
 LEFT JOIN latest_observation lo_gage
        ON gs.source_id = lo_gage.source_id AND lo_gage.data_type = 'gauge'
-WHERE sec.no_show = 0 AND st.name IN ($placeholders)
-ORDER BY sec.sort_name
+WHERE r.no_show = 0 AND st.name IN ($placeholders)
+ORDER BY r.sort_name
 SQL;
 
     $stmt = $db->prepare($sql);
@@ -62,9 +62,9 @@ SQL;
 // -----------------------------------------------------------------------
 $states = $db->query(
     'SELECT DISTINCT st.name FROM state st
-     JOIN section_state ss ON st.id = ss.state_id
-     JOIN section sec ON ss.section_id = sec.id
-     WHERE sec.no_show = 0
+     JOIN reach_state rs ON st.id = rs.state_id
+     JOIN reach r ON rs.reach_id = r.id
+     WHERE r.no_show = 0
      ORDER BY st.name'
 )->fetchAll(PDO::FETCH_COLUMN);
 
@@ -77,7 +77,7 @@ require_once __DIR__ . '/includes/footer.php';
 include_header('Build Your Own Levels Page', 'picker');
 ?>
 <h2>Build Your Own Levels Page</h2>
-<p style="margin:.5rem 0;font-size:.85rem">Select states, pick sections, then view a custom levels page you can bookmark and share.</p>
+<p style="margin:.5rem 0;font-size:.85rem">Select states, pick reaches, then view a custom levels page you can bookmark and share.</p>
 
 <div class="picker-states" id="state-pills">
 <?php foreach ($states as $st): ?>
@@ -85,7 +85,7 @@ include_header('Build Your Own Levels Page', 'picker');
 <?php endforeach; ?>
 </div>
 
-<input type="text" class="picker-search" id="search" placeholder="Filter sections by name…" disabled>
+<input type="text" class="picker-search" id="search" placeholder="Filter reaches by name…" disabled>
 
 <table class="picker-sections" id="sections">
   <thead>
@@ -110,7 +110,6 @@ include_header('Build Your Own Levels Page', 'picker');
 
 <script>
 (function() {
-  // stateCache: state name → array of section objects (keyed by section id)
   const stateCache = new Map();
   const selected = new Set();
   const pills = document.getElementById('state-pills');
@@ -145,7 +144,6 @@ include_header('Build Your Own Levels Page', 'picker');
   }
 
   function buildAllRows() {
-    // Merge cached state results, dedup by section id
     const byId = new Map();
     for (const name of checkedStates()) {
       const rows = stateCache.get(name);
@@ -202,15 +200,11 @@ include_header('Build Your Own Levels Page', 'picker');
       renderTable();
       return;
     }
-    // Fetch only uncached states
     const needed = names.filter(n => !stateCache.has(n));
     if (needed.length) {
       const url = '/picker.php?ajax=1&states=' + encodeURIComponent(needed.join(','));
       const resp = await fetch(url);
       const rows = await resp.json();
-      // Group rows per needed state — but the server returns a combined set.
-      // Cache the full batch under each needed state name.
-      // (A section appearing in multiple states gets cached under each.)
       for (const n of needed) stateCache.set(n, rows);
     }
     buildAllRows();

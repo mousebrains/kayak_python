@@ -30,7 +30,7 @@ python3 -m venv /home/pat/.venv
 /home/pat/.venv/bin/levels pipeline      # Fetch live data and generate HTML
 ```
 
-`init-db` seeds states, sources, and fetch URLs from `data/sources.yaml`. Gauges and sections must be imported separately from the legacy MySQL dump (see Migration & Sync Scripts below).
+`init-db` seeds states, sources, and fetch URLs from `data/sources.yaml`. Gauges and reaches must be imported separately from the legacy MySQL dump (see Migration & Sync Scripts below).
 
 ## Build and Development Commands
 
@@ -87,7 +87,7 @@ Runs these steps in order:
 
 **Python (static generation):** `levels build` writes self-contained HTML pages to `public_html/` with inlined CSS (from `src/kayak/web/static/style.css`) and SVG sparklines. These are the main river levels tables.
 
-**PHP (dynamic pages):** PHP files in `php/` handle interactive features — description pages with plots, data APIs, editing, the section picker. Both layers share the same database via `DATABASE_URL` environment variable.
+**PHP (dynamic pages):** PHP files in `php/` handle interactive features — description pages with plots, data APIs, editing, the reach picker, and source/gauge browsers. Both layers share the same database (`SQLITE_PATH` env var for PHP, `DATABASE_URL` for Python).
 
 ### Database
 
@@ -96,7 +96,7 @@ Single normalized SQLite database (`kayak.db`) for development, MySQL for produc
 - `source` / `gauge` / `gauge_source` — data sources and physical gauge stations
 - `observation` — time-series data (source_id, observed_at, data_type, value)
 - `latest_observation` — cached most-recent reading with delta_per_hour
-- `section` — river runs with metadata, coordinates, levels
+- `reach` — river runs with metadata, coordinates, levels
 - `fetch_url` / `calc_expression` — how to obtain data (fetch vs. calculate)
 - `rating` / `rating_data` — gage height ↔ flow conversion tables
 
@@ -117,8 +117,8 @@ Each subcommand module in `src/kayak/cli/` exposes `addArgs(subparsers)` and set
 - **Database access:** `kayak.db.engine.get_session(url)` provides sessions; CLI commands manage session lifecycle
 - **Upsert pattern:** `store_observation()` uses SQLite `ON CONFLICT DO UPDATE` / MySQL `ON DUPLICATE KEY UPDATE`
 - **Test isolation:** Every test gets a fresh in-memory SQLite engine and a transactional session that rolls back
-- **Test fixtures:** `tests/conftest.py` provides `engine`, `session`, `sample_source`, `sample_gauge`, `sample_section`, `linked_source_gauge`
-- **PHP DB connection:** `php/includes/db.php` reads `DATABASE_URL` env var; supports both MySQL PDO and SQLite PDO
+- **Test fixtures:** `tests/conftest.py` provides `engine`, `session`, `sample_source`, `sample_gauge`, `sample_reach`, `linked_source_gauge`
+- **PHP DB connection:** `php/includes/db.php` reads `SQLITE_PATH` env var; SQLite PDO only
 
 ## Migration & Sync Scripts
 
@@ -126,7 +126,7 @@ Scripts in `scripts/` handle data migration between the legacy MySQL databases a
 
 | Script | Purpose |
 |---|---|
-| `import_from_dump.py` | Import production MySQL dump (`levels_todo`) into local SQLite. Populates gauges, sections, ratings, and optionally observations. Required for local dev setup after `init-db`. |
+| `import_from_dump.py` | Import production MySQL dump (`levels_todo`) into local SQLite. Populates gauges, reaches, ratings, and optionally observations. Required for local dev setup after `init-db`. |
 | `migrate_legacy_to_wkcclevels.py` | Full one-time migration from legacy `levels_todo`/`levels_data`/`levels_page` → `wkcclevels` MySQL. Drops and recreates all 18 tables. |
 | `sync_observations.py` | Incremental sync from `levels_data` → `wkcclevels`. Uses high-water marks (`MAX(observed_at)` per source/data_type) to fetch only new rows. Runs on cron (twice daily at 6:00/18:00). |
 | `sync_legacy_observations.py` | Sync legacy observations into local SQLite or MySQL. Supports `--days N` window. Used for dev setup. |

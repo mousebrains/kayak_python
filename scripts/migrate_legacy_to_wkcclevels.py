@@ -337,9 +337,9 @@ def migrate_gauge_source(src, tgt, dry_run):
     return len(rows)
 
 
-def migrate_sections(src, tgt, dry_run):
-    """Migrate section table, renaming camelCase → snake_case."""
-    log.info("--- Migrating sections ---")
+def migrate_reaches(src, tgt, dry_run):
+    """Migrate section table → reach, renaming camelCase → snake_case."""
+    log.info("--- Migrating reaches ---")
     rows = src.execute(text(
         "SELECT id, tUpdate, gauge, name, displayName, sortName, nature, "
         "description, difficulties, basin, basinArea, elevation, elevationLost, "
@@ -380,31 +380,31 @@ def migrate_sections(src, tgt, dry_run):
             "watershed_type": r[30] if r[30] is not None else None,
             "aw_id": r[31] if r[31] is not None else None,
         })
-    mysql_upsert(tgt, "section", cols, batch)
+    mysql_upsert(tgt, "reach", cols, batch)
     tgt.commit()
-    log.info("  Wrote %d sections", len(rows))
+    log.info("  Wrote %d reaches", len(rows))
     return len(rows)
 
 
-def migrate_section_state(src, tgt, dry_run):
-    """Migrate section2state → section_state."""
-    log.info("--- Migrating section_state ---")
+def migrate_reach_state(src, tgt, dry_run):
+    """Migrate section2state → reach_state."""
+    log.info("--- Migrating reach_state ---")
     rows = src.execute(text("SELECT section, state FROM section2state")).fetchall()
 
     if dry_run:
         log.info("  [DRY RUN] %d rows", len(rows))
         return len(rows)
 
-    batch = [{"section_id": r[0], "state_id": r[1]} for r in rows]
-    mysql_upsert(tgt, "section_state", ["section_id", "state_id"], batch)
+    batch = [{"reach_id": r[0], "state_id": r[1]} for r in rows]
+    mysql_upsert(tgt, "reach_state", ["reach_id", "state_id"], batch)
     tgt.commit()
-    log.info("  Wrote %d section_state rows", len(rows))
+    log.info("  Wrote %d reach_state rows", len(rows))
     return len(rows)
 
 
-def migrate_section_class(src, tgt, dry_run):
-    """Migrate class → section_class, mapping int dataType to string enum."""
-    log.info("--- Migrating section_class ---")
+def migrate_reach_class(src, tgt, dry_run):
+    """Migrate class → reach_class, mapping int dataType to string enum."""
+    log.info("--- Migrating reach_class ---")
     rows = src.execute(
         text("SELECT section, name, low, lowDatatype, high, highDatatype FROM class")
     ).fetchall()
@@ -422,20 +422,20 @@ def migrate_section_class(src, tgt, dry_run):
             skipped += 1
             continue
         batch.append({
-            "section_id": r[0], "name": r[1],
+            "reach_id": r[0], "name": r[1],
             "low": r[2], "low_data_type": low_dt,
             "high": r[4], "high_data_type": high_dt,
         })
-    mysql_upsert(tgt, "section_class",
-                 ["section_id", "name", "low", "low_data_type", "high", "high_data_type"], batch)
+    mysql_upsert(tgt, "reach_class",
+                 ["reach_id", "name", "low", "low_data_type", "high", "high_data_type"], batch)
     tgt.commit()
-    log.info("  Wrote %d section_class rows (skipped %d)", len(batch), skipped)
+    log.info("  Wrote %d reach_class rows (skipped %d)", len(batch), skipped)
     return len(batch)
 
 
-def migrate_section_level(src, tgt, dry_run):
-    """Migrate section2level → section_level, mapping int enums to strings."""
-    log.info("--- Migrating section_level ---")
+def migrate_reach_level(src, tgt, dry_run):
+    """Migrate section2level → reach_level, mapping int enums to strings."""
+    log.info("--- Migrating reach_level ---")
     try:
         rows = src.execute(
             text("SELECT section, level, low, lowDatatype, high, highDatatype FROM section2level")
@@ -459,20 +459,20 @@ def migrate_section_level(src, tgt, dry_run):
             skipped += 1
             continue
         batch.append({
-            "section_id": r[0], "level": level_str,
+            "reach_id": r[0], "level": level_str,
             "low": r[2], "low_data_type": low_dt,
             "high": r[4], "high_data_type": high_dt,
         })
-    mysql_upsert(tgt, "section_level",
-                 ["section_id", "level", "low", "low_data_type", "high", "high_data_type"], batch)
+    mysql_upsert(tgt, "reach_level",
+                 ["reach_id", "level", "low", "low_data_type", "high", "high_data_type"], batch)
     tgt.commit()
-    log.info("  Wrote %d section_level rows (skipped %d)", len(batch), skipped)
+    log.info("  Wrote %d reach_level rows (skipped %d)", len(batch), skipped)
     return len(batch)
 
 
-def migrate_section_guidebook(src, tgt, dry_run):
-    """Migrate section2GuideBook → section_guidebook."""
-    log.info("--- Migrating section_guidebook ---")
+def migrate_reach_guidebook(src, tgt, dry_run):
+    """Migrate section2GuideBook → reach_guidebook."""
+    log.info("--- Migrating reach_guidebook ---")
     rows = src.execute(
         text("SELECT section, guideBook, page, run, url FROM section2GuideBook")
     ).fetchall()
@@ -482,13 +482,13 @@ def migrate_section_guidebook(src, tgt, dry_run):
         return len(rows)
 
     batch = [{
-        "section_id": r[0], "guidebook_id": r[1],
+        "reach_id": r[0], "guidebook_id": r[1],
         "page": r[2], "run": r[3], "url": r[4],
     } for r in rows]
-    mysql_upsert(tgt, "section_guidebook",
-                 ["section_id", "guidebook_id", "page", "run", "url"], batch)
+    mysql_upsert(tgt, "reach_guidebook",
+                 ["reach_id", "guidebook_id", "page", "run", "url"], batch)
     tgt.commit()
-    log.info("  Wrote %d section_guidebook rows", len(rows))
+    log.info("  Wrote %d reach_guidebook rows", len(rows))
     return len(rows)
 
 
@@ -750,8 +750,8 @@ def print_summary(target_session):
     for table_name in [
         "state", "class_description", "guidebook", "rating", "rating_data",
         "gauge", "fetch_url", "calc_expression", "source", "gauge_source",
-        "section", "section_state", "section_class", "section_level",
-        "section_guidebook", "observation", "latest_observation", "pages",
+        "reach", "reach_state", "reach_class", "reach_level",
+        "reach_guidebook", "observation", "latest_observation", "pages",
     ]:
         try:
             count = target_session.execute(
@@ -897,12 +897,12 @@ def main():
         migrate_sources(src, tgt, args.dry_run)
         migrate_gauge_source(src, tgt, args.dry_run)
 
-        # Sections and junctions (depend on gauge, state, guidebook)
-        migrate_sections(src, tgt, args.dry_run)
-        migrate_section_state(src, tgt, args.dry_run)
-        migrate_section_class(src, tgt, args.dry_run)
-        migrate_section_level(src, tgt, args.dry_run)
-        migrate_section_guidebook(src, tgt, args.dry_run)
+        # Reaches and junctions (depend on gauge, state, guidebook)
+        migrate_reaches(src, tgt, args.dry_run)
+        migrate_reach_state(src, tgt, args.dry_run)
+        migrate_reach_class(src, tgt, args.dry_run)
+        migrate_reach_level(src, tgt, args.dry_run)
+        migrate_reach_guidebook(src, tgt, args.dry_run)
 
         # --- Step 3: Observations from levels_data ---
         if not args.skip_observations:

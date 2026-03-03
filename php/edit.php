@@ -1,9 +1,9 @@
 <?php
 /**
- * Section editing form + submission.
+ * Reach editing form + submission.
  *
- * GET  /edit.php?id=<section_id>         — show form
- * POST /edit.php?id=<section_id>         — save changes
+ * GET  /edit.php?id=<reach_id>         — show form
+ * POST /edit.php?id=<reach_id>         — save changes
  */
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/header.php';
@@ -15,24 +15,24 @@ if ($edit_password) {
     if (!isset($_SERVER['PHP_AUTH_USER'])
         || $_SERVER['PHP_AUTH_USER'] !== $edit_user
         || $_SERVER['PHP_AUTH_PW'] !== $edit_password) {
-        header('WWW-Authenticate: Basic realm="Edit Section"');
+        header('WWW-Authenticate: Basic realm="Edit Reach"');
         http_response_code(401);
         exit('Unauthorized');
     }
 }
 
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT)
-    ?: filter_input(INPUT_POST, 'section_id', FILTER_VALIDATE_INT);
+    ?: filter_input(INPUT_POST, 'reach_id', FILTER_VALIDATE_INT);
 if (!$id) { http_response_code(400); exit('Missing id parameter'); }
 
 $db = get_db();
 
-$stmt = $db->prepare('SELECT * FROM section WHERE id = ?');
+$stmt = $db->prepare('SELECT * FROM reach WHERE id = ?');
 $stmt->execute([$id]);
-$section = $stmt->fetch();
-if (!$section) { http_response_code(404); exit('Section not found'); }
+$reach = $stmt->fetch();
+if (!$reach) { http_response_code(404); exit('Reach not found'); }
 
-$name = $section['display_name'] ?: $section['name'];
+$name = $reach['display_name'] ?: $reach['name'];
 
 $editable_fields = [
     'display_name', 'sort_name', 'description', 'difficulties',
@@ -64,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($sets) {
         $params[] = $id;
-        $sql = 'UPDATE section SET ' . implode(', ', $sets) . ' WHERE id = ?';
+        $sql = 'UPDATE reach SET ' . implode(', ', $sets) . ' WHERE id = ?';
         $db->prepare($sql)->execute($params);
     }
 
@@ -84,10 +84,10 @@ include_header("Edit $name");
 
 echo '<h2>Edit: ' . htmlspecialchars($name) . '</h2>';
 echo '<form method="POST" action="/edit.php?id=' . $id . '" class="edit-form">';
-echo '<input type="hidden" name="section_id" value="' . $id . '">';
+echo '<input type="hidden" name="reach_id" value="' . $id . '">';
 
 foreach ($editable_fields as $field) {
-    $val = htmlspecialchars((string)($section[$field] ?? ''));
+    $val = htmlspecialchars((string)($reach[$field] ?? ''));
     $label = ucwords(str_replace('_', ' ', $field));
     echo "<label>$label</label>";
 

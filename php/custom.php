@@ -1,6 +1,6 @@
 <?php
 /**
- * Custom levels page — renders a levels table for arbitrary section IDs.
+ * Custom levels page — renders a levels table for arbitrary reach IDs.
  *
  * URL format: /custom.php?ids=237,339,340  (bookmarkable, shareable)
  */
@@ -19,17 +19,17 @@ if (!$ids) {
     exit;
 }
 
-// Cap at 500 sections
+// Cap at 500 reaches
 $ids = array_slice($ids, 0, 500);
 
 $db = get_db();
 $placeholders = implode(',', array_fill(0, count($ids), '?'));
 
 $sql = <<<SQL
-SELECT sec.id,
-       COALESCE(sec.display_name, sec.name) AS display_name,
-       sec.sort_name,
-       sec.basin AS drainage,
+SELECT r.id,
+       COALESCE(r.display_name, r.name) AS display_name,
+       r.sort_name,
+       r.basin AS drainage,
        g.location AS gauge_location,
        lo_flow.value          AS flow,
        lo_flow.delta_per_hour AS flow_delta,
@@ -38,8 +38,8 @@ SELECT sec.id,
        lo_flow.observed_at    AS flow_time,
        lo_gage.observed_at    AS gage_time,
        lo_temp.observed_at    AS temp_time
-FROM section sec
-LEFT JOIN gauge g ON sec.gauge_id = g.id
+FROM reach r
+LEFT JOIN gauge g ON r.gauge_id = g.id
 LEFT JOIN (
     SELECT gauge_id, MIN(source_id) AS source_id
     FROM gauge_source GROUP BY gauge_id
@@ -50,24 +50,24 @@ LEFT JOIN latest_observation lo_gage
        ON gs.source_id = lo_gage.source_id AND lo_gage.data_type = 'gauge'
 LEFT JOIN latest_observation lo_temp
        ON gs.source_id = lo_temp.source_id AND lo_temp.data_type = 'temperature'
-WHERE sec.id IN ($placeholders)
-ORDER BY sec.sort_name
+WHERE r.id IN ($placeholders)
+ORDER BY r.sort_name
 SQL;
 
 $stmt = $db->prepare($sql);
 $stmt->execute($ids);
-$sections = $stmt->fetchAll();
+$reaches = $stmt->fetchAll();
 
-// Load classes for all sections in one query
+// Load classes for all reaches in one query
 $group_expr = "GROUP_CONCAT(name, ', ')";
-$class_sql = "SELECT section_id, $group_expr AS class
-              FROM section_class WHERE section_id IN ($placeholders)
-              GROUP BY section_id";
+$class_sql = "SELECT reach_id, $group_expr AS class
+              FROM reach_class WHERE reach_id IN ($placeholders)
+              GROUP BY reach_id";
 $cls_stmt = $db->prepare($class_sql);
 $cls_stmt->execute($ids);
 $classes = [];
 foreach ($cls_stmt->fetchAll() as $row) {
-    $classes[$row['section_id']] = $row['class'];
+    $classes[$row['reach_id']] = $row['class'];
 }
 
 header('Cache-Control: max-age=60');
@@ -78,7 +78,7 @@ $id_param = htmlspecialchars($raw);
 <h2>Custom Levels Page</h2>
 <p style="margin:.3rem 0 .5rem;font-size:.85rem">
   <a href="/picker.php">Edit selection</a> | <a href="/index.html">Home</a>
-  | <?= count($sections) ?> section<?= count($sections) !== 1 ? 's' : '' ?>
+  | <?= count($reaches) ?> reach<?= count($reaches) !== 1 ? 'es' : '' ?>
 </p>
 
 <table class="levels">
@@ -94,7 +94,7 @@ $id_param = htmlspecialchars($raw);
   <th class="secondary">Class</th>
 </tr></thead>
 <tbody>
-<?php foreach ($sections as $s):
+<?php foreach ($reaches as $s):
     $id = (int)$s['id'];
 
     // Status from flow delta
