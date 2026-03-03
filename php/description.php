@@ -92,21 +92,34 @@ if ($source_id) {
     $readings = $stmt->fetchAll();
 
     if ($readings) {
+        $type_labels = [
+            'flow' => 'Flow',
+            'gauge' => 'Gage Height',
+            'temperature' => 'Temperature',
+            'inflow' => 'Inflow',
+        ];
+        $type_units = [
+            'flow' => 'CFS',
+            'gauge' => 'Feet',
+            'temperature' => 'F',
+            'inflow' => 'CFS',
+        ];
         echo '<table class="readings-table">';
         echo '<tr><th>Type</th><th>Value</th><th>Time</th><th>Change/hr</th><th>Status</th></tr>';
         foreach ($readings as $r) {
-            $dtype = htmlspecialchars($r['data_type']);
+            $label = $type_labels[$r['data_type']] ?? htmlspecialchars($r['data_type']);
+            $unit = $type_units[$r['data_type']] ?? '';
             // Format value by data type: flow=integer, gauge/temperature=1 decimal
             $raw = (float)$r['value'];
-            if ($r['data_type'] === 'flow') {
-                $val = number_format($raw, 0);
+            if ($r['data_type'] === 'flow' || $r['data_type'] === 'inflow') {
+                $val = number_format($raw, 0) . " $unit";
             } else {
-                $val = number_format($raw, 1);
+                $val = number_format($raw, 1) . " $unit";
             }
             $time_iso = $r['observed_at'] ? date('Y-m-d\TH:i:s\Z', strtotime($r['observed_at'])) : '';
             $time_display = $r['observed_at'] ? date('m/d H:i', strtotime($r['observed_at'])) : 'N/A';
             $time_html = $time_iso ? "<time datetime=\"$time_iso\">$time_display</time>" : 'N/A';
-            $delta = $r['delta_per_hour'] !== null ? number_format((float)$r['delta_per_hour'], 2) : 'N/A';
+            $delta = $r['delta_per_hour'] !== null ? number_format((float)$r['delta_per_hour'], 2) : '';
             $status = '';
             if ($r['delta_per_hour'] !== null) {
                 $dph = (float)$r['delta_per_hour'];
@@ -118,7 +131,7 @@ if ($source_id) {
                     $status = '<span class="falling">falling</span>';
                 }
             }
-            echo "<tr><td>$dtype</td><td>$val</td><td>$time_html</td><td>$delta</td><td>$status</td></tr>\n";
+            echo "<tr><td>$label</td><td>$val</td><td>$time_html</td><td>$delta</td><td>$status</td></tr>\n";
         }
         echo '</table>';
     }
@@ -195,20 +208,14 @@ foreach ($flow_levels as $fl) {
     }
 }
 
-$fields += [
-    'Difficulties' => $reach['difficulties'],
-    'Description' => $reach['description'],
-    'Notes' => $reach['notes'],
-];
-
-// Build coordinate fields as Google Maps links
+// Build coordinate fields as Google Maps links (Gauge, Put-in, Take-out contiguous)
 $map_points = []; // label => "lat,lon" for combined map link
 $coord_fields = [];
 
 if ($gauge && $gauge['latitude'] !== null && $gauge['longitude'] !== null) {
     $glat = number_format((float)$gauge['latitude'], 6, '.', '');
     $glon = number_format((float)$gauge['longitude'], 6, '.', '');
-    $coord_fields['Gauge'] = [$glat, $glon];
+    $coord_fields['Gauge Location'] = [$glat, $glon];
     $map_points['Gauge'] = "$glat,$glon";
 }
 if ($reach['latitude_start'] !== null && $reach['longitude_start'] !== null) {
@@ -228,6 +235,12 @@ foreach ($coord_fields as $label => $coords) {
     $url = "https://www.google.com/maps?q={$coords[0]},{$coords[1]}";
     $fields[$label] = "<a href=\"" . htmlspecialchars($url) . "\" target=\"_blank\" rel=\"noopener\">{$coords[0]}, {$coords[1]}</a>";
 }
+
+$fields += [
+    'Difficulties' => $reach['difficulties'],
+    'Description' => $reach['description'],
+    'Notes' => $reach['notes'],
+];
 
 // Determine flow level for river track color
 $track_color = '#2196F3'; // blue = unknown
@@ -298,7 +311,7 @@ if (count($map_points) >= 1 || $geom) {
 }
 
 // HTML-safe fields list for raw output
-$html_fields = ['Gauge', 'Put-in', 'Take-out'];
+$html_fields = ['Gauge Location', 'Put-in', 'Take-out'];
 
 foreach ($fields as $label => $value) {
     if ($value === null || trim((string)$value) === '') continue;

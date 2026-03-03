@@ -171,8 +171,8 @@ def update_latest(
 
     Mirrors DataDB::wrapup() latest-value logic:
     - Latest value is the most recent observation
-    - Previous value is the most recent observation > 1 hour before latest
-    - delta_per_hour is the hourly rate of change
+    - Previous value is the most recent observation > 6 hours before latest
+    - delta_per_hour is the hourly rate of change over that window
     """
     latest_row = session.execute(
         select(Observation)
@@ -187,7 +187,7 @@ def update_latest(
     if latest_row is None:
         return
 
-    cutoff = latest_row.observed_at - timedelta(hours=1)
+    cutoff = latest_row.observed_at - timedelta(hours=6)
     prev_row = session.execute(
         select(Observation)
         .where(
