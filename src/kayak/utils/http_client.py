@@ -206,6 +206,9 @@ async def async_fetch_many(
     ssl_ctx = ssl.create_default_context()
     ssl_ctx.check_hostname = False
     ssl_ctx.verify_mode = ssl.CERT_NONE
+    # Lower cipher security level to include non-forward-secrecy ciphers
+    # (e.g. AES256-SHA) needed by older servers like USACE.
+    ssl_ctx.set_ciphers("DEFAULT:@SECLEVEL=1")
     connector = aiohttp.TCPConnector(ssl=ssl_ctx)
     async with aiohttp.ClientSession(
         connector=connector,

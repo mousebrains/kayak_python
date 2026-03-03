@@ -87,6 +87,7 @@ def parse_datetime(text: str, tz_name: str | None = None) -> datetime | None:
         "%Y-%m-%d %H:%M:%S",
         "%Y-%m-%d %H:%M",
         "%Y-%m-%d",
+        "%Y-%m-%dT%H:%M:%SZ",
         "%Y-%m-%dT%H:%M:%S",
         "%Y-%m-%dT%H:%M",
         "%m/%d/%Y %H:%M:%S",

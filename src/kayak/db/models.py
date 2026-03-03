@@ -87,6 +87,7 @@ class Gauge(Base):
     location: Mapped[str | None] = mapped_column(Text)
     latitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
     longitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    elevation: Mapped[float | None] = mapped_column()
     station_id: Mapped[str | None] = mapped_column(Text)
     cbtt_id: Mapped[str | None] = mapped_column(Text)
     geos_id: Mapped[str | None] = mapped_column(Text)

@@ -69,6 +69,12 @@ if ($reach['aw_id']) {
     echo '<p style="margin:.5rem 0"><a href="' . htmlspecialchars($aw_url) . '" target="_blank" rel="noopener">American Whitewater</a></p>';
 }
 
+if ($gauge && !empty($gauge['nwsli_id'])) {
+    $nwrfc_url = "https://www.nwrfc.noaa.gov/river/station/flowplot/flowplot.cgi?lid="
+        . urlencode($gauge['nwsli_id']);
+    echo '<p style="margin:.5rem 0"><a href="' . htmlspecialchars($nwrfc_url) . '" target="_blank" rel="noopener">NWRFC Gauge</a></p>';
+}
+
 // --- Current readings ---
 $source_id = null;
 if ($gauge) {

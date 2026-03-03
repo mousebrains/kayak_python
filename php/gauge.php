@@ -145,7 +145,7 @@ $fields = [
     'CBTT ID' => $gauge['cbtt_id'],
     'GEOS ID' => $gauge['geos_id'],
     'NWS ID' => $gauge['nws_id'],
-    'NWSLI ID' => $gauge['nwsli_id'],
+    'NWSLI ID' => $gauge['nwsli_id'] ? '<a href="https://www.nwrfc.noaa.gov/river/station/flowplot/flowplot.cgi?lid=' . urlencode($gauge['nwsli_id']) . '" target="_blank" rel="noopener">' . htmlspecialchars($gauge['nwsli_id']) . '</a>' : null,
     'SNOTEL ID' => $gauge['snotel_id'],
 ];
 
@@ -159,6 +159,9 @@ if ($lat !== null && $lon !== null) {
     $fields['Coordinates'] = "<a href=\"" . htmlspecialchars($maps_url) . "\" target=\"_blank\" rel=\"noopener\">{$lat_f}, {$lon_f}</a>";
 }
 
+if ($gauge['elevation'] !== null) {
+    $fields['Elevation'] = number_format((float)$gauge['elevation'], 0) . ' ft';
+}
 if ($gauge['bank_full'] !== null) {
     $fields['Bank Full'] = number_format((float)$gauge['bank_full'], 2);
 }
@@ -168,7 +171,7 @@ if ($gauge['flood_stage'] !== null) {
 
 foreach ($fields as $label => $value) {
     if ($value === null || trim((string)$value) === '') continue;
-    if ($label === 'Coordinates') {
+    if ($label === 'Coordinates' || $label === 'NWSLI ID') {
         echo "<tr><td>$label</td><td>$value</td></tr>\n";
     } else {
         $esc = htmlspecialchars((string)$value);

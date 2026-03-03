@@ -129,6 +129,7 @@ nwrfc.xml:
   urls:
     - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=CMRO3&pe=HG&dtype=b&numdays=2"
     - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LOCO3&pe=HG&dtype=b&numdays=2"
+    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LOPO3&pe=QR&dtype=b&numdays=2"
     - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WNFO3&pe=HG&dtype=b&numdays=2"
 
 usgs:

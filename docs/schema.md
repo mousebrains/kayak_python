@@ -18,6 +18,7 @@ erDiagram
         text location
         decimal latitude
         decimal longitude
+        float elevation
         string station_id
         string cbtt_id
         string geos_id
