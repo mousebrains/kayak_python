@@ -1,4 +1,4 @@
-"""Add elevation column to gauge table
+"""Add elevation and drainage_area columns to gauge table
 
 Revision ID: b2c3d4e5f6a7
 Revises: a1b2c3d4e5f6
@@ -19,8 +19,10 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     with op.batch_alter_table('gauge', schema=None) as batch_op:
         batch_op.add_column(sa.Column('elevation', sa.Float(), nullable=True))
+        batch_op.add_column(sa.Column('drainage_area', sa.Float(), nullable=True))
 
 
 def downgrade() -> None:
     with op.batch_alter_table('gauge', schema=None) as batch_op:
+        batch_op.drop_column('drainage_area')
         batch_op.drop_column('elevation')

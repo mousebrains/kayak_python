@@ -69,6 +69,13 @@ if ($reach['aw_id']) {
     echo '<p style="margin:.5rem 0"><a href="' . htmlspecialchars($aw_url) . '" target="_blank" rel="noopener">American Whitewater</a></p>';
 }
 
+if ($gauge && !empty($gauge['usgs_id'])) {
+    $usgs_url = "https://waterdata.usgs.gov/monitoring-location/USGS-"
+        . urlencode($gauge['usgs_id'])
+        . "/#dataTypeId=continuous-00065-0&period=P7D&showFieldMeasurements=true";
+    echo '<p style="margin:.5rem 0"><a href="' . htmlspecialchars($usgs_url) . '" target="_blank" rel="noopener">USGS Gauge</a></p>';
+}
+
 if ($gauge && !empty($gauge['nwsli_id'])) {
     $nwrfc_url = "https://www.nwrfc.noaa.gov/river/station/flowplot/flowplot.cgi?lid="
         . urlencode($gauge['nwsli_id']);

@@ -19,6 +19,7 @@ erDiagram
         decimal latitude
         decimal longitude
         float elevation
+        float drainage_area
         string station_id
         string cbtt_id
         string geos_id

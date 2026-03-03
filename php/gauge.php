@@ -162,6 +162,9 @@ if ($lat !== null && $lon !== null) {
 if ($gauge['elevation'] !== null) {
     $fields['Elevation'] = number_format((float)$gauge['elevation'], 0) . ' ft';
 }
+if ($gauge['drainage_area'] !== null) {
+    $fields['Drainage Area'] = number_format((float)$gauge['drainage_area'], 1) . ' sq mi';
+}
 if ($gauge['bank_full'] !== null) {
     $fields['Bank Full'] = number_format((float)$gauge['bank_full'], 2);
 }
