@@ -19,7 +19,7 @@ def _seed_states(session):
             session.add(State(name=name, abbreviation=abbr))
 
 
-def _sync_sources(session):
+def sync_sources(session):
     """Sync URL/parser definitions from data/sources.yaml into FetchUrl table."""
     sources = load_sources()
     count = 0
@@ -68,7 +68,7 @@ def init_db(args):
             print("Seeding states...")
             _seed_states(session)
             print("Syncing sources from YAML...")
-            count = _sync_sources(session)
+            count = sync_sources(session)
             print(f"  {count} new FetchUrl records added")
             session.commit()
             print("Done.")

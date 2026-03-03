@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+from kayak.cli.init_db import sync_sources
 from kayak.config_data import load_sources
 from kayak.db.engine import get_session
 from kayak.db.models import FetchUrl
@@ -105,6 +106,9 @@ def fetch(args):
 
     session = get_session()
     try:
+        # Sync YAML → fetch_url table so new/changed URLs are available
+        sync_sources(session)
+
         # --- Phase 1: Prepare work items (synchronous) ---
         work_items: list[_FetchWork] = []
         for src_def in yaml_sources:

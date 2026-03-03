@@ -15,12 +15,22 @@ Usage:
 """
 
 import argparse
+from datetime import datetime, timedelta, timezone
+import io
 import json
 import os
 import sqlite3
+import sys
 import time
 import urllib.error
 import urllib.request
+
+# Force line-buffered stdout so progress is visible when piped to a file
+if not sys.stdout.line_buffering:
+    sys.stdout = io.TextIOWrapper(
+        sys.stdout.buffer, encoding=sys.stdout.encoding,
+        errors=sys.stdout.errors, line_buffering=True,
+    )
 
 GRAPHQL_URL = "https://www.americanwhitewater.org/graphql"
 DEFAULT_CACHE = os.path.join(os.path.dirname(__file__), "..", "data", "aw_reaches.json")
@@ -126,6 +136,20 @@ def fetch_gauges_batch(reach_ids):
 # Phase 1: Fetch from AW API and save cache
 # ---------------------------------------------------------------------------
 
+def _now():
+    return datetime.now(timezone.utc)
+
+
+def _fmt(dt):
+    """Format a datetime as local HH:MM:SS."""
+    local = dt.astimezone()
+    return local.strftime("%H:%M:%S")
+
+
+def _log(msg):
+    print(f"[{_fmt(_now())}] {msg}", flush=True)
+
+
 def fetch_and_cache(cache_path, states_to_process, delay):
     """Fetch all AW reaches and their gauges, save to JSON cache."""
     # Load existing cache for resumption
@@ -136,11 +160,14 @@ def fetch_and_cache(cache_path, states_to_process, delay):
     if "reaches" not in cache:
         cache["reaches"] = {}
 
-    existing_ids = set(cache["reaches"].keys())
     requests_made = 0
+    start_time = _now()
+
+    # First pass: count total work to estimate completion
+    _log("Counting reaches per state...")
 
     for abbr, aw_code in states_to_process.items():
-        print(f"\n--- Fetching {abbr} ({aw_code}) ---")
+        _log(f"--- Fetching {abbr} ({aw_code}) ---")
 
         # Paginate reaches
         all_reaches = []
@@ -150,21 +177,18 @@ def fetch_and_cache(cache_path, states_to_process, delay):
             reaches, has_more = fetch_reaches_page(aw_code, page)
             requests_made += 1
             all_reaches.extend(reaches)
-            print(f"  Page {page}: {len(reaches)} reaches", end="")
+            _log(f"  Page {page}: {len(reaches)} reaches" +
+                 (" (last)" if not has_more else ""))
             if not has_more:
-                print(" (last)")
                 break
-            print()
             page += 1
 
-        print(f"  Total: {len(all_reaches)} reaches for {abbr}")
+        _log(f"  Total: {len(all_reaches)} reaches for {abbr}")
 
         # Collect reach IDs that need gauge fetching
         needs_gauges = []
         for r in all_reaches:
             rid = str(r["id"])
-            # Always update reach data (coordinates may change), but skip
-            # gauge fetch if we already have it cached
             cache["reaches"].setdefault(rid, {})
             cache["reaches"][rid].update({
                 "id": r["id"],
@@ -183,31 +207,43 @@ def fetch_and_cache(cache_path, states_to_process, delay):
             if "gauges" not in cache["reaches"][rid]:
                 needs_gauges.append(r["id"])
 
-        print(f"  Need gauge fetch for {len(needs_gauges)} reaches "
-              f"({len(all_reaches) - len(needs_gauges)} cached)")
+        cached_count = len(all_reaches) - len(needs_gauges)
+        _log(f"  Need gauge fetch for {len(needs_gauges)} reaches "
+             f"({cached_count} cached)")
 
         # Batch gauge queries
+        total_batches = (len(needs_gauges) + BATCH_SIZE - 1) // BATCH_SIZE
         for i in range(0, len(needs_gauges), BATCH_SIZE):
             batch = needs_gauges[i : i + BATCH_SIZE]
+            batch_num = i // BATCH_SIZE + 1
+            next_at = _now() + timedelta(seconds=delay)
             time.sleep(delay)
             try:
                 gauges_map = fetch_gauges_batch(batch)
                 requests_made += 1
             except (urllib.error.URLError, urllib.error.HTTPError, RuntimeError) as e:
-                print(f"  Error fetching gauge batch: {e}")
-                # Save progress and continue
+                _log(f"  Error fetching gauge batch: {e}")
                 _save_cache(cache, cache_path)
                 continue
             for rid, gauges in gauges_map.items():
                 cache["reaches"][str(rid)]["gauges"] = gauges
             done = min(i + BATCH_SIZE, len(needs_gauges))
-            print(f"  Gauges: {done}/{len(needs_gauges)}")
+            elapsed = (_now() - start_time).total_seconds()
+            rate = requests_made / elapsed if elapsed > 0 else 0
+            if batch_num < total_batches:
+                _log(f"  Gauges: {done}/{len(needs_gauges)} "
+                     f"(batch {batch_num}/{total_batches}, "
+                     f"next request ~{_fmt(next_at + timedelta(seconds=delay))})")
+            else:
+                _log(f"  Gauges: {done}/{len(needs_gauges)} (done)")
 
         # Save after each state
         _save_cache(cache, cache_path)
+        _log(f"  Saved cache ({len(cache['reaches'])} total reaches)")
 
-    print(f"\nFetch complete. {requests_made} API requests made.")
-    print(f"Cache: {len(cache['reaches'])} reaches saved to {cache_path}")
+    elapsed = (_now() - start_time).total_seconds()
+    _log(f"Fetch complete. {requests_made} requests in {elapsed/60:.1f} min.")
+    _log(f"Cache: {len(cache['reaches'])} reaches saved to {cache_path}")
     return cache
 
 
