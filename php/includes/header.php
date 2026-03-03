@@ -36,7 +36,7 @@ $css
 <body>
 <header>
   <h1><a href="/index.html">River Levels</a></h1>
-  <nav><a href="/index.html">Home</a> <a href="/picker.php"$picker_cls>Picker</a></nav>
+  <nav><a href="/picker.php"$picker_cls>Picker</a></nav>
 </header>
 <main>
 HTML;
