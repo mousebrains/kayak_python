@@ -155,6 +155,11 @@ usace.cda:
     - url: "https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22GPR.Flow-Out.Inst.0.0.Best%22,%22GPR.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d"
     - url: "https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22HCR.Flow-Out.Inst.0.0.Best%22,%22HCR.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d"
     - url: "https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22BCL.Flow-Out.Inst.0.0.Best%22,%22BCL.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d"
+    - url: "https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22DET.Flow-Out.Inst.0.0.Best%22,%22DET.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d"
+    - url: "https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22DOR.Flow-Out.Inst.0.0.Best%22,%22DOR.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d"
+    - url: "https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22LOP.Flow-Out.Inst.0.0.Best%22,%22LOP.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d"
+    - url: "https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22LOS.Flow-Out.Inst.0.0.Best%22,%22LOS.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d"
+    - url: "https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22FAL.Flow-Out.Inst.0.0.Best%22,%22FAL.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d"
 
 wa.gov:
   urls:

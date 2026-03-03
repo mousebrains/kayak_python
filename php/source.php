@@ -16,8 +16,13 @@ $q  = filter_input(INPUT_GET, 'q', FILTER_DEFAULT);
 // --- Search mode ---
 if ($q !== null && $q !== '') {
     $q = trim($q);
-    $stmt = $db->prepare('SELECT id, name, agency FROM source WHERE name LIKE ? ORDER BY id');
-    $stmt->execute(["%$q%"]);
+    $stmt = $db->prepare(
+        'SELECT id, name, agency FROM source
+         WHERE name LIKE ? OR agency LIKE ?
+         ORDER BY id'
+    );
+    $pat = "%$q%";
+    $stmt->execute([$pat, $pat]);
     $results = $stmt->fetchAll();
 
     if (count($results) === 1) {
@@ -87,6 +92,14 @@ $total = $db->query('SELECT COUNT(*) FROM source')->fetchColumn();
 $pos = $db->prepare('SELECT COUNT(*) FROM source WHERE id <= ?');
 $pos->execute([$id]);
 $position = $pos->fetchColumn();
+
+// --- Observation summary ---
+$obs_stmt = $db->prepare(
+    'SELECT data_type, COUNT(*) AS cnt, MAX(observed_at) AS latest
+     FROM observation WHERE source_id = ? GROUP BY data_type ORDER BY data_type'
+);
+$obs_stmt->execute([$id]);
+$obs_summary = $obs_stmt->fetchAll();
 
 // --- Associated gauges ---
 $gauges_stmt = $db->prepare(
@@ -160,6 +173,22 @@ foreach ($fields as $label => $value) {
 }
 
 echo '</table>';
+
+// Observation summary
+if ($obs_summary) {
+    echo '<h3 style="margin-top:1rem">Observations</h3>';
+    echo '<table class="desc-table">';
+    echo '<tr><th>Data Type</th><th>Count</th><th>Latest</th></tr>';
+    foreach ($obs_summary as $o) {
+        $dtype = htmlspecialchars($o['data_type']);
+        $cnt = number_format((int)$o['cnt']);
+        $latest = htmlspecialchars($o['latest'] ?? '');
+        echo "<tr><td>$dtype</td><td>$cnt</td><td>$latest</td></tr>\n";
+    }
+    echo '</table>';
+} else {
+    echo '<p style="margin-top:1rem;color:#666">No observations.</p>';
+}
 
 // Associated gauges
 if ($gauges) {

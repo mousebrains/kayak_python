@@ -16,8 +16,15 @@ $q  = filter_input(INPUT_GET, 'q', FILTER_DEFAULT);
 // --- Search mode ---
 if ($q !== null && $q !== '') {
     $q = trim($q);
-    $stmt = $db->prepare('SELECT id, name, location FROM gauge WHERE name LIKE ? ORDER BY id');
-    $stmt->execute(["%$q%"]);
+    $stmt = $db->prepare(
+        'SELECT id, name, location FROM gauge
+         WHERE name LIKE ? OR location LIKE ? OR station_id LIKE ?
+            OR usgs_id LIKE ? OR cbtt_id LIKE ? OR geos_id LIKE ?
+            OR nws_id LIKE ? OR nwsli_id LIKE ? OR snotel_id LIKE ?
+         ORDER BY id'
+    );
+    $pat = "%$q%";
+    $stmt->execute([$pat, $pat, $pat, $pat, $pat, $pat, $pat, $pat, $pat]);
     $results = $stmt->fetchAll();
 
     if (count($results) === 1) {
@@ -83,7 +90,9 @@ $position = $pos->fetchColumn();
 
 // --- Associated sources ---
 $sources_stmt = $db->prepare(
-    'SELECT s.id, s.name, s.agency
+    'SELECT s.id, s.name, s.agency,
+            (SELECT COUNT(*) FROM observation o WHERE o.source_id = s.id) AS obs_count,
+            (SELECT SUBSTR(MAX(o.observed_at), 1, 10) FROM observation o WHERE o.source_id = s.id) AS latest_at
      FROM source s
      JOIN gauge_source gs ON s.id = gs.source_id
      WHERE gs.gauge_id = ?
@@ -94,7 +103,8 @@ $sources = $sources_stmt->fetchAll();
 
 // --- Associated reaches ---
 $reaches_stmt = $db->prepare(
-    'SELECT id, COALESCE(display_name, name) AS name FROM reach WHERE gauge_id = ? ORDER BY sort_name'
+    'SELECT r.id, COALESCE(NULLIF(r.display_name, \'\'), r.name) AS name, r.river, r.difficulties, r.length, r.basin
+     FROM reach r WHERE r.gauge_id = ? ORDER BY r.sort_name'
 );
 $reaches_stmt->execute([$id]);
 $reaches = $reaches_stmt->fetchAll();
@@ -172,11 +182,13 @@ echo '</table>';
 if ($sources) {
     echo '<h3 style="margin-top:1rem">Associated Sources</h3>';
     echo '<table class="desc-table">';
-    echo '<tr><th>ID</th><th>Name</th><th>Agency</th></tr>';
+    echo '<tr><th>ID</th><th>Name</th><th>Agency</th><th>Observations</th><th>Latest</th></tr>';
     foreach ($sources as $s) {
         $sname = htmlspecialchars($s['name']);
         $sagency = htmlspecialchars($s['agency'] ?? '');
-        echo "<tr><td>{$s['id']}</td><td><a href=\"/source.php?id={$s['id']}\">$sname</a></td><td>$sagency</td></tr>\n";
+        $cnt = number_format((int)$s['obs_count']);
+        $latest = htmlspecialchars($s['latest_at'] ?? '');
+        echo "<tr><td>{$s['id']}</td><td><a href=\"/source.php?id={$s['id']}\">$sname</a></td><td>$sagency</td><td>$cnt</td><td>$latest</td></tr>\n";
     }
     echo '</table>';
 } else {
@@ -187,10 +199,14 @@ if ($sources) {
 if ($reaches) {
     echo '<h3 style="margin-top:1rem">Associated Reaches</h3>';
     echo '<table class="desc-table">';
-    echo '<tr><th>ID</th><th>Name</th></tr>';
+    echo '<tr><th>Name</th><th>River</th><th>Class</th><th>Length</th><th>Basin</th></tr>';
     foreach ($reaches as $r) {
         $rname = htmlspecialchars($r['name']);
-        echo "<tr><td>{$r['id']}</td><td><a href=\"/description.php?id={$r['id']}\">$rname</a></td></tr>\n";
+        $river = htmlspecialchars($r['river'] ?? '');
+        $diff = htmlspecialchars($r['difficulties'] ?? '');
+        $len = $r['length'] !== null ? number_format((float)$r['length'], 1) . ' mi' : '';
+        $basin = htmlspecialchars($r['basin'] ?? '');
+        echo "<tr><td><a href=\"/description.php?id={$r['id']}\">$rname</a></td><td>$river</td><td>$diff</td><td>$len</td><td>$basin</td></tr>\n";
     }
     echo '</table>';
 } else {
