@@ -242,40 +242,91 @@ _TD_CLASS = {
 }
 
 # Columns that get class="secondary" (hidden on phones)
-_SECONDARY_FIELDS = {"drainage", "class"}
+_SECONDARY_FIELDS = {"drainage", "class", "state"}
+
+# Fields whose cells are gauge-specific and can be consolidated with rowspan
+_GAUGE_FIELDS = {"gauge_location", "time", "flow", "gage", "temperature", "status"}
+
+
+def _levels_key(reach: Reach) -> tuple:
+    """Return a hashable key representing a reach's flow level thresholds."""
+    if not reach.levels:
+        return ()
+    return tuple(sorted(
+        (str(sl.level), sl.low, str(sl.low_data_type), sl.high, str(sl.high_data_type))
+        for sl in reach.levels
+    ))
 
 
 def _build_html_table(reaches, columns, primary_source_ids, calculated_ids,
-                      all_latest, sparkline_obs) -> str:
+                      all_latest, sparkline_obs, *, is_all_page: bool = False) -> str:
     """Build the <table> body for a set of reaches using pre-loaded data."""
-    rows: list[str] = []
-    rows.append('<table class="levels">')
-    rows.append("<thead><tr>")
+    lines: list[str] = []
+    lines.append('<table class="levels">')
+    lines.append("<thead><tr>")
     for col in columns:
         if "h" not in col["use"] or col["type"] == "noop":
             continue
+        if col["field"] == "state" and not is_all_page:
+            continue
         cls = ' class="secondary"' if col["field"] in _SECONDARY_FIELDS else ""
-        rows.append(f"  <th{cls}>{col['name_html']}</th>")
-    rows.append("</tr></thead>")
-    rows.append("<tbody>")
+        lines.append(f"  <th{cls}>{col['name_html']}</th>")
+    lines.append("</tr></thead>")
+    lines.append("<tbody>")
 
+    # Phase 1: Build row data and filter
+    visible: list[tuple[Reach, dict, str]] = []
     for reach in reaches:
         row = _get_row_data(reach, primary_source_ids, calculated_ids, all_latest)
         if row.get("expired"):
             continue
-        # Skip reaches with no data at all
         has_data = any(row.get(k) is not None and row.get(k) != ""
                        for k in ("flow", "gage", "temperature"))
         if not has_data:
             continue
-        reach_id = reach.id
         sparkline = _build_sparkline(reach, primary_source_ids, sparkline_obs)
+        visible.append((reach, row, sparkline))
+
+    # Phase 2: Compute contiguous gauge groups
+    # group_span[i] = rowspan for first row in group, 0 for subsequent rows
+    group_span: list[int] = [0] * len(visible)
+    i = 0
+    while i < len(visible):
+        reach_i = visible[i][0]
+        if not reach_i.gauge_id:
+            group_span[i] = 1
+            i += 1
+            continue
+        key = (reach_i.gauge_id, _levels_key(reach_i))
+        j = i + 1
+        while j < len(visible):
+            reach_j = visible[j][0]
+            if not reach_j.gauge_id:
+                break
+            if (reach_j.gauge_id, _levels_key(reach_j)) != key:
+                break
+            j += 1
+        group_span[i] = j - i
+        # subsequent rows in group stay 0
+        i = j
+
+    # Phase 3: Render rows
+    for idx, (reach, row, sparkline) in enumerate(visible):
+        reach_id = reach.id
+        span = group_span[idx]
+        is_first = span > 0
         tr_cls = ' class="stale"' if row.get("stale") else ""
-        rows.append(f"<tr{tr_cls}>")
+        lines.append(f"<tr{tr_cls}>")
 
         for col in columns:
             if "h" not in col["use"] or col["type"] == "noop":
                 continue
+            if col["field"] == "state" and not is_all_page:
+                continue
+
+            is_gauge_col = col["field"] in _GAUGE_FIELDS
+            if is_gauge_col and not is_first:
+                continue  # spanned by earlier row
 
             val = row.get(col["field"], "")
             label = col["name_text"]
@@ -308,11 +359,12 @@ def _build_html_table(reaches, columns, primary_source_ids, calculated_ids,
                 val = str(val) if val else ""
 
             cls_attr = f' class="{td_cls}"' if td_cls else ""
-            rows.append(f'  <td{cls_attr} data-label="{label}">{val}</td>')
-        rows.append("</tr>")
+            rowspan = f' rowspan="{span}"' if is_gauge_col and span > 1 else ""
+            lines.append(f'  <td{cls_attr}{rowspan} data-label="{label}">{val}</td>')
+        lines.append("</tr>")
 
-    rows.append("</tbody></table>")
-    return "\n".join(rows)
+    lines.append("</tbody></table>")
+    return "\n".join(lines)
 
 
 def _build_reach_directory(reaches) -> str:
@@ -473,7 +525,8 @@ def build(args):
     session = get_session()
     try:
         columns = _get_builder_columns()
-        all_reaches = reaches_query(session, visible_only=True, with_gauge=True)
+        all_reaches = reaches_query(session, visible_only=True, with_gauge=True,
+                                    sort_by_state=True)
         states = all_state_names(session)
         css = _load_css()
 
@@ -484,11 +537,13 @@ def build(args):
         (output_dir / "index.html").write_text(landing_html)
 
         # All-states page → all.html
-        _build_and_write(session, all_reaches, columns, "", states, css, output_dir)
+        _build_and_write(session, all_reaches, columns, "", states, css, output_dir,
+                         is_all_page=True)
 
         # Per-state pages
         for state in states:
-            state_reaches = reaches_query(session, state_name=state, visible_only=True)
+            state_reaches = reaches_query(session, state_name=state, visible_only=True,
+                                        with_gauge=True)
             if state_reaches:
                 _build_and_write(session, state_reaches, columns, state, states, css, output_dir)
 
@@ -498,7 +553,8 @@ def build(args):
 
 
 def _build_and_write(session, reaches, columns, state: str,
-                     states: list[str], css: str, output_dir: Path):
+                     states: list[str], css: str, output_dir: Path,
+                     *, is_all_page: bool = False):
     """Build and write CSV, text, and HTML for a state (or all)."""
     suffix = f"_{state}" if state else ""
     label = state or "all"
@@ -528,7 +584,8 @@ def _build_and_write(session, reaches, columns, state: str,
 
     # HTML — complete self-contained page
     table_html = _build_html_table(reaches, columns, primary_source_ids,
-                                   calculated_ids, all_latest, sparkline_obs)
+                                   calculated_ids, all_latest, sparkline_obs,
+                                   is_all_page=is_all_page)
     directory_html = _build_reach_directory(reaches)
     page_html = _build_page(table_html, css, states, state, title,
                             directory_html=directory_html)
