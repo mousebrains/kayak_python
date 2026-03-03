@@ -53,25 +53,6 @@ include_header("$name - Description");
 
 echo '<h2>' . htmlspecialchars($name) . '</h2>';
 
-if ($reach['aw_id']) {
-    $aw_url = "https://www.americanwhitewater.org/content/River/view/river-detail/"
-        . intval($reach['aw_id']) . "/";
-    echo '<p style="margin:.5rem 0"><a href="' . htmlspecialchars($aw_url) . '" target="_blank" rel="noopener">American Whitewater</a></p>';
-}
-
-if ($gauge && !empty($gauge['usgs_id'])) {
-    $usgs_url = "https://waterdata.usgs.gov/monitoring-location/USGS-"
-        . urlencode($gauge['usgs_id'])
-        . "/#dataTypeId=continuous-00065-0&period=P7D&showFieldMeasurements=true";
-    echo '<p style="margin:.5rem 0"><a href="' . htmlspecialchars($usgs_url) . '" target="_blank" rel="noopener">USGS Gauge</a></p>';
-}
-
-if ($gauge && !empty($gauge['nwsli_id'])) {
-    $nwrfc_url = "https://www.nwrfc.noaa.gov/river/station/flowplot/flowplot.cgi?lid="
-        . urlencode($gauge['nwsli_id']);
-    echo '<p style="margin:.5rem 0"><a href="' . htmlspecialchars($nwrfc_url) . '" target="_blank" rel="noopener">NWRFC Gauge</a></p>';
-}
-
 // --- Current readings ---
 $source_id = null;
 if ($gauge) {
@@ -341,11 +322,31 @@ if ($gauge) {
     if ($sources) {
         echo '<h3 style="margin-top:1rem">Data Sources</h3>';
         echo '<table class="desc-table">';
+
+        // Gauge-specific station page links
+        if (!empty($gauge['usgs_id'])) {
+            $usgs_site = "https://waterdata.usgs.gov/monitoring-location/USGS-"
+                . urlencode($gauge['usgs_id'])
+                . "/#dataTypeId=continuous-00065-0&period=P7D&showFieldMeasurements=true";
+            echo '<tr><td><a href="' . htmlspecialchars($usgs_site) . '" target="_blank" rel="noopener">USGS - '
+                . htmlspecialchars($gauge['usgs_id']) . '</a></td><td></td></tr>' . "\n";
+        }
+        if (!empty($gauge['nwsli_id'])) {
+            $nwrfc_site = "https://www.nwrfc.noaa.gov/river/station/flowplot/flowplot.cgi?lid="
+                . urlencode($gauge['nwsli_id']);
+            echo '<tr><td><a href="' . htmlspecialchars($nwrfc_site) . '" target="_blank" rel="noopener">NWRFC - '
+                . htmlspecialchars($gauge['nwsli_id']) . '</a></td><td></td></tr>' . "\n";
+        }
+
         foreach ($sources as $src) {
             $src_name = htmlspecialchars($src['name']);
             $agency = $src['agency'] ? htmlspecialchars($src['agency']) : '';
             $label = $agency ? "$agency — $src_name" : $src_name;
             if ($src['fetch_url']) {
+                // Skip USGS fetch URLs when we already show a gauge-specific USGS link
+                if (!empty($gauge['usgs_id']) && stripos($src['agency'] ?? '', 'USGS') !== false) {
+                    continue;
+                }
                 $url = htmlspecialchars($src['fetch_url']);
                 echo "<tr><td>$label</td><td><a href=\"$url\" target=\"_blank\" rel=\"noopener\">$url</a></td></tr>\n";
             } elseif ($src['calc_expr']) {
@@ -380,6 +381,42 @@ if ($gauge) {
         }
         echo '</table>';
     }
+}
+
+// --- Guidebooks ---
+$gb_stmt = $db->prepare(
+    'SELECT g.title, g.subtitle, g.edition, g.author, g.url AS book_url,
+            rg.page, rg.run, rg.url AS entry_url
+     FROM reach_guidebook rg
+     JOIN guidebook g ON g.id = rg.guidebook_id
+     WHERE rg.reach_id = ?
+     ORDER BY g.title, g.edition'
+);
+$gb_stmt->execute([$id]);
+$guidebooks = $gb_stmt->fetchAll();
+
+if ($guidebooks || $reach['aw_id']) {
+    echo '<h3 style="margin-top:1rem">Guidebooks</h3>';
+    echo '<table class="desc-table">';
+    if ($reach['aw_id']) {
+        $aw_url = "https://www.americanwhitewater.org/content/River/view/river-detail/"
+            . intval($reach['aw_id']) . "/";
+        echo '<tr><td><a href="' . htmlspecialchars($aw_url) . '" target="_blank" rel="noopener">American Whitewater</a></td><td></td></tr>' . "\n";
+    }
+    foreach ($guidebooks as $gb) {
+        $title = htmlspecialchars($gb['title']);
+        if ($gb['subtitle']) $title .= ' — ' . htmlspecialchars($gb['subtitle']);
+        if ($gb['edition']) $title .= ' (' . htmlspecialchars($gb['edition']) . ')';
+        $url = $gb['entry_url'] ?: $gb['book_url'];
+        if ($url) {
+            $title = '<a href="' . htmlspecialchars($url) . '" target="_blank" rel="noopener">' . $title . '</a>';
+        }
+        $detail = [];
+        if ($gb['page']) $detail[] = 'p. ' . htmlspecialchars($gb['page']);
+        if ($gb['run']) $detail[] = 'run ' . htmlspecialchars($gb['run']);
+        echo "<tr><td>$title</td><td>" . implode(', ', $detail) . "</td></tr>\n";
+    }
+    echo '</table>';
 }
 
 echo '<p style="margin-top:1rem"><a href="/index.html">Back to main page</a>';
