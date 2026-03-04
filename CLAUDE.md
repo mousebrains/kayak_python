@@ -155,4 +155,4 @@ The original C++ codebase remains in `src/*.C`/`src/*.H` with `src/Makefile`. It
 
 ## Python Version Compatibility
 
-The codebase targets Python 3.11+ (`datetime.UTC`, `enum.StrEnum`). The production server runs Python 3.10, so `src/kayak/db/models.py` includes a `StrEnum` compatibility shim. The migration/sync scripts in `scripts/` avoid importing modules that use `datetime.UTC` and work on Python 3.10.
+The codebase targets Python 3.11+ (`datetime.UTC`, `enum.StrEnum`). The production server runs Python 3.13.

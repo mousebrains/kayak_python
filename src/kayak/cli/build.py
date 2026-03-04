@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -26,6 +27,7 @@ from kayak.db.info_db import (
 )
 from kayak.db.models import DataType, LatestObservation, Observation, Reach
 from kayak.utils.lttb import downsample, running_median
+from kayak.utils.simplify import parse_geom, simplify
 
 logger = logging.getLogger(__name__)
 
@@ -383,6 +385,52 @@ def _build_reach_directory(reaches) -> str:
     return "\n".join(lines)
 
 
+def _build_geojson(
+    reaches,
+    primary_source_ids: dict[int, int],
+    calculated_ids: set[int],
+    all_latest: dict,
+    epsilon: float = 0.001,
+) -> str:
+    """Build a GeoJSON FeatureCollection of all mappable reaches."""
+    features: list[dict] = []
+    for reach in reaches:
+        row = _get_row_data(reach, primary_source_ids, calculated_ids, all_latest)
+        if row.get("expired"):
+            continue
+        status = row.get("status", "unknown")
+        name = reach.display_name or reach.name or ""
+        props = {"id": reach.id, "name": name, "status": status}
+
+        geometry = None
+        if reach.geom:
+            points = parse_geom(reach.geom)
+            if len(points) >= 2:
+                simplified = simplify(points, epsilon)
+                coords = [[round(x, 5), round(y, 5)] for x, y in simplified]
+                geometry = {"type": "LineString", "coordinates": coords}
+            elif len(points) == 1:
+                geometry = {"type": "Point", "coordinates": [round(points[0][0], 5), round(points[0][1], 5)]}
+        if geometry is None and reach.latitude_start and reach.longitude_start and reach.latitude_end and reach.longitude_end:
+            coords = [
+                [round(float(reach.longitude_start), 5), round(float(reach.latitude_start), 5)],
+                [round(float(reach.longitude_end), 5), round(float(reach.latitude_end), 5)],
+            ]
+            geometry = {"type": "LineString", "coordinates": coords}
+        if geometry is None and reach.latitude and reach.longitude:
+            geometry = {
+                "type": "Point",
+                "coordinates": [round(float(reach.longitude), 5), round(float(reach.latitude), 5)],
+            }
+        if geometry is None:
+            continue
+
+        features.append({"type": "Feature", "properties": props, "geometry": geometry})
+
+    collection = {"type": "FeatureCollection", "features": features}
+    return json.dumps(collection, separators=(",", ":"))
+
+
 def _build_page(table_html: str, css: str, states: list[str],
                 current_state: str, title: str,
                 directory_html: str = "") -> str:
@@ -390,6 +438,7 @@ def _build_page(table_html: str, css: str, states: list[str],
     nav_links: list[str] = []
     all_cls = ' class="active"' if not current_state else ""
     nav_links.append(f'<a href="/all.html"{all_cls}>All</a>')
+    nav_links.append('<a href="/map.html">Map</a>')
     for s in states:
         cls = ' class="active"' if s == current_state else ""
         nav_links.append(f'<a href="/{s}.html"{cls}>{s}</a>')
@@ -449,12 +498,14 @@ def _build_landing_page(css: str, states: list[str]) -> str:
     """Build index.html as a simple grid of state links."""
     nav_links: list[str] = []
     nav_links.append('<a href="/all.html">All</a>')
+    nav_links.append('<a href="/map.html">Map</a>')
     for s in states:
         nav_links.append(f'<a href="/{s}.html">{s}</a>')
     nav_html = "\n    ".join(nav_links)
 
     state_cards: list[str] = []
     state_cards.append('<a href="/all.html" class="state-card">All States</a>')
+    state_cards.append('<a href="/map.html" class="state-card">Map</a>')
     for s in states:
         state_cards.append(f'<a href="/{s}.html" class="state-card">{s}</a>')
     grid_html = "\n".join(state_cards)
@@ -501,6 +552,101 @@ Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.
 
 
 # ---------------------------------------------------------------------------
+# Map page
+# ---------------------------------------------------------------------------
+
+def _build_map_page(css: str, states: list[str]) -> str:
+    """Build map.html with an interactive Leaflet map of all reaches."""
+    nav_links: list[str] = []
+    nav_links.append('<a href="/all.html">All</a>')
+    nav_links.append('<a href="/map.html" class="active">Map</a>')
+    for s in states:
+        nav_links.append(f'<a href="/{s}.html">{s}</a>')
+    nav_html = "\n    ".join(nav_links)
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>River Map</title>
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#2060A0">
+<link rel="icon" href="/static/favicon.ico">
+<link rel="apple-touch-icon" href="/static/icon-180.png">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9/dist/leaflet.css"/>
+<style>
+{css}
+#map {{height:calc(100vh - 5rem);width:100%;}}
+.legend {{background:#fff;padding:8px 12px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.3);line-height:1.6;font-size:.85rem;}}
+.legend i {{width:14px;height:14px;display:inline-block;margin-right:6px;border-radius:2px;vertical-align:middle;}}
+main {{padding:0;max-width:none;}}
+</style>
+</head>
+<body>
+<header>
+  <h1><a href="/index.html">River Levels</a></h1>
+  <nav>
+    {nav_html}
+  </nav>
+</header>
+<main>
+<div id="map"></div>
+</main>
+<footer>
+Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.
+</footer>
+<script src="https://unpkg.com/leaflet@1.9/dist/leaflet.js"></script>
+<script>
+(function(){{
+var map=L.map('map').setView([43.5,-115],5);
+var topo=L.tileLayer('https://{{s}}.tile.opentopomap.org/{{z}}/{{x}}/{{y}}.png',{{
+  maxZoom:17,attribution:'OpenTopoMap'}});
+var street=L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png',{{
+  maxZoom:19,attribution:'OpenStreetMap'}});
+var sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{{z}}/{{y}}/{{x}}',{{
+  maxZoom:18,attribution:'Esri'}});
+topo.addTo(map);
+L.control.layers({{'Topo':topo,'Street':street,'Satellite':sat}}).addTo(map);
+
+var colors={{okay:'#4caf50',low:'#e8a735',high:'#e53935',unknown:'#2196F3'}};
+
+fetch('/static/reaches.geojson').then(function(r){{return r.json()}}).then(function(data){{
+  var geojsonLayer=L.geoJSON(data,{{
+    style:function(f){{
+      return {{color:colors[f.properties.status]||colors.unknown,weight:3,opacity:0.7}};
+    }},
+    pointToLayer:function(f,ll){{
+      return L.circleMarker(ll,{{radius:6,fillColor:colors[f.properties.status]||colors.unknown,
+        color:'#333',weight:1,fillOpacity:0.8}});
+    }},
+    onEachFeature:function(f,layer){{
+      var p=f.properties;
+      var badge='<span style="color:'+( colors[p.status]||colors.unknown)+'">&#9679;</span> '+p.status;
+      layer.bindPopup('<b><a href="/description.php?id='+p.id+'">'+p.name+'</a></b><br>'+badge);
+    }}
+  }}).addTo(map);
+  if(data.features.length)map.fitBounds(geojsonLayer.getBounds().pad(0.05));
+}});
+
+var legend=L.control({{position:'bottomright'}});
+legend.onAdd=function(){{
+  var d=L.DomUtil.create('div','legend');
+  d.innerHTML='<b>Status</b><br>'+
+    '<i style="background:#4caf50"></i>Okay<br>'+
+    '<i style="background:#e8a735"></i>Low<br>'+
+    '<i style="background:#e53935"></i>High<br>'+
+    '<i style="background:#2196F3"></i>Unknown';
+  return d;
+}};
+legend.addTo(map);
+}})();
+</script>
+</body>
+</html>"""
+
+
+# ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
 
@@ -532,13 +678,33 @@ def build(args):
 
         print(f"Building pages for {len(all_reaches)} reaches across {len(states)} states")
 
+        # Pre-load data for all reaches (used by all-page and GeoJSON)
+        all_gauge_ids = [r.gauge_id for r in all_reaches if r.gauge_id]
+        all_primary_source_ids = get_all_primary_source_ids(session, all_gauge_ids)
+        all_source_ids = list(all_primary_source_ids.values())
+        all_calculated_ids = get_calculated_source_ids(session, all_source_ids)
+        all_latest = get_all_latest(session, all_source_ids)
+
+        # GeoJSON → static/reaches.geojson
+        static_dir = output_dir / "static"
+        static_dir.mkdir(parents=True, exist_ok=True)
+        geojson = _build_geojson(all_reaches, all_primary_source_ids,
+                                 all_calculated_ids, all_latest)
+        (static_dir / "reaches.geojson").write_text(geojson)
+        logger.info("GeoJSON: %d bytes", len(geojson))
+
+        # Map page → map.html
+        map_html = _build_map_page(css, states)
+        (output_dir / "map.html").write_text(map_html)
+
         # Landing page → index.html (lightweight state list)
         landing_html = _build_landing_page(css, states)
         (output_dir / "index.html").write_text(landing_html)
 
         # All-states page → all.html
         _build_and_write(session, all_reaches, columns, "", states, css, output_dir,
-                         is_all_page=True)
+                         is_all_page=True,
+                         preloaded=(all_primary_source_ids, all_calculated_ids, all_latest))
 
         # Per-state pages
         for state in states:
@@ -554,7 +720,8 @@ def build(args):
 
 def _build_and_write(session, reaches, columns, state: str,
                      states: list[str], css: str, output_dir: Path,
-                     *, is_all_page: bool = False):
+                     *, is_all_page: bool = False,
+                     preloaded: tuple | None = None):
     """Build and write CSV, text, and HTML for a state (or all)."""
     suffix = f"_{state}" if state else ""
     label = state or "all"
@@ -563,12 +730,16 @@ def _build_and_write(session, reaches, columns, state: str,
 
     logger.info("Building %s: %d reaches", label, len(reaches))
 
-    # Pre-load ALL data in ~5 bulk queries
-    gauge_ids = [r.gauge_id for r in reaches if r.gauge_id]
-    primary_source_ids = get_all_primary_source_ids(session, gauge_ids)
-    source_ids = list(primary_source_ids.values())
-    calculated_ids = get_calculated_source_ids(session, source_ids)
-    all_latest = get_all_latest(session, source_ids)
+    # Pre-load ALL data in ~5 bulk queries (or reuse preloaded)
+    if preloaded:
+        primary_source_ids, calculated_ids, all_latest = preloaded
+        source_ids = list(primary_source_ids.values())
+    else:
+        gauge_ids = [r.gauge_id for r in reaches if r.gauge_id]
+        primary_source_ids = get_all_primary_source_ids(session, gauge_ids)
+        source_ids = list(primary_source_ids.values())
+        calculated_ids = get_calculated_source_ids(session, source_ids)
+        all_latest = get_all_latest(session, source_ids)
     since_48h = datetime.now(UTC) - timedelta(hours=48)
     sparkline_obs = get_bulk_observations(session, source_ids, DataType.flow, since_48h)
 
