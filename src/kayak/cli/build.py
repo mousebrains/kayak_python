@@ -574,7 +574,7 @@ def _build_map_page(css: str, states: list[str]) -> str:
 <meta name="theme-color" content="#2060A0">
 <link rel="icon" href="/static/favicon.ico">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
 {css}
 #map {{height:calc(100vh - 5rem);width:100%;}}
@@ -596,7 +596,7 @@ main {{padding:0;max-width:none;}}
 <footer>
 Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.
 </footer>
-<script src="https://unpkg.com/leaflet@1.9/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 (function(){{
 var map=L.map('map').setView([43.5,-115],5);

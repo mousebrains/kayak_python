@@ -7,7 +7,6 @@ Three phases:
   3. Fetch AW geometry (geom) for new reaches via GraphQL API
 
 Standalone script — uses only stdlib (sqlite3, urllib, json).
-Compatible with Python 3.10+.
 
 Usage:
     python3 scripts/import_aw_usgs_reaches.py --db kayak.db --dry-run

@@ -267,8 +267,8 @@ if (count($map_points) >= 1 || $geom) {
     }
     echo '</table>';
     echo '<div id="reach-map" style="height:350px;margin-top:1rem;border:1px solid #ccc"></div>';
-    echo '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9/dist/leaflet.css"/>';
-    echo '<script src="https://unpkg.com/leaflet@1.9/dist/leaflet.js"></script>';
+    echo '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>';
+    echo '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>';
     echo '<script>';
     echo 'var pts=' . $map_json . ';';
     echo 'var track=' . $track_json . ';';

@@ -164,7 +164,7 @@ since both run Debian 13.
 
 ## 1. System packages
 
-Debian 13 ships Python 3.12 and PHP 8.4.
+Debian 13 ships Python 3.13 and PHP 8.4.
 
 ```bash
 sudo apt update

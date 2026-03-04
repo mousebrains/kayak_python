@@ -36,7 +36,7 @@ python3 -m venv /home/pat/.venv
 
 ```bash
 pip install -e ".[dev]"              # Install in editable mode with dev deps (pytest, ruff, mypy)
-pip install -e ".[dev,mysql]"        # Also include PyMySQL for MySQL support
+pip install -e ".[dev,mysql]"        # Also include PyMySQL for migration scripts
 
 levels --help                        # CLI entry point (registered in pyproject.toml)
 levels init-db                       # Create tables, seed states/sources from data/*.yaml
@@ -153,6 +153,3 @@ python3 scripts/sync_observations.py --legacy-host 127.0.0.1 --legacy-port 3307
 
 The original C++ codebase remains in `src/*.C`/`src/*.H` with `src/Makefile`. It used `.C`/`.H` extensions, mysql++ library, three separate MySQL databases, and CGI binaries. This code is no longer built but is retained for reference.
 
-## Python Version Compatibility
-
-The codebase targets Python 3.11+ (`datetime.UTC`, `enum.StrEnum`). The production server runs Python 3.13.

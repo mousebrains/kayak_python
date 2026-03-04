@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fix AW reach sort_names to align with legacy sorting convention.
 
-Standalone script using sqlite3 only (Python 3.10 compatible, no kayak imports).
+Standalone script using sqlite3 only (no kayak imports).
 
 Legacy convention: "{family} {group_letter}{sequence}"
   - family: river system name (e.g., "Rogue", "Clackamas", "Santiam")
