@@ -10,6 +10,8 @@ require_once __DIR__ . '/includes/footer.php';
 require_once __DIR__ . '/includes/svg_plot.php';
 
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+$start_date = filter_input(INPUT_GET, 'start', FILTER_SANITIZE_SPECIAL_CHARS);
+$end_date = filter_input(INPUT_GET, 'end', FILTER_SANITIZE_SPECIAL_CHARS);
 if (!$id) { http_response_code(400); exit('Missing id parameter'); }
 
 $db = get_db();
@@ -118,22 +120,57 @@ if ($source_id) {
     }
 }
 
-// --- Inline SVG plots (only for data types with observations) ---
+// --- Date range selector and inline SVG plots ---
 if ($source_id) {
+    // Compute default dates from latest observation
+    $latest_ts_row = $db->prepare(
+        'SELECT MAX(observed_at) AS latest FROM observation WHERE source_id = ?'
+    );
+    $latest_ts_row->execute([$source_id]);
+    $latest_row = $latest_ts_row->fetch();
+    $latest_ts = $latest_row && $latest_row['latest'] ? strtotime($latest_row['latest']) : time();
+    $default_end = date('Y-m-d', $latest_ts);
+    $default_start = date('Y-m-d', $latest_ts - 10 * 86400);
+    $form_start = $start_date ?: $default_start;
+    $form_end = $end_date ?: $default_end;
+
+    echo '<form method="get" style="margin:.5rem 0;font-size:.85rem">';
+    echo '<input type="hidden" name="id" value="' . $id . '">';
+    echo '<label>Start: <input type="date" name="start" value="' . htmlspecialchars($form_start) . '"></label> ';
+    echo '<label>End: <input type="date" name="end" value="' . htmlspecialchars($form_end) . '"></label> ';
+    echo '<button type="submit">Update</button>';
+    echo '</form>';
+
+    if ($start_date && $end_date) {
+        $since = date('Y-m-d 00:00:00', strtotime($start_date));
+        $until = date('Y-m-d 23:59:59', strtotime($end_date));
+    } else {
+        $since = date('Y-m-d H:i:s', $latest_ts - 10 * 86400);
+        $until = null;
+    }
+
     $plot_types = [
         'flow'        => 'Flow (CFS)',
         'gauge'       => 'Gage Height (Ft)',
         'temperature' => 'Temperature (F)',
     ];
-    $since = date('Y-m-d H:i:s', time() - 10 * 86400);
 
     foreach ($plot_types as $dtype => $y_label) {
-        $stmt = $db->prepare(
-            'SELECT observed_at, value FROM observation
-             WHERE source_id = ? AND data_type = ? AND observed_at >= ?
-             ORDER BY observed_at'
-        );
-        $stmt->execute([$source_id, $dtype, $since]);
+        if ($until) {
+            $stmt = $db->prepare(
+                'SELECT observed_at, value FROM observation
+                 WHERE source_id = ? AND data_type = ? AND observed_at >= ? AND observed_at <= ?
+                 ORDER BY observed_at'
+            );
+            $stmt->execute([$source_id, $dtype, $since, $until]);
+        } else {
+            $stmt = $db->prepare(
+                'SELECT observed_at, value FROM observation
+                 WHERE source_id = ? AND data_type = ? AND observed_at >= ?
+                 ORDER BY observed_at'
+            );
+            $stmt->execute([$source_id, $dtype, $since]);
+        }
         $rows = $stmt->fetchAll();
 
         if (count($rows) < 2) continue;
@@ -445,6 +482,8 @@ if ($guidebooks || $reach['aw_id']) {
 }
 
 echo '<p style="margin-top:1rem"><a href="/index.html">Back to main page</a>';
+echo ' | <a href="/reach.php?id=' . $id . '">Reach details</a>';
+echo ' | <a href="/data.php?id=' . $id . '">Data inspector</a>';
 echo ' | <a href="/edit.php?id=' . $id . '">Edit</a></p>';
 
 include_footer();

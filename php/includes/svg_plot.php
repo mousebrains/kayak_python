@@ -2,6 +2,44 @@
 require_once __DIR__ . '/lttb.php';
 
 /**
+ * Compute nice Y-axis bounds and step for round tick labels.
+ *
+ * @return array [$y_min, $y_max, $step]
+ */
+function nice_axis(float $data_min, float $data_max): array {
+    $range = $data_max - $data_min;
+    if ($range < 1e-9) $range = 1.0;
+
+    // Find magnitude and candidate steps
+    $mag = pow(10, floor(log10($range)));
+    $candidates = [5 * $mag, 2 * $mag, 1 * $mag, 0.5 * $mag, 0.2 * $mag, 0.1 * $mag];
+
+    foreach ($candidates as $step) {
+        $lo = floor($data_min / $step) * $step;
+        $hi = ceil($data_max / $step) * $step;
+        $n_ticks = round(($hi - $lo) / $step);
+        if ($n_ticks >= 4 && $n_ticks <= 8) {
+            return [$lo, $hi, $step];
+        }
+    }
+
+    // Fallback: use the candidate closest to 5 ticks
+    $step = $candidates[0];
+    foreach ($candidates as $s) {
+        $lo = floor($data_min / $s) * $s;
+        $hi = ceil($data_max / $s) * $s;
+        $n = round(($hi - $lo) / $s);
+        if ($n >= 3 && $n <= 10) {
+            $step = $s;
+            break;
+        }
+    }
+    $lo = floor($data_min / $step) * $step;
+    $hi = ceil($data_max / $step) * $step;
+    return [$lo, $hi, $step];
+}
+
+/**
  * Generate a lightweight time-series SVG plot.
  *
  * @param array  $times   Array of Unix timestamps.
@@ -54,12 +92,7 @@ function generate_svg_plot(
     $x_min = $pairs[0][0];
     $x_max = $pairs[count($pairs) - 1][0];
     $y_vals = array_column($pairs, 1);
-    $y_min = min($y_vals);
-    $y_max = max($y_vals);
-    $y_pad = ($y_max - $y_min) * 0.05;
-    if ($y_pad < 0.01) $y_pad = 1.0;
-    $y_min -= $y_pad;
-    $y_max += $y_pad;
+    [$y_min, $y_max, $y_step] = nice_axis(min($y_vals), max($y_vals));
     $x_range = $x_max - $x_min ?: 1;
     $y_range = $y_max - $y_min ?: 1;
 
@@ -72,13 +105,12 @@ function generate_svg_plot(
     }
     $points_str = rtrim($points_str);
 
-    // Grid lines and labels
+    // Y-axis grid lines and labels
     $grid = '';
-    $n_yticks = 5;
-    for ($i = 0; $i <= $n_yticks; $i++) {
-        $yv = $y_min + ($y_range * $i / $n_yticks);
+    $y_decimals = $y_step >= 1 ? 0 : ($y_step >= 0.1 ? 1 : 2);
+    for ($yv = $y_min; $yv <= $y_max + $y_step * 0.01; $yv += $y_step) {
         $py = $mt + (int)(($y_max - $yv) / $y_range * $ph);
-        $label = $is_flow ? number_format($yv, 0) : number_format($yv, $yv == (int)$yv ? 0 : 1);
+        $label = number_format($yv, $y_decimals);
         $grid .= "<line x1=\"$ml\" y1=\"$py\" x2=\"" . ($ml + $pw) . "\" y2=\"$py\" stroke=\"#ddd\" stroke-width=\"0.5\"/>\n";
         $grid .= "<text x=\"" . ($ml - 5) . "\" y=\"" . ($py + 3) . "\" text-anchor=\"end\" font-size=\"10\" fill=\"#666\">$label</text>\n";
     }
@@ -91,6 +123,7 @@ function generate_svg_plot(
         $xv = $x_min + ($x_range * $i / $n_xticks);
         $px = $ml + (int)(($xv - $x_min) / $x_range * $pw);
         $label = $span_days > 3 ? date('n/j', (int)$xv) : date('n/j H:i', (int)$xv);
+        $grid .= "<line x1=\"$px\" y1=\"$mt\" x2=\"$px\" y2=\"" . ($mt + $ph) . "\" stroke=\"#ddd\" stroke-width=\"0.5\"/>\n";
         $grid .= "<text x=\"$px\" y=\"" . ($height - 8) . "\" text-anchor=\"middle\" font-size=\"10\" fill=\"#666\">$label</text>\n";
     }
 
