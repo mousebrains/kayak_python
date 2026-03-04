@@ -497,17 +497,16 @@ Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.
 def _build_landing_page(css: str, states: list[str]) -> str:
     """Build index.html as a simple grid of state links."""
     nav_links: list[str] = []
-    nav_links.append('<a href="/all.html">All</a>')
     nav_links.append('<a href="/map.html">Map</a>')
     for s in states:
         nav_links.append(f'<a href="/{s}.html">{s}</a>')
+    nav_links.append('<a href="/all.html">All</a>')
     nav_html = "\n    ".join(nav_links)
 
     state_cards: list[str] = []
-    state_cards.append('<a href="/all.html" class="state-card">All States</a>')
-    state_cards.append('<a href="/map.html" class="state-card">Map</a>')
     for s in states:
         state_cards.append(f'<a href="/{s}.html" class="state-card">{s}</a>')
+    state_cards.append('<a href="/all.html" class="state-card">All States</a>')
     grid_html = "\n".join(state_cards)
 
     now_utc = datetime.now(UTC)
@@ -599,14 +598,14 @@ Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 (function(){{
-var map=L.map('map').setView([43.5,-115],5);
+var map=L.map('map');
 var topo=L.tileLayer('https://{{s}}.tile.opentopomap.org/{{z}}/{{x}}/{{y}}.png',{{
   maxZoom:17,attribution:'OpenTopoMap'}});
 var street=L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png',{{
   maxZoom:19,attribution:'OpenStreetMap'}});
 var sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{{z}}/{{y}}/{{x}}',{{
   maxZoom:18,attribution:'Esri'}});
-topo.addTo(map);
+street.addTo(map);
 L.control.layers({{'Topo':topo,'Street':street,'Satellite':sat}}).addTo(map);
 
 var colors={{okay:'#4caf50',low:'#e8a735',high:'#e53935',unknown:'#2196F3'}};
@@ -626,7 +625,7 @@ fetch('/static/reaches.geojson').then(function(r){{return r.json()}}).then(funct
       layer.bindPopup('<b><a href="/description.php?id='+p.id+'">'+p.name+'</a></b><br>'+badge);
     }}
   }}).addTo(map);
-  if(data.features.length)map.fitBounds(geojsonLayer.getBounds().pad(0.05));
+  if(data.features.length)map.fitBounds(geojsonLayer.getBounds().pad(0.05));else map.setView([43.5,-115],5);
 }});
 
 var legend=L.control({{position:'bottomright'}});
