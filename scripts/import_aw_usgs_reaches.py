@@ -389,7 +389,8 @@ def create_reaches(db, aw_reaches, usgs_to_gauge, dry_run):
 
         river = reach.get("river") or ""
         section = reach.get("section") or ""
-        display_name = f"{river} - {section}" if section else river
+        display_name = river
+        description = section if section else None
         name = f"aw_{aw_id}"
 
         plat = _float(reach.get("plat"))
@@ -425,14 +426,14 @@ def create_reaches(db, aw_reaches, usgs_to_gauge, dry_run):
             cur = db.execute(
                 """INSERT INTO reach
                    (name, display_name, sort_name, river, gauge_id,
-                    difficulties, length, gradient, max_gradient,
+                    description, difficulties, length, gradient, max_gradient,
                     latitude_start, longitude_start,
                     latitude_end, longitude_end,
                     latitude, longitude,
                     aw_id, no_show)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)""",
                 (name, display_name, display_name, river, gauge_id,
-                 difficulties, length, gradient, max_gradient,
+                 description, difficulties, length, gradient, max_gradient,
                  plat, plon, tlat, tlon, lat, lon, aw_id),
             )
             reach_id = cur.lastrowid
@@ -444,6 +445,37 @@ def create_reaches(db, aw_reaches, usgs_to_gauge, dry_run):
                     "INSERT OR IGNORE INTO reach_state (reach_id, state_id) VALUES (?, ?)",
                     (reach_id, state_id),
                 )
+
+            # Import flow levels from AW gauge correlation (rmin/rmax)
+            rmin = None
+            rmax = None
+            for g in reach.get("gauges", []):
+                if g.get("rmin") is not None:
+                    rmin = _float(g["rmin"])
+                if g.get("rmax") is not None:
+                    rmax = _float(g["rmax"])
+            if rmin is not None or rmax is not None:
+                if rmin is not None:
+                    db.execute(
+                        "INSERT INTO reach_level "
+                        "(reach_id, level, low, low_data_type, high, high_data_type) "
+                        "VALUES (?, 'low', NULL, 'flow', ?, 'flow')",
+                        (reach_id, rmin),
+                    )
+                if rmin is not None and rmax is not None:
+                    db.execute(
+                        "INSERT INTO reach_level "
+                        "(reach_id, level, low, low_data_type, high, high_data_type) "
+                        "VALUES (?, 'okay', ?, 'flow', ?, 'flow')",
+                        (reach_id, rmin, rmax),
+                    )
+                if rmax is not None:
+                    db.execute(
+                        "INSERT INTO reach_level "
+                        "(reach_id, level, low, low_data_type, high, high_data_type) "
+                        "VALUES (?, 'high', ?, 'flow', NULL, 'flow')",
+                        (reach_id, rmax),
+                    )
 
             new_reaches.append((reach_id, aw_id))
 

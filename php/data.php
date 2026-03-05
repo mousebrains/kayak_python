@@ -11,6 +11,7 @@ require_once __DIR__ . '/includes/footer.php';
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 $start_date = filter_input(INPUT_GET, 'start', FILTER_SANITIZE_SPECIAL_CHARS);
 $end_date = filter_input(INPUT_GET, 'end', FILTER_SANITIZE_SPECIAL_CHARS);
+$sort = filter_input(INPUT_GET, 'sort', FILTER_SANITIZE_SPECIAL_CHARS) === 'asc' ? 'asc' : 'desc';
 
 if (!$id) { http_response_code(400); exit('Missing id parameter'); }
 
@@ -36,13 +37,13 @@ if ($reach['gauge_id']) {
     );
     $stmt->execute([$reach['gauge_id']]);
     $sources = $stmt->fetchAll();
-    $letter = 'A';
+    $letter_idx = 0;
     foreach ($sources as $s) {
         $source_ids[] = $s['id'];
         $source_map[$s['id']] = [
             'name' => $s['name'],
             'agency' => $s['agency'],
-            'letter' => $letter++,
+            'letter' => chr(ord('A') + $letter_idx++),
         ];
     }
 }
@@ -71,7 +72,7 @@ $params = array_merge($source_ids, [$since, $until]);
 $stmt = $db->prepare(
     "SELECT source_id, data_type, value, observed_at FROM observation
      WHERE source_id IN ($placeholders) AND observed_at >= ? AND observed_at <= ?
-     ORDER BY observed_at DESC
+     ORDER BY observed_at " . ($sort === 'asc' ? 'ASC' : 'DESC') . "
      LIMIT 10000"
 );
 $stmt->execute($params);
@@ -119,8 +120,11 @@ echo '</form>';
 if (!$pivoted) {
     echo '<p>No observations in this date range.</p>';
 } else {
+    $toggle_sort = $sort === 'desc' ? 'asc' : 'desc';
+    $sort_arrow = $sort === 'desc' ? ' ▼' : ' ▲';
+    $sort_url = '?id=' . $id . '&start=' . urlencode($form_start) . '&end=' . urlencode($form_end) . '&sort=' . $toggle_sort;
     echo '<table class="readings-table">';
-    echo '<tr><th>Time</th>';
+    echo '<tr><th><a href="' . htmlspecialchars($sort_url) . '" style="color:inherit;text-decoration:none">Time' . $sort_arrow . '</a></th>';
     if ($show_src) echo '<th>Src</th>';
     foreach ($data_types as $dt) {
         $label = $type_labels[$dt] ?? htmlspecialchars($dt);

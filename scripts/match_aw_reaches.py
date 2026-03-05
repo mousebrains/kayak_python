@@ -110,7 +110,7 @@ def fetch_gauges_batch(reach_ids):
     for rid in reach_ids:
         fragments.append(
             f'r{rid}: getGaugeInformationForReachID(id: "{rid}") {{\n'
-            f"  gauges {{ gauge {{ source source_id name }} }}\n"
+            f"  gauges {{ gauge {{ source source_id name rc rmin rmax }} }}\n"
             f"}}"
         )
     query = "{\n" + "\n".join(fragments) + "\n}"
@@ -123,11 +123,19 @@ def fetch_gauges_batch(reach_ids):
             for item in info.get("gauges") or []:
                 g = item.get("gauge")
                 if g and g.get("source") and g.get("source_id"):
-                    gauges.append({
+                    gd = {
                         "source": g["source"].lower(),
                         "source_id": g["source_id"],
                         "name": g.get("name") or "",
-                    })
+                    }
+                    # Flow level correlation data
+                    if g.get("rc") is not None:
+                        gd["rc"] = g["rc"]
+                    if g.get("rmin") is not None:
+                        gd["rmin"] = g["rmin"]
+                    if g.get("rmax") is not None:
+                        gd["rmax"] = g["rmax"]
+                    gauges.append(gd)
         out[rid] = gauges
     return out
 
@@ -319,6 +327,7 @@ def process_cache(cache, db, dry_run):
     total_reaches = 0
     total_conflicts = 0
     gauge_ids_filled = 0
+    levels_added = 0
 
     for rid_str, reach in cache.get("reaches", {}).items():
         total_reaches += 1
@@ -383,6 +392,50 @@ def process_cache(cache, db, dry_run):
                         current[col] = g["source_id"]
                     gauge_ids_filled += 1
 
+            # Import flow levels from AW gauge correlation (rmin/rmax)
+            rmin = None
+            rmax = None
+            for g in aw_gauges:
+                if g.get("rmin") is not None:
+                    rmin = float(g["rmin"])
+                if g.get("rmax") is not None:
+                    rmax = float(g["rmax"])
+            if rmin is not None or rmax is not None:
+                # Only add if reach has no levels yet
+                existing = db.execute(
+                    "SELECT COUNT(*) FROM reach_level WHERE reach_id = ?",
+                    (db_reach_id,),
+                ).fetchone()[0]
+                if existing == 0:
+                    print(f"    [{label}] reach {db_reach_id}: "
+                          f"levels rmin={rmin} rmax={rmax}")
+                    if not dry_run:
+                        if rmin is not None:
+                            db.execute(
+                                "INSERT INTO reach_level "
+                                "(reach_id, level, low, low_data_type, "
+                                " high, high_data_type) "
+                                "VALUES (?, 'low', NULL, 'flow', ?, 'flow')",
+                                (db_reach_id, rmin),
+                            )
+                        if rmin is not None and rmax is not None:
+                            db.execute(
+                                "INSERT INTO reach_level "
+                                "(reach_id, level, low, low_data_type, "
+                                " high, high_data_type) "
+                                "VALUES (?, 'okay', ?, 'flow', ?, 'flow')",
+                                (db_reach_id, rmin, rmax),
+                            )
+                        if rmax is not None:
+                            db.execute(
+                                "INSERT INTO reach_level "
+                                "(reach_id, level, low, low_data_type, "
+                                " high, high_data_type) "
+                                "VALUES (?, 'high', ?, 'flow', NULL, 'flow')",
+                                (db_reach_id, rmax),
+                            )
+                    levels_added += 1
+
     if not dry_run:
         db.commit()
 
@@ -393,6 +446,7 @@ def process_cache(cache, db, dry_run):
         print(f"Reaches updated: {total_updated}")
     print(f"Multi-reach matches (conflicts): {total_conflicts}")
     print(f"Gauge identifiers backfilled: {gauge_ids_filled}")
+    print(f"Flow levels added: {levels_added}")
 
 
 # ---------------------------------------------------------------------------
