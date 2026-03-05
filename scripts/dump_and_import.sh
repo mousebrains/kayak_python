@@ -7,13 +7,13 @@
 #
 # Prerequisites:
 #   - ssh wkcc works without a password prompt (key-based auth)
-#   - /home/pat/.venv has kayak installed
+#   - ../.venv has kayak installed (relative to repo root)
 
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-VENV=/home/pat/.venv
-DB=/home/pat/DB/kayak.db
+VENV="$REPO/../.venv"
+DB="$REPO/../DB/kayak.db"
 DUMP_DIR=/tmp
 DUMP_FILE="$DUMP_DIR/levels_todo.sql"
 

@@ -403,7 +403,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Match AW reaches to local reaches via shared gauge IDs"
     )
-    parser.add_argument("--db", default="/home/pat/DB/kayak.db",
+    parser.add_argument("--db", default=os.path.join(os.path.dirname(__file__), "..", "..", "DB", "kayak.db"),
                         help="SQLite database path")
     parser.add_argument("--cache", default=os.path.abspath(DEFAULT_CACHE),
                         help="JSON cache file path")

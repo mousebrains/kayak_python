@@ -10,6 +10,7 @@ Usage:
 """
 
 import argparse
+import os
 import re
 import sqlite3
 
@@ -119,6 +120,6 @@ def link_sources(db_path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Link sources to fetch_url records")
-    parser.add_argument("--db", default="/home/pat/DB/kayak.db", help="SQLite database path")
+    parser.add_argument("--db", default=os.path.join(os.path.dirname(__file__), "..", "..", "DB", "kayak.db"), help="SQLite database path")
     args = parser.parse_args()
     link_sources(args.db)

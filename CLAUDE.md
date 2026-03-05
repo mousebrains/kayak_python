@@ -127,26 +127,16 @@ Scripts in `scripts/` handle data migration between the legacy MySQL databases a
 | Script | Purpose |
 |---|---|
 | `import_from_dump.py` | Import production MySQL dump (`levels_todo`) into local SQLite. Populates gauges, reaches, ratings, and optionally observations. Required for local dev setup after `init-db`. |
-| `migrate_legacy_to_wkcclevels.py` | Full one-time migration from legacy `levels_todo`/`levels_data`/`levels_page` → `wkcclevels` MySQL. Drops and recreates all 18 tables. |
-| `sync_observations.py` | Incremental sync from `levels_data` → `wkcclevels`. Uses high-water marks (`MAX(observed_at)` per source/data_type) to fetch only new rows. Runs on cron (twice daily at 6:00/18:00). |
-| `sync_legacy_observations.py` | Sync legacy observations into local SQLite or MySQL. Supports `--days N` window. Used for dev setup. |
+| `sync_legacy_observations.py` | Sync legacy observations into local SQLite. Supports `--days N` window. Used for dev setup. |
 | `load_observations_sqlite.py` | Load `observation.csv` and `latest_observation.csv` dumps into a SQLite database. Self-contained (stdlib only, no dependencies). |
 
 ```bash
-# Full migration (destructive — drops target tables first)
-python3 scripts/migrate_legacy_to_wkcclevels.py
-
-# Incremental sync (production cron job)
-python3 scripts/sync_observations.py              # high-water mark (default)
-python3 scripts/sync_observations.py --days 7     # force last 7 days
-python3 scripts/sync_observations.py --dry-run    # show counts only
-
 # Dump observations from MySQL for SQLite import
 python3 scripts/load_observations_sqlite.py --db kayak.db
 
-# Via SSH tunnel (all MySQL scripts)
+# Via SSH tunnel (legacy MySQL scripts)
 ssh -L 3307:mysql.wkcc.dreamhosters.com:3306 tpw@levels.wkcc.org -N &
-python3 scripts/sync_observations.py --legacy-host 127.0.0.1 --legacy-port 3307
+python3 scripts/sync_legacy_observations.py --legacy mysql+pymysql://levels:Deschutes@127.0.0.1:3307/levels_data --days 7
 ```
 
 ## Legacy C++ Code

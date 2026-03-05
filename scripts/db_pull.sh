@@ -3,7 +3,7 @@ set -euo pipefail
 
 REMOTE_HOST="pat@levels.mousebrains.com"
 REMOTE_DB="/home/pat/DB/kayak.db"
-LOCAL_DB="./kayak.db"
+LOCAL_DB="../DB/kayak.db"
 
 echo "Checkpointing WAL on remote..."
 ssh "$REMOTE_HOST" "sqlite3 '$REMOTE_DB' 'PRAGMA wal_checkpoint(TRUNCATE);'"

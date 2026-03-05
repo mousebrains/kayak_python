@@ -61,7 +61,7 @@ LEGACY_PREFIXES = {
 
 # Default connection strings
 DEFAULT_LEGACY = "mysql+pymysql://levels:Deschutes@mysql.wkcc.dreamhosters.com/levels_data"
-DEFAULT_TARGET_SQLITE = f"sqlite:///{Path(__file__).parent.parent / 'kayak.db'}"
+DEFAULT_TARGET_SQLITE = f"sqlite:///{(Path(__file__).parent.parent / '../DB/kayak.db').resolve()}"
 
 
 def make_sqlite_engine(url):

@@ -140,7 +140,7 @@ def load_latest(conn, csv_path):
 
 
 def main():
-    default_db = str(Path(__file__).parent.parent / "kayak.db")
+    default_db = str((Path(__file__).parent.parent / "../DB/kayak.db").resolve())
     default_obs = str(Path(__file__).parent.parent / "observation.csv")
     default_latest = str(Path(__file__).parent.parent / "latest_observation.csv")
 

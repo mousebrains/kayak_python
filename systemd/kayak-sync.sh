@@ -7,8 +7,8 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-VENV="/home/pat/.venv"
-TARGET_DB="sqlite:////home/pat/DB/kayak.db"
+VENV="$REPO_DIR/../.venv"
+TARGET_DB="sqlite:///$REPO_DIR/../DB/kayak.db"
 LEGACY_URL="mysql+pymysql://levels:Deschutes@127.0.0.1:3307/levels_data"
 
 SSH_USER="tpw@levels.wkcc.org"

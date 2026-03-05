@@ -1,4 +1,4 @@
-"""SQLAlchemy 2.x ORM models for the wkcclevels database.
+"""SQLAlchemy 2.x ORM models for the kayak database.
 
 Normalized schema with 18 tables (16 from production + Page/PageAction).
 Replaces the flat Master/MergedMaster/Correction schema with proper

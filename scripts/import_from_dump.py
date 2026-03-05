@@ -782,8 +782,8 @@ def main():
         help="Path to MySQL dump file (default: ~/tpw/kayak_new/current.sql)"
     )
     parser.add_argument(
-        "--db", default="kayak.db",
-        help="Path to SQLite database (default: ./kayak.db)"
+        "--db", default="../DB/kayak.db",
+        help="Path to SQLite database (default: ../DB/kayak.db)"
     )
     parser.add_argument(
         "--skip-timeseries", action="store_true",

@@ -19,7 +19,7 @@ DATA_DIR = BASE_DIR / "data"
 # Database
 DATABASE_URL = os.environ.get(
     "DATABASE_URL",
-    f"sqlite:///{BASE_DIR / 'kayak.db'}",
+    f"sqlite:///{(BASE_DIR / '../DB/kayak.db').resolve()}",
 )
 
 # Data pipeline

@@ -75,7 +75,7 @@ fi
 
 echo ""
 echo "=== DB file permissions ==="
-chmod 660 /home/pat/DB/kayak.db
+chmod 660 "$REPO/../DB/kayak.db"
 echo "  kayak.db set to 660"
 
 echo ""
@@ -108,7 +108,7 @@ echo "unattended-upgrades auto-reboot:"
 grep "Automatic-Reboot" /etc/apt/apt.conf.d/50-unattended-upgrades-local | sed 's/^/  /'
 echo ""
 echo "DB permissions:"
-ls -l /home/pat/DB/kayak.db | sed 's/^/  /'
+ls -l "$REPO/../DB/kayak.db" | sed 's/^/  /'
 echo ""
 echo "msmtp:"
 ls -l /etc/msmtprc | sed 's/^/  /'
