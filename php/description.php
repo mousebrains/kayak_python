@@ -138,7 +138,8 @@ if ($source_id) {
     echo '<input type="hidden" name="id" value="' . $id . '">';
     echo '<label>Start: <input type="date" name="start" value="' . htmlspecialchars($form_start) . '"></label> ';
     echo '<label>End: <input type="date" name="end" value="' . htmlspecialchars($form_end) . '"></label> ';
-    echo '<button type="submit">Update</button>';
+    echo '<button type="submit">Update</button> ';
+    echo '<a href="/data.php?id=' . $id . '" style="margin-left:.5rem">Data inspector</a>';
     echo '</form>';
 
     if ($start_date && $end_date) {
@@ -483,7 +484,6 @@ if ($guidebooks || $reach['aw_id']) {
 
 echo '<p style="margin-top:1rem"><a href="/index.html">Back to main page</a>';
 echo ' | <a href="/reach.php?id=' . $id . '">Reach details</a>';
-echo ' | <a href="/data.php?id=' . $id . '">Data inspector</a>';
 echo ' | <a href="/edit.php?id=' . $id . '">Edit</a></p>';
 
 include_footer();

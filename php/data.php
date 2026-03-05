@@ -93,6 +93,7 @@ foreach ($rows as $r) {
 }
 $data_types = array_keys($data_types);
 sort($data_types);
+$show_src = count($source_map) > 1;
 
 $type_labels = [
     'flow' => 'Flow',
@@ -118,8 +119,6 @@ echo '</form>';
 if (!$pivoted) {
     echo '<p>No observations in this date range.</p>';
 } else {
-    $show_src = count($source_ids) > 1;
-
     echo '<table class="readings-table">';
     echo '<tr><th>Time</th>';
     if ($show_src) echo '<th>Src</th>';
@@ -130,13 +129,20 @@ if (!$pivoted) {
     echo '</tr>';
 
     foreach ($pivoted as $row) {
-        $time = htmlspecialchars($row['observed_at']);
+        $ts = strtotime($row['observed_at']);
+        $time = $ts ? date('Y-m-d H:i:s', $ts) : htmlspecialchars($row['observed_at']);
         $sid = $row['source_id'];
         $letter = $source_map[$sid]['letter'] ?? '?';
         echo "<tr><td>$time</td>";
         if ($show_src) echo "<td>$letter</td>";
         foreach ($data_types as $dt) {
-            $val = isset($row[$dt]) ? htmlspecialchars(number_format((float)$row[$dt], 2)) : '';
+            if (!isset($row[$dt])) {
+                $val = '';
+            } elseif (in_array($dt, ['flow', 'inflow', 'outflow'])) {
+                $val = number_format((float)$row[$dt], 0);
+            } else {
+                $val = number_format((float)$row[$dt], 1);
+            }
             echo "<td>$val</td>";
         }
         echo "</tr>\n";
@@ -146,7 +152,7 @@ if (!$pivoted) {
 }
 
 // Source legend
-if ($show_src ?? false) {
+if ($show_src) {
     echo '<h3 style="margin-top:1rem">Sources</h3>';
     echo '<table class="desc-table">';
     foreach ($source_map as $sid => $info) {
