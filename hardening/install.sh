@@ -23,16 +23,31 @@ sshd -t && echo "  sshd config OK" || { echo "  ERROR: sshd config test failed!"
 echo ""
 echo "=== fail2ban ==="
 cp "$DIR/jail.local" /etc/fail2ban/jail.local
+cp "$DIR/nginx-malicious.conf" /etc/fail2ban/filter.d/nginx-malicious.conf
+cp "$DIR/nginx-default-block.conf" /etc/fail2ban/filter.d/nginx-default-block.conf
 echo "  installed /etc/fail2ban/jail.local"
+echo "  installed /etc/fail2ban/filter.d/nginx-malicious.conf"
+echo "  installed /etc/fail2ban/filter.d/nginx-default-block.conf"
 
 echo ""
 echo "=== nginx ==="
+# Generate dummy SSL cert for default server block (if not already present)
+if [[ ! -f /etc/nginx/ssl/dummy.crt ]]; then
+    mkdir -p /etc/nginx/ssl
+    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+        -keyout /etc/nginx/ssl/dummy.key -out /etc/nginx/ssl/dummy.crt \
+        -subj '/CN=localhost' 2>/dev/null
+    echo "  generated /etc/nginx/ssl/dummy.crt"
+fi
 cp "$REPO/deploy/nginx-ratelimit.conf" /etc/nginx/conf.d/ratelimit.conf
 echo "  installed /etc/nginx/conf.d/ratelimit.conf"
 cp "$REPO/deploy/levels" /etc/nginx/sites-available/levels
 echo "  installed /etc/nginx/sites-available/levels"
-# Ensure symlink exists
+cp "$REPO/deploy/nginx-default-server" /etc/nginx/sites-available/default
+echo "  installed /etc/nginx/sites-available/default"
+# Ensure symlinks exist
 ln -sf /etc/nginx/sites-available/levels /etc/nginx/sites-enabled/levels
+ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
 nginx -t && echo "  nginx config OK" || { echo "  ERROR: nginx config test failed!" >&2; exit 1; }
 
 echo ""
