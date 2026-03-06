@@ -39,6 +39,9 @@ _STATE_ABBREVS = {
     "Oregon": "OR", "Utah": "UT", "Washington": "WA", "Wyoming": "WY",
 }
 
+# States shown in the nav bar (Oregon + adjacent states)
+_NAV_STATES = {"Oregon", "Washington", "Idaho", "Nevada", "California"}
+
 # CSS is read once from the source tree and inlined into every page.
 _CSS_PATH = Path(__file__).resolve().parent.parent / "web" / "static" / "style.css"
 
@@ -385,22 +388,6 @@ def _build_html_table(reaches, columns, primary_source_ids, calculated_ids,
     return "\n".join(lines)
 
 
-def _build_reach_directory(reaches) -> str:
-    """Build a collapsible alphabetical directory of all reaches."""
-    lines: list[str] = []
-    lines.append('<details class="reach-dir">')
-    lines.append(f'<summary>All Reaches ({len(reaches)})</summary>')
-    lines.append('<ul class="reach-list">')
-    for reach in reaches:
-        name = reach.display_name or reach.name
-        lines.append(
-            f'<li><a href="/description.php?id={reach.id}">{name}</a></li>'
-        )
-    lines.append('</ul>')
-    lines.append('</details>')
-    return "\n".join(lines)
-
-
 def _build_geojson(
     reaches,
     primary_source_ids: dict[int, int],
@@ -452,6 +439,8 @@ def _build_nav(states: list[str], active_state: str = "") -> str:
     links: list[str] = []
     links.append('<a href="/map.html">Map</a>')
     for s in states:
+        if s not in _NAV_STATES:
+            continue
         abbrev = _STATE_ABBREVS.get(s, s)
         cls = ' class="active"' if s == active_state else ""
         href = "/index.html" if s == PRIMARY_STATE else f"/{s}.html"
@@ -461,8 +450,7 @@ def _build_nav(states: list[str], active_state: str = "") -> str:
 
 
 def _build_page(table_html: str, css: str, states: list[str],
-                current_state: str, title: str,
-                directory_html: str = "") -> str:
+                current_state: str, title: str) -> str:
     """Wrap the table HTML in a complete HTML document with inlined CSS."""
     nav_html = _build_nav(states, active_state=current_state)
     now_utc = datetime.now(UTC)
@@ -492,7 +480,6 @@ def _build_page(table_html: str, css: str, states: list[str],
 </header>
 <main>
 {table_html}
-{directory_html}
 <div style="font-size:.75rem;color:#555;margin-top:1rem;line-height:1.6">
 <p><b>Status:</b>
 <span class="level-low">Low</span> &ndash;
@@ -697,12 +684,11 @@ def build(args):
                          css, output_dir, filename="index.html",
                          preloaded=(primary_source_ids, calculated_ids, all_latest))
 
-        # Placeholder pages for non-Oregon states
-        for state in states:
-            if state == PRIMARY_STATE:
-                continue
-            placeholder = _build_placeholder_page(css, states, state)
-            (output_dir / f"{state}.html").write_text(placeholder)
+        # Placeholder pages for adjacent states
+        for state in _NAV_STATES - {PRIMARY_STATE}:
+            if state in states:
+                placeholder = _build_placeholder_page(css, states, state)
+                (output_dir / f"{state}.html").write_text(placeholder)
 
         print(f"Build complete → {output_dir}")
     finally:
@@ -750,7 +736,5 @@ def _build_and_write(session, reaches, columns, state: str,
     table_html = _build_html_table(reaches, columns, primary_source_ids,
                                    calculated_ids, all_latest, sparkline_obs,
                                    is_all_page=is_all_page)
-    directory_html = _build_reach_directory(reaches)
-    page_html = _build_page(table_html, css, states, state, title,
-                            directory_html=directory_html)
+    page_html = _build_page(table_html, css, states, state, title)
     (output_dir / filename).write_text(page_html)
