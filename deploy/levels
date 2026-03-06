@@ -43,6 +43,11 @@ server {
     add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'" always;
     add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()" always;
 
+    # Block known malicious scanners and exploit tools
+    if ($http_user_agent ~* (zgrab|masscan|scanner/1\.0|libredtail|xfa1|Gh0st|^Hello|nvdorz|FreePBX-Scanner)) {
+        return 444;
+    }
+
     # Block dotfiles (.git, .env, .htaccess, etc.)
     location ~ /\. {
         deny all;
