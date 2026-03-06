@@ -42,6 +42,60 @@ _STATE_ABBREVS = {
 # States shown in the nav bar (Oregon + adjacent states)
 _NAV_STATES = {"Oregon", "Washington", "Idaho", "Nevada", "California"}
 
+# Links for adjacent state pages
+_STATE_LINKS: dict[str, list[tuple[str, str]]] = {
+    "Oregon": [
+        ("American Whitewater — Oregon", "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-ORE"),
+        ("Dreamflows — Oregon Coastal", "https://www.dreamflows.com/flows.php?zone=panw&page=prod&form=norm&mark=All#Oregon_Coastal_Rivers"),
+        ("Dreamflows — Oregon Central", "https://www.dreamflows.com/flows.php?zone=panw&page=prod&form=norm&mark=All#Oregon_Central_Rivers"),
+        ("Dreamflows — Oregon Eastern", "https://www.dreamflows.com/flows.php?zone=panw&page=prod&form=norm&mark=All#Oregon_Eastern_Rivers"),
+        ("Oregon Kayaking", "https://oregonkayaking.net"),
+        ("USGS Oregon Water Data", "https://waterdata.usgs.gov/state/oregon/"),
+        ("NW River Forecast Center", "https://www.nwrfc.noaa.gov/rfc/"),
+        ("USBR Hydromet", "https://www.usbr.gov/pn/hydromet/datamenu.html"),
+        ("Willamette Kayak and Canoe Club", "https://wkcc.org"),
+        ("Oregon Whitewater Association", "https://oregonwhitewater.org"),
+        ("Oregon Weather — Windy", "https://www.windy.com/?44.0,-120.5,7"),
+    ],
+    "Washington": [
+        ("American Whitewater — Washington", "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-WSH"),
+        ("Dreamflows — Washington", "https://www.dreamflows.com/flows.php?zone=panw&page=prod&form=norm&mark=All#Washington_Rivers"),
+        ("USGS Washington Water Data", "https://waterdata.usgs.gov/state/washington/"),
+        ("NW River Forecast Center", "https://www.nwrfc.noaa.gov/rfc/"),
+        ("USBR Hydromet", "https://www.usbr.gov/pn/hydromet/datamenu.html"),
+        ("Professor Paddle", "https://www.professorpaddle.com"),
+        ("Washington Weather — Windy", "https://www.windy.com/?47.5,-120.5,7"),
+        ("Washington Kayak Club", "http://wakayakclub.clubexpress.com"),
+    ],
+    "Idaho": [
+        ("American Whitewater — Idaho", "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-IDA"),
+        ("Dreamflows — Idaho", "https://www.dreamflows.com/flows.php?zone=panw&page=prod&form=norm&mark=All#Idaho_Rivers"),
+        ("USGS Idaho Water Data", "https://waterdata.usgs.gov/state/idaho/"),
+        ("NW River Forecast Center", "https://www.nwrfc.noaa.gov/rfc/"),
+        ("USBR Hydromet", "https://www.usbr.gov/pn/hydromet/datamenu.html"),
+        ("Idaho Rivers United", "https://www.idahorivers.org"),
+        ("Idaho Whitewater Association", "https://idahowhitewater.org"),
+        ("Idaho Dept. of Water Resources", "https://idwr.idaho.gov"),
+        ("Idaho Weather — Windy", "https://www.windy.com/?44.4,-114.7,7"),
+    ],
+    "Nevada": [
+        ("USGS Nevada Water Data", "https://waterdata.usgs.gov/state/nevada/"),
+        ("Colorado Basin River Forecast Center", "https://www.cbrfc.noaa.gov"),
+        ("American Whitewater — Nevada", "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-NEV"),
+        ("USBR Hydromet", "https://www.usbr.gov/pn/hydromet/datamenu.html"),
+        ("Nevada Weather — Windy", "https://www.windy.com/?39.5,-116.9,7"),
+    ],
+    "California": [
+        ("Dreamflows", "https://www.dreamflows.com"),
+        ("American Whitewater — California", "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-CAL"),
+        ("USGS California Water Data", "https://waterdata.usgs.gov/state/california/"),
+        ("California Nevada River Forecast Center", "https://www.cnrfc.noaa.gov"),
+        ("California Creeks", "https://cacreeks.com"),
+        ("Gold Country Paddlers", "https://goldcountrypaddlers.org"),
+        ("California Weather — Windy", "https://www.windy.com/?37.2,-119.5,6"),
+    ],
+}
+
 # CSS is read once from the source tree and inlined into every page.
 _CSS_PATH = Path(__file__).resolve().parent.parent / "web" / "static" / "style.css"
 
@@ -446,6 +500,7 @@ def _build_nav(states: list[str], active_state: str = "") -> str:
         href = "/index.html" if s == PRIMARY_STATE else f"/{s}.html"
         links.append(f'<a href="{href}"{cls}>{abbrev}</a>')
     links.append('<a href="/picker.php">Picker</a>')
+    links.append('<a href="https://www.windy.com/?44.0,-120.5,7">OR Weather</a>')
     return "\n    ".join(links)
 
 
@@ -503,8 +558,13 @@ Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.
 # ---------------------------------------------------------------------------
 
 def _build_placeholder_page(css: str, states: list[str], state: str) -> str:
-    """Build a placeholder page for a non-primary state."""
+    """Build a links page for a non-primary state."""
     nav_html = _build_nav(states, active_state=state)
+    links = _STATE_LINKS.get(state, [])
+    link_items = "\n".join(
+        f'<li><a href="{url}">{label}</a></li>' for label, url in links
+    )
+    links_html = f"<ul>\n{link_items}\n</ul>" if links else ""
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -527,7 +587,8 @@ def _build_placeholder_page(css: str, states: list[str], state: str) -> str:
   </nav>
 </header>
 <main>
-<p>{state} levels coming soon.</p>
+<h2>{state}</h2>
+{links_html}
 </main>
 <footer>
 Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.
@@ -684,11 +745,11 @@ def build(args):
                          css, output_dir, filename="index.html",
                          preloaded=(primary_source_ids, calculated_ids, all_latest))
 
-        # Placeholder pages for adjacent states
-        for state in _NAV_STATES - {PRIMARY_STATE}:
+        # Links pages for all nav states (including Oregon)
+        for state in _NAV_STATES:
             if state in states:
-                placeholder = _build_placeholder_page(css, states, state)
-                (output_dir / f"{state}.html").write_text(placeholder)
+                links_page = _build_placeholder_page(css, states, state)
+                (output_dir / f"{state}.html").write_text(links_page)
 
         print(f"Build complete → {output_dir}")
     finally:
