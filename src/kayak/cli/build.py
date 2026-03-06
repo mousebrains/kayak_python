@@ -31,6 +31,14 @@ from kayak.utils.simplify import parse_geom, simplify
 
 logger = logging.getLogger(__name__)
 
+PRIMARY_STATE = "Oregon"
+
+_STATE_ABBREVS = {
+    "Arizona": "AZ", "California": "CA", "Colorado": "CO", "Idaho": "ID",
+    "Kansas": "KS", "Montana": "MT", "Nevada": "NV", "New Mexico": "NM",
+    "Oregon": "OR", "Utah": "UT", "Washington": "WA", "Wyoming": "WY",
+}
+
 # CSS is read once from the source tree and inlined into every page.
 _CSS_PATH = Path(__file__).resolve().parent.parent / "web" / "static" / "style.css"
 
@@ -94,16 +102,24 @@ def _get_row_data(
                 ("flow", DataType.flow),
                 ("gage", DataType.gauge),
                 ("temperature", DataType.temperature),
+                ("inflow", DataType.inflow),
             ]:
                 latest = all_latest.get((source_id, dtype))
                 if latest and latest.value is not None:
-                    row[dtype_name] = latest.value
+                    # Display inflow in the flow column if no direct flow
+                    display_name = dtype_name
+                    if dtype_name == "inflow" and "flow" not in row:
+                        display_name = "flow"
+                    elif dtype_name == "inflow":
+                        continue
+                    row[display_name] = latest.value
                     row["time"] = latest.observed_at
-                    # Classify flow/gage level
-                    if dtype_name in ("flow", "gage"):
-                        level = classify_level(reach, dtype, latest.value)
+                    # Classify flow/gage level (inflow uses flow thresholds)
+                    classify_dtype = DataType.flow if dtype == DataType.inflow else dtype
+                    if display_name in ("flow", "gage"):
+                        level = classify_level(reach, classify_dtype, latest.value)
                         if level:
-                            row[f"{dtype_name}_level"] = str(level)
+                            row[f"{display_name}_level"] = str(level)
                             if "status" not in row:
                                 row["status"] = str(level)
 
@@ -431,19 +447,24 @@ def _build_geojson(
     return json.dumps(collection, separators=(",", ":"))
 
 
+def _build_nav(states: list[str], active_state: str = "") -> str:
+    """Build abbreviation-based nav bar. OR links to index.html, others to {State}.html."""
+    links: list[str] = []
+    links.append('<a href="/map.html">Map</a>')
+    for s in states:
+        abbrev = _STATE_ABBREVS.get(s, s)
+        cls = ' class="active"' if s == active_state else ""
+        href = "/index.html" if s == PRIMARY_STATE else f"/{s}.html"
+        links.append(f'<a href="{href}"{cls}>{abbrev}</a>')
+    links.append('<a href="/picker.php">Picker</a>')
+    return "\n    ".join(links)
+
+
 def _build_page(table_html: str, css: str, states: list[str],
                 current_state: str, title: str,
                 directory_html: str = "") -> str:
     """Wrap the table HTML in a complete HTML document with inlined CSS."""
-    nav_links: list[str] = []
-    all_cls = ' class="active"' if not current_state else ""
-    nav_links.append(f'<a href="/all.html"{all_cls}>All</a>')
-    nav_links.append('<a href="/map.html">Map</a>')
-    for s in states:
-        cls = ' class="active"' if s == current_state else ""
-        nav_links.append(f'<a href="/{s}.html"{cls}>{s}</a>')
-
-    nav_html = "\n    ".join(nav_links)
+    nav_html = _build_nav(states, active_state=current_state)
     now_utc = datetime.now(UTC)
     now_iso = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
     now_display = now_utc.strftime("%Y-%m-%d %H:%M UTC")
@@ -491,34 +512,18 @@ Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.
 
 
 # ---------------------------------------------------------------------------
-# Landing page — lightweight state index
+# Placeholder page — non-primary states
 # ---------------------------------------------------------------------------
 
-def _build_landing_page(css: str, states: list[str]) -> str:
-    """Build index.html as a simple grid of state links."""
-    nav_links: list[str] = []
-    nav_links.append('<a href="/map.html">Map</a>')
-    for s in states:
-        nav_links.append(f'<a href="/{s}.html">{s}</a>')
-    nav_links.append('<a href="/all.html">All</a>')
-    nav_html = "\n    ".join(nav_links)
-
-    state_cards: list[str] = []
-    for s in states:
-        state_cards.append(f'<a href="/{s}.html" class="state-card">{s}</a>')
-    state_cards.append('<a href="/all.html" class="state-card">All States</a>')
-    grid_html = "\n".join(state_cards)
-
-    now_utc = datetime.now(UTC)
-    now_iso = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
-    now_display = now_utc.strftime("%Y-%m-%d %H:%M UTC")
-
+def _build_placeholder_page(css: str, states: list[str], state: str) -> str:
+    """Build a placeholder page for a non-primary state."""
+    nav_html = _build_nav(states, active_state=state)
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>River Levels</title>
+<title>{state} River Levels</title>
 <link rel="manifest" href="/static/manifest.json">
 <meta name="theme-color" content="#2060A0">
 <link rel="icon" href="/static/favicon.ico">
@@ -535,17 +540,11 @@ def _build_landing_page(css: str, states: list[str]) -> str:
   </nav>
 </header>
 <main>
-<div class="state-grid">
-{grid_html}
-</div>
-<p style="font-size:.7rem;color:#888;margin-top:.5rem">Updated <time datetime="{now_iso}">{now_display}</time></p>
-<p style="margin-top:1rem"><a href="https://wkcc.org">Willamette Kayak and Canoe Club</a></p>
+<p>{state} levels coming soon.</p>
 </main>
 <footer>
 Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.
 </footer>
-{_LOCAL_TIME_JS}
-<script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/static/sw.js')</script>
 </body>
 </html>"""
 
@@ -555,13 +554,8 @@ Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.
 # ---------------------------------------------------------------------------
 
 def _build_map_page(css: str, states: list[str]) -> str:
-    """Build map.html with an interactive Leaflet map of all reaches."""
-    nav_links: list[str] = []
-    nav_links.append('<a href="/all.html">All</a>')
-    nav_links.append('<a href="/map.html" class="active">Map</a>')
-    for s in states:
-        nav_links.append(f'<a href="/{s}.html">{s}</a>')
-    nav_html = "\n    ".join(nav_links)
+    """Build map.html with an interactive Leaflet map of Oregon reaches."""
+    nav_html = _build_nav(states)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -625,7 +619,7 @@ fetch('/static/reaches.geojson').then(function(r){{return r.json()}}).then(funct
       layer.bindPopup('<b><a href="/description.php?id='+p.id+'">'+p.name+'</a></b><br>'+badge);
     }}
   }}).addTo(map);
-  if(data.features.length)map.fitBounds(geojsonLayer.getBounds().pad(0.05));else map.setView([43.5,-115],5);
+  if(data.features.length)map.fitBounds(geojsonLayer.getBounds().pad(0.05));else map.setView([44.0,-120.5],7);
 }});
 
 var legend=L.control({{position:'bottomright'}});
@@ -670,25 +664,27 @@ def build(args):
     session = get_session()
     try:
         columns = _get_builder_columns()
-        all_reaches = reaches_query(session, visible_only=True, with_gauge=True,
-                                    sort_by_state=True)
         states = all_state_names(session)
         css = _load_css()
 
-        print(f"Building pages for {len(all_reaches)} reaches across {len(states)} states")
+        # Oregon reaches — used for index.html, GeoJSON, CSV, text
+        oregon_reaches = reaches_query(session, state_name=PRIMARY_STATE,
+                                       visible_only=True, with_gauge=True)
 
-        # Pre-load data for all reaches (used by all-page and GeoJSON)
-        all_gauge_ids = [r.gauge_id for r in all_reaches if r.gauge_id]
-        all_primary_source_ids = get_all_primary_source_ids(session, all_gauge_ids)
-        all_source_ids = list(all_primary_source_ids.values())
-        all_calculated_ids = get_calculated_source_ids(session, all_source_ids)
-        all_latest = get_all_latest(session, all_source_ids)
+        print(f"Building Oregon-focused site: {len(oregon_reaches)} reaches")
 
-        # GeoJSON → static/reaches.geojson
+        # Pre-load data for Oregon reaches
+        gauge_ids = [r.gauge_id for r in oregon_reaches if r.gauge_id]
+        primary_source_ids = get_all_primary_source_ids(session, gauge_ids)
+        source_ids = list(primary_source_ids.values())
+        calculated_ids = get_calculated_source_ids(session, source_ids)
+        all_latest = get_all_latest(session, source_ids)
+
+        # GeoJSON → static/reaches.geojson (Oregon only)
         static_dir = output_dir / "static"
         static_dir.mkdir(parents=True, exist_ok=True)
-        geojson = _build_geojson(all_reaches, all_primary_source_ids,
-                                 all_calculated_ids, all_latest)
+        geojson = _build_geojson(oregon_reaches, primary_source_ids,
+                                 calculated_ids, all_latest)
         (static_dir / "reaches.geojson").write_text(geojson)
         logger.info("GeoJSON: %d bytes", len(geojson))
 
@@ -696,21 +692,17 @@ def build(args):
         map_html = _build_map_page(css, states)
         (output_dir / "map.html").write_text(map_html)
 
-        # Landing page → index.html (lightweight state list)
-        landing_html = _build_landing_page(css, states)
-        (output_dir / "index.html").write_text(landing_html)
+        # index.html = Oregon levels table
+        _build_and_write(session, oregon_reaches, columns, PRIMARY_STATE, states,
+                         css, output_dir, filename="index.html",
+                         preloaded=(primary_source_ids, calculated_ids, all_latest))
 
-        # All-states page → all.html
-        _build_and_write(session, all_reaches, columns, "", states, css, output_dir,
-                         is_all_page=True,
-                         preloaded=(all_primary_source_ids, all_calculated_ids, all_latest))
-
-        # Per-state pages
+        # Placeholder pages for non-Oregon states
         for state in states:
-            state_reaches = reaches_query(session, state_name=state, visible_only=True,
-                                        with_gauge=True)
-            if state_reaches:
-                _build_and_write(session, state_reaches, columns, state, states, css, output_dir)
+            if state == PRIMARY_STATE:
+                continue
+            placeholder = _build_placeholder_page(css, states, state)
+            (output_dir / f"{state}.html").write_text(placeholder)
 
         print(f"Build complete → {output_dir}")
     finally:
@@ -720,11 +712,13 @@ def build(args):
 def _build_and_write(session, reaches, columns, state: str,
                      states: list[str], css: str, output_dir: Path,
                      *, is_all_page: bool = False,
-                     preloaded: tuple | None = None):
+                     preloaded: tuple | None = None,
+                     filename: str | None = None):
     """Build and write CSV, text, and HTML for a state (or all)."""
     suffix = f"_{state}" if state else ""
     label = state or "all"
-    filename = f"{state}.html" if state else "all.html"
+    if filename is None:
+        filename = f"{state}.html" if state else "all.html"
     title = f"{state} River Levels" if state else "River Levels"
 
     logger.info("Building %s: %d reaches", label, len(reaches))
