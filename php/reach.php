@@ -12,23 +12,113 @@ $db = get_db();
 
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 $q  = filter_input(INPUT_GET, 'q', FILTER_DEFAULT);
+$st = filter_input(INPUT_GET, 'st', FILTER_DEFAULT);
+$st = ($st !== null && $st !== '') ? strtoupper(trim($st)) : '';
 
 // --- Search mode ---
 if ($q !== null && $q !== '') {
     $q = trim($q);
-    $stmt = $db->prepare(
-        'SELECT id, COALESCE(NULLIF(display_name, \'\'), name) AS name, river
-         FROM reach
-         WHERE display_name LIKE ? OR name LIKE ? OR river LIKE ?
-         ORDER BY sort_name'
-    );
     $pat = "%$q%";
-    $stmt->execute([$pat, $pat, $pat]);
+    if ($st !== '') {
+        $stmt = $db->prepare(
+            'SELECT r.id, COALESCE(NULLIF(r.display_name, \'\'), r.name) AS name, r.river,
+                    r.gauge_id, r.latitude_start, r.longitude_start,
+                    r.latitude_end, r.longitude_end, r.latitude, r.longitude,
+                    r.sort_name, r.aw_id
+             FROM reach r
+             JOIN reach_state rs ON rs.reach_id = r.id
+             JOIN state s ON s.id = rs.state_id
+             WHERE (r.display_name LIKE ? OR r.name LIKE ? OR r.river LIKE ?)
+               AND s.abbreviation = ?
+             ORDER BY r.sort_name'
+        );
+        $stmt->execute([$pat, $pat, $pat, $st]);
+    } else {
+        $stmt = $db->prepare(
+            'SELECT r.id, COALESCE(NULLIF(r.display_name, \'\'), r.name) AS name, r.river,
+                    r.gauge_id, r.latitude_start, r.longitude_start,
+                    r.latitude_end, r.longitude_end, r.latitude, r.longitude,
+                    r.sort_name, r.aw_id
+             FROM reach r
+             WHERE r.display_name LIKE ? OR r.name LIKE ? OR r.river LIKE ?
+             ORDER BY r.sort_name'
+        );
+        $stmt->execute([$pat, $pat, $pat]);
+    }
     $results = $stmt->fetchAll();
 
     if (count($results) === 1) {
         header('Location: /reach.php?id=' . $results[0]['id']);
         exit;
+    }
+
+    // Collect latest flow/gage/inflow readings for all result reaches
+    $reach_readings = [];
+    if ($results) {
+        $gauge_ids = array_values(array_unique(array_filter(array_column($results, 'gauge_id'))));
+        if ($gauge_ids) {
+            $placeholders = implode(',', array_fill(0, count($gauge_ids), '?'));
+            $lo_stmt = $db->prepare(
+                "SELECT gs.gauge_id, lo.data_type, lo.value, lo.observed_at
+                 FROM latest_observation lo
+                 JOIN gauge_source gs ON gs.source_id = lo.source_id
+                 WHERE gs.gauge_id IN ($placeholders)
+                   AND lo.data_type IN ('flow', 'gauge', 'inflow')
+                 ORDER BY gs.gauge_id, lo.data_type"
+            );
+            $lo_stmt->execute($gauge_ids);
+            foreach ($lo_stmt->fetchAll() as $lo) {
+                $gid = $lo['gauge_id'];
+                $dt = $lo['data_type'];
+                if (!isset($reach_readings[$gid][$dt])
+                    || ($dt === 'flow' || ($dt === 'inflow' && !isset($reach_readings[$gid]['flow'])))) {
+                    $reach_readings[$gid][$dt] = $lo;
+                }
+            }
+        }
+    }
+
+    // Collect classes and guidebook abbreviations for all result reaches
+    $reach_ids = array_column($results, 'id');
+    $reach_classes = [];
+    $reach_guides = [];
+    if ($reach_ids) {
+        $ph = implode(',', array_fill(0, count($reach_ids), '?'));
+
+        $cls_stmt = $db->prepare("SELECT reach_id, name FROM reach_class WHERE reach_id IN ($ph)");
+        $cls_stmt->execute($reach_ids);
+        foreach ($cls_stmt->fetchAll() as $c) {
+            $reach_classes[$c['reach_id']][] = $c['name'];
+        }
+
+        $gb_stmt = $db->prepare(
+            "SELECT rg.reach_id, g.id AS gid, g.title
+             FROM reach_guidebook rg
+             JOIN guidebook g ON g.id = rg.guidebook_id
+             WHERE rg.reach_id IN ($ph)"
+        );
+        $gb_stmt->execute($reach_ids);
+        // Guidebook abbreviation map
+        $gb_abbrev = [
+            1 => 'SS', 2 => 'SS', 3 => 'SS', 4 => 'SS', 9 => 'SS',  // Soggy Sneakers
+            5 => 'ID',    // Idaho
+            6 => 'WA',    // Guide to WW Rivers of Washington
+            7 => 'PO',    // Paddling Oregon
+            8 => 'AW',    // American Whitewater
+            10 => 'OK',   // Oregon Kayaking
+            11 => 'DF',   // Dreamflows
+        ];
+        foreach ($gb_stmt->fetchAll() as $gb) {
+            $abbr = $gb_abbrev[$gb['gid']] ?? substr($gb['title'], 0, 2);
+            $reach_guides[$gb['reach_id']][$abbr] = true;
+        }
+
+        // Add AW for reaches with aw_id set (even without a guidebook row)
+        foreach ($results as $r) {
+            if (!empty($r['aw_id'])) {
+                $reach_guides[$r['id']]['AW'] = true;
+            }
+        }
     }
 
     header('Cache-Control: no-cache');
@@ -38,15 +128,92 @@ if ($q !== null && $q !== '') {
     if (!$results) {
         echo '<p>No reaches matching &ldquo;' . htmlspecialchars($q) . '&rdquo;.</p>';
     } else {
+        // Map with reach locations
+        $map_reaches = [];
+        foreach ($results as $idx => $r) {
+            $lat = $r['latitude'] ?? $r['latitude_start'] ?? null;
+            $lon = $r['longitude'] ?? $r['longitude_start'] ?? null;
+            if ($lat !== null && $lon !== null) {
+                $map_reaches[] = [
+                    'id' => $r['id'],
+                    'name' => $r['name'],
+                    'lat' => (float)$lat,
+                    'lon' => (float)$lon,
+                    'lat_start' => $r['latitude_start'] ? (float)$r['latitude_start'] : null,
+                    'lon_start' => $r['longitude_start'] ? (float)$r['longitude_start'] : null,
+                    'lat_end' => $r['latitude_end'] ? (float)$r['latitude_end'] : null,
+                    'lon_end' => $r['longitude_end'] ? (float)$r['longitude_end'] : null,
+                    'idx' => $idx,
+                ];
+            }
+        }
+
+        if ($map_reaches) {
+            echo '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>';
+            echo '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>';
+            echo '<div id="search-map" style="height:350px;margin-bottom:1rem;border:1px solid #ccc"></div>';
+        }
+
         echo '<p>' . count($results) . ' reaches matching &ldquo;' . htmlspecialchars($q) . '&rdquo;:</p>';
         echo '<table class="desc-table">';
-        echo '<tr><th>ID</th><th>Name</th><th>River</th></tr>';
-        foreach ($results as $r) {
+        echo '<tr><th>ID</th><th>Name</th><th>River</th><th>Class</th><th>Sort Name</th><th>Guides</th><th>Flow / Gage</th></tr>';
+        $colors = ['#e6194b','#3cb44b','#4363d8','#f58231','#911eb4',
+                    '#42d4f4','#f032e6','#bfef45','#469990','#dcbeff',
+                    '#9A6324','#800000','#aaffc3','#808000','#000075'];
+        foreach ($results as $idx => $r) {
             $rname = htmlspecialchars($r['name']);
             $river = htmlspecialchars($r['river'] ?? '');
-            echo "<tr><td>{$r['id']}</td><td><a href=\"/reach.php?id={$r['id']}\">$rname</a></td><td>$river</td></tr>\n";
+            $sname = htmlspecialchars($r['sort_name'] ?? '');
+            $reading = '';
+            if ($r['gauge_id'] && isset($reach_readings[$r['gauge_id']])) {
+                $rr = $reach_readings[$r['gauge_id']];
+                $parts = [];
+                if (isset($rr['flow'])) {
+                    $parts[] = number_format((float)$rr['flow']['value'], 0) . ' cfs';
+                } elseif (isset($rr['inflow'])) {
+                    $parts[] = number_format((float)$rr['inflow']['value'], 0) . ' cfs';
+                }
+                if (isset($rr['gauge'])) {
+                    $parts[] = number_format((float)$rr['gauge']['value'], 2) . ' ft';
+                }
+                $reading = implode(' / ', $parts);
+            }
+            $color = $colors[$idx % count($colors)];
+            $swatch = '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' . $color . ';margin-right:4px" title="Map marker color"></span>';
+            $cls = htmlspecialchars(implode(', ', $reach_classes[$r['id']] ?? []));
+            $guides = implode(', ', array_keys($reach_guides[$r['id']] ?? []));
+            echo "<tr><td>{$r['id']}</td><td>{$swatch}<a href=\"/reach.php?id={$r['id']}\">$rname</a></td><td>$river</td><td>$cls</td><td>$sname</td><td>$guides</td><td>$reading</td></tr>\n";
         }
         echo '</table>';
+
+        if ($map_reaches) {
+            $map_json = json_encode($map_reaches);
+            $colors_json = json_encode($colors);
+            echo '<script>';
+            echo 'var reaches=' . $map_json . ';';
+            echo 'var colors=' . $colors_json . ';';
+            echo 'var map=L.map("search-map");';
+            echo 'var topo=L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",{attribution:"OpenTopoMap",maxZoom:17});';
+            echo 'var street=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"OpenStreetMap",maxZoom:19});';
+            echo 'var satellite=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{attribution:"Esri",maxZoom:19});';
+            echo 'topo.addTo(map);';
+            echo 'L.control.layers({"Topo":topo,"Street":street,"Satellite":satellite}).addTo(map);';
+            echo 'var bounds=[];';
+            echo 'reaches.forEach(function(r){';
+            echo '  var c=colors[r.idx%colors.length];';
+            echo '  var ic=L.divIcon({className:"",html:\'<div style="background:\'+c+\';color:#fff;padding:2px 6px;border-radius:3px;font:bold 11px sans-serif;white-space:nowrap;cursor:pointer;border:1px solid rgba(0,0,0,.3)">\'+r.name+\'</div>\',iconAnchor:[0,12]});';
+            echo '  var m=L.marker([r.lat,r.lon],{icon:ic}).addTo(map);';
+            echo '  m.bindPopup(\'<a href="/reach.php?id=\'+r.id+\'">\'+r.name+\'</a>\');';
+            echo '  bounds.push([r.lat,r.lon]);';
+            // Draw put-in to take-out line if both exist
+            echo '  if(r.lat_start&&r.lon_start&&r.lat_end&&r.lon_end){';
+            echo '    L.polyline([[r.lat_start,r.lon_start],[r.lat_end,r.lon_end]],{color:c,weight:4,opacity:0.7}).addTo(map);';
+            echo '  }';
+            echo '});';
+            echo 'if(bounds.length>1){map.fitBounds(bounds,{padding:[40,40]})}';
+            echo 'else if(bounds.length===1){map.setView(bounds[0],12)}';
+            echo '</script>';
+        }
     }
 
     echo '<p style="margin-top:1rem"><a href="/reach.php">Browse all reaches</a></p>';
@@ -141,8 +308,15 @@ if ($next) {
 } else {
     echo '<span style="color:#999">Next &raquo;</span>';
 }
+$all_states = $db->query('SELECT abbreviation FROM state ORDER BY abbreviation')->fetchAll(PDO::FETCH_COLUMN);
 echo '<form method="get" action="/reach.php" style="display:flex;gap:.25rem;margin-left:auto">';
-echo '<input type="text" name="q" placeholder="Search reaches…" style="width:14rem">';
+echo '<input type="text" name="q" placeholder="Search reaches…" style="width:14rem" value="' . htmlspecialchars($q ?? '') . '">';
+echo '<select name="st"><option value="">All states</option>';
+foreach ($all_states as $s) {
+    $sel = ($st === $s) ? ' selected' : '';
+    echo "<option value=\"$s\"$sel>$s</option>";
+}
+echo '</select>';
 echo '<button type="submit">Go</button>';
 echo '</form>';
 echo '</div>';

@@ -232,20 +232,20 @@ $map_points = []; // label => "lat,lon" for combined map link
 $coord_fields = [];
 
 if ($gauge && $gauge['latitude'] !== null && $gauge['longitude'] !== null) {
-    $glat = number_format((float)$gauge['latitude'], 6, '.', '');
-    $glon = number_format((float)$gauge['longitude'], 6, '.', '');
+    $glat = number_format((float)$gauge['latitude'], 5, '.', '');
+    $glon = number_format((float)$gauge['longitude'], 5, '.', '');
     $coord_fields['Gauge Location'] = [$glat, $glon];
     $map_points['Gauge'] = "$glat,$glon";
 }
 if ($reach['latitude_start'] !== null && $reach['longitude_start'] !== null) {
-    $slat = number_format((float)$reach['latitude_start'], 6, '.', '');
-    $slon = number_format((float)$reach['longitude_start'], 6, '.', '');
+    $slat = number_format((float)$reach['latitude_start'], 5, '.', '');
+    $slon = number_format((float)$reach['longitude_start'], 5, '.', '');
     $coord_fields['Put-in'] = [$slat, $slon];
     $map_points['Put-in'] = "$slat,$slon";
 }
 if ($reach['latitude_end'] !== null && $reach['longitude_end'] !== null) {
-    $elat = number_format((float)$reach['latitude_end'], 6, '.', '');
-    $elon = number_format((float)$reach['longitude_end'], 6, '.', '');
+    $elat = number_format((float)$reach['latitude_end'], 5, '.', '');
+    $elon = number_format((float)$reach['longitude_end'], 5, '.', '');
     $coord_fields['Take-out'] = [$elat, $elon];
     $map_points['Take-out'] = "$elat,$elon";
 }
@@ -383,8 +383,15 @@ if ($gauge) {
         foreach ($sources as $src) {
             // Match source to a station page link by agency
             $matched = null;
+            $agency = $src['agency'] ?? '';
             foreach ($station_urls as $key => $info) {
-                if (stripos($src['agency'] ?? '', $key) !== false && !in_array($key, $shown_agencies)) {
+                if (in_array($key, $shown_agencies)) continue;
+                if (stripos($agency, $key) !== false) {
+                    $matched = $key;
+                    break;
+                }
+                // NWS sources match NWRFC gauge pages
+                if ($key === 'NWRFC' && stripos($agency, 'NWS') !== false) {
                     $matched = $key;
                     break;
                 }

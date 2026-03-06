@@ -132,6 +132,10 @@ nwrfc.xml:
     - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LOPO3&pe=QR&dtype=b&numdays=2"
     - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WNFO3&pe=HG&dtype=b&numdays=2"
 
+nwrfc.textplot:
+  urls:
+    - url: "https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=APLO3&pe=QI"
+
 usgs:
   urls:
     - url: "https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=az&period=P1D&parameterCd=00060,00065,00010"

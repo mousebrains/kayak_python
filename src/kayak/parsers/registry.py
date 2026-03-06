@@ -46,6 +46,7 @@ def ensure_all_loaded():
     # Import each parser module — the @register decorator runs on import
     from kayak.parsers import (  # noqa: F401
         nwps,
+        nwrfc_textplot,
         nwrfc_xml,
         usace_cda,
         usace_outflow,
