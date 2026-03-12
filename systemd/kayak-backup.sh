@@ -8,8 +8,8 @@
 
 set -euo pipefail
 
-DB="${SQLITE_PATH:-/home/tpw/kayak/kayak.db}"
-BACKUP_DIR="/home/tpw/kayak/backups"
+DB="${SQLITE_PATH:-/home/pat/DB/kayak.db}"
+BACKUP_DIR="/home/pat/kayak/backups"
 DATE=$(date +%Y%m%d)
 DEST="$BACKUP_DIR/kayak-$DATE.db"
 

@@ -20,8 +20,8 @@ from kayak.utils.conversions import kcfs_to_cfs, parse_datetime
 
 logger = logging.getLogger(__name__)
 
-# Sentinel value used by NWPS API for unavailable data
-_MISSING = -999
+# Sentinel values used by NWPS API for unavailable data
+_MISSING_VALUES = {-999, -9999}
 
 
 @register("nwps")
@@ -64,13 +64,13 @@ class NWPSParser(BaseParser):
             # Stage (primary)
             if has_stage:
                 primary = entry.get("primary")
-                if primary is not None and primary != _MISSING:
+                if primary is not None and primary not in _MISSING_VALUES:
                     self.dump_to_db(station, DataType.gauge, when, float(primary))
 
             # Flow (secondary)
             if has_flow:
                 secondary = entry.get("secondary")
-                if secondary is not None and secondary != _MISSING:
+                if secondary is not None and secondary not in _MISSING_VALUES:
                     flow_cfs = kcfs_to_cfs(float(secondary)) if flow_is_kcfs else float(secondary)
                     if flow_cfs >= 0:
                         self.dump_to_db(station, DataType.flow, when, flow_cfs)

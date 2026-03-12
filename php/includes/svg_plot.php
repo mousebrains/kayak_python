@@ -84,7 +84,7 @@ function generate_svg_plot(
     $pairs = lttb_downsample($pairs, $target_points);
 
     // Margins
-    $ml = 75; $mr = 15; $mt = 30; $mb = 40;
+    $ml = 80; $mr = 20; $mt = 30; $mb = 45;
     $pw = $width - $ml - $mr;   // plot width
     $ph = $height - $mt - $mb;  // plot height
 
@@ -112,7 +112,7 @@ function generate_svg_plot(
         $py = $mt + (int)(($y_max - $yv) / $y_range * $ph);
         $label = number_format($yv, $y_decimals);
         $grid .= "<line x1=\"$ml\" y1=\"$py\" x2=\"" . ($ml + $pw) . "\" y2=\"$py\" stroke=\"#ddd\" stroke-width=\"0.5\"/>\n";
-        $grid .= "<text x=\"" . ($ml - 5) . "\" y=\"" . ($py + 3) . "\" text-anchor=\"end\" font-size=\"10\" fill=\"#666\">$label</text>\n";
+        $grid .= "<text x=\"" . ($ml - 5) . "\" y=\"" . ($py + 4) . "\" text-anchor=\"end\" font-size=\"14\" fill=\"#666\">$label</text>\n";
     }
 
     // X-axis date labels
@@ -124,7 +124,7 @@ function generate_svg_plot(
         $px = $ml + (int)(($xv - $x_min) / $x_range * $pw);
         $label = $span_days > 3 ? date('n/j', (int)$xv) : date('n/j H:i', (int)$xv);
         $grid .= "<line x1=\"$px\" y1=\"$mt\" x2=\"$px\" y2=\"" . ($mt + $ph) . "\" stroke=\"#ddd\" stroke-width=\"0.5\"/>\n";
-        $grid .= "<text x=\"$px\" y=\"" . ($height - 8) . "\" text-anchor=\"middle\" font-size=\"10\" fill=\"#666\">$label</text>\n";
+        $grid .= "<text x=\"$px\" y=\"" . ($height - 8) . "\" text-anchor=\"middle\" font-size=\"14\" fill=\"#666\">$label</text>\n";
     }
 
     $esc_title = htmlspecialchars($title);
@@ -137,6 +137,169 @@ function generate_svg_plot(
 $grid
 <rect x="$ml" y="$mt" width="$pw" height="$ph" fill="none" stroke="#ccc" stroke-width="0.5"/>
 <polyline fill="none" stroke="#2060A0" stroke-width="1.5" stroke-linejoin="round" points="$points_str"/>
+</svg>
+SVG;
+}
+
+/**
+ * Generate a dual-axis SVG plot with flow (left axis) and gauge height (right axis).
+ *
+ * @param array  $flow_times   Unix timestamps for flow data.
+ * @param array  $flow_values  Flow values (CFS).
+ * @param array  $gauge_times  Unix timestamps for gauge data.
+ * @param array  $gauge_values Gauge height values (ft).
+ * @param string $title        Plot title.
+ * @param int    $width        SVG width.
+ * @param int    $height       SVG height.
+ * @param int    $target_points LTTB target per series.
+ * @return string SVG markup.
+ */
+function generate_dual_svg_plot(
+    array $flow_times,
+    array $flow_values,
+    array $gauge_times,
+    array $gauge_values,
+    string $title,
+    int $width = 800,
+    int $height = 350,
+    int $target_points = 200
+): string {
+    // Build and sort pairs for each series
+    $flow_pairs = [];
+    for ($i = 0; $i < count($flow_times); $i++) {
+        if ($flow_values[$i] !== null) {
+            $flow_pairs[] = [(float)$flow_times[$i], (float)$flow_values[$i]];
+        }
+    }
+    usort($flow_pairs, fn($a, $b) => $a[0] <=> $b[0]);
+
+    $gauge_pairs = [];
+    for ($i = 0; $i < count($gauge_times); $i++) {
+        if ($gauge_values[$i] !== null) {
+            $gauge_pairs[] = [(float)$gauge_times[$i], (float)$gauge_values[$i]];
+        }
+    }
+    usort($gauge_pairs, fn($a, $b) => $a[0] <=> $b[0]);
+
+    $has_flow = count($flow_pairs) >= 2;
+    $has_gauge = count($gauge_pairs) >= 2;
+
+    if (!$has_flow && !$has_gauge) {
+        return _empty_svg($title, $width, $height);
+    }
+
+    // Downsample
+    if ($has_flow) $flow_pairs = lttb_downsample($flow_pairs, $target_points);
+    if ($has_gauge) $gauge_pairs = lttb_downsample($gauge_pairs, $target_points);
+
+    // Margins — right margin wider for second Y axis
+    $ml = 80; $mr = 80; $mt = 30; $mb = 45;
+    $pw = $width - $ml - $mr;
+    $ph = $height - $mt - $mb;
+
+    // X range from combined data
+    $all_x = [];
+    if ($has_flow) { $all_x[] = $flow_pairs[0][0]; $all_x[] = $flow_pairs[count($flow_pairs)-1][0]; }
+    if ($has_gauge) { $all_x[] = $gauge_pairs[0][0]; $all_x[] = $gauge_pairs[count($gauge_pairs)-1][0]; }
+    $x_min = min($all_x);
+    $x_max = max($all_x);
+    $x_range = $x_max - $x_min ?: 1;
+
+    // Flow Y axis (left)
+    $flow_grid = '';
+    $flow_line = '';
+    if ($has_flow) {
+        $fy_vals = array_column($flow_pairs, 1);
+        [$fy_min, $fy_max, $fy_step] = nice_axis(min($fy_vals), max($fy_vals));
+        $fy_range = $fy_max - $fy_min ?: 1;
+        $fy_decimals = $fy_step >= 1 ? 0 : ($fy_step >= 0.1 ? 1 : 2);
+
+        for ($yv = $fy_min; $yv <= $fy_max + $fy_step * 0.01; $yv += $fy_step) {
+            $py = $mt + (int)(($fy_max - $yv) / $fy_range * $ph);
+            $label = number_format($yv, $fy_decimals);
+            $flow_grid .= "<line x1=\"$ml\" y1=\"$py\" x2=\"" . ($ml + $pw) . "\" y2=\"$py\" stroke=\"#ddd\" stroke-width=\"0.5\"/>\n";
+            $flow_grid .= "<text x=\"" . ($ml - 5) . "\" y=\"" . ($py + 4) . "\" text-anchor=\"end\" font-size=\"14\" fill=\"#2060A0\">$label</text>\n";
+        }
+
+        $pts = '';
+        foreach ($flow_pairs as [$x, $y]) {
+            $px = $ml + (int)(($x - $x_min) / $x_range * $pw);
+            $py = $mt + (int)(($fy_max - $y) / $fy_range * $ph);
+            $pts .= "$px,$py ";
+        }
+        $flow_line = '<polyline fill="none" stroke="#2060A0" stroke-width="1.5" stroke-linejoin="round" points="' . rtrim($pts) . '"/>';
+    }
+
+    // Gauge Y axis (right)
+    $gauge_grid = '';
+    $gauge_line = '';
+    if ($has_gauge) {
+        $gy_vals = array_column($gauge_pairs, 1);
+        [$gy_min, $gy_max, $gy_step] = nice_axis(min($gy_vals), max($gy_vals));
+        $gy_range = $gy_max - $gy_min ?: 1;
+        $gy_decimals = $gy_step >= 1 ? 0 : ($gy_step >= 0.1 ? 1 : 2);
+
+        $right_x = $ml + $pw;
+        for ($yv = $gy_min; $yv <= $gy_max + $gy_step * 0.01; $yv += $gy_step) {
+            $py = $mt + (int)(($gy_max - $yv) / $gy_range * $ph);
+            $label = number_format($yv, $gy_decimals);
+            if (!$has_flow) {
+                $gauge_grid .= "<line x1=\"$ml\" y1=\"$py\" x2=\"$right_x\" y2=\"$py\" stroke=\"#ddd\" stroke-width=\"0.5\"/>\n";
+            }
+            $gauge_grid .= "<text x=\"" . ($right_x + 5) . "\" y=\"" . ($py + 4) . "\" text-anchor=\"start\" font-size=\"14\" fill=\"#C04020\">$label</text>\n";
+        }
+
+        $pts = '';
+        foreach ($gauge_pairs as [$x, $y]) {
+            $px = $ml + (int)(($x - $x_min) / $x_range * $pw);
+            $py = $mt + (int)(($gy_max - $y) / $gy_range * $ph);
+            $pts .= "$px,$py ";
+        }
+        $gauge_line = '<polyline fill="none" stroke="#C04020" stroke-width="1.5" stroke-linejoin="round" points="' . rtrim($pts) . '"/>';
+    }
+
+    // X-axis date labels
+    $x_labels = '';
+    $span_days = ($x_max - $x_min) / 86400;
+    $n_xticks = $span_days > 14 ? 5 : ($span_days > 3 ? (int)$span_days : 6);
+    $n_xticks = max($n_xticks, 2);
+    for ($i = 0; $i <= $n_xticks; $i++) {
+        $xv = $x_min + ($x_range * $i / $n_xticks);
+        $px = $ml + (int)(($xv - $x_min) / $x_range * $pw);
+        $label = $span_days > 3 ? date('n/j', (int)$xv) : date('n/j H:i', (int)$xv);
+        $x_labels .= "<line x1=\"$px\" y1=\"$mt\" x2=\"$px\" y2=\"" . ($mt + $ph) . "\" stroke=\"#ddd\" stroke-width=\"0.5\"/>\n";
+        $x_labels .= "<text x=\"$px\" y=\"" . ($height - 8) . "\" text-anchor=\"middle\" font-size=\"14\" fill=\"#666\">$label</text>\n";
+    }
+
+    $esc_title = htmlspecialchars($title);
+
+    // Y-axis labels
+    $flow_label = $has_flow ? '<text x="12" y="' . $mt . '" font-size="11" fill="#2060A0" transform="rotate(-90,12,' . $mt . ')" text-anchor="end">Flow (CFS)</text>' : '';
+    $gauge_label_x = $width - 12;
+    $gauge_label = $has_gauge ? '<text x="' . $gauge_label_x . '" y="' . $mt . '" font-size="11" fill="#C04020" transform="rotate(90,' . $gauge_label_x . ',' . $mt . ')" text-anchor="end">Gage Height (Ft)</text>' : '';
+
+    // Legend
+    $legend_x = $ml + $pw - 180;
+    $legend = '';
+    if ($has_flow && $has_gauge) {
+        $legend .= "<line x1=\"" . ($legend_x) . "\" y1=\"" . ($mt + 10) . "\" x2=\"" . ($legend_x + 20) . "\" y2=\"" . ($mt + 10) . "\" stroke=\"#2060A0\" stroke-width=\"2\"/>";
+        $legend .= "<text x=\"" . ($legend_x + 24) . "\" y=\"" . ($mt + 14) . "\" font-size=\"11\" fill=\"#2060A0\">Flow</text>";
+        $legend .= "<line x1=\"" . ($legend_x + 70) . "\" y1=\"" . ($mt + 10) . "\" x2=\"" . ($legend_x + 90) . "\" y2=\"" . ($mt + 10) . "\" stroke=\"#C04020\" stroke-width=\"2\"/>";
+        $legend .= "<text x=\"" . ($legend_x + 94) . "\" y=\"" . ($mt + 14) . "\" font-size=\"11\" fill=\"#C04020\">Gage Height</text>";
+    }
+
+    return <<<SVG
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 $width $height" width="$width" height="$height">
+<text x="{$ml}" y="18" font-size="13" font-weight="bold" fill="#333">$esc_title</text>
+$flow_label
+$gauge_label
+$flow_grid
+$gauge_grid
+$x_labels
+<rect x="$ml" y="$mt" width="$pw" height="$ph" fill="none" stroke="#ccc" stroke-width="0.5"/>
+$flow_line
+$gauge_line
+$legend
 </svg>
 SVG;
 }

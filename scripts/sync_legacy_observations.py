@@ -154,6 +154,9 @@ def sync_table(
             except ValueError:
                 continue
 
+        # Normalize to second precision to avoid .000000 suffix in SQLite
+        row_time = row_time.replace(microsecond=0)
+
         batch.append({
             "source_id": source_id,
             "observed_at": row_time,

@@ -16,7 +16,7 @@ $end_date = filter_input(INPUT_GET, 'end', FILTER_SANITIZE_SPECIAL_CHARS);
 
 if (!$id) { http_response_code(400); exit('Missing id parameter'); }
 
-$valid_types = ['flow', 'gauge', 'gage', 'temperature', 'temp', 'inflow', 'outflow'];
+$valid_types = ['flow', 'gauge', 'gage', 'temperature', 'temp', 'inflow', 'outflow', 'dual'];
 if (!in_array($type, $valid_types)) {
     http_response_code(400); exit('Invalid type');
 }

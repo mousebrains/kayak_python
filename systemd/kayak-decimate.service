@@ -4,9 +4,9 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-User=tpw
-WorkingDirectory=/home/tpw/kayak
-EnvironmentFile=/home/tpw/kayak/.env
-ExecStart=/home/tpw/kayak/.venv/bin/levels decimate --vacuum
+User=pat
+WorkingDirectory=/home/pat/kayak
+EnvironmentFile=/home/pat/.config/kayak/.env
+ExecStart=/home/pat/.venv/bin/levels decimate --vacuum
 TimeoutStartSec=600
 Nice=15

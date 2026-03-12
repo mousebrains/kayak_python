@@ -68,6 +68,7 @@ def store_observation(
             logger.error("Unknown data type: %s", data_type)
             return False
 
+    when = when.replace(microsecond=0)
     now = datetime.now(UTC)
     if when.tzinfo is None:
         when_utc = when.replace(tzinfo=UTC)
@@ -115,7 +116,7 @@ def store_observations(session: Session, values: list[dict]) -> int:
                 logger.error("Unknown data type: %s", data_type)
                 continue
 
-        when = row["observed_at"]
+        when = row["observed_at"].replace(microsecond=0)
         if when.tzinfo is None:
             when_utc = when.replace(tzinfo=UTC)
         else:

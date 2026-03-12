@@ -5,6 +5,8 @@ obj
 *.o
 *.d
 tpw.master.2*
+tkw.*
+tpw.*
 
 # Python
 __pycache__/

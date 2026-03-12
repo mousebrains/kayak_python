@@ -138,7 +138,7 @@ def _get_row_data(
     row: dict = {
         "reach_id": reach.id,
         "display_name": reach.display_name or "",
-        "gauge_location": (reach.gauge.location if reach.gauge else "") or "",
+        "gauge_location": reach.description or (reach.gauge.location if reach.gauge else "") or "",
         "drainage": reach.basin or "",
         "class": "",
         "state": ", ".join(s.name for s in reach.states) if reach.states else "",
@@ -320,7 +320,7 @@ _TD_CLASS = {
 _SECONDARY_FIELDS = {"drainage", "class", "state"}
 
 # Fields whose cells are gauge-specific and can be consolidated with rowspan
-_GAUGE_FIELDS = {"gauge_location", "time", "flow", "gage", "temperature", "status"}
+_GAUGE_FIELDS = {"time", "flow", "gage", "temperature", "status"}
 
 
 def _levels_key(reach: Reach) -> tuple:

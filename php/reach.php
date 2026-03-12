@@ -22,7 +22,7 @@ if ($q !== null && $q !== '') {
     if ($st !== '') {
         $stmt = $db->prepare(
             'SELECT r.id, COALESCE(NULLIF(r.display_name, \'\'), r.name) AS name, r.river,
-                    r.gauge_id, r.latitude_start, r.longitude_start,
+                    r.description, r.gauge_id, r.latitude_start, r.longitude_start,
                     r.latitude_end, r.longitude_end, r.latitude, r.longitude,
                     r.sort_name, r.aw_id
              FROM reach r
@@ -36,7 +36,7 @@ if ($q !== null && $q !== '') {
     } else {
         $stmt = $db->prepare(
             'SELECT r.id, COALESCE(NULLIF(r.display_name, \'\'), r.name) AS name, r.river,
-                    r.gauge_id, r.latitude_start, r.longitude_start,
+                    r.description, r.gauge_id, r.latitude_start, r.longitude_start,
                     r.latitude_end, r.longitude_end, r.latitude, r.longitude,
                     r.sort_name, r.aw_id
              FROM reach r
@@ -156,13 +156,13 @@ if ($q !== null && $q !== '') {
 
         echo '<p>' . count($results) . ' reaches matching &ldquo;' . htmlspecialchars($q) . '&rdquo;:</p>';
         echo '<table class="desc-table">';
-        echo '<tr><th>ID</th><th>Name</th><th>River</th><th>Class</th><th>Sort Name</th><th>Guides</th><th>Flow / Gage</th></tr>';
+        echo '<tr><th>ID</th><th>Name</th><th>Description</th><th>Class</th><th>Sort Name</th><th>Guides</th><th>Flow / Gage</th></tr>';
         $colors = ['#e6194b','#3cb44b','#4363d8','#f58231','#911eb4',
                     '#42d4f4','#f032e6','#bfef45','#469990','#dcbeff',
                     '#9A6324','#800000','#aaffc3','#808000','#000075'];
         foreach ($results as $idx => $r) {
             $rname = htmlspecialchars($r['name']);
-            $river = htmlspecialchars($r['river'] ?? '');
+            $desc = htmlspecialchars($r['description'] ?? '');
             $sname = htmlspecialchars($r['sort_name'] ?? '');
             $reading = '';
             if ($r['gauge_id'] && isset($reach_readings[$r['gauge_id']])) {
@@ -182,7 +182,7 @@ if ($q !== null && $q !== '') {
             $swatch = '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' . $color . ';margin-right:4px" title="Map marker color"></span>';
             $cls = htmlspecialchars(implode(', ', $reach_classes[$r['id']] ?? []));
             $guides = implode(', ', array_keys($reach_guides[$r['id']] ?? []));
-            echo "<tr><td>{$r['id']}</td><td>{$swatch}<a href=\"/reach.php?id={$r['id']}\">$rname</a></td><td>$river</td><td>$cls</td><td>$sname</td><td>$guides</td><td>$reading</td></tr>\n";
+            echo "<tr><td>{$r['id']}</td><td>{$swatch}<a href=\"/reach.php?id={$r['id']}\">$rname</a></td><td>$desc</td><td>$cls</td><td>$sname</td><td>$guides</td><td>$reading</td></tr>\n";
         }
         echo '</table>';
 
