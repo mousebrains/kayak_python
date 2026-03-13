@@ -51,9 +51,9 @@ def pipeline(args):
     ])
 
     for step_name, func in steps:
-        print(f"\n{'='*60}")
-        print(f"Running: {step_name}")
-        print(f"{'='*60}")
+        print(f"\n{'='*60}", flush=True)
+        print(f"Running: {step_name}", flush=True)
+        print(f"{'='*60}", flush=True)
         start = time.time()
         try:
             func(args)
@@ -62,7 +62,7 @@ def pipeline(args):
         except Exception as e:
             logger.error("Error in %s: %s", step_name, e)
         elapsed = time.time() - start
-        print(f"Completed {step_name} in {elapsed:.1f}s")
+        print(f"Completed {step_name} in {elapsed:.1f}s", flush=True)
 
     # Run PRAGMA optimize to update SQLite query planner statistics
     try:
@@ -73,5 +73,5 @@ def pipeline(args):
     except Exception as e:
         logger.warning("PRAGMA optimize failed: %s", e)
 
-    print(f"\n{'='*60}")
-    print("Pipeline complete")
+    print(f"\n{'='*60}", flush=True)
+    print("Pipeline complete", flush=True)

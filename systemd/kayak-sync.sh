@@ -50,6 +50,7 @@ echo "Running observation sync..."
 "$VENV/bin/python3" "$REPO_DIR/scripts/sync_legacy_observations.py" \
     --legacy "$LEGACY_URL" \
     --target "$TARGET_DB" \
+    --days 7 \
     --verbose
 
 echo "Sync complete."

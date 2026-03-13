@@ -37,12 +37,12 @@ def merge(args):
         for gauge in gauges:
             source_ids = get_source_ids_for_gauge(session, gauge.id)
 
-            if not source_ids:
+            if len(source_ids) < 2:
                 continue
 
             # Use the first source as the merge target; include ALL sources
             # (including target) as inputs so the ±15 min moving median
-            # smooths across every source (works for single-source too).
+            # smooths across every source.
             target_id = source_ids[0]
 
             for dtype in types:
