@@ -11,13 +11,21 @@ The legacy database stores observations in per-station tables:
 This script reads those tables and inserts/upserts into the new unified
 `observation` table keyed by (source_id, observed_at, data_type).
 
+Credentials are read from ~/.config/wkcc/legacy_db.json:
+    {
+        "host": "mysql.wkcc.dreamhosters.com",
+        "user": "levels",
+        "password": "...",
+        "database": "levels_data"
+    }
+
 Usage:
     # Sync into local SQLite (default)
     python3 scripts/sync_legacy_observations.py
 
-    # Sync into production MySQL
+    # Sync into production MySQL target
     python3 scripts/sync_legacy_observations.py \
-        --target mysql+pymysql://levels:Deschutes@mysql.wkcc.dreamhosters.com/wkcc_levels
+        --target mysql+pymysql://user:pass@host/wkcc_levels
 
     # Sync only last 7 days
     python3 scripts/sync_legacy_observations.py --days 7
@@ -28,10 +36,11 @@ Usage:
     # Sync via SSH tunnel (run from local machine)
     ssh -L 3307:mysql.wkcc.dreamhosters.com:3306 tpw@levels.wkcc.org -N &
     python3 scripts/sync_legacy_observations.py \
-        --legacy mysql+pymysql://levels:Deschutes@127.0.0.1:3307/levels_data
+        --legacy mysql+pymysql://user:pass@127.0.0.1:3307/levels_data
 """
 
 import argparse
+import json
 import logging
 import sys
 from datetime import UTC, datetime, timedelta
@@ -59,9 +68,21 @@ LEGACY_PREFIXES = {
     "temperature": DataType.temperature,
 }
 
-# Default connection strings
-DEFAULT_LEGACY = "mysql+pymysql://levels:Deschutes@mysql.wkcc.dreamhosters.com/levels_data"
+CONFIG_PATH = Path.home() / ".config" / "wkcc" / "legacy_db.json"
 DEFAULT_TARGET_SQLITE = f"sqlite:///{(Path(__file__).parent.parent / '../DB/kayak.db').resolve()}"
+
+
+def load_legacy_url():
+    """Build the legacy MySQL URL from ~/.config/wkcc/legacy_db.json."""
+    if not CONFIG_PATH.exists():
+        sys.exit(f"Legacy DB config not found: {CONFIG_PATH}")
+    cfg = json.loads(CONFIG_PATH.read_text())
+    user = cfg["user"]
+    password = cfg["password"]
+    host = cfg.get("host", "localhost")
+    port = cfg.get("port", 3306)
+    database = cfg.get("database", "levels_data")
+    return f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}"
 
 
 def make_sqlite_engine(url):
@@ -296,8 +317,8 @@ def main():
     )
     parser.add_argument(
         "--legacy",
-        default=DEFAULT_LEGACY,
-        help=f"Legacy MySQL connection URL (default: {DEFAULT_LEGACY})",
+        default=None,
+        help="Legacy MySQL connection URL (default: loaded from ~/.config/wkcc/legacy_db.json)",
     )
     parser.add_argument(
         "--target",
@@ -344,8 +365,9 @@ def main():
         log.info("Syncing observations since %s", since)
 
     # Connect to legacy DB
-    log.info("Connecting to legacy DB: %s", args.legacy.split("@")[-1])
-    legacy_engine = create_engine(args.legacy)
+    legacy_url = args.legacy or load_legacy_url()
+    log.info("Connecting to legacy DB: %s", legacy_url.split("@")[-1])
+    legacy_engine = create_engine(legacy_url)
 
     # Connect to target DB
     log.info("Connecting to target DB: %s", args.target.split("@")[-1])
