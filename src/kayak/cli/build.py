@@ -334,8 +334,13 @@ def _levels_key(reach: Reach) -> tuple:
 
 
 def _build_html_table(reaches, columns, primary_source_ids, calculated_ids,
-                      all_latest, sparkline_obs, *, is_all_page: bool = False) -> str:
-    """Build the <table> body for a set of reaches using pre-loaded data."""
+                      all_latest, sparkline_obs, *, is_all_page: bool = False
+                      ) -> tuple[str, list[str]]:
+    """Build the <table> body for a set of reaches using pre-loaded data.
+
+    Returns (html, letters) where letters is the ordered list of first-letters
+    that appear in the visible rows (used for the letter navigation bar).
+    """
     lines: list[str] = []
     lines.append('<table class="levels">')
     lines.append("<thead><tr>")
@@ -386,12 +391,24 @@ def _build_html_table(reaches, columns, primary_source_ids, calculated_ids,
         i = j
 
     # Phase 3: Render rows
+    prev_letter = ""
+    letters: list[str] = []
     for idx, (reach, row, sparkline) in enumerate(visible):
         reach_id = reach.id
         span = group_span[idx]
         is_first = span > 0
-        tr_cls = ' class="stale"' if row.get("stale") else ""
-        lines.append(f"<tr{tr_cls}>")
+
+        # Track first-letter groups for the letter navigation bar
+        sort_name = reach.sort_name or reach.display_name or ""
+        cur_letter = sort_name[0].upper() if sort_name else ""
+        letter_id = ""
+        if cur_letter and cur_letter != prev_letter:
+            letter_id = f' id="letter-{cur_letter}"'
+            letters.append(cur_letter)
+            prev_letter = cur_letter
+
+        stale = " stale" if row.get("stale") else ""
+        lines.append(f'<tr{letter_id} class="clickable-row{stale}" data-href="/description.php?id={reach_id}">')
 
         for col in columns:
             if "h" not in col["use"] or col["type"] == "noop":
@@ -414,15 +431,12 @@ def _build_html_table(reaches, columns, primary_source_ids, calculated_ids,
                 val = f'<a href="/description.php?id={reach_id}">{val}</a>{est}'
             elif col["type"] == "flow" and isinstance(val, (int, float)):
                 lvl_cls = f' class="level-{row["flow_level"]}"' if row.get("flow_level") else ""
-                val = (
-                    f'<a{lvl_cls} href="/plot.php?type=flow&id={reach_id}">{val:,.0f}</a>'
-                    f"{sparkline}"
-                )
+                val = f'<span{lvl_cls}>{val:,.0f}</span>{sparkline}'
             elif col["type"] == "gage" and isinstance(val, (int, float)):
                 lvl_cls = f' class="level-{row["gage_level"]}"' if row.get("gage_level") else ""
-                val = f'<a{lvl_cls} href="/plot.php?type=gage&id={reach_id}">{val:,.1f}</a>'
+                val = f'<span{lvl_cls}>{val:,.1f}</span>'
             elif col["type"] == "temp" and isinstance(val, (int, float)):
-                val = f'<a href="/plot.php?type=temp&id={reach_id}">{val:.1f}</a>'
+                val = f'{val:.1f}'
             elif col["type"] == "date" and isinstance(val, datetime):
                 iso = val.strftime("%Y-%m-%dT%H:%M:%SZ")
                 display = val.strftime("%m/%d %H:%M")
@@ -439,7 +453,7 @@ def _build_html_table(reaches, columns, primary_source_ids, calculated_ids,
         lines.append("</tr>")
 
     lines.append("</tbody></table>")
-    return "\n".join(lines)
+    return "\n".join(lines), letters
 
 
 def _build_geojson(
@@ -504,10 +518,20 @@ def _build_nav(states: list[str], active_state: str = "") -> str:
     return "\n    ".join(links)
 
 
+def _build_letter_nav(letters: list[str]) -> str:
+    """Build an A-Z letter navigation bar linking to #letter-X anchors."""
+    if not letters:
+        return ""
+    links = " ".join(f'<a href="#letter-{ch}">{ch}</a>' for ch in letters)
+    return f'<nav class="letter-nav" aria-label="Jump to river by letter">{links}</nav>'
+
+
 def _build_page(table_html: str, css: str, states: list[str],
-                current_state: str, title: str) -> str:
+                current_state: str, title: str,
+                letters: list[str] | None = None) -> str:
     """Wrap the table HTML in a complete HTML document with inlined CSS."""
     nav_html = _build_nav(states, active_state=current_state)
+    letter_nav_html = _build_letter_nav(letters) if letters else ""
     now_utc = datetime.now(UTC)
     now_iso = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
     now_display = now_utc.strftime("%Y-%m-%d %H:%M UTC")
@@ -532,6 +556,7 @@ def _build_page(table_html: str, css: str, states: list[str],
   <nav>
     {nav_html}
   </nav>
+  {letter_nav_html}
 </header>
 <main>
 {table_html}
@@ -545,9 +570,10 @@ def _build_page(table_html: str, css: str, states: list[str],
 <p style="font-size:.7rem;color:#888;margin-top:.5rem">Updated <time datetime="{now_iso}">{now_display}</time></p>
 </main>
 <footer>
-Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.
+Data sourced from USGS, NOAA, USACE, USBR, and other government agencies. <a href="/privacy.php">Privacy Policy</a>
 </footer>
 {_LOCAL_TIME_JS}
+<script>document.querySelector('.levels')?.addEventListener('click',function(e){{if(e.target.closest('a'))return;var r=e.target.closest('tr[data-href]');if(r)location.href=r.dataset.href}})</script>
 <script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/static/sw.js')</script>
 </body>
 </html>"""
@@ -591,7 +617,7 @@ def _build_placeholder_page(css: str, states: list[str], state: str) -> str:
 {links_html}
 </main>
 <footer>
-Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.
+Data sourced from USGS, NOAA, USACE, USBR, and other government agencies. <a href="/privacy.php">Privacy Policy</a>
 </footer>
 </body>
 </html>"""
@@ -615,7 +641,7 @@ def _build_map_page(css: str, states: list[str]) -> str:
 <meta name="theme-color" content="#2060A0">
 <link rel="icon" href="/static/favicon.ico">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous"/>
 <style>
 {css}
 #map {{height:calc(100vh - 5rem);width:100%;}}
@@ -635,9 +661,9 @@ main {{padding:0;max-width:none;}}
 <div id="map"></div>
 </main>
 <footer>
-Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.
+Data sourced from USGS, NOAA, USACE, USBR, and other government agencies. <a href="/privacy.php">Privacy Policy</a>
 </footer>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 (function(){{
 var map=L.map('map');
@@ -782,6 +808,9 @@ def _build_and_write(session, reaches, columns, state: str,
         all_latest = get_all_latest(session, source_ids)
     since_48h = datetime.now(UTC) - timedelta(hours=48)
     sparkline_obs = get_bulk_observations(session, source_ids, DataType.flow, since_48h)
+    inflow_obs = get_bulk_observations(session, source_ids, DataType.inflow, since_48h)
+    for sid, obs in inflow_obs.items():
+        sparkline_obs.setdefault(sid, obs)
 
     # CSV
     csv_content = _build_csv(reaches, columns, state,
@@ -794,8 +823,8 @@ def _build_and_write(session, reaches, columns, state: str,
     (output_dir / f"levels{suffix}.text").write_text(text_content)
 
     # HTML — complete self-contained page
-    table_html = _build_html_table(reaches, columns, primary_source_ids,
-                                   calculated_ids, all_latest, sparkline_obs,
-                                   is_all_page=is_all_page)
-    page_html = _build_page(table_html, css, states, state, title)
+    table_html, letters = _build_html_table(reaches, columns, primary_source_ids,
+                                            calculated_ids, all_latest, sparkline_obs,
+                                            is_all_page=is_all_page)
+    page_html = _build_page(table_html, css, states, state, title, letters=letters)
     (output_dir / filename).write_text(page_html)
