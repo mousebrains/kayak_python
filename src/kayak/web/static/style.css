@@ -5,13 +5,19 @@ a{color:#2060A0;text-decoration:none}
 a:hover{text-decoration:underline}
 
 /* Header */
-header{background:#2060A0;color:#fff;padding:.5rem 1rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+header{background:#2060A0;color:#fff;padding:.5rem 1rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;position:sticky;top:0;z-index:100}
 header h1{font-size:1.1rem;white-space:nowrap}
 header h1 a{color:#fff}
 header nav{display:flex;flex-wrap:wrap;gap:.3rem}
 header nav a{color:rgba(255,255,255,.85);font-size:.8rem;padding:2px 6px;border-radius:3px}
 header nav a:hover{background:rgba(255,255,255,.15);text-decoration:none}
 header nav a.active{background:rgba(255,255,255,.25);color:#fff}
+
+/* Letter navigation */
+.letter-nav{display:flex;flex-wrap:wrap;gap:2px;margin-left:auto}
+.letter-nav a{display:inline-block;min-width:1.4em;padding:1px 3px;text-align:center;font-size:.75rem;font-weight:600;color:rgba(255,255,255,.85);border-radius:3px;text-decoration:none}
+.letter-nav a:hover{background:rgba(255,255,255,.25);color:#fff;text-decoration:none}
+[id^="letter-"]{scroll-margin-top:4rem}
 
 /* Main */
 main{padding:.5rem}
@@ -36,6 +42,9 @@ table.levels a{color:#2060A0}
 .level-low,table.levels a.level-low,table.levels a.level-low:visited{color:#c00}
 .level-okay,table.levels a.level-okay,table.levels a.level-okay:visited{color:#0a0}
 .level-high,table.levels a.level-high,table.levels a.level-high:visited{color:#e80}
+
+/* Clickable rows */
+tr.clickable-row{cursor:pointer}
 
 /* Stale data */
 tr.stale td{color:#aaa;font-style:italic}
