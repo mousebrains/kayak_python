@@ -11,6 +11,14 @@ fi
 echo "=== Security Hardening Script ==="
 echo ""
 
+# --- 0. Install headers-more module to hide Server header ---
+if ! dpkg -l libnginx-mod-http-headers-more-filter >/dev/null 2>&1; then
+    apt-get install -y libnginx-mod-http-headers-more-filter
+    echo "[OK] Installed libnginx-mod-http-headers-more-filter"
+else
+    echo "[SKIP] libnginx-mod-http-headers-more-filter already installed"
+fi
+
 # --- 1. Generate new EDIT_PASSWORD and create restricted snippet ---
 NEW_PASSWORD=$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)
 

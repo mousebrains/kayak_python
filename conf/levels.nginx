@@ -18,8 +18,9 @@ server {
 
     server_name levels.mousebrains.com levels-test.wkcc.org; # levels.wkcc.org;
 
-    # Hide nginx version in Server header
+    # Hide server identity completely (requires libnginx-mod-http-headers-more-filter)
     server_tokens off;
+    more_clear_headers Server;
 
     # Security headers (server-level — apply when no location overrides)
     include /etc/nginx/snippets/security-headers.conf;
