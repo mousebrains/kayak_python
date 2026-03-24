@@ -11,6 +11,9 @@ import csv
 import io
 import json
 import logging
+import os
+import tempfile
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -30,6 +33,23 @@ from kayak.utils.lttb import downsample, running_median
 from kayak.utils.simplify import parse_geom, simplify
 
 logger = logging.getLogger(__name__)
+
+
+def _atomic_write(path: Path, content: str) -> None:
+    """Write *content* to *path* atomically via temp file + rename."""
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        os.write(fd, content.encode())
+        os.close(fd)
+        fd = -1
+        os.replace(tmp, path)
+    except BaseException:
+        if fd >= 0:
+            os.close(fd)
+        with suppress(OSError):
+            os.unlink(tmp)
+        raise
+
 
 PRIMARY_STATE = "Oregon"
 
@@ -664,51 +684,7 @@ main {{padding:0;max-width:none;}}
 Data sourced from USGS, NOAA, USACE, USBR, and other government agencies. <a href="/privacy.php">Privacy Policy</a>
 </footer>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
-<script>
-(function(){{
-var map=L.map('map');
-var topo=L.tileLayer('https://{{s}}.tile.opentopomap.org/{{z}}/{{x}}/{{y}}.png',{{
-  maxZoom:17,attribution:'OpenTopoMap'}});
-var street=L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png',{{
-  maxZoom:19,attribution:'OpenStreetMap'}});
-var sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{{z}}/{{y}}/{{x}}',{{
-  maxZoom:18,attribution:'Esri'}});
-street.addTo(map);
-L.control.layers({{'Topo':topo,'Street':street,'Satellite':sat}}).addTo(map);
-
-var colors={{okay:'#4caf50',low:'#e8a735',high:'#e53935',unknown:'#2196F3'}};
-
-fetch('/static/reaches.geojson').then(function(r){{return r.json()}}).then(function(data){{
-  var geojsonLayer=L.geoJSON(data,{{
-    style:function(f){{
-      return {{color:colors[f.properties.status]||colors.unknown,weight:3,opacity:0.7}};
-    }},
-    pointToLayer:function(f,ll){{
-      return L.circleMarker(ll,{{radius:6,fillColor:colors[f.properties.status]||colors.unknown,
-        color:'#333',weight:1,fillOpacity:0.8}});
-    }},
-    onEachFeature:function(f,layer){{
-      var p=f.properties;
-      var badge='<span style="color:'+( colors[p.status]||colors.unknown)+'">&#9679;</span> '+p.status;
-      layer.bindPopup('<b><a href="/description.php?id='+p.id+'">'+p.name+'</a></b><br>'+badge);
-    }}
-  }}).addTo(map);
-  if(data.features.length)map.fitBounds(geojsonLayer.getBounds().pad(0.05));else map.setView([44.0,-120.5],7);
-}});
-
-var legend=L.control({{position:'bottomright'}});
-legend.onAdd=function(){{
-  var d=L.DomUtil.create('div','legend');
-  d.innerHTML='<b>Status</b><br>'+
-    '<i style="background:#4caf50"></i>Okay<br>'+
-    '<i style="background:#e8a735"></i>Low<br>'+
-    '<i style="background:#e53935"></i>High<br>'+
-    '<i style="background:#2196F3"></i>Unknown';
-  return d;
-}};
-legend.addTo(map);
-}})();
-</script>
+<script src="/static/map.js"></script>
 </body>
 </html>"""
 
@@ -759,12 +735,12 @@ def build(args):
         static_dir.mkdir(parents=True, exist_ok=True)
         geojson = _build_geojson(oregon_reaches, primary_source_ids,
                                  calculated_ids, all_latest)
-        (static_dir / "reaches.geojson").write_text(geojson)
+        _atomic_write(static_dir / "reaches.geojson", geojson)
         logger.info("GeoJSON: %d bytes", len(geojson))
 
         # Map page → map.html
         map_html = _build_map_page(css, states)
-        (output_dir / "map.html").write_text(map_html)
+        _atomic_write(output_dir / "map.html", map_html)
 
         # index.html = Oregon levels table
         _build_and_write(session, oregon_reaches, columns, PRIMARY_STATE, states,
@@ -775,7 +751,7 @@ def build(args):
         for state in _NAV_STATES:
             if state in states:
                 links_page = _build_placeholder_page(css, states, state)
-                (output_dir / f"{state}.html").write_text(links_page)
+                _atomic_write(output_dir / f"{state}.html", links_page)
 
         print(f"Build complete → {output_dir}")
     finally:
@@ -815,16 +791,16 @@ def _build_and_write(session, reaches, columns, state: str,
     # CSV
     csv_content = _build_csv(reaches, columns, state,
                              primary_source_ids, calculated_ids, all_latest)
-    (output_dir / f"levels{suffix}.csv").write_text(csv_content)
+    _atomic_write(output_dir / f"levels{suffix}.csv", csv_content)
 
     # Text
     text_content = _build_text(reaches, columns, state,
                                primary_source_ids, calculated_ids, all_latest)
-    (output_dir / f"levels{suffix}.text").write_text(text_content)
+    _atomic_write(output_dir / f"levels{suffix}.text", text_content)
 
     # HTML — complete self-contained page
     table_html, letters = _build_html_table(reaches, columns, primary_source_ids,
                                             calculated_ids, all_latest, sparkline_obs,
                                             is_all_page=is_all_page)
     page_html = _build_page(table_html, css, states, state, title, letters=letters)
-    (output_dir / filename).write_text(page_html)
+    _atomic_write(output_dir / filename, page_html)
