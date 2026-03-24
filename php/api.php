@@ -17,6 +17,7 @@ header('Access-Control-Allow-Origin: *');
 $id     = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 $type   = filter_input(INPUT_GET, 'type', FILTER_SANITIZE_SPECIAL_CHARS) ?: 'flow';
 $days   = filter_input(INPUT_GET, 'days', FILTER_VALIDATE_INT) ?: 60;
+$days   = min($days, 365);
 $points = filter_input(INPUT_GET, 'points', FILTER_VALIDATE_INT) ?: 0;
 $format = filter_input(INPUT_GET, 'format', FILTER_SANITIZE_SPECIAL_CHARS) ?: 'compact';
 

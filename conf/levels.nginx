@@ -1,0 +1,119 @@
+# Redirect HTTP → HTTPS
+server {
+    listen 80;
+    listen [::]:80;
+    server_name levels.mousebrains.com levels-test.wkcc.org; # levels.wkcc.org;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen [::]:443 ssl ipv6only=on; # managed by Certbot
+    listen 443 ssl; # managed by Certbot
+    http2 on;
+
+    ssl_certificate /etc/letsencrypt/live/levels.mousebrains.com/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/levels.mousebrains.com/privkey.pem; # managed by Certbot
+    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+
+    server_name levels.mousebrains.com levels-test.wkcc.org; # levels.wkcc.org;
+
+    # Hide nginx version in Server header
+    server_tokens off;
+
+    # Security headers (server-level — apply when no location overrides)
+    include /etc/nginx/snippets/security-headers.conf;
+
+    # Document root — where build output + PHP symlinks live
+    root /home/pat/public_html;
+    index index.html;
+
+    # Request size limit — no file uploads expected
+    client_max_body_size 16k;
+
+    # Gzip — big win for the inline-SVG HTML pages
+    gzip on;
+    gzip_types text/plain text/css text/csv
+               application/json application/javascript
+               image/svg+xml;
+    gzip_min_length 256;
+    gzip_vary on;
+
+    # Block known malicious scanners and exploit tools
+    if ($http_user_agent ~* (zgrab|masscan|scanner/1\.0|libredtail|xfa1|Gh0st|^Hello|nvdorz|FreePBX-Scanner)) {
+        return 444;
+    }
+
+    # Block dotfiles (.git, .env, .htaccess, etc.)
+    location ~ /\. {
+        deny all;
+        return 404;
+    }
+
+    # Block access to PHP includes (db.php, svg_plot.php, etc.)
+    # Use regex to override the \.php$ location (regex precedence rules)
+    location ~ ^/includes/ {
+        deny all;
+        return 404;
+    }
+
+    # Static assets — long cache, immutable content
+    location /static/ {
+        expires 7d;
+        add_header Cache-Control "public, immutable";
+        include /etc/nginx/snippets/security-headers.conf;
+    }
+
+    # Generated HTML/CSV/text pages — short cache, regenerated hourly
+    location / {
+        try_files $uri $uri/ =404;
+        expires 5m;
+        add_header Cache-Control "public";
+        include /etc/nginx/snippets/security-headers.conf;
+    }
+
+    # PHP endpoints via php-fpm
+    location ~ \.php$ {
+        limit_req zone=php burst=20 nodelay;
+        try_files $uri =404;
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+
+        # Pass environment to PHP
+        fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
+
+        # Cache PHP responses (5 min for reads, no cache for edits)
+        add_header Cache-Control "public, max-age=300";
+        include /etc/nginx/snippets/security-headers.conf;
+    }
+
+    # Edit endpoint — rate-limited, no cache
+    location = /edit.php {
+        limit_req zone=edit burst=2 nodelay;
+        try_files $uri =404;
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+        fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
+        include /etc/nginx/snippets/edit-password.conf;
+        add_header Cache-Control "no-cache, no-store";
+        include /etc/nginx/snippets/security-headers.conf;
+    }
+
+    # Let's Encrypt ACME challenge
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    # Custom error page
+    error_page 404 /404.html;
+    location = /404.html {
+        internal;
+    }
+
+    # Logging
+    access_log /var/log/nginx/kayak-access.log;
+    error_log  /var/log/nginx/kayak-error.log;
+}
