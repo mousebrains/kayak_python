@@ -8,7 +8,7 @@
 function get_inline_css(): string {
     static $css = null;
     if ($css === null) {
-        $path = dirname(__DIR__, 2) . '/src/kayak/web/static/style.css';
+        $path = __DIR__ . '/../style.css';
         $css = file_exists($path) ? file_get_contents($path) : '';
     }
     return $css;
