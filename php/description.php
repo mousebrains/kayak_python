@@ -152,6 +152,7 @@ if ($source_id) {
 
     $plot_types = [
         'flow'        => 'Flow (CFS)',
+        'inflow'      => 'Inflow (CFS)',
         'gauge'       => 'Gage Height (Ft)',
         'temperature' => 'Temperature (F)',
     ];
@@ -305,8 +306,8 @@ if (count($map_points) >= 1 || $geom) {
     }
     echo '</table>';
     echo '<div id="reach-map" style="height:350px;margin-top:1rem;border:1px solid #ccc"></div>';
-    echo '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>';
-    echo '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>';
+    echo '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous"/>';
+    echo '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>';
     echo '<script>';
     echo 'var pts=' . $map_json . ';';
     echo 'var track=' . $track_json . ';';
