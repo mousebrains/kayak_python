@@ -12,6 +12,7 @@ import io
 import json
 import logging
 import os
+import shutil
 import tempfile
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
@@ -118,18 +119,11 @@ _STATE_LINKS: dict[str, list[tuple[str, str]]] = {
 }
 
 # CSS is read once from the source tree and inlined into every page.
-_CSS_PATH = Path(__file__).resolve().parent.parent / "web" / "static" / "style.css"
+_STATIC_DIR = Path(__file__).resolve().parent.parent / "web" / "static"
+_CSS_PATH = _STATIC_DIR / "style.css"
+_JS_PATH = _STATIC_DIR / "levels.js"
 
-# JS snippet to convert <time> elements to the browser's local timezone.
-_LOCAL_TIME_JS = """<script>
-document.querySelectorAll('time[datetime]').forEach(function(el){
-  var d=new Date(el.getAttribute('datetime'));
-  if(isNaN(d))return;
-  var mm=d.getMonth()+1,dd=d.getDate();
-  var hh=d.getHours(),mi=d.getMinutes();
-  el.textContent=(mm<10?'0':'')+mm+'/'+(dd<10?'0':'')+dd+' '+(hh<10?'0':'')+hh+':'+(mi<10?'0':'')+mi;
-});
-</script>"""
+_LEVELS_JS = '<script src="/static/levels.js" defer></script>'
 
 
 def _load_css() -> str:
@@ -593,9 +587,7 @@ def _build_page(table_html: str, css: str, states: list[str],
 <footer>
 Data sourced from USGS, NOAA, USACE, USBR, and other government agencies. <a href="/privacy.php">Privacy Policy</a>
 </footer>
-{_LOCAL_TIME_JS}
-<script>document.querySelector('.levels')?.addEventListener('click',function(e){{if(e.target.closest('a'))return;var r=e.target.closest('tr[data-href]');if(r)location.href=r.dataset.href}})</script>
-<script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/static/sw.js')</script>
+{_LEVELS_JS}
 </body>
 </html>"""
 
@@ -731,9 +723,12 @@ def build(args):
         calculated_ids = get_calculated_source_ids(session, source_ids)
         all_latest = get_all_latest(session, source_ids)
 
-        # GeoJSON → static/reaches.geojson (Oregon only)
+        # Static assets
         static_dir = output_dir / "static"
         static_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(_JS_PATH, static_dir / "levels.js")
+
+        # GeoJSON → static/reaches.geojson (Oregon only)
         geojson = _build_geojson(oregon_reaches, primary_source_ids,
                                  calculated_ids, all_latest)
         _atomic_write(static_dir / "reaches.geojson", geojson)
