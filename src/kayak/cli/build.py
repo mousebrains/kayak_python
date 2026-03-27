@@ -42,6 +42,7 @@ def _atomic_write(path: Path, content: str) -> None:
         os.write(fd, content.encode())
         os.close(fd)
         fd = -1
+        os.chmod(tmp, 0o644)
         os.replace(tmp, path)
     except BaseException:
         if fd >= 0:
