@@ -98,6 +98,6 @@ include_header('Build Your Own Levels Page', 'picker');
   <span class="copied" id="copied" style="display:none">Copied!</span>
 </div>
 
-<script src="/static/picker.js"></script>
+<script src="/static/picker.js?v=2"></script>
 <?php
 include_footer();
