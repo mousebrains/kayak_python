@@ -70,6 +70,57 @@ foreach ($cls_stmt->fetchAll() as $row) {
     $classes[$row['reach_id']] = $row['class'];
 }
 
+// Load sparkline data (48h of flow observations per source)
+$spark_sql = <<<SQL
+SELECT gs.gauge_id, o.value, o.observed_at
+FROM observation o
+JOIN gauge_source gs ON o.source_id = gs.source_id
+JOIN reach r ON r.gauge_id = gs.gauge_id
+WHERE r.id IN ($placeholders)
+  AND o.data_type = 'flow'
+  AND o.observed_at >= datetime('now', '-48 hours')
+ORDER BY gs.gauge_id, o.observed_at
+SQL;
+$spark_stmt = $db->prepare($spark_sql);
+$spark_stmt->execute($ids);
+$sparklines = [];
+foreach ($spark_stmt->fetchAll() as $row) {
+    $sparklines[(int)$row['gauge_id']][] = [
+        'ts' => strtotime($row['observed_at']),
+        'v'  => (float)$row['value'],
+    ];
+}
+
+// Build SVG sparkline for a gauge
+function build_sparkline(array $data, int $w = 80, int $h = 20): string {
+    if (count($data) < 3) return '';
+    $xs = array_column($data, 'ts');
+    $ys = array_column($data, 'v');
+    $x_min = min($xs); $x_max = max($xs);
+    $y_min = min($ys); $y_max = max($ys);
+    $x_range = $x_max - $x_min ?: 1;
+    $y_range = $y_max - $y_min ?: 1;
+    $pts = [];
+    foreach ($data as $d) {
+        $px = (int)(($d['ts'] - $x_min) / $x_range * $w);
+        $py = (int)($h - ($d['v'] - $y_min) / $y_range * $h);
+        $pts[] = "$px,$py";
+    }
+    $points = implode(' ', $pts);
+    return '<svg class="spark" width="' . $w . '" height="' . $h
+         . '" viewBox="0 0 ' . $w . ' ' . $h . '">'
+         . '<polyline fill="none" stroke="#2060A0" stroke-width="1.5" points="' . $points . '"/>'
+         . '</svg>';
+}
+
+// Map reach_id -> gauge_id for sparkline lookup
+$gauge_map = [];
+$gid_stmt = $db->prepare("SELECT id, gauge_id FROM reach WHERE id IN ($placeholders)");
+$gid_stmt->execute($ids);
+foreach ($gid_stmt->fetchAll() as $row) {
+    if ($row['gauge_id']) $gauge_map[(int)$row['id']] = (int)$row['gauge_id'];
+}
+
 header('Cache-Control: max-age=60');
 include_header('Custom Levels Page');
 
@@ -110,27 +161,37 @@ $id_param = htmlspecialchars($raw);
         }
     }
 
-    // Best available timestamp
-    $time_str = '';
+    // Best available timestamp — render as <time> for client-side local conversion
+    $time_html = '';
     $ts = $s['flow_time'] ?? $s['gage_time'] ?? $s['temp_time'] ?? null;
     if ($ts) {
-        $time_str = date('m/d H:i', strtotime($ts));
+        $iso = date('Y-m-d\TH:i:s\Z', strtotime($ts));
+        $display = date('m/d H:i', strtotime($ts));
+        $time_html = "<time datetime=\"$iso\">$display</time>";
     }
 
     // Values
     $name = htmlspecialchars($s['display_name'] ?? '');
     $loc  = htmlspecialchars($s['gauge_location'] ?? '');
-    $flow = $s['flow'] !== null ? '<a href="/plot.php?type=flow&id=' . $id . '">' . number_format((float)$s['flow'], 0) . '</a>' : '';
+    // Sparkline
+    $spark = '';
+    $gid = $gauge_map[$id] ?? null;
+    if ($gid && isset($sparklines[$gid])) {
+        $spark = build_sparkline($sparklines[$gid]);
+    }
+
+    $flow_val = $s['flow'] !== null ? number_format((float)$s['flow'], 0) : '';
+    $flow = $flow_val !== '' ? '<a href="/plot.php?type=flow&id=' . $id . '">' . $flow_val . '</a>' . $spark : '';
     $gage = $s['gage'] !== null ? '<a href="/plot.php?type=gage&id=' . $id . '">' . number_format((float)$s['gage'], 2) . '</a>' : '';
     $temp = $s['temperature'] !== null ? '<a href="/plot.php?type=temp&id=' . $id . '">' . number_format((float)$s['temperature'], 0) . '</a>' : '';
     $drain = htmlspecialchars($s['drainage'] ?? '');
     $class = htmlspecialchars($classes[$id] ?? '');
 ?>
-<tr>
+<tr class="clickable-row" data-href="/description.php?id=<?= $id ?>">
   <td class="td-status" data-label="Status"><?= $status ?></td>
   <td class="td-name" data-label="Name"><a href="/description.php?id=<?= $id ?>"><?= $name ?></a></td>
   <td data-label="Location"><?= $loc ?></td>
-  <td class="td-date" data-label="Date"><?= $time_str ?></td>
+  <td class="td-date" data-label="Date"><?= $time_html ?></td>
   <td class="td-flow" data-label="Flow"><?= $flow ?></td>
   <td class="td-gage" data-label="Height"><?= $gage ?></td>
   <td class="td-temp" data-label="Temp"><?= $temp ?></td>
