@@ -148,18 +148,21 @@ if ($q !== null && $q !== '') {
             }
         }
 
+        $colors = ['#e6194b','#3cb44b','#4363d8','#f58231','#911eb4',
+                    '#42d4f4','#f032e6','#bfef45','#469990','#dcbeff',
+                    '#9A6324','#800000','#aaffc3','#808000','#000075'];
         if ($map_reaches) {
             echo '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>';
             echo '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>';
-            echo '<div id="search-map" style="height:350px;margin-bottom:1rem;border:1px solid #ccc"></div>';
+            $map_json = htmlspecialchars(json_encode($map_reaches), ENT_QUOTES, 'UTF-8');
+            $colors_json = htmlspecialchars(json_encode($colors), ENT_QUOTES, 'UTF-8');
+            echo '<div id="search-map" style="height:350px;margin-bottom:1rem;border:1px solid #ccc" data-reaches="' . $map_json . '" data-colors="' . $colors_json . '"></div>';
+            echo '<script src="/static/search-map.js"></script>';
         }
 
         echo '<p>' . count($results) . ' reaches matching &ldquo;' . htmlspecialchars($q) . '&rdquo;:</p>';
         echo '<table class="desc-table">';
         echo '<tr><th>ID</th><th>Name</th><th>Description</th><th>Class</th><th>Sort Name</th><th>Guides</th><th>Flow / Gage</th></tr>';
-        $colors = ['#e6194b','#3cb44b','#4363d8','#f58231','#911eb4',
-                    '#42d4f4','#f032e6','#bfef45','#469990','#dcbeff',
-                    '#9A6324','#800000','#aaffc3','#808000','#000075'];
         foreach ($results as $idx => $r) {
             $rname = htmlspecialchars($r['name']);
             $desc = htmlspecialchars($r['description'] ?? '');
@@ -186,34 +189,6 @@ if ($q !== null && $q !== '') {
         }
         echo '</table>';
 
-        if ($map_reaches) {
-            $map_json = json_encode($map_reaches);
-            $colors_json = json_encode($colors);
-            echo '<script>';
-            echo 'var reaches=' . $map_json . ';';
-            echo 'var colors=' . $colors_json . ';';
-            echo 'var map=L.map("search-map");';
-            echo 'var topo=L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",{attribution:"OpenTopoMap",maxZoom:17});';
-            echo 'var street=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"OpenStreetMap",maxZoom:19});';
-            echo 'var satellite=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{attribution:"Esri",maxZoom:19});';
-            echo 'topo.addTo(map);';
-            echo 'L.control.layers({"Topo":topo,"Street":street,"Satellite":satellite}).addTo(map);';
-            echo 'var bounds=[];';
-            echo 'reaches.forEach(function(r){';
-            echo '  var c=colors[r.idx%colors.length];';
-            echo '  var ic=L.divIcon({className:"",html:\'<div style="background:\'+c+\';color:#fff;padding:2px 6px;border-radius:3px;font:bold 11px sans-serif;white-space:nowrap;cursor:pointer;border:1px solid rgba(0,0,0,.3)">\'+r.name+\'</div>\',iconAnchor:[0,12]});';
-            echo '  var m=L.marker([r.lat,r.lon],{icon:ic}).addTo(map);';
-            echo '  m.bindPopup(\'<a href="/reach.php?id=\'+r.id+\'">\'+r.name+\'</a>\');';
-            echo '  bounds.push([r.lat,r.lon]);';
-            // Draw put-in to take-out line if both exist
-            echo '  if(r.lat_start&&r.lon_start&&r.lat_end&&r.lon_end){';
-            echo '    L.polyline([[r.lat_start,r.lon_start],[r.lat_end,r.lon_end]],{color:c,weight:4,opacity:0.7}).addTo(map);';
-            echo '  }';
-            echo '});';
-            echo 'if(bounds.length>1){map.fitBounds(bounds,{padding:[40,40]})}';
-            echo 'else if(bounds.length===1){map.setView(bounds[0],12)}';
-            echo '</script>';
-        }
     }
 
     echo '<p style="margin-top:1rem"><a href="/reach.php">Browse all reaches</a></p>';

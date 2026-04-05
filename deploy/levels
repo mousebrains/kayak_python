@@ -36,12 +36,8 @@ server {
     gzip_min_length 256;
     gzip_vary on;
 
-    # Security headers
-    add_header X-Content-Type-Options nosniff always;
-    add_header X-Frame-Options SAMEORIGIN always;
-    add_header Referrer-Policy strict-origin-when-cross-origin always;
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'" always;
-    add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()" always;
+    # Security headers (base set — child blocks with add_header must re-include)
+    include /home/pat/kayak/conf/security-headers.conf;
 
     # Block known malicious scanners and exploit tools
     if ($http_user_agent ~* (zgrab|masscan|scanner/1\.0|libredtail|xfa1|Gh0st|^Hello|nvdorz|FreePBX-Scanner)) {
@@ -62,12 +58,14 @@ server {
 
     # Static assets — long cache, immutable content
     location /static/ {
+        include /home/pat/kayak/conf/security-headers.conf;
         expires 7d;
         add_header Cache-Control "public, immutable";
     }
 
     # Generated HTML/CSV/text pages — short cache, regenerated hourly
     location / {
+        include /home/pat/kayak/conf/security-headers.conf;
         try_files $uri $uri/ =404;
         expires 5m;
         add_header Cache-Control "public";
@@ -84,8 +82,8 @@ server {
         # Pass environment to PHP
         fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
 
-        # Cache PHP responses (5 min for reads, no cache for edits)
-        # Browsers respect these; optionally add fastcgi_cache for server-side
+        # Security + cache headers
+        include /home/pat/kayak/conf/security-headers.conf;
         add_header Cache-Control "public, max-age=300";
     }
 
@@ -97,6 +95,7 @@ server {
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
         include fastcgi_params;
         fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
+        include /home/pat/kayak/conf/security-headers.conf;
         add_header Cache-Control "no-cache, no-store";
     }
 
