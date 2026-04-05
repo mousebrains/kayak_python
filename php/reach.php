@@ -392,25 +392,30 @@ if ($classes) {
     }
 }
 
-// Flow levels
+// Flow levels — 2-row table with Low, Okay, High as columns
 if ($flow_levels) {
+    $by_level = [];
+    foreach ($flow_levels as $fl) {
+        $by_level[$fl['level']] = $fl;
+    }
     echo '<h3 style="margin-top:1rem">Flow Levels</h3>';
     echo '<table class="desc-table">';
-    echo '<tr><th>Level</th><th>Low</th><th>High</th></tr>';
-    foreach ($flow_levels as $fl) {
-        $level = htmlspecialchars(ucfirst($fl['level']));
-        $lo = '';
-        if ($fl['low'] !== null) {
-            $unit = $fl['low_data_type'] === 'flow' ? ' CFS' : ' ft';
-            $lo = number_format((float)$fl['low'], $fl['low_data_type'] === 'flow' ? 0 : 1) . $unit;
+    echo '<tr><th style="text-align:center">Low</th><th style="text-align:center">Okay</th><th style="text-align:center">High</th></tr>';
+    $cells = [];
+    foreach (['low', 'okay', 'high'] as $lvl) {
+        $parts = [];
+        if (isset($by_level[$lvl])) {
+            $fl = $by_level[$lvl];
+            foreach (['low', 'high'] as $bound) {
+                if ($fl[$bound] !== null) {
+                    $unit = $fl[$bound . '_data_type'] === 'flow' ? ' CFS' : ' ft';
+                    $parts[] = number_format((float)$fl[$bound], $fl[$bound . '_data_type'] === 'flow' ? 0 : 1) . $unit;
+                }
+            }
         }
-        $hi = '';
-        if ($fl['high'] !== null) {
-            $unit = $fl['high_data_type'] === 'flow' ? ' CFS' : ' ft';
-            $hi = number_format((float)$fl['high'], $fl['high_data_type'] === 'flow' ? 0 : 1) . $unit;
-        }
-        echo "<tr><td>$level</td><td>$lo</td><td>$hi</td></tr>\n";
+        $cells[] = '<td style="text-align:center">' . implode(' – ', $parts) . '</td>';
     }
+    echo '<tr>' . implode('', $cells) . "</tr>\n";
     echo '</table>';
 }
 
