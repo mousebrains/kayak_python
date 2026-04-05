@@ -70,25 +70,54 @@ foreach ($cls_stmt->fetchAll() as $row) {
     $classes[$row['reach_id']] = $row['class'];
 }
 
-// Load sparkline data (48h of flow observations per source)
-$spark_sql = <<<SQL
-SELECT gs.gauge_id, o.value, o.observed_at
-FROM observation o
-JOIN gauge_source gs ON o.source_id = gs.source_id
-JOIN reach r ON r.gauge_id = gs.gauge_id
-WHERE r.id IN ($placeholders)
-  AND o.data_type = 'flow'
-  AND o.observed_at >= datetime('now', '-48 hours')
-ORDER BY gs.gauge_id, o.observed_at
-SQL;
-$spark_stmt = $db->prepare($spark_sql);
-$spark_stmt->execute($ids);
+// Map reach_id -> gauge_id and collect distinct gauge source_ids for sparklines
+$gauge_map = [];
+$gid_stmt = $db->prepare("SELECT id, gauge_id FROM reach WHERE id IN ($placeholders)");
+$gid_stmt->execute($ids);
+foreach ($gid_stmt->fetchAll() as $row) {
+    if ($row['gauge_id']) $gauge_map[(int)$row['id']] = (int)$row['gauge_id'];
+}
+
+// Get primary source_id for each gauge (same logic as main query)
+$gauge_ids = array_values(array_unique(array_filter(array_values($gauge_map))));
 $sparklines = [];
-foreach ($spark_stmt->fetchAll() as $row) {
-    $sparklines[(int)$row['gauge_id']][] = [
-        'ts' => strtotime($row['observed_at']),
-        'v'  => (float)$row['value'],
-    ];
+if ($gauge_ids) {
+    $gph = implode(',', array_fill(0, count($gauge_ids), '?'));
+    $src_stmt = $db->prepare("SELECT gauge_id, MIN(source_id) AS source_id FROM gauge_source WHERE gauge_id IN ($gph) GROUP BY gauge_id");
+    $src_stmt->execute($gauge_ids);
+    $gauge_sources = [];
+    foreach ($src_stmt->fetchAll() as $row) {
+        $gauge_sources[(int)$row['gauge_id']] = (int)$row['source_id'];
+    }
+
+    // Fetch sparkline data per source, sampled to ~60 points (every 48min over 48h)
+    $spark_stmt = $db->prepare(
+        "SELECT value, observed_at FROM observation
+         WHERE source_id = ? AND data_type = 'flow'
+           AND observed_at >= datetime('now', '-48 hours')
+         ORDER BY observed_at"
+    );
+    foreach ($gauge_sources as $gid => $sid) {
+        $spark_stmt->execute([$sid]);
+        $all = [];
+        while ($row = $spark_stmt->fetch()) {
+            $all[] = ['ts' => strtotime($row['observed_at']), 'v' => (float)$row['value']];
+        }
+        // Downsample to ~60 points
+        $n = count($all);
+        if ($n > 60) {
+            $step = $n / 60;
+            $sampled = [];
+            for ($i = 0; $i < 60; $i++) {
+                $sampled[] = $all[(int)($i * $step)];
+            }
+            $sampled[] = $all[$n - 1]; // always include last point
+            $all = $sampled;
+        }
+        if (count($all) >= 3) {
+            $sparklines[$gid] = $all;
+        }
+    }
 }
 
 // Build SVG sparkline for a gauge
@@ -111,14 +140,6 @@ function build_sparkline(array $data, int $w = 80, int $h = 20): string {
          . '" viewBox="0 0 ' . $w . ' ' . $h . '">'
          . '<polyline fill="none" stroke="#2060A0" stroke-width="1.5" points="' . $points . '"/>'
          . '</svg>';
-}
-
-// Map reach_id -> gauge_id for sparkline lookup
-$gauge_map = [];
-$gid_stmt = $db->prepare("SELECT id, gauge_id FROM reach WHERE id IN ($placeholders)");
-$gid_stmt->execute($ids);
-foreach ($gid_stmt->fetchAll() as $row) {
-    if ($row['gauge_id']) $gauge_map[(int)$row['id']] = (int)$row['gauge_id'];
 }
 
 header('Cache-Control: max-age=60');
