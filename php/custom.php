@@ -19,8 +19,8 @@ if (!$ids) {
     exit;
 }
 
-// Cap at 500 reaches
-$ids = array_slice($ids, 0, 500);
+// Cap at 200 reaches (500 caused OOM with 128MB limit due to sparkline queries)
+$ids = array_slice($ids, 0, 200);
 
 $db = get_db();
 $placeholders = implode(',', array_fill(0, count($ids), '?'));

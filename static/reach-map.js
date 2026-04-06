@@ -23,7 +23,22 @@ for(var k in pts){
   bounds.push(ll);
   (function(lat,lon){m.on('click',function(){window.open('https://www.google.com/maps?q='+lat+','+lon,'_blank')})})(ll[0],ll[1]);
 }
-if(track){L.polyline(track,{color:trackColor,weight:6,opacity:0.6}).addTo(map);track.forEach(function(p){bounds.push(p)})}
+if(track){
+  L.polyline(track,{color:trackColor,weight:6,opacity:0.6}).addTo(map);
+  track.forEach(function(p){bounds.push(p)});
+  // Connect put-in/take-out markers to trace endpoints with dashed lines
+  var dash={color:'#666',weight:2,opacity:0.6,dashArray:'6,6'};
+  if(pts['Put-in']){
+    var pi=pts['Put-in'].split(',');
+    var piLL=[parseFloat(pi[0]),parseFloat(pi[1])];
+    L.polyline([piLL,track[0]],dash).addTo(map);
+  }
+  if(pts['Take-out']){
+    var to=pts['Take-out'].split(',');
+    var toLL=[parseFloat(to[0]),parseFloat(to[1])];
+    L.polyline([track[track.length-1],toLL],dash).addTo(map);
+  }
+}
 if(bounds.length>1){map.fitBounds(bounds,{padding:[40,40]})}
 else if(bounds.length===1){map.setView(bounds[0],13)}
 })();

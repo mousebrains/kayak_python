@@ -24,7 +24,7 @@ if ($q !== null && $q !== '') {
             'SELECT r.id, COALESCE(NULLIF(r.display_name, \'\'), r.name) AS name, r.river,
                     r.description, r.gauge_id, r.latitude_start, r.longitude_start,
                     r.latitude_end, r.longitude_end, r.latitude, r.longitude,
-                    r.sort_name, r.aw_id
+                    r.sort_name, r.aw_id, r.geom
              FROM reach r
              JOIN reach_state rs ON rs.reach_id = r.id
              JOIN state s ON s.id = rs.state_id
@@ -38,7 +38,7 @@ if ($q !== null && $q !== '') {
             'SELECT r.id, COALESCE(NULLIF(r.display_name, \'\'), r.name) AS name, r.river,
                     r.description, r.gauge_id, r.latitude_start, r.longitude_start,
                     r.latitude_end, r.longitude_end, r.latitude, r.longitude,
-                    r.sort_name, r.aw_id
+                    r.sort_name, r.aw_id, r.geom
              FROM reach r
              WHERE r.display_name LIKE ? OR r.name LIKE ? OR r.river LIKE ?
              ORDER BY r.sort_name'
@@ -134,6 +134,27 @@ if ($q !== null && $q !== '') {
             $lat = $r['latitude'] ?? $r['latitude_start'] ?? null;
             $lon = $r['longitude'] ?? $r['longitude_start'] ?? null;
             if ($lat !== null && $lon !== null) {
+                $track = null;
+                if (!empty($r['geom'])) {
+                    $track = [];
+                    foreach (explode(',', $r['geom']) as $pair) {
+                        $parts = preg_split('/\s+/', trim($pair));
+                        if (count($parts) === 2) {
+                            $track[] = [(float)$parts[1], (float)$parts[0]];
+                        }
+                    }
+                    // Downsample to ~100 points for search map
+                    $n = count($track);
+                    if ($n > 100) {
+                        $step = $n / 100;
+                        $sampled = [];
+                        for ($i = 0; $i < 100; $i++) {
+                            $sampled[] = $track[(int)($i * $step)];
+                        }
+                        $sampled[] = $track[$n - 1];
+                        $track = $sampled;
+                    }
+                }
                 $map_reaches[] = [
                     'id' => $r['id'],
                     'name' => $r['name'],
@@ -143,6 +164,7 @@ if ($q !== null && $q !== '') {
                     'lon_start' => $r['longitude_start'] ? (float)$r['longitude_start'] : null,
                     'lat_end' => $r['latitude_end'] ? (float)$r['latitude_end'] : null,
                     'lon_end' => $r['longitude_end'] ? (float)$r['longitude_end'] : null,
+                    'track' => $track,
                     'idx' => $idx,
                 ];
             }
