@@ -6,6 +6,9 @@ Strategy:
 - Long-term (> archive_days): thin to 1 per 6 hours
 
 Within each time bucket, the observation closest to the bucket midpoint is kept.
+
+Deletions are batched by source_id so the database write lock is held only
+briefly per batch, allowing concurrent readers and writers.
 """
 
 from __future__ import annotations
@@ -18,7 +21,7 @@ from kayak.db.engine import get_engine, get_session
 
 logger = logging.getLogger(__name__)
 
-# SQL for hourly thinning (medium-term)
+# SQL for hourly thinning (medium-term), scoped to one source
 _HOURLY_SQL = """
 WITH ranked AS (
     SELECT
@@ -30,7 +33,8 @@ WITH ranked AS (
             )
         ) AS rn
     FROM observation
-    WHERE observed_at < :medium_cutoff
+    WHERE source_id = :source_id
+      AND observed_at < :medium_cutoff
       AND observed_at >= :archive_cutoff
 )
 DELETE FROM observation
@@ -39,7 +43,7 @@ WHERE (source_id, observed_at, data_type) IN (
 )
 """
 
-# SQL for 6-hourly thinning (long-term)
+# SQL for 6-hourly thinning (long-term), scoped to one source
 _6HOURLY_SQL = """
 WITH ranked AS (
     SELECT
@@ -54,7 +58,8 @@ WITH ranked AS (
             )
         ) AS rn
     FROM observation
-    WHERE observed_at < :archive_cutoff
+    WHERE source_id = :source_id
+      AND observed_at < :archive_cutoff
 )
 DELETE FROM observation
 WHERE (source_id, observed_at, data_type) IN (
@@ -62,7 +67,7 @@ WHERE (source_id, observed_at, data_type) IN (
 )
 """
 
-# Count queries for dry-run / reporting
+# Count queries for dry-run / reporting (global, not per-source)
 _HOURLY_COUNT_SQL = """
 WITH ranked AS (
     SELECT
@@ -193,19 +198,43 @@ def decimate(args):
             print("\nNothing to decimate")
             return
 
-        # Execute deletions
-        print("\nDecimating...")
-        result1 = session.execute(text(_HOURLY_SQL), params)
-        print(f"  Hourly: {result1.rowcount:,} rows deleted")
+        # Get distinct source_ids that have observations to decimate
+        source_ids = [
+            row[0] for row in session.execute(
+                text(
+                    "SELECT DISTINCT source_id FROM observation "
+                    "WHERE observed_at < :medium_cutoff"
+                ),
+                {"medium_cutoff": params["medium_cutoff"]},
+            ).fetchall()
+        ]
 
-        result2 = session.execute(
-            text(_6HOURLY_SQL),
-            {"archive_cutoff": params["archive_cutoff"]},
-        )
-        print(f"  6-hourly: {result2.rowcount:,} rows deleted")
+        # Execute deletions per source, committing after each
+        print(f"\nDecimating across {len(source_ids)} sources...")
+        total_hourly = 0
+        total_6hourly = 0
 
-        session.commit()
-        print(f"Committed — {result1.rowcount + result2.rowcount:,} total rows deleted")
+        for source_id in source_ids:
+            src_params = {**params, "source_id": source_id}
+
+            result1 = session.execute(text(_HOURLY_SQL), src_params)
+            hourly = result1.rowcount
+
+            result2 = session.execute(
+                text(_6HOURLY_SQL),
+                {"archive_cutoff": params["archive_cutoff"], "source_id": source_id},
+            )
+            sixhourly = result2.rowcount
+
+            if hourly > 0 or sixhourly > 0:
+                session.commit()
+                total_hourly += hourly
+                total_6hourly += sixhourly
+                logger.info("source_id=%d: hourly=%d, 6-hourly=%d", source_id, hourly, sixhourly)
+
+        print(f"  Hourly: {total_hourly:,} rows deleted")
+        print(f"  6-hourly: {total_6hourly:,} rows deleted")
+        print(f"Done — {total_hourly + total_6hourly:,} total rows deleted")
 
     finally:
         session.close()

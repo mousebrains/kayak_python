@@ -196,10 +196,13 @@ def calculator(args):
                     update_latest(session, source.id, data_type)
                     logger.debug("  = %.1f at %s", result, when)
 
+                # Commit after each source to release the write lock
+                session.commit()
+
             except Exception as e:
+                session.rollback()
                 logger.error("Error for %s: %s", source.name, e)
 
-        session.commit()
         print("Calculations complete")
     finally:
         session.close()

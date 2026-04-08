@@ -47,8 +47,8 @@ def addArgs(subparsers):
     )
     parser.set_defaults(func=fetch_usgs_ogc)
     parser.add_argument(
-        "--hours", type=int, default=24,
-        help="Hours of history to fetch (default: 24)",
+        "--hours", type=int, default=12,
+        help="Hours of history to fetch (default: 12)",
     )
     parser.add_argument(
         "-d", "--dry-run", action="store_true",
@@ -108,13 +108,15 @@ def _fetch_page(url: str, api_key: str | None) -> dict | None:
     return None
 
 
-def _fetch_continuous(session, site_map, api_key, hours, batch_size, dry_run):
+def _fetch_continuous(site_map, api_key, hours, batch_size):
     """Fetch continuous (15-min) data for all sites and parameter codes.
 
-    Returns a set of (source_id, DataType) pairs that received new data,
-    so the caller can update latest observations.
+    Performs only network I/O — no database access.  Returns a list of
+    observation dicts ready for store_observations().
     """
-    updated_pairs: set[tuple[int, DataType]] = set()
+    from datetime import UTC, datetime
+
+    all_rows: list[dict] = []
     site_ids = list(site_map.keys())
 
     # Only fetch 00060, 00065, 00010 (skip 00011 — sites report one or the other)
@@ -122,7 +124,7 @@ def _fetch_continuous(session, site_map, api_key, hours, batch_size, dry_run):
 
     for param_code in param_codes:
         data_type, convert_fn = PARAM_MAP[param_code]
-        total_stored = 0
+        param_count = 0
 
         for i in range(0, len(site_ids), batch_size):
             batch = site_ids[i : i + batch_size]
@@ -146,7 +148,6 @@ def _fetch_continuous(session, site_map, api_key, hours, batch_size, dry_run):
                     break
 
                 features = data.get("features", [])
-                page_rows = []
                 for feature in features:
                     props = feature.get("properties", {})
                     mon_loc = props.get("monitoring_location_id", "")
@@ -169,8 +170,6 @@ def _fetch_continuous(session, site_map, api_key, hours, batch_size, dry_run):
                     if convert_fn is not None:
                         value = convert_fn(value)
 
-                    from datetime import UTC, datetime
-
                     try:
                         when = datetime.fromisoformat(timestamp)
                         if when.tzinfo is None:
@@ -179,20 +178,13 @@ def _fetch_continuous(session, site_map, api_key, hours, batch_size, dry_run):
                         logger.debug("Bad timestamp: %s", timestamp)
                         continue
 
-                    page_rows.append({
+                    all_rows.append({
                         "source_id": source_id,
                         "data_type": data_type,
                         "observed_at": when,
                         "value": value,
                     })
-
-                if not dry_run and page_rows:
-                    stored = store_observations(session, page_rows)
-                    total_stored += stored
-                    for row in page_rows:
-                        updated_pairs.add((row["source_id"], row["data_type"]))
-                else:
-                    total_stored += len(page_rows)
+                    param_count += 1
 
                 # Follow pagination
                 url = None
@@ -202,12 +194,12 @@ def _fetch_continuous(session, site_map, api_key, hours, batch_size, dry_run):
                         break
 
         logger.info(
-            "param_code=%s (%s): stored %d observations",
-            param_code, data_type.value, total_stored,
+            "param_code=%s (%s): fetched %d observations",
+            param_code, data_type.value, param_count,
         )
-        print(f"  {param_code} ({data_type.value}): {total_stored} observations")
+        print(f"  {param_code} ({data_type.value}): {param_count} observations")
 
-    return updated_pairs
+    return all_rows
 
 
 def fetch_usgs_ogc(args):
@@ -225,28 +217,39 @@ def fetch_usgs_ogc(args):
     if dry_run:
         print("Dry run mode — no data will be stored")
 
+    # Phase 1: Read site map (short read-only session)
     session = get_session()
     try:
         site_map = _build_site_map(session)
-        print(f"Found {len(site_map)} USGS sites in database")
+    finally:
+        session.close()
 
-        if not site_map:
-            print("No USGS sites found — nothing to fetch")
-            return
+    print(f"Found {len(site_map)} USGS sites in database")
+    if not site_map:
+        print("No USGS sites found — nothing to fetch")
+        return
 
-        print(f"Fetching {hours}h of continuous data...")
-        updated = _fetch_continuous(
-            session, site_map, api_key, hours, batch_size, dry_run,
-        )
+    # Phase 2: Fetch all data from API (no DB session held)
+    print(f"Fetching {hours}h of continuous data...")
+    all_rows = _fetch_continuous(site_map, api_key, hours, batch_size)
 
-        if not dry_run:
-            print(f"Updating latest observations for {len(updated)} source/type pairs...")
-            for source_id, data_type in updated:
-                update_latest(session, source_id, data_type)
-            session.commit()
-            print("Committed to database")
-        else:
-            session.rollback()
+    if dry_run:
+        print(f"Dry run: {len(all_rows)} observations fetched")
+        return
 
+    # Phase 3: Store to DB (short write session)
+    if not all_rows:
+        print("No observations to store")
+        return
+
+    session = get_session()
+    try:
+        stored = store_observations(session, all_rows)
+        updated_pairs = {(row["source_id"], row["data_type"]) for row in all_rows}
+        print(f"Updating latest observations for {len(updated_pairs)} source/type pairs...")
+        for source_id, data_type in updated_pairs:
+            update_latest(session, source_id, data_type)
+        session.commit()
+        print(f"Committed {stored} observations to database")
     finally:
         session.close()

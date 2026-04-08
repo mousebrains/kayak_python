@@ -47,11 +47,23 @@ def _run_decimate_sql(session, medium_cutoff, archive_cutoff, dry_run=False):
     if dry_run:
         return hourly_count, sixhour_count
 
-    session.execute(text(_HOURLY_SQL), params)
-    session.execute(
-        text(_6HOURLY_SQL),
-        {"archive_cutoff": params["archive_cutoff"]},
-    )
+    # Delete per source_id, matching the batched production code
+    source_ids = [
+        row[0] for row in session.execute(
+            text(
+                "SELECT DISTINCT source_id FROM observation "
+                "WHERE observed_at < :medium_cutoff"
+            ),
+            {"medium_cutoff": params["medium_cutoff"]},
+        ).fetchall()
+    ]
+    for source_id in source_ids:
+        src_params = {**params, "source_id": source_id}
+        session.execute(text(_HOURLY_SQL), src_params)
+        session.execute(
+            text(_6HOURLY_SQL),
+            {"archive_cutoff": params["archive_cutoff"], "source_id": source_id},
+        )
     session.flush()
     return hourly_count, sixhour_count
 

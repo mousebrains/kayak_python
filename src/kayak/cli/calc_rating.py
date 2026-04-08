@@ -126,10 +126,13 @@ def calc_rating(args):
                     if new_gauge:
                         update_latest(session, source_id, DataType.gauge)
 
+                # Commit after each gauge to release the write lock
+                session.commit()
+
             except Exception as e:
+                session.rollback()
                 logger.error("Error for %s: %s", gauge.name, e)
 
-        session.commit()
         print("Rating calculations complete")
     finally:
         session.close()

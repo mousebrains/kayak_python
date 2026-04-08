@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from kayak.db.models import DataType
 from kayak.parsers.base import BaseParser
@@ -50,6 +50,7 @@ class NWPSParser(BaseParser):
         flow_is_kcfs = secondary_units == "kcfs"
 
         now = datetime.now(UTC)
+        cutoff = now - timedelta(hours=36)
 
         for entry in data.get("data") or []:
             valid_time = entry.get("validTime")
@@ -58,7 +59,7 @@ class NWPSParser(BaseParser):
 
             # Strip trailing "Z" — parse_datetime handles UTC by default
             when = parse_datetime(valid_time.rstrip("Z"))
-            if when is None or when > now:
+            if when is None or when > now or when < cutoff:
                 continue
 
             # Stage (primary)

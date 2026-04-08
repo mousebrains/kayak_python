@@ -74,7 +74,7 @@ class _FetchWork:
     parser_name: str
     source_id: int | None
     source_map: dict[str, int] = field(default_factory=dict)
-    fetch_url: FetchUrl | None = None
+    fetch_url_id: int | None = None
 
 
 def fetch(args):
@@ -104,12 +104,13 @@ def fetch(args):
 
     print(f"Found {len(yaml_sources)} URL sources to process")
 
+    # --- Phase 1: Prepare work items (short read-only session) ---
     session = get_session()
     try:
         # Sync YAML → fetch_url table so new/changed URLs are available
         sync_sources(session)
+        session.commit()
 
-        # --- Phase 1: Prepare work items (synchronous) ---
         work_items: list[_FetchWork] = []
         for src_def in yaml_sources:
             hours = src_def.get("hours", "")
@@ -141,7 +142,9 @@ def fetch(args):
 
             source_id = None
             source_map: dict[str, int] = {}
+            fetch_url_id = None
             if fetch_url is not None:
+                fetch_url_id = fetch_url.id
                 sources = fetch_url.sources
                 if len(sources) == 1:
                     source_id = sources[0].id
@@ -151,41 +154,43 @@ def fetch(args):
             work_items.append(_FetchWork(
                 url=url, raw_url=src_def["url"],
                 parser_name=parser_name, source_id=source_id,
-                source_map=source_map, fetch_url=fetch_url,
+                source_map=source_map, fetch_url_id=fetch_url_id,
             ))
+    finally:
+        session.close()
 
-        # --- Phase 2: Fetch content ---
-        if args.input_dir:
-            # Read from saved files synchronously
-            content_map: dict[str, str | None] = {}
-            for w in work_items:
-                content_map[w.url] = _get_content_from_file(w.raw_url, args.input_dir)
-        elif work_items:
-            # Fetch all URLs concurrently
-            from kayak.utils.http_client import async_fetch_many
+    # --- Phase 2: Fetch content (no DB session held) ---
+    if args.input_dir:
+        content_map: dict[str, str | None] = {}
+        for w in work_items:
+            content_map[w.url] = _get_content_from_file(w.raw_url, args.input_dir)
+    elif work_items:
+        from kayak.utils.http_client import async_fetch_many
 
-            urls = [w.url for w in work_items]
-            results = asyncio.run(async_fetch_many(
-                urls, concurrency_per_host=args.concurrency,
-            ))
-            content_map = {}
-            for w in work_items:
-                result = results[w.url]
-                if not result.ok:
-                    logger.error("Fetch error for %s: %s", w.url, result.error)
-                    content_map[w.url] = None
-                elif result.status_code >= 400:
-                    logger.error("HTTP %d for %s", result.status_code, w.url)
-                    content_map[w.url] = None
-                else:
-                    if args.output_dir:
-                        out_path = Path(args.output_dir) / w.raw_url.lstrip("/")
-                        result.write_file(str(out_path))
-                    content_map[w.url] = result.text
-        else:
-            content_map = {}
+        urls = [w.url for w in work_items]
+        results = asyncio.run(async_fetch_many(
+            urls, concurrency_per_host=args.concurrency,
+        ))
+        content_map = {}
+        for w in work_items:
+            result = results[w.url]
+            if not result.ok:
+                logger.error("Fetch error for %s: %s", w.url, result.error)
+                content_map[w.url] = None
+            elif result.status_code >= 400:
+                logger.error("HTTP %d for %s", result.status_code, w.url)
+                content_map[w.url] = None
+            else:
+                if args.output_dir:
+                    out_path = Path(args.output_dir) / w.raw_url.lstrip("/")
+                    result.write_file(str(out_path))
+                content_map[w.url] = result.text
+    else:
+        content_map = {}
 
-        # --- Phase 3: Parse and store (synchronous) ---
+    # --- Phase 3: Parse and store (short write session) ---
+    session = get_session()
+    try:
         for w in work_items:
             text_content = content_map.get(w.url)
             if text_content is None:
@@ -204,13 +209,15 @@ def fetch(args):
                     source_id=w.source_id,
                     source_map=w.source_map,
                     dry_run=args.dry_run,
-                    fetch_url_id=w.fetch_url.id if w.fetch_url else None,
+                    fetch_url_id=w.fetch_url_id,
                     agency=w.parser_name,
                 )
                 count = parser.parse(text_content)
 
-                if w.fetch_url and not args.dry_run and not args.input_dir:
-                    w.fetch_url.last_fetched_at = datetime.now(UTC)
+                if w.fetch_url_id and not args.dry_run and not args.input_dir:
+                    fetch_url = session.get(FetchUrl, w.fetch_url_id)
+                    if fetch_url:
+                        fetch_url.last_fetched_at = datetime.now(UTC)
 
                 logger.debug("  %d updates", count)
 

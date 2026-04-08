@@ -54,10 +54,13 @@ def merge(args):
                         update_latest(session, target_id, dtype)
                         merge_count += count
                 except Exception as e:
+                    session.rollback()
                     logger.error("Error merging %s/%s: %s", gauge.name, dtype.value, e)
 
+            # Commit after each gauge to release the write lock
+            session.commit()
+
         print(f"Found {merge_count} observations merged")
-        session.commit()
         print("Merge complete")
     finally:
         session.close()
