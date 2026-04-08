@@ -33,7 +33,7 @@ for f in "${STATE_FILES[@]}"; do
         continue
     fi
     echo "  Downloading $f ..."
-    wget -q --show-progress -O "$dest" "$S3/Hydrography/NHD/State/GPKG/$f"
+    curl -# -o "$dest" "$S3/Hydrography/NHD/State/GPKG/$f"
 done
 
 # --- High resolution: NHDPlus HR by HUC4 ---
@@ -76,7 +76,7 @@ for huc in "${HR_HUCS[@]}"; do
     status=$(curl -sI -o /dev/null -w "%{http_code}" "$url")
     if [[ "$status" == "200" ]]; then
         echo "  Downloading $f ..."
-        wget -q --show-progress -O "$dest" "$url"
+        curl -# -o "$dest" "$url"
     else
         echo "  SKIP $f (HTTP $status)"
     fi
