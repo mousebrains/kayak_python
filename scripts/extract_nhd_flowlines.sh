@@ -34,33 +34,32 @@ for zip in "$HR_DIR"/NHDPLUS_H_*_HU4_GDB.zip; do
     huc=$(basename "$zip" | sed 's/NHDPLUS_H_\([0-9]*\)_.*/\1/')
     echo "Processing HUC4 $huc ..."
 
-    # Build the WHERE clause
+    # Build the WHERE clause and optional spatial filter
     where="gnis_name IS NOT NULL"
+    spat_args=()
     if echo "$FILTER_HUCS" | grep -qw "$huc"; then
-        where="$where AND OGR_GEOM_MAXY >= 40.0"
+        # Clip to lat >= 40° using a spatial filter (bounding box: minx miny maxx maxy)
+        spat_args=(-spat -180 40.0 180 90)
         echo "  (filtering to lat >= 40°)"
     fi
 
     # The GDB inside the zip has a path like NHDPLUS_H_1707_HU4_GDB.gdb
     gdb_name="NHDPLUS_H_${huc}_HU4_GDB.gdb"
 
-    if [[ $count -eq 0 ]]; then
-        ogr2ogr -f GPKG "$OUTPUT" \
-            "/vsizip/$zip/$gdb_name" NHDFlowline \
-            -where "$where" \
-            -nln flowline \
-            -select "permanent_identifier,gnis_name,gnis_id,ftype,fcode,lengthkm,reachcode" \
-            2>&1 | tail -1 || echo "  Warning: extraction may have partially failed"
-    else
-        ogr2ogr -f GPKG "$OUTPUT" \
-            "/vsizip/$zip/$gdb_name" NHDFlowline \
-            -where "$where" \
-            -nln flowline -append \
-            -select "permanent_identifier,gnis_name,gnis_id,ftype,fcode,lengthkm,reachcode" \
-            2>&1 | tail -1 || echo "  Warning: extraction may have partially failed"
+    append_args=()
+    if [[ $count -gt 0 ]]; then
+        append_args=(-update -append)
     fi
 
-    new_count=$(ogrinfo -sql "SELECT COUNT(*) FROM flowline" "$OUTPUT" 2>/dev/null | grep -oP '\d+' | tail -1 || echo "?")
+    fields="permanent_identifier,gnis_name,gnis_id,ftype,fcode,lengthkm,reachcode"
+    ogr2ogr -f GPKG "$OUTPUT" \
+        "/vsizip/$zip/$gdb_name" \
+        -sql "SELECT $fields FROM NHDFlowline WHERE $where" \
+        ${spat_args[@]+"${spat_args[@]}"} \
+        -nln flowline ${append_args[@]+"${append_args[@]}"} \
+        || echo "  Warning: extraction failed for HUC $huc"
+
+    new_count=$(ogrinfo -sql "SELECT COUNT(*) FROM flowline" "$OUTPUT" 2>/dev/null | grep -oE '[0-9]+' | tail -1 || echo "?")
     echo "  Total flowlines so far: $new_count"
     count=$((count + 1))
 done
