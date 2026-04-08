@@ -5,6 +5,7 @@
 # 1, 3, and 5 in the sorted list (roughly 1, 3, and 5 weeks old).
 #
 # Uses sqlite3 .backup for a consistent snapshot of a live database.
+# Backups are gzip-compressed (level 4, ~82% size reduction).
 
 set -euo pipefail
 
@@ -24,11 +25,15 @@ fi
 sqlite3 "$DB" ".backup $DEST"
 echo "Backed up to $DEST ($(du -h "$DEST" | cut -f1))"
 
+# Compress with gzip level 4 (~82% reduction, fast)
+gzip -4 "$DEST"
+echo "Compressed to $DEST.gz ($(du -h "$DEST.gz" | cut -f1))"
+
 # Retention: keep backups at positions 0, 1, 3, 5 (newest first)
 # This gives coverage at 0, ~1, ~3, ~5 weeks back
 keep_positions=(0 1 3 5)
 
-mapfile -t backups < <(ls -1r "$BACKUP_DIR"/kayak-*.db 2>/dev/null)
+mapfile -t backups < <(ls -1r "$BACKUP_DIR"/kayak-*.db.gz 2>/dev/null)
 
 for i in "${!backups[@]}"; do
     keep=false
@@ -44,4 +49,7 @@ for i in "${!backups[@]}"; do
     fi
 done
 
-echo "Backups retained: $(ls -1 "$BACKUP_DIR"/kayak-*.db 2>/dev/null | wc -l)"
+# Clean up any old uncompressed backups
+rm -f "$BACKUP_DIR"/kayak-*.db
+
+echo "Backups retained: $(ls -1 "$BACKUP_DIR"/kayak-*.db.gz 2>/dev/null | wc -l)"
