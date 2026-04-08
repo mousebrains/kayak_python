@@ -139,9 +139,30 @@ echo '</div>';
 echo '<h2>' . htmlspecialchars($source['name']) . '</h2>';
 echo '<table class="desc-table">';
 
+// Build agency metadata URL for the source name
+$agency_url = null;
+$agency_lc = strtolower($source['agency'] ?? '');
+$src_name = $source['name'] ?? '';
+if ($agency_lc === 'usgs' && preg_match('/^\d+$/', $src_name)) {
+    $agency_url = 'https://waterdata.usgs.gov/monitoring-location/' . urlencode($src_name);
+} elseif ($agency_lc === 'nwrfc' && preg_match('/^[A-Z]{4}\d?$/', $src_name)) {
+    $agency_url = 'https://www.nwrfc.noaa.gov/river/station/flowplot/flowplot.cgi?lid=' . urlencode($src_name);
+} elseif ($agency_lc === 'usace') {
+    $agency_url = 'https://www.nwp.usace.army.mil/Locations/' . urlencode($src_name);
+} elseif ($agency_lc === 'usbr') {
+    $agency_url = 'https://www.usbr.gov/pn/hydromet/arcread.html?station=' . urlencode($src_name);
+} elseif ($agency_lc === 'idwr') {
+    $agency_url = 'https://research.idwr.idaho.gov/apps/Realtime/Pages/StationPage.aspx?SiteID=' . urlencode($src_name);
+}
+
+$name_html = htmlspecialchars($src_name);
+if ($agency_url) {
+    $name_html = '<a href="' . htmlspecialchars($agency_url) . '" target="_blank" rel="noopener">' . $name_html . '</a>';
+}
+
 $fields = [
     'ID' => $source['id'],
-    'Name' => $source['name'],
+    'Name' => $name_html,
     'Agency' => $source['agency'],
 ];
 
@@ -163,8 +184,8 @@ if ($source['fetch_url']) {
 
 foreach ($fields as $label => $value) {
     if ($value === null || trim((string)$value) === '') continue;
-    // Fetch URL field already contains HTML link
-    if ($label === 'Fetch URL') {
+    // These fields already contain HTML links
+    if ($label === 'Fetch URL' || $label === 'Name') {
         echo "<tr><td>$label</td><td>$value</td></tr>\n";
     } else {
         $esc = htmlspecialchars((string)$value);

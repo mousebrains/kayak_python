@@ -5,8 +5,8 @@ After=network-online.target
 [Service]
 Type=oneshot
 User=pat
-WorkingDirectory=%h/kayak
-EnvironmentFile=%h/.config/kayak/.env
-ExecStart=%h/kayak/systemd/kayak-sync.sh
-TimeoutStartSec=600
+WorkingDirectory=/home/pat/kayak
+EnvironmentFile=/home/pat/.config/kayak/.env
+ExecStart=/home/pat/kayak/systemd/kayak-sync.sh
+TimeoutStartSec=1800
 Nice=10

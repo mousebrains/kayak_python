@@ -109,7 +109,7 @@ columns:
     field: "flow"
     length: 7
     name_text: "Flow"
-    name_html: '<a href="#Units">Flow<br />CFS</a>'
+    name_html: '<a href="#Units">Flow<br>CFS</a>'
 
   - sort_key: 600
     use: "hct"
@@ -117,7 +117,7 @@ columns:
     field: "gage"
     length: 7
     name_text: "Height"
-    name_html: '<a href="#Units">Height<br />Feet</a>'
+    name_html: '<a href="#Units">Height<br>Feet</a>'
 
   - sort_key: 700
     use: "hct"
@@ -125,7 +125,7 @@ columns:
     field: "temperature"
     length: 4
     name_text: "Temp"
-    name_html: '<a href="#Units">Temp<br />F</a>'
+    name_html: '<a href="#Units">Temp<br>F</a>'
 
   - sort_key: 800
     use: "fhct"

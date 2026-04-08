@@ -1,9 +1,16 @@
 """Tests for the NWPS API parser."""
 
 import json
+from datetime import UTC, datetime, timedelta
 
 from kayak.db.models import DataType, FetchUrl, Observation, Source
 from kayak.parsers.nwps import NWPSParser
+
+
+def _recent(hours_ago=1):
+    """Return an ISO timestamp for *hours_ago* hours before now."""
+    return (datetime.now(UTC) - timedelta(hours=hours_ago)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
 
 NWPS_BASIC = json.dumps({
     "primaryName": "Stage",
@@ -11,8 +18,8 @@ NWPS_BASIC = json.dumps({
     "secondaryName": "Flow",
     "secondaryUnits": "kcfs",
     "data": [
-        {"validTime": "2024-06-15T12:00:00Z", "primary": 7.57, "secondary": 1.52},
-        {"validTime": "2024-06-15T13:00:00Z", "primary": 7.60, "secondary": 1.54},
+        {"validTime": _recent(2), "primary": 7.57, "secondary": 1.52},
+        {"validTime": _recent(1), "primary": 7.60, "secondary": 1.54},
     ],
 })
 
@@ -22,7 +29,7 @@ NWPS_MISSING_SECONDARY = json.dumps({
     "secondaryName": "Flow",
     "secondaryUnits": "kcfs",
     "data": [
-        {"validTime": "2024-06-15T12:00:00Z", "primary": 7.57, "secondary": -999},
+        {"validTime": _recent(1), "primary": 7.57, "secondary": -999},
     ],
 })
 
@@ -32,7 +39,7 @@ NWPS_NEGATIVE_FLOW = json.dumps({
     "secondaryName": "Flow",
     "secondaryUnits": "kcfs",
     "data": [
-        {"validTime": "2024-06-15T12:00:00Z", "primary": 7.57, "secondary": -0.5},
+        {"validTime": _recent(1), "primary": 7.57, "secondary": -0.5},
     ],
 })
 
@@ -60,7 +67,7 @@ NWPS_CFS_UNITS = json.dumps({
     "secondaryName": "Flow",
     "secondaryUnits": "cfs",
     "data": [
-        {"validTime": "2024-06-15T12:00:00Z", "primary": 3.0, "secondary": 500.0},
+        {"validTime": _recent(1), "primary": 3.0, "secondary": 500.0},
     ],
 })
 

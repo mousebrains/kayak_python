@@ -165,7 +165,10 @@ def test_get_content_saves_to_output_dir(tmp_path):
 
 
 def test_dry_run_does_not_commit():
-    """In dry-run mode the session is rolled back, not committed."""
+    """In dry-run mode the parse/store session is rolled back, not committed.
+
+    Phase 1 (sync_sources) commits normally; Phase 3 (parse/store) rolls back.
+    """
     import argparse
 
     from kayak.cli.fetch import fetch as fetch_cmd
@@ -185,16 +188,20 @@ def test_dry_run_does_not_commit():
         concurrency=8,
     )
 
-    mock_session = mock.MagicMock()
+    phase1_session = mock.MagicMock()
+    phase3_session = mock.MagicMock()
+    sessions = iter([phase1_session, phase3_session])
     with (
         mock.patch("kayak.cli.fetch.load_sources", return_value=[]),
         mock.patch("kayak.cli.fetch.ensure_all_loaded"),
-        mock.patch("kayak.cli.fetch.get_session", return_value=mock_session),
+        mock.patch("kayak.cli.fetch.get_session", side_effect=lambda: next(sessions)),
     ):
         fetch_cmd(args)
 
-    mock_session.commit.assert_not_called()
-    mock_session.rollback.assert_called_once()
+    # Phase 1 commits sync_sources; Phase 3 rolls back in dry-run
+    phase1_session.commit.assert_called_once()
+    phase3_session.commit.assert_not_called()
+    phase3_session.rollback.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -235,14 +242,16 @@ def test_fetch_uses_async_fetch_many():
     async def mock_async_fetch(urls, concurrency_per_host=8, timeout=None):
         return {url: fake_result for url in urls}
 
-    mock_session = mock.MagicMock()
+    phase1_session = mock.MagicMock()
+    phase3_session = mock.MagicMock()
+    sessions = iter([phase1_session, phase3_session])
     with (
         mock.patch("kayak.cli.fetch.load_sources", return_value=sources),
         mock.patch("kayak.cli.fetch.ensure_all_loaded"),
-        mock.patch("kayak.cli.fetch.get_session", return_value=mock_session),
+        mock.patch("kayak.cli.fetch.get_session", side_effect=lambda: next(sessions)),
         mock.patch("kayak.utils.http_client.async_fetch_many", mock_async_fetch),
     ):
         fetch_cmd(args)
 
-    # dry_run → rollback, not commit
-    mock_session.commit.assert_not_called()
+    # Phase 3: dry_run → rollback, not commit
+    phase3_session.commit.assert_not_called()

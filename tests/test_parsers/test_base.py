@@ -10,10 +10,13 @@ class ConcreteParser(BaseParser):
     """Minimal concrete parser for testing the base class."""
 
     name = "test"
+    _seq = 0
 
     def parse_line(self, line):
         if line.startswith("DATA:"):
-            self.dump_to_db("test_station", DataType.flow, datetime.now(UTC), 100.0)
+            ConcreteParser._seq += 1
+            ts = datetime(2026, 1, 1, 12, ConcreteParser._seq, tzinfo=UTC)
+            self.dump_to_db("test_station", DataType.flow, ts, 100.0)
         return True
 
 
@@ -21,12 +24,15 @@ class StopParser(BaseParser):
     """Parser that stops after encountering STOP."""
 
     name = "stop_test"
+    _seq = 0
 
     def parse_line(self, line):
         if line == "STOP":
             return False
         if line.startswith("DATA:"):
-            self.dump_to_db("test_station", DataType.flow, datetime.now(UTC), 50.0)
+            StopParser._seq += 1
+            ts = datetime(2026, 1, 1, 13, StopParser._seq, tzinfo=UTC)
+            self.dump_to_db("test_station", DataType.flow, ts, 50.0)
         return True
 
 

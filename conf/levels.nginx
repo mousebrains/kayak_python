@@ -18,8 +18,12 @@ server {
 
     server_name levels.mousebrains.com levels-test.wkcc.org; # levels.wkcc.org;
 
-    # HSTS — tell browsers to always use HTTPS
-    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
+    # Hide server identity completely (requires libnginx-mod-http-headers-more-filter)
+    server_tokens off;
+    more_clear_headers Server;
+
+    # Security headers (server-level — apply when no location overrides)
+    include /etc/nginx/snippets/security-headers.conf;
 
     # Document root — where build output + PHP symlinks live
     root /home/pat/public_html;
@@ -36,9 +40,6 @@ server {
     gzip_min_length 256;
     gzip_vary on;
 
-    # Security headers (base set — child blocks with add_header must re-include)
-    include /home/pat/kayak/conf/security-headers.conf;
-
     # Block known malicious scanners and exploit tools
     if ($http_user_agent ~* (zgrab|masscan|scanner/1\.0|libredtail|xfa1|Gh0st|^Hello|nvdorz|FreePBX-Scanner)) {
         return 444;
@@ -51,28 +52,30 @@ server {
     }
 
     # Block access to PHP includes (db.php, svg_plot.php, etc.)
-    location /includes/ {
+    # Use regex to override the \.php$ location (regex precedence rules)
+    location ~ ^/includes/ {
         deny all;
         return 404;
     }
 
     # Static assets — long cache, immutable content
     location /static/ {
-        include /home/pat/kayak/conf/security-headers.conf;
         expires 7d;
         add_header Cache-Control "public, immutable";
+        include /etc/nginx/snippets/security-headers.conf;
     }
 
     # Generated HTML/CSV/text pages — short cache, regenerated hourly
     location / {
-        include /home/pat/kayak/conf/security-headers.conf;
         try_files $uri $uri/ =404;
         expires 5m;
         add_header Cache-Control "public";
+        include /etc/nginx/snippets/security-headers.conf;
     }
 
     # PHP endpoints via php-fpm
     location ~ \.php$ {
+        limit_req zone=php burst=20 nodelay;
         try_files $uri =404;
         fastcgi_pass unix:/run/php/php-fpm.sock;
         fastcgi_index index.php;
@@ -82,9 +85,9 @@ server {
         # Pass environment to PHP
         fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
 
-        # Security + cache headers
-        include /home/pat/kayak/conf/security-headers.conf;
+        # Cache PHP responses (5 min for reads, no cache for edits)
         add_header Cache-Control "public, max-age=300";
+        include /etc/nginx/snippets/security-headers.conf;
     }
 
     # Edit endpoint — rate-limited, no cache
@@ -95,8 +98,9 @@ server {
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
         include fastcgi_params;
         fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
-        include /home/pat/kayak/conf/security-headers.conf;
+        include /etc/nginx/snippets/edit-password.conf;
         add_header Cache-Control "no-cache, no-store";
+        include /etc/nginx/snippets/security-headers.conf;
     }
 
     # Let's Encrypt ACME challenge

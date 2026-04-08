@@ -19,8 +19,8 @@ if (!$ids) {
     exit;
 }
 
-// Cap at 500 reaches
-$ids = array_slice($ids, 0, 500);
+// Cap at 200 reaches (500 caused OOM with 128MB limit due to sparkline queries)
+$ids = array_slice($ids, 0, 200);
 
 $db = get_db();
 $placeholders = implode(',', array_fill(0, count($ids), '?'));
@@ -70,6 +70,78 @@ foreach ($cls_stmt->fetchAll() as $row) {
     $classes[$row['reach_id']] = $row['class'];
 }
 
+// Map reach_id -> gauge_id and collect distinct gauge source_ids for sparklines
+$gauge_map = [];
+$gid_stmt = $db->prepare("SELECT id, gauge_id FROM reach WHERE id IN ($placeholders)");
+$gid_stmt->execute($ids);
+foreach ($gid_stmt->fetchAll() as $row) {
+    if ($row['gauge_id']) $gauge_map[(int)$row['id']] = (int)$row['gauge_id'];
+}
+
+// Get primary source_id for each gauge (same logic as main query)
+$gauge_ids = array_values(array_unique(array_filter(array_values($gauge_map))));
+$sparklines = [];
+if ($gauge_ids) {
+    $gph = implode(',', array_fill(0, count($gauge_ids), '?'));
+    $src_stmt = $db->prepare("SELECT gauge_id, MIN(source_id) AS source_id FROM gauge_source WHERE gauge_id IN ($gph) GROUP BY gauge_id");
+    $src_stmt->execute($gauge_ids);
+    $gauge_sources = [];
+    foreach ($src_stmt->fetchAll() as $row) {
+        $gauge_sources[(int)$row['gauge_id']] = (int)$row['source_id'];
+    }
+
+    // Fetch sparkline data per source, sampled to ~60 points (every 48min over 48h)
+    $spark_stmt = $db->prepare(
+        "SELECT value, observed_at FROM observation
+         WHERE source_id = ? AND data_type = 'flow'
+           AND observed_at >= datetime('now', '-48 hours')
+         ORDER BY observed_at"
+    );
+    foreach ($gauge_sources as $gid => $sid) {
+        $spark_stmt->execute([$sid]);
+        $all = [];
+        while ($row = $spark_stmt->fetch()) {
+            $all[] = ['ts' => strtotime($row['observed_at']), 'v' => (float)$row['value']];
+        }
+        // Downsample to ~60 points
+        $n = count($all);
+        if ($n > 60) {
+            $step = $n / 60;
+            $sampled = [];
+            for ($i = 0; $i < 60; $i++) {
+                $sampled[] = $all[(int)($i * $step)];
+            }
+            $sampled[] = $all[$n - 1]; // always include last point
+            $all = $sampled;
+        }
+        if (count($all) >= 3) {
+            $sparklines[$gid] = $all;
+        }
+    }
+}
+
+// Build SVG sparkline for a gauge
+function build_sparkline(array $data, int $w = 80, int $h = 20): string {
+    if (count($data) < 3) return '';
+    $xs = array_column($data, 'ts');
+    $ys = array_column($data, 'v');
+    $x_min = min($xs); $x_max = max($xs);
+    $y_min = min($ys); $y_max = max($ys);
+    $x_range = $x_max - $x_min ?: 1;
+    $y_range = $y_max - $y_min ?: 1;
+    $pts = [];
+    foreach ($data as $d) {
+        $px = (int)(($d['ts'] - $x_min) / $x_range * $w);
+        $py = (int)($h - ($d['v'] - $y_min) / $y_range * $h);
+        $pts[] = "$px,$py";
+    }
+    $points = implode(' ', $pts);
+    return '<svg class="spark" width="' . $w . '" height="' . $h
+         . '" viewBox="0 0 ' . $w . ' ' . $h . '">'
+         . '<polyline fill="none" stroke="#2060A0" stroke-width="1.5" points="' . $points . '"/>'
+         . '</svg>';
+}
+
 header('Cache-Control: max-age=60');
 include_header('Custom Levels Page');
 
@@ -110,27 +182,37 @@ $id_param = htmlspecialchars($raw);
         }
     }
 
-    // Best available timestamp
-    $time_str = '';
+    // Best available timestamp — render as <time> for client-side local conversion
+    $time_html = '';
     $ts = $s['flow_time'] ?? $s['gage_time'] ?? $s['temp_time'] ?? null;
     if ($ts) {
-        $time_str = date('m/d H:i', strtotime($ts));
+        $iso = date('Y-m-d\TH:i:s\Z', strtotime($ts));
+        $display = date('m/d H:i', strtotime($ts));
+        $time_html = "<time datetime=\"$iso\">$display</time>";
     }
 
     // Values
     $name = htmlspecialchars($s['display_name'] ?? '');
     $loc  = htmlspecialchars($s['gauge_location'] ?? '');
-    $flow = $s['flow'] !== null ? '<a href="/plot.php?type=flow&id=' . $id . '">' . number_format((float)$s['flow'], 0) . '</a>' : '';
+    // Sparkline
+    $spark = '';
+    $gid = $gauge_map[$id] ?? null;
+    if ($gid && isset($sparklines[$gid])) {
+        $spark = build_sparkline($sparklines[$gid]);
+    }
+
+    $flow_val = $s['flow'] !== null ? number_format((float)$s['flow'], 0) : '';
+    $flow = $flow_val !== '' ? '<a href="/plot.php?type=flow&id=' . $id . '">' . $flow_val . '</a>' . $spark : '';
     $gage = $s['gage'] !== null ? '<a href="/plot.php?type=gage&id=' . $id . '">' . number_format((float)$s['gage'], 2) . '</a>' : '';
     $temp = $s['temperature'] !== null ? '<a href="/plot.php?type=temp&id=' . $id . '">' . number_format((float)$s['temperature'], 0) . '</a>' : '';
     $drain = htmlspecialchars($s['drainage'] ?? '');
     $class = htmlspecialchars($classes[$id] ?? '');
 ?>
-<tr>
+<tr class="clickable-row" data-href="/description.php?id=<?= $id ?>">
   <td class="td-status" data-label="Status"><?= $status ?></td>
   <td class="td-name" data-label="Name"><a href="/description.php?id=<?= $id ?>"><?= $name ?></a></td>
   <td data-label="Location"><?= $loc ?></td>
-  <td class="td-date" data-label="Date"><?= $time_str ?></td>
+  <td class="td-date" data-label="Date"><?= $time_html ?></td>
   <td class="td-flow" data-label="Flow"><?= $flow ?></td>
   <td class="td-gage" data-label="Height"><?= $gage ?></td>
   <td class="td-temp" data-label="Temp"><?= $temp ?></td>

@@ -68,6 +68,7 @@ def store_observation(
             logger.error("Unknown data type: %s", data_type)
             return False
 
+    when = when.replace(microsecond=0)
     now = datetime.now(UTC)
     if when.tzinfo is None:
         when_utc = when.replace(tzinfo=UTC)
@@ -115,7 +116,7 @@ def store_observations(session: Session, values: list[dict]) -> int:
                 logger.error("Unknown data type: %s", data_type)
                 continue
 
-        when = row["observed_at"]
+        when = row["observed_at"].replace(microsecond=0)
         if when.tzinfo is None:
             when_utc = when.replace(tzinfo=UTC)
         else:
@@ -361,31 +362,74 @@ def merge_sources(
     input_source_ids: list[int],
     data_type: DataType,
     since: datetime | None = None,
+    window_minutes: int = 15,
 ) -> int:
     """Merge observations from multiple sources into a target.
 
-    When multiple sources have data at the same timestamp, the median
-    value is used instead of last-write-wins.
+    For each output timestamp, collects all observations from all input
+    sources within ±window_minutes and computes the median. This smooths
+    out noise from measurement jitter and small offsets between sources.
 
     Returns count of new rows inserted.
     """
     if since is None:
         since = datetime.now(UTC) - timedelta(days=10)
 
-    # Collect all values grouped by timestamp
-    by_time: defaultdict[datetime, list[float]] = defaultdict(list)
+    window = timedelta(minutes=window_minutes)
+
+    # Collect all (timestamp, value) pairs from all input sources.
+    # Normalize timestamps to second precision so that e.g. "00:00:00"
+    # and "00:00:00.000000" collapse to the same output point.
+    all_obs: list[tuple[datetime, float]] = []
     for src_id in input_source_ids:
-        rows = get_observations(session, src_id, data_type, since=since)
-        for row in rows:
-            by_time[row.observed_at].append(row.value)
+        obs_rows = get_observations(session, src_id, data_type, since=since)
+        for row in obs_rows:
+            t = row.observed_at.replace(microsecond=0)
+            all_obs.append((t, row.value))
+
+    if not all_obs:
+        return 0
+
+    all_obs.sort(key=lambda x: x[0])
+
+    # Collect unique timestamps as output points
+    timestamps = sorted({t for t, _ in all_obs})
 
     rows = []
-    for observed_at, vals in by_time.items():
-        median_val = statistics.median(vals)
-        rows.append({
-            "source_id": target_source_id,
-            "data_type": data_type,
-            "observed_at": observed_at,
-            "value": median_val,
-        })
+    # Use two pointers to find values within the window for each timestamp
+    n = len(all_obs)
+    lo = 0
+    for observed_at in timestamps:
+        win_start = observed_at - window
+        win_end = observed_at + window
+
+        # Advance lo pointer past expired entries
+        while lo < n and all_obs[lo][0] < win_start:
+            lo += 1
+
+        # Collect values in window
+        vals = []
+        for i in range(lo, n):
+            if all_obs[i][0] > win_end:
+                break
+            vals.append(all_obs[i][1])
+
+        if vals:
+            rows.append({
+                "source_id": target_source_id,
+                "data_type": data_type,
+                "observed_at": observed_at,
+                "value": round(statistics.median(vals), 2),
+            })
+
+    # Delete the target's existing observations in this range before writing,
+    # so stale rows from previous merges or fetches don't linger.
+    session.execute(
+        Observation.__table__.delete().where(
+            Observation.source_id == target_source_id,
+            Observation.data_type == data_type,
+            Observation.observed_at >= since,
+        )
+    )
+
     return store_observations(session, rows)

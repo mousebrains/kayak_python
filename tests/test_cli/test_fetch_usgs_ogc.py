@@ -101,8 +101,8 @@ def test_build_site_map_excludes_null_usgs_id(session):
 # ---------------------------------------------------------------------------
 
 
-def test_fetch_continuous_stores_observations(session):
-    """Continuous fetch stores observations for known sites."""
+def test_fetch_continuous_returns_observations(session):
+    """Continuous fetch returns observation rows for known sites."""
     src, _ = _make_usgs_source(session, usgs_id="14306500")
     site_map = {"14306500": src.id}
 
@@ -119,15 +119,12 @@ def test_fetch_continuous_stores_observations(session):
         return empty_response
 
     with mock.patch("kayak.cli.fetch_usgs_ogc._fetch_page", side_effect=mock_fetch):
-        updated = _fetch_continuous(session, site_map, "test-key", 24, BATCH_SIZE, False)
+        rows = _fetch_continuous(site_map, "test-key", 24, BATCH_SIZE)
 
-    session.flush()
-    obs = session.query(Observation).filter_by(
-        source_id=src.id, data_type=DataType.flow,
-    ).all()
-    assert len(obs) == 2
-    assert {o.value for o in obs} == {1500.0, 1520.0}
-    assert (src.id, DataType.flow) in updated
+    flow_rows = [r for r in rows if r["data_type"] == DataType.flow]
+    assert len(flow_rows) == 2
+    assert {r["value"] for r in flow_rows} == {1500.0, 1520.0}
+    assert all(r["source_id"] == src.id for r in flow_rows)
 
 
 def test_pagination(session):
@@ -153,11 +150,10 @@ def test_pagination(session):
         return page2
 
     with mock.patch("kayak.cli.fetch_usgs_ogc._fetch_page", side_effect=mock_fetch_page):
-        _fetch_continuous(session, site_map, "test-key", 24, BATCH_SIZE, False)
+        rows = _fetch_continuous(site_map, "test-key", 24, BATCH_SIZE)
 
-    session.flush()
-    obs = session.query(Observation).filter_by(source_id=src.id, data_type=DataType.flow).all()
-    assert len(obs) == 2
+    flow_rows = [r for r in rows if r["data_type"] == DataType.flow]
+    assert len(flow_rows) == 2
     # 3 param codes x 1 batch = 3 initial calls, but page2 returned for subsequent
     # The mock_fetch_page tracks calls across all param codes
     assert call_count > 2  # at least page1+page2 for first param code
@@ -179,14 +175,11 @@ def test_celsius_to_fahrenheit(session):
         return _make_geojson_response([])
 
     with mock.patch("kayak.cli.fetch_usgs_ogc._fetch_page", side_effect=mock_fetch):
-        _fetch_continuous(session, site_map, "test-key", 24, BATCH_SIZE, False)
+        rows = _fetch_continuous(site_map, "test-key", 24, BATCH_SIZE)
 
-    session.flush()
-    obs = session.query(Observation).filter_by(
-        source_id=src.id, data_type=DataType.temperature,
-    ).all()
-    assert len(obs) == 1
-    assert obs[0].value == pytest.approx(68.0)
+    temp_rows = [r for r in rows if r["data_type"] == DataType.temperature]
+    assert len(temp_rows) == 1
+    assert temp_rows[0]["value"] == pytest.approx(68.0)
 
 
 def test_unknown_site_skipped(session):
@@ -197,26 +190,9 @@ def test_unknown_site_skipped(session):
     response = _make_geojson_response(features)
 
     with mock.patch("kayak.cli.fetch_usgs_ogc._fetch_page", return_value=response):
-        updated = _fetch_continuous(session, site_map, "test-key", 24, BATCH_SIZE, False)
+        rows = _fetch_continuous(site_map, "test-key", 24, BATCH_SIZE)
 
-    assert len(updated) == 0
-
-
-def test_dry_run_no_writes(session):
-    """Dry run does not write observations to the database."""
-    src, _ = _make_usgs_source(session, usgs_id="14306500")
-    site_map = {"14306500": src.id}
-
-    features = [_make_feature("14306500", "00060", 1500.0, "2026-02-28T10:00:00Z")]
-    response = _make_geojson_response(features)
-
-    with mock.patch("kayak.cli.fetch_usgs_ogc._fetch_page", return_value=response):
-        updated = _fetch_continuous(session, site_map, "test-key", 24, BATCH_SIZE, True)
-
-    session.flush()
-    obs = session.query(Observation).filter_by(source_id=src.id).all()
-    assert len(obs) == 0
-    assert len(updated) == 0
+    assert len(rows) == 0
 
 
 def test_missing_api_key():

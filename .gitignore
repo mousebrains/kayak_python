@@ -5,6 +5,8 @@ obj
 *.o
 *.d
 tpw.master.2*
+tkw.*
+tpw.*
 
 # Python
 __pycache__/
@@ -23,3 +25,8 @@ build/
 public_html/*.html
 public_html/*.csv
 public_html/*.text
+static/reaches.geojson
+
+# OSM data cache
+OSM-cache/
+

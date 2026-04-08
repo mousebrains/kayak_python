@@ -3,8 +3,8 @@ Description=Kayak SQLite database backup
 
 [Service]
 Type=oneshot
-User=tpw
-WorkingDirectory=/home/tpw/kayak
-EnvironmentFile=/home/tpw/kayak/.env
-ExecStart=/home/tpw/kayak/systemd/kayak-backup.sh
+User=pat
+WorkingDirectory=/home/pat/kayak
+EnvironmentFile=/home/pat/.config/kayak/.env
+ExecStart=/home/pat/kayak/systemd/kayak-backup.sh
 Nice=15

@@ -40,23 +40,27 @@ def merge(args):
             if len(source_ids) < 2:
                 continue
 
-            # Use the first source as the merge target
+            # Use the first source as the merge target; include ALL sources
+            # (including target) as inputs so the ±15 min moving median
+            # smooths across every source.
             target_id = source_ids[0]
-            input_ids = source_ids[1:]
 
             for dtype in types:
                 try:
-                    count = merge_sources(session, target_id, input_ids, dtype)
+                    count = merge_sources(session, target_id, source_ids, dtype)
                     if count > 0:
                         logger.info("%s/%s: %d rows merged", gauge.name, dtype.value, count)
                     if count > 0:
                         update_latest(session, target_id, dtype)
                         merge_count += count
                 except Exception as e:
+                    session.rollback()
                     logger.error("Error merging %s/%s: %s", gauge.name, dtype.value, e)
 
+            # Commit after each gauge to release the write lock
+            session.commit()
+
         print(f"Found {merge_count} observations merged")
-        session.commit()
         print("Merge complete")
     finally:
         session.close()

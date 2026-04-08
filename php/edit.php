@@ -9,17 +9,35 @@ require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
 
-$edit_user = getenv('EDIT_USER') ?: 'admin';
-$edit_password = getenv('EDIT_PASSWORD');
-if ($edit_password) {
-    if (!isset($_SERVER['PHP_AUTH_USER'])
-        || $_SERVER['PHP_AUTH_USER'] !== $edit_user
-        || $_SERVER['PHP_AUTH_PW'] !== $edit_password) {
-        header('WWW-Authenticate: Basic realm="Edit Reach"');
-        http_response_code(401);
-        exit('Unauthorized');
-    }
+// Require HTTP Basic Auth — EDIT_PASSWORD must be set or editing is disabled
+$edit_user = ($_SERVER['EDIT_USER'] ?? getenv('EDIT_USER')) ?: 'admin';
+$edit_password = $_SERVER['EDIT_PASSWORD'] ?? getenv('EDIT_PASSWORD');
+if (!$edit_password) {
+    http_response_code(403);
+    exit('Editing is disabled (EDIT_PASSWORD not configured)');
 }
+if (!isset($_SERVER['PHP_AUTH_USER'])
+    || $_SERVER['PHP_AUTH_USER'] !== $edit_user
+    || $_SERVER['PHP_AUTH_PW'] !== $edit_password) {
+    header('WWW-Authenticate: Basic realm="Edit Reach"');
+    http_response_code(401);
+    exit('Unauthorized');
+}
+
+// CSRF protection — generate/verify a per-session token
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path'     => '/edit.php',
+    'secure'   => true,
+    'httponly'  => true,
+    'samesite' => 'Strict',
+]);
+ini_set('session.use_strict_mode', '1');
+session_start();
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$csrf_token = $_SESSION['csrf_token'];
 
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT)
     ?: filter_input(INPUT_POST, 'reach_id', FILTER_VALIDATE_INT);
@@ -46,6 +64,10 @@ $textarea_fields = ['description', 'difficulties', 'features', 'notes'];
 
 // Handle POST submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!isset($_POST['csrf_token']) || !hash_equals($csrf_token, $_POST['csrf_token'])) {
+        http_response_code(403);
+        exit('Invalid CSRF token');
+    }
     $sets = [];
     $params = [];
     foreach ($editable_fields as $field) {
@@ -85,6 +107,7 @@ include_header("Edit $name");
 echo '<h2>Edit: ' . htmlspecialchars($name) . '</h2>';
 echo '<form method="POST" action="/edit.php?id=' . $id . '" class="edit-form">';
 echo '<input type="hidden" name="reach_id" value="' . $id . '">';
+echo '<input type="hidden" name="csrf_token" value="' . htmlspecialchars($csrf_token) . '">';
 
 foreach ($editable_fields as $field) {
     $val = htmlspecialchars((string)($reach[$field] ?? ''));

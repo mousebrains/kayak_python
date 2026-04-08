@@ -100,7 +100,7 @@ def test_build_html_table_produces_table(session):
         mock.patch("kayak.cli.build._get_row_data", return_value=fake_row),
         mock.patch("kayak.cli.build._build_sparkline", return_value=""),
     ):
-        result = _build_html_table(reaches, COLS, {}, set(), {}, {})
+        result, letters = _build_html_table(reaches, COLS, {}, set(), {}, {})
 
     assert "<table" in result
     assert "</table>" in result
@@ -108,8 +108,8 @@ def test_build_html_table_produces_table(session):
     assert "Flow" in result
 
 
-def test_build_html_table_includes_flow_link(session):
-    """_build_html_table wraps flow values in a link to plot.php."""
+def test_build_html_table_includes_flow_value(session):
+    """_build_html_table renders flow values in the table."""
     reaches = _make_reaches(session, count=1)
     fake_row = {"display_name": "Sandy", "flow": 750.0}
 
@@ -117,9 +117,8 @@ def test_build_html_table_includes_flow_link(session):
         mock.patch("kayak.cli.build._get_row_data", return_value=fake_row),
         mock.patch("kayak.cli.build._build_sparkline", return_value=""),
     ):
-        result = _build_html_table(reaches, COLS, {}, set(), {}, {})
+        result, letters = _build_html_table(reaches, COLS, {}, set(), {}, {})
 
-    assert "plot.php" in result
     assert "750" in result
 
 
@@ -132,7 +131,7 @@ def test_build_html_table_includes_name_link(session):
         mock.patch("kayak.cli.build._get_row_data", return_value=fake_row),
         mock.patch("kayak.cli.build._build_sparkline", return_value=""),
     ):
-        result = _build_html_table(reaches, COLS, {}, set(), {}, {})
+        result, letters = _build_html_table(reaches, COLS, {}, set(), {}, {})
 
     assert "description.php" in result
     assert "White Salmon" in result

@@ -152,6 +152,7 @@ if ($source_id) {
 
     $plot_types = [
         'flow'        => 'Flow (CFS)',
+        'inflow'      => 'Inflow (CFS)',
         'gauge'       => 'Gage Height (Ft)',
         'temperature' => 'Temperature (F)',
     ];
@@ -232,20 +233,20 @@ $map_points = []; // label => "lat,lon" for combined map link
 $coord_fields = [];
 
 if ($gauge && $gauge['latitude'] !== null && $gauge['longitude'] !== null) {
-    $glat = number_format((float)$gauge['latitude'], 6, '.', '');
-    $glon = number_format((float)$gauge['longitude'], 6, '.', '');
+    $glat = number_format((float)$gauge['latitude'], 5, '.', '');
+    $glon = number_format((float)$gauge['longitude'], 5, '.', '');
     $coord_fields['Gauge Location'] = [$glat, $glon];
     $map_points['Gauge'] = "$glat,$glon";
 }
 if ($reach['latitude_start'] !== null && $reach['longitude_start'] !== null) {
-    $slat = number_format((float)$reach['latitude_start'], 6, '.', '');
-    $slon = number_format((float)$reach['longitude_start'], 6, '.', '');
+    $slat = number_format((float)$reach['latitude_start'], 5, '.', '');
+    $slon = number_format((float)$reach['longitude_start'], 5, '.', '');
     $coord_fields['Put-in'] = [$slat, $slon];
     $map_points['Put-in'] = "$slat,$slon";
 }
 if ($reach['latitude_end'] !== null && $reach['longitude_end'] !== null) {
-    $elat = number_format((float)$reach['latitude_end'], 6, '.', '');
-    $elon = number_format((float)$reach['longitude_end'], 6, '.', '');
+    $elat = number_format((float)$reach['latitude_end'], 5, '.', '');
+    $elon = number_format((float)$reach['longitude_end'], 5, '.', '');
     $coord_fields['Take-out'] = [$elat, $elon];
     $map_points['Take-out'] = "$elat,$elon";
 }
@@ -304,28 +305,13 @@ if (count($map_points) >= 1 || $geom) {
         }
     }
     echo '</table>';
-    echo '<div id="reach-map" style="height:350px;margin-top:1rem;border:1px solid #ccc"></div>';
-    echo '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>';
-    echo '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>';
-    echo '<script>';
-    echo 'var pts=' . $map_json . ';';
-    echo 'var track=' . $track_json . ';';
-    echo 'var trackColor=' . json_encode($track_color) . ';';
-    echo 'var map=L.map("reach-map");';
-    echo 'var street=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"OpenStreetMap",maxZoom:19});';
-    echo 'var topo=L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",{attribution:"OpenTopoMap",maxZoom:17});';
-    echo 'var satellite=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{attribution:"Esri",maxZoom:19});';
-    echo 'topo.addTo(map);';
-    echo 'L.control.layers({"Topo":topo,"Street":street,"Satellite":satellite}).addTo(map);';
-    echo 'var bounds=[];';
-    echo 'var colors={"Put-in":"green","Gauge":"blue","Take-out":"red"};';
-    echo 'for(var k in pts){var c=pts[k].split(",");var ll=[parseFloat(c[0]),parseFloat(c[1])];';
-    echo 'var ic=L.divIcon({className:"",html:\'<div style="background:\'+colors[k]+\';color:#fff;padding:2px 6px;border-radius:3px;font:bold 12px sans-serif;white-space:nowrap;cursor:pointer">\'+k+\'</div>\',iconAnchor:[0,12]});';
-    echo 'var m=L.marker(ll,{icon:ic}).addTo(map);bounds.push(ll);';
-    echo '(function(lat,lon){m.on("click",function(){window.open("https://www.google.com/maps?q="+lat+","+lon,"_blank")})})(ll[0],ll[1]);}';
-    echo 'if(track){L.polyline(track,{color:trackColor,weight:6,opacity:0.6}).addTo(map);track.forEach(function(p){bounds.push(p);})}';
-    echo 'if(bounds.length>1){map.fitBounds(bounds,{padding:[40,40]})}else if(bounds.length===1){map.setView(bounds[0],13)}';
-    echo '</script>';
+    $points_attr = htmlspecialchars($map_json, ENT_QUOTES, 'UTF-8');
+    $track_attr = htmlspecialchars($track_json, ENT_QUOTES, 'UTF-8');
+    $color_attr = htmlspecialchars($track_color, ENT_QUOTES, 'UTF-8');
+    echo '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous"/>';
+    echo '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>';
+    echo '<div id="reach-map" style="height:350px;margin-top:1rem;border:1px solid #ccc" data-points="' . $points_attr . '" data-track="' . $track_attr . '" data-track-color="' . $color_attr . '"></div>';
+    echo '<script src="/static/reach-map.js"></script>';
     echo '<table class="desc-table">';
 }
 
@@ -383,8 +369,15 @@ if ($gauge) {
         foreach ($sources as $src) {
             // Match source to a station page link by agency
             $matched = null;
+            $agency = $src['agency'] ?? '';
             foreach ($station_urls as $key => $info) {
-                if (stripos($src['agency'] ?? '', $key) !== false && !in_array($key, $shown_agencies)) {
+                if (in_array($key, $shown_agencies)) continue;
+                if (stripos($agency, $key) !== false) {
+                    $matched = $key;
+                    break;
+                }
+                // NWS sources match NWRFC gauge pages
+                if ($key === 'NWRFC' && stripos($agency, 'NWS') !== false) {
                     $matched = $key;
                     break;
                 }

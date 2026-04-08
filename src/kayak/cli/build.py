@@ -11,6 +11,10 @@ import csv
 import io
 import json
 import logging
+import os
+import shutil
+import tempfile
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -31,19 +35,95 @@ from kayak.utils.simplify import parse_geom, simplify
 
 logger = logging.getLogger(__name__)
 
-# CSS is read once from the source tree and inlined into every page.
-_CSS_PATH = Path(__file__).resolve().parent.parent / "web" / "static" / "style.css"
 
-# JS snippet to convert <time> elements to the browser's local timezone.
-_LOCAL_TIME_JS = """<script>
-document.querySelectorAll('time[datetime]').forEach(function(el){
-  var d=new Date(el.getAttribute('datetime'));
-  if(isNaN(d))return;
-  var mm=d.getMonth()+1,dd=d.getDate();
-  var hh=d.getHours(),mi=d.getMinutes();
-  el.textContent=(mm<10?'0':'')+mm+'/'+(dd<10?'0':'')+dd+' '+(hh<10?'0':'')+hh+':'+(mi<10?'0':'')+mi;
-});
-</script>"""
+def _atomic_write(path: Path, content: str) -> None:
+    """Write *content* to *path* atomically via temp file + rename."""
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        os.write(fd, content.encode())
+        os.close(fd)
+        fd = -1
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, path)
+    except BaseException:
+        if fd >= 0:
+            os.close(fd)
+        with suppress(OSError):
+            os.unlink(tmp)
+        raise
+
+
+PRIMARY_STATE = "Oregon"
+
+_STATE_ABBREVS = {
+    "Arizona": "AZ", "California": "CA", "Colorado": "CO", "Idaho": "ID",
+    "Kansas": "KS", "Montana": "MT", "Nevada": "NV", "New Mexico": "NM",
+    "Oregon": "OR", "Utah": "UT", "Washington": "WA", "Wyoming": "WY",
+}
+
+# States shown in the nav bar (Oregon + adjacent states)
+_NAV_STATES = {"Oregon", "Washington", "Idaho", "Nevada", "California"}
+
+# Links for adjacent state pages
+_STATE_LINKS: dict[str, list[tuple[str, str]]] = {
+    "Oregon": [
+        ("American Whitewater — Oregon", "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-ORE"),
+        ("Dreamflows — Oregon Coastal", "https://www.dreamflows.com/flows.php?zone=panw&page=prod&form=norm&mark=All#Oregon_Coastal_Rivers"),
+        ("Dreamflows — Oregon Central", "https://www.dreamflows.com/flows.php?zone=panw&page=prod&form=norm&mark=All#Oregon_Central_Rivers"),
+        ("Dreamflows — Oregon Eastern", "https://www.dreamflows.com/flows.php?zone=panw&page=prod&form=norm&mark=All#Oregon_Eastern_Rivers"),
+        ("Oregon Kayaking", "https://oregonkayaking.net"),
+        ("USGS Oregon Water Data", "https://waterdata.usgs.gov/state/oregon/"),
+        ("NW River Forecast Center", "https://www.nwrfc.noaa.gov/rfc/"),
+        ("USBR Hydromet", "https://www.usbr.gov/pn/hydromet/datamenu.html"),
+        ("Willamette Kayak and Canoe Club", "https://wkcc.org"),
+        ("Oregon Whitewater Association", "https://oregonwhitewater.org"),
+        ("Oregon Weather — Windy", "https://www.windy.com/?44.0,-120.5,7"),
+    ],
+    "Washington": [
+        ("American Whitewater — Washington", "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-WSH"),
+        ("Dreamflows — Washington", "https://www.dreamflows.com/flows.php?zone=panw&page=prod&form=norm&mark=All#Washington_Rivers"),
+        ("USGS Washington Water Data", "https://waterdata.usgs.gov/state/washington/"),
+        ("NW River Forecast Center", "https://www.nwrfc.noaa.gov/rfc/"),
+        ("USBR Hydromet", "https://www.usbr.gov/pn/hydromet/datamenu.html"),
+        ("Professor Paddle", "https://www.professorpaddle.com"),
+        ("Washington Weather — Windy", "https://www.windy.com/?47.5,-120.5,7"),
+        ("Washington Kayak Club", "http://wakayakclub.clubexpress.com"),
+    ],
+    "Idaho": [
+        ("American Whitewater — Idaho", "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-IDA"),
+        ("Dreamflows — Idaho", "https://www.dreamflows.com/flows.php?zone=panw&page=prod&form=norm&mark=All#Idaho_Rivers"),
+        ("USGS Idaho Water Data", "https://waterdata.usgs.gov/state/idaho/"),
+        ("NW River Forecast Center", "https://www.nwrfc.noaa.gov/rfc/"),
+        ("USBR Hydromet", "https://www.usbr.gov/pn/hydromet/datamenu.html"),
+        ("Idaho Rivers United", "https://www.idahorivers.org"),
+        ("Idaho Whitewater Association", "https://idahowhitewater.org"),
+        ("Idaho Dept. of Water Resources", "https://idwr.idaho.gov"),
+        ("Idaho Weather — Windy", "https://www.windy.com/?44.4,-114.7,7"),
+    ],
+    "Nevada": [
+        ("USGS Nevada Water Data", "https://waterdata.usgs.gov/state/nevada/"),
+        ("Colorado Basin River Forecast Center", "https://www.cbrfc.noaa.gov"),
+        ("American Whitewater — Nevada", "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-NEV"),
+        ("USBR Hydromet", "https://www.usbr.gov/pn/hydromet/datamenu.html"),
+        ("Nevada Weather — Windy", "https://www.windy.com/?39.5,-116.9,7"),
+    ],
+    "California": [
+        ("Dreamflows", "https://www.dreamflows.com"),
+        ("American Whitewater — California", "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-CAL"),
+        ("USGS California Water Data", "https://waterdata.usgs.gov/state/california/"),
+        ("California Nevada River Forecast Center", "https://www.cnrfc.noaa.gov"),
+        ("California Creeks", "https://cacreeks.com"),
+        ("Gold Country Paddlers", "https://goldcountrypaddlers.org"),
+        ("California Weather — Windy", "https://www.windy.com/?37.2,-119.5,6"),
+    ],
+}
+
+# CSS is read once from the source tree and inlined into every page.
+_STATIC_DIR = Path(__file__).resolve().parent.parent / "web" / "static"
+_CSS_PATH = _STATIC_DIR / "style.css"
+_JS_PATH = _STATIC_DIR / "levels.js"
+
+_LEVELS_JS = '<script src="/static/levels.js" defer></script>'
 
 
 def _load_css() -> str:
@@ -73,7 +153,7 @@ def _get_row_data(
     row: dict = {
         "reach_id": reach.id,
         "display_name": reach.display_name or "",
-        "gauge_location": (reach.gauge.location if reach.gauge else "") or "",
+        "gauge_location": reach.description or (reach.gauge.location if reach.gauge else "") or "",
         "drainage": reach.basin or "",
         "class": "",
         "state": ", ".join(s.name for s in reach.states) if reach.states else "",
@@ -94,16 +174,24 @@ def _get_row_data(
                 ("flow", DataType.flow),
                 ("gage", DataType.gauge),
                 ("temperature", DataType.temperature),
+                ("inflow", DataType.inflow),
             ]:
                 latest = all_latest.get((source_id, dtype))
                 if latest and latest.value is not None:
-                    row[dtype_name] = latest.value
+                    # Display inflow in the flow column if no direct flow
+                    display_name = dtype_name
+                    if dtype_name == "inflow" and "flow" not in row:
+                        display_name = "flow"
+                    elif dtype_name == "inflow":
+                        continue
+                    row[display_name] = latest.value
                     row["time"] = latest.observed_at
-                    # Classify flow/gage level
-                    if dtype_name in ("flow", "gage"):
-                        level = classify_level(reach, dtype, latest.value)
+                    # Classify flow/gage level (inflow uses flow thresholds)
+                    classify_dtype = DataType.flow if dtype == DataType.inflow else dtype
+                    if display_name in ("flow", "gage"):
+                        level = classify_level(reach, classify_dtype, latest.value)
                         if level:
-                            row[f"{dtype_name}_level"] = str(level)
+                            row[f"{display_name}_level"] = str(level)
                             if "status" not in row:
                                 row["status"] = str(level)
 
@@ -247,7 +335,7 @@ _TD_CLASS = {
 _SECONDARY_FIELDS = {"drainage", "class", "state"}
 
 # Fields whose cells are gauge-specific and can be consolidated with rowspan
-_GAUGE_FIELDS = {"gauge_location", "time", "flow", "gage", "temperature", "status"}
+_GAUGE_FIELDS = {"time", "flow", "gage", "temperature", "status"}
 
 
 def _levels_key(reach: Reach) -> tuple:
@@ -261,8 +349,13 @@ def _levels_key(reach: Reach) -> tuple:
 
 
 def _build_html_table(reaches, columns, primary_source_ids, calculated_ids,
-                      all_latest, sparkline_obs, *, is_all_page: bool = False) -> str:
-    """Build the <table> body for a set of reaches using pre-loaded data."""
+                      all_latest, sparkline_obs, *, is_all_page: bool = False
+                      ) -> tuple[str, list[str]]:
+    """Build the <table> body for a set of reaches using pre-loaded data.
+
+    Returns (html, letters) where letters is the ordered list of first-letters
+    that appear in the visible rows (used for the letter navigation bar).
+    """
     lines: list[str] = []
     lines.append('<table class="levels">')
     lines.append("<thead><tr>")
@@ -313,12 +406,24 @@ def _build_html_table(reaches, columns, primary_source_ids, calculated_ids,
         i = j
 
     # Phase 3: Render rows
+    prev_letter = ""
+    letters: list[str] = []
     for idx, (reach, row, sparkline) in enumerate(visible):
         reach_id = reach.id
         span = group_span[idx]
         is_first = span > 0
-        tr_cls = ' class="stale"' if row.get("stale") else ""
-        lines.append(f"<tr{tr_cls}>")
+
+        # Track first-letter groups for the letter navigation bar
+        sort_name = reach.sort_name or reach.display_name or ""
+        cur_letter = sort_name[0].upper() if sort_name else ""
+        letter_id = ""
+        if cur_letter and cur_letter != prev_letter:
+            letter_id = f' id="letter-{cur_letter}"'
+            letters.append(cur_letter)
+            prev_letter = cur_letter
+
+        stale = " stale" if row.get("stale") else ""
+        lines.append(f'<tr{letter_id} class="clickable-row{stale}" data-href="/description.php?id={reach_id}">')
 
         for col in columns:
             if "h" not in col["use"] or col["type"] == "noop":
@@ -341,15 +446,12 @@ def _build_html_table(reaches, columns, primary_source_ids, calculated_ids,
                 val = f'<a href="/description.php?id={reach_id}">{val}</a>{est}'
             elif col["type"] == "flow" and isinstance(val, (int, float)):
                 lvl_cls = f' class="level-{row["flow_level"]}"' if row.get("flow_level") else ""
-                val = (
-                    f'<a{lvl_cls} href="/plot.php?type=flow&id={reach_id}">{val:,.0f}</a>'
-                    f"{sparkline}"
-                )
+                val = f'<span{lvl_cls}>{val:,.0f}</span>{sparkline}'
             elif col["type"] == "gage" and isinstance(val, (int, float)):
                 lvl_cls = f' class="level-{row["gage_level"]}"' if row.get("gage_level") else ""
-                val = f'<a{lvl_cls} href="/plot.php?type=gage&id={reach_id}">{val:,.1f}</a>'
+                val = f'<span{lvl_cls}>{val:,.1f}</span>'
             elif col["type"] == "temp" and isinstance(val, (int, float)):
-                val = f'<a href="/plot.php?type=temp&id={reach_id}">{val:.1f}</a>'
+                val = f'{val:.1f}'
             elif col["type"] == "date" and isinstance(val, datetime):
                 iso = val.strftime("%Y-%m-%dT%H:%M:%SZ")
                 display = val.strftime("%m/%d %H:%M")
@@ -366,23 +468,7 @@ def _build_html_table(reaches, columns, primary_source_ids, calculated_ids,
         lines.append("</tr>")
 
     lines.append("</tbody></table>")
-    return "\n".join(lines)
-
-
-def _build_reach_directory(reaches) -> str:
-    """Build a collapsible alphabetical directory of all reaches."""
-    lines: list[str] = []
-    lines.append('<details class="reach-dir">')
-    lines.append(f'<summary>All Reaches ({len(reaches)})</summary>')
-    lines.append('<ul class="reach-list">')
-    for reach in reaches:
-        name = reach.display_name or reach.name
-        lines.append(
-            f'<li><a href="/description.php?id={reach.id}">{name}</a></li>'
-        )
-    lines.append('</ul>')
-    lines.append('</details>')
-    return "\n".join(lines)
+    return "\n".join(lines), letters
 
 
 def _build_geojson(
@@ -431,19 +517,36 @@ def _build_geojson(
     return json.dumps(collection, separators=(",", ":"))
 
 
+def _build_nav(states: list[str], active_state: str = "") -> str:
+    """Build abbreviation-based nav bar. OR links to index.html, others to {State}.html."""
+    links: list[str] = []
+    links.append('<a href="/map.html">Map</a>')
+    for s in states:
+        if s not in _NAV_STATES:
+            continue
+        abbrev = _STATE_ABBREVS.get(s, s)
+        cls = ' class="active"' if s == active_state else ""
+        href = "/index.html" if s == PRIMARY_STATE else f"/{s}.html"
+        links.append(f'<a href="{href}"{cls}>{abbrev}</a>')
+    links.append('<a href="/picker.php">Picker</a>')
+    links.append('<a href="https://www.windy.com/?44.0,-120.5,7">OR Weather</a>')
+    return "\n    ".join(links)
+
+
+def _build_letter_nav(letters: list[str]) -> str:
+    """Build an A-Z letter navigation bar linking to #letter-X anchors."""
+    if not letters:
+        return ""
+    links = " ".join(f'<a href="#letter-{ch}">{ch}</a>' for ch in letters)
+    return f'<nav class="letter-nav" aria-label="Jump to river by letter">{links}</nav>'
+
+
 def _build_page(table_html: str, css: str, states: list[str],
                 current_state: str, title: str,
-                directory_html: str = "") -> str:
+                letters: list[str] | None = None) -> str:
     """Wrap the table HTML in a complete HTML document with inlined CSS."""
-    nav_links: list[str] = []
-    all_cls = ' class="active"' if not current_state else ""
-    nav_links.append(f'<a href="/all.html"{all_cls}>All</a>')
-    nav_links.append('<a href="/map.html">Map</a>')
-    for s in states:
-        cls = ' class="active"' if s == current_state else ""
-        nav_links.append(f'<a href="/{s}.html"{cls}>{s}</a>')
-
-    nav_html = "\n    ".join(nav_links)
+    nav_html = _build_nav(states, active_state=current_state)
+    letter_nav_html = _build_letter_nav(letters) if letters else ""
     now_utc = datetime.now(UTC)
     now_iso = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
     now_display = now_utc.strftime("%Y-%m-%d %H:%M UTC")
@@ -468,10 +571,10 @@ def _build_page(table_html: str, css: str, states: list[str],
   <nav>
     {nav_html}
   </nav>
+  {letter_nav_html}
 </header>
 <main>
 {table_html}
-{directory_html}
 <div style="font-size:.75rem;color:#555;margin-top:1rem;line-height:1.6">
 <p><b>Status:</b>
 <span class="level-low">Low</span> &ndash;
@@ -482,43 +585,31 @@ def _build_page(table_html: str, css: str, states: list[str],
 <p style="font-size:.7rem;color:#888;margin-top:.5rem">Updated <time datetime="{now_iso}">{now_display}</time></p>
 </main>
 <footer>
-Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.
+Data sourced from USGS, NOAA, USACE, USBR, and other government agencies. <a href="/privacy.php">Privacy Policy</a>
 </footer>
-{_LOCAL_TIME_JS}
-<script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/static/sw.js')</script>
+{_LEVELS_JS}
 </body>
 </html>"""
 
 
 # ---------------------------------------------------------------------------
-# Landing page — lightweight state index
+# Placeholder page — non-primary states
 # ---------------------------------------------------------------------------
 
-def _build_landing_page(css: str, states: list[str]) -> str:
-    """Build index.html as a simple grid of state links."""
-    nav_links: list[str] = []
-    nav_links.append('<a href="/map.html">Map</a>')
-    for s in states:
-        nav_links.append(f'<a href="/{s}.html">{s}</a>')
-    nav_links.append('<a href="/all.html">All</a>')
-    nav_html = "\n    ".join(nav_links)
-
-    state_cards: list[str] = []
-    for s in states:
-        state_cards.append(f'<a href="/{s}.html" class="state-card">{s}</a>')
-    state_cards.append('<a href="/all.html" class="state-card">All States</a>')
-    grid_html = "\n".join(state_cards)
-
-    now_utc = datetime.now(UTC)
-    now_iso = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
-    now_display = now_utc.strftime("%Y-%m-%d %H:%M UTC")
-
+def _build_placeholder_page(css: str, states: list[str], state: str) -> str:
+    """Build a links page for a non-primary state."""
+    nav_html = _build_nav(states, active_state=state)
+    links = _STATE_LINKS.get(state, [])
+    link_items = "\n".join(
+        f'<li><a href="{url}">{label}</a></li>' for label, url in links
+    )
+    links_html = f"<ul>\n{link_items}\n</ul>" if links else ""
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>River Levels</title>
+<title>{state} River Levels</title>
 <link rel="manifest" href="/static/manifest.json">
 <meta name="theme-color" content="#2060A0">
 <link rel="icon" href="/static/favicon.ico">
@@ -535,17 +626,12 @@ def _build_landing_page(css: str, states: list[str]) -> str:
   </nav>
 </header>
 <main>
-<div class="state-grid">
-{grid_html}
-</div>
-<p style="font-size:.7rem;color:#888;margin-top:.5rem">Updated <time datetime="{now_iso}">{now_display}</time></p>
-<p style="margin-top:1rem"><a href="https://wkcc.org">Willamette Kayak and Canoe Club</a></p>
+<h2>{state}</h2>
+{links_html}
 </main>
 <footer>
-Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.
+Data sourced from USGS, NOAA, USACE, USBR, and other government agencies. <a href="/privacy.php">Privacy Policy</a>
 </footer>
-{_LOCAL_TIME_JS}
-<script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/static/sw.js')</script>
 </body>
 </html>"""
 
@@ -555,13 +641,8 @@ Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.
 # ---------------------------------------------------------------------------
 
 def _build_map_page(css: str, states: list[str]) -> str:
-    """Build map.html with an interactive Leaflet map of all reaches."""
-    nav_links: list[str] = []
-    nav_links.append('<a href="/all.html">All</a>')
-    nav_links.append('<a href="/map.html" class="active">Map</a>')
-    for s in states:
-        nav_links.append(f'<a href="/{s}.html">{s}</a>')
-    nav_html = "\n    ".join(nav_links)
+    """Build map.html with an interactive Leaflet map of Oregon reaches."""
+    nav_html = _build_nav(states)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -573,7 +654,7 @@ def _build_map_page(css: str, states: list[str]) -> str:
 <meta name="theme-color" content="#2060A0">
 <link rel="icon" href="/static/favicon.ico">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous"/>
 <style>
 {css}
 #map {{height:calc(100vh - 5rem);width:100%;}}
@@ -593,54 +674,10 @@ main {{padding:0;max-width:none;}}
 <div id="map"></div>
 </main>
 <footer>
-Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.
+Data sourced from USGS, NOAA, USACE, USBR, and other government agencies. <a href="/privacy.php">Privacy Policy</a>
 </footer>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>
-(function(){{
-var map=L.map('map');
-var topo=L.tileLayer('https://{{s}}.tile.opentopomap.org/{{z}}/{{x}}/{{y}}.png',{{
-  maxZoom:17,attribution:'OpenTopoMap'}});
-var street=L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png',{{
-  maxZoom:19,attribution:'OpenStreetMap'}});
-var sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{{z}}/{{y}}/{{x}}',{{
-  maxZoom:18,attribution:'Esri'}});
-street.addTo(map);
-L.control.layers({{'Topo':topo,'Street':street,'Satellite':sat}}).addTo(map);
-
-var colors={{okay:'#4caf50',low:'#e8a735',high:'#e53935',unknown:'#2196F3'}};
-
-fetch('/static/reaches.geojson').then(function(r){{return r.json()}}).then(function(data){{
-  var geojsonLayer=L.geoJSON(data,{{
-    style:function(f){{
-      return {{color:colors[f.properties.status]||colors.unknown,weight:3,opacity:0.7}};
-    }},
-    pointToLayer:function(f,ll){{
-      return L.circleMarker(ll,{{radius:6,fillColor:colors[f.properties.status]||colors.unknown,
-        color:'#333',weight:1,fillOpacity:0.8}});
-    }},
-    onEachFeature:function(f,layer){{
-      var p=f.properties;
-      var badge='<span style="color:'+( colors[p.status]||colors.unknown)+'">&#9679;</span> '+p.status;
-      layer.bindPopup('<b><a href="/description.php?id='+p.id+'">'+p.name+'</a></b><br>'+badge);
-    }}
-  }}).addTo(map);
-  if(data.features.length)map.fitBounds(geojsonLayer.getBounds().pad(0.05));else map.setView([43.5,-115],5);
-}});
-
-var legend=L.control({{position:'bottomright'}});
-legend.onAdd=function(){{
-  var d=L.DomUtil.create('div','legend');
-  d.innerHTML='<b>Status</b><br>'+
-    '<i style="background:#4caf50"></i>Okay<br>'+
-    '<i style="background:#e8a735"></i>Low<br>'+
-    '<i style="background:#e53935"></i>High<br>'+
-    '<i style="background:#2196F3"></i>Unknown';
-  return d;
-}};
-legend.addTo(map);
-}})();
-</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+<script src="/static/map.js"></script>
 </body>
 </html>"""
 
@@ -670,47 +707,47 @@ def build(args):
     session = get_session()
     try:
         columns = _get_builder_columns()
-        all_reaches = reaches_query(session, visible_only=True, with_gauge=True,
-                                    sort_by_state=True)
         states = all_state_names(session)
         css = _load_css()
 
-        print(f"Building pages for {len(all_reaches)} reaches across {len(states)} states")
+        # Oregon reaches — used for index.html, GeoJSON, CSV, text
+        oregon_reaches = reaches_query(session, state_name=PRIMARY_STATE,
+                                       visible_only=True, with_gauge=True)
 
-        # Pre-load data for all reaches (used by all-page and GeoJSON)
-        all_gauge_ids = [r.gauge_id for r in all_reaches if r.gauge_id]
-        all_primary_source_ids = get_all_primary_source_ids(session, all_gauge_ids)
-        all_source_ids = list(all_primary_source_ids.values())
-        all_calculated_ids = get_calculated_source_ids(session, all_source_ids)
-        all_latest = get_all_latest(session, all_source_ids)
+        print(f"Building Oregon-focused site: {len(oregon_reaches)} reaches")
 
-        # GeoJSON → static/reaches.geojson
+        # Pre-load data for Oregon reaches
+        gauge_ids = [r.gauge_id for r in oregon_reaches if r.gauge_id]
+        primary_source_ids = get_all_primary_source_ids(session, gauge_ids)
+        source_ids = list(primary_source_ids.values())
+        calculated_ids = get_calculated_source_ids(session, source_ids)
+        all_latest = get_all_latest(session, source_ids)
+
+        # Static assets
         static_dir = output_dir / "static"
         static_dir.mkdir(parents=True, exist_ok=True)
-        geojson = _build_geojson(all_reaches, all_primary_source_ids,
-                                 all_calculated_ids, all_latest)
-        (static_dir / "reaches.geojson").write_text(geojson)
+        shutil.copy2(_JS_PATH, static_dir / "levels.js")
+
+        # GeoJSON → static/reaches.geojson (Oregon only)
+        geojson = _build_geojson(oregon_reaches, primary_source_ids,
+                                 calculated_ids, all_latest)
+        _atomic_write(static_dir / "reaches.geojson", geojson)
         logger.info("GeoJSON: %d bytes", len(geojson))
 
         # Map page → map.html
         map_html = _build_map_page(css, states)
-        (output_dir / "map.html").write_text(map_html)
+        _atomic_write(output_dir / "map.html", map_html)
 
-        # Landing page → index.html (lightweight state list)
-        landing_html = _build_landing_page(css, states)
-        (output_dir / "index.html").write_text(landing_html)
+        # index.html = Oregon levels table
+        _build_and_write(session, oregon_reaches, columns, PRIMARY_STATE, states,
+                         css, output_dir, filename="index.html",
+                         preloaded=(primary_source_ids, calculated_ids, all_latest))
 
-        # All-states page → all.html
-        _build_and_write(session, all_reaches, columns, "", states, css, output_dir,
-                         is_all_page=True,
-                         preloaded=(all_primary_source_ids, all_calculated_ids, all_latest))
-
-        # Per-state pages
-        for state in states:
-            state_reaches = reaches_query(session, state_name=state, visible_only=True,
-                                        with_gauge=True)
-            if state_reaches:
-                _build_and_write(session, state_reaches, columns, state, states, css, output_dir)
+        # Links pages for all nav states (including Oregon)
+        for state in _NAV_STATES:
+            if state in states:
+                links_page = _build_placeholder_page(css, states, state)
+                _atomic_write(output_dir / f"{state}.html", links_page)
 
         print(f"Build complete → {output_dir}")
     finally:
@@ -720,11 +757,13 @@ def build(args):
 def _build_and_write(session, reaches, columns, state: str,
                      states: list[str], css: str, output_dir: Path,
                      *, is_all_page: bool = False,
-                     preloaded: tuple | None = None):
+                     preloaded: tuple | None = None,
+                     filename: str | None = None):
     """Build and write CSV, text, and HTML for a state (or all)."""
     suffix = f"_{state}" if state else ""
     label = state or "all"
-    filename = f"{state}.html" if state else "all.html"
+    if filename is None:
+        filename = f"{state}.html" if state else "all.html"
     title = f"{state} River Levels" if state else "River Levels"
 
     logger.info("Building %s: %d reaches", label, len(reaches))
@@ -741,22 +780,23 @@ def _build_and_write(session, reaches, columns, state: str,
         all_latest = get_all_latest(session, source_ids)
     since_48h = datetime.now(UTC) - timedelta(hours=48)
     sparkline_obs = get_bulk_observations(session, source_ids, DataType.flow, since_48h)
+    inflow_obs = get_bulk_observations(session, source_ids, DataType.inflow, since_48h)
+    for sid, obs in inflow_obs.items():
+        sparkline_obs.setdefault(sid, obs)
 
     # CSV
     csv_content = _build_csv(reaches, columns, state,
                              primary_source_ids, calculated_ids, all_latest)
-    (output_dir / f"levels{suffix}.csv").write_text(csv_content)
+    _atomic_write(output_dir / f"levels{suffix}.csv", csv_content)
 
     # Text
     text_content = _build_text(reaches, columns, state,
                                primary_source_ids, calculated_ids, all_latest)
-    (output_dir / f"levels{suffix}.text").write_text(text_content)
+    _atomic_write(output_dir / f"levels{suffix}.text", text_content)
 
     # HTML — complete self-contained page
-    table_html = _build_html_table(reaches, columns, primary_source_ids,
-                                   calculated_ids, all_latest, sparkline_obs,
-                                   is_all_page=is_all_page)
-    directory_html = _build_reach_directory(reaches)
-    page_html = _build_page(table_html, css, states, state, title,
-                            directory_html=directory_html)
-    (output_dir / filename).write_text(page_html)
+    table_html, letters = _build_html_table(reaches, columns, primary_source_ids,
+                                            calculated_ids, all_latest, sparkline_obs,
+                                            is_all_page=is_all_page)
+    page_html = _build_page(table_html, css, states, state, title, letters=letters)
+    _atomic_write(output_dir / filename, page_html)
