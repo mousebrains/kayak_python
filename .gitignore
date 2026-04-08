@@ -30,3 +30,4 @@ static/reaches.geojson
 # OSM data cache
 OSM-cache/
 
+NHD-cache/
