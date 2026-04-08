@@ -477,6 +477,45 @@ if ($gauge) {
     echo '</table>';
 }
 
+// Map
+$map_points = [];
+if ($reach['latitude_start'] !== null && $reach['longitude_start'] !== null) {
+    $map_points['Put-in'] = number_format((float)$reach['latitude_start'], 6, '.', '')
+        . ',' . number_format((float)$reach['longitude_start'], 6, '.', '');
+}
+if ($reach['latitude_end'] !== null && $reach['longitude_end'] !== null) {
+    $map_points['Take-out'] = number_format((float)$reach['latitude_end'], 6, '.', '')
+        . ',' . number_format((float)$reach['longitude_end'], 6, '.', '');
+}
+if ($gauge && $gauge['latitude'] !== null && $gauge['longitude'] !== null) {
+    $map_points['Gauge'] = number_format((float)$gauge['latitude'], 6, '.', '')
+        . ',' . number_format((float)$gauge['longitude'], 6, '.', '');
+}
+
+if ($map_points || $reach['geom']) {
+    $track = null;
+    if (!empty($reach['geom'])) {
+        $track = [];
+        foreach (explode(',', $reach['geom']) as $pair) {
+            $parts = preg_split('/\s+/', trim($pair));
+            if (count($parts) === 2) {
+                $track[] = [(float)$parts[1], (float)$parts[0]];
+            }
+        }
+    }
+
+    echo '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>';
+    echo '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>';
+    $pts_json = htmlspecialchars(json_encode($map_points), ENT_QUOTES, 'UTF-8');
+    echo '<div id="reach-map" style="height:400px;margin-top:1rem;border:1px solid #ccc" data-points="' . $pts_json . '"';
+    if ($track) {
+        $track_json = htmlspecialchars(json_encode($track), ENT_QUOTES, 'UTF-8');
+        echo ' data-track="' . $track_json . '"';
+    }
+    echo '></div>';
+    echo '<script src="/static/reach-map.js"></script>';
+}
+
 // Footer links
 echo '<p style="margin-top:1rem">';
 echo '<a href="/description.php?id=' . $id . '">Description</a>';
