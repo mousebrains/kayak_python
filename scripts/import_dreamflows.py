@@ -3,7 +3,8 @@
 
 Two-phase approach:
   1. Fetch: scrape Dreamflows xlist pages per state, extract reach info
-     and AW IDs. Then fetch map geometries for each reach. Save to JSON cache.
+     and AW IDs. Then fetch map geometries for each reach. Save to the
+     dreamflows_* tables in the gauge metadata cache DB.
   2. Process: match cached Dreamflows reaches to our DB via aw_id, update
      geom (river track) and other metadata.
 
@@ -33,7 +34,9 @@ if not sys.stdout.line_buffering:
         errors=sys.stdout.errors, line_buffering=True,
     )
 
-DEFAULT_CACHE = os.path.join(os.path.dirname(__file__), "..", "data", "dreamflows_cache.json")
+DEFAULT_METADATA_DB = os.path.join(
+    os.path.dirname(__file__), "..", "Gauge-metadata-cache", "gauges.db"
+)
 DEFAULT_DB = os.path.join(os.path.dirname(__file__), "..", "..", "DB", "kayak.db")
 
 # Dreamflows state pages
@@ -53,6 +56,32 @@ STATE_PAGES = {
 
 BASE_URL = "https://www.dreamflows.com"
 
+CREATE_TABLES = """
+CREATE TABLE IF NOT EXISTS dreamflows_site (
+    id            INTEGER PRIMARY KEY,
+    name          TEXT
+);
+CREATE TABLE IF NOT EXISTS dreamflows_run (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    description   TEXT,
+    state         TEXT,
+    aw_ids        TEXT,
+    site_id       INTEGER,
+    map_num       INTEGER
+);
+CREATE TABLE IF NOT EXISTS dreamflows_map (
+    key           TEXT PRIMARY KEY,
+    site_id       INTEGER,
+    map_num       INTEGER,
+    segments      TEXT,
+    markers       TEXT,
+    error         TEXT
+);
+CREATE TABLE IF NOT EXISTS dreamflows_fetched_state (
+    abbreviation  TEXT PRIMARY KEY
+);
+"""
+
 
 def _log(msg):
     from datetime import datetime, timezone
@@ -61,10 +90,7 @@ def _log(msg):
 
 
 def fetch_url(url, delay=0):
-    """Fetch a URL with throttling and retries.
-
-    Returns (content, was_rate_limited). On 403, backs off exponentially.
-    """
+    """Fetch a URL with throttling and retries."""
     if delay > 0:
         time.sleep(delay)
     req = urllib.request.Request(url, headers={
@@ -100,14 +126,10 @@ def fetch_url(url, delay=0):
 # ---------------------------------------------------------------------------
 
 def parse_xlist_page(html, state):
-    """Parse a Dreamflows xlist page and extract sites and runs.
-
-    Returns list of dicts with site and run info.
-    """
+    """Parse a Dreamflows xlist page and extract sites and runs."""
     sites = []
     runs = []
 
-    # Extract gauge sites: <span id="Site769"><b>Williamson - Near Klamath Agency</b></span>
     for m in re.finditer(
         r'<span id="Site(\d+)"><b>([^<]+)</b></span>', html
     ):
@@ -115,18 +137,12 @@ def parse_xlist_page(html, state):
         site_name = m.group(2).strip()
         sites.append({"id": site_id, "name": site_name})
 
-    # Extract runs with their reach map links and AW IDs
-    # Each run is in a pind1 div, with optional reach map and AW links
-    # Pattern: reach description text followed by optional map and AW links
-
-    # Find all reach map links with their surrounding context
-    # Runs appear as indented text with description, then map/AW links
     run_pattern = re.compile(
         r'<img src=.?/images/pixelshim\.gif.?[^>]*>'
         r'\s*(?:<a[^>]*><img src=.?/images/querySym\.gif.?[^>]*></a>\s*)?'
-        r'([^<]+?)'  # run description text
+        r'([^<]+?)'
         r'(?:\s*&nbsp;)*'
-        r'(.*?)'  # links section
+        r'(.*?)'
         r'<br>',
         re.DOTALL,
     )
@@ -135,8 +151,6 @@ def parse_xlist_page(html, state):
         desc = m.group(1).strip()
         links_section = m.group(2)
 
-        # Parse run description: "River Name - Section (miles, class, sources)"
-        # e.g. "Klamath River - Keno Dam to Moonshine Falls (III+, 8.4 miles, AWA)"
         run_info = {
             "description": desc,
             "state": state,
@@ -144,34 +158,17 @@ def parse_xlist_page(html, state):
             "df_reach_maps": [],
         }
 
-        # Extract AW IDs from links
         for aw_match in re.finditer(
             r'americanwhitewater\.org/content/River/detail/id/(\d+)', links_section
         ):
             run_info["aw_ids"].append(int(aw_match.group(1)))
 
-        # Extract reach map links (single reach maps, not composite)
         for map_match in re.finditer(
             r"reachMap/index\.php\?rid=(\d+)&(?:amp;)?num=(\d+)", links_section
         ):
             rid = int(map_match.group(1))
             num = int(map_match.group(2))
             run_info["df_reach_maps"].append({"rid": rid, "num": num})
-
-        # Extract miles and class from description
-        paren_match = re.search(r'\(([^)]+)\)\s*$', desc)
-        if paren_match:
-            paren_text = paren_match.group(1)
-            miles_m = re.search(r'([\d.]+)\s*miles?', paren_text)
-            if miles_m:
-                run_info["miles"] = float(miles_m.group(1))
-            # Class is typically the first part before miles
-            class_parts = paren_text.split(',')
-            for part in class_parts:
-                part = part.strip()
-                if re.match(r'^[IV]+', part) or part.startswith('Class'):
-                    run_info["class"] = part
-                    break
 
         if run_info["aw_ids"] or run_info["df_reach_maps"]:
             runs.append(run_info)
@@ -184,16 +181,12 @@ def parse_xlist_page(html, state):
 # ---------------------------------------------------------------------------
 
 def parse_map_page(html):
-    """Parse a Dreamflows reach map page and extract geometry and markers.
-
-    Returns dict with coordinates, markers, etc.
-    """
+    """Parse a Dreamflows reach map page and extract geometry and markers."""
     result = {
         "segments": [],
         "markers": [],
     }
 
-    # Extract coordinate arrays: var reachRunCoordinatesN = [ L.latLng(lat,lng), ... ];
     for seg_match in re.finditer(
         r'var reachRunCoordinates(\d+)\s*=\s*\[(.*?)\];',
         html,
@@ -205,7 +198,6 @@ def parse_map_page(html):
         for c in re.finditer(r'L\.latLng\(([-\d.]+),([-\d.]+)\)', coord_text):
             coords.append([float(c.group(1)), float(c.group(2))])
 
-        # Check if dashed (portage/road)
         style_pattern = rf"reachRunCoordinates{seg_num}.*?dashArray"
         is_dashed = bool(re.search(style_pattern, html, re.DOTALL))
 
@@ -216,7 +208,6 @@ def parse_map_page(html):
                 "dashed": is_dashed,
             })
 
-    # Extract markers: createMarker(layer, zoffset, type, lat, lng, hover, click)
     for mk in re.finditer(
         r"createMarker\(\w+,\s*\d+,\s*'(\w+)',\s*([-\d.]+),\s*([-\d.]+),\s*'([^']*)'",
         html,
@@ -236,24 +227,27 @@ def parse_map_page(html):
 
 
 # ---------------------------------------------------------------------------
-# Phase 1: Fetch and cache
+# Phase 1: Fetch and store to metadata DB
 # ---------------------------------------------------------------------------
 
-def fetch_and_cache(cache_path, states, delay, fetch_geom, retry_errors=False):
-    """Fetch Dreamflows data and save to cache."""
-    cache = {}
-    if os.path.exists(cache_path):
-        with open(cache_path) as f:
-            cache = json.load(f)
+def fetch_and_store(meta_db, states, delay, fetch_geom, retry_errors=False):
+    """Fetch Dreamflows data and save to metadata DB."""
+    meta_db.executescript(CREATE_TABLES)
 
-    cache.setdefault("sites", {})
-    cache.setdefault("runs", [])
-    cache.setdefault("maps", {})
-    cache.setdefault("fetched_states", [])
+    # Load already-fetched states
+    fetched_states = {
+        r[0] for r in meta_db.execute("SELECT abbreviation FROM dreamflows_fetched_state")
+    }
+    # Load existing AW IDs to avoid duplicate runs
+    existing_aw_ids = set()
+    for row in meta_db.execute("SELECT aw_ids FROM dreamflows_run"):
+        if row[0]:
+            for aid in json.loads(row[0]):
+                existing_aw_ids.add(aid)
 
     # Phase 1a: Fetch xlist pages
     for abbr, page in states.items():
-        if abbr in cache["fetched_states"] and not fetch_geom:
+        if abbr in fetched_states and not fetch_geom:
             _log(f"Skipping {abbr} xlist (already cached)")
             continue
 
@@ -271,47 +265,61 @@ def fetch_and_cache(cache_path, states, delay, fetch_geom, retry_errors=False):
         _log(f"  {abbr}: {len(sites)} sites, {len(runs)} runs with AW/map links")
 
         for s in sites:
-            cache["sites"][str(s["id"])] = s
-
-        # Add runs, avoiding duplicates by checking AW IDs
-        existing_aw_ids = set()
-        for r in cache["runs"]:
-            for aw_id in r.get("aw_ids", []):
-                existing_aw_ids.add(aw_id)
+            meta_db.execute(
+                "INSERT OR REPLACE INTO dreamflows_site (id, name) VALUES (?, ?)",
+                (s["id"], s["name"]),
+            )
 
         added = 0
         for r in runs:
-            # Check if this run's AW IDs are already in cache
             if r["aw_ids"] and all(aid in existing_aw_ids for aid in r["aw_ids"]):
                 continue
-            cache["runs"].append(r)
+            aw_ids_json = json.dumps(r.get("aw_ids", []))
+            for dm in r.get("df_reach_maps", []):
+                meta_db.execute(
+                    "INSERT INTO dreamflows_run (description, state, aw_ids, site_id, map_num) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (r.get("description"), r.get("state"), aw_ids_json,
+                     dm.get("rid"), dm.get("num")),
+                )
+            # If run has no reach maps but has AW IDs, still store it
+            if not r.get("df_reach_maps") and r.get("aw_ids"):
+                meta_db.execute(
+                    "INSERT INTO dreamflows_run (description, state, aw_ids) "
+                    "VALUES (?, ?, ?)",
+                    (r.get("description"), r.get("state"), aw_ids_json),
+                )
             for aid in r["aw_ids"]:
                 existing_aw_ids.add(aid)
             added += 1
         _log(f"  Added {added} new runs")
 
-        if abbr not in cache["fetched_states"]:
-            cache["fetched_states"].append(abbr)
-
-        _save_cache(cache, cache_path)
+        meta_db.execute(
+            "INSERT OR IGNORE INTO dreamflows_fetched_state (abbreviation) VALUES (?)",
+            (abbr,),
+        )
+        meta_db.commit()
 
     # Phase 1b: Fetch map geometries
     if fetch_geom:
-        # Clear error entries if retrying
         if retry_errors:
-            error_keys = [k for k, v in cache["maps"].items() if "error" in v]
-            for k in error_keys:
-                del cache["maps"][k]
-            if error_keys:
-                _log(f"Cleared {len(error_keys)} error entries for retry")
+            deleted = meta_db.execute(
+                "DELETE FROM dreamflows_map WHERE error IS NOT NULL"
+            ).rowcount
+            meta_db.commit()
+            if deleted:
+                _log(f"Cleared {deleted} error entries for retry")
 
         # Collect all unique reach maps to fetch
         maps_to_fetch = []
-        for r in cache["runs"]:
-            for rm in r.get("df_reach_maps", []):
-                key = f"{rm['rid']}_{rm['num']}"
-                if key not in cache["maps"]:
-                    maps_to_fetch.append(rm)
+        existing_keys = {
+            r[0] for r in meta_db.execute("SELECT key FROM dreamflows_map")
+        }
+        for row in meta_db.execute("SELECT site_id, map_num FROM dreamflows_run WHERE site_id IS NOT NULL AND map_num IS NOT NULL"):
+            key = f"{row[0]}_{row[1]}"
+            if key not in existing_keys:
+                maps_to_fetch.append({"rid": row[0], "num": row[1]})
+                existing_keys.add(key)  # avoid duplicates in the fetch list
 
         _log(f"Need to fetch {len(maps_to_fetch)} reach maps")
 
@@ -328,52 +336,61 @@ def fetch_and_cache(cache_path, states, delay, fetch_geom, retry_errors=False):
                 _log(f"    {len(map_data['segments'])} segments, "
                      f"{total_pts} points, "
                      f"{len(map_data['markers'])} markers")
-                cache["maps"][key] = map_data
+                meta_db.execute(
+                    "INSERT OR REPLACE INTO dreamflows_map "
+                    "(key, site_id, map_num, segments, markers) VALUES (?, ?, ?, ?, ?)",
+                    (key, rm["rid"], rm["num"],
+                     json.dumps(map_data["segments"]),
+                     json.dumps(map_data["markers"])),
+                )
                 consecutive_403s = 0
-                current_delay = delay  # reset to normal delay
+                current_delay = delay
             except urllib.error.HTTPError as e:
                 if e.code == 403:
                     consecutive_403s += 1
-                    _log(f"    Error: {e}")
-                    cache["maps"][key] = {"error": str(e)}
-                    if consecutive_403s >= 3:
-                        _log(f"  3+ consecutive 403s — stopping geometry fetch. "
-                             f"Re-run with --retry-errors later.")
-                        _save_cache(cache, cache_path)
-                        break
-                else:
-                    _log(f"    Error: {e}")
-                    cache["maps"][key] = {"error": str(e)}
+                _log(f"    Error: {e}")
+                meta_db.execute(
+                    "INSERT OR REPLACE INTO dreamflows_map "
+                    "(key, site_id, map_num, error) VALUES (?, ?, ?, ?)",
+                    (key, rm["rid"], rm["num"], str(e)),
+                )
+                if consecutive_403s >= 3:
+                    _log(f"  3+ consecutive 403s — stopping geometry fetch. "
+                         f"Re-run with --retry-errors later.")
+                    meta_db.commit()
+                    break
             except Exception as e:
                 _log(f"    Error: {e}")
-                cache["maps"][key] = {"error": str(e)}
+                meta_db.execute(
+                    "INSERT OR REPLACE INTO dreamflows_map "
+                    "(key, site_id, map_num, error) VALUES (?, ?, ?, ?)",
+                    (key, rm["rid"], rm["num"], str(e)),
+                )
 
-            # Save periodically
             if (i + 1) % 10 == 0:
-                _save_cache(cache, cache_path)
-                _log(f"  Saved cache ({len(cache['maps'])} maps)")
+                meta_db.commit()
+                total_maps = meta_db.execute(
+                    "SELECT COUNT(*) FROM dreamflows_map WHERE error IS NULL"
+                ).fetchone()[0]
+                _log(f"  Saved ({total_maps} maps)")
 
-        _save_cache(cache, cache_path)
+        meta_db.commit()
 
-    total_aw = sum(1 for r in cache["runs"] if r.get("aw_ids"))
-    total_maps = sum(1 for k, v in cache["maps"].items() if "error" not in v)
-    _log(f"Cache complete: {len(cache['runs'])} runs, "
-         f"{total_aw} with AW IDs, {total_maps} maps")
-    return cache
-
-
-def _save_cache(cache, path):
-    tmp = path + ".tmp"
-    with open(tmp, "w") as f:
-        json.dump(cache, f, indent=1)
-    os.replace(tmp, path)
+    total_runs = meta_db.execute("SELECT COUNT(*) FROM dreamflows_run").fetchone()[0]
+    total_aw = meta_db.execute(
+        "SELECT COUNT(*) FROM dreamflows_run WHERE aw_ids IS NOT NULL AND aw_ids != '[]'"
+    ).fetchone()[0]
+    total_maps = meta_db.execute(
+        "SELECT COUNT(*) FROM dreamflows_map WHERE error IS NULL"
+    ).fetchone()[0]
+    _log(f"Cache complete: {total_runs} runs, {total_aw} with AW IDs, {total_maps} maps")
 
 
 # ---------------------------------------------------------------------------
-# Phase 2: Process cache against database
+# Phase 2: Process cached data against kayak database
 # ---------------------------------------------------------------------------
 
-def process_cache(cache, db, dry_run):
+def process_cached(meta_db, db, dry_run):
     """Match Dreamflows data to our DB via AW IDs and update geometry."""
     # Build lookup: aw_id -> reach row
     rows = db.execute(
@@ -384,8 +401,19 @@ def process_cache(cache, db, dry_run):
 
     # Build lookup: aw_id -> dreamflows run with map data
     aw_to_df = {}
-    for run in cache.get("runs", []):
-        for aw_id in run.get("aw_ids", []):
+    for row in meta_db.execute(
+        "SELECT description, state, aw_ids, site_id, map_num FROM dreamflows_run"
+    ):
+        aw_ids = json.loads(row[2]) if row[2] else []
+        run = {
+            "description": row[0],
+            "state": row[1],
+            "aw_ids": aw_ids,
+            "df_reach_maps": [],
+        }
+        if row[3] is not None and row[4] is not None:
+            run["df_reach_maps"].append({"rid": row[3], "num": row[4]})
+        for aw_id in aw_ids:
             if aw_id not in aw_to_df:
                 aw_to_df[aw_id] = run
 
@@ -404,21 +432,26 @@ def process_cache(cache, db, dry_run):
         map_data = None
         for rm in df_run.get("df_reach_maps", []):
             key = f"{rm['rid']}_{rm['num']}"
-            md = cache.get("maps", {}).get(key)
-            if md and "error" not in md and md.get("segments"):
-                map_data = md
+            md_row = meta_db.execute(
+                "SELECT segments, markers FROM dreamflows_map WHERE key = ? AND error IS NULL",
+                (key,),
+            ).fetchone()
+            if md_row and md_row[0]:
+                map_data = {
+                    "segments": json.loads(md_row[0]),
+                    "markers": json.loads(md_row[1]) if md_row[1] else [],
+                }
                 break
 
         if not map_data:
             no_map += 1
             continue
 
-        # Build geom string: "lon lat,lon lat,..." from all non-dashed segments
+        # Build geom string from all non-dashed segments
         all_coords = []
         for seg in map_data["segments"]:
             if not seg.get("dashed"):
                 all_coords.extend(seg["coords"])
-        # If no solid segments, use all segments
         if not all_coords:
             for seg in map_data["segments"]:
                 all_coords.extend(seg["coords"])
@@ -427,7 +460,6 @@ def process_cache(cache, db, dry_run):
             no_map += 1
             continue
 
-        # Convert to "lon lat" format (matching AW geom format)
         geom_str = ",".join(f"{c[1]} {c[0]}" for c in all_coords)
 
         label = "DRY-RUN" if dry_run else "UPDATE"
@@ -466,8 +498,8 @@ def main():
     )
     parser.add_argument("--db", default=os.path.abspath(DEFAULT_DB),
                         help="SQLite database path")
-    parser.add_argument("--cache", default=os.path.abspath(DEFAULT_CACHE),
-                        help="JSON cache file path")
+    parser.add_argument("--metadata-db", default=os.path.abspath(DEFAULT_METADATA_DB),
+                        help="Gauge metadata cache DB path")
     parser.add_argument("--dry-run", action="store_true",
                         help="Show matches without updating DB")
     parser.add_argument("--state",
@@ -494,28 +526,30 @@ def main():
             return
         states = {abbr: STATE_PAGES[abbr]}
 
+    meta_db = sqlite3.connect(args.metadata_db)
+
     # Phase 1: Fetch
-    cache = None
     if not args.cache_only:
         _log(f"Delay between requests: {args.delay}s")
-        cache = fetch_and_cache(
-            args.cache, states, args.delay, not args.no_geom, args.retry_errors
-        )
+        fetch_and_store(meta_db, states, args.delay, not args.no_geom, args.retry_errors)
 
     # Phase 2: Process
     if not args.fetch_only:
-        if cache is None:
-            if not os.path.exists(args.cache):
-                print(f"Cache file not found: {args.cache}")
-                print("Run without --cache-only first to fetch data.")
-                return
-            with open(args.cache) as f:
-                cache = json.load(f)
+        total = meta_db.execute(
+            "SELECT COUNT(*) FROM dreamflows_run"
+        ).fetchone()[0]
+        if total == 0:
+            print("No Dreamflows data in metadata DB.")
+            print("Run without --cache-only first to fetch data.")
+            meta_db.close()
+            return
         db = sqlite3.connect(args.db)
         if args.overwrite_geom:
-            # Temporarily clear geom so process_cache will update all
             _log("--overwrite-geom: will overwrite existing geometry")
-        process_cache(cache, db, args.dry_run)
+        process_cached(meta_db, db, args.dry_run)
+        db.close()
+
+    meta_db.close()
 
 
 if __name__ == "__main__":

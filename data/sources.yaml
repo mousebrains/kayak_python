@@ -127,28 +127,26 @@ nwps:
 
 nwrfc.xml:
   urls:
-    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=CMRO3&pe=HG&dtype=b&numdays=2"
-    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LOCO3&pe=HG&dtype=b&numdays=2"
-    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LOPO3&pe=QR&dtype=b&numdays=2"
-    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WNFO3&pe=HG&dtype=b&numdays=2"
+    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=CMRO3&pe=HG&dtype=b&numdays=1"
+    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LOCO3&pe=HG&dtype=b&numdays=1"
+    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LOPO3&pe=QR&dtype=b&numdays=1"
+    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WNFO3&pe=HG&dtype=b&numdays=1"
 
 nwrfc.textplot:
   urls:
     - url: "https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=APLO3&pe=QI"
 
-usgs:
-  urls:
-    - url: "https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=az&period=P1D&parameterCd=00060,00065,00010"
-    - url: "https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=ca&period=P1D&parameterCd=00060,00065,00010"
-    - url: "https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=co&period=P1D&parameterCd=00060,00065,00010"
-    - url: "https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=id&period=P1D&parameterCd=00060,00065,00010"
-    - url: "https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=mt&period=P1D&parameterCd=00060,00065,00010"
-    - url: "https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=nv&period=P1D&parameterCd=00060,00065,00010"
-    - url: "https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=nm&period=P1D&parameterCd=00060,00065,00010"
-    - url: "https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=or&period=P1D&parameterCd=00060,00065,00010"
-    - url: "https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=ut&period=P1D&parameterCd=00060,00065,00010"
-    - url: "https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=wa&period=P1D&parameterCd=00060,00065,00010"
-    - url: "https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=wy&period=P1D&parameterCd=00060,00065,00010"
+# Replaced by fetch-usgs-ogc which only fetches gauges already in the DB.
+# The bulk state fetches below created thousands of unlinked source records.
+# usgs:
+#   urls:
+#     - url: "https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=or&period=PT12H&parameterCd=00060,00065,00010"
+#     - url: "https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=wa&period=PT12H&parameterCd=00060,00065,00010"
+#     - url: "https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=id&period=PT12H&parameterCd=00060,00065,00010"
+#     # Nevada — north of 40° latitude only
+#     - url: "https://waterservices.usgs.gov/nwis/iv/?format=rdb&bBox=-120.0,40.0,-114.0,42.1&period=PT12H&parameterCd=00060,00065,00010"
+#     # Northern California only (north of 40° latitude)
+#     - url: "https://waterservices.usgs.gov/nwis/iv/?format=rdb&bBox=-124.5,40.0,-119.5,42.1&period=PT12H&parameterCd=00060,00065,00010"
 
 usbr:
   urls:

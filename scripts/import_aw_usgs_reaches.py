@@ -33,7 +33,9 @@ if not sys.stdout.line_buffering:
         errors=sys.stdout.errors, line_buffering=True,
     )
 
-DEFAULT_CACHE = os.path.join(os.path.dirname(__file__), "..", "data", "aw_reaches.json")
+DEFAULT_METADATA_DB = os.path.join(
+    os.path.dirname(__file__), "..", "Gauge-metadata-cache", "gauges.db"
+)
 
 GRAPHQL_URL = "https://www.americanwhitewater.org/graphql"
 
@@ -208,7 +210,6 @@ def get_usgs_fetch_url_map(db):
     ).fetchall()
     result = {}
     for fid, url in rows:
-        # Extract state code from URL
         for part in url.split("&"):
             if part.startswith("stateCd="):
                 st = part.split("=", 1)[1].lower()
@@ -221,18 +222,15 @@ def create_missing_gauges(db, aw_reaches, dry_run):
 
     Returns dict of usgs_site_id -> gauge_id (including both existing and new).
     """
-    # Build lookup of existing USGS gauges
     existing = {}
     for row in db.execute("SELECT id, usgs_id FROM gauge WHERE usgs_id IS NOT NULL"):
         existing[row[0]] = row[1]
     usgs_to_gauge = {v: k for k, v in existing.items()}
 
-    # Also build source name -> source_id for existing USGS sources
     existing_sources = {}
     for row in db.execute("SELECT id, name FROM source WHERE UPPER(agency) = 'USGS'"):
         existing_sources[row[1]] = row[0]
 
-    # Collect all USGS site IDs referenced by unmatched reaches
     needed_sites = set()
     for reach in aw_reaches:
         for g in reach.get("gauges", []):
@@ -247,7 +245,6 @@ def create_missing_gauges(db, aw_reaches, dry_run):
 
     log(f"Phase 1: {len(needed_sites)} USGS sites need gauges")
 
-    # Fetch metadata from USGS
     if not dry_run:
         metadata = fetch_usgs_site_metadata(needed_sites)
     else:
@@ -255,10 +252,8 @@ def create_missing_gauges(db, aw_reaches, dry_run):
                           "elevation": None, "drainage_area": None}
                     for sid in needed_sites}
 
-    # Get fetch_url mapping
     fetch_url_map = get_usgs_fetch_url_map(db)
 
-    # Build site -> state mapping from AW data
     site_to_state = {}
     for reach in aw_reaches:
         state = reach.get("state", "").upper()
@@ -266,14 +261,12 @@ def create_missing_gauges(db, aw_reaches, dry_run):
             if g["source"] == "usgs" and g["source_id"] in needed_sites:
                 site_to_state.setdefault(g["source_id"], state)
 
-    # Check if any states need a new fetch_url
     missing_states = set()
     for sid, state in site_to_state.items():
         st_lower = STATE_ABBREVS.get(state, state.lower())
         if st_lower not in fetch_url_map:
             missing_states.add(st_lower)
 
-    # Create missing fetch_urls
     for st_lower in sorted(missing_states):
         url = USGS_URL_TEMPLATE.format(state=st_lower)
         label = f"[DRY-RUN] " if dry_run else ""
@@ -285,7 +278,6 @@ def create_missing_gauges(db, aw_reaches, dry_run):
             )
             fetch_url_map[st_lower] = cur.lastrowid
 
-    # Create gauge, source, gauge_source for each missing site
     created = 0
     for sid in sorted(needed_sites):
         meta = metadata.get(sid, {})
@@ -303,7 +295,6 @@ def create_missing_gauges(db, aw_reaches, dry_run):
         vlog(f"[{label}] gauge usgs_id={sid} name={gauge_name[:60]}")
 
         if not dry_run:
-            # Insert gauge
             cur = db.execute(
                 """INSERT INTO gauge (name, usgs_id, latitude, longitude,
                    elevation, drainage_area)
@@ -312,21 +303,18 @@ def create_missing_gauges(db, aw_reaches, dry_run):
             )
             gauge_id = cur.lastrowid
 
-            # Insert source
             cur = db.execute(
                 "INSERT INTO source (name, agency, fetch_url_id) VALUES (?, 'USGS', ?)",
                 (sid, fu_id),
             )
             source_id = cur.lastrowid
 
-            # Link them
             db.execute(
                 "INSERT INTO gauge_source (gauge_id, source_id) VALUES (?, ?)",
                 (gauge_id, source_id),
             )
             usgs_to_gauge[sid] = gauge_id
         else:
-            # Track placeholder for dry-run so Phase 2 can count correctly
             usgs_to_gauge[sid] = -1  # sentinel
 
         created += 1
@@ -348,12 +336,10 @@ def create_reaches(db, aw_reaches, usgs_to_gauge, dry_run):
 
     Returns list of (reach_id, aw_id) for newly created reaches.
     """
-    # Build state abbreviation -> state.id mapping
     state_map = {}
     for row in db.execute("SELECT id, abbreviation FROM state WHERE abbreviation IS NOT NULL"):
         state_map[row[1].upper()] = row[0]
 
-    # Build source name -> gauge_id lookup for USGS sources
     source_to_gauge = {}
     for row in db.execute(
         """SELECT s.name, gs.gauge_id FROM source s
@@ -369,16 +355,13 @@ def create_reaches(db, aw_reaches, usgs_to_gauge, dry_run):
         aw_id = reach["id"]
         state = reach.get("state", "").upper()
 
-        # Find gauge_id from the first USGS gauge
         gauge_id = None
         for g in reach.get("gauges", []):
             if g["source"] == "usgs":
                 sid = g["source_id"]
-                # Try source_to_gauge first (covers both existing and newly created)
                 if sid in source_to_gauge:
                     gauge_id = source_to_gauge[sid]
                     break
-                # Fall back to usgs_to_gauge (from Phase 1)
                 if sid in usgs_to_gauge:
                     gauge_id = usgs_to_gauge[sid]
                     break
@@ -398,7 +381,6 @@ def create_reaches(db, aw_reaches, usgs_to_gauge, dry_run):
         tlat = _float(reach.get("tlat"))
         tlon = _float(reach.get("tlon"))
 
-        # Midpoint for latitude/longitude
         lat = None
         lon = None
         if plat is not None and tlat is not None:
@@ -438,7 +420,6 @@ def create_reaches(db, aw_reaches, usgs_to_gauge, dry_run):
             )
             reach_id = cur.lastrowid
 
-            # Link to state
             state_id = state_map.get(state)
             if state_id:
                 db.execute(
@@ -446,7 +427,6 @@ def create_reaches(db, aw_reaches, usgs_to_gauge, dry_run):
                     (reach_id, state_id),
                 )
 
-            # Import flow levels from AW gauge correlation (rmin/rmax)
             rmin = None
             rmax = None
             for g in reach.get("gauges", []):
@@ -544,21 +524,39 @@ def fetch_geometry(db, new_reaches, dry_run):
 # Main
 # ---------------------------------------------------------------------------
 
-def load_aw_reaches(cache_path, state_filter=None):
-    """Load AW reaches from cache, filter to unmatched with USGS gauges."""
-    with open(cache_path) as f:
-        cache = json.load(f)
+def load_aw_reaches(meta_db, state_filter=None):
+    """Load AW reaches from metadata DB, filter to those with USGS gauges."""
+    query = "SELECT id, river, section, class, state, put_in_lat, put_in_lon, " \
+            "take_out_lat, take_out_lon, length, avg_gradient, max_gradient, gauges " \
+            "FROM aw_reach WHERE gauges IS NOT NULL"
+    params = []
+    if state_filter:
+        query += " AND UPPER(state) = ?"
+        params.append(state_filter)
+
+    rows = meta_db.execute(query, params).fetchall()
 
     reaches = []
-    for rid_str, reach in cache.get("reaches", {}).items():
-        # Filter by state if requested
-        if state_filter and reach.get("state", "").upper() != state_filter:
-            continue
-        # Only reaches with at least one USGS gauge
-        usgs_gauges = [g for g in reach.get("gauges", []) if g["source"] == "usgs"]
+    for row in rows:
+        gauges = json.loads(row[12]) if row[12] else []
+        usgs_gauges = [g for g in gauges if g.get("source") == "usgs"]
         if not usgs_gauges:
             continue
-        reaches.append(reach)
+        reaches.append({
+            "id": row[0],
+            "river": row[1],
+            "section": row[2],
+            "class": row[3],
+            "state": row[4],
+            "plat": row[5],
+            "plon": row[6],
+            "tlat": row[7],
+            "tlon": row[8],
+            "length": row[9],
+            "avggradient": row[10],
+            "maxgradient": row[11],
+            "gauges": gauges,
+        })
 
     return reaches
 
@@ -582,8 +580,8 @@ def main():
     )
     parser.add_argument("--db", default=os.path.join(os.path.dirname(__file__), "..", "..", "DB", "kayak.db"),
                         help="SQLite database path")
-    parser.add_argument("--cache", default=os.path.abspath(DEFAULT_CACHE),
-                        help="AW reaches JSON cache file")
+    parser.add_argument("--metadata-db", default=os.path.abspath(DEFAULT_METADATA_DB),
+                        help="Gauge metadata cache DB path")
     parser.add_argument("--dry-run", action="store_true",
                         help="Show what would be done without modifying DB")
     parser.add_argument("--state",
@@ -597,17 +595,16 @@ def main():
     global VERBOSE
     VERBOSE = args.verbose
 
-    if not os.path.exists(args.cache):
-        log(f"Cache file not found: {args.cache}")
-        log("Run scripts/match_aw_reaches.py first to build the AW cache.")
-        sys.exit(1)
-
     state_filter = args.state.upper() if args.state else None
 
-    # Load and filter AW reaches
-    aw_reaches = load_aw_reaches(args.cache, state_filter)
+    # Load AW reaches from metadata DB
+    meta_db = sqlite3.connect(args.metadata_db)
+    aw_reaches = load_aw_reaches(meta_db, state_filter)
+    meta_db.close()
+
     if not aw_reaches:
-        log("No AW reaches with USGS gauges found.")
+        log("No AW reaches with USGS gauges found in metadata DB.")
+        log("Run scripts/match_aw_reaches.py first to populate the AW cache.")
         return
 
     db = sqlite3.connect(args.db)
