@@ -26,7 +26,7 @@ rm -f "$OUTPUT"
 
 # HUC4 regions that need latitude filtering (Nevada/California)
 # These extend south of 40° — clip to north only
-FILTER_HUCS="1601 1602 1603 1604 1803"
+FILTER_HUCS="1601 1602 1603 1604 1801 1803"
 
 count=0
 for zip in "$HR_DIR"/NHDPLUS_H_*_HU4_GDB.zip; do

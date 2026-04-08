@@ -54,12 +54,13 @@ done
 #   1602 - Great Basin (NV)
 #   1603 - Great Basin (NV)
 #   1604 - Humboldt (NV)
+#   1801 - Klamath-Trinity-Smith (NorCal)
 #   1802 - Klamath (OR/CA)
 #   1803 - NorCal (north of 40°)
 HR_HUCS=(
     1701 1702 1703 1704 1705 1706 1707 1708 1709 1710 1711 1712
     1601 1602 1603 1604
-    1802 1803
+    1801 1802 1803
 )
 
 echo ""
