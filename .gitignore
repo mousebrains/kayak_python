@@ -31,7 +31,11 @@ public_html/*.csv
 public_html/*.text
 static/reaches.geojson
 
+# DB backups
+backups
+
 # OSM data cache
 OSM-cache/
 
+# National Hydrologic Database cache
 NHD-cache/
