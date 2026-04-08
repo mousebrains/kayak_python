@@ -1,3 +1,5 @@
+.DS_Store
+
 # Legacy system dumps to initialize this system.
 legacy
 
@@ -17,6 +19,8 @@ dist/
 build/
 .venv/
 *.db
+*.db-shm
+*.db-wal
 .env
 .pytest_cache/
 .coverage
