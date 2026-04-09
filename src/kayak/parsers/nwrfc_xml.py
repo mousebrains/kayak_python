@@ -1,7 +1,7 @@
 """NWRFC XML parser (replaces Parse_NWRFC_XML.C).
 
 Format: XML with nested SiteData/observedData/observedValue.
-Extracts stage (feet) and discharge (cubic feet per second).
+Extracts stage (feet), discharge (cfs), and inflow (cfs).
 """
 
 from __future__ import annotations
@@ -92,6 +92,12 @@ class NWRFCXMLParser(BaseParser):
                     val = safe_float(text)
                     if val is not None and math.isfinite(val) and val >= 0:
                         self.dump_to_db(station, DataType.flow, when, val)
+            elif tag == "inflow" and when and text:
+                units = elem.get("units", "")
+                if "cubic" in units.lower() or "cfs" in units.lower():
+                    val = safe_float(text)
+                    if val is not None and math.isfinite(val) and val >= 0:
+                        self.dump_to_db(station, DataType.inflow, when, val)
 
     def parse_line(self, line: str) -> bool:
         return True

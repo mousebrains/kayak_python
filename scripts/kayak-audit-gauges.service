@@ -1,0 +1,12 @@
+[Unit]
+Description=Kayak gauge metadata audit
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=pat
+WorkingDirectory=/home/pat/kayak
+EnvironmentFile=/home/pat/.config/kayak/.env
+ExecStart=/home/pat/.venv/bin/python3 /home/pat/kayak/scripts/audit_gauges.py --days 14
+TimeoutStartSec=600
+Nice=15

@@ -69,8 +69,10 @@ nwps:
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/MKLO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/MNRO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/MPLO3/stageflow/observed"
+    - url: "https://api.water.noaa.gov/nwps/v1/gauges/MUSO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/MUDW1/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/NASW1/stageflow/observed"
+    - url: "https://api.water.noaa.gov/nwps/v1/gauges/NMFO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/NEBO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/OAKO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/OCUO3/stageflow/observed"
@@ -115,6 +117,7 @@ nwps:
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/AURO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/BTYO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/PDTO3/stageflow/observed"
+    - url: "https://api.water.noaa.gov/nwps/v1/gauges/WICO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/WINO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/RSBO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/GOSO3/stageflow/observed"
@@ -127,10 +130,14 @@ nwps:
 
 nwrfc.xml:
   urls:
+    # CMRO3: McKenzie above South Fork (USGS 14159110 flow defunct since 2006)
     - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=CMRO3&pe=HG&dtype=b&numdays=1"
-    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LOCO3&pe=HG&dtype=b&numdays=1"
-    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LOPO3&pe=QR&dtype=b&numdays=1"
-    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WNFO3&pe=HG&dtype=b&numdays=1"
+    # LOCO3 (Lookout Creek) — redundant with active USGS 14161500
+    # - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LOCO3&pe=HG&dtype=b&numdays=1"
+    # LOPO3 (Lookout Point Dam) — not used by any reach
+    # - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LOPO3&pe=QR&dtype=b&numdays=1"
+    # WNFO3 (Wiley Creek) — redundant with active USGS 14187000
+    # - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WNFO3&pe=HG&dtype=b&numdays=1"
 
 nwrfc.textplot:
   urls:
