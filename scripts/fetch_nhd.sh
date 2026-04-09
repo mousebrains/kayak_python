@@ -7,11 +7,11 @@
 # Usage:
 #   bash scripts/fetch_nhd.sh [DEST_DIR]
 #
-# Default destination: ./NHD-cache/
+# Default destination: ./Trace-cache/NHD/
 
 set -euo pipefail
 
-DEST="${1:-$(dirname "$0")/../NHD-cache}"
+DEST="${1:-$(dirname "$0")/../Trace-cache/NHD}"
 mkdir -p "$DEST/state" "$DEST/hr"
 
 S3="https://prd-tnm.s3.amazonaws.com/StagedProducts"

@@ -7,12 +7,12 @@
 #   bash scripts/extract_nhd_flowlines.sh [NHD_DIR] [OUTPUT]
 #
 # Defaults:
-#   NHD_DIR = ./NHD-cache
-#   OUTPUT  = ./NHD-cache/named_flowlines.gpkg
+#   NHD_DIR = ./Trace-cache/NHD
+#   OUTPUT  = ./Trace-cache/NHD/named_flowlines.gpkg
 
 set -euo pipefail
 
-NHD_DIR="${1:-$(dirname "$0")/../NHD-cache}"
+NHD_DIR="${1:-$(dirname "$0")/../Trace-cache/NHD}"
 OUTPUT="${2:-$NHD_DIR/named_flowlines.gpkg}"
 HR_DIR="$NHD_DIR/hr"
 

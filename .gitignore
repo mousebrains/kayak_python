@@ -34,8 +34,5 @@ static/reaches.geojson
 # DB backups
 backups
 
-# OSM data cache
-OSM-cache/
-
-# National Hydrologic Database cache
-NHD-cache/
+# Stream trace data caches (NHD, OSM, merged)
+Trace-cache/
