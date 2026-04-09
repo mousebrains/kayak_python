@@ -185,7 +185,8 @@ def _get_row_data(
                     elif dtype_name == "inflow":
                         continue
                     row[display_name] = latest.value
-                    row["time"] = latest.observed_at
+                    if "time" not in row or latest.observed_at > row["time"]:
+                        row["time"] = latest.observed_at
                     # Classify flow/gage level (inflow uses flow thresholds)
                     classify_dtype = DataType.flow if dtype == DataType.inflow else dtype
                     if display_name in ("flow", "gage"):
@@ -710,14 +711,13 @@ def build(args):
         states = all_state_names(session)
         css = _load_css()
 
-        # Oregon reaches — used for index.html, GeoJSON, CSV, text
-        oregon_reaches = reaches_query(session, state_name=PRIMARY_STATE,
-                                       visible_only=True, with_gauge=True)
+        # All visible gauged reaches — used for index.html, GeoJSON, CSV, text
+        all_reaches = reaches_query(session, visible_only=True, with_gauge=True)
 
-        print(f"Building Oregon-focused site: {len(oregon_reaches)} reaches")
+        print(f"Building site: {len(all_reaches)} reaches")
 
-        # Pre-load data for Oregon reaches
-        gauge_ids = [r.gauge_id for r in oregon_reaches if r.gauge_id]
+        # Pre-load data for all reaches
+        gauge_ids = [r.gauge_id for r in all_reaches if r.gauge_id]
         primary_source_ids = get_all_primary_source_ids(session, gauge_ids)
         source_ids = list(primary_source_ids.values())
         calculated_ids = get_calculated_source_ids(session, source_ids)
@@ -728,8 +728,8 @@ def build(args):
         static_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(_JS_PATH, static_dir / "levels.js")
 
-        # GeoJSON → static/reaches.geojson (Oregon only)
-        geojson = _build_geojson(oregon_reaches, primary_source_ids,
+        # GeoJSON → static/reaches.geojson
+        geojson = _build_geojson(all_reaches, primary_source_ids,
                                  calculated_ids, all_latest)
         _atomic_write(static_dir / "reaches.geojson", geojson)
         logger.info("GeoJSON: %d bytes", len(geojson))
@@ -738,8 +738,8 @@ def build(args):
         map_html = _build_map_page(css, states)
         _atomic_write(output_dir / "map.html", map_html)
 
-        # index.html = Oregon levels table
-        _build_and_write(session, oregon_reaches, columns, PRIMARY_STATE, states,
+        # index.html = all reaches levels table
+        _build_and_write(session, all_reaches, columns, PRIMARY_STATE, states,
                          css, output_dir, filename="index.html",
                          preloaded=(primary_source_ids, calculated_ids, all_latest))
 

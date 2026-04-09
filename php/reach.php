@@ -14,6 +14,8 @@ $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 $q  = filter_input(INPUT_GET, 'q', FILTER_DEFAULT);
 $st = filter_input(INPUT_GET, 'st', FILTER_DEFAULT);
 $st = ($st !== null && $st !== '') ? strtoupper(trim($st)) : '';
+$hidden = filter_input(INPUT_GET, 'hidden', FILTER_VALIDATE_INT);
+$hidden = ($hidden === 1) ? 1 : 0;
 
 // --- Search mode ---
 if ($q !== null && $q !== '') {
@@ -30,9 +32,10 @@ if ($q !== null && $q !== '') {
              JOIN state s ON s.id = rs.state_id
              WHERE (r.display_name LIKE ? OR r.name LIKE ? OR r.river LIKE ?)
                AND s.abbreviation = ?
+               AND r.no_show = ?
              ORDER BY r.sort_name'
         );
-        $stmt->execute([$pat, $pat, $pat, $st]);
+        $stmt->execute([$pat, $pat, $pat, $st, $hidden]);
     } else {
         $stmt = $db->prepare(
             'SELECT r.id, COALESCE(NULLIF(r.display_name, \'\'), r.name) AS name, r.river,
@@ -40,10 +43,11 @@ if ($q !== null && $q !== '') {
                     r.latitude_end, r.longitude_end, r.latitude, r.longitude,
                     r.sort_name, r.aw_id, r.geom
              FROM reach r
-             WHERE r.display_name LIKE ? OR r.name LIKE ? OR r.river LIKE ?
+             WHERE (r.display_name LIKE ? OR r.name LIKE ? OR r.river LIKE ?)
+               AND r.no_show = ?
              ORDER BY r.sort_name'
         );
-        $stmt->execute([$pat, $pat, $pat]);
+        $stmt->execute([$pat, $pat, $pat, $hidden]);
     }
     $results = $stmt->fetchAll();
 
@@ -220,7 +224,9 @@ if ($q !== null && $q !== '') {
 
 // --- Default: show first reach ---
 if (!$id) {
-    $row = $db->query('SELECT id FROM reach ORDER BY sort_name, id ASC LIMIT 1')->fetch();
+    $row = $db->prepare('SELECT id FROM reach WHERE no_show = ? ORDER BY sort_name, id ASC LIMIT 1');
+    $row->execute([$hidden]);
+    $row = $row->fetch();
     if (!$row) {
         header('Cache-Control: no-cache');
         include_header('Reaches');
@@ -240,17 +246,19 @@ if (!$reach) { http_response_code(404); exit('Reach not found'); }
 $name = $reach['display_name'] ?: $reach['name'];
 
 // --- Navigation ---
-$prev_stmt = $db->prepare('SELECT id FROM reach WHERE sort_name < ? OR (sort_name = ? AND id < ?) ORDER BY sort_name DESC, id DESC LIMIT 1');
-$prev_stmt->execute([$reach['sort_name'], $reach['sort_name'], $id]);
+$prev_stmt = $db->prepare('SELECT id FROM reach WHERE (sort_name < ? OR (sort_name = ? AND id < ?)) AND no_show = ? ORDER BY sort_name DESC, id DESC LIMIT 1');
+$prev_stmt->execute([$reach['sort_name'], $reach['sort_name'], $id, $hidden]);
 $prev = $prev_stmt->fetch();
 
-$next_stmt = $db->prepare('SELECT id FROM reach WHERE sort_name > ? OR (sort_name = ? AND id > ?) ORDER BY sort_name ASC, id ASC LIMIT 1');
-$next_stmt->execute([$reach['sort_name'], $reach['sort_name'], $id]);
+$next_stmt = $db->prepare('SELECT id FROM reach WHERE (sort_name > ? OR (sort_name = ? AND id > ?)) AND no_show = ? ORDER BY sort_name ASC, id ASC LIMIT 1');
+$next_stmt->execute([$reach['sort_name'], $reach['sort_name'], $id, $hidden]);
 $next = $next_stmt->fetch();
 
-$total = $db->query('SELECT COUNT(*) FROM reach')->fetchColumn();
-$pos = $db->prepare('SELECT COUNT(*) FROM reach WHERE sort_name < ? OR (sort_name = ? AND id <= ?)');
-$pos->execute([$reach['sort_name'], $reach['sort_name'], $id]);
+$total_stmt = $db->prepare('SELECT COUNT(*) FROM reach WHERE no_show = ?');
+$total_stmt->execute([$hidden]);
+$total = $total_stmt->fetchColumn();
+$pos = $db->prepare('SELECT COUNT(*) FROM reach WHERE (sort_name < ? OR (sort_name = ? AND id <= ?)) AND no_show = ?');
+$pos->execute([$reach['sort_name'], $reach['sort_name'], $id, $hidden]);
 $position = $pos->fetchColumn();
 
 // --- Load related data ---
@@ -294,14 +302,15 @@ include_header(htmlspecialchars($name) . ' - Reach');
 
 // Navigation bar
 echo '<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">';
+$hq = $hidden ? '&amp;hidden=1' : '';
 if ($prev) {
-    echo '<a href="/reach.php?id=' . $prev['id'] . '">&laquo; Prev</a>';
+    echo '<a href="/reach.php?id=' . $prev['id'] . $hq . '">&laquo; Prev</a>';
 } else {
     echo '<span style="color:#999">&laquo; Prev</span>';
 }
 echo "<span>Reach $position of $total</span>";
 if ($next) {
-    echo '<a href="/reach.php?id=' . $next['id'] . '">Next &raquo;</a>';
+    echo '<a href="/reach.php?id=' . $next['id'] . $hq . '">Next &raquo;</a>';
 } else {
     echo '<span style="color:#999">Next &raquo;</span>';
 }
@@ -314,8 +323,12 @@ foreach ($all_states as $s) {
     echo "<option value=\"$s\"$sel>$s</option>";
 }
 echo '</select>';
+if ($hidden) echo '<input type="hidden" name="hidden" value="1">';
 echo '<button type="submit">Go</button>';
 echo '</form>';
+$toggle_hidden = $hidden ? 0 : 1;
+$toggle_label = $hidden ? 'Show visible' : 'Show hidden';
+echo "<a href=\"/reach.php?id=$id&amp;hidden=$toggle_hidden\">$toggle_label</a>";
 echo '</div>';
 
 // Title linked to description

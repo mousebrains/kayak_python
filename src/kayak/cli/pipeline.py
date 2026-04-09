@@ -11,7 +11,6 @@ Runs the full data pipeline in order:
 from __future__ import annotations
 
 import logging
-import os
 import time
 
 from sqlalchemy import text
@@ -40,8 +39,7 @@ def pipeline(args):
     if not args.skip_fetch:
         steps.append(("fetch", fetch.fetch))
 
-    if os.environ.get("USGS_API_KEY"):
-        steps.append(("fetch-usgs-ogc", fetch_usgs_ogc.fetch_usgs_ogc))
+    steps.append(("fetch-usgs-ogc", fetch_usgs_ogc.fetch_usgs_ogc))
 
     steps.extend([
         ("calc-rating", calc_rating.calc_rating),

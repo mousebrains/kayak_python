@@ -64,15 +64,20 @@ def _build_site_map(session) -> dict[str, int]:
     """Build a mapping of usgs_id → source_id from the database.
 
     Joins gauge → gauge_source → source to find the source_id for each
-    USGS station.
+    USGS station.  When a gauge has multiple sources, prefer the one
+    whose name matches the usgs_id (the actual USGS source).
     """
     rows = session.execute(
-        select(Gauge.usgs_id, Source.id)
+        select(Gauge.usgs_id, Source.id, Source.name)
         .join(GaugeSource, Gauge.id == GaugeSource.gauge_id)
         .join(Source, GaugeSource.source_id == Source.id)
         .where(Gauge.usgs_id.is_not(None))
     ).all()
-    return {usgs_id: source_id for usgs_id, source_id in rows}
+    result: dict[str, int] = {}
+    for usgs_id, source_id, source_name in rows:
+        if usgs_id not in result or source_name == usgs_id:
+            result[usgs_id] = source_id
+    return result
 
 
 def _fetch_page(url: str, api_key: str | None) -> dict | None:
@@ -205,10 +210,6 @@ def _fetch_continuous(site_map, api_key, hours, batch_size):
 def fetch_usgs_ogc(args):
     """Fetch USGS data via the OGC API."""
     api_key = os.environ.get("USGS_API_KEY")
-    if not api_key:
-        logger.warning("USGS_API_KEY not set — skipping OGC fetch")
-        print("USGS_API_KEY not set — skipping OGC fetch")
-        return
 
     hours = getattr(args, "hours", 24)
     dry_run = getattr(args, "dry_run", False)
