@@ -860,7 +860,9 @@ def build(args: argparse.Namespace) -> None:
         # Static assets
         static_dir = output_dir / "static"
         static_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(_JS_PATH, static_dir / "levels.js")
+        js_dest = static_dir / "levels.js"
+        if not js_dest.resolve().samefile(_JS_PATH.resolve()):
+            shutil.copy2(_JS_PATH, js_dest)
 
         # GeoJSON → static/reaches.geojson
         geojson = _build_geojson(all_reaches, calculated_gauge_ids, all_latest)
