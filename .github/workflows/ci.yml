@@ -30,7 +30,7 @@ jobs:
 
       - name: Install biome
         run: |
-          curl -fsSL https://github.com/biomejs/biome/releases/download/cli%2Fv2.4.11/biome-linux-x64 -o /usr/local/bin/biome
+          curl -fsSL "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.4.11/biome-linux-x64" -o /usr/local/bin/biome
           chmod +x /usr/local/bin/biome
 
       - name: PHP syntax check
