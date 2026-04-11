@@ -194,16 +194,16 @@ def test_unknown_site_skipped(session):
     assert len(rows) == 0
 
 
-def test_missing_api_key():
-    """Graceful skip when USGS_API_KEY is not set."""
+def test_missing_api_key(session):
+    """Works without USGS_API_KEY (optional, just affects rate limit)."""
     args = argparse.Namespace(hours=24, dry_run=False, batch_size=BATCH_SIZE)
 
-    with mock.patch.dict("os.environ", {}, clear=True):
-        # Remove USGS_API_KEY if it exists
-        import os
-
-        os.environ.pop("USGS_API_KEY", None)
-        fetch_usgs_ogc(args)  # should return without error
+    with (
+        mock.patch.dict("os.environ", {"USGS_API_KEY": ""}, clear=False),
+        mock.patch("kayak.cli.fetch_usgs_ogc._build_site_map", return_value={}),
+        mock.patch("kayak.cli.fetch_usgs_ogc.get_session", return_value=session),
+    ):
+        fetch_usgs_ogc(args)  # should return via "No USGS sites found" path
 
 
 def test_c_to_f():

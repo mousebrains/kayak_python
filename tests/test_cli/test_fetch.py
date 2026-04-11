@@ -15,18 +15,18 @@ def test_hour_allowed_empty_string():
 
 
 def test_hour_allowed_matching_hour():
-    """Returns True when the current hour is in the spec."""
-    from datetime import datetime
+    """Returns True when the current UTC hour is in the spec."""
+    from datetime import UTC, datetime
 
-    current_hour = datetime.now().hour
+    current_hour = datetime.now(UTC).hour
     assert _hour_allowed(str(current_hour)) is True
 
 
 def test_hour_allowed_non_matching_hour():
-    """Returns False when the current hour is not in the spec."""
-    from datetime import datetime
+    """Returns False when the current UTC hour is not in the spec."""
+    from datetime import UTC, datetime
 
-    current_hour = datetime.now().hour
+    current_hour = datetime.now(UTC).hour
     other_hour = (current_hour + 12) % 24
     assert _hour_allowed(str(other_hour)) is False
 

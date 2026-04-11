@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import math
 from datetime import UTC, datetime
+
+logger = logging.getLogger(__name__)
 
 # Common timezone abbreviations to UTC offsets (hours)
 TIMEZONE_OFFSETS: dict[str, int] = {
@@ -126,6 +129,7 @@ def parse_datetime(text: str, tz_name: str | None = None) -> datetime | None:
             # Convert from local time to UTC
             dt = dt.replace(tzinfo=UTC) - timedelta(hours=offset_hours)
         else:
+            logger.warning("Unknown timezone '%s', falling back to UTC", tz_name)
             dt = dt.replace(tzinfo=UTC)
     else:
         dt = dt.replace(tzinfo=UTC)

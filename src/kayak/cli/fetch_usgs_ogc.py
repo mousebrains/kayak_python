@@ -226,9 +226,6 @@ def _fetch_continuous(
 def fetch_usgs_ogc(args: argparse.Namespace) -> None:
     """Fetch USGS data via the OGC API."""
     api_key = os.environ.get("USGS_API_KEY")
-    if not api_key:
-        logger.warning("USGS_API_KEY not set — skipping USGS OGC fetch")
-        return
 
     hours = getattr(args, "hours", 24)
     dry_run = getattr(args, "dry_run", False)
@@ -272,13 +269,14 @@ def fetch_usgs_ogc(args: argparse.Namespace) -> None:
         for gs in session.query(GaugeSource).all():
             source_to_gauge[gs.source_id] = gs.gauge_id
         for sid, dtype in updated_pairs:
-            assert isinstance(sid, int) and isinstance(dtype, DataType)
+            if not isinstance(sid, int) or not isinstance(dtype, DataType):
+                logger.warning("Unexpected types: sid=%r dtype=%r, skipping", sid, dtype)
+                continue
             update_latest(session, sid, dtype)
         # Update gauge-level cache for affected gauges
         gauge_pairs: set[tuple[int, DataType]] = set()
         for sid, dtype in updated_pairs:
-            if isinstance(sid, int) and sid in source_to_gauge:
-                assert isinstance(dtype, DataType)
+            if isinstance(sid, int) and sid in source_to_gauge and isinstance(dtype, DataType):
                 gauge_pairs.add((source_to_gauge[sid], dtype))
         for gid, dtype in gauge_pairs:
             update_latest_gauge(session, gid, dtype)

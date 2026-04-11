@@ -29,7 +29,7 @@ def _hour_allowed(hours_spec: str) -> bool:
     """
     if not hours_spec or not hours_spec.strip():
         return True
-    current_hour = datetime.now().hour
+    current_hour = datetime.now(UTC).hour
     try:
         allowed = {int(h.strip()) for h in hours_spec.split(",") if h.strip()}
         return current_hour in allowed

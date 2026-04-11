@@ -161,6 +161,13 @@ class TestParseDatetime:
         expected = datetime(2024, 6, 15, 10, 0, 0, tzinfo=UTC)
         assert result == expected
 
+    def test_unknown_timezone_logs_warning(self, caplog):
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="kayak.utils.conversions"):
+            parse_datetime("2024-06-15 10:00:00", tz_name="BOGUS")
+        assert "Unknown timezone 'BOGUS'" in caplog.text
+
     def test_empty_string_returns_none(self):
         assert parse_datetime("") is None
 
