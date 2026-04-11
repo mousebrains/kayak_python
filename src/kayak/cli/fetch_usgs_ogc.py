@@ -40,7 +40,7 @@ PARAM_MAP: dict[str, tuple[DataType, Callable[[float], float] | None]] = {
 }
 
 
-def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     """Register the 'fetch-usgs-ogc' subcommand."""
     parser = subparsers.add_parser(
         "fetch-usgs-ogc",

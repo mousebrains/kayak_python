@@ -15,7 +15,7 @@ from kayak.db.models import DataType, Gauge
 logger = logging.getLogger(__name__)
 
 
-def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     """Register the 'merge' subcommand."""
     parser = subparsers.add_parser(
         "merge", help="Merge data from multiple source stations into combined stations"

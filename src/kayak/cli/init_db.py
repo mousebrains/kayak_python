@@ -58,7 +58,7 @@ def sync_sources(session: Session) -> int:
     return count
 
 
-def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     """Register the 'init-db' subcommand."""
     parser = subparsers.add_parser(
         "init-db", help="Create database tables and optionally seed reference data"

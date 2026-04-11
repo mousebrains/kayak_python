@@ -69,7 +69,7 @@ def addArgs_options(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     """Register the 'fetch' subcommand."""
     parser = subparsers.add_parser(
         "fetch", help="Fetch data from remote agencies, parse, and store in database"

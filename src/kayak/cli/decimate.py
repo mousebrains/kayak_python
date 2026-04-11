@@ -104,7 +104,7 @@ SELECT COUNT(*) FROM ranked WHERE rn > 1
 """
 
 
-def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     """Register the 'decimate' subcommand."""
     parser = subparsers.add_parser(
         "decimate",

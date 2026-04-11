@@ -21,7 +21,7 @@ from kayak.db.engine import get_engine
 logger = logging.getLogger(__name__)
 
 
-def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     """Register the 'pipeline' subcommand."""
     parser = subparsers.add_parser("pipeline", help="Run the full data pipeline")
     parser.set_defaults(func=pipeline)

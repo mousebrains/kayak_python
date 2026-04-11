@@ -76,7 +76,7 @@ def _safe_eval(expr: str) -> float:
     return float(_eval(tree))
 
 
-def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     """Register the 'calculator' subcommand."""
     parser = subparsers.add_parser(
         "calculator", help="Build synthetic/calculated gage readings from expressions"

@@ -23,7 +23,7 @@ from kayak.utils.conversions import interpolate_rating
 logger = logging.getLogger(__name__)
 
 
-def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     """Register the 'calc-rating' subcommand."""
     parser = subparsers.add_parser(
         "calc-rating", help="Apply rating tables to convert between gage height and flow"

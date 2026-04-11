@@ -533,7 +533,7 @@ def _build_html_table(
         if col["field"] == "state" and not is_all_page:
             continue
         cls = ' class="secondary"' if col["field"] in _SECONDARY_FIELDS else ""
-        lines.append(f"  <th scope=\"col\"{cls}>{col['name_html']}</th>")
+        lines.append(f'  <th scope="col"{cls}>{col["name_html"]}</th>')
     lines.append("</tr></thead>")
     lines.append("<tbody>")
 
@@ -823,7 +823,7 @@ Data sourced from USGS, NOAA, USACE, USBR, and other government agencies. <a hre
 # ---------------------------------------------------------------------------
 
 
-def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     """Register the 'build' subcommand."""
     parser = subparsers.add_parser(
         "build", help="Generate static HTML/CSV/text files to output directory"
