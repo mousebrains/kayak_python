@@ -9,12 +9,13 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 VENV="$REPO_DIR/../.venv"
 TARGET_DB="sqlite:///$REPO_DIR/../DB/kayak.db"
-LEGACY_URL="mysql+pymysql://levels:Deschutes@127.0.0.1:3307/levels_data"
+MYSQL_PASS="${MYSQL_PASS:?Set MYSQL_PASS environment variable}"
+LEGACY_URL="mysql+pymysql://levels:${MYSQL_PASS}@127.0.0.1:3307/levels_data"
 
 SSH_USER="tpw@levels.wkcc.org"
 SSH_REMOTE="mysql.wkcc.dreamhosters.com:3306"
 LOCAL_PORT=3307
-SOCK="/tmp/kayak-sync-ssh-$$"
+SOCK="${XDG_RUNTIME_DIR:-/tmp}/kayak-sync-ssh-$$"
 
 cleanup() {
     if [[ -S "$SOCK" ]]; then

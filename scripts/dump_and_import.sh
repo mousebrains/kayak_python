@@ -17,12 +17,15 @@ DB="$REPO/../DB/kayak.db"
 DUMP_DIR=/tmp
 DUMP_FILE="$DUMP_DIR/levels_todo.sql"
 
-MYSQL_HOST=mysql.wkcc.dreamhosters.com
-MYSQL_USER=levels
-MYSQL_PASS=Deschutes
-MYSQL_DB=levels_todo
+MYSQL_HOST="${MYSQL_HOST:-mysql.wkcc.dreamhosters.com}"
+MYSQL_USER="${MYSQL_USER:-levels}"
+MYSQL_PASS="${MYSQL_PASS:?Set MYSQL_PASS environment variable}"
+MYSQL_DB="${MYSQL_DB:-levels_todo}"
 
 IMPORT_ARGS=("$@")
+
+cleanup() { rm -f "$DUMP_FILE"; }
+trap cleanup EXIT
 
 echo "=== Step 1: Dumping $MYSQL_DB from production ==="
 ssh wkcc "mysqldump --single-transaction --skip-lock-tables \
@@ -51,5 +54,3 @@ echo "=== Step 4: Running pipeline ==="
 echo ""
 echo "=== Done ==="
 ls -lh "$DB"
-rm -f "$DUMP_FILE"
-echo "Cleaned up $DUMP_FILE"
