@@ -102,6 +102,33 @@ class TestWaGovQuality:
         assert len(temps) == 1
 
 
+class TestWaGovQualityBoundaries:
+    """Explicit boundary tests for the quality code filter."""
+
+    def _parse_single(self, session, quality_value):
+        src = _make_source(session)
+        parser = WaGovParser(url="https://example.com/wa", session=session, source_id=src.id)
+        text = (
+            f"BNDRY--Boundary Test\n"
+            f"DATE TIME Water_Temp  Quality\n"
+            f"---  ---  -------  -------\n"
+            f"06/15/2024 12:00  18.5  {quality_value}\n"
+        )
+        return parser.parse(text)
+
+    def test_quality_zero_rejected(self, session):
+        assert self._parse_single(session, 0) == 0
+
+    def test_quality_one_accepted(self, session):
+        assert self._parse_single(session, 1) == 1
+
+    def test_quality_199_accepted(self, session):
+        assert self._parse_single(session, 199) == 1
+
+    def test_quality_200_rejected(self, session):
+        assert self._parse_single(session, 200) == 0
+
+
 class TestWaGovEdgeCases:
     def test_no_data_lines_skipped(self, session):
         """Lines containing 'No Data' should be skipped."""

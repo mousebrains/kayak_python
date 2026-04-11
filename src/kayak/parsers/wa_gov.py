@@ -79,7 +79,8 @@ class WaGovParser(BaseParser):
         if "No Data" in line:
             return True
 
-        # Last column is quality
+        # Last column is quality code; 0 means "no quality code available" in
+        # WA DOE data, treated as suspect.  Valid quality codes are 1-199.
         quality = safe_float(parts[-1])
         if quality is None or quality <= 0 or quality >= 200:
             return True
