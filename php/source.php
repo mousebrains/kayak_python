@@ -114,7 +114,7 @@ $gauges = $gauges_stmt->fetchAll();
 
 // --- Render ---
 header('Cache-Control: no-cache');
-include_header(htmlspecialchars($source['name']) . ' - Source');
+include_header($source['name'] . ' - Source');
 
 // Navigation bar
 echo '<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">';

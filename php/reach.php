@@ -311,7 +311,7 @@ $guidebooks = $gb_stmt->fetchAll();
 
 // --- Render ---
 header('Cache-Control: no-cache');
-include_header(htmlspecialchars($name) . ' - Reach');
+include_header($name . ' - Reach');
 
 // Navigation bar
 echo '<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">';

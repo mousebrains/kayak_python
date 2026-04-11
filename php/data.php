@@ -102,7 +102,7 @@ $type_labels = [
 ];
 
 header('Cache-Control: no-cache');
-include_header(htmlspecialchars($name) . ' - Data');
+include_header($name . ' - Data');
 
 echo '<h2>' . htmlspecialchars($name) . ' — Data Inspector</h2>';
 
