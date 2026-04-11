@@ -96,7 +96,8 @@ class TestDecimateSixHourlyThinning:
     def test_thins_archive_observations(self, session, sample_source):
         now = datetime.now(UTC)
         # 24 observations per day (hourly), 500 days ago (archive range)
-        start = now - timedelta(days=500)
+        # Anchor to midnight so all 24 obs fall within one calendar day (4 six-hour buckets)
+        start = (now - timedelta(days=500)).replace(hour=0, minute=0, second=0, microsecond=0)
         _seed_observations(session, sample_source.id, 24, start, timedelta(hours=1))
         before = _count_obs(session)
         assert before == 24

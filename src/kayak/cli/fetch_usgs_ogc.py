@@ -226,6 +226,9 @@ def _fetch_continuous(
 def fetch_usgs_ogc(args: argparse.Namespace) -> None:
     """Fetch USGS data via the OGC API."""
     api_key = os.environ.get("USGS_API_KEY")
+    if not api_key:
+        logger.warning("USGS_API_KEY not set — skipping USGS OGC fetch")
+        return
 
     hours = getattr(args, "hours", 24)
     dry_run = getattr(args, "dry_run", False)
