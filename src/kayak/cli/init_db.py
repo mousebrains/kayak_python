@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import logging
 
 from sqlalchemy.orm import Session
 
 from kayak.config_data import load_sources
 from kayak.db.engine import get_engine
 from kayak.db.models import Base, FetchUrl, State
+
+logger = logging.getLogger(__name__)
 
 
 def _seed_states(session: Session) -> None:
@@ -91,6 +94,7 @@ def init_db(args: argparse.Namespace) -> None:
             session.commit()
             print("Done.")
         except Exception:
+            logger.exception("Error during database initialization")
             session.rollback()
             raise
         finally:

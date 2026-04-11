@@ -19,9 +19,17 @@ _DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 def _load_yaml(filename: str) -> dict[str, Any]:
     """Load and parse a YAML file from the data directory."""
     path = _DATA_DIR / filename
-    with open(path) as f:
-        result: dict[str, Any] = yaml.safe_load(f)
-        return result
+    try:
+        with open(path) as f:
+            result: dict[str, Any] = yaml.safe_load(f)
+            return result
+    except FileNotFoundError:
+        raise FileNotFoundError(
+            f"Required config file not found: {path}. "
+            f"Ensure the 'data/' directory contains {filename}."
+        ) from None
+    except yaml.YAMLError as e:
+        raise ValueError(f"Error parsing {path}: {e}") from e
 
 
 @lru_cache(maxsize=1)

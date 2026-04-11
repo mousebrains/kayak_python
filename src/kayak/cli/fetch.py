@@ -256,9 +256,12 @@ def fetch(args: argparse.Namespace) -> None:
 
                 logger.debug("  %d updates", count)
 
-            except Exception as e:
-                logger.error("Exception for %s: %s", w.url, e)
+            except (ValueError, KeyError, LookupError) as e:
+                logger.error("Parse/data error for %s: %s", w.url, e)
                 continue
+            except Exception:
+                logger.exception("Unexpected error for %s", w.url)
+                raise
 
         if not args.dry_run:
             session.commit()
