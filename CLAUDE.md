@@ -78,10 +78,13 @@ php -S localhost:8000 -t public_html  # Serve PHP pages + static build output
 Runs these steps in order:
 
 1. **fetch** — reads `data/sources.yaml`, fetches URLs, dispatches to registered parsers, stores `Observation` rows
-2. **calc-rating** — interpolates missing flow from gage height (or vice versa) using `Rating`/`RatingData` tables
-3. **merge** — for gauges with multiple sources, merges observations using median at each timestamp
-4. **calculator** — evaluates `CalcExpression` formulas referencing `LatestObservation` values
-5. **build** — generates per-state HTML pages, CSV, and text files to `public_html/`; inlines CSS and SVG sparklines
+2. **fetch-usgs-ogc** — fetches USGS data via the OGC API for gauges with `usgs_id`
+3. **calc-rating** — interpolates missing flow from gage height (or vice versa) using `Rating`/`RatingData` tables
+4. **update-gauge-cache** — recomputes gauge-level latest observation values
+5. **calculator** — evaluates `CalcExpression` formulas referencing `LatestObservation` values
+6. **build** — generates per-state HTML pages, CSV, and text files to `public_html/`; inlines CSS and SVG sparklines
+
+**Note:** `merge` (for gauges with multiple sources) is not part of the pipeline — run `levels merge` manually when needed.
 
 ### Two-Layer Web Architecture
 
@@ -91,7 +94,7 @@ Runs these steps in order:
 
 ### Database
 
-Single normalized SQLite database (`kayak.db`) for development, MySQL for production. Schema defined in `src/kayak/db/models.py` (SQLAlchemy 2.x ORM, 18 tables). Key tables:
+Single normalized SQLite database (`kayak.db`). Schema defined in `src/kayak/db/models.py` (SQLAlchemy 2.x ORM, 18 tables). Key tables:
 
 - `source` / `gauge` / `gauge_source` — data sources and physical gauge stations
 - `observation` — time-series data (source_id, observed_at, data_type, value)

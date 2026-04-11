@@ -28,7 +28,7 @@ if (!isset($_SERVER['PHP_AUTH_USER'])
 session_set_cookie_params([
     'lifetime' => 0,
     'path'     => '/edit.php',
-    'secure'   => true,
+    'secure'   => !empty($_SERVER['HTTPS']),
     'httponly'  => true,
     'samesite' => 'Strict',
 ]);
