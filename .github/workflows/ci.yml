@@ -66,4 +66,4 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
-      - run: pytest --cov=kayak --cov-report=term-missing -q
+      - run: pytest --cov=kayak --cov-report=term-missing --cov-fail-under=60 -q
