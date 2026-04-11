@@ -9,6 +9,16 @@ _engine: Engine | None = None
 _session_factory: sessionmaker[Session] | None = None
 
 
+def _set_sqlite_pragma(dbapi_conn: object, _connection_record: object) -> None:
+    """Set SQLite PRAGMAs on each new connection."""
+    cursor = dbapi_conn.cursor()  # type: ignore[attr-defined]
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.execute("PRAGMA busy_timeout=30000")
+    cursor.execute("PRAGMA synchronous=NORMAL")
+    cursor.close()
+
+
 def get_engine(url: str | None = None) -> Engine:
     """Return the singleton engine, creating it on first call."""
     global _engine
@@ -18,18 +28,8 @@ def get_engine(url: str | None = None) -> Engine:
         if db_url.startswith("sqlite"):
             connect_args["check_same_thread"] = False
         _engine = create_engine(db_url, connect_args=connect_args, echo=False)
-        # Enable WAL mode and foreign keys for SQLite
         if db_url.startswith("sqlite"):
-
-            @event.listens_for(_engine, "connect")
-            def _set_sqlite_pragma(dbapi_conn: object, _connection_record: object) -> None:
-                cursor = dbapi_conn.cursor()  # type: ignore[attr-defined]
-                cursor.execute("PRAGMA journal_mode=WAL")
-                cursor.execute("PRAGMA foreign_keys=ON")
-                cursor.execute("PRAGMA busy_timeout=30000")
-                cursor.execute("PRAGMA synchronous=NORMAL")
-                cursor.close()
-
+            event.listen(_engine, "connect", _set_sqlite_pragma)
     return _engine
 
 
