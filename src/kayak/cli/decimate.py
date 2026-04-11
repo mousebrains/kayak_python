@@ -11,8 +11,6 @@ Deletions are batched by source_id so the database write lock is held only
 briefly per batch, allowing concurrent readers and writers.
 """
 
-from __future__ import annotations
-
 import argparse
 import logging
 

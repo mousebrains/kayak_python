@@ -1,7 +1,5 @@
 """Tests for kayak.cli.build output generators."""
 
-from __future__ import annotations
-
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest import mock

@@ -5,8 +5,6 @@ If only gage data exists, converts to flow. If only flow, converts to gage.
 If both exist, fills in gaps.
 """
 
-from __future__ import annotations
-
 import argparse
 import logging
 

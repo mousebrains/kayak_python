@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "kayak"
 version = "0.1.0"
 description = "River level data aggregation from government agencies"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = [
     "SQLAlchemy>=2.0",
     "requests>=2.31",
@@ -56,7 +56,7 @@ exclude_lines = [
 ]
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py313"
 line-length = 100
 src = ["src"]
 
@@ -68,7 +68,7 @@ ignore = ["E501", "SIM108"]
 known-first-party = ["kayak"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.13"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

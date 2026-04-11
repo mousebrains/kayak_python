@@ -4,8 +4,6 @@ Reduces a time series to a target number of points while preserving
 visual shape — peaks and troughs are retained.
 """
 
-from __future__ import annotations
-
 import statistics
 
 

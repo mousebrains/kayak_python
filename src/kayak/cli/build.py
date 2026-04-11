@@ -5,8 +5,6 @@ directory (default: public_html/).  Each page has responsive mobile-first
 styling, state navigation links, and inline SVG sparklines.
 """
 
-from __future__ import annotations
-
 import argparse
 import csv
 import html as html_mod

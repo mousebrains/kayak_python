@@ -4,8 +4,6 @@ Provides a simple requests-based HTTP client with the same interface
 semantics as the C++ Curl class.
 """
 
-from __future__ import annotations
-
 import asyncio
 import logging
 import ssl

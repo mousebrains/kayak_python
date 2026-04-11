@@ -6,8 +6,6 @@ Returns JSON with stage (ft) and flow (kcfs) observations.
 Only observed data is stored — forecasts are not used.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import re

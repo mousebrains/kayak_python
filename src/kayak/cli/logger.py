@@ -5,8 +5,6 @@ Provides argparse-compatible equivalents of TPWUtils addArgs()/mkLogger():
 - mkLogger: configures the root logger from the parsed args namespace.
 """
 
-from __future__ import annotations
-
 import argparse
 import getpass
 import logging

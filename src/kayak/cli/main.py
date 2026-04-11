@@ -1,7 +1,5 @@
 """Argparse CLI entry point (replaces individual C++ programs)."""
 
-from __future__ import annotations
-
 import argparse
 import sys
 

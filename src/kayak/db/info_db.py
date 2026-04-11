@@ -4,8 +4,6 @@ Uses the normalized schema with Reach, Gauge, State, and junction tables
 instead of the flat Master/MergedMaster approach.
 """
 
-from __future__ import annotations
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
 

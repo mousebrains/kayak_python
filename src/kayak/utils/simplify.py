@@ -1,7 +1,5 @@
 """Douglas-Peucker polyline simplification and geometry parsing."""
 
-from __future__ import annotations
-
 
 def parse_geom(geom_str: str) -> list[tuple[float, float]]:
     """Parse "lon lat,lon lat,..." text into [(lon, lat), ...] tuples."""

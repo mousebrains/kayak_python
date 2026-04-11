@@ -4,8 +4,6 @@ These replace the database-stored configuration tables (URLParse, BuilderColumn,
 DescriptionField) with static YAML files under data/.
 """
 
-from __future__ import annotations
-
 from functools import lru_cache
 from pathlib import Path
 from typing import Any

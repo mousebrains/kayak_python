@@ -4,8 +4,6 @@ Format: XML with nested SiteData/observedData/observedValue.
 Extracts stage (feet), discharge (cfs), and inflow (cfs).
 """
 
-from __future__ import annotations
-
 import logging
 import math
 from datetime import UTC, datetime

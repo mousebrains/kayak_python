@@ -8,8 +8,6 @@ Returns JSON keyed by station with nested timeseries containing
 [timestamp, value, quality_flag] triples.  Values are already in CFS.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 from datetime import UTC, datetime

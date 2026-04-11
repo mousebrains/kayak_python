@@ -4,8 +4,6 @@ Combines data from multiple source stations into merged gauges via
 the GaugeSource relationships.
 """
 
-from __future__ import annotations
-
 import argparse
 import logging
 

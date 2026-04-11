@@ -9,8 +9,6 @@ Each column like ``01_00060`` encodes a USGS parameter code that maps to
 a data type (flow, gage, temperature, etc.) with optional unit conversion.
 """
 
-from __future__ import annotations
-
 import logging
 import math
 from dataclasses import dataclass

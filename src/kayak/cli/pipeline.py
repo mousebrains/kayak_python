@@ -9,8 +9,6 @@ Runs the full data pipeline in order:
 6. build — generate output pages
 """
 
-from __future__ import annotations
-
 import argparse
 import logging
 import time

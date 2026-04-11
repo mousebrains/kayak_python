@@ -6,8 +6,6 @@ URL parameter ``format=csv`` produces clean CSV without HTML wrapping.
 Data codes: Q=FLOW, GH=GAGE, WC/WF=TEMPERATURE, etc.
 """
 
-from __future__ import annotations
-
 import logging
 import math
 from dataclasses import dataclass

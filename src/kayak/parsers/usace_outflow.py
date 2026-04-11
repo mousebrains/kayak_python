@@ -5,8 +5,6 @@ States: 0=Find "PROJECT-", 1=Find "REPORT" date, 2=Parse hour:value data
 Flow values are in thousands (multiplied by 1000).
 """
 
-from __future__ import annotations
-
 import logging
 import math
 import re

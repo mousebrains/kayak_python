@@ -1,7 +1,5 @@
 """Database initialization command (replaces gen.sql/rebuild)."""
 
-from __future__ import annotations
-
 import argparse
 import logging
 

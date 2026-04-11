@@ -5,8 +5,6 @@ Queries the database for all gauges with a usgs_id, then fetches continuous
 the correct Source record via the gauge → gauge_source → source relationship.
 """
 
-from __future__ import annotations
-
 import argparse
 import logging
 import os

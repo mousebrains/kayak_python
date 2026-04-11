@@ -3,8 +3,7 @@
 All queries are keyed by source_id (int FK) instead of station name strings.
 """
 
-from __future__ import annotations
-
+import itertools
 import logging
 import statistics
 from collections import defaultdict
@@ -159,9 +158,7 @@ def store_observations(session: Session, values: list[dict]) -> int:
         return 0
 
     # SQLite has a 999-variable limit; each row uses 4 variables → batch at 200
-    BATCH = 200
-    for i in range(0, len(valid_rows), BATCH):
-        batch = valid_rows[i : i + BATCH]
+    for batch in itertools.batched(valid_rows, 200, strict=False):
         stmt = (
             sqlite_upsert(Observation)
             .values(batch)

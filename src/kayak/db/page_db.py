@@ -1,7 +1,5 @@
 """Page cache query helpers (replaces PageDB.C)."""
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session

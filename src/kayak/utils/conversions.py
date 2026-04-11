@@ -1,7 +1,5 @@
 """Unit conversions and date parsing helpers."""
 
-from __future__ import annotations
-
 import logging
 import math
 from datetime import UTC, datetime

@@ -9,8 +9,6 @@ The data type (flow vs inflow) is determined from the column header
 ("Discharge" -> flow, "Inflow" -> inflow).
 """
 
-from __future__ import annotations
-
 import logging
 import re
 from datetime import UTC, datetime

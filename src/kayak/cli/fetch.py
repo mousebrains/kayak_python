@@ -4,8 +4,6 @@ Fetches data from remote government agencies, parses it, and stores
 observations in the database.
 """
 
-from __future__ import annotations
-
 import argparse
 import asyncio
 import logging

@@ -4,8 +4,6 @@ Evaluates CalcExpression entries that reference other sources' Latest values
 to produce derived observations.
 """
 
-from __future__ import annotations
-
 import argparse
 import ast
 import logging
