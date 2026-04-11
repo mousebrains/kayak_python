@@ -100,12 +100,12 @@ class TestNWRFCBasic:
 
 class TestNWRFCNegativeFlow:
     def test_rejects_negative_flow(self, session):
-        """Negative discharge values should be rejected."""
+        """Negative discharge values should be rejected at the storage layer."""
         src = _make_source(session)
         parser = NWRFCXMLParser(url="https://example.com/nwrfc", session=session, source_id=src.id)
         count = parser.parse(NWRFC_NEGATIVE_FLOW)
 
-        # Stage is stored, but negative flow is not
+        # Stage is stored, but negative flow is rejected by store_observations
         gauges = (
             session.query(Observation).filter_by(source_id=src.id, data_type=DataType.gauge).all()
         )
@@ -114,7 +114,7 @@ class TestNWRFCNegativeFlow:
         )
         assert len(gauges) == 1
         assert len(flows) == 0
-        assert count == 1
+        assert count == 2  # both parsed; negative flow filtered at storage layer
 
 
 class TestNWRFCEdgeCases:

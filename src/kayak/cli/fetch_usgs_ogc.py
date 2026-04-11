@@ -15,7 +15,12 @@ import requests
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from kayak.db.data_db import store_observations, update_latest, update_latest_gauge
+from kayak.db.data_db import (
+    get_negative_flow_source_ids,
+    store_observations,
+    update_latest,
+    update_latest_gauge,
+)
 from kayak.db.engine import get_session
 from kayak.db.models import DataType, Gauge, GaugeSource, Source
 
@@ -259,7 +264,8 @@ def fetch_usgs_ogc(args: argparse.Namespace) -> None:
 
     session = get_session()
     try:
-        stored = store_observations(session, all_rows)
+        neg_flow_sources = get_negative_flow_source_ids(session)
+        stored = store_observations(session, all_rows, allow_negative_flow_sources=neg_flow_sources)
         updated_pairs = {(row["source_id"], row["data_type"]) for row in all_rows}
         print(f"Updating latest observations for {len(updated_pairs)} source/type pairs...")
         # Build source→gauge reverse map

@@ -11,6 +11,7 @@ import logging
 from sqlalchemy import select
 
 from kayak.db.data_db import (
+    get_negative_flow_source_ids,
     get_observations,
     get_rating_table,
     store_observation,
@@ -40,6 +41,7 @@ def calc_rating(args: argparse.Namespace) -> None:
     try:
         # Find gauges with rating tables
         gauges = list(session.scalars(select(Gauge).where(Gauge.rating_id.isnot(None))))
+        neg_flow_sources = get_negative_flow_source_ids(session)
 
         print(f"Found {len(gauges)} gauges with rating tables")
 
@@ -83,7 +85,12 @@ def calc_rating(args: argparse.Namespace) -> None:
                         for rec in flow_records:
                             val = interpolate_rating(cfs_to_feet, rec.value, 0.1)
                             if val is not None and store_observation(
-                                session, source_id, DataType.gauge, rec.observed_at, val
+                                session,
+                                source_id,
+                                DataType.gauge,
+                                rec.observed_at,
+                                val,
+                                allow_negative_flow_sources=neg_flow_sources,
                             ):
                                 new_gauge = True
                     elif not flow_records:
@@ -93,7 +100,12 @@ def calc_rating(args: argparse.Namespace) -> None:
                                 val is not None
                                 and val > 0
                                 and store_observation(
-                                    session, source_id, DataType.flow, rec.observed_at, val
+                                    session,
+                                    source_id,
+                                    DataType.flow,
+                                    rec.observed_at,
+                                    val,
+                                    allow_negative_flow_sources=neg_flow_sources,
                                 )
                             ):
                                 new_flow = True
@@ -110,6 +122,7 @@ def calc_rating(args: argparse.Namespace) -> None:
                                     DataType.gauge,
                                     rec.observed_at,
                                     val,
+                                    allow_negative_flow_sources=neg_flow_sources,
                                 ):
                                     new_gauge = True
 
@@ -125,6 +138,7 @@ def calc_rating(args: argparse.Namespace) -> None:
                                         DataType.flow,
                                         rec.observed_at,
                                         val,
+                                        allow_negative_flow_sources=neg_flow_sources,
                                     )
                                 ):
                                     new_flow = True

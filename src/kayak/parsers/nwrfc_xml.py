@@ -96,7 +96,7 @@ class NWRFCXMLParser(BaseParser):
                 units = elem.get("units", "")
                 if "cubic" in units.lower() or "cfs" in units.lower():
                     val = safe_float(text)
-                    if val is not None and math.isfinite(val) and val >= 0:
+                    if val is not None and math.isfinite(val):
                         self.dump_to_db(station, DataType.flow, when, val)
             elif tag == "inflow" and when and text:
                 units = elem.get("units", "")

@@ -13,7 +13,13 @@ from collections.abc import Callable
 
 from sqlalchemy import select
 
-from kayak.db.data_db import get_latest_gauge, store_observation, update_latest, update_latest_gauge
+from kayak.db.data_db import (
+    get_latest_gauge,
+    get_negative_flow_source_ids,
+    store_observation,
+    update_latest,
+    update_latest_gauge,
+)
 from kayak.db.engine import get_session
 from kayak.db.models import DataType, Gauge, GaugeSource, Source
 
@@ -97,6 +103,8 @@ def calculator(args: argparse.Namespace) -> None:
         )
 
         print(f"Found {len(calc_sources)} calculated sources")
+
+        neg_flow_sources = get_negative_flow_source_ids(session)
 
         # Build gauge name -> gauge_id lookup
         name_to_gauge_id = {g.name: g.id for g in session.scalars(select(Gauge))}
@@ -240,9 +248,18 @@ def calculator(args: argparse.Namespace) -> None:
                     logger.error("Error evaluating '%s': %s", expr, e)
                     continue
 
-                result = max(0, float(result))
+                result = float(result)
+                if source.id not in neg_flow_sources:
+                    result = max(0, result)
 
-                if store_observation(session, source.id, data_type, when, result):
+                if store_observation(
+                    session,
+                    source.id,
+                    data_type,
+                    when,
+                    result,
+                    allow_negative_flow_sources=neg_flow_sources,
+                ):
                     update_latest(session, source.id, data_type)
                     # Also update gauge-level cache
                     gauge_id = source_to_gauge.get(source.id)

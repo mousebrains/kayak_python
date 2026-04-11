@@ -14,7 +14,12 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from kayak.db.data_db import store_observations, update_latest, update_latest_gauge
+from kayak.db.data_db import (
+    get_negative_flow_source_ids,
+    store_observations,
+    update_latest,
+    update_latest_gauge,
+)
 from kayak.db.models import DataType, GaugeSource, Source
 
 logger = logging.getLogger(__name__)
@@ -151,7 +156,12 @@ class BaseParser(ABC):
         if not self._obs_buffer or self.dry_run:
             self._obs_buffer = []
             return
-        stored = store_observations(self.session, self._obs_buffer)
+        neg_flow_sources = get_negative_flow_source_ids(self.session)
+        stored = store_observations(
+            self.session,
+            self._obs_buffer,
+            allow_negative_flow_sources=neg_flow_sources,
+        )
         if stored < len(self._obs_buffer):
             logger.warning(
                 "Stored %d of %d buffered observations for %s",

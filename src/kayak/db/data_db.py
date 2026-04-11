@@ -35,6 +35,16 @@ DELTA_LOOKBACK_WINDOW = timedelta(hours=6)
 # ---------------------------------------------------------------------------
 
 
+def get_negative_flow_source_ids(session: Session) -> set[int]:
+    """Return source_ids linked to gauges with allow_negative_flow=True."""
+    rows = session.execute(
+        select(GaugeSource.source_id)
+        .join(Gauge, GaugeSource.gauge_id == Gauge.id)
+        .where(Gauge.allow_negative_flow.is_(True))
+    ).all()
+    return {r[0] for r in rows}
+
+
 def get_source_by_name(session: Session, name: str) -> Source | None:
     """Fetch a Source by its name."""
     return session.execute(select(Source).where(Source.name == name)).scalar_one_or_none()
@@ -56,12 +66,14 @@ def store_observation(
     data_type: DataType | str,
     when: datetime,
     value: float,
+    *,
+    allow_negative_flow_sources: set[int] | None = None,
 ) -> bool:
     """Store a single observation, rejecting invalid data.
 
     Mirrors DataDB::operator() validation:
     - Rejects timestamps in the future
-    - Rejects negative flow values
+    - Rejects negative flow values (unless source is in allow_negative_flow_sources)
     """
     if isinstance(data_type, str):
         try:
@@ -81,7 +93,11 @@ def store_observation(
         logger.warning("Rejecting future timestamp %s for source_id=%d", when, source_id)
         return False
 
-    if data_type == DataType.flow and value < 0:
+    if (
+        data_type == DataType.flow
+        and value < 0
+        and not (allow_negative_flow_sources and source_id in allow_negative_flow_sources)
+    ):
         logger.error("Rejecting negative flow %s for source_id=%d", value, source_id)
         return False
 
@@ -102,12 +118,18 @@ def store_observation(
     return True
 
 
-def store_observations(session: Session, values: list[dict]) -> int:
+def store_observations(
+    session: Session,
+    values: list[dict],
+    *,
+    allow_negative_flow_sources: set[int] | None = None,
+) -> int:
     """Store multiple observations in a single batch INSERT.
 
     Each dict must have keys: source_id, data_type, observed_at, value.
     Same validation rules as store_observation(): rejects future timestamps
-    and negative flow values. Returns count of rows stored.
+    and negative flow values (unless source is in allow_negative_flow_sources).
+    Returns count of rows stored.
     """
     now = datetime.now(UTC)
     future_cutoff = now + timedelta(hours=1)
@@ -137,7 +159,13 @@ def store_observations(session: Session, values: list[dict]) -> int:
             continue
 
         value = row["value"]
-        if data_type == DataType.flow and value < 0:
+        if (
+            data_type == DataType.flow
+            and value < 0
+            and not (
+                allow_negative_flow_sources and row["source_id"] in allow_negative_flow_sources
+            )
+        ):
             logger.error(
                 "Rejecting negative flow %s for source_id=%d",
                 value,

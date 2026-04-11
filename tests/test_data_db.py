@@ -7,6 +7,7 @@ from kayak.db.data_db import (
     get_bulk_observations,
     get_gauge_by_name,
     get_latest,
+    get_negative_flow_source_ids,
     get_observations,
     get_rating_table,
     get_source_by_name,
@@ -408,3 +409,96 @@ def test_update_latest_gauge_basic(session):
     )
     assert latest is not None
     assert latest.value == 150.0
+
+
+# ---------------------------------------------------------------------------
+# allow_negative_flow flag
+# ---------------------------------------------------------------------------
+
+
+def _make_tidal_gauge_source(session):
+    """Create a gauge with allow_negative_flow=True and a linked source."""
+    src = _make_source(session, "tidal_src")
+    gauge = Gauge(name="tidal_gauge", allow_negative_flow=True)
+    session.add(gauge)
+    session.flush()
+    gs = GaugeSource(gauge_id=gauge.id, source_id=src.id)
+    session.add(gs)
+    session.flush()
+    return src, gauge
+
+
+def test_get_negative_flow_source_ids_empty(session):
+    """No gauges with the flag returns empty set."""
+    assert get_negative_flow_source_ids(session) == set()
+
+
+def test_get_negative_flow_source_ids(session):
+    """Sources linked to allow_negative_flow gauges are returned."""
+    src, _gauge = _make_tidal_gauge_source(session)
+    ids = get_negative_flow_source_ids(session)
+    assert src.id in ids
+
+
+def test_store_observation_negative_flow_allowed(session):
+    """Negative flow accepted when source is in allow set."""
+    src, _gauge = _make_tidal_gauge_source(session)
+    now = datetime.now(UTC)
+    allowed = get_negative_flow_source_ids(session)
+    assert store_observation(
+        session,
+        src.id,
+        DataType.flow,
+        now,
+        -100.0,
+        allow_negative_flow_sources=allowed,
+    )
+    session.flush()
+    rows = get_observations(session, src.id, DataType.flow)
+    assert len(rows) == 1
+    assert rows[0].value == -100.0
+
+
+def test_store_observation_negative_flow_rejected_by_default(session):
+    """Negative flow still rejected for sources not in allow set."""
+    src, _gauge = _make_tidal_gauge_source(session)
+    now = datetime.now(UTC)
+    # Pass empty set — source not allowed
+    assert not store_observation(
+        session,
+        src.id,
+        DataType.flow,
+        now,
+        -100.0,
+        allow_negative_flow_sources=set(),
+    )
+
+
+def test_store_observations_batch_negative_flow_allowed(session):
+    """Batch store accepts negative flow for allowed sources."""
+    src, _gauge = _make_tidal_gauge_source(session)
+    now = datetime.now(UTC)
+    allowed = get_negative_flow_source_ids(session)
+    rows = [
+        {"source_id": src.id, "data_type": DataType.flow, "observed_at": now, "value": -50.0},
+        {
+            "source_id": src.id,
+            "data_type": DataType.flow,
+            "observed_at": now - timedelta(hours=1),
+            "value": -200.0,
+        },
+    ]
+    count = store_observations(session, rows, allow_negative_flow_sources=allowed)
+    session.flush()
+    assert count == 2
+
+
+def test_store_observations_batch_negative_flow_rejected(session):
+    """Batch store rejects negative flow when source not in allow set."""
+    src = _make_source(session, "normal_src")
+    now = datetime.now(UTC)
+    rows = [
+        {"source_id": src.id, "data_type": DataType.flow, "observed_at": now, "value": -50.0},
+    ]
+    count = store_observations(session, rows, allow_negative_flow_sources=set())
+    assert count == 0
