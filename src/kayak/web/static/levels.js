@@ -26,5 +26,13 @@ document.querySelectorAll('time[datetime]').forEach(function(el){
   });
 })();
 
+// Lazy-load sparkline SVGs (keeps initial HTML small for slow networks)
+fetch('/static/sparklines.json').then(function(r){return r.json()}).then(function(data){
+  document.querySelectorAll('span.spark[data-gid]').forEach(function(el){
+    var svg=data[el.dataset.gid];
+    if(svg)el.innerHTML=svg;
+  });
+}).catch(function(){});
+
 // Service worker
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/static/sw.js',{scope:'/'});
