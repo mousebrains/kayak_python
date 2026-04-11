@@ -22,6 +22,15 @@ from kayak.parsers.registry import ensure_all_loaded, get_parser_class
 logger = logging.getLogger(__name__)
 
 
+def _safe_subpath(base_dir: Path, raw_url: str) -> Path:
+    """Resolve raw_url under base_dir, rejecting path traversal."""
+    candidate = (base_dir / raw_url.lstrip("/")).resolve()
+    base_resolved = base_dir.resolve()
+    if not str(candidate).startswith(str(base_resolved) + "/") and candidate != base_resolved:
+        raise ValueError(f"Path traversal detected: {raw_url!r} escapes {base_dir}")
+    return candidate
+
+
 def _hour_allowed(hours_spec: str) -> bool:
     """Check if current hour is allowed by the hours constraint.
 
@@ -207,7 +216,7 @@ def fetch(args: argparse.Namespace) -> None:
                 content_map[w.url] = None
             else:
                 if args.output_dir:
-                    out_path = Path(args.output_dir) / w.raw_url.lstrip("/")
+                    out_path = _safe_subpath(Path(args.output_dir), w.raw_url)
                     result.write_file(str(out_path))
                 content_map[w.url] = result.text
     else:
@@ -266,7 +275,7 @@ def _get_content_from_file(raw_url: str, input_dir: str) -> str | None:
 
     Returns the text content, or None if the file does not exist.
     """
-    file_path = Path(input_dir) / raw_url.lstrip("/")
+    file_path = _safe_subpath(Path(input_dir), raw_url)
     if not file_path.exists():
         logger.debug("No saved file: %s", file_path)
         return None
@@ -297,7 +306,7 @@ def _get_content(
         return None
 
     if output_dir:
-        out_path = Path(output_dir) / raw_url.lstrip("/")
+        out_path = _safe_subpath(Path(output_dir), raw_url)
         result.write_file(str(out_path))
 
     return result.text

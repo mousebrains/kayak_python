@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import html as html_mod
 import io
 import json
 import logging
@@ -484,12 +485,14 @@ def _format_cell_value(col: dict[str, Any], row: dict, reach_id: int, sparkline:
 
     if col["type"] == "name":
         est = '<span class="est"> (est)</span>' if row.get("is_estimated") else ""
-        return f'<a href="/description.php?id={reach_id}">{val}</a>{est}'
+        return f'<a href="/description.php?id={reach_id}">{html_mod.escape(str(val))}</a>{est}'
     elif col["type"] == "flow" and isinstance(val, int | float):
-        lvl_cls = f' class="level-{row["flow_level"]}"' if row.get("flow_level") else ""
+        lvl = html_mod.escape(str(row["flow_level"])) if row.get("flow_level") else ""
+        lvl_cls = f' class="level-{lvl}"' if lvl else ""
         return f"<span{lvl_cls}>{val:,.0f}</span>{sparkline}"
     elif col["type"] == "gage" and isinstance(val, int | float):
-        lvl_cls = f' class="level-{row["gage_level"]}"' if row.get("gage_level") else ""
+        lvl = html_mod.escape(str(row["gage_level"])) if row.get("gage_level") else ""
+        lvl_cls = f' class="level-{lvl}"' if lvl else ""
         return f"<span{lvl_cls}>{val:,.1f}</span>"
     elif col["type"] == "temp" and isinstance(val, int | float):
         return f"{val:.1f}"
@@ -498,10 +501,10 @@ def _format_cell_value(col: dict[str, Any], row: dict, reach_id: int, sparkline:
         display = val.strftime("%m/%d %H:%M")
         return f'<time datetime="{iso}">{display}</time>'
     elif col["type"] == "status":
-        status = row.get("status", "")
+        status = html_mod.escape(str(row.get("status", "")))
         return f'<span class="level-{status}">{status}</span>' if status else ""
     else:
-        return str(val) if val else ""
+        return html_mod.escape(str(val)) if val else ""
 
 
 def _build_html_table(
@@ -579,7 +582,9 @@ def _build_html_table(
 
             cls_attr = f' class="{td_cls}"' if td_cls else ""
             rowspan = f' rowspan="{span}"' if is_gauge_col and span > 1 else ""
-            lines.append(f'  <td{cls_attr}{rowspan} data-label="{label}">{val}</td>')
+            lines.append(
+                f'  <td{cls_attr}{rowspan} data-label="{html_mod.escape(label)}">{val}</td>'
+            )
         lines.append("</tr>")
 
     lines.append("</tbody></table>")

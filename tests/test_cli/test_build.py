@@ -516,6 +516,31 @@ class TestBuildHTMLTable:
             result, _ = _build_html_table(reaches, COLS, set(), {}, {})
         assert "level-high" in result
 
+    def test_status_value_html_escaped(self, session):
+        reaches = _make_reaches(session, count=1)
+        fake_row = {"display_name": "XSS River", "flow": 100.0, "status": '<script>alert(1)</script>'}
+        with (
+            mock.patch("kayak.cli.build._get_row_data", return_value=fake_row),
+            mock.patch("kayak.cli.build._build_sparkline", return_value=""),
+        ):
+            result, _ = _build_html_table(reaches, COLS, set(), {}, {})
+        assert "<script>" not in result
+        assert "&lt;script&gt;" in result
+
+    def test_data_label_html_escaped(self, session):
+        evil_col = {**COLS_SIMPLE[1], "name_text": 'Flow"onmouseover="alert(1)'}
+        reaches = _make_reaches(session, count=1)
+        fake_row = {"display_name": "Test", "flow": 100.0}
+        with (
+            mock.patch("kayak.cli.build._get_row_data", return_value=fake_row),
+            mock.patch("kayak.cli.build._build_sparkline", return_value=""),
+        ):
+            result, _ = _build_html_table(reaches, [COLS_SIMPLE[0], evil_col], set(), {}, {})
+        # Quotes in label should be escaped so they can't break the attribute
+        assert "&quot;" in result
+        # Should NOT have an unescaped quote breaking out of data-label
+        assert 'data-label="Flow&quot;' in result
+
     def test_estimated_tag(self, session):
         reaches = _make_reaches(session, count=1)
         fake_row = {"display_name": "Est River", "flow": 100.0, "is_estimated": True}

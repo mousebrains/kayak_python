@@ -2,7 +2,9 @@
 
 from unittest import mock
 
-from kayak.cli.fetch import _get_content, _get_content_from_file, _hour_allowed
+import pytest
+
+from kayak.cli.fetch import _get_content, _get_content_from_file, _hour_allowed, _safe_subpath
 
 # ---------------------------------------------------------------------------
 # _hour_allowed
@@ -34,6 +36,33 @@ def test_hour_allowed_non_matching_hour():
 def test_hour_allowed_invalid_spec():
     """Invalid (non-integer) spec returns True (fail-open)."""
     assert _hour_allowed("abc,xyz") is True
+
+
+# ---------------------------------------------------------------------------
+# _safe_subpath
+# ---------------------------------------------------------------------------
+
+
+class TestSafeSubpath:
+    def test_normal_url_resolves(self, tmp_path):
+        result = _safe_subpath(tmp_path, "data/feed.txt")
+        assert str(result).startswith(str(tmp_path))
+
+    def test_traversal_rejected(self, tmp_path):
+        with pytest.raises(ValueError, match="Path traversal"):
+            _safe_subpath(tmp_path, "../../etc/passwd")
+
+    def test_double_dot_in_middle_rejected(self, tmp_path):
+        with pytest.raises(ValueError, match="Path traversal"):
+            _safe_subpath(tmp_path, "data/../../etc/passwd")
+
+    def test_absolute_path_stays_within_base(self, tmp_path):
+        result = _safe_subpath(tmp_path, "/data/file.txt")
+        assert str(result).startswith(str(tmp_path))
+
+    def test_leading_slashes_stripped(self, tmp_path):
+        result = _safe_subpath(tmp_path, "///data/file.txt")
+        assert result == tmp_path / "data/file.txt"
 
 
 # ---------------------------------------------------------------------------
