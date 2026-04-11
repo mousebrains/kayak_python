@@ -15,4 +15,4 @@ document.querySelector('.levels')?.addEventListener('click',function(e){
 });
 
 // Service worker
-if('serviceWorker' in navigator)navigator.serviceWorker.register('/static/sw.js');
+if('serviceWorker' in navigator)navigator.serviceWorker.register('/static/sw.js',{scope:'/'});

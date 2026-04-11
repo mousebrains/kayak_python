@@ -8,6 +8,7 @@ Flow values are in thousands (multiplied by 1000).
 import logging
 import math
 import re
+from datetime import timedelta
 from typing import Any
 
 from kayak.db.models import DataType
@@ -71,8 +72,15 @@ class USACEOutflowParser(BaseParser):
                 if hour is not None and hour > 0:
                     val = safe_float(parts[2])
                     if val is not None and math.isfinite(val):
-                        time_str = self._date + " " + parts[0] + ":00"
-                        when = parse_datetime(time_str)
+                        if hour == 24:
+                            # USACE convention: hour 24 = midnight of the next day
+                            time_str = self._date + " 00:00"
+                            when = parse_datetime(time_str)
+                            if when:
+                                when += timedelta(days=1)
+                        else:
+                            time_str = self._date + " " + parts[0] + ":00"
+                            when = parse_datetime(time_str)
                         if when:
                             # Values are in thousands
                             self.dump_to_db(

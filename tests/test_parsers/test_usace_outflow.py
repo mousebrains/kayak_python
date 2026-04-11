@@ -1,7 +1,17 @@
 """Tests for the USACE Outflow parser."""
 
+from datetime import UTC, datetime
+
 from kayak.db.models import DataType, FetchUrl, Observation, Source
 from kayak.parsers.usace_outflow import USACEOutflowParser
+
+USACE_HOUR24 = """\
+  PROJECT- DALLES
+  REPORT Jun 15 2024
+
+  23  00  160.0
+  24  00  155.0
+"""
 
 USACE_BASIC = """\
   PROJECT- DALLES
@@ -101,6 +111,27 @@ class TestUSACEEdgeCases:
             url="https://example.com/usace", session=session, source_id=src.id
         )
         assert parser.parse("") == 0
+
+    def test_hour_24_normalized_to_next_day(self, session):
+        """Hour 24 is USACE convention for midnight of the next day."""
+        src = _make_source(session, name="h24_test")
+        parser = USACEOutflowParser(
+            url="https://example.com/usace", session=session, source_id=src.id
+        )
+        count = parser.parse(USACE_HOUR24)
+        assert count == 2
+
+        flows = (
+            session.query(Observation)
+            .filter_by(source_id=src.id, data_type=DataType.flow)
+            .order_by(Observation.observed_at)
+            .all()
+        )
+        assert len(flows) == 2
+        # Hour 23 on Jun 15
+        assert flows[0].observed_at.replace(tzinfo=None) == datetime(2024, 6, 15, 23, 0)
+        # Hour 24 → midnight Jun 16
+        assert flows[1].observed_at.replace(tzinfo=None) == datetime(2024, 6, 16, 0, 0)
 
     def test_multiple_projects(self, session):
         """Multiple PROJECT blocks in the same text should all parse."""
