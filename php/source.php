@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 /**
  * Source browser — view source details with associated gauges.
  *

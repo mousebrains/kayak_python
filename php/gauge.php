@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 /**
  * Gauge browser — view gauge details with associated sources and reaches.
  *

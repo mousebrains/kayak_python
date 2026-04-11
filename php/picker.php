@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 /**
  * Picker — "Build Your Own Levels Page"
  *

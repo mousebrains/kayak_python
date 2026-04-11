@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 /**
  * Input validation helpers shared across PHP pages.
  */

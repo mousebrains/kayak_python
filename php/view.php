@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 /**
  * Raw data view — shows latest readings for a reach.
  *

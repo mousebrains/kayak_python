@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 /**
  * Shared HTML header with inlined CSS.
  *

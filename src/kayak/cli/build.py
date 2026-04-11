@@ -317,7 +317,7 @@ def _build_sparkline(
     )
 
     return (
-        f'<svg class="spark" width="{width}" height="{height}" viewBox="0 0 {width} {height}">'
+        f'<svg class="spark" width="{width}" height="{height}" viewBox="0 0 {width} {height}" aria-hidden="true">'
         f'<polyline fill="none" stroke="{SPARKLINE_COLOR}" stroke-width="{SPARKLINE_STROKE_WIDTH}" points="{points}"/>'
         f"</svg>"
     )
@@ -794,7 +794,7 @@ def _build_map_page(css: str, states: list[str]) -> str:
 <style>
 {css}
 #map {{height:calc(100vh - 5rem);width:100%;}}
-.legend {{background:#fff;padding:8px 12px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.3);line-height:1.6;font-size:.85rem;}}
+.legend {{background:var(--c-surface);padding:8px 12px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.3);line-height:1.6;font-size:.85rem;}}
 .legend i {{width:14px;height:14px;display:inline-block;margin-right:6px;border-radius:2px;vertical-align:middle;}}
 main {{padding:0;max-width:none;}}
 </style>

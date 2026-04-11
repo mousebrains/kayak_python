@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 /**
  * Reach description page — readings, plots, map link, metadata.
  *

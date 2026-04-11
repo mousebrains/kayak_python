@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 /**
  * Largest Triangle Three Buckets (LTTB) downsampling.
  *

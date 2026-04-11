@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 /**
  * Data inspector — raw observation data for a reach's gauge sources.
  *

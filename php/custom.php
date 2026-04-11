@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 /**
  * Custom levels page — renders a levels table for arbitrary reach IDs.
  *

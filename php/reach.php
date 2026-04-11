@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 /**
  * Reach browser — view reach details with navigation.
  *
