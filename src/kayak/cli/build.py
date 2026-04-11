@@ -189,7 +189,8 @@ _STATIC_DIR = Path(__file__).resolve().parent.parent / "web" / "static"
 _CSS_PATH = _STATIC_DIR / "style.css"
 _JS_PATH = _STATIC_DIR / "levels.js"
 
-_LEVELS_JS = '<script src="/static/levels.js" defer></script>'
+_LEVELS_JS_VERSION = int(_JS_PATH.stat().st_mtime)
+_LEVELS_JS = f'<script src="/static/levels.js?v={_LEVELS_JS_VERSION}" defer></script>'
 
 
 def _load_css() -> str:

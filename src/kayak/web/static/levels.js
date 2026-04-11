@@ -34,5 +34,11 @@ fetch('/static/sparklines.json').then(function(r){return r.json()}).then(functio
   });
 }).catch(function(){});
 
-// Service worker
-if('serviceWorker' in navigator)navigator.serviceWorker.register('/static/sw.js',{scope:'/'});
+// Service worker — unregister any stale root-scope SW, then register with default scope
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.getRegistrations().then(function(regs){
+    regs.forEach(function(r){if(r.scope!==location.origin+'/static/')r.unregister();});
+  }).then(function(){
+    return navigator.serviceWorker.register('/static/sw.js');
+  }).catch(function(){});
+}
