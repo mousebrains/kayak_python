@@ -10,6 +10,7 @@ import argparse
 import ast
 import logging
 import operator
+import re
 from collections.abc import Callable
 
 from kayak.db.data_db import get_latest_gauge, store_observation, update_latest, update_latest_gauge
@@ -99,10 +100,46 @@ def calculator(args: argparse.Namespace) -> None:
         # Build gauge name -> gauge_id lookup
         name_to_gauge_id = {g.name: g.id for g in session.query(Gauge).all()}
 
-        # Build source_id -> gauge_id reverse lookup for updating gauge cache
+        # Build source_id -> gauge_id and gauge_id -> gauge_name reverse lookups
         source_to_gauge: dict[int, int] = {}
         for gs in session.query(GaugeSource).all():
             source_to_gauge[gs.source_id] = gs.gauge_id
+        gauge_id_to_name: dict[int, str] = {gid: name for name, gid in name_to_gauge_id.items()}
+
+        # Topological sort: calc sources that depend on other calcs run last
+        calc_gauge_names = {gauge_id_to_name.get(source_to_gauge.get(s.id, -1), ""): s for s in calc_sources}
+        def _get_deps(source: Source) -> list[str]:
+            ce = source.calc_expression
+            if not ce or not ce.time_expression:
+                return []
+            return [ref_name for _, ref_name, _ in re.findall(r'(\w+)::(\w+)::(\w+)', ce.time_expression)
+                    if ref_name in calc_gauge_names]
+
+        # Simple topo sort: sources with no calc deps first, then dependents
+        sorted_sources: list[Source] = []
+        remaining = list(calc_sources)
+        resolved: set[str] = set()
+        max_iterations = len(remaining) + 1
+        while remaining and max_iterations > 0:
+            max_iterations -= 1
+            progress = False
+            next_remaining = []
+            for source in remaining:
+                deps = _get_deps(source)
+                if all(d in resolved for d in deps):
+                    sorted_sources.append(source)
+                    src_gauge_name = gauge_id_to_name.get(source_to_gauge.get(source.id, -1), "")
+                    if src_gauge_name:
+                        resolved.add(src_gauge_name)
+                    progress = True
+                else:
+                    next_remaining.append(source)
+            remaining = next_remaining
+            if not progress:
+                # Circular dependency — append remaining as-is
+                sorted_sources.extend(remaining)
+                break
+        calc_sources = sorted_sources
 
         for source in calc_sources:
             try:
