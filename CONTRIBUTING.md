@@ -27,7 +27,7 @@ make test       # pytest
 make check      # all three
 ```
 
-**Ruff** is configured in `pyproject.toml`: Python 3.11 target, 100-char line
+**Ruff** is configured in `pyproject.toml`: Python 3.13 target, 100-char line
 length, rules `E W F I UP B SIM RUF`. Auto-fix with `make format`.
 
 **mypy** runs in strict mode on `src/`.

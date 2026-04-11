@@ -45,7 +45,7 @@ table.levels a{color:#2060A0}
 
 /* Level indicators */
 .level-low,table.levels a.level-low,table.levels a.level-low:visited{color:#c00}
-.level-okay,table.levels a.level-okay,table.levels a.level-okay:visited{color:#0a0}
+.level-okay,table.levels a.level-okay,table.levels a.level-okay:visited{color:#078007}
 .level-high,table.levels a.level-high,table.levels a.level-high:visited{color:#e80}
 
 /* Clickable rows */

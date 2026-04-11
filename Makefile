@@ -1,7 +1,7 @@
 .PHONY: lint format typecheck test coverage check pipeline build clean \
        lint-php lint-js lint-css lint-shell lint-all
 
-VENV ?= /home/pat/.venv
+VENV ?= .venv
 PYTHON = $(VENV)/bin/python
 PIP = $(VENV)/bin/pip
 
