@@ -15,6 +15,8 @@ function get_inline_css(): string {
 }
 
 function include_header(string $title = 'River Levels', string $active = ''): void {
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: SAMEORIGIN');
     $css = get_inline_css();
     $esc_title = htmlspecialchars($title);
     $picker_cls = $active === 'picker' ? ' class="active"' : '';

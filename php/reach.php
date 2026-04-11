@@ -333,7 +333,8 @@ echo '<input type="text" name="q" placeholder="Search reaches…" style="width:1
 echo '<select name="st"><option value="">All states</option>';
 foreach ($all_states as $s) {
     $sel = ($st === $s) ? ' selected' : '';
-    echo "<option value=\"$s\"$sel>$s</option>";
+    $esc = htmlspecialchars($s, ENT_QUOTES);
+    echo "<option value=\"$esc\"$sel>$esc</option>";
 }
 echo '</select>';
 if ($hidden) echo '<input type="hidden" name="hidden" value="1">';

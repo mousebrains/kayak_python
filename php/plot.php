@@ -6,13 +6,14 @@
  */
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/svg_plot.php';
+require_once __DIR__ . '/includes/validate.php';
 
 $id   = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 $type = filter_input(INPUT_GET, 'type', FILTER_SANITIZE_SPECIAL_CHARS) ?: 'flow';
 $days = filter_input(INPUT_GET, 'days', FILTER_VALIDATE_INT) ?: 10;
 $embed = filter_input(INPUT_GET, 'embed', FILTER_VALIDATE_INT);
-$start_date = filter_input(INPUT_GET, 'start', FILTER_SANITIZE_SPECIAL_CHARS);
-$end_date = filter_input(INPUT_GET, 'end', FILTER_SANITIZE_SPECIAL_CHARS);
+$start_date = validate_date(filter_input(INPUT_GET, 'start', FILTER_SANITIZE_SPECIAL_CHARS));
+$end_date = validate_date(filter_input(INPUT_GET, 'end', FILTER_SANITIZE_SPECIAL_CHARS));
 
 if (!$id) { http_response_code(400); exit('Missing id parameter'); }
 
