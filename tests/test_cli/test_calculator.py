@@ -7,8 +7,8 @@ from unittest.mock import patch
 import pytest
 
 from kayak.cli.calculator import _safe_eval, calculator
-from kayak.db.data_db import get_latest, store_observation, update_latest
-from kayak.db.models import CalcExpression, DataType, Source
+from kayak.db.data_db import get_latest, store_observation, update_latest, update_latest_gauge
+from kayak.db.models import CalcExpression, DataType, Gauge, GaugeSource, Source
 
 
 def _noop(*a, **kw):
@@ -88,14 +88,27 @@ def _make_calc_source(session, expression, time_expression, ref_sources):
     session.flush()
     source_id = source.id
 
+    # Create a gauge for the calc source and link it
+    calc_gauge = Gauge(name="calc_test_gauge")
+    session.add(calc_gauge)
+    session.flush()
+    session.add(GaugeSource(gauge_id=calc_gauge.id, source_id=source_id))
+
     for name, dtype, value in ref_sources:
         ref_src = Source(name=name, agency="TEST")
         session.add(ref_src)
         session.flush()
 
+        # Create a gauge with the same name as the source and link them
+        ref_gauge = Gauge(name=name)
+        session.add(ref_gauge)
+        session.flush()
+        session.add(GaugeSource(gauge_id=ref_gauge.id, source_id=ref_src.id))
+
         now = datetime.now(UTC) - timedelta(hours=1)
         store_observation(session, ref_src.id, dtype, now, value)
         update_latest(session, ref_src.id, dtype)
+        update_latest_gauge(session, ref_gauge.id, dtype)
 
     session.flush()
     return source_id

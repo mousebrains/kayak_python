@@ -15,8 +15,8 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from kayak.db.data_db import store_observations, update_latest
-from kayak.db.models import DataType, Source
+from kayak.db.data_db import store_observations, update_latest, update_latest_gauge
+from kayak.db.models import DataType, GaugeSource, Source
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +161,15 @@ class BaseParser(ABC):
         pairs = {(row["source_id"], row["data_type"]) for row in self._obs_buffer}
         for source_id, data_type in pairs:
             update_latest(self.session, source_id, data_type)
+
+        # Update gauge-level cache
+        source_to_gauge: dict[int, int] = {}
+        source_ids = {row["source_id"] for row in self._obs_buffer}
+        for gs in self.session.query(GaugeSource).filter(GaugeSource.source_id.in_(source_ids)).all():
+            source_to_gauge[gs.source_id] = gs.gauge_id
+        gauge_pairs = {(source_to_gauge[sid], dtype) for sid, dtype in pairs if sid in source_to_gauge}
+        for gauge_id, data_type in gauge_pairs:
+            update_latest_gauge(self.session, gauge_id, data_type)
 
         self._obs_buffer = []
 

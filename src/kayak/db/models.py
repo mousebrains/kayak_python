@@ -271,6 +271,30 @@ class LatestObservation(Base):
 
 
 # ---------------------------------------------------------------------------
+# latest_gauge_observation (gauge-level cache table)
+# ---------------------------------------------------------------------------
+
+class LatestGaugeObservation(Base):
+    __tablename__ = "latest_gauge_observation"
+
+    gauge_id: Mapped[int] = mapped_column(
+        ForeignKey("gauge.id", ondelete="CASCADE"), primary_key=True
+    )
+    data_type: Mapped[DataType] = mapped_column(primary_key=True)
+    observed_at: Mapped[datetime] = mapped_column(nullable=False)
+    value: Mapped[float] = mapped_column(nullable=False)
+    prev_observed_at: Mapped[datetime | None] = mapped_column()
+    prev_value: Mapped[float | None] = mapped_column()
+    delta_per_hour: Mapped[float | None] = mapped_column()
+    source_id: Mapped[int | None] = mapped_column(
+        ForeignKey("source.id", ondelete="SET NULL")
+    )
+
+    # relationships
+    gauge: Mapped[Gauge] = relationship()
+
+
+# ---------------------------------------------------------------------------
 # reach
 # ---------------------------------------------------------------------------
 

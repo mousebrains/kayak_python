@@ -12,10 +12,9 @@ import logging
 import operator
 from collections.abc import Callable
 
-from kayak.db.data_db import get_latest, store_observation, update_latest
+from kayak.db.data_db import get_latest_gauge, store_observation, update_latest, update_latest_gauge
 from kayak.db.engine import get_session
-from kayak.db.info_db import get_primary_source_id
-from kayak.db.models import DataType, Gauge, Source
+from kayak.db.models import DataType, Gauge, GaugeSource, Source
 
 logger = logging.getLogger(__name__)
 
@@ -97,15 +96,13 @@ def calculator(args: argparse.Namespace) -> None:
 
         print(f"Found {len(calc_sources)} calculated sources")
 
-        # Build name -> source_id lookup from Source names and Gauge names
-        all_sources = session.query(Source).all()
-        name_to_id = {s.name: s.id for s in all_sources}
+        # Build gauge name -> gauge_id lookup
+        name_to_gauge_id = {g.name: g.id for g in session.query(Gauge).all()}
 
-        # Also map gauge names to their primary source_id
-        for gauge in session.query(Gauge).all():
-            sid = get_primary_source_id(session, gauge.id)
-            if sid and gauge.name not in name_to_id:
-                name_to_id[gauge.name] = sid
+        # Build source_id -> gauge_id reverse lookup for updating gauge cache
+        source_to_gauge: dict[int, int] = {}
+        for gs in session.query(GaugeSource).all():
+            source_to_gauge[gs.source_id] = gs.gauge_id
 
         for source in calc_sources:
             try:
@@ -126,10 +123,10 @@ def calculator(args: argparse.Namespace) -> None:
                     logger.warning("No time_expression for source %s", source.name)
                     continue
 
-                # Resolve all references to actual values
-                # time_expression refs are "key::source_name::type" (3-part)
-                # or "source_name::type" (2-part)
-                values = {}
+                # Resolve all references to gauge-level latest values
+                # time_expression refs are "key::gauge_name::type" (3-part)
+                # or "gauge_name::type" (2-part)
+                values: dict[str, float] = {}
                 times = []
                 skip = False
 
@@ -147,9 +144,9 @@ def calculator(args: argparse.Namespace) -> None:
                         ref_name = parts[0]
                         ref_type_str = parts[1]
 
-                    ref_source_id = name_to_id.get(ref_name)
-                    if not ref_source_id:
-                        logger.error("No source_id for name %s", ref_name)
+                    ref_gauge_id = name_to_gauge_id.get(ref_name)
+                    if not ref_gauge_id:
+                        logger.error("No gauge for name %s", ref_name)
                         skip = True
                         break
 
@@ -160,10 +157,10 @@ def calculator(args: argparse.Namespace) -> None:
                         skip = True
                         break
 
-                    latest = get_latest(session, ref_source_id, ref_dtype)
+                    latest = get_latest_gauge(session, ref_gauge_id, ref_dtype)
                     if latest is None or latest.value is None:
                         logger.warning(
-                            "No latest value for %s/%s", ref_name, ref_type_str
+                            "No latest gauge value for %s/%s", ref_name, ref_type_str
                         )
                         skip = True
                         break
@@ -196,6 +193,10 @@ def calculator(args: argparse.Namespace) -> None:
 
                 if store_observation(session, source.id, data_type, when, result):
                     update_latest(session, source.id, data_type)
+                    # Also update gauge-level cache
+                    gauge_id = source_to_gauge.get(source.id)
+                    if gauge_id:
+                        update_latest_gauge(session, gauge_id, data_type)
                     logger.debug("  = %.1f at %s", result, when)
 
                 # Commit after each source to release the write lock

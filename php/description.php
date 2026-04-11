@@ -56,23 +56,17 @@ include_header("$name - Description");
 echo '<h2>' . htmlspecialchars($name) . '</h2>';
 
 // --- Current readings ---
-$source_id = null;
+$readings = [];
 if ($gauge) {
-    $stmt = $db->prepare('SELECT source_id FROM gauge_source WHERE gauge_id = ? LIMIT 1');
-    $stmt->execute([$gauge['id']]);
-    $gs = $stmt->fetch();
-    if ($gs) {
-        $source_id = $gs['source_id'];
-    }
-}
-
-if ($source_id) {
     $stmt = $db->prepare(
         'SELECT data_type, value, observed_at, delta_per_hour
-         FROM latest_observation WHERE source_id = ?'
+         FROM latest_gauge_observation WHERE gauge_id = ?'
     );
-    $stmt->execute([$source_id]);
+    $stmt->execute([$gauge['id']]);
     $readings = $stmt->fetchAll();
+}
+
+if ($readings) {
 
     if ($readings) {
         $type_labels = [
@@ -121,12 +115,14 @@ if ($source_id) {
 }
 
 // --- Date range selector and inline SVG plots ---
-if ($source_id) {
-    // Compute default dates from latest observation
+if ($gauge) {
+    // Compute default dates from latest observation across all sources
     $latest_ts_row = $db->prepare(
-        'SELECT MAX(observed_at) AS latest FROM observation WHERE source_id = ?'
+        'SELECT MAX(o.observed_at) AS latest FROM observation o
+         JOIN gauge_source gs ON o.source_id = gs.source_id
+         WHERE gs.gauge_id = ?'
     );
-    $latest_ts_row->execute([$source_id]);
+    $latest_ts_row->execute([$gauge['id']]);
     $latest_row = $latest_ts_row->fetch();
     $latest_ts = $latest_row && $latest_row['latest'] ? strtotime($latest_row['latest']) : time();
     $default_end = date('Y-m-d', $latest_ts);
@@ -160,18 +156,20 @@ if ($source_id) {
     foreach ($plot_types as $dtype => $y_label) {
         if ($until) {
             $stmt = $db->prepare(
-                'SELECT observed_at, value FROM observation
-                 WHERE source_id = ? AND data_type = ? AND observed_at >= ? AND observed_at <= ?
-                 ORDER BY observed_at'
+                'SELECT o.observed_at, o.value FROM observation o
+                 JOIN gauge_source gs ON o.source_id = gs.source_id
+                 WHERE gs.gauge_id = ? AND o.data_type = ? AND o.observed_at >= ? AND o.observed_at <= ?
+                 ORDER BY o.observed_at'
             );
-            $stmt->execute([$source_id, $dtype, $since, $until]);
+            $stmt->execute([$gauge['id'], $dtype, $since, $until]);
         } else {
             $stmt = $db->prepare(
-                'SELECT observed_at, value FROM observation
-                 WHERE source_id = ? AND data_type = ? AND observed_at >= ?
-                 ORDER BY observed_at'
+                'SELECT o.observed_at, o.value FROM observation o
+                 JOIN gauge_source gs ON o.source_id = gs.source_id
+                 WHERE gs.gauge_id = ? AND o.data_type = ? AND o.observed_at >= ?
+                 ORDER BY o.observed_at'
             );
-            $stmt->execute([$source_id, $dtype, $since]);
+            $stmt->execute([$gauge['id'], $dtype, $since]);
         }
         $rows = $stmt->fetchAll();
 

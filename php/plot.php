@@ -35,31 +35,28 @@ if (!$reach || !$reach['gauge_id']) { http_response_code(404); exit('Not found')
 
 $name = $reach['display_name'] ?: $reach['name'];
 
-$stmt = $db->prepare('SELECT source_id FROM gauge_source WHERE gauge_id = ? LIMIT 1');
-$stmt->execute([$reach['gauge_id']]);
-$gs = $stmt->fetch();
-if (!$gs) { http_response_code(404); exit('No source'); }
-
-$source_id = $gs['source_id'];
+$gauge_id = $reach['gauge_id'];
 $is_flow = in_array($type, ['flow', 'inflow', 'outflow']);
 
 if ($start_date && $end_date) {
     $since = date('Y-m-d 00:00:00', strtotime($start_date));
     $until = date('Y-m-d 23:59:59', strtotime($end_date));
     $stmt = $db->prepare(
-        'SELECT observed_at, value FROM observation
-         WHERE source_id = ? AND data_type = ? AND observed_at >= ? AND observed_at <= ?
-         ORDER BY observed_at'
+        'SELECT o.observed_at, o.value FROM observation o
+         JOIN gauge_source gs ON o.source_id = gs.source_id
+         WHERE gs.gauge_id = ? AND o.data_type = ? AND o.observed_at >= ? AND o.observed_at <= ?
+         ORDER BY o.observed_at'
     );
-    $stmt->execute([$source_id, $type, $since, $until]);
+    $stmt->execute([$gauge_id, $type, $since, $until]);
 } else {
     $since = date('Y-m-d H:i:s', time() - $days * 86400);
     $stmt = $db->prepare(
-        'SELECT observed_at, value FROM observation
-         WHERE source_id = ? AND data_type = ? AND observed_at >= ?
-         ORDER BY observed_at'
+        'SELECT o.observed_at, o.value FROM observation o
+         JOIN gauge_source gs ON o.source_id = gs.source_id
+         WHERE gs.gauge_id = ? AND o.data_type = ? AND o.observed_at >= ?
+         ORDER BY o.observed_at'
     );
-    $stmt->execute([$source_id, $type, $since]);
+    $stmt->execute([$gauge_id, $type, $since]);
 }
 $rows = $stmt->fetchAll();
 

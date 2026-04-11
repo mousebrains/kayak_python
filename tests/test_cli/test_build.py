@@ -50,7 +50,7 @@ def _make_reaches(session, count=1):
 def test_build_csv_empty_reaches(session):
     """_build_csv with no reaches returns a header-only CSV."""
     with mock.patch("kayak.cli.build._get_row_data", return_value={}):
-        result = _build_csv([], COLS, "", {}, set(), {})
+        result = _build_csv([], COLS, "", set(), {})
 
     lines = result.strip().splitlines()
     assert len(lines) == 1
@@ -67,7 +67,7 @@ def test_build_csv_with_reaches(session):
     ]
 
     with mock.patch("kayak.cli.build._get_row_data", side_effect=fake_rows):
-        result = _build_csv(reaches, COLS, "", {}, set(), {})
+        result = _build_csv(reaches, COLS, "", set(), {})
 
     lines = result.strip().splitlines()
     # header + 2 data rows
@@ -82,7 +82,7 @@ def test_build_text_fixed_width(session):
     fake_row = {"display_name": "Deschutes", "flow": 1500.0}
 
     with mock.patch("kayak.cli.build._get_row_data", return_value=fake_row):
-        result = _build_text(reaches, COLS, "", {}, set(), {})
+        result = _build_text(reaches, COLS, "", set(), {})
 
     lines = result.splitlines()
     # header, separator, data row
@@ -100,7 +100,7 @@ def test_build_html_table_produces_table(session):
         mock.patch("kayak.cli.build._get_row_data", return_value=fake_row),
         mock.patch("kayak.cli.build._build_sparkline", return_value=""),
     ):
-        result, _letters = _build_html_table(reaches, COLS, {}, set(), {}, {})
+        result, _letters = _build_html_table(reaches, COLS, set(), {}, {})
 
     assert "<table" in result
     assert "</table>" in result
@@ -117,7 +117,7 @@ def test_build_html_table_includes_flow_value(session):
         mock.patch("kayak.cli.build._get_row_data", return_value=fake_row),
         mock.patch("kayak.cli.build._build_sparkline", return_value=""),
     ):
-        result, _letters = _build_html_table(reaches, COLS, {}, set(), {}, {})
+        result, _letters = _build_html_table(reaches, COLS, set(), {}, {})
 
     assert "750" in result
 
@@ -131,7 +131,7 @@ def test_build_html_table_includes_name_link(session):
         mock.patch("kayak.cli.build._get_row_data", return_value=fake_row),
         mock.patch("kayak.cli.build._build_sparkline", return_value=""),
     ):
-        result, _letters = _build_html_table(reaches, COLS, {}, set(), {}, {})
+        result, _letters = _build_html_table(reaches, COLS, set(), {}, {})
 
     assert "description.php" in result
     assert "White Salmon" in result

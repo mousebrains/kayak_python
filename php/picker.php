@@ -37,14 +37,10 @@ FROM reach r
 JOIN reach_state rs ON r.id = rs.reach_id
 JOIN state st ON rs.state_id = st.id
 LEFT JOIN gauge g ON r.gauge_id = g.id
-LEFT JOIN (
-    SELECT gauge_id, MIN(source_id) AS source_id
-    FROM gauge_source GROUP BY gauge_id
-) gs ON g.id = gs.gauge_id
-LEFT JOIN latest_observation lo_flow
-       ON gs.source_id = lo_flow.source_id AND lo_flow.data_type = 'flow'
-LEFT JOIN latest_observation lo_gage
-       ON gs.source_id = lo_gage.source_id AND lo_gage.data_type = 'gauge'
+LEFT JOIN latest_gauge_observation lo_flow
+       ON g.id = lo_flow.gauge_id AND lo_flow.data_type = 'flow'
+LEFT JOIN latest_gauge_observation lo_gage
+       ON g.id = lo_gage.gauge_id AND lo_gage.data_type = 'gauge'
 WHERE r.no_show = 0 AND st.name IN ($placeholders)
 ORDER BY r.sort_name
 SQL;

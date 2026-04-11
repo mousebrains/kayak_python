@@ -155,6 +155,20 @@ def get_calculated_source_ids(
     return set(rows)
 
 
+def get_calculated_gauge_ids(
+    session: Session, gauge_ids: list[int],
+) -> set[int]:
+    """Return gauge_ids where any linked source uses a calc_expression."""
+    if not gauge_ids:
+        return set()
+    rows = session.execute(
+        select(GaugeSource.gauge_id)
+        .join(Source, GaugeSource.source_id == Source.id)
+        .where(GaugeSource.gauge_id.in_(gauge_ids), Source.calc_expression_id.is_not(None))
+    ).scalars().all()
+    return set(rows)
+
+
 def classify_level(
     reach: Reach,
     data_type: DataType,

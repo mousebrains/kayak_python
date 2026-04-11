@@ -15,6 +15,7 @@ from kayak.db.data_db import (
     get_rating_table,
     store_observation,
     update_latest,
+    update_latest_gauge,
 )
 from kayak.db.engine import get_session
 from kayak.db.info_db import get_source_ids_for_gauge
@@ -126,6 +127,11 @@ def calc_rating(args: argparse.Namespace) -> None:
                         update_latest(session, source_id, DataType.flow)
                     if new_gauge:
                         update_latest(session, source_id, DataType.gauge)
+
+                if new_flow:
+                    update_latest_gauge(session, gauge.id, DataType.flow)
+                if new_gauge:
+                    update_latest_gauge(session, gauge.id, DataType.gauge)
 
                 # Commit after each gauge to release the write lock
                 session.commit()

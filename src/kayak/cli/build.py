@@ -24,16 +24,15 @@ from sqlalchemy.orm import Session
 
 from kayak.config import BASE_DIR
 from kayak.config_data import load_builder_columns
-from kayak.db.data_db import get_all_latest, get_bulk_observations
+from kayak.db.data_db import get_all_latest_gauges, get_bulk_gauge_observations
 from kayak.db.engine import get_session
 from kayak.db.info_db import (
     all_state_names,
     classify_level,
-    get_all_primary_source_ids,
-    get_calculated_source_ids,
+    get_calculated_gauge_ids,
     reaches_query,
 )
-from kayak.db.models import DataType, LatestObservation, Observation, Reach
+from kayak.db.models import DataType, LatestGaugeObservation, Observation, Reach
 from kayak.utils.lttb import downsample, running_median
 from kayak.utils.simplify import parse_geom, simplify
 
@@ -149,11 +148,10 @@ def _get_builder_columns() -> list[dict]:
 
 def _get_row_data(
     reach: Reach,
-    primary_source_ids: dict[int, int],
-    calculated_ids: set[int],
-    all_latest: dict[tuple[int, DataType], LatestObservation],
+    calculated_gauge_ids: set[int],
+    all_latest: dict[tuple[int, DataType], LatestGaugeObservation],
 ) -> dict:
-    """Build a data dict for one river reach using pre-loaded data."""
+    """Build a data dict for one river reach using pre-loaded gauge-level data."""
     row: dict = {
         "reach_id": reach.id,
         "display_name": reach.display_name or "",
@@ -169,47 +167,45 @@ def _get_row_data(
 
     gauge = reach.gauge
     if gauge:
-        source_id = primary_source_ids.get(gauge.id)
-        if source_id:
-            if source_id in calculated_ids:
-                row["is_estimated"] = True
+        if gauge.id in calculated_gauge_ids:
+            row["is_estimated"] = True
 
-            for dtype_name, dtype in [
-                ("flow", DataType.flow),
-                ("gage", DataType.gauge),
-                ("temperature", DataType.temperature),
-                ("inflow", DataType.inflow),
-            ]:
-                latest = all_latest.get((source_id, dtype))
-                if latest and latest.value is not None:
-                    # Display inflow in the flow column if no direct flow
-                    display_name = dtype_name
-                    if dtype_name == "inflow" and "flow" not in row:
-                        display_name = "flow"
-                    elif dtype_name == "inflow":
-                        continue
-                    row[display_name] = latest.value
-                    if "time" not in row or latest.observed_at > row["time"]:
-                        row["time"] = latest.observed_at
-                    # Classify flow/gage level (inflow uses flow thresholds)
-                    classify_dtype = DataType.flow if dtype == DataType.inflow else dtype
-                    if display_name in ("flow", "gage"):
-                        level = classify_level(reach, classify_dtype, latest.value)
-                        if level:
-                            row[f"{display_name}_level"] = str(level)
-                            if "status" not in row:
-                                row["status"] = str(level)
+        for dtype_name, dtype in [
+            ("flow", DataType.flow),
+            ("gage", DataType.gauge),
+            ("temperature", DataType.temperature),
+            ("inflow", DataType.inflow),
+        ]:
+            latest = all_latest.get((gauge.id, dtype))
+            if latest and latest.value is not None:
+                # Display inflow in the flow column if no direct flow
+                display_name = dtype_name
+                if dtype_name == "inflow" and "flow" not in row:
+                    display_name = "flow"
+                elif dtype_name == "inflow":
+                    continue
+                row[display_name] = latest.value
+                if "time" not in row or latest.observed_at > row["time"]:
+                    row["time"] = latest.observed_at
+                # Classify flow/gage level (inflow uses flow thresholds)
+                classify_dtype = DataType.flow if dtype == DataType.inflow else dtype
+                if display_name in ("flow", "gage"):
+                    level = classify_level(reach, classify_dtype, latest.value)
+                    if level:
+                        row[f"{display_name}_level"] = str(level)
+                        if "status" not in row:
+                            row["status"] = str(level)
 
-            # Stale / expired detection
-            if "time" in row:
-                obs_time = row["time"]
-                if obs_time.tzinfo is None:
-                    obs_time = obs_time.replace(tzinfo=UTC)
-                age = datetime.now(UTC) - obs_time
-                if age > timedelta(days=7):
-                    row["expired"] = True
-                elif age > timedelta(hours=48):
-                    row["stale"] = True
+        # Stale / expired detection
+        if "time" in row:
+            obs_time = row["time"]
+            if obs_time.tzinfo is None:
+                obs_time = obs_time.replace(tzinfo=UTC)
+            age = datetime.now(UTC) - obs_time
+            if age > timedelta(days=7):
+                row["expired"] = True
+            elif age > timedelta(hours=48):
+                row["stale"] = True
     return row
 
 
@@ -219,20 +215,16 @@ def _get_row_data(
 
 def _build_sparkline(
     reach: Reach,
-    primary_source_ids: dict[int, int],
     sparkline_obs: dict[int, list[Observation]],
     width: int = 80,
     height: int = 20,
 ) -> str:
-    """Generate a tiny inline SVG sparkline from pre-loaded observation data."""
+    """Generate a tiny inline SVG sparkline from pre-loaded gauge observation data."""
     gauge = reach.gauge
     if not gauge:
         return ""
-    source_id = primary_source_ids.get(gauge.id)
-    if not source_id:
-        return ""
 
-    records = sparkline_obs.get(source_id, [])
+    records = sparkline_obs.get(gauge.id, [])
     if len(records) < 3:
         return ""
 
@@ -272,15 +264,15 @@ def _build_sparkline(
 # ---------------------------------------------------------------------------
 
 def _build_csv(reaches: list[Reach], columns: list[dict[str, Any]], state_name: str,
-               primary_source_ids: dict[int, int], calculated_ids: set[int],
-               all_latest: dict[tuple[int, DataType], LatestObservation]) -> str:
+               calculated_gauge_ids: set[int],
+               all_latest: dict[tuple[int, DataType], LatestGaugeObservation]) -> str:
     output = io.StringIO()
     writer = csv.writer(output)
     headers = [c["name_text"] for c in columns if "c" in c["use"] and c["type"] != "noop"]
     writer.writerow(headers)
 
     for reach in reaches:
-        row = _get_row_data(reach, primary_source_ids, calculated_ids, all_latest)
+        row = _get_row_data(reach, calculated_gauge_ids, all_latest)
         values = []
         for col in columns:
             if "c" not in col["use"] or col["type"] == "noop":
@@ -296,8 +288,8 @@ def _build_csv(reaches: list[Reach], columns: list[dict[str, Any]], state_name: 
 
 
 def _build_text(reaches: list[Reach], columns: list[dict[str, Any]], state_name: str,
-                primary_source_ids: dict[int, int], calculated_ids: set[int],
-                all_latest: dict[tuple[int, DataType], LatestObservation]) -> str:
+                calculated_gauge_ids: set[int],
+                all_latest: dict[tuple[int, DataType], LatestGaugeObservation]) -> str:
     lines = []
     header = ""
     for col in columns:
@@ -308,7 +300,7 @@ def _build_text(reaches: list[Reach], columns: list[dict[str, Any]], state_name:
     lines.append("-" * len(header))
 
     for reach in reaches:
-        row = _get_row_data(reach, primary_source_ids, calculated_ids, all_latest)
+        row = _get_row_data(reach, calculated_gauge_ids, all_latest)
         line = ""
         for col in columns:
             if "t" not in col["use"] or col["type"] == "noop":
@@ -356,8 +348,8 @@ def _levels_key(reach: Reach) -> tuple:
 
 
 def _build_html_table(reaches: list[Reach], columns: list[dict[str, Any]],
-                      primary_source_ids: dict[int, int], calculated_ids: set[int],
-                      all_latest: dict[tuple[int, DataType], LatestObservation],
+                      calculated_gauge_ids: set[int],
+                      all_latest: dict[tuple[int, DataType], LatestGaugeObservation],
                       sparkline_obs: dict[int, list[Observation]], *, is_all_page: bool = False
                       ) -> tuple[str, list[str]]:
     """Build the <table> body for a set of reaches using pre-loaded data.
@@ -381,14 +373,14 @@ def _build_html_table(reaches: list[Reach], columns: list[dict[str, Any]],
     # Phase 1: Build row data and filter
     visible: list[tuple[Reach, dict, str]] = []
     for reach in reaches:
-        row = _get_row_data(reach, primary_source_ids, calculated_ids, all_latest)
+        row = _get_row_data(reach, calculated_gauge_ids, all_latest)
         if row.get("expired"):
             continue
         has_data = any(row.get(k) is not None and row.get(k) != ""
                        for k in ("flow", "gage", "temperature"))
         if not has_data:
             continue
-        sparkline = _build_sparkline(reach, primary_source_ids, sparkline_obs)
+        sparkline = _build_sparkline(reach, sparkline_obs)
         visible.append((reach, row, sparkline))
 
     # Phase 2: Compute contiguous gauge groups
@@ -482,15 +474,14 @@ def _build_html_table(reaches: list[Reach], columns: list[dict[str, Any]],
 
 def _build_geojson(
     reaches: list[Reach],
-    primary_source_ids: dict[int, int],
-    calculated_ids: set[int],
-    all_latest: dict[tuple[int, DataType], LatestObservation],
+    calculated_gauge_ids: set[int],
+    all_latest: dict[tuple[int, DataType], LatestGaugeObservation],
     epsilon: float = 0.001,
 ) -> str:
     """Build a GeoJSON FeatureCollection of all mappable reaches."""
     features: list[dict] = []
     for reach in reaches:
-        row = _get_row_data(reach, primary_source_ids, calculated_ids, all_latest)
+        row = _get_row_data(reach, calculated_gauge_ids, all_latest)
         if row.get("expired"):
             continue
         status = row.get("status", "unknown")
@@ -724,12 +715,10 @@ def build(args: argparse.Namespace) -> None:
 
         print(f"Building site: {len(all_reaches)} reaches")
 
-        # Pre-load data for all reaches
+        # Pre-load data for all reaches at gauge level
         gauge_ids = [r.gauge_id for r in all_reaches if r.gauge_id]
-        primary_source_ids = get_all_primary_source_ids(session, gauge_ids)
-        source_ids = list(primary_source_ids.values())
-        calculated_ids = get_calculated_source_ids(session, source_ids)
-        all_latest = get_all_latest(session, source_ids)
+        calculated_gauge_ids = get_calculated_gauge_ids(session, gauge_ids)
+        all_latest = get_all_latest_gauges(session, gauge_ids)
 
         # Static assets
         static_dir = output_dir / "static"
@@ -737,8 +726,7 @@ def build(args: argparse.Namespace) -> None:
         shutil.copy2(_JS_PATH, static_dir / "levels.js")
 
         # GeoJSON → static/reaches.geojson
-        geojson = _build_geojson(all_reaches, primary_source_ids,
-                                 calculated_ids, all_latest)
+        geojson = _build_geojson(all_reaches, calculated_gauge_ids, all_latest)
         _atomic_write(static_dir / "reaches.geojson", geojson)
         logger.info("GeoJSON: %d bytes", len(geojson))
 
@@ -749,7 +737,7 @@ def build(args: argparse.Namespace) -> None:
         # index.html = all reaches levels table
         _build_and_write(session, all_reaches, columns, PRIMARY_STATE, states,
                          css, output_dir, filename="index.html",
-                         preloaded=(primary_source_ids, calculated_ids, all_latest))
+                         preloaded=(calculated_gauge_ids, all_latest))
 
         # Links pages for all nav states (including Oregon)
         for state in _NAV_STATES:
@@ -765,7 +753,7 @@ def build(args: argparse.Namespace) -> None:
 def _build_and_write(session: Session, reaches: list[Reach], columns: list[dict[str, Any]],
                      state: str, states: list[str], css: str, output_dir: Path,
                      *, is_all_page: bool = False,
-                     preloaded: tuple[dict[int, int], set[int], dict[tuple[int, DataType], LatestObservation]] | None = None,
+                     preloaded: tuple[set[int], dict[tuple[int, DataType], LatestGaugeObservation]] | None = None,
                      filename: str | None = None) -> None:
     """Build and write CSV, text, and HTML for a state (or all)."""
     suffix = f"_{state}" if state else ""
@@ -776,35 +764,32 @@ def _build_and_write(session: Session, reaches: list[Reach], columns: list[dict[
 
     logger.info("Building %s: %d reaches", label, len(reaches))
 
-    # Pre-load ALL data in ~5 bulk queries (or reuse preloaded)
+    # Pre-load ALL data at gauge level (or reuse preloaded)
+    gauge_ids = [r.gauge_id for r in reaches if r.gauge_id]
     if preloaded:
-        primary_source_ids, calculated_ids, all_latest = preloaded
-        source_ids = list(primary_source_ids.values())
+        calculated_gauge_ids, all_latest = preloaded
     else:
-        gauge_ids = [r.gauge_id for r in reaches if r.gauge_id]
-        primary_source_ids = get_all_primary_source_ids(session, gauge_ids)
-        source_ids = list(primary_source_ids.values())
-        calculated_ids = get_calculated_source_ids(session, source_ids)
-        all_latest = get_all_latest(session, source_ids)
+        calculated_gauge_ids = get_calculated_gauge_ids(session, gauge_ids)
+        all_latest = get_all_latest_gauges(session, gauge_ids)
     since_48h = datetime.now(UTC) - timedelta(hours=48)
-    sparkline_obs = get_bulk_observations(session, source_ids, DataType.flow, since_48h)
-    inflow_obs = get_bulk_observations(session, source_ids, DataType.inflow, since_48h)
-    for sid, obs in inflow_obs.items():
-        sparkline_obs.setdefault(sid, obs)
+    sparkline_obs = get_bulk_gauge_observations(session, gauge_ids, DataType.flow, since_48h)
+    inflow_obs = get_bulk_gauge_observations(session, gauge_ids, DataType.inflow, since_48h)
+    for gid, obs in inflow_obs.items():
+        sparkline_obs.setdefault(gid, obs)
 
     # CSV
     csv_content = _build_csv(reaches, columns, state,
-                             primary_source_ids, calculated_ids, all_latest)
+                             calculated_gauge_ids, all_latest)
     _atomic_write(output_dir / f"levels{suffix}.csv", csv_content)
 
     # Text
     text_content = _build_text(reaches, columns, state,
-                               primary_source_ids, calculated_ids, all_latest)
+                               calculated_gauge_ids, all_latest)
     _atomic_write(output_dir / f"levels{suffix}.text", text_content)
 
     # HTML — complete self-contained page
-    table_html, letters = _build_html_table(reaches, columns, primary_source_ids,
-                                            calculated_ids, all_latest, sparkline_obs,
+    table_html, letters = _build_html_table(reaches, columns,
+                                            calculated_gauge_ids, all_latest, sparkline_obs,
                                             is_all_page=is_all_page)
     page_html = _build_page(table_html, css, states, state, title, letters=letters)
     _atomic_write(output_dir / filename, page_html)

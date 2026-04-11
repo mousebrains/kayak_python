@@ -32,32 +32,26 @@ if (!$reach['gauge_id']) {
     exit;
 }
 
-$stmt = $db->prepare('SELECT source_id FROM gauge_source WHERE gauge_id = ? LIMIT 1');
+$stmt = $db->prepare(
+    'SELECT data_type, value, observed_at, delta_per_hour
+     FROM latest_gauge_observation WHERE gauge_id = ?'
+);
 $stmt->execute([$reach['gauge_id']]);
-$gs = $stmt->fetch();
+$rows = $stmt->fetchAll();
 
-if ($gs) {
-    $stmt = $db->prepare(
-        'SELECT data_type, value, observed_at, delta_per_hour
-         FROM latest_observation WHERE source_id = ?'
-    );
-    $stmt->execute([$gs['source_id']]);
-    $rows = $stmt->fetchAll();
-
-    if ($rows) {
-        echo '<table class="view-table">';
-        echo '<tr><th>Type</th><th>Value</th><th>Time</th><th>Change/hr</th></tr>';
-        foreach ($rows as $r) {
-            $dtype = htmlspecialchars($r['data_type']);
-            $val   = number_format((float)$r['value'], 2);
-            $time  = $r['observed_at'] ? date('Y-m-d H:i', strtotime($r['observed_at'])) : 'N/A';
-            $delta = $r['delta_per_hour'] !== null ? number_format((float)$r['delta_per_hour'], 2) : 'N/A';
-            echo "<tr><td>$dtype</td><td>$val</td><td>$time</td><td>$delta</td></tr>\n";
-        }
-        echo '</table>';
-    } else {
-        echo '<p>No recent data.</p>';
+if ($rows) {
+    echo '<table class="view-table">';
+    echo '<tr><th>Type</th><th>Value</th><th>Time</th><th>Change/hr</th></tr>';
+    foreach ($rows as $r) {
+        $dtype = htmlspecialchars($r['data_type']);
+        $val   = number_format((float)$r['value'], 2);
+        $time  = $r['observed_at'] ? date('Y-m-d H:i', strtotime($r['observed_at'])) : 'N/A';
+        $delta = $r['delta_per_hour'] !== null ? number_format((float)$r['delta_per_hour'], 2) : 'N/A';
+        echo "<tr><td>$dtype</td><td>$val</td><td>$time</td><td>$delta</td></tr>\n";
     }
+    echo '</table>';
+} else {
+    echo '<p>No recent data.</p>';
 }
 
 echo '<p style="margin-top:1rem">';

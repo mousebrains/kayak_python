@@ -40,16 +40,12 @@ SELECT r.id,
        lo_temp.observed_at    AS temp_time
 FROM reach r
 LEFT JOIN gauge g ON r.gauge_id = g.id
-LEFT JOIN (
-    SELECT gauge_id, MIN(source_id) AS source_id
-    FROM gauge_source GROUP BY gauge_id
-) gs ON g.id = gs.gauge_id
-LEFT JOIN latest_observation lo_flow
-       ON gs.source_id = lo_flow.source_id AND lo_flow.data_type = 'flow'
-LEFT JOIN latest_observation lo_gage
-       ON gs.source_id = lo_gage.source_id AND lo_gage.data_type = 'gauge'
-LEFT JOIN latest_observation lo_temp
-       ON gs.source_id = lo_temp.source_id AND lo_temp.data_type = 'temperature'
+LEFT JOIN latest_gauge_observation lo_flow
+       ON g.id = lo_flow.gauge_id AND lo_flow.data_type = 'flow'
+LEFT JOIN latest_gauge_observation lo_gage
+       ON g.id = lo_gage.gauge_id AND lo_gage.data_type = 'gauge'
+LEFT JOIN latest_gauge_observation lo_temp
+       ON g.id = lo_temp.gauge_id AND lo_temp.data_type = 'temperature'
 WHERE r.id IN ($placeholders)
 ORDER BY r.sort_name
 SQL;

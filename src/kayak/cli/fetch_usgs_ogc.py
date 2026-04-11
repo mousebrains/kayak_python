@@ -17,7 +17,7 @@ import requests
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from kayak.db.data_db import store_observations, update_latest
+from kayak.db.data_db import store_observations, update_latest, update_latest_gauge
 from kayak.db.engine import get_session
 from kayak.db.models import DataType, Gauge, GaugeSource, Source
 
@@ -252,9 +252,17 @@ def fetch_usgs_ogc(args: argparse.Namespace) -> None:
         stored = store_observations(session, all_rows)
         updated_pairs = {(row["source_id"], row["data_type"]) for row in all_rows}
         print(f"Updating latest observations for {len(updated_pairs)} source/type pairs...")
+        # Build source→gauge reverse map
+        source_to_gauge: dict[int, int] = {}
+        for gs in session.query(GaugeSource).all():
+            source_to_gauge[gs.source_id] = gs.gauge_id
         for sid, dtype in updated_pairs:
             assert isinstance(sid, int) and isinstance(dtype, DataType)
             update_latest(session, sid, dtype)
+        # Update gauge-level cache for affected gauges
+        gauge_pairs = {(source_to_gauge[sid], dtype) for sid, dtype in updated_pairs if sid in source_to_gauge}
+        for gid, dtype in gauge_pairs:
+            update_latest_gauge(session, gid, dtype)
         session.commit()
         print(f"Committed {stored} observations to database")
     finally:

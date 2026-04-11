@@ -2,10 +2,11 @@
 
 Runs the full data pipeline in order:
 1. fetch — fetch from remote agencies
-2. calc-rating — apply rating tables
-3. merge — merge multi-source data
-4. calculator — compute derived values
-5. build — generate output pages
+2. fetch-usgs-ogc — fetch USGS data via OGC API
+3. calc-rating — apply rating tables
+4. update-gauge-cache — recompute gauge-level latest values
+5. calculator — compute derived values
+6. build — generate output pages
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ import time
 
 from sqlalchemy import text
 
-from kayak.cli import build, calc_rating, calculator, fetch, fetch_usgs_ogc, merge
+from kayak.cli import build, calc_rating, calculator, fetch, fetch_usgs_ogc
 from kayak.db.engine import get_engine
 
 logger = logging.getLogger(__name__)
@@ -33,8 +34,20 @@ def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> 
     fetch.addArgs_options(parser)
 
 
+def _update_gauge_cache(args: argparse.Namespace) -> None:
+    """Recompute gauge-level latest observation cache."""
+    from kayak.db.data_db import update_all_latest_gauges
+    from kayak.db.engine import get_session
+    session = get_session()
+    try:
+        update_all_latest_gauges(session)
+        print("Gauge cache updated")
+    finally:
+        session.close()
+
+
 def pipeline(args: argparse.Namespace) -> None:
-    """Run the full data pipeline (fetch -> calc-rating -> merge -> calculator -> build)."""
+    """Run the full data pipeline."""
     steps = []
 
     if not args.skip_fetch:
@@ -44,7 +57,7 @@ def pipeline(args: argparse.Namespace) -> None:
 
     steps.extend([
         ("calc-rating", calc_rating.calc_rating),
-        ("merge", merge.merge),
+        ("update-gauge-cache", _update_gauge_cache),
         ("calculator", calculator.calculator),
         ("build", build.build),
     ])

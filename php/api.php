@@ -37,22 +37,15 @@ if (!$reach || !$reach['gauge_id']) {
     exit;
 }
 
-$stmt = $db->prepare('SELECT source_id FROM gauge_source WHERE gauge_id = ? LIMIT 1');
-$stmt->execute([$reach['gauge_id']]);
-$gs = $stmt->fetch();
-if (!$gs) {
-    echo json_encode(['reach' => $reach['name'], 'type' => $type, 'count' => 0, 'ts' => [], 'v' => []]);
-    exit;
-}
-
 $since = date('Y-m-d H:i:s', time() - $days * 86400);
 
 $stmt = $db->prepare(
-    'SELECT observed_at, value FROM observation
-     WHERE source_id = ? AND data_type = ? AND observed_at >= ?
-     ORDER BY observed_at'
+    'SELECT o.observed_at, o.value FROM observation o
+     JOIN gauge_source gs ON o.source_id = gs.source_id
+     WHERE gs.gauge_id = ? AND o.data_type = ? AND o.observed_at >= ?
+     ORDER BY o.observed_at'
 );
-$stmt->execute([$gs['source_id'], $type, $since]);
+$stmt->execute([$reach['gauge_id'], $type, $since]);
 $rows = $stmt->fetchAll();
 
 // Optional LTTB downsampling

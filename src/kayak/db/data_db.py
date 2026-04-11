@@ -17,6 +17,8 @@ from sqlalchemy.orm import Session
 from kayak.db.models import (
     DataType,
     Gauge,
+    GaugeSource,
+    LatestGaugeObservation,
     LatestObservation,
     Observation,
     RatingData,
@@ -264,6 +266,179 @@ def get_all_latest(
         .where(LatestObservation.source_id.in_(source_ids))
     ).all()
     return {(r.source_id, r.data_type): r for r in rows}
+
+
+# ---------------------------------------------------------------------------
+# Gauge-level latest cache
+# ---------------------------------------------------------------------------
+
+def update_latest_gauge(
+    session: Session,
+    gauge_id: int,
+    data_type: DataType,
+) -> None:
+    """Recompute the LatestGaugeObservation for a gauge/type.
+
+    Finds the most recent observation across ALL sources linked to the gauge,
+    computes delta_per_hour from a previous observation >6h before latest,
+    and upserts into the latest_gauge_observation cache.
+    """
+    source_ids = list(session.scalars(
+        select(GaugeSource.source_id).where(GaugeSource.gauge_id == gauge_id)
+    ))
+    if not source_ids:
+        return
+
+    latest_row = session.execute(
+        select(Observation)
+        .where(
+            Observation.source_id.in_(source_ids),
+            Observation.data_type == data_type,
+        )
+        .order_by(Observation.observed_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+    if latest_row is None:
+        return
+
+    cutoff = latest_row.observed_at - timedelta(hours=6)
+    prev_row = session.execute(
+        select(Observation)
+        .where(
+            Observation.source_id.in_(source_ids),
+            Observation.data_type == data_type,
+            Observation.observed_at <= cutoff,
+        )
+        .order_by(Observation.observed_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+    delta = None
+    prev_observed_at = None
+    prev_value = None
+    if prev_row is not None:
+        prev_observed_at = prev_row.observed_at
+        prev_value = prev_row.value
+        hours_diff = (latest_row.observed_at - prev_row.observed_at).total_seconds() / 3600
+        if hours_diff > 0:
+            delta = (latest_row.value - prev_row.value) / hours_diff
+
+    existing = session.execute(
+        select(LatestGaugeObservation).where(
+            LatestGaugeObservation.gauge_id == gauge_id,
+            LatestGaugeObservation.data_type == data_type,
+        )
+    ).scalar_one_or_none()
+
+    if existing:
+        existing.observed_at = latest_row.observed_at
+        existing.value = latest_row.value
+        existing.prev_observed_at = prev_observed_at
+        existing.prev_value = prev_value
+        existing.delta_per_hour = delta
+        existing.source_id = latest_row.source_id
+    else:
+        session.add(LatestGaugeObservation(
+            gauge_id=gauge_id,
+            data_type=data_type,
+            observed_at=latest_row.observed_at,
+            value=latest_row.value,
+            prev_observed_at=prev_observed_at,
+            prev_value=prev_value,
+            delta_per_hour=delta,
+            source_id=latest_row.source_id,
+        ))
+
+
+def update_all_latest_gauges(session: Session) -> None:
+    """Recompute latest_gauge_observation for all gauges and data types."""
+    gauge_ids = list(session.scalars(
+        select(Gauge.id).where(
+            Gauge.id.in_(select(GaugeSource.gauge_id).distinct())
+        )
+    ))
+    types = [DataType.flow, DataType.inflow, DataType.gauge, DataType.temperature]
+    for gauge_id in gauge_ids:
+        for dtype in types:
+            update_latest_gauge(session, gauge_id, dtype)
+    session.commit()
+
+
+def get_latest_gauge(
+    session: Session,
+    gauge_id: int,
+    data_type: DataType,
+) -> LatestGaugeObservation | None:
+    """Fetch the LatestGaugeObservation row for a gauge/type."""
+    return session.execute(
+        select(LatestGaugeObservation).where(
+            LatestGaugeObservation.gauge_id == gauge_id,
+            LatestGaugeObservation.data_type == data_type,
+        )
+    ).scalar_one_or_none()
+
+
+def get_all_latest_gauges(
+    session: Session,
+    gauge_ids: list[int],
+) -> dict[tuple[int, DataType], LatestGaugeObservation]:
+    """Fetch all LatestGaugeObservation rows for a list of gauge_ids.
+
+    Returns a dict keyed by (gauge_id, data_type).
+    """
+    if not gauge_ids:
+        return {}
+    rows = session.scalars(
+        select(LatestGaugeObservation)
+        .where(LatestGaugeObservation.gauge_id.in_(gauge_ids))
+    ).all()
+    return {(r.gauge_id, r.data_type): r for r in rows}
+
+
+def get_bulk_gauge_observations(
+    session: Session,
+    gauge_ids: list[int],
+    data_type: DataType,
+    since: datetime,
+) -> dict[int, list[Observation]]:
+    """Fetch observations for multiple gauges, combining all sources per gauge.
+
+    Returns a dict keyed by gauge_id with lists of Observation sorted
+    descending by observed_at.
+    """
+    if not gauge_ids:
+        return {}
+    # Build gauge_id → [source_ids] mapping
+    gs_rows = session.execute(
+        select(GaugeSource.gauge_id, GaugeSource.source_id)
+        .where(GaugeSource.gauge_id.in_(gauge_ids))
+    ).all()
+    gauge_to_sources: dict[int, list[int]] = defaultdict(list)
+    source_to_gauge: dict[int, int] = {}
+    for gid, sid in gs_rows:
+        gauge_to_sources[gid].append(sid)
+        source_to_gauge[sid] = gid
+
+    all_source_ids = list(source_to_gauge.keys())
+    if not all_source_ids:
+        return {}
+
+    stmt = (
+        select(Observation)
+        .where(
+            Observation.source_id.in_(all_source_ids),
+            Observation.data_type == data_type,
+            Observation.observed_at >= since,
+        )
+        .order_by(Observation.observed_at.desc())
+    )
+    rows = list(session.scalars(stmt))
+    result: dict[int, list[Observation]] = defaultdict(list)
+    for row in rows:
+        gid = source_to_gauge[row.source_id]
+        result[gid].append(row)
+    return dict(result)
 
 
 # ---------------------------------------------------------------------------
