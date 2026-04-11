@@ -12,11 +12,7 @@ $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 if (!$id) { http_response_code(400); exit('Missing id parameter'); }
 
 $db = get_db();
-
-$stmt = $db->prepare('SELECT gauge_id, display_name, name FROM reach WHERE id = ?');
-$stmt->execute([$id]);
-$reach = $stmt->fetch();
-if (!$reach) { http_response_code(404); exit('Reach not found'); }
+$reach = get_reach_or_404($id);
 
 $name = $reach['display_name'] ?: $reach['name'];
 

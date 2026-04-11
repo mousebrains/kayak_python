@@ -29,10 +29,8 @@ if ($type === 'temp') $type = 'temperature';
 $db = get_db();
 
 // Look up reach → gauge → source
-$stmt = $db->prepare('SELECT gauge_id, display_name, name FROM reach WHERE id = ?');
-$stmt->execute([$id]);
-$reach = $stmt->fetch();
-if (!$reach || !$reach['gauge_id']) { http_response_code(404); exit('Not found'); }
+$reach = get_reach_or_404($id);
+if (!$reach['gauge_id']) { http_response_code(404); exit('No gauge for this reach'); }
 
 $name = $reach['display_name'] ?: $reach['name'];
 
