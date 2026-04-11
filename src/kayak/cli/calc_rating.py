@@ -64,6 +64,8 @@ def calc_rating(args: argparse.Namespace) -> None:
                 )
 
                 source_ids = get_source_ids_for_gauge(session, gauge.id)
+                any_new_gauge = False
+                any_new_flow = False
 
                 for source_id in source_ids:
                     gauge_records = get_observations(session, source_id, DataType.gauge)
@@ -133,12 +135,14 @@ def calc_rating(args: argparse.Namespace) -> None:
 
                     if new_flow:
                         update_latest(session, source_id, DataType.flow)
+                        any_new_flow = True
                     if new_gauge:
                         update_latest(session, source_id, DataType.gauge)
+                        any_new_gauge = True
 
-                if new_flow:
+                if any_new_flow:
                     update_latest_gauge(session, gauge.id, DataType.flow)
-                if new_gauge:
+                if any_new_gauge:
                     update_latest_gauge(session, gauge.id, DataType.gauge)
 
                 # Commit after each gauge to release the write lock
