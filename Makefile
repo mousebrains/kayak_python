@@ -1,4 +1,5 @@
-.PHONY: lint format typecheck test coverage check pipeline build clean
+.PHONY: lint format typecheck test coverage check pipeline build clean \
+       lint-php lint-js lint-css lint-shell lint-all
 
 VENV ?= /home/pat/.venv
 PYTHON = $(VENV)/bin/python
@@ -6,10 +7,10 @@ PIP = $(VENV)/bin/pip
 
 ## Development
 
-lint:  ## Run linter
+lint:  ## Run Python linter
 	$(VENV)/bin/ruff check src/ tests/
 
-format:  ## Auto-format code
+format:  ## Auto-format Python code
 	$(VENV)/bin/ruff format src/ tests/
 
 typecheck:  ## Run type checker
@@ -21,7 +22,21 @@ test:  ## Run tests
 coverage:  ## Run tests with coverage report
 	$(VENV)/bin/pytest --cov=kayak --cov-report=term-missing -q
 
-check: lint typecheck test  ## Run all checks (lint + typecheck + test)
+lint-php:  ## Syntax-check PHP files
+	@for f in php/*.php php/includes/*.php; do php -l "$$f" || exit 1; done
+
+lint-js:  ## Lint JavaScript files
+	biome check static/ public_html/no_show_review.js src/kayak/web/static/levels.js
+
+lint-css:  ## Lint CSS files
+	biome check php/style.css src/kayak/web/static/style.css
+
+lint-shell:  ## Lint shell scripts
+	shellcheck --severity=warning scripts/*.sh systemd/*.sh hardening/*.sh
+
+lint-all: lint lint-php lint-js lint-css lint-shell  ## Run all linters
+
+check: lint-all typecheck test  ## Run all checks
 
 ## Application
 

@@ -19,3 +19,25 @@ repos:
           - aiohttp
         pass_filenames: false
         args: [src/]
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+        args: [--severity=warning]
+
+  - repo: https://github.com/biomejs/pre-commit
+    rev: v2.0.0
+    hooks:
+      - id: biome-check
+        additional_dependencies: ["@biomejs/biome@2.0.0"]
+        files: \.(js|css)$
+
+  - repo: local
+    hooks:
+      - id: php-lint
+        name: PHP syntax check
+        entry: php -l
+        language: system
+        files: \.php$
+        types: [file]
