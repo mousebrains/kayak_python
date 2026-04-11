@@ -65,8 +65,6 @@ if ($gauge) {
 }
 
 if ($readings) {
-
-    if ($readings) {
         $type_labels = [
             'flow' => 'Flow',
             'gauge' => 'Gage Height',
@@ -109,7 +107,6 @@ if ($readings) {
             echo "<tr><td>$label</td><td>$val</td><td>$time_html</td><td>$delta</td><td>$status</td></tr>\n";
         }
         echo '</table>';
-    }
 }
 
 // --- Date range selector and inline SVG plots ---
