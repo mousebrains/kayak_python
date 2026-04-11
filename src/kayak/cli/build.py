@@ -864,6 +864,11 @@ def build(args: argparse.Namespace) -> None:
         if not js_dest.resolve().samefile(_JS_PATH.resolve()):
             shutil.copy2(_JS_PATH, js_dest)
 
+        # Copy CSS to php/ so the PHP layer can inline it (www-data can't
+        # follow symlinks into src/, so this must be a real copy).
+        php_css_dest = BASE_DIR / "php" / "style.css"
+        shutil.copy2(_CSS_PATH, php_css_dest)
+
         # GeoJSON → static/reaches.geojson
         geojson = _build_geojson(all_reaches, calculated_gauge_ids, all_latest)
         _atomic_write(static_dir / "reaches.geojson", geojson)
