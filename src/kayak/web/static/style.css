@@ -3,6 +3,7 @@
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f5f7fa;color:#333}
 a{color:#2060A0;text-decoration:none}
 a:hover{text-decoration:underline}
+a:focus-visible{outline:2px solid #2060A0;outline-offset:2px;border-radius:2px}
 
 /* Header */
 header{background:#2060A0;color:#fff;padding:.5rem 1rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;position:sticky;top:0;z-index:100}
@@ -24,7 +25,7 @@ main{padding:.5rem}
 @media(min-width:1024px){main{max-width:1200px;margin:0 auto;padding:1rem}}
 
 /* Footer */
-footer{text-align:center;padding:.5rem;color:#888;font-size:.7rem}
+footer{text-align:center;padding:.5rem;color:#666;font-size:.7rem}
 
 /* Table — desktop default */
 table.levels{width:100%;border-collapse:collapse;font-size:.85rem}
@@ -47,7 +48,7 @@ table.levels a{color:#2060A0}
 tr.clickable-row{cursor:pointer}
 
 /* Stale data */
-tr.stale td{color:#aaa;font-style:italic}
+tr.stale td{color:#777;font-style:italic}
 
 /* Estimated marker */
 .est{color:#c00;font-size:.75rem}
@@ -140,4 +141,18 @@ tr.stale td{color:#aaa;font-style:italic}
 /* Picker responsive */
 @media(max-width:639px){
   .picker-sections .col-location,.picker-sections .col-flow,.picker-sections .col-gage{display:none}
+}
+
+/* Focus styles for interactive elements */
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid #2060A0;outline-offset:2px}
+
+/* Print */
+@media print{
+  header,.letter-nav,footer,.picker-actions{display:none}
+  main{padding:0}
+  table.levels{font-size:.7rem}
+  table.levels td,table.levels th{padding:2px 4px}
+  .spark{display:none}
+  a{color:#000;text-decoration:none}
+  a[href]:after{content:" (" attr(href) ")";font-size:.7rem;color:#555}
 }
