@@ -24,9 +24,7 @@ def test_usgs_parser_basic(session):
     src = _make_source(session)
     text = (FIXTURES / "usgs_sample.rdb").read_text()
 
-    parser = USGSParser(
-        url="https://example.com/usgs", session=session, source_id=src.id
-    )
+    parser = USGSParser(url="https://example.com/usgs", session=session, source_id=src.id)
     count = parser.parse(text)
 
     # 3 rows x 2 params (flow + gauge) = 6 updates
@@ -62,8 +60,7 @@ def test_usgs_parser_dry_run(session):
     text = (FIXTURES / "usgs_sample.rdb").read_text()
 
     parser = USGSParser(
-        url="https://example.com/usgs", session=session,
-        source_id=src.id, dry_run=True
+        url="https://example.com/usgs", session=session, source_id=src.id, dry_run=True
     )
     count = parser.parse(text)
 
@@ -74,9 +71,7 @@ def test_usgs_parser_dry_run(session):
 def test_usgs_parser_empty_input(session):
     """Empty input should produce zero updates."""
     src = _make_source(session)
-    parser = USGSParser(
-        url="https://example.com/usgs", session=session, source_id=src.id
-    )
+    parser = USGSParser(url="https://example.com/usgs", session=session, source_id=src.id)
     count = parser.parse("")
     assert count == 0
 
@@ -85,9 +80,7 @@ def test_usgs_parser_comments_only(session):
     """Input with only comments should produce zero updates."""
     src = _make_source(session)
     text = "# This is a comment\n# Another comment\n"
-    parser = USGSParser(
-        url="https://example.com/usgs", session=session, source_id=src.id
-    )
+    parser = USGSParser(url="https://example.com/usgs", session=session, source_id=src.id)
     count = parser.parse(text)
     assert count == 0
 
@@ -100,9 +93,7 @@ def test_usgs_temperature_conversion(session):
         "5s\t15s\t20d\t6s\t14n\t10s\n"
         "USGS\t99999999\t2024-06-15 12:00\tUTC\t20.0\tP\n"
     )
-    parser = USGSParser(
-        url="https://example.com/usgs", session=session, source_id=src.id
-    )
+    parser = USGSParser(url="https://example.com/usgs", session=session, source_id=src.id)
     count = parser.parse(text)
 
     assert count == 1

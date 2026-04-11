@@ -15,7 +15,6 @@ Usage:
 """
 
 import argparse
-from datetime import datetime, timedelta, timezone
 import io
 import json
 import os
@@ -24,12 +23,15 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from datetime import UTC, datetime, timedelta
 
 # Force line-buffered stdout so progress is visible when piped to a file
 if not sys.stdout.line_buffering:
     sys.stdout = io.TextIOWrapper(
-        sys.stdout.buffer, encoding=sys.stdout.encoding,
-        errors=sys.stdout.errors, line_buffering=True,
+        sys.stdout.buffer,
+        encoding=sys.stdout.encoding,
+        errors=sys.stdout.errors,
+        line_buffering=True,
     )
 
 GRAPHQL_URL = "https://www.americanwhitewater.org/graphql"
@@ -165,8 +167,9 @@ def fetch_gauges_batch(reach_ids):
 # Phase 1: Fetch from AW API and save to metadata DB
 # ---------------------------------------------------------------------------
 
+
 def _now():
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _fmt(dt):
@@ -195,12 +198,21 @@ def _upsert_reach(meta_db, reach_data, gauges=None):
                  take_out_lon=excluded.take_out_lon, length=excluded.length,
                  avg_gradient=excluded.avg_gradient, max_gradient=excluded.max_gradient,
                  gauges=excluded.gauges""",
-            (reach_data["id"], reach_data.get("river"), reach_data.get("section"),
-             reach_data.get("class"), reach_data.get("state"),
-             reach_data.get("plat"), reach_data.get("plon"),
-             reach_data.get("tlat"), reach_data.get("tlon"),
-             reach_data.get("length"), reach_data.get("avggradient"),
-             reach_data.get("maxgradient"), gauges_json),
+            (
+                reach_data["id"],
+                reach_data.get("river"),
+                reach_data.get("section"),
+                reach_data.get("class"),
+                reach_data.get("state"),
+                reach_data.get("plat"),
+                reach_data.get("plon"),
+                reach_data.get("tlat"),
+                reach_data.get("tlon"),
+                reach_data.get("length"),
+                reach_data.get("avggradient"),
+                reach_data.get("maxgradient"),
+                gauges_json,
+            ),
         )
     else:
         # Upsert reach metadata only, don't overwrite existing gauges
@@ -215,12 +227,20 @@ def _upsert_reach(meta_db, reach_data, gauges=None):
                  put_in_lon=excluded.put_in_lon, take_out_lat=excluded.take_out_lat,
                  take_out_lon=excluded.take_out_lon, length=excluded.length,
                  avg_gradient=excluded.avg_gradient, max_gradient=excluded.max_gradient""",
-            (reach_data["id"], reach_data.get("river"), reach_data.get("section"),
-             reach_data.get("class"), reach_data.get("state"),
-             reach_data.get("plat"), reach_data.get("plon"),
-             reach_data.get("tlat"), reach_data.get("tlon"),
-             reach_data.get("length"), reach_data.get("avggradient"),
-             reach_data.get("maxgradient")),
+            (
+                reach_data["id"],
+                reach_data.get("river"),
+                reach_data.get("section"),
+                reach_data.get("class"),
+                reach_data.get("state"),
+                reach_data.get("plat"),
+                reach_data.get("plon"),
+                reach_data.get("tlat"),
+                reach_data.get("tlon"),
+                reach_data.get("length"),
+                reach_data.get("avggradient"),
+                reach_data.get("maxgradient"),
+            ),
         )
 
 
@@ -244,8 +264,7 @@ def fetch_and_store(meta_db, states_to_process, delay):
             reaches, has_more = fetch_reaches_page(aw_code, page)
             requests_made += 1
             all_reaches.extend(reaches)
-            _log(f"  Page {page}: {len(reaches)} reaches" +
-                 (" (last)" if not has_more else ""))
+            _log(f"  Page {page}: {len(reaches)} reaches" + (" (last)" if not has_more else ""))
             if not has_more:
                 break
             page += 1
@@ -281,8 +300,7 @@ def fetch_and_store(meta_db, states_to_process, delay):
                 needs_gauges.append(r["id"])
 
         cached_count = len(all_reaches) - len(needs_gauges)
-        _log(f"  Need gauge fetch for {len(needs_gauges)} reaches "
-             f"({cached_count} cached)")
+        _log(f"  Need gauge fetch for {len(needs_gauges)} reaches ({cached_count} cached)")
 
         # Batch gauge queries
         total_batches = (len(needs_gauges) + BATCH_SIZE - 1) // BATCH_SIZE
@@ -303,24 +321,33 @@ def fetch_and_store(meta_db, states_to_process, delay):
                 row = meta_db.execute(
                     "SELECT river, section, class, state, put_in_lat, put_in_lon, "
                     "take_out_lat, take_out_lon, length, avg_gradient, max_gradient "
-                    "FROM aw_reach WHERE id = ?", (rid,)
+                    "FROM aw_reach WHERE id = ?",
+                    (rid,),
                 ).fetchone()
                 if row:
                     reach_data = {
-                        "id": rid, "river": row[0], "section": row[1],
-                        "class": row[2], "state": row[3],
-                        "plat": row[4], "plon": row[5],
-                        "tlat": row[6], "tlon": row[7],
-                        "length": row[8], "avggradient": row[9],
+                        "id": rid,
+                        "river": row[0],
+                        "section": row[1],
+                        "class": row[2],
+                        "state": row[3],
+                        "plat": row[4],
+                        "plon": row[5],
+                        "tlat": row[6],
+                        "tlon": row[7],
+                        "length": row[8],
+                        "avggradient": row[9],
                         "maxgradient": row[10],
                     }
                     _upsert_reach(meta_db, reach_data, gauges)
             done = min(i + BATCH_SIZE, len(needs_gauges))
             elapsed = (_now() - start_time).total_seconds()
             if batch_num < total_batches:
-                _log(f"  Gauges: {done}/{len(needs_gauges)} "
-                     f"(batch {batch_num}/{total_batches}, "
-                     f"next request ~{_fmt(next_at + timedelta(seconds=delay))})")
+                _log(
+                    f"  Gauges: {done}/{len(needs_gauges)} "
+                    f"(batch {batch_num}/{total_batches}, "
+                    f"next request ~{_fmt(next_at + timedelta(seconds=delay))})"
+                )
             else:
                 _log(f"  Gauges: {done}/{len(needs_gauges)} (done)")
 
@@ -330,7 +357,7 @@ def fetch_and_store(meta_db, states_to_process, delay):
         _log(f"  Saved ({total} total reaches)")
 
     elapsed = (_now() - start_time).total_seconds()
-    _log(f"Fetch complete. {requests_made} requests in {elapsed/60:.1f} min.")
+    _log(f"Fetch complete. {requests_made} requests in {elapsed / 60:.1f} min.")
     total = meta_db.execute("SELECT COUNT(*) FROM aw_reach").fetchone()[0]
     _log(f"Cache: {total} reaches in metadata DB")
 
@@ -338,6 +365,7 @@ def fetch_and_store(meta_db, states_to_process, delay):
 # ---------------------------------------------------------------------------
 # Phase 2: Process cached data against kayak database
 # ---------------------------------------------------------------------------
+
 
 def build_source_lookup(db):
     """Build a mapping from source name -> set of (reach_id, gauge_id)."""
@@ -421,9 +449,7 @@ def process_cached(meta_db, db, dry_run):
         # Collect all (reach_id, gauge_id) matched through any gauge
         matched = set()
         for g in aw_gauges:
-            matched.update(
-                match_source_id(g["source"], g["source_id"], lookup)
-            )
+            matched.update(match_source_id(g["source"], g["source_id"], lookup))
         if not matched:
             continue
 
@@ -489,8 +515,7 @@ def process_cached(meta_db, db, dry_run):
                     (db_reach_id,),
                 ).fetchone()[0]
                 if existing == 0:
-                    print(f"    [{label}] reach {db_reach_id}: "
-                          f"levels rmin={rmin} rmax={rmax}")
+                    print(f"    [{label}] reach {db_reach_id}: levels rmin={rmin} rmax={rmax}")
                     if not dry_run:
                         if rmin is not None:
                             db.execute(
@@ -521,7 +546,7 @@ def process_cached(meta_db, db, dry_run):
     if not dry_run:
         db.commit()
 
-    print(f"\n=== Summary ===")
+    print("\n=== Summary ===")
     print(f"Total AW reaches in cache: {total_reaches}")
     print(f"Reaches matched to our reaches: {total_matched}")
     if not dry_run:
@@ -535,24 +560,37 @@ def process_cached(meta_db, db, dry_run):
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Match AW reaches to local reaches via shared gauge IDs"
     )
-    parser.add_argument("--db", default=os.path.join(os.path.dirname(__file__), "..", "..", "DB", "kayak.db"),
-                        help="SQLite database path")
-    parser.add_argument("--metadata-db", default=os.path.abspath(DEFAULT_METADATA_DB),
-                        help="Gauge metadata cache DB path")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Show matches without updating DB")
-    parser.add_argument("--state",
-                        help="Process only this state abbreviation (e.g., OR)")
-    parser.add_argument("--fetch-only", action="store_true",
-                        help="Only fetch from AW API and save to metadata DB; skip DB updates")
-    parser.add_argument("--cache-only", action="store_true",
-                        help="Only process existing cache; skip API fetching")
-    parser.add_argument("--delay", type=float, default=None,
-                        help="Seconds between API requests (default: auto for ~60 min)")
+    parser.add_argument(
+        "--db",
+        default=os.path.join(os.path.dirname(__file__), "..", "..", "DB", "kayak.db"),
+        help="SQLite database path",
+    )
+    parser.add_argument(
+        "--metadata-db",
+        default=os.path.abspath(DEFAULT_METADATA_DB),
+        help="Gauge metadata cache DB path",
+    )
+    parser.add_argument("--dry-run", action="store_true", help="Show matches without updating DB")
+    parser.add_argument("--state", help="Process only this state abbreviation (e.g., OR)")
+    parser.add_argument(
+        "--fetch-only",
+        action="store_true",
+        help="Only fetch from AW API and save to metadata DB; skip DB updates",
+    )
+    parser.add_argument(
+        "--cache-only", action="store_true", help="Only process existing cache; skip API fetching"
+    )
+    parser.add_argument(
+        "--delay",
+        type=float,
+        default=None,
+        help="Seconds between API requests (default: auto for ~60 min)",
+    )
     args = parser.parse_args()
 
     states_to_process = STATE_MAP

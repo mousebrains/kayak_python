@@ -97,10 +97,7 @@ def downsample(data: list[tuple[float, float]], threshold: int) -> list[tuple[fl
         max_area = -1.0
         max_idx = range_start
         for j in range(range_start, range_end):
-            area = abs(
-                (a_x - avg_x) * (data[j][1] - a_y)
-                - (a_x - data[j][0]) * (avg_y - a_y)
-            )
+            area = abs((a_x - avg_x) * (data[j][1] - a_y) - (a_x - data[j][0]) * (avg_y - a_y))
             if area > max_area:
                 max_area = area
                 max_idx = j

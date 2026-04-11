@@ -32,11 +32,13 @@ _UNARYOPS: dict[type, Callable[[float], float]] = {
     ast.USub: operator.neg,
 }
 
+
 def _safe_round(value: float, ndigits: float | None = None) -> float:
     """round() wrapper that accepts float ndigits from the evaluator."""
     if ndigits is not None:
         ndigits = int(ndigits)
     return round(value, ndigits)
+
 
 _SAFE_FUNCS: dict[str, Callable[..., float]] = {"max": max, "min": min, "round": _safe_round}
 
@@ -52,7 +54,7 @@ def _safe_eval(expr: str) -> float:
     def _eval(node: ast.AST) -> float:
         if isinstance(node, ast.Expression):
             return _eval(node.body)
-        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        if isinstance(node, ast.Constant) and isinstance(node.value, int | float):
             return float(node.value)
         if isinstance(node, ast.BinOp):
             bin_fn = _BINOPS.get(type(node.op))
@@ -78,8 +80,9 @@ def _safe_eval(expr: str) -> float:
 
 def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Register the 'calculator' subcommand."""
-    parser = subparsers.add_parser("calculator",
-                                   help="Build synthetic/calculated gage readings from expressions")
+    parser = subparsers.add_parser(
+        "calculator", help="Build synthetic/calculated gage readings from expressions"
+    )
     parser.set_defaults(func=calculator)
 
 
@@ -89,11 +92,7 @@ def calculator(args: argparse.Namespace) -> None:
     session = get_session()
     try:
         # Find sources with calculation expressions
-        calc_sources = (
-            session.query(Source)
-            .filter(Source.calc_expression_id.isnot(None))
-            .all()
-        )
+        calc_sources = session.query(Source).filter(Source.calc_expression_id.isnot(None)).all()
 
         print(f"Found {len(calc_sources)} calculated sources")
 
@@ -107,13 +106,19 @@ def calculator(args: argparse.Namespace) -> None:
         gauge_id_to_name: dict[int, str] = {gid: name for name, gid in name_to_gauge_id.items()}
 
         # Topological sort: calc sources that depend on other calcs run last
-        calc_gauge_names = {gauge_id_to_name.get(source_to_gauge.get(s.id, -1), ""): s for s in calc_sources}
+        calc_gauge_names = {
+            gauge_id_to_name.get(source_to_gauge.get(s.id, -1), ""): s for s in calc_sources
+        }
+
         def _get_deps(source: Source) -> list[str]:
             ce = source.calc_expression
             if not ce or not ce.time_expression:
                 return []
-            return [ref_name for _, ref_name, _ in re.findall(r'(\w+)::(\w+)::(\w+)', ce.time_expression)
-                    if ref_name in calc_gauge_names]
+            return [
+                ref_name
+                for _, ref_name, _ in re.findall(r"(\w+)::(\w+)::(\w+)", ce.time_expression)
+                if ref_name in calc_gauge_names
+            ]
 
         # Simple topo sort: sources with no calc deps first, then dependents
         sorted_sources: list[Source] = []
@@ -153,7 +158,9 @@ def calculator(args: argparse.Namespace) -> None:
 
                 logger.info(
                     "Calculating %s: type=%s expr=%s",
-                    source.name, data_type.value, expression,
+                    source.name,
+                    data_type.value,
+                    expression,
                 )
 
                 if not time_expression:
@@ -196,9 +203,7 @@ def calculator(args: argparse.Namespace) -> None:
 
                     latest = get_latest_gauge(session, ref_gauge_id, ref_dtype)
                     if latest is None or latest.value is None:
-                        logger.warning(
-                            "No latest gauge value for %s/%s", ref_name, ref_type_str
-                        )
+                        logger.warning("No latest gauge value for %s/%s", ref_name, ref_type_str)
                         skip = True
                         break
 

@@ -10,9 +10,10 @@ from kayak.cli.main import main
 
 def test_version_flag(capsys):
     """--version prints version string and exits."""
-    with mock.patch.object(sys, "argv", ["levels", "--version"]), pytest.raises(
-        SystemExit
-    ) as exc_info:
+    with (
+        mock.patch.object(sys, "argv", ["levels", "--version"]),
+        pytest.raises(SystemExit) as exc_info,
+    ):
         main()
     assert exc_info.value.code == 0
     captured = capsys.readouterr()
@@ -21,18 +22,17 @@ def test_version_flag(capsys):
 
 def test_no_args_exits_with_error(capsys):
     """Calling main with no arguments prints help and exits with code 1."""
-    with mock.patch.object(sys, "argv", ["levels"]), pytest.raises(
-        SystemExit
-    ) as exc_info:
+    with mock.patch.object(sys, "argv", ["levels"]), pytest.raises(SystemExit) as exc_info:
         main()
     assert exc_info.value.code == 1
 
 
 def test_help_flag(capsys):
     """--help prints usage information and exits cleanly."""
-    with mock.patch.object(sys, "argv", ["levels", "--help"]), pytest.raises(
-        SystemExit
-    ) as exc_info:
+    with (
+        mock.patch.object(sys, "argv", ["levels", "--help"]),
+        pytest.raises(SystemExit) as exc_info,
+    ):
         main()
     assert exc_info.value.code == 0
     captured = capsys.readouterr()
@@ -72,9 +72,10 @@ def test_known_subcommands_registered():
 
 def test_unknown_subcommand_exits():
     """An unrecognised subcommand causes argparse to exit with an error."""
-    with mock.patch.object(sys, "argv", ["levels", "bogus-cmd"]), pytest.raises(
-        SystemExit
-    ) as exc_info:
+    with (
+        mock.patch.object(sys, "argv", ["levels", "bogus-cmd"]),
+        pytest.raises(SystemExit) as exc_info,
+    ):
         main()
     # argparse exits with code 2 for unrecognised arguments
     assert exc_info.value.code in (1, 2)

@@ -37,11 +37,13 @@ def test_all_states_empty(session):
 
 def test_all_states_sorted(session):
     """all_states returns State records sorted alphabetically by name."""
-    session.add_all([
-        State(name="WA", abbreviation="WA"),
-        State(name="ID", abbreviation="ID"),
-        State(name="OR", abbreviation="OR"),
-    ])
+    session.add_all(
+        [
+            State(name="WA", abbreviation="WA"),
+            State(name="ID", abbreviation="ID"),
+            State(name="OR", abbreviation="OR"),
+        ]
+    )
     session.flush()
 
     result = all_states(session)
@@ -61,8 +63,9 @@ def test_all_state_names_sorted(session):
 
     # Link a visible reach to each state
     for st in states:
-        r = Reach(name=f"r_{st.name}", display_name=f"River {st.name}",
-                  sort_name=f"River {st.name}")
+        r = Reach(
+            name=f"r_{st.name}", display_name=f"River {st.name}", sort_name=f"River {st.name}"
+        )
         session.add(r)
         session.flush()
         session.add(ReachState(reach_id=r.id, state_id=st.id))

@@ -7,13 +7,19 @@ from datetime import UTC, datetime
 
 # Common timezone abbreviations to UTC offsets (hours)
 TIMEZONE_OFFSETS: dict[str, int] = {
-    "EST": -5, "EDT": -4,
-    "CST": -6, "CDT": -5,
-    "MST": -7, "MDT": -6,
-    "PST": -8, "PDT": -7,
-    "AKST": -9, "AKDT": -8,
+    "EST": -5,
+    "EDT": -4,
+    "CST": -6,
+    "CDT": -5,
+    "MST": -7,
+    "MDT": -6,
+    "PST": -8,
+    "PDT": -7,
+    "AKST": -9,
+    "AKDT": -8,
     "HST": -10,
-    "UTC": 0, "GMT": 0,
+    "UTC": 0,
+    "GMT": 0,
     "Z": 0,
     # USBR_Special zone codes
     "P": 0,  # UTC (Pacific in USBR context but data is UTC)
@@ -116,6 +122,7 @@ def parse_datetime(text: str, tz_name: str | None = None) -> datetime | None:
         offset_hours = TIMEZONE_OFFSETS.get(tz_name)
         if offset_hours is not None:
             from datetime import timedelta
+
             # Convert from local time to UTC
             dt = dt.replace(tzinfo=UTC) - timedelta(hours=offset_hours)
         else:

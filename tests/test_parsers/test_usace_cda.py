@@ -5,83 +5,93 @@ import json
 from kayak.db.models import DataType, FetchUrl, Observation, Source
 from kayak.parsers.usace_cda import USACECDAParser
 
-CDA_BASIC = json.dumps({
-    "GPR": {
-        "name": "Green Peter Reservoir",
-        "timeseries": {
-            "GPR.Flow-Out.Inst.0.0.Best": {
-                "parameter": "Flow-Out",
-                "units": "cfs",
-                "values": [
-                    ["2024-06-15T12:00:00", 50.0, 0],
-                    ["2024-06-15T13:00:00", 55.0, 0],
-                ],
-            }
-        },
-    }
-})
-
-CDA_MULTI_PARAM = json.dumps({
-    "HCR": {
-        "name": "Hills Creek Dam",
-        "timeseries": {
-            "HCR.Flow-Out.Inst.0.0.Best": {
-                "parameter": "Flow-Out",
-                "units": "cfs",
-                "values": [
-                    ["2024-06-15T12:00:00", 483.97, 0],
-                ],
+CDA_BASIC = json.dumps(
+    {
+        "GPR": {
+            "name": "Green Peter Reservoir",
+            "timeseries": {
+                "GPR.Flow-Out.Inst.0.0.Best": {
+                    "parameter": "Flow-Out",
+                    "units": "cfs",
+                    "values": [
+                        ["2024-06-15T12:00:00", 50.0, 0],
+                        ["2024-06-15T13:00:00", 55.0, 0],
+                    ],
+                }
             },
-            "HCR.Elev-Forebay.Inst.0.0.Best": {
-                "parameter": "Elev-Forebay",
-                "units": "ft",
-                "values": [
-                    ["2024-06-15T12:00:00", 1480.5, 0],
-                ],
+        }
+    }
+)
+
+CDA_MULTI_PARAM = json.dumps(
+    {
+        "HCR": {
+            "name": "Hills Creek Dam",
+            "timeseries": {
+                "HCR.Flow-Out.Inst.0.0.Best": {
+                    "parameter": "Flow-Out",
+                    "units": "cfs",
+                    "values": [
+                        ["2024-06-15T12:00:00", 483.97, 0],
+                    ],
+                },
+                "HCR.Elev-Forebay.Inst.0.0.Best": {
+                    "parameter": "Elev-Forebay",
+                    "units": "ft",
+                    "values": [
+                        ["2024-06-15T12:00:00", 1480.5, 0],
+                    ],
+                },
             },
-        },
+        }
     }
-})
+)
 
-CDA_FUTURE = json.dumps({
-    "GPR": {
-        "timeseries": {
-            "GPR.Flow-Out.Inst.0.0.Best": {
-                "parameter": "Flow-Out",
-                "units": "cfs",
-                "values": [
-                    ["2099-01-01T00:00:00", 100.0, 0],
-                ],
-            }
-        },
+CDA_FUTURE = json.dumps(
+    {
+        "GPR": {
+            "timeseries": {
+                "GPR.Flow-Out.Inst.0.0.Best": {
+                    "parameter": "Flow-Out",
+                    "units": "cfs",
+                    "values": [
+                        ["2099-01-01T00:00:00", 100.0, 0],
+                    ],
+                }
+            },
+        }
     }
-})
+)
 
-CDA_EMPTY_VALUES = json.dumps({
-    "GPR": {
-        "timeseries": {
-            "GPR.Flow-Out.Inst.0.0.Best": {
-                "parameter": "Flow-Out",
-                "units": "cfs",
-                "values": [],
-            }
-        },
+CDA_EMPTY_VALUES = json.dumps(
+    {
+        "GPR": {
+            "timeseries": {
+                "GPR.Flow-Out.Inst.0.0.Best": {
+                    "parameter": "Flow-Out",
+                    "units": "cfs",
+                    "values": [],
+                }
+            },
+        }
     }
-})
+)
 
-CDA_NULL_VALUE = json.dumps({
-    "GPR": {
-        "timeseries": {
-            "GPR.Flow-Out.Inst.0.0.Best": {
-                "parameter": "Flow-Out",
-                "units": "cfs",
-                "values": [
-                    ["2024-06-15T12:00:00", None, 0],
-                ],
-            }
-        },
+CDA_NULL_VALUE = json.dumps(
+    {
+        "GPR": {
+            "timeseries": {
+                "GPR.Flow-Out.Inst.0.0.Best": {
+                    "parameter": "Flow-Out",
+                    "units": "cfs",
+                    "values": [
+                        ["2024-06-15T12:00:00", None, 0],
+                    ],
+                }
+            },
+        }
     }
-})
+)
 
 CDA_URL = (
     "https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson"
@@ -127,17 +137,13 @@ class TestUSACECDABasic:
         assert count == 2
 
         flows = (
-            session.query(Observation)
-            .filter_by(source_id=src.id, data_type=DataType.flow)
-            .all()
+            session.query(Observation).filter_by(source_id=src.id, data_type=DataType.flow).all()
         )
         assert len(flows) == 1
         assert flows[0].value == 483.97
 
         gauges = (
-            session.query(Observation)
-            .filter_by(source_id=src.id, data_type=DataType.gauge)
-            .all()
+            session.query(Observation).filter_by(source_id=src.id, data_type=DataType.gauge).all()
         )
         assert len(gauges) == 1
         assert gauges[0].value == 1480.5
@@ -175,9 +181,7 @@ class TestUSACECDAEdgeCases:
     def test_dry_run(self, session):
         """Dry run should count but not store observations."""
         src = _make_source(session)
-        parser = USACECDAParser(
-            url=CDA_URL, session=session, source_id=src.id, dry_run=True
-        )
+        parser = USACECDAParser(url=CDA_URL, session=session, source_id=src.id, dry_run=True)
         count = parser.parse(CDA_BASIC)
         assert count == 2
         assert session.query(Observation).count() == 0

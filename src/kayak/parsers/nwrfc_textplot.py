@@ -25,6 +25,13 @@ logger = logging.getLogger(__name__)
 
 @register("nwrfc.textplot")
 class NWRFCTextPlotParser(BaseParser):
+    """NW River Forecast Center HTML table parser.
+
+    Parses observed-data HTML tables from the NWRFC textPlot endpoint.
+    Extracts flow (cfs/kcfs) or gage height (ft) from table rows. Uses
+    regex to match table cells rather than line-by-line processing.
+    """
+
     name = "nwrfc.textplot"
 
     def parse(self, text: str) -> int:

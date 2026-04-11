@@ -1,5 +1,6 @@
 [Unit]
 Description=Kayak SQLite database backup
+OnFailure=kayak-notify-failure@%n.service
 
 [Service]
 Type=oneshot

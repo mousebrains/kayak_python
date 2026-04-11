@@ -114,19 +114,26 @@ def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> 
     )
     parser.set_defaults(func=decimate)
     parser.add_argument(
-        "--recent-days", type=int, default=90,
+        "--recent-days",
+        type=int,
+        default=90,
         help="Keep all observations within this many days (default: 90)",
     )
     parser.add_argument(
-        "--archive-days", type=int, default=365,
+        "--archive-days",
+        type=int,
+        default=365,
         help="Thin to 6-hourly beyond this many days (default: 365)",
     )
     parser.add_argument(
-        "-d", "--dry-run", action="store_true",
+        "-d",
+        "--dry-run",
+        action="store_true",
         help="Show counts only, do not delete",
     )
     parser.add_argument(
-        "--vacuum", action="store_true",
+        "--vacuum",
+        action="store_true",
         help="Run VACUUM after deletion to reclaim space",
     )
 
@@ -152,9 +159,7 @@ def decimate(args: argparse.Namespace) -> None:
     session = get_session()
     try:
         # Count total observations
-        total = session.execute(
-            text("SELECT COUNT(*) FROM observation")
-        ).scalar()
+        total = session.execute(text("SELECT COUNT(*) FROM observation")).scalar()
         print(f"Total observations: {total:,}")
 
         # Count observations in each time range
@@ -201,10 +206,10 @@ def decimate(args: argparse.Namespace) -> None:
 
         # Get distinct source_ids that have observations to decimate
         source_ids = [
-            row[0] for row in session.execute(
+            row[0]
+            for row in session.execute(
                 text(
-                    "SELECT DISTINCT source_id FROM observation "
-                    "WHERE observed_at < :medium_cutoff"
+                    "SELECT DISTINCT source_id FROM observation WHERE observed_at < :medium_cutoff"
                 ),
                 {"medium_cutoff": params["medium_cutoff"]},
             ).fetchall()

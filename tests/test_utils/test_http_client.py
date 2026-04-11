@@ -223,14 +223,18 @@ class TestAsyncFetchMany:
             "http://host-b.com/data3",
         ]
 
-        fake_session = _FakeSession({
-            "http://host-a.com/data1": _FakeAsyncResponse(200, "body1"),
-            "http://host-a.com/data2": _FakeAsyncResponse(200, "body2"),
-            "http://host-b.com/data3": _FakeAsyncResponse(200, "body3"),
-        })
+        fake_session = _FakeSession(
+            {
+                "http://host-a.com/data1": _FakeAsyncResponse(200, "body1"),
+                "http://host-a.com/data2": _FakeAsyncResponse(200, "body2"),
+                "http://host-b.com/data3": _FakeAsyncResponse(200, "body3"),
+            }
+        )
 
-        with patch("kayak.utils.http_client.aiohttp.TCPConnector"), \
-             patch("kayak.utils.http_client.aiohttp.ClientSession", return_value=fake_session):
+        with (
+            patch("kayak.utils.http_client.aiohttp.TCPConnector"),
+            patch("kayak.utils.http_client.aiohttp.ClientSession", return_value=fake_session),
+        ):
             results = asyncio.run(async_fetch_many(urls, timeout=10))
 
         assert len(results) == 3
@@ -243,13 +247,17 @@ class TestAsyncFetchMany:
         """async_fetch_many returns error FetchResult on connection failure."""
         urls = ["http://fail.com/bad"]
 
-        fake_session = _FakeSession({
-            "http://fail.com/bad": aiohttp.ClientError("refused"),
-        })
+        fake_session = _FakeSession(
+            {
+                "http://fail.com/bad": aiohttp.ClientError("refused"),
+            }
+        )
 
-        with patch("kayak.utils.http_client.aiohttp.TCPConnector"), \
-             patch("kayak.utils.http_client.aiohttp.ClientSession", return_value=fake_session), \
-             patch("kayak.utils.http_client.asyncio.sleep", new_callable=AsyncMock):
+        with (
+            patch("kayak.utils.http_client.aiohttp.TCPConnector"),
+            patch("kayak.utils.http_client.aiohttp.ClientSession", return_value=fake_session),
+            patch("kayak.utils.http_client.asyncio.sleep", new_callable=AsyncMock),
+        ):
             results = asyncio.run(async_fetch_many(urls, timeout=10))
 
         assert len(results) == 1
@@ -274,9 +282,11 @@ class TestAsyncFetchMany:
 
         fake_session = _FakeSession()
 
-        with patch("kayak.utils.http_client.aiohttp.TCPConnector"), \
-             patch("kayak.utils.http_client.aiohttp.ClientSession", return_value=fake_session), \
-             patch("kayak.utils.http_client.asyncio.Semaphore", tracking_semaphore):
+        with (
+            patch("kayak.utils.http_client.aiohttp.TCPConnector"),
+            patch("kayak.utils.http_client.aiohttp.ClientSession", return_value=fake_session),
+            patch("kayak.utils.http_client.asyncio.Semaphore", tracking_semaphore),
+        ):
             results = asyncio.run(async_fetch_many(urls, concurrency_per_host=4, timeout=10))
 
         assert len(results) == 3
@@ -303,10 +313,11 @@ class TestAsyncFetchMany:
             async def __aexit__(self, *args):
                 pass
 
-        with patch("kayak.utils.http_client.aiohttp.TCPConnector"), \
-             patch("kayak.utils.http_client.aiohttp.ClientSession",
-                   return_value=RetrySession()), \
-             patch("kayak.utils.http_client.asyncio.sleep", new_callable=AsyncMock):
+        with (
+            patch("kayak.utils.http_client.aiohttp.TCPConnector"),
+            patch("kayak.utils.http_client.aiohttp.ClientSession", return_value=RetrySession()),
+            patch("kayak.utils.http_client.asyncio.sleep", new_callable=AsyncMock),
+        ):
             results = asyncio.run(async_fetch_many(urls, timeout=10))
 
         assert results["http://retry.com/page"].ok is True

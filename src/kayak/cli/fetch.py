@@ -41,27 +41,32 @@ def addArgs_options(parser: argparse.ArgumentParser) -> None:
     """Add fetch-specific options to a parser."""
     parser.add_argument("-d", "--dry-run", action="store_true", help="Do not store data")
     parser.add_argument("-f", "--fetch-only", action="store_true", help="Fetch but do not parse")
-    parser.add_argument("-I", "--input-dir", default=None,
-                        help="Read previously saved files instead of fetching from network")
-    parser.add_argument("-i", "--ignore-constraints", action="store_true",
-                        help="Ignore hour constraints")
-    parser.add_argument("-n", "--show-name", action="store_true",
-                        help="Show URL being fetched")
-    parser.add_argument("-o", "--output-dir", default=None,
-                        help="Save fetched data to directory")
+    parser.add_argument(
+        "-I",
+        "--input-dir",
+        default=None,
+        help="Read previously saved files instead of fetching from network",
+    )
+    parser.add_argument(
+        "-i", "--ignore-constraints", action="store_true", help="Ignore hour constraints"
+    )
+    parser.add_argument("-n", "--show-name", action="store_true", help="Show URL being fetched")
+    parser.add_argument("-o", "--output-dir", default=None, help="Save fetched data to directory")
     parser.add_argument("-P", "--url-prefix", default="", help="Prepend to all URLs")
     parser.add_argument("-p", "--parser-filter", default=None, help="Filter by parser type")
     parser.add_argument("-t", "--parser-type", default=None, help="Force parser type")
     parser.add_argument("-u", "--url-filter", default=None, help="Filter by URL substring")
     parser.add_argument("-U", "--single-url", default=None, help="Fetch a single URL")
-    parser.add_argument("--concurrency", type=int, default=8,
-                        help="Max concurrent requests per host (default: 8)")
+    parser.add_argument(
+        "--concurrency", type=int, default=8, help="Max concurrent requests per host (default: 8)"
+    )
 
 
 def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Register the 'fetch' subcommand."""
-    parser = subparsers.add_parser("fetch",
-                                   help="Fetch data from remote agencies, parse, and store in database")
+    parser = subparsers.add_parser(
+        "fetch", help="Fetch data from remote agencies, parse, and store in database"
+    )
     parser.set_defaults(func=fetch)
     addArgs_options(parser)
 
@@ -90,8 +95,15 @@ def fetch(args: argparse.Namespace) -> None:
         print(f"Reading from saved files in {args.input_dir}")
 
     if args.single_url and args.parser_type:
-        _fetch_single(args.single_url, args.parser_type, args.url_prefix,
-                       args.output_dir, args.input_dir, args.dry_run, args.fetch_only)
+        _fetch_single(
+            args.single_url,
+            args.parser_type,
+            args.url_prefix,
+            args.output_dir,
+            args.input_dir,
+            args.dry_run,
+            args.fetch_only,
+        )
         return
 
     # Load sources from YAML config
@@ -116,7 +128,7 @@ def fetch(args: argparse.Namespace) -> None:
         for src_def in yaml_sources:
             hours = src_def.get("hours", "")
             if not args.ignore_constraints and not _hour_allowed(hours):
-                logger.debug("Skipping %s (hour constraint)", src_def['url'])
+                logger.debug("Skipping %s (hour constraint)", src_def["url"])
                 continue
 
             url = args.url_prefix + src_def["url"]
@@ -128,10 +140,14 @@ def fetch(args: argparse.Namespace) -> None:
                 logger.info("Processing %s parser=%s", url, parser_name)
 
             if args.fetch_only:
-                work_items.append(_FetchWork(
-                    url=url, raw_url=src_def["url"],
-                    parser_name=parser_name, source_id=None,
-                ))
+                work_items.append(
+                    _FetchWork(
+                        url=url,
+                        raw_url=src_def["url"],
+                        parser_name=parser_name,
+                        source_id=None,
+                    )
+                )
                 continue
 
             parser_cls = get_parser_class(parser_name)
@@ -152,11 +168,16 @@ def fetch(args: argparse.Namespace) -> None:
                 elif len(sources) > 1:
                     source_map = {s.name: s.id for s in sources}
 
-            work_items.append(_FetchWork(
-                url=url, raw_url=src_def["url"],
-                parser_name=parser_name, source_id=source_id,
-                source_map=source_map, fetch_url_id=fetch_url_id,
-            ))
+            work_items.append(
+                _FetchWork(
+                    url=url,
+                    raw_url=src_def["url"],
+                    parser_name=parser_name,
+                    source_id=source_id,
+                    source_map=source_map,
+                    fetch_url_id=fetch_url_id,
+                )
+            )
     finally:
         session.close()
 
@@ -169,9 +190,12 @@ def fetch(args: argparse.Namespace) -> None:
         from kayak.utils.http_client import async_fetch_many
 
         urls = [w.url for w in work_items]
-        results = asyncio.run(async_fetch_many(
-            urls, concurrency_per_host=args.concurrency,
-        ))
+        results = asyncio.run(
+            async_fetch_many(
+                urls,
+                concurrency_per_host=args.concurrency,
+            )
+        )
         content_map = {}
         for w in work_items:
             result = results[w.url]
@@ -206,7 +230,8 @@ def fetch(args: argparse.Namespace) -> None:
                     continue
 
                 parser = parser_cls(
-                    url=w.url, session=session,
+                    url=w.url,
+                    session=session,
                     source_id=w.source_id,
                     source_map=w.source_map,
                     dry_run=args.dry_run,
@@ -249,7 +274,9 @@ def _get_content_from_file(raw_url: str, input_dir: str) -> str | None:
     return file_path.read_text(encoding="utf-8", errors="replace")
 
 
-def _get_content(url: str, raw_url: str, input_dir: str | None, output_dir: str | None) -> str | None:
+def _get_content(
+    url: str, raw_url: str, input_dir: str | None, output_dir: str | None
+) -> str | None:
     """Get text content either from a saved file or by fetching the URL.
 
     Returns the text content, or None if the content could not be obtained.
@@ -277,8 +304,13 @@ def _get_content(url: str, raw_url: str, input_dir: str | None, output_dir: str 
 
 
 def _fetch_single(
-    url: str, parser_name: str, url_prefix: str, output_dir: str | None, input_dir: str | None,
-    dry_run: bool, fetch_only: bool,
+    url: str,
+    parser_name: str,
+    url_prefix: str,
+    output_dir: str | None,
+    input_dir: str | None,
+    dry_run: bool,
+    fetch_only: bool,
 ) -> None:
     """Fetch and parse a single URL (the -U -t mode)."""
     full_url = url_prefix + url
@@ -296,7 +328,8 @@ def _fetch_single(
         session = get_session()
         try:
             parser = parser_cls(
-                url=full_url, session=session,
+                url=full_url,
+                session=session,
                 dry_run=dry_run,
             )
             count = parser.parse(text_content)

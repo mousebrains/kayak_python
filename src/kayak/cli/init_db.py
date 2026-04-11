@@ -14,9 +14,18 @@ from kayak.db.models import Base, FetchUrl, State
 def _seed_states(session: Session) -> None:
     """Seed state reference data."""
     states = [
-        ("Utah", "UT"), ("Oregon", "OR"), ("Arizona", "AZ"), ("California", "CA"),
-        ("Washington", "WA"), ("Colorado", "CO"), ("Kansas", "KS"), ("Montana", "MT"),
-        ("Idaho", "ID"), ("Wyoming", "WY"), ("Nevada", "NV"), ("New Mexico", "NM"),
+        ("Utah", "UT"),
+        ("Oregon", "OR"),
+        ("Arizona", "AZ"),
+        ("California", "CA"),
+        ("Washington", "WA"),
+        ("Colorado", "CO"),
+        ("Kansas", "KS"),
+        ("Montana", "MT"),
+        ("Idaho", "ID"),
+        ("Wyoming", "WY"),
+        ("Nevada", "NV"),
+        ("New Mexico", "NM"),
     ]
     for name, abbr in states:
         existing = session.query(State).filter_by(abbreviation=abbr).first()
@@ -36,20 +45,23 @@ def sync_sources(session: Session) -> int:
             existing.hours = src.get("hours", "")
             existing.is_active = True
         else:
-            session.add(FetchUrl(
-                url=url,
-                parser=src["parser"],
-                hours=src.get("hours", ""),
-                is_active=True,
-            ))
+            session.add(
+                FetchUrl(
+                    url=url,
+                    parser=src["parser"],
+                    hours=src.get("hours", ""),
+                    is_active=True,
+                )
+            )
             count += 1
     return count
 
 
 def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Register the 'init-db' subcommand."""
-    parser = subparsers.add_parser("init-db",
-                                   help="Create database tables and optionally seed reference data")
+    parser = subparsers.add_parser(
+        "init-db", help="Create database tables and optionally seed reference data"
+    )
     parser.set_defaults(func=init_db)
     parser.add_argument("--drop", action="store_true", help="Drop and recreate all tables")
     parser.add_argument("--no-seed", action="store_true", help="Skip seeding reference data")
@@ -68,6 +80,7 @@ def init_db(args: argparse.Namespace) -> None:
 
     if not args.no_seed:
         from kayak.db.engine import get_session
+
         session = get_session()
         try:
             print("Seeding states...")

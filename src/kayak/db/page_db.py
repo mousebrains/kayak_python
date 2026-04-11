@@ -26,13 +26,15 @@ def store_page(
         existing.expires = expires
         existing.modified = datetime.now(UTC)
     else:
-        session.add(Page(
-            name=name,
-            action=action,
-            body=body,
-            mimetype=mimetype,
-            expires=expires,
-        ))
+        session.add(
+            Page(
+                name=name,
+                action=action,
+                body=body,
+                mimetype=mimetype,
+                expires=expires,
+            )
+        )
 
 
 def get_page(session: Session, name: str) -> Page | None:

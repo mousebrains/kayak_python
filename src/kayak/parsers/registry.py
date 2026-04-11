@@ -23,9 +23,11 @@ def register(name: str) -> Callable[[type[BaseParser]], type[BaseParser]]:
         class USGSParser(BaseParser):
             ...
     """
+
     def decorator(cls: type[BaseParser]) -> type[BaseParser]:
         _REGISTRY[name] = cls
         return cls
+
     return decorator
 
 

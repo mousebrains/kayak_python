@@ -100,19 +100,22 @@ def test_merge_sources(session):
 
     now = datetime.now(UTC)
     store_observation(session, src1.id, DataType.flow, now, 100.0)
-    store_observation(
-        session, src2.id, DataType.flow, now - timedelta(hours=1), 200.0
-    )
+    store_observation(session, src2.id, DataType.flow, now - timedelta(hours=1), 200.0)
     session.flush()
 
     merge_sources(
-        session, merged.id, [src1.id, src2.id], DataType.flow,
+        session,
+        merged.id,
+        [src1.id, src2.id],
+        DataType.flow,
         since=now - timedelta(days=1),
     )
     session.flush()
 
     merged_obs = get_observations(
-        session, merged.id, DataType.flow,
+        session,
+        merged.id,
+        DataType.flow,
         since=now - timedelta(days=1),
     )
     assert len(merged_obs) == 2
@@ -157,13 +160,18 @@ def test_merge_sources_median(session):
     session.flush()
 
     merge_sources(
-        session, merged.id, [src1.id, src2.id], DataType.flow,
+        session,
+        merged.id,
+        [src1.id, src2.id],
+        DataType.flow,
         since=now - timedelta(days=1),
     )
     session.flush()
 
     merged_obs = get_observations(
-        session, merged.id, DataType.flow,
+        session,
+        merged.id,
+        DataType.flow,
         since=now - timedelta(days=1),
     )
     assert len(merged_obs) == 1
@@ -185,13 +193,18 @@ def test_merge_sources_median_three(session):
     session.flush()
 
     merge_sources(
-        session, merged.id, [src1.id, src2.id, src3.id], DataType.flow,
+        session,
+        merged.id,
+        [src1.id, src2.id, src3.id],
+        DataType.flow,
         since=now - timedelta(days=1),
     )
     session.flush()
 
     merged_obs = get_observations(
-        session, merged.id, DataType.flow,
+        session,
+        merged.id,
+        DataType.flow,
         since=now - timedelta(days=1),
     )
     assert len(merged_obs) == 1
@@ -208,7 +221,12 @@ def test_store_observations_batch(session):
     src = _make_source(session)
     now = datetime.now(UTC)
     rows = [
-        {"source_id": src.id, "data_type": DataType.flow, "observed_at": now - timedelta(hours=i), "value": 100.0 + i}
+        {
+            "source_id": src.id,
+            "data_type": DataType.flow,
+            "observed_at": now - timedelta(hours=i),
+            "value": 100.0 + i,
+        }
         for i in range(5)
     ]
     count = store_observations(session, rows)
@@ -227,7 +245,12 @@ def test_store_observations_upsert(session):
 
     rows = [
         {"source_id": src.id, "data_type": DataType.flow, "observed_at": now, "value": 200.0},
-        {"source_id": src.id, "data_type": DataType.flow, "observed_at": now - timedelta(hours=1), "value": 300.0},
+        {
+            "source_id": src.id,
+            "data_type": DataType.flow,
+            "observed_at": now - timedelta(hours=1),
+            "value": 300.0,
+        },
     ]
     count = store_observations(session, rows)
     session.flush()
@@ -246,8 +269,18 @@ def test_store_observations_validation(session):
     future = now + timedelta(hours=2)
     rows = [
         {"source_id": src.id, "data_type": DataType.flow, "observed_at": now, "value": 100.0},
-        {"source_id": src.id, "data_type": DataType.flow, "observed_at": future, "value": 200.0},  # future
-        {"source_id": src.id, "data_type": DataType.flow, "observed_at": now - timedelta(hours=1), "value": -10.0},  # negative flow
+        {
+            "source_id": src.id,
+            "data_type": DataType.flow,
+            "observed_at": future,
+            "value": 200.0,
+        },  # future
+        {
+            "source_id": src.id,
+            "data_type": DataType.flow,
+            "observed_at": now - timedelta(hours=1),
+            "value": -10.0,
+        },  # negative flow
     ]
     count = store_observations(session, rows)
     session.flush()

@@ -12,64 +12,76 @@ def _recent(hours_ago=1):
     return (datetime.now(UTC) - timedelta(hours=hours_ago)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-NWPS_BASIC = json.dumps({
-    "primaryName": "Stage",
-    "primaryUnits": "ft",
-    "secondaryName": "Flow",
-    "secondaryUnits": "kcfs",
-    "data": [
-        {"validTime": _recent(2), "primary": 7.57, "secondary": 1.52},
-        {"validTime": _recent(1), "primary": 7.60, "secondary": 1.54},
-    ],
-})
+NWPS_BASIC = json.dumps(
+    {
+        "primaryName": "Stage",
+        "primaryUnits": "ft",
+        "secondaryName": "Flow",
+        "secondaryUnits": "kcfs",
+        "data": [
+            {"validTime": _recent(2), "primary": 7.57, "secondary": 1.52},
+            {"validTime": _recent(1), "primary": 7.60, "secondary": 1.54},
+        ],
+    }
+)
 
-NWPS_MISSING_SECONDARY = json.dumps({
-    "primaryName": "Stage",
-    "primaryUnits": "ft",
-    "secondaryName": "Flow",
-    "secondaryUnits": "kcfs",
-    "data": [
-        {"validTime": _recent(1), "primary": 7.57, "secondary": -999},
-    ],
-})
+NWPS_MISSING_SECONDARY = json.dumps(
+    {
+        "primaryName": "Stage",
+        "primaryUnits": "ft",
+        "secondaryName": "Flow",
+        "secondaryUnits": "kcfs",
+        "data": [
+            {"validTime": _recent(1), "primary": 7.57, "secondary": -999},
+        ],
+    }
+)
 
-NWPS_NEGATIVE_FLOW = json.dumps({
-    "primaryName": "Stage",
-    "primaryUnits": "ft",
-    "secondaryName": "Flow",
-    "secondaryUnits": "kcfs",
-    "data": [
-        {"validTime": _recent(1), "primary": 7.57, "secondary": -0.5},
-    ],
-})
+NWPS_NEGATIVE_FLOW = json.dumps(
+    {
+        "primaryName": "Stage",
+        "primaryUnits": "ft",
+        "secondaryName": "Flow",
+        "secondaryUnits": "kcfs",
+        "data": [
+            {"validTime": _recent(1), "primary": 7.57, "secondary": -0.5},
+        ],
+    }
+)
 
-NWPS_FUTURE = json.dumps({
-    "primaryName": "Stage",
-    "primaryUnits": "ft",
-    "secondaryName": "Flow",
-    "secondaryUnits": "kcfs",
-    "data": [
-        {"validTime": "2099-01-01T00:00:00Z", "primary": 5.00, "secondary": 2.0},
-    ],
-})
+NWPS_FUTURE = json.dumps(
+    {
+        "primaryName": "Stage",
+        "primaryUnits": "ft",
+        "secondaryName": "Flow",
+        "secondaryUnits": "kcfs",
+        "data": [
+            {"validTime": "2099-01-01T00:00:00Z", "primary": 5.00, "secondary": 2.0},
+        ],
+    }
+)
 
-NWPS_EMPTY_DATA = json.dumps({
-    "primaryName": "Stage",
-    "primaryUnits": "ft",
-    "secondaryName": "Flow",
-    "secondaryUnits": "kcfs",
-    "data": [],
-})
+NWPS_EMPTY_DATA = json.dumps(
+    {
+        "primaryName": "Stage",
+        "primaryUnits": "ft",
+        "secondaryName": "Flow",
+        "secondaryUnits": "kcfs",
+        "data": [],
+    }
+)
 
-NWPS_CFS_UNITS = json.dumps({
-    "primaryName": "Stage",
-    "primaryUnits": "ft",
-    "secondaryName": "Flow",
-    "secondaryUnits": "cfs",
-    "data": [
-        {"validTime": _recent(1), "primary": 3.0, "secondary": 500.0},
-    ],
-})
+NWPS_CFS_UNITS = json.dumps(
+    {
+        "primaryName": "Stage",
+        "primaryUnits": "ft",
+        "secondaryName": "Flow",
+        "secondaryUnits": "cfs",
+        "data": [
+            {"validTime": _recent(1), "primary": 3.0, "secondary": 500.0},
+        ],
+    }
+)
 
 NWPS_URL = "https://api.water.noaa.gov/nwps/v1/gauges/PRTO3/stageflow/observed"
 
@@ -133,14 +145,10 @@ class TestNWPSSentinelValues:
         assert count == 1
 
         gauges = (
-            session.query(Observation)
-            .filter_by(source_id=src.id, data_type=DataType.gauge)
-            .all()
+            session.query(Observation).filter_by(source_id=src.id, data_type=DataType.gauge).all()
         )
         flows = (
-            session.query(Observation)
-            .filter_by(source_id=src.id, data_type=DataType.flow)
-            .all()
+            session.query(Observation).filter_by(source_id=src.id, data_type=DataType.flow).all()
         )
         assert len(gauges) == 1
         assert len(flows) == 0
@@ -154,9 +162,7 @@ class TestNWPSSentinelValues:
         # Stage stored, negative flow rejected
         assert count == 1
         flows = (
-            session.query(Observation)
-            .filter_by(source_id=src.id, data_type=DataType.flow)
-            .all()
+            session.query(Observation).filter_by(source_id=src.id, data_type=DataType.flow).all()
         )
         assert len(flows) == 0
 
@@ -191,9 +197,7 @@ class TestNWPSEdgeCases:
 
         assert count == 2
         flows = (
-            session.query(Observation)
-            .filter_by(source_id=src.id, data_type=DataType.flow)
-            .all()
+            session.query(Observation).filter_by(source_id=src.id, data_type=DataType.flow).all()
         )
         assert len(flows) == 1
         assert flows[0].value == 500.0  # No conversion

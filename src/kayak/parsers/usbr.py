@@ -51,6 +51,13 @@ class _ColumnInfo:
 
 @register("usbr")
 class USBRParser(BaseParser):
+    """US Bureau of Reclamation Hydromet CSV parser.
+
+    Parses CSV data from USBR Hydromet web service. Handles multi-station
+    responses with columns like QD (flow), GH (gage height), and QJ (inflow).
+    Temperature values are converted from Celsius to Fahrenheit.
+    """
+
     name = "usbr"
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -85,13 +92,17 @@ class USBRParser(BaseParser):
                 self._columns.append(None)
                 continue
             station = col[:underscore].upper()
-            code = col[underscore + 1:]
+            code = col[underscore + 1 :]
             data_type = _CODE_MAP.get(code)
             if data_type:
-                self._columns.append(_ColumnInfo(
-                    station=station, code=code, data_type=data_type,
-                    is_celsius=(code in _CELSIUS_CODES),
-                ))
+                self._columns.append(
+                    _ColumnInfo(
+                        station=station,
+                        code=code,
+                        data_type=data_type,
+                        is_celsius=(code in _CELSIUS_CODES),
+                    )
+                )
             else:
                 self._columns.append(None)
         self._header_parsed = True

@@ -32,8 +32,10 @@ from sqlalchemy.orm import (
 # ENUMs
 # ---------------------------------------------------------------------------
 
+
 class DataType(enum.StrEnum):
     """Measurement types (replaces DataDB::TYPE)."""
+
     gauge = "gauge"
     flow = "flow"
     inflow = "inflow"
@@ -42,6 +44,7 @@ class DataType(enum.StrEnum):
 
 class FlowLevel(enum.StrEnum):
     """Flow level classifications for reach_level."""
+
     low = "low"
     okay = "okay"
     high = "high"
@@ -49,6 +52,7 @@ class FlowLevel(enum.StrEnum):
 
 class PageAction(enum.StrEnum):
     """Page cache action types (replaces PageDB::ACTION)."""
+
     PAGE = "page"
     FILE = "file"
     PLOT = "plot"
@@ -62,6 +66,7 @@ class PageAction(enum.StrEnum):
 # Base
 # ---------------------------------------------------------------------------
 
+
 class Base(DeclarativeBase):
     pass
 
@@ -70,7 +75,15 @@ class Base(DeclarativeBase):
 # gauge
 # ---------------------------------------------------------------------------
 
+
 class Gauge(Base):
+    """Physical gauge station on a river.
+
+    Stores location metadata and agency-specific IDs (USGS, NWS, CBTT, etc.).
+    Linked to data sources via the gauge_source M2M table and to a rating table
+    for gage-height-to-flow conversions.
+    """
+
     __tablename__ = "gauge"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -89,27 +102,29 @@ class Gauge(Base):
     nwsli_id: Mapped[str | None] = mapped_column(Text)
     snotel_id: Mapped[str | None] = mapped_column(Text)
     usgs_id: Mapped[str | None] = mapped_column(String(32))
-    rating_id: Mapped[int | None] = mapped_column(
-        ForeignKey("rating.id", ondelete="SET NULL")
-    )
+    rating_id: Mapped[int | None] = mapped_column(ForeignKey("rating.id", ondelete="SET NULL"))
 
     # relationships
     rating: Mapped[Rating | None] = relationship(back_populates="gauges")
-    sources: Mapped[list[Source]] = relationship(
-        secondary="gauge_source", back_populates="gauges"
-    )
+    sources: Mapped[list[Source]] = relationship(secondary="gauge_source", back_populates="gauges")
     reaches: Mapped[list[Reach]] = relationship(back_populates="gauge")
 
-    __table_args__ = (
-        Index("ix_gauge_usgs_id", "usgs_id"),
-    )
+    __table_args__ = (Index("ix_gauge_usgs_id", "usgs_id"),)
 
 
 # ---------------------------------------------------------------------------
 # source
 # ---------------------------------------------------------------------------
 
+
 class Source(Base):
+    """A data feed providing observations for one or more gauges.
+
+    Each source is either fetched from a remote URL (via fetch_url) or
+    calculated from other sources (via calc_expression). Multiple sources
+    may feed the same gauge, with observations merged by the merge step.
+    """
+
     __tablename__ = "source"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -124,27 +139,22 @@ class Source(Base):
 
     # relationships
     fetch_url: Mapped[FetchUrl | None] = relationship(back_populates="sources")
-    calc_expression: Mapped[CalcExpression | None] = relationship(
-        back_populates="sources"
-    )
-    gauges: Mapped[list[Gauge]] = relationship(
-        secondary="gauge_source", back_populates="sources"
-    )
+    calc_expression: Mapped[CalcExpression | None] = relationship(back_populates="sources")
+    gauges: Mapped[list[Gauge]] = relationship(secondary="gauge_source", back_populates="sources")
     observations: Mapped[list[Observation]] = relationship(back_populates="source")
-    latest_observations: Mapped[list[LatestObservation]] = relationship(
-        back_populates="source"
-    )
+    latest_observations: Mapped[list[LatestObservation]] = relationship(back_populates="source")
 
-    __table_args__ = (
-        Index("ix_source_name", "name"),
-    )
+    __table_args__ = (Index("ix_source_name", "name"),)
 
 
 # ---------------------------------------------------------------------------
 # gauge_source (M2M junction)
 # ---------------------------------------------------------------------------
 
+
 class GaugeSource(Base):
+    """Many-to-many junction linking gauges to their data sources."""
+
     __tablename__ = "gauge_source"
 
     gauge_id: Mapped[int] = mapped_column(
@@ -159,7 +169,15 @@ class GaugeSource(Base):
 # fetch_url
 # ---------------------------------------------------------------------------
 
+
 class FetchUrl(Base):
+    """Remote URL to fetch observation data from.
+
+    Seeded from data/sources.yaml by init-db. The ``parser`` field names
+    the registered parser class. The ``hours`` field restricts which hours
+    of the day this URL should be fetched (e.g. "6,12,18").
+    """
+
     __tablename__ = "fetch_url"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -172,16 +190,22 @@ class FetchUrl(Base):
     # relationships
     sources: Mapped[list[Source]] = relationship(back_populates="fetch_url")
 
-    __table_args__ = (
-        Index("ix_fetch_url_is_active", "is_active"),
-    )
+    __table_args__ = (Index("ix_fetch_url_is_active", "is_active"),)
 
 
 # ---------------------------------------------------------------------------
 # calc_expression
 # ---------------------------------------------------------------------------
 
+
 class CalcExpression(Base):
+    """Formula for computing synthetic observations from other sources.
+
+    Expressions reference gauge values by name (e.g. ``Gauge Name::flow``)
+    and are evaluated by the calculator pipeline step. Dependencies are
+    resolved via topological sort.
+    """
+
     __tablename__ = "calc_expression"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -198,7 +222,14 @@ class CalcExpression(Base):
 # rating
 # ---------------------------------------------------------------------------
 
+
 class Rating(Base):
+    """Gage-height-to-flow conversion table for a gauge.
+
+    Contains a URL for the rating source and a set of RatingData points
+    used for linear interpolation by the calc-rating pipeline step.
+    """
+
     __tablename__ = "rating"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -214,7 +245,13 @@ class Rating(Base):
 # rating_data
 # ---------------------------------------------------------------------------
 
+
 class RatingData(Base):
+    """Single (gage_height_ft, flow_cfs) data point in a rating table.
+
+    Points must be ordered by gauge_height_ft for interpolation to work.
+    """
+
     __tablename__ = "rating_data"
 
     rating_id: Mapped[int] = mapped_column(
@@ -231,7 +268,15 @@ class RatingData(Base):
 # observation
 # ---------------------------------------------------------------------------
 
+
 class Observation(Base):
+    """Time-series measurement from a data source.
+
+    Primary key is (source_id, observed_at, data_type). This is the largest
+    table in the database (~5M+ rows). Old rows are thinned by the decimate
+    command using the LTTB algorithm.
+    """
+
     __tablename__ = "observation"
 
     source_id: Mapped[int] = mapped_column(
@@ -253,7 +298,14 @@ class Observation(Base):
 # latest_observation (cache table)
 # ---------------------------------------------------------------------------
 
+
 class LatestObservation(Base):
+    """Cached most-recent observation per (source_id, data_type).
+
+    Also stores the previous value from ~6 hours ago and the computed
+    delta_per_hour for trend display. Updated by store_observation().
+    """
+
     __tablename__ = "latest_observation"
 
     source_id: Mapped[int] = mapped_column(
@@ -274,7 +326,14 @@ class LatestObservation(Base):
 # latest_gauge_observation (gauge-level cache table)
 # ---------------------------------------------------------------------------
 
+
 class LatestGaugeObservation(Base):
+    """Gauge-level consolidated latest values across all sources.
+
+    For gauges with multiple sources, this picks the best (most recent)
+    observation. Used by the build step to generate the HTML tables.
+    """
+
     __tablename__ = "latest_gauge_observation"
 
     gauge_id: Mapped[int] = mapped_column(
@@ -286,9 +345,7 @@ class LatestGaugeObservation(Base):
     prev_observed_at: Mapped[datetime | None] = mapped_column()
     prev_value: Mapped[float | None] = mapped_column()
     delta_per_hour: Mapped[float | None] = mapped_column()
-    source_id: Mapped[int | None] = mapped_column(
-        ForeignKey("source.id", ondelete="SET NULL")
-    )
+    source_id: Mapped[int | None] = mapped_column(ForeignKey("source.id", ondelete="SET NULL"))
 
     # relationships
     gauge: Mapped[Gauge] = relationship()
@@ -298,14 +355,20 @@ class LatestGaugeObservation(Base):
 # reach
 # ---------------------------------------------------------------------------
 
+
 class Reach(Base):
+    """A paddleable section of river with metadata, levels, and coordinates.
+
+    Linked to a gauge for live data, to states via reach_state, and to
+    guidebooks via reach_guidebook. The ``geom`` field stores WKT LineString
+    geometry for map display.
+    """
+
     __tablename__ = "reach"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     updated_at: Mapped[datetime | None] = mapped_column()
-    gauge_id: Mapped[int | None] = mapped_column(
-        ForeignKey("gauge.id", ondelete="SET NULL")
-    )
+    gauge_id: Mapped[int | None] = mapped_column(ForeignKey("gauge.id", ondelete="SET NULL"))
     name: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
     display_name: Mapped[str | None] = mapped_column(Text)
     sort_name: Mapped[str | None] = mapped_column(String(256))
@@ -341,25 +404,24 @@ class Reach(Base):
 
     # relationships
     gauge: Mapped[Gauge | None] = relationship(back_populates="reaches")
-    states: Mapped[list[State]] = relationship(
-        secondary="reach_state", back_populates="reaches"
-    )
+    states: Mapped[list[State]] = relationship(secondary="reach_state", back_populates="reaches")
     classes: Mapped[list[ReachClass]] = relationship(back_populates="reach")
     levels: Mapped[list[ReachLevel]] = relationship(back_populates="reach")
     guidebooks: Mapped[list[Guidebook]] = relationship(
         secondary="reach_guidebook", back_populates="reaches"
     )
 
-    __table_args__ = (
-        Index("ix_reach_sort_name", "sort_name"),
-    )
+    __table_args__ = (Index("ix_reach_sort_name", "sort_name"),)
 
 
 # ---------------------------------------------------------------------------
 # state
 # ---------------------------------------------------------------------------
 
+
 class State(Base):
+    """US state. Reaches are linked to states via the reach_state junction."""
+
     __tablename__ = "state"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -367,16 +429,17 @@ class State(Base):
     abbreviation: Mapped[str | None] = mapped_column(String(2))
 
     # relationships
-    reaches: Mapped[list[Reach]] = relationship(
-        secondary="reach_state", back_populates="states"
-    )
+    reaches: Mapped[list[Reach]] = relationship(secondary="reach_state", back_populates="states")
 
 
 # ---------------------------------------------------------------------------
 # reach_state (M2M junction)
 # ---------------------------------------------------------------------------
 
+
 class ReachState(Base):
+    """Many-to-many junction linking reaches to states."""
+
     __tablename__ = "reach_state"
 
     reach_id: Mapped[int] = mapped_column(
@@ -386,16 +449,21 @@ class ReachState(Base):
         ForeignKey("state.id", ondelete="CASCADE"), primary_key=True
     )
 
-    __table_args__ = (
-        Index("ix_reach_state_state_id", "state_id"),
-    )
+    __table_args__ = (Index("ix_reach_state_state_id", "state_id"),)
 
 
 # ---------------------------------------------------------------------------
 # reach_class
 # ---------------------------------------------------------------------------
 
+
 class ReachClass(Base):
+    """Whitewater difficulty class for a reach (e.g. III, IV+).
+
+    Optionally bounded by flow/gage thresholds: the class applies when
+    the observed value is between ``low`` and ``high``.
+    """
+
     __tablename__ = "reach_class"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -416,7 +484,14 @@ class ReachClass(Base):
 # reach_level
 # ---------------------------------------------------------------------------
 
+
 class ReachLevel(Base):
+    """Flow level classification (low/okay/high) for a reach.
+
+    Defines the threshold ranges used to color-code the levels table.
+    A reach may have multiple level rows (one per FlowLevel).
+    """
+
     __tablename__ = "reach_level"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -437,7 +512,10 @@ class ReachLevel(Base):
 # class_description
 # ---------------------------------------------------------------------------
 
+
 class ClassDescription(Base):
+    """Human-readable description of a whitewater difficulty class."""
+
     __tablename__ = "class_description"
 
     name: Mapped[str] = mapped_column(String(32), primary_key=True)
@@ -448,7 +526,10 @@ class ClassDescription(Base):
 # guidebook
 # ---------------------------------------------------------------------------
 
+
 class Guidebook(Base):
+    """Published guidebook that references river reaches (e.g. Soggy Sneakers)."""
+
     __tablename__ = "guidebook"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -468,7 +549,10 @@ class Guidebook(Base):
 # reach_guidebook (M2M junction with extra columns)
 # ---------------------------------------------------------------------------
 
+
 class ReachGuidebook(Base):
+    """Many-to-many junction linking reaches to guidebooks with page/run/URL."""
+
     __tablename__ = "reach_guidebook"
 
     reach_id: Mapped[int] = mapped_column(
@@ -486,8 +570,10 @@ class ReachGuidebook(Base):
 # page (cache table — kept from original schema)
 # ---------------------------------------------------------------------------
 
+
 class Page(Base):
     """Pre-rendered page cache (replaces Pages table in levels_page)."""
+
     __tablename__ = "pages"
 
     name: Mapped[str] = mapped_column(String(128), primary_key=True)

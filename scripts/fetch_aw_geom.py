@@ -46,9 +46,13 @@ HEADERS = {
 
 
 def lonlat_to_tile(lon, lat, z):
-    n = 2 ** z
+    n = 2**z
     x = int((lon + 180) / 360 * n)
-    y = int((1 - math.log(math.tan(math.radians(lat)) + 1 / math.cos(math.radians(lat))) / math.pi) / 2 * n)
+    y = int(
+        (1 - math.log(math.tan(math.radians(lat)) + 1 / math.cos(math.radians(lat))) / math.pi)
+        / 2
+        * n
+    )
     return x, y
 
 
@@ -58,7 +62,7 @@ def tile_to_lonlat(px, py, tx, ty, z, extent):
     The mapbox_vector_tile decoder returns y with 0 at the bottom of the tile,
     but the tile grid has y=0 at the top, so we flip py.
     """
-    n = 2 ** z
+    n = 2**z
     lon = (tx + px / extent) / n * 360 - 180
     lat_rad = math.atan(math.sinh(math.pi * (1 - 2 * (ty + 1 - py / extent) / n)))
     lat = math.degrees(lat_rad)
@@ -115,8 +119,10 @@ def fetch_tile_segments(aw_id, min_lon, min_lat, max_lon, max_lat, z=ZOOM):
                     if feat.get("properties", {}).get("id") == aw_id:
                         coords = feat["geometry"]["coordinates"]
                         points = [
-                            (round(tile_to_lonlat(px, py, tx, ty, z, extent)[0], 6),
-                             round(tile_to_lonlat(px, py, tx, ty, z, extent)[1], 6))
+                            (
+                                round(tile_to_lonlat(px, py, tx, ty, z, extent)[0], 6),
+                                round(tile_to_lonlat(px, py, tx, ty, z, extent)[1], 6),
+                            )
                             for px, py in coords
                         ]
                         segments.append(points)
@@ -155,8 +161,7 @@ def chain_segments(segments, putin=None):
     # Chain: greedily connect nearest endpoints
     remaining = list(segments)
     if putin:
-        best_idx = min(range(len(remaining)),
-                       key=lambda i: dist(putin, remaining[i][0]))
+        best_idx = min(range(len(remaining)), key=lambda i: dist(putin, remaining[i][0]))
     else:
         best_idx = 0
     chain = remaining.pop(best_idx)[:]
@@ -188,14 +193,13 @@ def chain_segments(segments, putin=None):
 
 
 def main():
-    import urllib.parse
-
     parser = argparse.ArgumentParser(description="Fetch AW reach geometry from vector tiles")
     parser.add_argument("--aw-id", type=int, required=True, help="AW reach ID")
     parser.add_argument("--reach-id", type=int, help="Local DB reach ID to update")
     parser.add_argument("--save", action="store_true", help="Save geometry to database")
-    parser.add_argument("--fetch-poi", action="store_true",
-                        help="Fetch put-in/take-out from AW tRPC API")
+    parser.add_argument(
+        "--fetch-poi", action="store_true", help="Fetch put-in/take-out from AW tRPC API"
+    )
     parser.add_argument("--bbox", help="Bounding box: min_lon,min_lat,max_lon,max_lat")
     parser.add_argument("--zoom", type=int, default=ZOOM, help=f"Tile zoom level (default {ZOOM})")
     args = parser.parse_args()
@@ -246,9 +250,9 @@ def main():
             print("Error: --reach-id required with --save", file=sys.stderr)
             sys.exit(1)
 
+        from kayak.config import DATABASE_URL
         from kayak.db.engine import get_session
         from kayak.db.models import Reach
-        from kayak.config import DATABASE_URL
 
         with get_session(DATABASE_URL) as s:
             r = s.query(Reach).filter(Reach.id == args.reach_id).one()

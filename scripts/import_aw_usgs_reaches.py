@@ -29,8 +29,10 @@ import urllib.request
 # Force line-buffered stdout so progress is visible when piped
 if not sys.stdout.line_buffering:
     sys.stdout = io.TextIOWrapper(
-        sys.stdout.buffer, encoding=sys.stdout.encoding,
-        errors=sys.stdout.errors, line_buffering=True,
+        sys.stdout.buffer,
+        encoding=sys.stdout.encoding,
+        errors=sys.stdout.errors,
+        line_buffering=True,
     )
 
 DEFAULT_METADATA_DB = os.path.join(
@@ -47,9 +49,18 @@ USGS_URL_TEMPLATE = (
 
 # Map AW state field (uppercase) to lowercase for USGS URLs
 STATE_ABBREVS = {
-    "AZ": "az", "CA": "ca", "CO": "co", "ID": "id", "KS": "ks",
-    "MT": "mt", "NV": "nv", "NM": "nm", "OR": "or", "UT": "ut",
-    "WA": "wa", "WY": "wy",
+    "AZ": "az",
+    "CA": "ca",
+    "CO": "co",
+    "ID": "id",
+    "KS": "ks",
+    "MT": "mt",
+    "NV": "nv",
+    "NM": "nm",
+    "OR": "or",
+    "UT": "ut",
+    "WA": "wa",
+    "WY": "wy",
 }
 
 # USGS site service for batch metadata queries
@@ -76,6 +87,7 @@ def vlog(msg):
 # USGS site metadata
 # ---------------------------------------------------------------------------
 
+
 def fetch_usgs_site_metadata(site_ids):
     """Batch-query USGS site service for metadata.
 
@@ -87,12 +99,14 @@ def fetch_usgs_site_metadata(site_ids):
     site_list = list(site_ids)
 
     for i in range(0, len(site_list), batch_size):
-        batch = site_list[i:i + batch_size]
-        params = urllib.parse.urlencode({
-            "format": "rdb",
-            "sites": ",".join(batch),
-            "siteOutput": "expanded",
-        })
+        batch = site_list[i : i + batch_size]
+        params = urllib.parse.urlencode(
+            {
+                "format": "rdb",
+                "sites": ",".join(batch),
+                "siteOutput": "expanded",
+            }
+        )
         url = f"{USGS_SITE_URL}?{params}"
         vlog(f"Fetching USGS metadata for {len(batch)} sites...")
 
@@ -120,7 +134,7 @@ def fetch_usgs_site_metadata(site_ids):
             fields = line.split("\t")
             if len(fields) < len(header):
                 continue
-            row = dict(zip(header, fields))
+            row = dict(zip(header, fields, strict=False))
             site_no = row.get("site_no", "").strip()
             if not site_no:
                 continue
@@ -142,7 +156,7 @@ def _float(val):
     """Convert a value to float, returning None for empty/invalid."""
     if val is None:
         return None
-    if isinstance(val, (int, float)):
+    if isinstance(val, int | float):
         return float(val)
     val = str(val).strip()
     if not val:
@@ -156,6 +170,7 @@ def _float(val):
 # ---------------------------------------------------------------------------
 # AW GraphQL for geometry
 # ---------------------------------------------------------------------------
+
 
 def graphql(query, variables=None):
     """Execute a GraphQL query against the AW API."""
@@ -184,9 +199,7 @@ def fetch_aw_geom_batch(aw_ids):
         return {}
     fragments = []
     for aid in aw_ids:
-        fragments.append(
-            f'r{aid}: reach(id: {aid}) {{ geom }}'
-        )
+        fragments.append(f"r{aid}: reach(id: {aid}) {{ geom }}")
     query = "{\n" + "\n".join(fragments) + "\n}"
     result = graphql(query)
     out = {}
@@ -202,6 +215,7 @@ def fetch_aw_geom_batch(aw_ids):
 # ---------------------------------------------------------------------------
 # Phase 1: Create missing USGS gauges
 # ---------------------------------------------------------------------------
+
 
 def get_usgs_fetch_url_map(db):
     """Return dict of lowercase state abbreviation -> fetch_url.id for USGS URLs."""
@@ -248,9 +262,16 @@ def create_missing_gauges(db, aw_reaches, dry_run):
     if not dry_run:
         metadata = fetch_usgs_site_metadata(needed_sites)
     else:
-        metadata = {sid: {"name": f"USGS {sid}", "lat": None, "lon": None,
-                          "elevation": None, "drainage_area": None}
-                    for sid in needed_sites}
+        metadata = {
+            sid: {
+                "name": f"USGS {sid}",
+                "lat": None,
+                "lon": None,
+                "elevation": None,
+                "drainage_area": None,
+            }
+            for sid in needed_sites
+        }
 
     fetch_url_map = get_usgs_fetch_url_map(db)
 
@@ -262,14 +283,14 @@ def create_missing_gauges(db, aw_reaches, dry_run):
                 site_to_state.setdefault(g["source_id"], state)
 
     missing_states = set()
-    for sid, state in site_to_state.items():
+    for _sid, state in site_to_state.items():
         st_lower = STATE_ABBREVS.get(state, state.lower())
         if st_lower not in fetch_url_map:
             missing_states.add(st_lower)
 
     for st_lower in sorted(missing_states):
         url = USGS_URL_TEMPLATE.format(state=st_lower)
-        label = f"[DRY-RUN] " if dry_run else ""
+        label = "[DRY-RUN] " if dry_run else ""
         log(f"  {label}Creating fetch_url for USGS state={st_lower}")
         if not dry_run:
             cur = db.execute(
@@ -322,14 +343,14 @@ def create_missing_gauges(db, aw_reaches, dry_run):
     if not dry_run:
         db.commit()
 
-    log(f"Phase 1 complete: {created} gauges created, "
-        f"{len(usgs_to_gauge)} total USGS gauges")
+    log(f"Phase 1 complete: {created} gauges created, {len(usgs_to_gauge)} total USGS gauges")
     return usgs_to_gauge
 
 
 # ---------------------------------------------------------------------------
 # Phase 2: Create reach records
 # ---------------------------------------------------------------------------
+
 
 def create_reaches(db, aw_reaches, usgs_to_gauge, dry_run):
     """Phase 2: Create reach + reach_state for unmatched AW reaches with USGS gauges.
@@ -414,9 +435,25 @@ def create_reaches(db, aw_reaches, usgs_to_gauge, dry_run):
                     latitude, longitude,
                     aw_id, no_show)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)""",
-                (name, display_name, display_name, river, gauge_id,
-                 description, difficulties, length, gradient, max_gradient,
-                 plat, plon, tlat, tlon, lat, lon, aw_id),
+                (
+                    name,
+                    display_name,
+                    display_name,
+                    river,
+                    gauge_id,
+                    description,
+                    difficulties,
+                    length,
+                    gradient,
+                    max_gradient,
+                    plat,
+                    plon,
+                    tlat,
+                    tlon,
+                    lat,
+                    lon,
+                    aw_id,
+                ),
             )
             reach_id = cur.lastrowid
 
@@ -472,6 +509,7 @@ def create_reaches(db, aw_reaches, usgs_to_gauge, dry_run):
 # Phase 3: Fetch AW geometry
 # ---------------------------------------------------------------------------
 
+
 def fetch_geometry(db, new_reaches, dry_run):
     """Phase 3: Fetch geom from AW GraphQL API for new reaches."""
     if not new_reaches:
@@ -485,7 +523,7 @@ def fetch_geometry(db, new_reaches, dry_run):
     total_with_geom = 0
 
     for i in range(0, len(new_reaches), batch_size):
-        batch = new_reaches[i:i + batch_size]
+        batch = new_reaches[i : i + batch_size]
         aw_ids = [aw_id for _, aw_id in batch]
 
         try:
@@ -516,19 +554,21 @@ def fetch_geometry(db, new_reaches, dry_run):
     if not dry_run:
         db.commit()
 
-    log(f"Phase 3 complete: {total_with_geom}/{len(new_reaches)} "
-        f"reaches have geometry")
+    log(f"Phase 3 complete: {total_with_geom}/{len(new_reaches)} reaches have geometry")
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
+
 def load_aw_reaches(meta_db, state_filter=None):
     """Load AW reaches from metadata DB, filter to those with USGS gauges."""
-    query = "SELECT id, river, section, class, state, put_in_lat, put_in_lon, " \
-            "take_out_lat, take_out_lon, length, avg_gradient, max_gradient, gauges " \
-            "FROM aw_reach WHERE gauges IS NOT NULL"
+    query = (
+        "SELECT id, river, section, class, state, put_in_lat, put_in_lon, "
+        "take_out_lat, take_out_lon, length, avg_gradient, max_gradient, gauges "
+        "FROM aw_reach WHERE gauges IS NOT NULL"
+    )
     params = []
     if state_filter:
         query += " AND UPPER(state) = ?"
@@ -542,21 +582,23 @@ def load_aw_reaches(meta_db, state_filter=None):
         usgs_gauges = [g for g in gauges if g.get("source") == "usgs"]
         if not usgs_gauges:
             continue
-        reaches.append({
-            "id": row[0],
-            "river": row[1],
-            "section": row[2],
-            "class": row[3],
-            "state": row[4],
-            "plat": row[5],
-            "plon": row[6],
-            "tlat": row[7],
-            "tlon": row[8],
-            "length": row[9],
-            "avggradient": row[10],
-            "maxgradient": row[11],
-            "gauges": gauges,
-        })
+        reaches.append(
+            {
+                "id": row[0],
+                "river": row[1],
+                "section": row[2],
+                "class": row[3],
+                "state": row[4],
+                "plat": row[5],
+                "plon": row[6],
+                "tlat": row[7],
+                "tlon": row[8],
+                "length": row[9],
+                "avggradient": row[10],
+                "maxgradient": row[11],
+                "gauges": gauges,
+            }
+        )
 
     return reaches
 
@@ -568,9 +610,11 @@ def filter_unmatched(db, aw_reaches):
         existing_aw_ids.add(row[0])
 
     unmatched = [r for r in aw_reaches if r["id"] not in existing_aw_ids]
-    log(f"AW reaches with USGS gauges: {len(aw_reaches)}, "
+    log(
+        f"AW reaches with USGS gauges: {len(aw_reaches)}, "
         f"already matched: {len(aw_reaches) - len(unmatched)}, "
-        f"to import: {len(unmatched)}")
+        f"to import: {len(unmatched)}"
+    )
     return unmatched
 
 
@@ -578,18 +622,22 @@ def main():
     parser = argparse.ArgumentParser(
         description="Import AW reaches with USGS gauges into kayak database"
     )
-    parser.add_argument("--db", default=os.path.join(os.path.dirname(__file__), "..", "..", "DB", "kayak.db"),
-                        help="SQLite database path")
-    parser.add_argument("--metadata-db", default=os.path.abspath(DEFAULT_METADATA_DB),
-                        help="Gauge metadata cache DB path")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Show what would be done without modifying DB")
-    parser.add_argument("--state",
-                        help="Process only this state (e.g., OR)")
-    parser.add_argument("--skip-geom", action="store_true",
-                        help="Skip Phase 3 (geometry fetch)")
-    parser.add_argument("--verbose", action="store_true",
-                        help="Show detailed per-row output")
+    parser.add_argument(
+        "--db",
+        default=os.path.join(os.path.dirname(__file__), "..", "..", "DB", "kayak.db"),
+        help="SQLite database path",
+    )
+    parser.add_argument(
+        "--metadata-db",
+        default=os.path.abspath(DEFAULT_METADATA_DB),
+        help="Gauge metadata cache DB path",
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Show what would be done without modifying DB"
+    )
+    parser.add_argument("--state", help="Process only this state (e.g., OR)")
+    parser.add_argument("--skip-geom", action="store_true", help="Skip Phase 3 (geometry fetch)")
+    parser.add_argument("--verbose", action="store_true", help="Show detailed per-row output")
     args = parser.parse_args()
 
     global VERBOSE
@@ -632,8 +680,7 @@ def main():
     elif args.skip_geom:
         log("Phase 3: Skipped (--skip-geom)")
     elif args.dry_run:
-        log(f"Phase 3: Skipped (dry run; would fetch geom for "
-            f"{len(new_reaches)} reaches)")
+        log(f"Phase 3: Skipped (dry run; would fetch geom for {len(new_reaches)} reaches)")
 
     db.close()
     log("\nDone.")

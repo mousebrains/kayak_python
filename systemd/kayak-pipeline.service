@@ -1,6 +1,7 @@
 [Unit]
 Description=Kayak river levels pipeline
 After=network-online.target
+OnFailure=kayak-notify-failure@%n.service
 
 [Service]
 Type=oneshot

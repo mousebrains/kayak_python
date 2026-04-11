@@ -30,13 +30,12 @@ import re
 import sys
 import time
 from collections import defaultdict
-from math import radians, cos, sqrt
+from math import cos, radians, sqrt
 
 from osgeo import ogr, osr
+from shapely import get_coordinates, line_merge
 from shapely import wkb as shapely_wkb
 from shapely.geometry import LineString, MultiLineString
-from shapely import STRtree, line_merge, get_coordinates
-from shapely.ops import linemerge
 
 ogr.UseExceptions()
 
@@ -66,18 +65,44 @@ def safe_multi(geoms):
 
 # Words to strip for fuzzy name matching
 STRIP_WORDS = {
-    "north", "south", "east", "west",
-    "fork", "branch", "prong",
-    "creek", "river", "stream", "run", "brook", "branch",
-    "ditch", "canal", "slough", "wash", "draw", "gulch",
-    "little", "big", "upper", "lower", "middle",
+    "north",
+    "south",
+    "east",
+    "west",
+    "fork",
+    "branch",
+    "prong",
+    "creek",
+    "river",
+    "stream",
+    "run",
+    "brook",
+    "ditch",
+    "canal",
+    "slough",
+    "wash",
+    "draw",
+    "gulch",
+    "little",
+    "big",
+    "upper",
+    "lower",
+    "middle",
 }
 
 # Common abbreviations
 ABBREVS = {
-    "n": "north", "s": "south", "e": "east", "w": "west",
-    "fk": "fork", "br": "branch", "cr": "creek", "r": "river",
-    "ck": "creek", "lk": "lake", "mt": "mount",
+    "n": "north",
+    "s": "south",
+    "e": "east",
+    "w": "west",
+    "fk": "fork",
+    "br": "branch",
+    "cr": "creek",
+    "r": "river",
+    "ck": "creek",
+    "lk": "lake",
+    "mt": "mount",
 }
 
 
@@ -147,8 +172,10 @@ def load_features(gpkg_path, layer_name, name_field, source_tag, bbox=None):
 
     features = []
     count = layer.GetFeatureCount()
-    print(f"  Loading {count} features from {gpkg_path} [{layer_name}]"
-          f"{' (bbox filtered)' if bbox else ''}...")
+    print(
+        f"  Loading {count} features from {gpkg_path} [{layer_name}]"
+        f"{' (bbox filtered)' if bbox else ''}..."
+    )
 
     for feat in layer:
         name = feat.GetField(name_field)
@@ -167,10 +194,17 @@ def load_features(gpkg_path, layer_name, name_field, source_tag, bbox=None):
             continue
 
         full_name, stem = normalize_name(name)
-        features.append((full_name, stem, shp_geom, {
-            "source": source_tag,
-            "original_name": name,
-        }))
+        features.append(
+            (
+                full_name,
+                stem,
+                shp_geom,
+                {
+                    "source": source_tag,
+                    "original_name": name,
+                },
+            )
+        )
 
     ds = None  # close
     return features
@@ -185,6 +219,7 @@ def group_by_name(features):
 
 
 # --- Merge logic ------------------------------------------------------------
+
 
 def merge_stream_group(nhd_feats, osm_feats):
     """Merge features for a single stream name.
@@ -223,7 +258,9 @@ def merge_stream_group(nhd_feats, osm_feats):
 
     # Decision: use the source with better vertex density, but only if it
     # covers a reasonable fraction of the other source's length
-    coverage_ratio = min(nhd_len, osm_len) / max(nhd_len, osm_len) if max(nhd_len, osm_len) > 0 else 0
+    coverage_ratio = (
+        min(nhd_len, osm_len) / max(nhd_len, osm_len) if max(nhd_len, osm_len) > 0 else 0
+    )
 
     if coverage_ratio > 0.3:
         # Both cover similar extent — pick higher density
@@ -254,6 +291,7 @@ def merge_stream_group(nhd_feats, osm_feats):
 
 # --- Spatial matching -------------------------------------------------------
 
+
 def match_groups(nhd_groups, osm_groups):
     """Match NHD and OSM groups by stem name.
 
@@ -269,6 +307,7 @@ def match_groups(nhd_groups, osm_groups):
 
 
 # --- Output -----------------------------------------------------------------
+
 
 def write_output(results, output_path):
     """Write merged features to a GeoPackage."""
@@ -316,30 +355,30 @@ def write_output(results, output_path):
 
 # --- Main -------------------------------------------------------------------
 
+
 def main():
     base = "."
     parser = argparse.ArgumentParser(
         description="Merge NHD and OSM flowlines into a unified GeoPackage"
     )
     parser.add_argument(
-        "--nhd", default=f"{base}/Trace-cache/NHD/named_flowlines.gpkg",
-        help="NHD named flowlines GeoPackage"
+        "--nhd",
+        default=f"{base}/Trace-cache/NHD/named_flowlines.gpkg",
+        help="NHD named flowlines GeoPackage",
     )
     parser.add_argument(
-        "--osm", default=f"{base}/Trace-cache/OSM/named_waterways.gpkg",
-        help="OSM named waterways GeoPackage"
+        "--osm",
+        default=f"{base}/Trace-cache/OSM/named_waterways.gpkg",
+        help="OSM named waterways GeoPackage",
     )
     parser.add_argument(
-        "--output", "-o", default=f"{base}/Trace-cache/merged_flowlines.gpkg",
-        help="Output merged GeoPackage"
+        "--output",
+        "-o",
+        default=f"{base}/Trace-cache/merged_flowlines.gpkg",
+        help="Output merged GeoPackage",
     )
-    parser.add_argument(
-        "--dry-run", action="store_true",
-        help="Print stats without writing output"
-    )
-    parser.add_argument(
-        "--bbox", help="Spatial filter: min_lon,min_lat,max_lon,max_lat"
-    )
+    parser.add_argument("--dry-run", action="store_true", help="Print stats without writing output")
+    parser.add_argument("--bbox", help="Spatial filter: min_lon,min_lat,max_lon,max_lat")
     args = parser.parse_args()
 
     t0 = time.time()
@@ -386,13 +425,19 @@ def main():
             winner = "OSM" if osm_d > nhd_d * 1.2 else "NHD"
             comparisons.append((stem, nhd_d, osm_d, nhd_l, osm_l, winner))
 
-        print(f"  {'Stream':<30} {'NHD pt/km':>10} {'OSM pt/km':>10} {'NHD km':>8} {'OSM km':>8} {'Winner':>6}")
-        print(f"  {'-'*30} {'-'*10} {'-'*10} {'-'*8} {'-'*8} {'-'*6}")
-        for stem, nd, od, nl, ol, w in sorted(comparisons, key=lambda x: x[2] - x[1], reverse=True)[:30]:
+        print(
+            f"  {'Stream':<30} {'NHD pt/km':>10} {'OSM pt/km':>10} {'NHD km':>8} {'OSM km':>8} {'Winner':>6}"
+        )
+        print(f"  {'-' * 30} {'-' * 10} {'-' * 10} {'-' * 8} {'-' * 8} {'-' * 6}")
+        for stem, nd, od, nl, ol, w in sorted(comparisons, key=lambda x: x[2] - x[1], reverse=True)[
+            :30
+        ]:
             print(f"  {stem:<30} {nd:>10.1f} {od:>10.1f} {nl:>8.1f} {ol:>8.1f} {w:>6}")
 
         osm_wins = sum(1 for _, _, _, _, _, w in comparisons if w == "OSM")
-        print(f"\n  Of {len(comparisons)} compared: OSM wins {osm_wins}, NHD wins {len(comparisons) - osm_wins}")
+        print(
+            f"\n  Of {len(comparisons)} compared: OSM wins {osm_wins}, NHD wins {len(comparisons) - osm_wins}"
+        )
         print(f"\n  Elapsed: {time.time() - t0:.1f}s")
         return
 
@@ -401,9 +446,9 @@ def main():
     all_results = []
     stats = defaultdict(int)
 
-    for stem, nhd_feats, osm_feats in matched:
+    for _stem, nhd_feats, osm_feats in matched:
         merged = merge_stream_group(nhd_feats, osm_feats)
-        for geom, attrs in merged:
+        for _geom, attrs in merged:
             stats[attrs["merge_reason"]] += 1
         all_results.extend(merged)
 
@@ -416,6 +461,7 @@ def main():
     print(f"  Wrote {written} features")
 
     import os
+
     size_mb = os.path.getsize(args.output) / 1024 / 1024
     print(f"  File size: {size_mb:.1f} MB")
     print(f"  Elapsed: {time.time() - t0:.1f}s")

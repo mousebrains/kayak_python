@@ -22,6 +22,13 @@ logger = logging.getLogger(__name__)
 
 @register("usace.outflow")
 class USACEOutflowParser(BaseParser):
+    """US Army Corps of Engineers outflow text report parser.
+
+    Parses fixed-format text reports from USACE dam projects. Extracts
+    outflow values in kcfs (converted to cfs) using a two-state machine:
+    state 0 finds the project/date header, state 1 reads hourly outflow rows.
+    """
+
     name = "usace.outflow"
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -39,7 +46,7 @@ class USACEOutflowParser(BaseParser):
                 # Also try as a prefix
                 for _i, p in enumerate(parts):
                     if p.startswith("PROJECT-"):
-                        self._project = p[len("PROJECT-"):]
+                        self._project = p[len("PROJECT-") :]
                         self._state = 1
                         return True
                 return True
@@ -51,7 +58,7 @@ class USACEOutflowParser(BaseParser):
         if self._state == 1:
             if "REPORT" in line:
                 idx = line.find("REPORT")
-                date_str = line[idx + len("REPORT"):].strip()
+                date_str = line[idx + len("REPORT") :].strip()
                 # Collapse multiple spaces
                 self._date = re.sub(r"\s+", " ", date_str).strip()
                 self._state = 2
@@ -71,8 +78,10 @@ class USACEOutflowParser(BaseParser):
                         if when:
                             # Values are in thousands
                             self.dump_to_db(
-                                self._project, DataType.flow,
-                                when, val * 1000,
+                                self._project,
+                                DataType.flow,
+                                when,
+                                val * 1000,
                             )
                         else:
                             logger.error("Cannot parse date: %s", time_str)

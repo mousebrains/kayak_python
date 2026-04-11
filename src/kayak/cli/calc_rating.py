@@ -27,8 +27,9 @@ logger = logging.getLogger(__name__)
 
 def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Register the 'calc-rating' subcommand."""
-    parser = subparsers.add_parser("calc-rating",
-                                   help="Apply rating tables to convert between gage height and flow")
+    parser = subparsers.add_parser(
+        "calc-rating", help="Apply rating tables to convert between gage height and flow"
+    )
     parser.set_defaults(func=calc_rating)
 
 
@@ -72,8 +73,11 @@ def calc_rating(args: argparse.Namespace) -> None:
 
                     logger.info(
                         "%s src=%s: %d rating entries, %d gauge, %d flow",
-                        gauge.name, source_id, len(feet_to_cfs),
-                        len(gauge_records), len(flow_records),
+                        gauge.name,
+                        source_id,
+                        len(feet_to_cfs),
+                        len(gauge_records),
+                        len(flow_records),
                     )
 
                     new_gauge = False
@@ -105,8 +109,11 @@ def calc_rating(args: argparse.Namespace) -> None:
                             if rec.observed_at not in gauge_times:
                                 val = interpolate_rating(cfs_to_feet, rec.value, 0.1)
                                 if val is not None and store_observation(
-                                    session, source_id, DataType.gauge,
-                                    rec.observed_at, val,
+                                    session,
+                                    source_id,
+                                    DataType.gauge,
+                                    rec.observed_at,
+                                    val,
                                 ):
                                     new_gauge = True
 
@@ -117,8 +124,11 @@ def calc_rating(args: argparse.Namespace) -> None:
                                     val is not None
                                     and val > 0
                                     and store_observation(
-                                        session, source_id, DataType.flow,
-                                        rec.observed_at, val,
+                                        session,
+                                        source_id,
+                                        DataType.flow,
+                                        rec.observed_at,
+                                        val,
                                     )
                                 ):
                                     new_flow = True

@@ -103,16 +103,24 @@ def test_create_observation(session, sample_source):
 def test_observation_composite_pk(session, sample_source):
     """Duplicate source_id/observed_at/data_type should conflict."""
     now = datetime.now(UTC)
-    session.add(Observation(
-        source_id=sample_source.id, observed_at=now,
-        data_type=DataType.gauge, value=5.0,
-    ))
+    session.add(
+        Observation(
+            source_id=sample_source.id,
+            observed_at=now,
+            data_type=DataType.gauge,
+            value=5.0,
+        )
+    )
     session.flush()
 
-    session.add(Observation(
-        source_id=sample_source.id, observed_at=now,
-        data_type=DataType.gauge, value=6.0,
-    ))
+    session.add(
+        Observation(
+            source_id=sample_source.id,
+            observed_at=now,
+            data_type=DataType.gauge,
+            value=6.0,
+        )
+    )
     with pytest.raises(IntegrityError):
         session.flush()
 
@@ -153,9 +161,12 @@ def test_reach_state_junction(session, sample_reach):
 
 def test_reach_class(session, sample_reach):
     rc = ReachClass(
-        reach_id=sample_reach.id, name="III",
-        low=500.0, low_data_type=DataType.flow,
-        high=2000.0, high_data_type=DataType.flow,
+        reach_id=sample_reach.id,
+        name="III",
+        low=500.0,
+        low_data_type=DataType.flow,
+        high=2000.0,
+        high_data_type=DataType.flow,
     )
     session.add(rc)
     session.flush()
@@ -167,8 +178,10 @@ def test_reach_class(session, sample_reach):
 
 def test_reach_level(session, sample_reach):
     rl = ReachLevel(
-        reach_id=sample_reach.id, level=FlowLevel.okay,
-        low=800.0, low_data_type=DataType.flow,
+        reach_id=sample_reach.id,
+        level=FlowLevel.okay,
+        low=800.0,
+        low_data_type=DataType.flow,
     )
     session.add(rl)
     session.flush()
@@ -240,10 +253,7 @@ def test_fetch_url(session):
 
 
 def test_page(session):
-    p = Page(
-        name="main", action=PageAction.PAGE,
-        body="<html>Hello</html>", mimetype="text/html"
-    )
+    p = Page(name="main", action=PageAction.PAGE, body="<html>Hello</html>", mimetype="text/html")
     session.add(p)
     session.flush()
 

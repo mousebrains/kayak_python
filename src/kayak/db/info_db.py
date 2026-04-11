@@ -14,20 +14,22 @@ from kayak.db.models import DataType, FlowLevel, Gauge, GaugeSource, Reach, Sour
 
 def all_states(session: Session) -> list[State]:
     """Return all State records sorted by name."""
-    return list(session.scalars(
-        select(State).order_by(State.name)
-    ))
+    return list(session.scalars(select(State).order_by(State.name)))
 
 
 def all_state_names(session: Session) -> list[str]:
     """Return sorted list of state names that have visible reaches."""
-    rows = session.execute(
-        select(State.name)
-        .join(State.reaches)
-        .where(Reach.no_show.is_(False))
-        .group_by(State.name)
-        .order_by(State.name)
-    ).scalars().all()
+    rows = (
+        session.execute(
+            select(State.name)
+            .join(State.reaches)
+            .where(Reach.no_show.is_(False))
+            .group_by(State.name)
+            .order_by(State.name)
+        )
+        .scalars()
+        .all()
+    )
     return list(rows)
 
 
@@ -50,12 +52,7 @@ def reaches_query(
     if sort_by_state:
         # Multi-state reaches sort by their first state alphabetically;
         # .distinct() prevents duplicate rows from the join.
-        stmt = (
-            select(Reach)
-            .join(Reach.states)
-            .order_by(State.name, Reach.sort_name)
-            .distinct()
-        )
+        stmt = select(Reach).join(Reach.states).order_by(State.name, Reach.sort_name).distinct()
     else:
         stmt = select(Reach).order_by(Reach.sort_name)
 
@@ -83,9 +80,7 @@ def get_reach(session: Session, reach_id: int) -> Reach | None:
 
 def get_reach_by_name(session: Session, name: str) -> Reach | None:
     """Fetch a Reach by its unique name."""
-    return session.execute(
-        select(Reach).where(Reach.name == name)
-    ).scalar_one_or_none()
+    return session.execute(select(Reach).where(Reach.name == name)).scalar_one_or_none()
 
 
 def display_name(session: Session, reach_id: int) -> str | None:
@@ -112,9 +107,11 @@ def get_primary_source_id(session: Session, gauge_id: int) -> int | None:
 
 def get_source_ids_for_gauge(session: Session, gauge_id: int) -> list[int]:
     """Return all source_ids linked to a gauge."""
-    rows = session.execute(
-        select(GaugeSource.source_id).where(GaugeSource.gauge_id == gauge_id)
-    ).scalars().all()
+    rows = (
+        session.execute(select(GaugeSource.source_id).where(GaugeSource.gauge_id == gauge_id))
+        .scalars()
+        .all()
+    )
     return list(rows)
 
 
@@ -125,14 +122,16 @@ def is_source_calculated(session: Session, source_id: int) -> bool:
 
 
 def get_all_primary_source_ids(
-    session: Session, gauge_ids: list[int],
+    session: Session,
+    gauge_ids: list[int],
 ) -> dict[int, int]:
     """Return a mapping of gauge_id → first source_id for multiple gauges."""
     if not gauge_ids:
         return {}
     rows = session.execute(
-        select(GaugeSource.gauge_id, GaugeSource.source_id)
-        .where(GaugeSource.gauge_id.in_(gauge_ids))
+        select(GaugeSource.gauge_id, GaugeSource.source_id).where(
+            GaugeSource.gauge_id.in_(gauge_ids)
+        )
     ).all()
     # Keep only the first source_id per gauge (same semantics as get_primary_source_id)
     result: dict[int, int] = {}
@@ -143,29 +142,40 @@ def get_all_primary_source_ids(
 
 
 def get_calculated_source_ids(
-    session: Session, source_ids: list[int],
+    session: Session,
+    source_ids: list[int],
 ) -> set[int]:
     """Return the subset of source_ids that use calc_expression (estimated)."""
     if not source_ids:
         return set()
-    rows = session.execute(
-        select(Source.id)
-        .where(Source.id.in_(source_ids), Source.calc_expression_id.is_not(None))
-    ).scalars().all()
+    rows = (
+        session.execute(
+            select(Source.id).where(
+                Source.id.in_(source_ids), Source.calc_expression_id.is_not(None)
+            )
+        )
+        .scalars()
+        .all()
+    )
     return set(rows)
 
 
 def get_calculated_gauge_ids(
-    session: Session, gauge_ids: list[int],
+    session: Session,
+    gauge_ids: list[int],
 ) -> set[int]:
     """Return gauge_ids where any linked source uses a calc_expression."""
     if not gauge_ids:
         return set()
-    rows = session.execute(
-        select(GaugeSource.gauge_id)
-        .join(Source, GaugeSource.source_id == Source.id)
-        .where(GaugeSource.gauge_id.in_(gauge_ids), Source.calc_expression_id.is_not(None))
-    ).scalars().all()
+    rows = (
+        session.execute(
+            select(GaugeSource.gauge_id)
+            .join(Source, GaugeSource.source_id == Source.id)
+            .where(GaugeSource.gauge_id.in_(gauge_ids), Source.calc_expression_id.is_not(None))
+        )
+        .scalars()
+        .all()
+    )
     return set(rows)
 
 

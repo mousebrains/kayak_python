@@ -24,16 +24,31 @@ import sqlite3
 # Fork prefix patterns: canonical form → regex matching display_name prefixes
 FORK_PREFIXES = ("NF", "SF", "MF", "EF", "WF", "CF")
 FORK_LONG = {
-    "North Fork": "NF", "N. Fork": "NF", "N Fork": "NF",
-    "North": "NF", "N.": "NF",
-    "South Fork": "SF", "S. Fork": "SF", "S Fork": "SF",
-    "South": "SF", "S.": "SF",
-    "Middle Fork": "MF", "M. Fork": "MF", "M Fork": "MF",
-    "Middle": "MF", "M.": "MF",
-    "East Fork": "EF", "E. Fork": "EF", "E Fork": "EF",
-    "East": "EF", "E.": "EF",
-    "West Fork": "WF", "W. Fork": "WF", "W Fork": "WF",
-    "West": "WF", "W.": "WF",
+    "North Fork": "NF",
+    "N. Fork": "NF",
+    "N Fork": "NF",
+    "North": "NF",
+    "N.": "NF",
+    "South Fork": "SF",
+    "S. Fork": "SF",
+    "S Fork": "SF",
+    "South": "SF",
+    "S.": "SF",
+    "Middle Fork": "MF",
+    "M. Fork": "MF",
+    "M Fork": "MF",
+    "Middle": "MF",
+    "M.": "MF",
+    "East Fork": "EF",
+    "E. Fork": "EF",
+    "E Fork": "EF",
+    "East": "EF",
+    "E.": "EF",
+    "West Fork": "WF",
+    "W. Fork": "WF",
+    "W Fork": "WF",
+    "West": "WF",
+    "W.": "WF",
     "Coast Fork": "CF",
     "Big North Fork": "NF",
     "Little North": "NF",  # "Little North Santiam" → NF group (Santiam 'a')
@@ -57,13 +72,13 @@ def parse_fork_prefix(display_name):
     # Compound: "NF of MF Willamette River"
     m = COMPOUND_PREFIX_RE.match(display_name)
     if m:
-        rest = display_name[m.end():].strip()
+        rest = display_name[m.end() :].strip()
         return m.group(0), rest
 
     # Simple: "NF Rogue River"
     for pfx in FORK_PREFIXES:
         if display_name.startswith(pfx + " "):
-            return pfx, display_name[len(pfx) + 1:]
+            return pfx, display_name[len(pfx) + 1 :]
 
     return None, display_name
 
@@ -324,8 +339,7 @@ def compute_sort_name(reach, families, legacy_sort_names, verbose=False):
 
     # Found a family — now find the group
     comma_fork = comma[1] if comma else None
-    grp, is_mainstem = match_fork_to_group(display_name, family, families,
-                                           comma_fork=comma_fork)
+    grp, is_mainstem = match_fork_to_group(display_name, family, families, comma_fork=comma_fork)
 
     if grp:
         # Matched an existing legacy group
@@ -390,9 +404,9 @@ def _next_suffix(family, grp, families, legacy_sort_names=None):
     for sn in legacy_sort_names:
         if sn.startswith(prefix) and len(sn) > len(prefix):
             next_char = sn[len(prefix)]
-            if 'a' <= next_char <= 'z' and (max_sub is None or next_char > max_sub):
+            if "a" <= next_char <= "z" and (max_sub is None or next_char > max_sub):
                 max_sub = next_char
-    if max_sub and max_sub < 'z':
+    if max_sub and max_sub < "z":
         return chr(ord(max_sub) + 1)
     return ""
 
@@ -407,7 +421,7 @@ def normalize_display_name(display_name):
     # Match patterns like "S.F ", "N.F. ", "W.F. ", "E.F ", "M.F." at start
     m = re.match(r"^([SNMEW])\.([F])\.?\s", display_name)
     if m:
-        return m.group(1) + m.group(2) + " " + display_name[m.end():]
+        return m.group(1) + m.group(2) + " " + display_name[m.end() :]
     return display_name
 
 
@@ -434,14 +448,17 @@ def main():
 
     # Get AW reaches to fix
     if args.state:
-        cur.execute("""
+        cur.execute(
+            """
             SELECT r.id, r.name, r.display_name, r.sort_name, r.description, r.elevation
             FROM reach r
             JOIN reach_state rs ON r.id = rs.reach_id
             JOIN state s ON s.id = rs.state_id
             WHERE r.name LIKE 'aw_%' AND s.name = ?
             ORDER BY r.sort_name
-        """, (args.state,))
+        """,
+            (args.state,),
+        )
     else:
         cur.execute("""
             SELECT id, name, display_name, sort_name, description, elevation
@@ -475,8 +492,10 @@ def main():
         if new_sort != old_sort:
             updates.append((reach["id"], new_sort, old_sort))
             if args.verbose:
-                print(f"  {reach['name']:15s} {reach['display_name'][:30]:30s} "
-                      f"{old_sort[:40]:40s} → {new_sort[:40]:40s}  ({reason})")
+                print(
+                    f"  {reach['name']:15s} {reach['display_name'][:30]:30s} "
+                    f"{old_sort[:40]:40s} → {new_sort[:40]:40s}  ({reason})"
+                )
 
     # Also normalize display_names for non-AW reaches
     cur.execute("SELECT id, display_name FROM reach WHERE name NOT LIKE 'aw_%'")
@@ -502,7 +521,9 @@ def main():
         for rid, new_dn, _old_dn in dn_updates:
             cur.execute("UPDATE reach SET display_name = ? WHERE id = ?", (new_dn, rid))
         conn.commit()
-        print(f"\nApplied {len(updates)} sort_name updates and {len(dn_updates)} display_name updates")
+        print(
+            f"\nApplied {len(updates)} sort_name updates and {len(dn_updates)} display_name updates"
+        )
 
     conn.close()
 

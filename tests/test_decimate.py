@@ -49,11 +49,9 @@ def _run_decimate_sql(session, medium_cutoff, archive_cutoff, dry_run=False):
 
     # Delete per source_id, matching the batched production code
     source_ids = [
-        row[0] for row in session.execute(
-            text(
-                "SELECT DISTINCT source_id FROM observation "
-                "WHERE observed_at < :medium_cutoff"
-            ),
+        row[0]
+        for row in session.execute(
+            text("SELECT DISTINCT source_id FROM observation WHERE observed_at < :medium_cutoff"),
             {"medium_cutoff": params["medium_cutoff"]},
         ).fetchall()
     ]
@@ -78,12 +76,14 @@ def test_thin_hourly(session):
     rows = []
     for hour in range(6):
         for minute in [0, 15, 30, 45]:
-            rows.append({
-                "source_id": src.id,
-                "data_type": DataType.flow,
-                "observed_at": base + timedelta(hours=hour, minutes=minute),
-                "value": 100.0 + hour,
-            })
+            rows.append(
+                {
+                    "source_id": src.id,
+                    "data_type": DataType.flow,
+                    "observed_at": base + timedelta(hours=hour, minutes=minute),
+                    "value": 100.0 + hour,
+                }
+            )
     store_observations(session, rows)
     session.flush()
 
@@ -107,12 +107,14 @@ def test_thin_6h(session):
 
     rows = []
     for hour in range(24):
-        rows.append({
-            "source_id": src.id,
-            "data_type": DataType.flow,
-            "observed_at": base + timedelta(hours=hour),
-            "value": 100.0 + hour,
-        })
+        rows.append(
+            {
+                "source_id": src.id,
+                "data_type": DataType.flow,
+                "observed_at": base + timedelta(hours=hour),
+                "value": 100.0 + hour,
+            }
+        )
     store_observations(session, rows)
     session.flush()
 
@@ -134,12 +136,14 @@ def test_recent_preserved(session):
 
     rows = []
     for i in range(20):
-        rows.append({
-            "source_id": src.id,
-            "data_type": DataType.flow,
-            "observed_at": now - timedelta(hours=i),
-            "value": 100.0 + i,
-        })
+        rows.append(
+            {
+                "source_id": src.id,
+                "data_type": DataType.flow,
+                "observed_at": now - timedelta(hours=i),
+                "value": 100.0 + i,
+            }
+        )
     store_observations(session, rows)
     session.flush()
 
@@ -161,12 +165,14 @@ def test_dry_run(session):
     rows = []
     for hour in range(6):
         for minute in [0, 15, 30, 45]:
-            rows.append({
-                "source_id": src.id,
-                "data_type": DataType.flow,
-                "observed_at": base + timedelta(hours=hour, minutes=minute),
-                "value": 100.0,
-            })
+            rows.append(
+                {
+                    "source_id": src.id,
+                    "data_type": DataType.flow,
+                    "observed_at": base + timedelta(hours=hour, minutes=minute),
+                    "value": 100.0,
+                }
+            )
     store_observations(session, rows)
     session.flush()
 
@@ -186,7 +192,9 @@ def test_empty_db(session):
     archive_cutoff = now - timedelta(days=365)
 
     hourly_count, sixhour_count = _run_decimate_sql(
-        session, medium_cutoff, archive_cutoff,
+        session,
+        medium_cutoff,
+        archive_cutoff,
     )
     assert hourly_count == 0
     assert sixhour_count == 0

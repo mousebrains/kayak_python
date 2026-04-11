@@ -25,8 +25,7 @@ logger = logging.getLogger(__name__)
 
 def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Register the 'pipeline' subcommand."""
-    parser = subparsers.add_parser("pipeline",
-                                   help="Run the full data pipeline")
+    parser = subparsers.add_parser("pipeline", help="Run the full data pipeline")
     parser.set_defaults(func=pipeline)
     parser.add_argument("--skip-fetch", action="store_true", help="Skip the fetch step")
 
@@ -38,6 +37,7 @@ def _update_gauge_cache(args: argparse.Namespace) -> None:
     """Recompute gauge-level latest observation cache."""
     from kayak.db.data_db import update_all_latest_gauges
     from kayak.db.engine import get_session
+
     session = get_session()
     try:
         update_all_latest_gauges(session)
@@ -55,17 +55,19 @@ def pipeline(args: argparse.Namespace) -> None:
 
     steps.append(("fetch-usgs-ogc", fetch_usgs_ogc.fetch_usgs_ogc))
 
-    steps.extend([
-        ("calc-rating", calc_rating.calc_rating),
-        ("update-gauge-cache", _update_gauge_cache),
-        ("calculator", calculator.calculator),
-        ("build", build.build),
-    ])
+    steps.extend(
+        [
+            ("calc-rating", calc_rating.calc_rating),
+            ("update-gauge-cache", _update_gauge_cache),
+            ("calculator", calculator.calculator),
+            ("build", build.build),
+        ]
+    )
 
     for step_name, func in steps:
-        print(f"\n{'='*60}", flush=True)
+        print(f"\n{'=' * 60}", flush=True)
         print(f"Running: {step_name}", flush=True)
-        print(f"{'='*60}", flush=True)
+        print(f"{'=' * 60}", flush=True)
         start = time.time()
         try:
             func(args)
@@ -85,5 +87,5 @@ def pipeline(args: argparse.Namespace) -> None:
     except Exception as e:
         logger.warning("PRAGMA optimize failed: %s", e)
 
-    print(f"\n{'='*60}", flush=True)
+    print(f"\n{'=' * 60}", flush=True)
     print("Pipeline complete", flush=True)

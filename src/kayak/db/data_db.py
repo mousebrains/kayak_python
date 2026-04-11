@@ -32,23 +32,21 @@ logger = logging.getLogger(__name__)
 # Source / Gauge lookups
 # ---------------------------------------------------------------------------
 
+
 def get_source_by_name(session: Session, name: str) -> Source | None:
     """Fetch a Source by its name."""
-    return session.execute(
-        select(Source).where(Source.name == name)
-    ).scalar_one_or_none()
+    return session.execute(select(Source).where(Source.name == name)).scalar_one_or_none()
 
 
 def get_gauge_by_name(session: Session, name: str) -> Gauge | None:
     """Fetch a Gauge by its name."""
-    return session.execute(
-        select(Gauge).where(Gauge.name == name)
-    ).scalar_one_or_none()
+    return session.execute(select(Gauge).where(Gauge.name == name)).scalar_one_or_none()
 
 
 # ---------------------------------------------------------------------------
 # Observation storage
 # ---------------------------------------------------------------------------
+
 
 def store_observation(
     session: Session,
@@ -85,14 +83,18 @@ def store_observation(
         logger.error("Rejecting negative flow %s for source_id=%d", value, source_id)
         return False
 
-    stmt = sqlite_upsert(Observation).values(
-        source_id=source_id,
-        observed_at=when,
-        data_type=data_type,
-        value=value,
-    ).on_conflict_do_update(
-        index_elements=["source_id", "observed_at", "data_type"],
-        set_={"value": value},
+    stmt = (
+        sqlite_upsert(Observation)
+        .values(
+            source_id=source_id,
+            observed_at=when,
+            data_type=data_type,
+            value=value,
+        )
+        .on_conflict_do_update(
+            index_elements=["source_id", "observed_at", "data_type"],
+            set_={"value": value},
+        )
     )
     session.execute(stmt)
     return True
@@ -127,7 +129,8 @@ def store_observations(session: Session, values: list[dict]) -> int:
         if when_utc > future_cutoff:
             logger.warning(
                 "Rejecting future timestamp %s for source_id=%d",
-                when, row["source_id"],
+                when,
+                row["source_id"],
             )
             continue
 
@@ -135,16 +138,19 @@ def store_observations(session: Session, values: list[dict]) -> int:
         if data_type == DataType.flow and value < 0:
             logger.error(
                 "Rejecting negative flow %s for source_id=%d",
-                value, row["source_id"],
+                value,
+                row["source_id"],
             )
             continue
 
-        valid_rows.append({
-            "source_id": row["source_id"],
-            "data_type": data_type,
-            "observed_at": when,
-            "value": value,
-        })
+        valid_rows.append(
+            {
+                "source_id": row["source_id"],
+                "data_type": data_type,
+                "observed_at": when,
+                "value": value,
+            }
+        )
 
     if not valid_rows:
         return 0
@@ -152,10 +158,14 @@ def store_observations(session: Session, values: list[dict]) -> int:
     # SQLite has a 999-variable limit; each row uses 4 variables → batch at 200
     BATCH = 200
     for i in range(0, len(valid_rows), BATCH):
-        batch = valid_rows[i:i + BATCH]
-        stmt = sqlite_upsert(Observation).values(batch).on_conflict_do_update(
-            index_elements=["source_id", "observed_at", "data_type"],
-            set_={"value": sqlite_upsert(Observation).excluded.value},
+        batch = valid_rows[i : i + BATCH]
+        stmt = (
+            sqlite_upsert(Observation)
+            .values(batch)
+            .on_conflict_do_update(
+                index_elements=["source_id", "observed_at", "data_type"],
+                set_={"value": sqlite_upsert(Observation).excluded.value},
+            )
         )
         session.execute(stmt)
     return len(valid_rows)
@@ -164,6 +174,7 @@ def store_observations(session: Session, values: list[dict]) -> int:
 # ---------------------------------------------------------------------------
 # Latest observation
 # ---------------------------------------------------------------------------
+
 
 def update_latest(
     session: Session,
@@ -226,15 +237,17 @@ def update_latest(
         existing.prev_value = prev_value
         existing.delta_per_hour = delta
     else:
-        session.add(LatestObservation(
-            source_id=source_id,
-            data_type=data_type,
-            observed_at=latest_row.observed_at,
-            value=latest_row.value,
-            prev_observed_at=prev_observed_at,
-            prev_value=prev_value,
-            delta_per_hour=delta,
-        ))
+        session.add(
+            LatestObservation(
+                source_id=source_id,
+                data_type=data_type,
+                observed_at=latest_row.observed_at,
+                value=latest_row.value,
+                prev_observed_at=prev_observed_at,
+                prev_value=prev_value,
+                delta_per_hour=delta,
+            )
+        )
 
 
 def get_latest(
@@ -262,8 +275,7 @@ def get_all_latest(
     if not source_ids:
         return {}
     rows = session.scalars(
-        select(LatestObservation)
-        .where(LatestObservation.source_id.in_(source_ids))
+        select(LatestObservation).where(LatestObservation.source_id.in_(source_ids))
     ).all()
     return {(r.source_id, r.data_type): r for r in rows}
 
@@ -271,6 +283,7 @@ def get_all_latest(
 # ---------------------------------------------------------------------------
 # Gauge-level latest cache
 # ---------------------------------------------------------------------------
+
 
 def update_latest_gauge(
     session: Session,
@@ -283,9 +296,9 @@ def update_latest_gauge(
     computes delta_per_hour from a previous observation >6h before latest,
     and upserts into the latest_gauge_observation cache.
     """
-    source_ids = list(session.scalars(
-        select(GaugeSource.source_id).where(GaugeSource.gauge_id == gauge_id)
-    ))
+    source_ids = list(
+        session.scalars(select(GaugeSource.source_id).where(GaugeSource.gauge_id == gauge_id))
+    )
     if not source_ids:
         return
 
@@ -339,25 +352,27 @@ def update_latest_gauge(
         existing.delta_per_hour = delta
         existing.source_id = latest_row.source_id
     else:
-        session.add(LatestGaugeObservation(
-            gauge_id=gauge_id,
-            data_type=data_type,
-            observed_at=latest_row.observed_at,
-            value=latest_row.value,
-            prev_observed_at=prev_observed_at,
-            prev_value=prev_value,
-            delta_per_hour=delta,
-            source_id=latest_row.source_id,
-        ))
+        session.add(
+            LatestGaugeObservation(
+                gauge_id=gauge_id,
+                data_type=data_type,
+                observed_at=latest_row.observed_at,
+                value=latest_row.value,
+                prev_observed_at=prev_observed_at,
+                prev_value=prev_value,
+                delta_per_hour=delta,
+                source_id=latest_row.source_id,
+            )
+        )
 
 
 def update_all_latest_gauges(session: Session) -> None:
     """Recompute latest_gauge_observation for all gauges and data types."""
-    gauge_ids = list(session.scalars(
-        select(Gauge.id).where(
-            Gauge.id.in_(select(GaugeSource.gauge_id).distinct())
+    gauge_ids = list(
+        session.scalars(
+            select(Gauge.id).where(Gauge.id.in_(select(GaugeSource.gauge_id).distinct()))
         )
-    ))
+    )
     types = [DataType.flow, DataType.inflow, DataType.gauge, DataType.temperature]
     for gauge_id in gauge_ids:
         for dtype in types:
@@ -390,8 +405,7 @@ def get_all_latest_gauges(
     if not gauge_ids:
         return {}
     rows = session.scalars(
-        select(LatestGaugeObservation)
-        .where(LatestGaugeObservation.gauge_id.in_(gauge_ids))
+        select(LatestGaugeObservation).where(LatestGaugeObservation.gauge_id.in_(gauge_ids))
     ).all()
     return {(r.gauge_id, r.data_type): r for r in rows}
 
@@ -411,8 +425,9 @@ def get_bulk_gauge_observations(
         return {}
     # Build gauge_id → [source_ids] mapping
     gs_rows = session.execute(
-        select(GaugeSource.gauge_id, GaugeSource.source_id)
-        .where(GaugeSource.gauge_id.in_(gauge_ids))
+        select(GaugeSource.gauge_id, GaugeSource.source_id).where(
+            GaugeSource.gauge_id.in_(gauge_ids)
+        )
     ).all()
     gauge_to_sources: dict[int, list[int]] = defaultdict(list)
     source_to_gauge: dict[int, int] = {}
@@ -445,6 +460,7 @@ def get_bulk_gauge_observations(
 # Observation queries
 # ---------------------------------------------------------------------------
 
+
 def get_observations(
     session: Session,
     source_id: int,
@@ -456,13 +472,10 @@ def get_observations(
     if since is None:
         since = datetime.now(UTC) - timedelta(days=60)
 
-    stmt = (
-        select(Observation)
-        .where(
-            Observation.source_id == source_id,
-            Observation.data_type == data_type,
-            Observation.observed_at >= since,
-        )
+    stmt = select(Observation).where(
+        Observation.source_id == source_id,
+        Observation.data_type == data_type,
+        Observation.observed_at >= since,
     )
     if until is not None:
         stmt = stmt.where(Observation.observed_at <= until)
@@ -503,6 +516,7 @@ def get_bulk_observations(
 # Rating tables
 # ---------------------------------------------------------------------------
 
+
 def get_rating_table(
     session: Session,
     rating_id: int,
@@ -530,6 +544,7 @@ def put_rating_table(
 # ---------------------------------------------------------------------------
 # Merge sources
 # ---------------------------------------------------------------------------
+
 
 def merge_sources(
     session: Session,
@@ -590,12 +605,14 @@ def merge_sources(
             vals.append(all_obs[i][1])
 
         if vals:
-            rows.append({
-                "source_id": target_source_id,
-                "data_type": data_type,
-                "observed_at": observed_at,
-                "value": round(statistics.median(vals), 2),
-            })
+            rows.append(
+                {
+                    "source_id": target_source_id,
+                    "data_type": data_type,
+                    "observed_at": observed_at,
+                    "value": round(statistics.median(vals), 2),
+                }
+            )
 
     # Delete the target's existing observations in this range before writing,
     # so stale rows from previous merges or fetches don't linger.

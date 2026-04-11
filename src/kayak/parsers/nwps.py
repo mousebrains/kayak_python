@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from kayak.db.models import DataType
 from kayak.parsers.base import BaseParser
@@ -26,6 +26,13 @@ _MISSING_VALUES = {-999, -9999}
 
 @register("nwps")
 class NWPSParser(BaseParser):
+    """NOAA National Water Prediction Service API parser.
+
+    Parses JSON from the NWPS stageflow/observed endpoint. Extracts stage
+    (ft) and flow (cfs or kcfs, converted to cfs). Sentinel values -999
+    and -9999 are treated as missing data.
+    """
+
     name = "nwps"
 
     def parse(self, text: str) -> int:

@@ -49,9 +49,7 @@ class TestUSBRFlow:
     def test_parse_basic_flow(self, session):
         """Parse USBR CSV with flow (Q) and gauge (GH) values."""
         src = _make_source(session)
-        parser = USBRParser(
-            url="https://example.com/usbr", session=session, source_id=src.id
-        )
+        parser = USBRParser(url="https://example.com/usbr", session=session, source_id=src.id)
         count = parser.parse(USBR_FLOW_SAMPLE)
 
         # 2 rows x 2 columns (Q + GH) = 4 updates
@@ -72,9 +70,7 @@ class TestUSBRGauge:
     def test_parse_gauge_values(self, session):
         """Parse USBR CSV with gauge (GH) values."""
         src = _make_source(session)
-        parser = USBRParser(
-            url="https://example.com/usbr", session=session, source_id=src.id
-        )
+        parser = USBRParser(url="https://example.com/usbr", session=session, source_id=src.id)
         count = parser.parse(USBR_GAUGE_SAMPLE)
 
         assert count == 2
@@ -94,9 +90,7 @@ class TestUSBRTemperature:
     def test_temperature_celsius_to_fahrenheit(self, session):
         """WC code should convert Celsius to Fahrenheit."""
         src = _make_source(session)
-        parser = USBRParser(
-            url="https://example.com/usbr", session=session, source_id=src.id
-        )
+        parser = USBRParser(url="https://example.com/usbr", session=session, source_id=src.id)
         count = parser.parse(USBR_TEMP_SAMPLE)
 
         assert count == 2
@@ -117,17 +111,13 @@ class TestUSBREdgeCases:
     def test_empty_input(self, session):
         """Empty input should return 0."""
         src = _make_source(session)
-        parser = USBRParser(
-            url="https://example.com/usbr", session=session, source_id=src.id
-        )
+        parser = USBRParser(url="https://example.com/usbr", session=session, source_id=src.id)
         assert parser.parse("") == 0
 
     def test_html_wrapped(self, session):
         """HTML-wrapped response should still parse correctly."""
         src = _make_source(session)
-        parser = USBRParser(
-            url="https://example.com/usbr", session=session, source_id=src.id
-        )
+        parser = USBRParser(url="https://example.com/usbr", session=session, source_id=src.id)
         count = parser.parse(USBR_HTML_WRAPPED)
         assert count == 1
 
@@ -152,9 +142,7 @@ class TestUSBREdgeCases:
         session.flush()
 
         source_map = {"MADO": src_mado.id, "WARO": src_waro.id}
-        parser = USBRParser(
-            url="https://example.com/multi", session=session, source_map=source_map
-        )
+        parser = USBRParser(url="https://example.com/multi", session=session, source_map=source_map)
         count = parser.parse(USBR_MULTI_STATION)
 
         # MADO: 2 rows x 3 cols (gh, q, wf) = 6
@@ -189,9 +177,11 @@ class TestUSBREdgeCases:
 
         source_map = {"MADO": src_mado.id}
         parser = USBRParser(
-            url="https://example.com/multi_auto", session=session,
+            url="https://example.com/multi_auto",
+            session=session,
             source_map=source_map,
-            fetch_url_id=fu.id, agency="usbr",
+            fetch_url_id=fu.id,
+            agency="usbr",
         )
         count = parser.parse(USBR_MULTI_STATION)
 
@@ -204,9 +194,5 @@ class TestUSBREdgeCases:
         assert waro_src.fetch_url_id == fu.id
 
         # WARO observations were stored
-        waro_obs = (
-            session.query(Observation)
-            .filter_by(source_id=waro_src.id)
-            .all()
-        )
+        waro_obs = session.query(Observation).filter_by(source_id=waro_src.id).all()
         assert len(waro_obs) == 4

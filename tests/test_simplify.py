@@ -6,6 +6,7 @@ from kayak.utils.simplify import parse_geom, simplify
 # simplify()
 # ---------------------------------------------------------------------------
 
+
 class TestSimplify:
     def test_straight_line_reduces_to_endpoints(self):
         points = [(0, 0), (1, 0), (2, 0), (3, 0), (4, 0)]
@@ -39,6 +40,7 @@ class TestSimplify:
 # ---------------------------------------------------------------------------
 # parse_geom()
 # ---------------------------------------------------------------------------
+
 
 class TestParseGeom:
     def test_standard_parsing(self):

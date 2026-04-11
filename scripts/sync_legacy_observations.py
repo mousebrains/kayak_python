@@ -53,7 +53,7 @@ from sqlalchemy.orm import Session
 # Add src/ to path so we can import kayak modules
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from kayak.db.models import Base, DataType, Observation, Source
+from kayak.db.models import Base, DataType
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)s: %(message)s",
@@ -115,7 +115,7 @@ def get_legacy_tables(legacy_engine):
     for tname in table_names:
         for prefix in LEGACY_PREFIXES:
             if tname.startswith(f"{prefix}_"):
-                source_name = tname[len(prefix) + 1:]
+                source_name = tname[len(prefix) + 1 :]
                 results.append((prefix, source_name, tname))
                 break
     return results
@@ -123,9 +123,7 @@ def get_legacy_tables(legacy_engine):
 
 def build_source_map(target_session):
     """Build a dict mapping source.name → source.id from the target DB."""
-    sources = target_session.execute(
-        text("SELECT id, name FROM source")
-    ).fetchall()
+    sources = target_session.execute(text("SELECT id, name FROM source")).fetchall()
     return {name: sid for sid, name in sources}
 
 
@@ -178,12 +176,14 @@ def sync_table(
         # Normalize to second precision to avoid .000000 suffix in SQLite
         row_time = row_time.replace(microsecond=0)
 
-        batch.append({
-            "source_id": source_id,
-            "observed_at": row_time,
-            "data_type": data_type.value,
-            "value": float(value),
-        })
+        batch.append(
+            {
+                "source_id": source_id,
+                "observed_at": row_time,
+                "data_type": data_type.value,
+                "value": float(value),
+            }
+        )
         count += 1
 
         if len(batch) >= batch_size:
@@ -351,7 +351,8 @@ def main():
         help="Skip syncing the Latest table",
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Enable debug logging",
     )
@@ -403,14 +404,28 @@ def main():
 
             data_type = LEGACY_PREFIXES[prefix]
             count = sync_table(
-                legacy_engine, target_session, table_name,
-                source_id, data_type, since, args.dry_run, args.batch_size,
+                legacy_engine,
+                target_session,
+                table_name,
+                source_id,
+                data_type,
+                since,
+                args.dry_run,
+                args.batch_size,
             )
             if count > 0:
-                log.info("  %s → source_id=%d (%s): %d rows", table_name, source_id, data_type.value, count)
+                log.info(
+                    "  %s → source_id=%d (%s): %d rows",
+                    table_name,
+                    source_id,
+                    data_type.value,
+                    count,
+                )
             total += count
 
-        log.info("Synced %d observation rows (%d tables skipped — no source mapping)", total, skipped)
+        log.info(
+            "Synced %d observation rows (%d tables skipped — no source mapping)", total, skipped
+        )
 
         # Sync Latest table
         if not args.skip_latest:

@@ -8,6 +8,7 @@ Also queries time-series-metadata to record the most recent data date for
 each site (flow, gage height, or temperature).
 """
 
+import contextlib
 import os
 import sqlite3
 import sys
@@ -58,7 +59,7 @@ def fetch_page(url, api_key=None):
     for attempt in range(4):
         resp = requests.get(url, headers=headers, timeout=60)
         if resp.status_code == 429:
-            wait = 2 ** attempt
+            wait = 2**attempt
             print(f"  Rate limited, waiting {wait}s...")
             time.sleep(wait)
             continue
@@ -100,18 +101,20 @@ def fetch_state(state_name, api_key=None):
             if lat < 40.0 or lon > -111.0:
                 continue
 
-            rows.append({
-                "site_no": site_no,
-                "station_nm": props.get("monitoring_location_name", "").strip(),
-                "latitude": lat,
-                "longitude": lon,
-                "state_cd": props.get("state_code", ""),
-                "county_cd": props.get("county_code", ""),
-                "huc_cd": props.get("hydrologic_unit_code", ""),
-                "drain_area_sq_mi": props.get("drainage_area"),
-                "altitude_ft": props.get("altitude"),
-                "alt_datum": props.get("vertical_datum"),
-            })
+            rows.append(
+                {
+                    "site_no": site_no,
+                    "station_nm": props.get("monitoring_location_name", "").strip(),
+                    "latitude": lat,
+                    "longitude": lon,
+                    "state_cd": props.get("state_code", ""),
+                    "county_cd": props.get("county_code", ""),
+                    "huc_cd": props.get("hydrologic_unit_code", ""),
+                    "drain_area_sq_mi": props.get("drainage_area"),
+                    "altitude_ft": props.get("altitude"),
+                    "alt_datum": props.get("vertical_datum"),
+                }
+            )
 
         url = None
         for link in data.get("links", []):
@@ -178,9 +181,14 @@ def fetch_last_dates(site_nos, api_key=None):
 
 
 def main():
-    db_path = sys.argv[1] if len(sys.argv) > 1 else str(
-        __import__("pathlib").Path(__file__).resolve().parent.parent
-        / "Gauge-metadata-cache" / "gauges.db"
+    db_path = (
+        sys.argv[1]
+        if len(sys.argv) > 1
+        else str(
+            __import__("pathlib").Path(__file__).resolve().parent.parent
+            / "Gauge-metadata-cache"
+            / "gauges.db"
+        )
     )
 
     api_key = os.environ.get("USGS_API_KEY")
@@ -189,10 +197,8 @@ def main():
     conn.execute(CREATE_TABLE)
     # Add columns if they don't exist (upgrade from older schema)
     for col in ["last_flow_date", "last_gage_date", "last_temp_date"]:
-        try:
+        with contextlib.suppress(sqlite3.OperationalError):
             conn.execute(f"ALTER TABLE usgs_site ADD COLUMN {col} TEXT")
-        except sqlite3.OperationalError:
-            pass
 
     total = 0
     all_site_nos = set()
@@ -202,11 +208,21 @@ def main():
         print(f"{len(rows)} USGS stream sites")
 
         for r in rows:
-            conn.execute(INSERT_SQL, (
-                r["site_no"], r["station_nm"], r["latitude"], r["longitude"],
-                r["state_cd"], r["county_cd"], r["huc_cd"],
-                r["drain_area_sq_mi"], r["altitude_ft"], r["alt_datum"],
-            ))
+            conn.execute(
+                INSERT_SQL,
+                (
+                    r["site_no"],
+                    r["station_nm"],
+                    r["latitude"],
+                    r["longitude"],
+                    r["state_cd"],
+                    r["county_cd"],
+                    r["huc_cd"],
+                    r["drain_area_sq_mi"],
+                    r["altitude_ft"],
+                    r["alt_datum"],
+                ),
+            )
             all_site_nos.add(r["site_no"])
         total += len(rows)
 
@@ -219,10 +235,15 @@ def main():
 
     updated = 0
     for site_no, dates in last_dates.items():
-        conn.execute(UPDATE_LAST_DATES, (
-            dates.get("flow"), dates.get("gage"), dates.get("temp"),
-            site_no,
-        ))
+        conn.execute(
+            UPDATE_LAST_DATES,
+            (
+                dates.get("flow"),
+                dates.get("gage"),
+                dates.get("temp"),
+                site_no,
+            ),
+        )
         updated += 1
 
     conn.commit()

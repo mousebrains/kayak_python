@@ -19,6 +19,7 @@ def _noop(*a, **kw):
 # _safe_eval unit tests
 # ---------------------------------------------------------------------------
 
+
 class TestSafeEval:
     def test_simple_arithmetic(self):
         assert _safe_eval("2 + 3") == 5.0
@@ -69,6 +70,7 @@ class TestSafeEval:
 # ---------------------------------------------------------------------------
 # calculator() integration tests
 # ---------------------------------------------------------------------------
+
 
 def _make_calc_source(session, expression, time_expression, ref_sources):
     """Create a source with a calc_expression and reference sources with latest values.

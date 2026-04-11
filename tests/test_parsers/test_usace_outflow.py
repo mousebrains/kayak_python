@@ -114,8 +114,6 @@ class TestUSACEEdgeCases:
         assert count == 3
 
         flows = (
-            session.query(Observation)
-            .filter_by(source_id=src.id, data_type=DataType.flow)
-            .all()
+            session.query(Observation).filter_by(source_id=src.id, data_type=DataType.flow).all()
         )
         assert len(flows) == 3

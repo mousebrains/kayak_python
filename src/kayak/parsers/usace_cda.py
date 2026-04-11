@@ -33,6 +33,13 @@ _PARAM_MAP: dict[str, DataType] = {
 
 @register("usace.cda")
 class USACECDAParser(BaseParser):
+    """US Army Corps of Engineers CDA JSON parser.
+
+    Parses time-series JSON from the USACE Columbia Data Access API.
+    Handles multi-parameter responses (flow, gage, temperature) with
+    unit conversion from kcfs to cfs.
+    """
+
     name = "usace.cda"
 
     def parse(self, text: str) -> int:
@@ -74,9 +81,7 @@ class USACECDAParser(BaseParser):
         self._flush_buffer()
 
         if self._db_updates == 0:
-            logger.warning(
-                "No database updates from %s parser(%s)", self.url, self.name
-            )
+            logger.warning("No database updates from %s parser(%s)", self.url, self.name)
 
         return self._db_updates
 

@@ -17,41 +17,64 @@ import socket
 def addArgs(parser: argparse.ArgumentParser) -> None:
     """Add TPWUtils-style logging options to an ArgumentParser."""
     parser.add_argument(
-        "--logfile", default=None, metavar="FILENAME",
+        "--logfile",
+        default=None,
+        metavar="FILENAME",
         help="Name of logfile (enables rotating file handler)",
     )
     parser.add_argument(
-        "--logBytes", type=int, default=10_000_000, metavar="BYTES",
+        "--logBytes",
+        type=int,
+        default=10_000_000,
+        metavar="BYTES",
         help="Maximum logfile size in bytes",
     )
     parser.add_argument(
-        "--logCount", type=int, default=3, metavar="COUNT",
+        "--logCount",
+        type=int,
+        default=3,
+        metavar="COUNT",
         help="Number of backup log files to keep",
     )
     parser.add_argument(
-        "--mailTo", action="append", default=[], metavar="ADDR",
+        "--mailTo",
+        action="append",
+        default=[],
+        metavar="ADDR",
         help="Where to mail errors and exceptions to (repeatable)",
     )
     parser.add_argument(
-        "--mailFrom", default=None, metavar="ADDR",
+        "--mailFrom",
+        default=None,
+        metavar="ADDR",
         help="Who the mail originates from",
     )
     parser.add_argument(
-        "--mailSubject", default=None, metavar="SUBJECT",
+        "--mailSubject",
+        default=None,
+        metavar="SUBJECT",
         help="Mail subject line",
     )
     parser.add_argument(
-        "--smtpHost", default="localhost", metavar="HOST",
+        "--smtpHost",
+        default="localhost",
+        metavar="HOST",
         help="SMTP server to mail to",
     )
 
     level_group = parser.add_mutually_exclusive_group()
     level_group.add_argument(
-        "--debug", action="store_const", const="DEBUG", dest="log_level",
+        "--debug",
+        action="store_const",
+        const="DEBUG",
+        dest="log_level",
         help="Enable very verbose (DEBUG) logging",
     )
     level_group.add_argument(
-        "--verbose", action="store_const", const="INFO", dest="log_level",
+        "--verbose",
+        action="store_const",
+        const="INFO",
+        dest="log_level",
         help="Enable verbose (INFO) logging",
     )
 
@@ -65,7 +88,9 @@ def mkLogger(args: argparse.Namespace) -> logging.Logger:
 
     if args.logfile:
         handler: logging.Handler = logging.handlers.RotatingFileHandler(
-            args.logfile, maxBytes=args.logBytes, backupCount=args.logCount,
+            args.logfile,
+            maxBytes=args.logBytes,
+            backupCount=args.logCount,
         )
     else:
         handler = logging.StreamHandler()
@@ -82,7 +107,10 @@ def mkLogger(args: argparse.Namespace) -> logging.Logger:
         frm = args.mailFrom or (getpass.getuser() + "@" + socket.getfqdn())
         subj = args.mailSubject or ("Error on " + socket.getfqdn())
         smtp_handler = logging.handlers.SMTPHandler(
-            args.smtpHost, frm, list(args.mailTo), subj,
+            args.smtpHost,
+            frm,
+            list(args.mailTo),
+            subj,
         )
         smtp_handler.setLevel(logging.ERROR)
         smtp_handler.setFormatter(formatter)

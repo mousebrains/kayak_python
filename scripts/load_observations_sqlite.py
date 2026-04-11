@@ -123,15 +123,18 @@ def load_latest(conn, csv_path):
         next(reader)  # skip header
         for row in reader:
             source_id, data_type, observed_at, value, prev_at, prev_val, delta = row
-            cursor.execute(UPSERT_LATEST, (
-                int(source_id),
-                data_type,
-                observed_at,
-                float(value),
-                prev_at if prev_at else None,
-                float(prev_val) if prev_val else None,
-                float(delta) if delta else None,
-            ))
+            cursor.execute(
+                UPSERT_LATEST,
+                (
+                    int(source_id),
+                    data_type,
+                    observed_at,
+                    float(value),
+                    prev_at if prev_at else None,
+                    float(prev_val) if prev_val else None,
+                    float(delta) if delta else None,
+                ),
+            )
             count += 1
 
     conn.commit()
@@ -148,23 +151,29 @@ def main():
         description="Load observation CSV dumps into a SQLite database"
     )
     parser.add_argument(
-        "--db", default=default_db,
+        "--db",
+        default=default_db,
         help=f"SQLite database path (default: {default_db})",
     )
     parser.add_argument(
-        "--observations", default=default_obs,
+        "--observations",
+        default=default_obs,
         help=f"Path to observation.csv (default: {default_obs})",
     )
     parser.add_argument(
-        "--latest", default=default_latest,
+        "--latest",
+        default=default_latest,
         help=f"Path to latest_observation.csv (default: {default_latest})",
     )
     parser.add_argument(
-        "--skip-latest", action="store_true",
+        "--skip-latest",
+        action="store_true",
         help="Skip loading the latest_observation table",
     )
     parser.add_argument(
-        "--verbose", "-v", action="store_true",
+        "--verbose",
+        "-v",
+        action="store_true",
         help="Enable debug logging",
     )
     args = parser.parse_args()

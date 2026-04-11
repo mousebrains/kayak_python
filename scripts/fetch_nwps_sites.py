@@ -4,7 +4,6 @@ Downloads gauge metadata from the NWPS API, filters to sites north of 40°
 latitude and west of -111° longitude, and stores them in an 'nwps_site' table.
 """
 
-import json
 import sqlite3
 import sys
 
@@ -44,8 +43,10 @@ def main():
         resp.raise_for_status()
         gauges = resp.json()["gauges"]
         kept = [
-            g for g in gauges
-            if g.get("latitude") and g.get("longitude")
+            g
+            for g in gauges
+            if g.get("latitude")
+            and g.get("longitude")
             and g["latitude"] >= 40.0
             and g["longitude"] <= -111.0
         ]
@@ -58,23 +59,28 @@ def main():
 
     for g in filtered:
         pedts = g.get("pedts", {})
-        conn.execute(INSERT_SQL, (
-            g["lid"],
-            g.get("name"),
-            g["latitude"],
-            g["longitude"],
-            g.get("state", {}).get("abbreviation"),
-            g.get("rfc", {}).get("abbreviation"),
-            g.get("wfo", {}).get("abbreviation"),
-            pedts.get("observed"),
-            pedts.get("forecast"),
-        ))
+        conn.execute(
+            INSERT_SQL,
+            (
+                g["lid"],
+                g.get("name"),
+                g["latitude"],
+                g["longitude"],
+                g.get("state", {}).get("abbreviation"),
+                g.get("rfc", {}).get("abbreviation"),
+                g.get("wfo", {}).get("abbreviation"),
+                pedts.get("observed"),
+                pedts.get("forecast"),
+            ),
+        )
 
     conn.commit()
     print(f"\n{len(filtered)} NWPS sites stored in {db_path}")
 
     # Summary by state
-    cur = conn.execute("SELECT state, COUNT(*) FROM nwps_site GROUP BY state ORDER BY COUNT(*) DESC")
+    cur = conn.execute(
+        "SELECT state, COUNT(*) FROM nwps_site GROUP BY state ORDER BY COUNT(*) DESC"
+    )
     for state, count in cur:
         print(f"  {state}: {count}")
 

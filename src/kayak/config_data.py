@@ -37,11 +37,13 @@ def load_sources() -> list[dict[str, str]]:
         if not section.get("enabled", True):
             continue
         for entry in section.get("urls", []):
-            sources.append({
-                "parser": parser_name,
-                "url": entry["url"],
-                "hours": entry.get("hours", ""),
-            })
+            sources.append(
+                {
+                    "parser": parser_name,
+                    "url": entry["url"],
+                    "hours": entry.get("hours", ""),
+                }
+            )
     return sources
 
 

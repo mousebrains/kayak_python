@@ -1,0 +1,9 @@
+[Unit]
+Description=Send failure notification for %i
+
+[Service]
+Type=oneshot
+User=pat
+ExecStart=/bin/bash -c 'echo "ALERT: %i failed at $(date -u +\"%%Y-%%m-%%d %%H:%%M UTC\")" | logger -t kayak-alert -p user.err'
+# To enable email notifications, uncomment and configure:
+# ExecStart=/bin/bash -c 'echo "Unit %i failed at $(date -u)" | mail -s "Kayak: %i failed" pat.kayak@gmail.com'

@@ -19,11 +19,12 @@ import os
 import re
 import sys
 import time
-from datetime import datetime
 from pathlib import Path
 
 # Add src/ to path so we can import kayak models
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+import contextlib
 
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session
@@ -48,6 +49,7 @@ LEVEL_MAP = {1: "low", 2: "okay", 3: "high"}
 # MySQL dump parser
 # ---------------------------------------------------------------------------
 
+
 def parse_mysql_values(values_str):
     """Parse a MySQL VALUES clause into a list of tuples.
 
@@ -60,16 +62,16 @@ def parse_mysql_values(values_str):
 
     while i < n:
         # Find start of a row
-        while i < n and values_str[i] != '(':
+        while i < n and values_str[i] != "(":
             i += 1
         if i >= n:
             break
         i += 1  # skip '('
 
         row = []
-        while i < n and values_str[i] != ')':
+        while i < n and values_str[i] != ")":
             # Skip whitespace
-            while i < n and values_str[i] in (' ', '\t'):
+            while i < n and values_str[i] in (" ", "\t"):
                 i += 1
 
             if values_str[i] == "'":
@@ -77,22 +79,22 @@ def parse_mysql_values(values_str):
                 i += 1
                 parts = []
                 while i < n:
-                    if values_str[i] == '\\' and i + 1 < n:
+                    if values_str[i] == "\\" and i + 1 < n:
                         next_ch = values_str[i + 1]
                         if next_ch == "'":
                             parts.append("'")
                         elif next_ch == '"':
                             parts.append('"')
-                        elif next_ch == '\\':
-                            parts.append('\\')
-                        elif next_ch == 'n':
-                            parts.append('\n')
-                        elif next_ch == 'r':
-                            parts.append('\r')
-                        elif next_ch == 't':
-                            parts.append('\t')
-                        elif next_ch == '0':
-                            parts.append('\0')
+                        elif next_ch == "\\":
+                            parts.append("\\")
+                        elif next_ch == "n":
+                            parts.append("\n")
+                        elif next_ch == "r":
+                            parts.append("\r")
+                        elif next_ch == "t":
+                            parts.append("\t")
+                        elif next_ch == "0":
+                            parts.append("\0")
                         else:
                             parts.append(next_ch)
                         i += 2
@@ -102,19 +104,19 @@ def parse_mysql_values(values_str):
                     else:
                         parts.append(values_str[i])
                         i += 1
-                row.append(''.join(parts))
-            elif values_str[i:i+4] == 'NULL':
+                row.append("".join(parts))
+            elif values_str[i : i + 4] == "NULL":
                 row.append(None)
                 i += 4
             else:
                 # Number or other literal
                 start = i
-                while i < n and values_str[i] not in (',', ')'):
+                while i < n and values_str[i] not in (",", ")"):
                     i += 1
                 val = values_str[start:i].strip()
                 # Try to convert to number
                 try:
-                    if '.' in val:
+                    if "." in val:
                         row.append(float(val))
                     else:
                         row.append(int(val))
@@ -122,17 +124,17 @@ def parse_mysql_values(values_str):
                     row.append(val)
 
             # Skip comma between values
-            while i < n and values_str[i] in (' ', '\t'):
+            while i < n and values_str[i] in (" ", "\t"):
                 i += 1
-            if i < n and values_str[i] == ',':
+            if i < n and values_str[i] == ",":
                 i += 1
 
-        if i < n and values_str[i] == ')':
+        if i < n and values_str[i] == ")":
             i += 1
         rows.append(tuple(row))
 
         # Skip comma between rows or semicolon at end
-        while i < n and values_str[i] in (',', ' ', '\t', '\n', '\r', ';'):
+        while i < n and values_str[i] in (",", " ", "\t", "\n", "\r", ";"):
             i += 1
 
     return rows
@@ -146,13 +148,11 @@ def extract_table_data(dump_path, table_name):
     """
     prefix = f"INSERT INTO `{table_name}` VALUES "
     rows = []
-    collecting = False
-    buffer = []
 
-    with open(dump_path, 'r', encoding='utf-8', errors='replace') as f:
+    with open(dump_path, encoding="utf-8", errors="replace") as f:
         for line in f:
             if line.startswith(prefix):
-                values_part = line[len(prefix):]
+                values_part = line[len(prefix) :]
                 rows.extend(parse_mysql_values(values_part))
             # Stop early if we've passed the table's section
             elif rows and line.startswith("UNLOCK TABLES"):
@@ -168,9 +168,8 @@ def extract_all_timeseries_tables(dump_path):
     """
     known_prefixes = ("flow_", "gauge_", "temperature_", "inflow_", "GotMe_")
     tables = {}
-    current_table = None
 
-    with open(dump_path, 'r', encoding='utf-8', errors='replace') as f:
+    with open(dump_path, encoding="utf-8", errors="replace") as f:
         for line in f:
             if line.startswith("INSERT INTO `"):
                 # Extract table name
@@ -181,7 +180,7 @@ def extract_all_timeseries_tables(dump_path):
 
                 if tname == "Latest" or any(tname.startswith(p) for p in known_prefixes):
                     prefix = f"INSERT INTO `{tname}` VALUES "
-                    values_part = line[len(prefix):]
+                    values_part = line[len(prefix) :]
                     parsed = parse_mysql_values(values_part)
                     if tname not in tables:
                         tables[tname] = []
@@ -193,6 +192,7 @@ def extract_all_timeseries_tables(dump_path):
 # ---------------------------------------------------------------------------
 # Import steps (mirrors ~/tpw/kayak_new/migrate/ scripts)
 # ---------------------------------------------------------------------------
+
 
 def import_states(session, dump_path):
     """Step 1a: Import states."""
@@ -206,10 +206,10 @@ def import_states(session, dump_path):
         else:
             sid, name = row[0], row[1]
             abbr = name  # abbreviation = name in old format
-        session.execute(text(
-            "INSERT OR IGNORE INTO state (id, name, abbreviation) "
-            "VALUES (:id, :name, :abbr)"
-        ), {"id": sid, "name": name, "abbr": abbr})
+        session.execute(
+            text("INSERT OR IGNORE INTO state (id, name, abbreviation) VALUES (:id, :name, :abbr)"),
+            {"id": sid, "name": name, "abbr": abbr},
+        )
     session.commit()
     log.info("  Imported %d states", len(rows))
 
@@ -220,10 +220,12 @@ def import_class_descriptions(session, dump_path):
     rows = extract_table_data(dump_path, "classDescription")
     for row in rows:
         name, desc = row[0], row[1]
-        session.execute(text(
-            "INSERT OR IGNORE INTO class_description (name, description) "
-            "VALUES (:name, :desc)"
-        ), {"name": name, "desc": desc})
+        session.execute(
+            text(
+                "INSERT OR IGNORE INTO class_description (name, description) VALUES (:name, :desc)"
+            ),
+            {"name": name, "desc": desc},
+        )
     session.commit()
     log.info("  Imported %d class descriptions", len(rows))
 
@@ -239,11 +241,20 @@ def import_guidebooks(session, dump_path):
         edition = row[3] if len(row) > 3 else None
         author = row[4] if len(row) > 4 else None
         url = row[5] if len(row) > 5 else None
-        session.execute(text(
-            "INSERT OR IGNORE INTO guidebook (id, title, subtitle, edition, author, url) "
-            "VALUES (:id, :title, :subtitle, :edition, :author, :url)"
-        ), {"id": gid, "title": title, "subtitle": subtitle,
-            "edition": edition, "author": author, "url": url})
+        session.execute(
+            text(
+                "INSERT OR IGNORE INTO guidebook (id, title, subtitle, edition, author, url) "
+                "VALUES (:id, :title, :subtitle, :edition, :author, :url)"
+            ),
+            {
+                "id": gid,
+                "title": title,
+                "subtitle": subtitle,
+                "edition": edition,
+                "author": author,
+                "url": url,
+            },
+        )
     session.commit()
     log.info("  Imported %d guidebooks", len(rows))
 
@@ -254,10 +265,10 @@ def import_ratings(session, dump_path):
     rows = extract_table_data(dump_path, "rating")
     for row in rows:
         # rating: (id, url, parser)
-        session.execute(text(
-            "INSERT OR IGNORE INTO rating (id, url, parser) "
-            "VALUES (:id, :url, :parser)"
-        ), {"id": row[0], "url": row[1], "parser": row[2] if len(row) > 2 else None})
+        session.execute(
+            text("INSERT OR IGNORE INTO rating (id, url, parser) VALUES (:id, :url, :parser)"),
+            {"id": row[0], "url": row[1], "parser": row[2] if len(row) > 2 else None},
+        )
     session.commit()
     log.info("  Imported %d ratings", len(rows))
 
@@ -269,21 +280,32 @@ def import_gauges(session, dump_path):
     for row in rows:
         # gauge: (id, name, bankFull, floodStage, location, latitude, longitude,
         #         stationID, cbttID, geosID, nwsID, nwsliID, snotelID, usgsID, rating)
-        session.execute(text(
-            "INSERT OR IGNORE INTO gauge "
-            "(id, name, bank_full, flood_stage, location, latitude, longitude, "
-            " station_id, cbtt_id, geos_id, nws_id, nwsli_id, snotel_id, usgs_id, rating_id) "
-            "VALUES (:id, :name, :bank_full, :flood_stage, :location, :lat, :lon, "
-            " :station_id, :cbtt_id, :geos_id, :nws_id, :nwsli_id, :snotel_id, :usgs_id, :rating_id)"
-        ), {
-            "id": row[0], "name": row[1],
-            "bank_full": row[2], "flood_stage": row[3],
-            "location": row[4], "lat": row[5], "lon": row[6],
-            "station_id": row[7], "cbtt_id": row[8], "geos_id": row[9],
-            "nws_id": row[10], "nwsli_id": row[11], "snotel_id": row[12],
-            "usgs_id": row[13],
-            "rating_id": row[14] if len(row) > 14 and row[14] else None,
-        })
+        session.execute(
+            text(
+                "INSERT OR IGNORE INTO gauge "
+                "(id, name, bank_full, flood_stage, location, latitude, longitude, "
+                " station_id, cbtt_id, geos_id, nws_id, nwsli_id, snotel_id, usgs_id, rating_id) "
+                "VALUES (:id, :name, :bank_full, :flood_stage, :location, :lat, :lon, "
+                " :station_id, :cbtt_id, :geos_id, :nws_id, :nwsli_id, :snotel_id, :usgs_id, :rating_id)"
+            ),
+            {
+                "id": row[0],
+                "name": row[1],
+                "bank_full": row[2],
+                "flood_stage": row[3],
+                "location": row[4],
+                "lat": row[5],
+                "lon": row[6],
+                "station_id": row[7],
+                "cbtt_id": row[8],
+                "geos_id": row[9],
+                "nws_id": row[10],
+                "nwsli_id": row[11],
+                "snotel_id": row[12],
+                "usgs_id": row[13],
+                "rating_id": row[14] if len(row) > 14 and row[14] else None,
+            },
+        )
     session.commit()
     log.info("  Imported %d gauges", len(rows))
 
@@ -297,14 +319,20 @@ def import_fetch_urls(session, dump_path):
         hours_val = row[3] if len(row) > 3 else None
         is_active = row[4] if len(row) > 4 else 1
         last_fetched = row[5] if len(row) > 5 else None
-        session.execute(text(
-            "INSERT OR IGNORE INTO fetch_url (id, url, parser, hours, is_active, last_fetched_at) "
-            "VALUES (:id, :url, :parser, :hours, :is_active, :last_fetched)"
-        ), {
-            "id": row[0], "url": row[1], "parser": row[2],
-            "hours": hours_val, "is_active": 1 if is_active else 0,
-            "last_fetched": last_fetched,
-        })
+        session.execute(
+            text(
+                "INSERT OR IGNORE INTO fetch_url (id, url, parser, hours, is_active, last_fetched_at) "
+                "VALUES (:id, :url, :parser, :hours, :is_active, :last_fetched)"
+            ),
+            {
+                "id": row[0],
+                "url": row[1],
+                "parser": row[2],
+                "hours": hours_val,
+                "is_active": 1 if is_active else 0,
+                "last_fetched": last_fetched,
+            },
+        )
     session.commit()
     log.info("  Imported %d fetch_url rows", len(rows))
 
@@ -319,14 +347,19 @@ def import_calc_expressions(session, dump_path):
         if dt_str is None:
             log.warning("  Unknown dataType %s for calc id %s, skipping", row[1], row[0])
             continue
-        session.execute(text(
-            "INSERT OR IGNORE INTO calc_expression (id, data_type, expression, time_expression, note) "
-            "VALUES (:id, :dt, :expr, :time_expr, :note)"
-        ), {
-            "id": row[0], "dt": dt_str, "expr": row[2],
-            "time_expr": row[3] if len(row) > 3 else None,
-            "note": row[4] if len(row) > 4 else None,
-        })
+        session.execute(
+            text(
+                "INSERT OR IGNORE INTO calc_expression (id, data_type, expression, time_expression, note) "
+                "VALUES (:id, :dt, :expr, :time_expr, :note)"
+            ),
+            {
+                "id": row[0],
+                "dt": dt_str,
+                "expr": row[2],
+                "time_expr": row[3] if len(row) > 3 else None,
+                "note": row[4] if len(row) > 4 else None,
+            },
+        )
     session.commit()
     log.info("  Imported %d calc expressions", len(rows))
 
@@ -342,14 +375,19 @@ def import_sources(session, dump_path):
         calc_id = row[2] if row[2] and row[2] != 0 else None
         if url_id is None and calc_id is None:
             continue
-        session.execute(text(
-            "INSERT OR IGNORE INTO source (id, name, agency, fetch_url_id, calc_expression_id) "
-            "VALUES (:id, :name, :agency, :url_id, :calc_id)"
-        ), {
-            "id": row[0], "name": row[3],
-            "agency": row[4] if len(row) > 4 else None,
-            "url_id": url_id, "calc_id": calc_id,
-        })
+        session.execute(
+            text(
+                "INSERT OR IGNORE INTO source (id, name, agency, fetch_url_id, calc_expression_id) "
+                "VALUES (:id, :name, :agency, :url_id, :calc_id)"
+            ),
+            {
+                "id": row[0],
+                "name": row[3],
+                "agency": row[4] if len(row) > 4 else None,
+                "url_id": url_id,
+                "calc_id": calc_id,
+            },
+        )
         count += 1
     session.commit()
     log.info("  Imported %d sources (skipped %d without url/calc)", count, len(rows) - count)
@@ -363,10 +401,12 @@ def import_gauge_source(session, dump_path):
     for row in rows:
         # gauge2source: (gauge, src)
         try:
-            session.execute(text(
-                "INSERT OR IGNORE INTO gauge_source (gauge_id, source_id) "
-                "VALUES (:gid, :sid)"
-            ), {"gid": row[0], "sid": row[1]})
+            session.execute(
+                text(
+                    "INSERT OR IGNORE INTO gauge_source (gauge_id, source_id) VALUES (:gid, :sid)"
+                ),
+                {"gid": row[0], "sid": row[1]},
+            )
             count += 1
         except Exception:
             pass  # FK violation — source or gauge doesn't exist
@@ -386,36 +426,57 @@ def import_reaches(session, dump_path):
         #   mapName, noShow, notes, optimalFlow, region, remoteness, scenery,
         #   season, watershedType, awID)
         gauge_id = row[2] if row[2] and row[2] != 0 else None
-        session.execute(text(
-            "INSERT OR IGNORE INTO reach "
-            "(id, updated_at, gauge_id, name, display_name, sort_name, nature, "
-            " description, difficulties, basin, basin_area, elevation, elevation_lost, "
-            " length, gradient, features, latitude, longitude, "
-            " latitude_start, longitude_start, latitude_end, longitude_end, "
-            " map_name, no_show, notes, optimal_flow, region, remoteness, scenery, "
-            " season, watershed_type, aw_id) "
-            "VALUES (:id, :updated_at, :gauge_id, :name, :display_name, :sort_name, :nature, "
-            " :description, :difficulties, :basin, :basin_area, :elevation, :elevation_lost, "
-            " :length, :gradient, :features, :latitude, :longitude, "
-            " :lat_start, :lon_start, :lat_end, :lon_end, "
-            " :map_name, :no_show, :notes, :optimal_flow, :region, :remoteness, :scenery, "
-            " :season, :watershed_type, :aw_id)"
-        ), {
-            "id": row[0], "updated_at": row[1], "gauge_id": gauge_id,
-            "name": row[3], "display_name": row[4], "sort_name": row[5],
-            "nature": row[6], "description": row[7], "difficulties": row[8],
-            "basin": row[9], "basin_area": row[10], "elevation": row[11],
-            "elevation_lost": row[12], "length": row[13], "gradient": row[14],
-            "features": row[15], "latitude": row[16], "longitude": row[17],
-            "lat_start": row[18], "lon_start": row[19],
-            "lat_end": row[20], "lon_end": row[21],
-            "map_name": row[22], "no_show": 1 if row[23] else 0,
-            "notes": row[24], "optimal_flow": row[25],
-            "region": row[26], "remoteness": row[27], "scenery": row[28],
-            "season": row[29],
-            "watershed_type": row[30] if len(row) > 30 else None,
-            "aw_id": row[31] if len(row) > 31 else None,
-        })
+        session.execute(
+            text(
+                "INSERT OR IGNORE INTO reach "
+                "(id, updated_at, gauge_id, name, display_name, sort_name, nature, "
+                " description, difficulties, basin, basin_area, elevation, elevation_lost, "
+                " length, gradient, features, latitude, longitude, "
+                " latitude_start, longitude_start, latitude_end, longitude_end, "
+                " map_name, no_show, notes, optimal_flow, region, remoteness, scenery, "
+                " season, watershed_type, aw_id) "
+                "VALUES (:id, :updated_at, :gauge_id, :name, :display_name, :sort_name, :nature, "
+                " :description, :difficulties, :basin, :basin_area, :elevation, :elevation_lost, "
+                " :length, :gradient, :features, :latitude, :longitude, "
+                " :lat_start, :lon_start, :lat_end, :lon_end, "
+                " :map_name, :no_show, :notes, :optimal_flow, :region, :remoteness, :scenery, "
+                " :season, :watershed_type, :aw_id)"
+            ),
+            {
+                "id": row[0],
+                "updated_at": row[1],
+                "gauge_id": gauge_id,
+                "name": row[3],
+                "display_name": row[4],
+                "sort_name": row[5],
+                "nature": row[6],
+                "description": row[7],
+                "difficulties": row[8],
+                "basin": row[9],
+                "basin_area": row[10],
+                "elevation": row[11],
+                "elevation_lost": row[12],
+                "length": row[13],
+                "gradient": row[14],
+                "features": row[15],
+                "latitude": row[16],
+                "longitude": row[17],
+                "lat_start": row[18],
+                "lon_start": row[19],
+                "lat_end": row[20],
+                "lon_end": row[21],
+                "map_name": row[22],
+                "no_show": 1 if row[23] else 0,
+                "notes": row[24],
+                "optimal_flow": row[25],
+                "region": row[26],
+                "remoteness": row[27],
+                "scenery": row[28],
+                "season": row[29],
+                "watershed_type": row[30] if len(row) > 30 else None,
+                "aw_id": row[31] if len(row) > 31 else None,
+            },
+        )
     session.commit()
     log.info("  Imported %d reaches", len(rows))
 
@@ -428,10 +489,10 @@ def import_reach_state(session, dump_path):
     for row in rows:
         # section2state: (section, state)
         try:
-            session.execute(text(
-                "INSERT OR IGNORE INTO reach_state (reach_id, state_id) "
-                "VALUES (:sec, :st)"
-            ), {"sec": row[0], "st": row[1]})
+            session.execute(
+                text("INSERT OR IGNORE INTO reach_state (reach_id, state_id) VALUES (:sec, :st)"),
+                {"sec": row[0], "st": row[1]},
+            )
             count += 1
         except Exception:
             pass
@@ -451,15 +512,21 @@ def import_reach_class(session, dump_path):
         if low_dt is None or high_dt is None:
             continue
         try:
-            session.execute(text(
-                "INSERT OR IGNORE INTO reach_class "
-                "(reach_id, name, low, low_data_type, high, high_data_type) "
-                "VALUES (:sec, :name, :low, :low_dt, :high, :high_dt)"
-            ), {
-                "sec": row[0], "name": row[1],
-                "low": row[2], "low_dt": low_dt,
-                "high": row[4], "high_dt": high_dt,
-            })
+            session.execute(
+                text(
+                    "INSERT OR IGNORE INTO reach_class "
+                    "(reach_id, name, low, low_data_type, high, high_data_type) "
+                    "VALUES (:sec, :name, :low, :low_dt, :high, :high_dt)"
+                ),
+                {
+                    "sec": row[0],
+                    "name": row[1],
+                    "low": row[2],
+                    "low_dt": low_dt,
+                    "high": row[4],
+                    "high_dt": high_dt,
+                },
+            )
             count += 1
         except Exception:
             pass
@@ -483,15 +550,21 @@ def import_reach_level(session, dump_path):
         if level_str is None or low_dt is None or high_dt is None:
             continue
         try:
-            session.execute(text(
-                "INSERT OR IGNORE INTO reach_level "
-                "(reach_id, level, low, low_data_type, high, high_data_type) "
-                "VALUES (:sec, :level, :low, :low_dt, :high, :high_dt)"
-            ), {
-                "sec": row[0], "level": level_str,
-                "low": row[2], "low_dt": low_dt,
-                "high": row[4], "high_dt": high_dt,
-            })
+            session.execute(
+                text(
+                    "INSERT OR IGNORE INTO reach_level "
+                    "(reach_id, level, low, low_data_type, high, high_data_type) "
+                    "VALUES (:sec, :level, :low, :low_dt, :high, :high_dt)"
+                ),
+                {
+                    "sec": row[0],
+                    "level": level_str,
+                    "low": row[2],
+                    "low_dt": low_dt,
+                    "high": row[4],
+                    "high_dt": high_dt,
+                },
+            )
             count += 1
         except Exception:
             pass
@@ -507,16 +580,20 @@ def import_reach_guidebook(session, dump_path):
     for row in rows:
         # section2GuideBook: (section, guideBook, page, run, url)
         try:
-            session.execute(text(
-                "INSERT OR IGNORE INTO reach_guidebook "
-                "(reach_id, guidebook_id, page, run, url) "
-                "VALUES (:sec, :gb, :page, :run, :url)"
-            ), {
-                "sec": row[0], "gb": row[1],
-                "page": row[2] if len(row) > 2 else None,
-                "run": row[3] if len(row) > 3 else None,
-                "url": row[4] if len(row) > 4 else None,
-            })
+            session.execute(
+                text(
+                    "INSERT OR IGNORE INTO reach_guidebook "
+                    "(reach_id, guidebook_id, page, run, url) "
+                    "VALUES (:sec, :gb, :page, :run, :url)"
+                ),
+                {
+                    "sec": row[0],
+                    "gb": row[1],
+                    "page": row[2] if len(row) > 2 else None,
+                    "run": row[3] if len(row) > 3 else None,
+                    "url": row[4] if len(row) > 4 else None,
+                },
+            )
             count += 1
         except Exception:
             pass
@@ -530,13 +607,14 @@ def import_rating_data(session, dump_path):
     rows = extract_table_data(dump_path, "ratingData")
     for row in rows:
         # ratingData: (rating, gauge, flow)
-        try:
-            session.execute(text(
-                "INSERT OR IGNORE INTO rating_data (rating_id, gauge_height_ft, flow_cfs) "
-                "VALUES (:rid, :gh, :flow)"
-            ), {"rid": row[0], "gh": row[1], "flow": row[2]})
-        except Exception:
-            pass
+        with contextlib.suppress(Exception):
+            session.execute(
+                text(
+                    "INSERT OR IGNORE INTO rating_data (rating_id, gauge_height_ft, flow_cfs) "
+                    "VALUES (:rid, :gh, :flow)"
+                ),
+                {"rid": row[0], "gh": row[1], "flow": row[2]},
+            )
     session.commit()
     log.info("  Imported %d rating_data rows", len(rows))
 
@@ -562,14 +640,14 @@ def import_timeseries(session, dump_path):
     BATCH_SIZE = 10000
 
     start = time.time()
-    with open(dump_path, 'r', encoding='utf-8', errors='replace') as f:
+    with open(dump_path, encoding="utf-8", errors="replace") as f:
         for line in f:
             if not line.startswith(prefix):
                 if total > 0 and line.startswith("UNLOCK TABLES"):
                     break
                 continue
 
-            values_part = line[len(prefix):]
+            values_part = line[len(prefix) :]
             rows = parse_mysql_values(values_part)
 
             for row in rows:
@@ -583,31 +661,40 @@ def import_timeseries(session, dump_path):
                     skipped += 1
                     continue
 
-                batch.append({
-                    "src": src_id, "dt": dt_str,
-                    "val": row[2], "t": row[3],
-                })
+                batch.append(
+                    {
+                        "src": src_id,
+                        "dt": dt_str,
+                        "val": row[2],
+                        "t": row[3],
+                    }
+                )
                 total += 1
 
                 if len(batch) >= BATCH_SIZE:
-                    session.execute(text(
-                        "INSERT OR IGNORE INTO observation "
-                        "(source_id, data_type, value, observed_at) "
-                        "VALUES (:src, :dt, :val, :t)"
-                    ), batch)
+                    session.execute(
+                        text(
+                            "INSERT OR IGNORE INTO observation "
+                            "(source_id, data_type, value, observed_at) "
+                            "VALUES (:src, :dt, :val, :t)"
+                        ),
+                        batch,
+                    )
                     batch = []
                     if total % 500000 == 0:
                         session.commit()
                         elapsed = time.time() - start
-                        log.info("  %d rows (%.0fs, %d skipped)...",
-                                 total, elapsed, skipped)
+                        log.info("  %d rows (%.0fs, %d skipped)...", total, elapsed, skipped)
 
     if batch:
-        session.execute(text(
-            "INSERT OR IGNORE INTO observation "
-            "(source_id, data_type, value, observed_at) "
-            "VALUES (:src, :dt, :val, :t)"
-        ), batch)
+        session.execute(
+            text(
+                "INSERT OR IGNORE INTO observation "
+                "(source_id, data_type, value, observed_at) "
+                "VALUES (:src, :dt, :val, :t)"
+            ),
+            batch,
+        )
     session.commit()
 
     elapsed = time.time() - start
@@ -626,7 +713,6 @@ def import_per_gauge_tables(session, dump_path):
     result = session.execute(text("SELECT name, id FROM source"))
     name_to_src = {row[0]: row[1] for row in result}
 
-    known_prefixes = {"flow", "gauge", "temperature", "inflow"}
     total_rows = 0
     total_tables = 0
     skipped_tables = 0
@@ -637,10 +723,8 @@ def import_per_gauge_tables(session, dump_path):
     batch = []
     BATCH_SIZE = 10000
     current_table = None
-    current_src_id = None
-    current_dt = None
 
-    with open(dump_path, 'r', encoding='utf-8', errors='replace') as f:
+    with open(dump_path, encoding="utf-8", errors="replace") as f:
         for line in f:
             m = prefix_re.match(line)
             if not m:
@@ -665,51 +749,67 @@ def import_per_gauge_tables(session, dump_path):
                 total_tables += 1
 
             prefix = f"INSERT INTO `{tname}` VALUES "
-            values_part = line[len(prefix):]
+            values_part = line[len(prefix) :]
             rows = parse_mysql_values(values_part)
 
             for row in rows:
                 # per-gauge table: (time, value)
                 ts = row[0]
                 val_str = row[1]
-                if val_str is None or val_str == '':
+                if val_str is None or val_str == "":
                     continue
                 try:
                     val = float(val_str) if isinstance(val_str, str) else val_str
                 except (ValueError, TypeError):
                     continue
 
-                batch.append({
-                    "src": src_id, "dt": data_type,
-                    "val": val, "t": ts,
-                })
+                batch.append(
+                    {
+                        "src": src_id,
+                        "dt": data_type,
+                        "val": val,
+                        "t": ts,
+                    }
+                )
                 total_rows += 1
 
                 if len(batch) >= BATCH_SIZE:
-                    session.execute(text(
-                        "INSERT OR IGNORE INTO observation "
-                        "(source_id, data_type, value, observed_at) "
-                        "VALUES (:src, :dt, :val, :t)"
-                    ), batch)
+                    session.execute(
+                        text(
+                            "INSERT OR IGNORE INTO observation "
+                            "(source_id, data_type, value, observed_at) "
+                            "VALUES (:src, :dt, :val, :t)"
+                        ),
+                        batch,
+                    )
                     batch = []
 
                     if total_rows % 500000 == 0:
                         session.commit()
                         elapsed = time.time() - start
-                        log.info("  %d rows from %d tables (%.0fs)...",
-                                 total_rows, total_tables, elapsed)
+                        log.info(
+                            "  %d rows from %d tables (%.0fs)...", total_rows, total_tables, elapsed
+                        )
 
     if batch:
-        session.execute(text(
-            "INSERT OR IGNORE INTO observation "
-            "(source_id, data_type, value, observed_at) "
-            "VALUES (:src, :dt, :val, :t)"
-        ), batch)
+        session.execute(
+            text(
+                "INSERT OR IGNORE INTO observation "
+                "(source_id, data_type, value, observed_at) "
+                "VALUES (:src, :dt, :val, :t)"
+            ),
+            batch,
+        )
     session.commit()
 
     elapsed = time.time() - start
-    log.info("  Imported %d rows from %d tables in %.0fs (skipped %d tables)",
-             total_rows, total_tables, elapsed, skipped_tables)
+    log.info(
+        "  Imported %d rows from %d tables in %.0fs (skipped %d tables)",
+        total_rows,
+        total_tables,
+        elapsed,
+        skipped_tables,
+    )
 
 
 def import_latest(session, dump_path):
@@ -749,18 +849,24 @@ def import_latest(session, dump_path):
             continue
 
         try:
-            session.execute(text(
-                "INSERT OR IGNORE INTO latest_observation "
-                "(source_id, data_type, observed_at, value, "
-                " prev_observed_at, prev_value, delta_per_hour) "
-                "VALUES (:src, :dt, :obs_time, :value, "
-                " :prev_time, :prev_value, :delta)"
-            ), {
-                "src": src_id, "dt": data_type,
-                "obs_time": obs_time, "value": value,
-                "prev_time": prev_time, "prev_value": prev_value,
-                "delta": delta,
-            })
+            session.execute(
+                text(
+                    "INSERT OR IGNORE INTO latest_observation "
+                    "(source_id, data_type, observed_at, value, "
+                    " prev_observed_at, prev_value, delta_per_hour) "
+                    "VALUES (:src, :dt, :obs_time, :value, "
+                    " :prev_time, :prev_value, :delta)"
+                ),
+                {
+                    "src": src_id,
+                    "dt": data_type,
+                    "obs_time": obs_time,
+                    "value": value,
+                    "prev_time": prev_time,
+                    "prev_value": prev_value,
+                    "delta": delta,
+                },
+            )
             count += 1
         except Exception:
             pass
@@ -773,25 +879,26 @@ def import_latest(session, dump_path):
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Import production MySQL dump into local SQLite"
+    parser = argparse.ArgumentParser(description="Import production MySQL dump into local SQLite")
+    parser.add_argument(
+        "--dump",
+        default=os.path.expanduser("~/tpw/kayak_new/current.sql"),
+        help="Path to MySQL dump file (default: ~/tpw/kayak_new/current.sql)",
     )
     parser.add_argument(
-        "--dump", default=os.path.expanduser("~/tpw/kayak_new/current.sql"),
-        help="Path to MySQL dump file (default: ~/tpw/kayak_new/current.sql)"
+        "--db", default="../DB/kayak.db", help="Path to SQLite database (default: ../DB/kayak.db)"
     )
     parser.add_argument(
-        "--db", default="../DB/kayak.db",
-        help="Path to SQLite database (default: ../DB/kayak.db)"
+        "--skip-timeseries",
+        action="store_true",
+        help="Skip importing observation data (metadata only)",
     )
     parser.add_argument(
-        "--skip-timeseries", action="store_true",
-        help="Skip importing observation data (metadata only)"
-    )
-    parser.add_argument(
-        "--skip-per-gauge", action="store_true",
-        help="Skip importing per-gauge tables (only import levels_todo.data)"
+        "--skip-per-gauge",
+        action="store_true",
+        help="Skip importing per-gauge tables (only import levels_todo.data)",
     )
     args = parser.parse_args()
 
@@ -870,10 +977,23 @@ def main():
     # Print summary counts
     with Session(engine) as session:
         for table_name in [
-            "state", "class_description", "guidebook", "rating", "gauge",
-            "fetch_url", "calc_expression", "source", "gauge_source",
-            "reach", "reach_state", "reach_class", "reach_level",
-            "reach_guidebook", "rating_data", "observation", "latest_observation",
+            "state",
+            "class_description",
+            "guidebook",
+            "rating",
+            "gauge",
+            "fetch_url",
+            "calc_expression",
+            "source",
+            "gauge_source",
+            "reach",
+            "reach_state",
+            "reach_class",
+            "reach_level",
+            "reach_guidebook",
+            "rating_data",
+            "observation",
+            "latest_observation",
         ]:
             count = session.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
             log.info("  %-25s %8d rows", table_name, count)

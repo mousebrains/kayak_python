@@ -70,6 +70,7 @@ class FetchResult:
     def write_file(self, path: str) -> None:
         """Write response body to file (mirrors Curl::writeFile)."""
         from pathlib import Path
+
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(self.content)
@@ -101,10 +102,14 @@ def fetch(url: str, timeout: int | None = None) -> FetchResult:
                 verify=False,
             )
             if response.status_code in _RETRYABLE_STATUS_CODES and attempt < _MAX_RETRIES - 1:
-                wait = 2 ** attempt
+                wait = 2**attempt
                 logger.warning(
                     "HTTP %d for %s, retrying in %ds (attempt %d/%d)",
-                    response.status_code, url, wait, attempt + 1, _MAX_RETRIES,
+                    response.status_code,
+                    url,
+                    wait,
+                    attempt + 1,
+                    _MAX_RETRIES,
                 )
                 time.sleep(wait)
                 last_result = FetchResult(url=url, response=response)
@@ -112,10 +117,14 @@ def fetch(url: str, timeout: int | None = None) -> FetchResult:
             return FetchResult(url=url, response=response)
         except requests.ConnectionError as e:
             if attempt < _MAX_RETRIES - 1:
-                wait = 2 ** attempt
+                wait = 2**attempt
                 logger.warning(
                     "Connection error for %s, retrying in %ds (attempt %d/%d): %s",
-                    url, wait, attempt + 1, _MAX_RETRIES, e,
+                    url,
+                    wait,
+                    attempt + 1,
+                    _MAX_RETRIES,
+                    e,
                 )
                 time.sleep(wait)
                 last_result = FetchResult(url=url, error=str(e))
@@ -139,9 +148,10 @@ async def _async_fetch_one(
     last_result: FetchResult | None = None
     for attempt in range(_MAX_RETRIES):
         try:
-            async with semaphore, session.get(
-                url, timeout=aiohttp.ClientTimeout(total=timeout)
-            ) as resp:
+            async with (
+                semaphore,
+                session.get(url, timeout=aiohttp.ClientTimeout(total=timeout)) as resp,
+            ):
                 body = await resp.text(errors="replace")
                 status = resp.status
                 headers = dict(resp.headers)
@@ -150,7 +160,11 @@ async def _async_fetch_one(
                 wait = 2**attempt
                 logger.warning(
                     "HTTP %d for %s, retrying in %ds (attempt %d/%d)",
-                    status, url, wait, attempt + 1, _MAX_RETRIES,
+                    status,
+                    url,
+                    wait,
+                    attempt + 1,
+                    _MAX_RETRIES,
                 )
                 await asyncio.sleep(wait)
                 # Build a lightweight mock response for FetchResult
@@ -164,7 +178,11 @@ async def _async_fetch_one(
                 wait = 2**attempt
                 logger.warning(
                     "Connection error for %s, retrying in %ds (attempt %d/%d): %s",
-                    url, wait, attempt + 1, _MAX_RETRIES, e,
+                    url,
+                    wait,
+                    attempt + 1,
+                    _MAX_RETRIES,
+                    e,
                 )
                 await asyncio.sleep(wait)
                 last_result = FetchResult(url=url, error=str(e))

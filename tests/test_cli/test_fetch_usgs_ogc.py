@@ -201,6 +201,7 @@ def test_missing_api_key():
     with mock.patch.dict("os.environ", {}, clear=True):
         # Remove USGS_API_KEY if it exists
         import os
+
         os.environ.pop("USGS_API_KEY", None)
         fetch_usgs_ogc(args)  # should return without error
 

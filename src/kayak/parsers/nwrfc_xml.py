@@ -21,6 +21,13 @@ logger = logging.getLogger(__name__)
 
 @register("nwrfc.xml")
 class NWRFCXMLParser(BaseParser):
+    """NW River Forecast Center XML parser.
+
+    Parses observed-data XML from NWRFC. Extracts stage (ft) and flow (kcfs)
+    values, converting kcfs to cfs. Rejects negative flow values. Uses lxml
+    for XML parsing rather than line-by-line processing.
+    """
+
     name = "nwrfc.xml"
 
     def parse(self, text: str) -> int:

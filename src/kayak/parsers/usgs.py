@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class _Parameter:
     """USGS parameter code mapping to database type + conversion."""
+
     code: int
     key: str
     db_key: str = ""
@@ -191,7 +192,8 @@ class USGSParser(BaseParser):
             if len(tokens) != len(self._columns):
                 logger.error(
                     "Column count mismatch: %d names vs %d widths",
-                    len(self._columns), len(tokens),
+                    len(self._columns),
+                    len(tokens),
                 )
                 self._state = 0
             else:

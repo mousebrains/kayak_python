@@ -69,9 +69,7 @@ class BaseParser(ABC):
         self._flush_buffer()
 
         if self._db_updates == 0:
-            logger.warning(
-                "No database updates from %s parser(%s)", self.url, self.name
-            )
+            logger.warning("No database updates from %s parser(%s)", self.url, self.name)
 
         return self._db_updates
 
@@ -121,16 +119,20 @@ class BaseParser(ABC):
                 sid = self._auto_create_source(station)
             else:
                 logger.error(
-                    "No source_id set for %s/%s — cannot store", station, data_type,
+                    "No source_id set for %s/%s — cannot store",
+                    station,
+                    data_type,
                 )
                 return False
 
-        self._obs_buffer.append({
-            "source_id": sid,
-            "data_type": data_type,
-            "observed_at": when,
-            "value": value,
-        })
+        self._obs_buffer.append(
+            {
+                "source_id": sid,
+                "data_type": data_type,
+                "observed_at": when,
+                "value": value,
+            }
+        )
         return True
 
     def _auto_create_source(self, station: str) -> int:
@@ -154,7 +156,9 @@ class BaseParser(ABC):
         if stored < len(self._obs_buffer):
             logger.warning(
                 "Stored %d of %d buffered observations for %s",
-                stored, len(self._obs_buffer), self.name,
+                stored,
+                len(self._obs_buffer),
+                self.name,
             )
 
         # Update latest_observation for each source/type that was stored
@@ -165,9 +169,13 @@ class BaseParser(ABC):
         # Update gauge-level cache
         source_to_gauge: dict[int, int] = {}
         source_ids = {row["source_id"] for row in self._obs_buffer}
-        for gs in self.session.query(GaugeSource).filter(GaugeSource.source_id.in_(source_ids)).all():
+        for gs in (
+            self.session.query(GaugeSource).filter(GaugeSource.source_id.in_(source_ids)).all()
+        ):
             source_to_gauge[gs.source_id] = gs.gauge_id
-        gauge_pairs = {(source_to_gauge[sid], dtype) for sid, dtype in pairs if sid in source_to_gauge}
+        gauge_pairs = {
+            (source_to_gauge[sid], dtype) for sid, dtype in pairs if sid in source_to_gauge
+        }
         for gauge_id, data_type in gauge_pairs:
             update_latest_gauge(self.session, gauge_id, data_type)
 

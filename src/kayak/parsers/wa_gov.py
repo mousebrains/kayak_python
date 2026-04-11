@@ -23,6 +23,14 @@ logger = logging.getLogger(__name__)
 
 @register("wa.gov")
 class WaGovParser(BaseParser):
+    """Washington State Dept. of Ecology real-time data parser.
+
+    Parses tab-delimited text from WA DOE real-time monitoring stations.
+    Uses a three-state machine: state 0 finds the station header, state 1
+    reads column headers, state 2 reads data rows. Filters out rows with
+    quality codes >= 200 (suspect or rejected data).
+    """
+
     name = "wa.gov"
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:

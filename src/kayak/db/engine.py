@@ -20,6 +20,7 @@ def get_engine(url: str | None = None) -> Engine:
         _engine = create_engine(db_url, connect_args=connect_args, echo=False)
         # Enable WAL mode and foreign keys for SQLite
         if db_url.startswith("sqlite"):
+
             @event.listens_for(_engine, "connect")
             def _set_sqlite_pragma(dbapi_conn: object, _connection_record: object) -> None:
                 cursor = dbapi_conn.cursor()  # type: ignore[attr-defined]
@@ -28,6 +29,7 @@ def get_engine(url: str | None = None) -> Engine:
                 cursor.execute("PRAGMA busy_timeout=30000")
                 cursor.execute("PRAGMA synchronous=NORMAL")
                 cursor.close()
+
     return _engine
 
 

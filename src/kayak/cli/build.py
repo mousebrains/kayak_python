@@ -38,6 +38,30 @@ from kayak.utils.simplify import parse_geom, simplify
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Constants — extracted from inline magic numbers
+# ---------------------------------------------------------------------------
+
+# Sparkline rendering
+SPARKLINE_MEDIAN_WINDOW_SECS = 3 * 3600  # 3-hour running median window
+SPARKLINE_DOWNSAMPLE_POINTS = 60  # Target points after LTTB downsampling
+SPARKLINE_DEFAULT_WIDTH = 80
+SPARKLINE_DEFAULT_HEIGHT = 20
+SPARKLINE_STROKE_WIDTH = "1.5"
+SPARKLINE_COLOR = "#2060A0"
+
+# Data freshness
+DATA_STALE_THRESHOLD = timedelta(hours=48)
+DATA_EXPIRY_THRESHOLD = timedelta(days=7)
+SPARKLINE_OBSERVATION_WINDOW = timedelta(hours=48)
+
+# GeoJSON geometry simplification
+GEOJSON_SIMPLIFY_EPSILON = 0.001
+GEOJSON_COORD_PRECISION = 5
+
+# Branding
+BRAND_COLOR = "#2060A0"
+
 
 def _atomic_write(path: Path, content: str) -> None:
     """Write *content* to *path* atomically via temp file + rename."""
@@ -59,9 +83,18 @@ def _atomic_write(path: Path, content: str) -> None:
 PRIMARY_STATE = "Oregon"
 
 _STATE_ABBREVS = {
-    "Arizona": "AZ", "California": "CA", "Colorado": "CO", "Idaho": "ID",
-    "Kansas": "KS", "Montana": "MT", "Nevada": "NV", "New Mexico": "NM",
-    "Oregon": "OR", "Utah": "UT", "Washington": "WA", "Wyoming": "WY",
+    "Arizona": "AZ",
+    "California": "CA",
+    "Colorado": "CO",
+    "Idaho": "ID",
+    "Kansas": "KS",
+    "Montana": "MT",
+    "Nevada": "NV",
+    "New Mexico": "NM",
+    "Oregon": "OR",
+    "Utah": "UT",
+    "Washington": "WA",
+    "Wyoming": "WY",
 }
 
 # States shown in the nav bar (Oregon + adjacent states)
@@ -70,10 +103,22 @@ _NAV_STATES = {"Oregon", "Washington", "Idaho", "Nevada", "California"}
 # Links for adjacent state pages
 _STATE_LINKS: dict[str, list[tuple[str, str]]] = {
     "Oregon": [
-        ("American Whitewater — Oregon", "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-ORE"),
-        ("Dreamflows — Oregon Coastal", "https://www.dreamflows.com/flows.php?zone=panw&page=prod&form=norm&mark=All#Oregon_Coastal_Rivers"),
-        ("Dreamflows — Oregon Central", "https://www.dreamflows.com/flows.php?zone=panw&page=prod&form=norm&mark=All#Oregon_Central_Rivers"),
-        ("Dreamflows — Oregon Eastern", "https://www.dreamflows.com/flows.php?zone=panw&page=prod&form=norm&mark=All#Oregon_Eastern_Rivers"),
+        (
+            "American Whitewater — Oregon",
+            "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-ORE",
+        ),
+        (
+            "Dreamflows — Oregon Coastal",
+            "https://www.dreamflows.com/flows.php?zone=panw&page=prod&form=norm&mark=All#Oregon_Coastal_Rivers",
+        ),
+        (
+            "Dreamflows — Oregon Central",
+            "https://www.dreamflows.com/flows.php?zone=panw&page=prod&form=norm&mark=All#Oregon_Central_Rivers",
+        ),
+        (
+            "Dreamflows — Oregon Eastern",
+            "https://www.dreamflows.com/flows.php?zone=panw&page=prod&form=norm&mark=All#Oregon_Eastern_Rivers",
+        ),
         ("Oregon Kayaking", "https://oregonkayaking.net"),
         ("USGS Oregon Water Data", "https://waterdata.usgs.gov/state/oregon/"),
         ("NW River Forecast Center", "https://www.nwrfc.noaa.gov/rfc/"),
@@ -83,8 +128,14 @@ _STATE_LINKS: dict[str, list[tuple[str, str]]] = {
         ("Oregon Weather — Windy", "https://www.windy.com/?44.0,-120.5,7"),
     ],
     "Washington": [
-        ("American Whitewater — Washington", "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-WSH"),
-        ("Dreamflows — Washington", "https://www.dreamflows.com/flows.php?zone=panw&page=prod&form=norm&mark=All#Washington_Rivers"),
+        (
+            "American Whitewater — Washington",
+            "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-WSH",
+        ),
+        (
+            "Dreamflows — Washington",
+            "https://www.dreamflows.com/flows.php?zone=panw&page=prod&form=norm&mark=All#Washington_Rivers",
+        ),
         ("USGS Washington Water Data", "https://waterdata.usgs.gov/state/washington/"),
         ("NW River Forecast Center", "https://www.nwrfc.noaa.gov/rfc/"),
         ("USBR Hydromet", "https://www.usbr.gov/pn/hydromet/datamenu.html"),
@@ -93,8 +144,14 @@ _STATE_LINKS: dict[str, list[tuple[str, str]]] = {
         ("Washington Kayak Club", "http://wakayakclub.clubexpress.com"),
     ],
     "Idaho": [
-        ("American Whitewater — Idaho", "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-IDA"),
-        ("Dreamflows — Idaho", "https://www.dreamflows.com/flows.php?zone=panw&page=prod&form=norm&mark=All#Idaho_Rivers"),
+        (
+            "American Whitewater — Idaho",
+            "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-IDA",
+        ),
+        (
+            "Dreamflows — Idaho",
+            "https://www.dreamflows.com/flows.php?zone=panw&page=prod&form=norm&mark=All#Idaho_Rivers",
+        ),
         ("USGS Idaho Water Data", "https://waterdata.usgs.gov/state/idaho/"),
         ("NW River Forecast Center", "https://www.nwrfc.noaa.gov/rfc/"),
         ("USBR Hydromet", "https://www.usbr.gov/pn/hydromet/datamenu.html"),
@@ -106,13 +163,19 @@ _STATE_LINKS: dict[str, list[tuple[str, str]]] = {
     "Nevada": [
         ("USGS Nevada Water Data", "https://waterdata.usgs.gov/state/nevada/"),
         ("Colorado Basin River Forecast Center", "https://www.cbrfc.noaa.gov"),
-        ("American Whitewater — Nevada", "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-NEV"),
+        (
+            "American Whitewater — Nevada",
+            "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-NEV",
+        ),
         ("USBR Hydromet", "https://www.usbr.gov/pn/hydromet/datamenu.html"),
         ("Nevada Weather — Windy", "https://www.windy.com/?39.5,-116.9,7"),
     ],
     "California": [
         ("Dreamflows", "https://www.dreamflows.com"),
-        ("American Whitewater — California", "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-CAL"),
+        (
+            "American Whitewater — California",
+            "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-CAL",
+        ),
         ("USGS California Water Data", "https://waterdata.usgs.gov/state/california/"),
         ("California Nevada River Forecast Center", "https://www.cnrfc.noaa.gov"),
         ("California Creeks", "https://cacreeks.com"),
@@ -145,6 +208,7 @@ def _get_builder_columns() -> list[dict]:
 # ---------------------------------------------------------------------------
 # Row data
 # ---------------------------------------------------------------------------
+
 
 def _get_row_data(
     reach: Reach,
@@ -202,9 +266,9 @@ def _get_row_data(
             if obs_time.tzinfo is None:
                 obs_time = obs_time.replace(tzinfo=UTC)
             age = datetime.now(UTC) - obs_time
-            if age > timedelta(days=7):
+            if age > DATA_EXPIRY_THRESHOLD:
                 row["expired"] = True
-            elif age > timedelta(hours=48):
+            elif age > DATA_STALE_THRESHOLD:
                 row["stale"] = True
     return row
 
@@ -212,6 +276,7 @@ def _get_row_data(
 # ---------------------------------------------------------------------------
 # Sparkline SVG
 # ---------------------------------------------------------------------------
+
 
 def _build_sparkline(
     reach: Reach,
@@ -236,8 +301,8 @@ def _build_sparkline(
     if len(pairs) < 3:
         return ""
 
-    pairs = running_median(pairs, window_seconds=3 * 3600)
-    pairs = downsample(pairs, 60)
+    pairs = running_median(pairs, window_seconds=SPARKLINE_MEDIAN_WINDOW_SECS)
+    pairs = downsample(pairs, SPARKLINE_DOWNSAMPLE_POINTS)
 
     xs = [p[0] for p in pairs]
     ys = [p[1] for p in pairs]
@@ -254,7 +319,7 @@ def _build_sparkline(
 
     return (
         f'<svg class="spark" width="{width}" height="{height}" viewBox="0 0 {width} {height}">'
-        f'<polyline fill="none" stroke="#2060A0" stroke-width="1.5" points="{points}"/>'
+        f'<polyline fill="none" stroke="{SPARKLINE_COLOR}" stroke-width="{SPARKLINE_STROKE_WIDTH}" points="{points}"/>'
         f"</svg>"
     )
 
@@ -263,9 +328,14 @@ def _build_sparkline(
 # CSV / Text builders (unchanged logic)
 # ---------------------------------------------------------------------------
 
-def _build_csv(reaches: list[Reach], columns: list[dict[str, Any]], state_name: str,
-               calculated_gauge_ids: set[int],
-               all_latest: dict[tuple[int, DataType], LatestGaugeObservation]) -> str:
+
+def _build_csv(
+    reaches: list[Reach],
+    columns: list[dict[str, Any]],
+    state_name: str,
+    calculated_gauge_ids: set[int],
+    all_latest: dict[tuple[int, DataType], LatestGaugeObservation],
+) -> str:
     output = io.StringIO()
     writer = csv.writer(output)
     headers = [c["name_text"] for c in columns if "c" in c["use"] and c["type"] != "noop"]
@@ -287,9 +357,13 @@ def _build_csv(reaches: list[Reach], columns: list[dict[str, Any]], state_name: 
     return output.getvalue()
 
 
-def _build_text(reaches: list[Reach], columns: list[dict[str, Any]], state_name: str,
-                calculated_gauge_ids: set[int],
-                all_latest: dict[tuple[int, DataType], LatestGaugeObservation]) -> str:
+def _build_text(
+    reaches: list[Reach],
+    columns: list[dict[str, Any]],
+    state_name: str,
+    calculated_gauge_ids: set[int],
+    all_latest: dict[tuple[int, DataType], LatestGaugeObservation],
+) -> str:
     lines = []
     header = ""
     for col in columns:
@@ -310,7 +384,7 @@ def _build_text(reaches: list[Reach], columns: list[dict[str, Any]], state_name:
                 val = f"{val:.1f}"
             elif isinstance(val, datetime):
                 val = val.strftime("%m/%d %H:%M")
-            line += str(val)[:col["length"]].ljust(col["length"])
+            line += str(val)[: col["length"]].ljust(col["length"])
         lines.append(line)
     return "\n".join(lines)
 
@@ -341,50 +415,47 @@ def _levels_key(reach: Reach) -> tuple:
     """Return a hashable key representing a reach's flow level thresholds."""
     if not reach.levels:
         return ()
-    return tuple(sorted(
-        (str(sl.level), sl.low, str(sl.low_data_type), sl.high, str(sl.high_data_type))
-        for sl in reach.levels
-    ))
+    return tuple(
+        sorted(
+            (str(sl.level), sl.low, str(sl.low_data_type), sl.high, str(sl.high_data_type))
+            for sl in reach.levels
+        )
+    )
 
 
-def _build_html_table(reaches: list[Reach], columns: list[dict[str, Any]],
-                      calculated_gauge_ids: set[int],
-                      all_latest: dict[tuple[int, DataType], LatestGaugeObservation],
-                      sparkline_obs: dict[int, list[Observation]], *, is_all_page: bool = False
-                      ) -> tuple[str, list[str]]:
-    """Build the <table> body for a set of reaches using pre-loaded data.
+def _filter_visible_rows(
+    reaches: list[Reach],
+    calculated_gauge_ids: set[int],
+    all_latest: dict[tuple[int, DataType], LatestGaugeObservation],
+    sparkline_obs: dict[int, list[Observation]],
+) -> list[tuple[Reach, dict, str]]:
+    """Filter reaches to those with current data and build row dicts.
 
-    Returns (html, letters) where letters is the ordered list of first-letters
-    that appear in the visible rows (used for the letter navigation bar).
+    Excludes expired reaches (data > 7 days old) and reaches with no
+    flow/gage/temperature data. Returns (reach, row_dict, sparkline_svg) tuples.
     """
-    lines: list[str] = []
-    lines.append('<table class="levels">')
-    lines.append("<thead><tr>")
-    for col in columns:
-        if "h" not in col["use"] or col["type"] == "noop":
-            continue
-        if col["field"] == "state" and not is_all_page:
-            continue
-        cls = ' class="secondary"' if col["field"] in _SECONDARY_FIELDS else ""
-        lines.append(f"  <th{cls}>{col['name_html']}</th>")
-    lines.append("</tr></thead>")
-    lines.append("<tbody>")
-
-    # Phase 1: Build row data and filter
     visible: list[tuple[Reach, dict, str]] = []
     for reach in reaches:
         row = _get_row_data(reach, calculated_gauge_ids, all_latest)
         if row.get("expired"):
             continue
-        has_data = any(row.get(k) is not None and row.get(k) != ""
-                       for k in ("flow", "gage", "temperature"))
+        has_data = any(
+            row.get(k) is not None and row.get(k) != "" for k in ("flow", "gage", "temperature")
+        )
         if not has_data:
             continue
         sparkline = _build_sparkline(reach, sparkline_obs)
         visible.append((reach, row, sparkline))
+    return visible
 
-    # Phase 2: Compute contiguous gauge groups
-    # group_span[i] = rowspan for first row in group, 0 for subsequent rows
+
+def _compute_gauge_groups(visible: list[tuple[Reach, dict, str]]) -> list[int]:
+    """Compute rowspan groups for consecutive reaches sharing the same gauge.
+
+    Returns a list of the same length as *visible*. For the first row in each
+    group, the value is the group size (rowspan). For subsequent rows, the
+    value is 0 (meaning gauge-specific columns are spanned by the first row).
+    """
     group_span: list[int] = [0] * len(visible)
     i = 0
     while i < len(visible):
@@ -403,10 +474,72 @@ def _build_html_table(reaches: list[Reach], columns: list[dict[str, Any]],
                 break
             j += 1
         group_span[i] = j - i
-        # subsequent rows in group stay 0
         i = j
+    return group_span
 
-    # Phase 3: Render rows
+
+def _format_cell_value(col: dict[str, Any], row: dict, reach_id: int, sparkline: str) -> str:
+    """Format a single table cell value based on its column type."""
+    val = row.get(col["field"], "")
+
+    if col["type"] == "name":
+        est = '<span class="est"> (est)</span>' if row.get("is_estimated") else ""
+        return f'<a href="/description.php?id={reach_id}">{val}</a>{est}'
+    elif col["type"] == "flow" and isinstance(val, int | float):
+        lvl_cls = f' class="level-{row["flow_level"]}"' if row.get("flow_level") else ""
+        return f"<span{lvl_cls}>{val:,.0f}</span>{sparkline}"
+    elif col["type"] == "gage" and isinstance(val, int | float):
+        lvl_cls = f' class="level-{row["gage_level"]}"' if row.get("gage_level") else ""
+        return f"<span{lvl_cls}>{val:,.1f}</span>"
+    elif col["type"] == "temp" and isinstance(val, int | float):
+        return f"{val:.1f}"
+    elif col["type"] == "date" and isinstance(val, datetime):
+        iso = val.strftime("%Y-%m-%dT%H:%M:%SZ")
+        display = val.strftime("%m/%d %H:%M")
+        return f'<time datetime="{iso}">{display}</time>'
+    elif col["type"] == "status":
+        status = row.get("status", "")
+        return f'<span class="level-{status}">{status}</span>' if status else ""
+    else:
+        return str(val) if val else ""
+
+
+def _build_html_table(
+    reaches: list[Reach],
+    columns: list[dict[str, Any]],
+    calculated_gauge_ids: set[int],
+    all_latest: dict[tuple[int, DataType], LatestGaugeObservation],
+    sparkline_obs: dict[int, list[Observation]],
+    *,
+    is_all_page: bool = False,
+) -> tuple[str, list[str]]:
+    """Build the <table> body for a set of reaches using pre-loaded data.
+
+    Three phases:
+      1. Filter to visible rows (have current data, not expired)
+      2. Compute gauge groups (consecutive reaches sharing a gauge get rowspan)
+      3. Render HTML rows with formatted cell values
+
+    Returns (html, letters) where letters is the ordered list of first-letters
+    that appear in the visible rows (used for the letter navigation bar).
+    """
+    lines: list[str] = []
+    lines.append('<table class="levels">')
+    lines.append("<thead><tr>")
+    for col in columns:
+        if "h" not in col["use"] or col["type"] == "noop":
+            continue
+        if col["field"] == "state" and not is_all_page:
+            continue
+        cls = ' class="secondary"' if col["field"] in _SECONDARY_FIELDS else ""
+        lines.append(f"  <th{cls}>{col['name_html']}</th>")
+    lines.append("</tr></thead>")
+    lines.append("<tbody>")
+
+    visible = _filter_visible_rows(reaches, calculated_gauge_ids, all_latest, sparkline_obs)
+    group_span = _compute_gauge_groups(visible)
+
+    # Render rows
     prev_letter = ""
     letters: list[str] = []
     for idx, (reach, row, sparkline) in enumerate(visible):
@@ -424,7 +557,9 @@ def _build_html_table(reaches: list[Reach], columns: list[dict[str, Any]],
             prev_letter = cur_letter
 
         stale = " stale" if row.get("stale") else ""
-        lines.append(f'<tr{letter_id} class="clickable-row{stale}" data-href="/description.php?id={reach_id}">')
+        lines.append(
+            f'<tr{letter_id} class="clickable-row{stale}" data-href="/description.php?id={reach_id}">'
+        )
 
         for col in columns:
             if "h" not in col["use"] or col["type"] == "noop":
@@ -436,32 +571,11 @@ def _build_html_table(reaches: list[Reach], columns: list[dict[str, Any]],
             if is_gauge_col and not is_first:
                 continue  # spanned by earlier row
 
-            val = row.get(col["field"], "")
+            val = _format_cell_value(col, row, reach_id, sparkline)
             label = col["name_text"]
             td_cls = _TD_CLASS.get(col["type"], "")
             if col["field"] in _SECONDARY_FIELDS:
                 td_cls = (td_cls + " secondary").strip()
-
-            if col["type"] == "name":
-                est = '<span class="est"> (est)</span>' if row.get("is_estimated") else ""
-                val = f'<a href="/description.php?id={reach_id}">{val}</a>{est}'
-            elif col["type"] == "flow" and isinstance(val, (int, float)):
-                lvl_cls = f' class="level-{row["flow_level"]}"' if row.get("flow_level") else ""
-                val = f'<span{lvl_cls}>{val:,.0f}</span>{sparkline}'
-            elif col["type"] == "gage" and isinstance(val, (int, float)):
-                lvl_cls = f' class="level-{row["gage_level"]}"' if row.get("gage_level") else ""
-                val = f'<span{lvl_cls}>{val:,.1f}</span>'
-            elif col["type"] == "temp" and isinstance(val, (int, float)):
-                val = f'{val:.1f}'
-            elif col["type"] == "date" and isinstance(val, datetime):
-                iso = val.strftime("%Y-%m-%dT%H:%M:%SZ")
-                display = val.strftime("%m/%d %H:%M")
-                val = f'<time datetime="{iso}">{display}</time>'
-            elif col["type"] == "status":
-                status = row.get("status", "")
-                val = f'<span class="level-{status}">{status}</span>' if status else ""
-            else:
-                val = str(val) if val else ""
 
             cls_attr = f' class="{td_cls}"' if td_cls else ""
             rowspan = f' rowspan="{span}"' if is_gauge_col and span > 1 else ""
@@ -476,7 +590,7 @@ def _build_geojson(
     reaches: list[Reach],
     calculated_gauge_ids: set[int],
     all_latest: dict[tuple[int, DataType], LatestGaugeObservation],
-    epsilon: float = 0.001,
+    epsilon: float = GEOJSON_SIMPLIFY_EPSILON,
 ) -> str:
     """Build a GeoJSON FeatureCollection of all mappable reaches."""
     features: list[dict] = []
@@ -493,20 +607,33 @@ def _build_geojson(
             points = parse_geom(reach.geom)
             if len(points) >= 2:
                 simplified = simplify(points, epsilon)
-                coords = [[round(x, 5), round(y, 5)] for x, y in simplified]
+                p = GEOJSON_COORD_PRECISION
+                coords = [[round(x, p), round(y, p)] for x, y in simplified]
                 geometry = {"type": "LineString", "coordinates": coords}
             elif len(points) == 1:
-                geometry = {"type": "Point", "coordinates": [round(points[0][0], 5), round(points[0][1], 5)]}  # type: ignore[arg-type]
-        if geometry is None and reach.latitude_start and reach.longitude_start and reach.latitude_end and reach.longitude_end:
+                p = GEOJSON_COORD_PRECISION
+                geometry = {
+                    "type": "Point",
+                    "coordinates": [round(points[0][0], p), round(points[0][1], p)],  # type: ignore[arg-type]
+                }
+        if (
+            geometry is None
+            and reach.latitude_start
+            and reach.longitude_start
+            and reach.latitude_end
+            and reach.longitude_end
+        ):
+            p = GEOJSON_COORD_PRECISION
             coords = [
-                [round(float(reach.longitude_start), 5), round(float(reach.latitude_start), 5)],
-                [round(float(reach.longitude_end), 5), round(float(reach.latitude_end), 5)],
+                [round(float(reach.longitude_start), p), round(float(reach.latitude_start), p)],
+                [round(float(reach.longitude_end), p), round(float(reach.latitude_end), p)],
             ]
             geometry = {"type": "LineString", "coordinates": coords}
         if geometry is None and reach.latitude and reach.longitude:
+            p = GEOJSON_COORD_PRECISION
             geometry = {
                 "type": "Point",
-                "coordinates": [round(float(reach.longitude), 5), round(float(reach.latitude), 5)],  # type: ignore[arg-type]
+                "coordinates": [round(float(reach.longitude), p), round(float(reach.latitude), p)],  # type: ignore[arg-type]
             }
         if geometry is None:
             continue
@@ -541,9 +668,14 @@ def _build_letter_nav(letters: list[str]) -> str:
     return f'<nav class="letter-nav" aria-label="Jump to river by letter">{links}</nav>'
 
 
-def _build_page(table_html: str, css: str, states: list[str],
-                current_state: str, title: str,
-                letters: list[str] | None = None) -> str:
+def _build_page(
+    table_html: str,
+    css: str,
+    states: list[str],
+    current_state: str,
+    title: str,
+    letters: list[str] | None = None,
+) -> str:
     """Wrap the table HTML in a complete HTML document with inlined CSS."""
     nav_html = _build_nav(states, active_state=current_state)
     letter_nav_html = _build_letter_nav(letters) if letters else ""
@@ -558,7 +690,7 @@ def _build_page(table_html: str, css: str, states: list[str],
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{title}</title>
 <link rel="manifest" href="/static/manifest.json">
-<meta name="theme-color" content="#2060A0">
+<meta name="theme-color" content="{BRAND_COLOR}">
 <link rel="icon" href="/static/favicon.ico">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
 <style>
@@ -596,13 +728,12 @@ Data sourced from USGS, NOAA, USACE, USBR, and other government agencies. <a hre
 # Placeholder page — non-primary states
 # ---------------------------------------------------------------------------
 
+
 def _build_placeholder_page(css: str, states: list[str], state: str) -> str:
     """Build a links page for a non-primary state."""
     nav_html = _build_nav(states, active_state=state)
     links = _STATE_LINKS.get(state, [])
-    link_items = "\n".join(
-        f'<li><a href="{url}">{label}</a></li>' for label, url in links
-    )
+    link_items = "\n".join(f'<li><a href="{url}">{label}</a></li>' for label, url in links)
     links_html = f"<ul>\n{link_items}\n</ul>" if links else ""
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -611,7 +742,7 @@ def _build_placeholder_page(css: str, states: list[str], state: str) -> str:
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{state} River Levels</title>
 <link rel="manifest" href="/static/manifest.json">
-<meta name="theme-color" content="#2060A0">
+<meta name="theme-color" content="{BRAND_COLOR}">
 <link rel="icon" href="/static/favicon.ico">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
 <style>
@@ -640,6 +771,7 @@ Data sourced from USGS, NOAA, USACE, USBR, and other government agencies. <a hre
 # Map page
 # ---------------------------------------------------------------------------
 
+
 def _build_map_page(css: str, states: list[str]) -> str:
     """Build map.html with an interactive Leaflet map of Oregon reaches."""
     nav_html = _build_nav(states)
@@ -651,7 +783,7 @@ def _build_map_page(css: str, states: list[str]) -> str:
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>River Map</title>
 <link rel="manifest" href="/static/manifest.json">
-<meta name="theme-color" content="#2060A0">
+<meta name="theme-color" content="{BRAND_COLOR}">
 <link rel="icon" href="/static/favicon.ico">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous"/>
@@ -685,6 +817,7 @@ Data sourced from USGS, NOAA, USACE, USBR, and other government agencies. <a hre
 # ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
+
 
 def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Register the 'build' subcommand."""
@@ -735,9 +868,17 @@ def build(args: argparse.Namespace) -> None:
         _atomic_write(output_dir / "map.html", map_html)
 
         # index.html = all reaches levels table
-        _build_and_write(session, all_reaches, columns, PRIMARY_STATE, states,
-                         css, output_dir, filename="index.html",
-                         preloaded=(calculated_gauge_ids, all_latest))
+        _build_and_write(
+            session,
+            all_reaches,
+            columns,
+            PRIMARY_STATE,
+            states,
+            css,
+            output_dir,
+            filename="index.html",
+            preloaded=(calculated_gauge_ids, all_latest),
+        )
 
         # Links pages for all nav states (including Oregon)
         for state in _NAV_STATES:
@@ -750,11 +891,19 @@ def build(args: argparse.Namespace) -> None:
         session.close()
 
 
-def _build_and_write(session: Session, reaches: list[Reach], columns: list[dict[str, Any]],
-                     state: str, states: list[str], css: str, output_dir: Path,
-                     *, is_all_page: bool = False,
-                     preloaded: tuple[set[int], dict[tuple[int, DataType], LatestGaugeObservation]] | None = None,
-                     filename: str | None = None) -> None:
+def _build_and_write(
+    session: Session,
+    reaches: list[Reach],
+    columns: list[dict[str, Any]],
+    state: str,
+    states: list[str],
+    css: str,
+    output_dir: Path,
+    *,
+    is_all_page: bool = False,
+    preloaded: tuple[set[int], dict[tuple[int, DataType], LatestGaugeObservation]] | None = None,
+    filename: str | None = None,
+) -> None:
     """Build and write CSV, text, and HTML for a state (or all)."""
     suffix = f"_{state}" if state else ""
     label = state or "all"
@@ -771,25 +920,23 @@ def _build_and_write(session: Session, reaches: list[Reach], columns: list[dict[
     else:
         calculated_gauge_ids = get_calculated_gauge_ids(session, gauge_ids)
         all_latest = get_all_latest_gauges(session, gauge_ids)
-    since_48h = datetime.now(UTC) - timedelta(hours=48)
+    since_48h = datetime.now(UTC) - SPARKLINE_OBSERVATION_WINDOW
     sparkline_obs = get_bulk_gauge_observations(session, gauge_ids, DataType.flow, since_48h)
     inflow_obs = get_bulk_gauge_observations(session, gauge_ids, DataType.inflow, since_48h)
     for gid, obs in inflow_obs.items():
         sparkline_obs.setdefault(gid, obs)
 
     # CSV
-    csv_content = _build_csv(reaches, columns, state,
-                             calculated_gauge_ids, all_latest)
+    csv_content = _build_csv(reaches, columns, state, calculated_gauge_ids, all_latest)
     _atomic_write(output_dir / f"levels{suffix}.csv", csv_content)
 
     # Text
-    text_content = _build_text(reaches, columns, state,
-                               calculated_gauge_ids, all_latest)
+    text_content = _build_text(reaches, columns, state, calculated_gauge_ids, all_latest)
     _atomic_write(output_dir / f"levels{suffix}.text", text_content)
 
     # HTML — complete self-contained page
-    table_html, letters = _build_html_table(reaches, columns,
-                                            calculated_gauge_ids, all_latest, sparkline_obs,
-                                            is_all_page=is_all_page)
+    table_html, letters = _build_html_table(
+        reaches, columns, calculated_gauge_ids, all_latest, sparkline_obs, is_all_page=is_all_page
+    )
     page_html = _build_page(table_html, css, states, state, title, letters=letters)
     _atomic_write(output_dir / filename, page_html)

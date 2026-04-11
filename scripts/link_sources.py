@@ -25,16 +25,14 @@ def link_sources(db_path):
     skipped = 0
 
     # NWPS: .../gauges/GIBO3/stageflow/observed
-    for fid, url, parser in fetch_urls:
+    for fid, url, _parser in fetch_urls:
         if "api.water.noaa.gov/nwps" not in url:
             continue
         m = re.search(r"/gauges/([A-Z0-9]+)/", url)
         if not m:
             continue
         station = m.group(1)
-        src = cur.execute(
-            "SELECT id FROM source WHERE name = ?", (station,)
-        ).fetchone()
+        src = cur.execute("SELECT id FROM source WHERE name = ?", (station,)).fetchone()
         if src:
             cur.execute("UPDATE source SET fetch_url_id = ? WHERE id = ?", (fid, src[0]))
             linked += 1
@@ -42,43 +40,37 @@ def link_sources(db_path):
             skipped += 1
 
     # WA Ecology: .../Prod/29C100/29C100_STG_FM.TXT
-    for fid, url, parser in fetch_urls:
+    for fid, url, _parser in fetch_urls:
         if "apps.ecology.wa.gov" not in url:
             continue
         m = re.search(r"/Prod/([A-Z0-9]+)/", url)
         if not m:
             continue
         station = m.group(1)
-        src = cur.execute(
-            "SELECT id FROM source WHERE name = ?", (station,)
-        ).fetchone()
+        src = cur.execute("SELECT id FROM source WHERE name = ?", (station,)).fetchone()
         if src:
             cur.execute("UPDATE source SET fetch_url_id = ? WHERE id = ?", (fid, src[0]))
             linked += 1
 
     # USBR: station codes in the 'list' query parameter
-    for fid, url, parser in fetch_urls:
+    for fid, url, _parser in fetch_urls:
         if "usbr.gov" not in url:
             continue
         m = re.search(r"list=([A-Z0-9,]+)", url)
         if not m:
             continue
         for station in m.group(1).split(","):
-            src = cur.execute(
-                "SELECT id FROM source WHERE name = ?", (station,)
-            ).fetchone()
+            src = cur.execute("SELECT id FROM source WHERE name = ?", (station,)).fetchone()
             if src:
                 cur.execute("UPDATE source SET fetch_url_id = ? WHERE id = ?", (fid, src[0]))
                 linked += 1
 
     # USACE CDA: station codes like GPR, HCR in JSON query
-    for fid, url, parser in fetch_urls:
+    for fid, url, _parser in fetch_urls:
         if "usace.army.mil" not in url:
             continue
         for station in set(re.findall(r'"([A-Z]{3})\.[A-Za-z-]+', url)):
-            src = cur.execute(
-                "SELECT id FROM source WHERE name = ?", (station,)
-            ).fetchone()
+            src = cur.execute("SELECT id FROM source WHERE name = ?", (station,)).fetchone()
             if src:
                 cur.execute("UPDATE source SET fetch_url_id = ? WHERE id = ?", (fid, src[0]))
                 linked += 1
@@ -88,7 +80,7 @@ def link_sources(db_path):
     # New: https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=az&...
     # Build mapping: state code -> new fetch_url id
     new_usgs = {}
-    for fid, url, parser in fetch_urls:
+    for fid, url, _parser in fetch_urls:
         if "waterservices.usgs.gov" not in url:
             continue
         m = re.search(r"stateCd=([a-z]{2})", url)
@@ -98,7 +90,7 @@ def link_sources(db_path):
     if new_usgs:
         # Find old USGS fetch_urls and remap their sources
         old_usgs = {}
-        for fid, url, parser in fetch_urls:
+        for fid, url, _parser in fetch_urls:
             if "waterdata.usgs.gov" not in url or parser != "usgs":
                 continue
             m = re.search(r"waterdata\.usgs\.gov/([a-z]{2})/", url)
@@ -120,6 +112,10 @@ def link_sources(db_path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Link sources to fetch_url records")
-    parser.add_argument("--db", default=os.path.join(os.path.dirname(__file__), "..", "..", "DB", "kayak.db"), help="SQLite database path")
+    parser.add_argument(
+        "--db",
+        default=os.path.join(os.path.dirname(__file__), "..", "..", "DB", "kayak.db"),
+        help="SQLite database path",
+    )
     args = parser.parse_args()
     link_sources(args.db)

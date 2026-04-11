@@ -35,10 +35,10 @@ def c_to_f(celsius: float) -> float:
 
 # Maps USGS parameter code → (DataType, optional conversion function)
 PARAM_MAP: dict[str, tuple[DataType, Callable[[float], float] | None]] = {
-    "00060": (DataType.flow, None),           # discharge cfs
-    "00065": (DataType.gauge, None),          # gage height ft
+    "00060": (DataType.flow, None),  # discharge cfs
+    "00065": (DataType.gauge, None),  # gage height ft
     "00010": (DataType.temperature, c_to_f),  # temp °C → °F
-    "00011": (DataType.temperature, None),    # temp °F
+    "00011": (DataType.temperature, None),  # temp °F
 }
 
 
@@ -50,15 +50,21 @@ def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> 
     )
     parser.set_defaults(func=fetch_usgs_ogc)
     parser.add_argument(
-        "--hours", type=int, default=12,
+        "--hours",
+        type=int,
+        default=12,
         help="Hours of history to fetch (default: 12)",
     )
     parser.add_argument(
-        "-d", "--dry-run", action="store_true",
+        "-d",
+        "--dry-run",
+        action="store_true",
         help="Do not write to DB",
     )
     parser.add_argument(
-        "--batch-size", type=int, default=BATCH_SIZE,
+        "--batch-size",
+        type=int,
+        default=BATCH_SIZE,
         help=f"Sites per request (default: {BATCH_SIZE})",
     )
 
@@ -101,7 +107,7 @@ def _fetch_page(url: str, api_key: str | None) -> dict | None:
             return None
 
         if resp.status_code == 429:
-            wait = 2 ** attempt
+            wait = 2**attempt
             logger.warning("Rate limited (429), waiting %ds", wait)
             time.sleep(wait)
             continue
@@ -116,7 +122,9 @@ def _fetch_page(url: str, api_key: str | None) -> dict | None:
     return None
 
 
-def _fetch_continuous(site_map: dict[str, int], api_key: str | None, hours: int, batch_size: int) -> list[dict[str, object]]:
+def _fetch_continuous(
+    site_map: dict[str, int], api_key: str | None, hours: int, batch_size: int
+) -> list[dict[str, object]]:
     """Fetch continuous (15-min) data for all sites and parameter codes.
 
     Performs only network I/O — no database access.  Returns a list of
@@ -187,12 +195,14 @@ def _fetch_continuous(site_map: dict[str, int], api_key: str | None, hours: int,
                         logger.debug("Bad timestamp: %s", timestamp)
                         continue
 
-                    all_rows.append({
-                        "source_id": source_id,
-                        "data_type": data_type,
-                        "observed_at": when,
-                        "value": value,
-                    })
+                    all_rows.append(
+                        {
+                            "source_id": source_id,
+                            "data_type": data_type,
+                            "observed_at": when,
+                            "value": value,
+                        }
+                    )
                     param_count += 1
 
                 # Follow pagination
@@ -204,7 +214,9 @@ def _fetch_continuous(site_map: dict[str, int], api_key: str | None, hours: int,
 
         logger.info(
             "param_code=%s (%s): fetched %d observations",
-            param_code, data_type.value, param_count,
+            param_code,
+            data_type.value,
+            param_count,
         )
         print(f"  {param_code} ({data_type.value}): {param_count} observations")
 
@@ -260,7 +272,11 @@ def fetch_usgs_ogc(args: argparse.Namespace) -> None:
             assert isinstance(sid, int) and isinstance(dtype, DataType)
             update_latest(session, sid, dtype)
         # Update gauge-level cache for affected gauges
-        gauge_pairs = {(source_to_gauge[sid], dtype) for sid, dtype in updated_pairs if sid in source_to_gauge}
+        gauge_pairs: set[tuple[int, DataType]] = set()
+        for sid, dtype in updated_pairs:
+            if isinstance(sid, int) and sid in source_to_gauge:
+                assert isinstance(dtype, DataType)
+                gauge_pairs.add((source_to_gauge[sid], dtype))
         for gid, dtype in gauge_pairs:
             update_latest_gauge(session, gid, dtype)
         session.commit()

@@ -51,9 +51,7 @@ class TestWaGovTemperature:
     def test_parse_temperature_c_to_f(self, session):
         """Water_Temp header should trigger temperature type with C-to-F conversion."""
         src = _make_source(session)
-        parser = WaGovParser(
-            url="https://example.com/wa", session=session, source_id=src.id
-        )
+        parser = WaGovParser(url="https://example.com/wa", session=session, source_id=src.id)
         count = parser.parse(WA_GOV_TEMP)
 
         assert count == 2
@@ -74,9 +72,7 @@ class TestWaGovStage:
     def test_parse_stage_gauge(self, session):
         """Stage header should trigger gauge data type."""
         src = _make_source(session)
-        parser = WaGovParser(
-            url="https://example.com/wa", session=session, source_id=src.id
-        )
+        parser = WaGovParser(url="https://example.com/wa", session=session, source_id=src.id)
         count = parser.parse(WA_GOV_STAGE)
 
         assert count == 2
@@ -96,9 +92,7 @@ class TestWaGovQuality:
     def test_quality_filtering(self, session):
         """Quality <= 0 or >= 200 should be rejected."""
         src = _make_source(session)
-        parser = WaGovParser(
-            url="https://example.com/wa", session=session, source_id=src.id
-        )
+        parser = WaGovParser(url="https://example.com/wa", session=session, source_id=src.id)
         count = parser.parse(WA_GOV_BAD_QUALITY)
 
         # Only the row with quality=100 passes (14:00 row)
@@ -112,9 +106,7 @@ class TestWaGovEdgeCases:
     def test_no_data_lines_skipped(self, session):
         """Lines containing 'No Data' should be skipped."""
         src = _make_source(session)
-        parser = WaGovParser(
-            url="https://example.com/wa", session=session, source_id=src.id
-        )
+        parser = WaGovParser(url="https://example.com/wa", session=session, source_id=src.id)
         count = parser.parse(WA_GOV_NO_DATA)
 
         # Only the 13:00 row with actual data passes
@@ -123,7 +115,5 @@ class TestWaGovEdgeCases:
     def test_empty_input(self, session):
         """Empty input should return 0."""
         src = _make_source(session)
-        parser = WaGovParser(
-            url="https://example.com/wa", session=session, source_id=src.id
-        )
+        parser = WaGovParser(url="https://example.com/wa", session=session, source_id=src.id)
         assert parser.parse("") == 0
