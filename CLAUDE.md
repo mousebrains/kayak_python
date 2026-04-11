@@ -100,7 +100,7 @@ Single normalized SQLite database (`kayak.db`) for development, MySQL for produc
 - `fetch_url` / `calc_expression` — how to obtain data (fetch vs. calculate)
 - `rating` / `rating_data` — gage height ↔ flow conversion tables
 
-Alembic manages migrations (`alembic upgrade head`, `alembic revision --autogenerate -m "..."`).
+Schema changes are applied by adding models to `models.py` and running `levels init-db` (uses `Base.metadata.create_all()`).
 
 ### Parser System
 

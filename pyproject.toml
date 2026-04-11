@@ -9,7 +9,6 @@ description = "River level data aggregation from government agencies"
 requires-python = ">=3.11"
 dependencies = [
     "SQLAlchemy>=2.0",
-    "alembic>=1.13",
     "requests>=2.31",
     "lxml>=5.0",
     "python-dotenv>=1.0",
