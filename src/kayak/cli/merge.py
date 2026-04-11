@@ -7,6 +7,8 @@ the GaugeSource relationships.
 import argparse
 import logging
 
+from sqlalchemy import select
+
 from kayak.db.data_db import merge_sources, update_latest
 from kayak.db.engine import get_session
 from kayak.db.info_db import get_source_ids_for_gauge
@@ -29,7 +31,7 @@ def merge(args: argparse.Namespace) -> None:
     session = get_session()
     try:
         # Find gauges that have multiple sources (candidates for merging)
-        gauges = session.query(Gauge).all()
+        gauges = list(session.scalars(select(Gauge)))
 
         types = [DataType.flow, DataType.inflow, DataType.gauge, DataType.temperature]
 

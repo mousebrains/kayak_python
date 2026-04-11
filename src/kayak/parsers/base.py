@@ -11,6 +11,7 @@ import re
 from abc import ABC, abstractmethod
 from datetime import datetime
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from kayak.db.data_db import store_observations, update_latest, update_latest_gauge
@@ -167,8 +168,8 @@ class BaseParser(ABC):
         # Update gauge-level cache
         source_to_gauge: dict[int, int] = {}
         source_ids = {row["source_id"] for row in self._obs_buffer}
-        for gs in (
-            self.session.query(GaugeSource).filter(GaugeSource.source_id.in_(source_ids)).all()
+        for gs in self.session.scalars(
+            select(GaugeSource).where(GaugeSource.source_id.in_(source_ids))
         ):
             source_to_gauge[gs.source_id] = gs.gauge_id
         gauge_pairs = {

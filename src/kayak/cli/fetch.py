@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+from sqlalchemy import select
+
 from kayak.cli.init_db import sync_sources
 from kayak.config_data import load_sources
 from kayak.db.engine import get_session
@@ -23,8 +25,7 @@ logger = logging.getLogger(__name__)
 def _safe_subpath(base_dir: Path, raw_url: str) -> Path:
     """Resolve raw_url under base_dir, rejecting path traversal."""
     candidate = (base_dir / raw_url.lstrip("/")).resolve()
-    base_resolved = base_dir.resolve()
-    if not str(candidate).startswith(str(base_resolved) + "/") and candidate != base_resolved:
+    if not candidate.is_relative_to(base_dir.resolve()):
         raise ValueError(f"Path traversal detected: {raw_url!r} escapes {base_dir}")
     return candidate
 
@@ -162,7 +163,9 @@ def fetch(args: argparse.Namespace) -> None:
                 logger.error("Unknown parser '%s'", parser_name)
                 continue
 
-            fetch_url = session.query(FetchUrl).filter_by(url=src_def["url"]).first()
+            fetch_url = session.execute(
+                select(FetchUrl).where(FetchUrl.url == src_def["url"])
+            ).scalar_one_or_none()
 
             source_id = None
             source_map: dict[str, int] = {}

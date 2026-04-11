@@ -3,6 +3,7 @@
 import argparse
 import logging
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from kayak.config_data import load_sources
@@ -29,7 +30,9 @@ def _seed_states(session: Session) -> None:
         ("New Mexico", "NM"),
     ]
     for name, abbr in states:
-        existing = session.query(State).filter_by(abbreviation=abbr).first()
+        existing = session.execute(
+            select(State).where(State.abbreviation == abbr)
+        ).scalar_one_or_none()
         if not existing:
             session.add(State(name=name, abbreviation=abbr))
 
@@ -40,7 +43,7 @@ def sync_sources(session: Session) -> int:
     count = 0
     for src in sources:
         url = src["url"]
-        existing = session.query(FetchUrl).filter_by(url=url).first()
+        existing = session.execute(select(FetchUrl).where(FetchUrl.url == url)).scalar_one_or_none()
         if existing:
             existing.parser = src["parser"]
             existing.hours = src.get("hours", "")

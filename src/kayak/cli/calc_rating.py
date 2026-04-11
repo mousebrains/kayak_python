@@ -8,6 +8,8 @@ If both exist, fills in gaps.
 import argparse
 import logging
 
+from sqlalchemy import select
+
 from kayak.db.data_db import (
     get_observations,
     get_rating_table,
@@ -37,13 +39,7 @@ def calc_rating(args: argparse.Namespace) -> None:
     session = get_session()
     try:
         # Find gauges with rating tables
-        gauges = (
-            session.query(Gauge)
-            .filter(
-                Gauge.rating_id.isnot(None),
-            )
-            .all()
-        )
+        gauges = list(session.scalars(select(Gauge).where(Gauge.rating_id.isnot(None))))
 
         print(f"Found {len(gauges)} gauges with rating tables")
 

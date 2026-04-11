@@ -63,7 +63,7 @@ ruff format src/ tests/              # Format
 mypy src/                            # Type check
 ```
 
-Ruff config: Python 3.11 target, 100-char line length, rules `E W F I UP B SIM RUF`. Configured in `pyproject.toml`.
+Ruff config: Python 3.13 target, 100-char line length, rules `E W F I UP B SIM RUF`. Configured in `pyproject.toml`.
 
 ### Running the PHP Web Layer
 

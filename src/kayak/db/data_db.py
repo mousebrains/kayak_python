@@ -536,7 +536,7 @@ def put_rating_table(
     entries: list[tuple[float, float]],
 ) -> None:
     """Store rating table entries for a rating_id."""
-    session.query(RatingData).filter(RatingData.rating_id == rating_id).delete()
+    session.execute(delete(RatingData).where(RatingData.rating_id == rating_id))
     for feet, cfs in entries:
         session.add(RatingData(rating_id=rating_id, gauge_height_ft=feet, flow_cfs=cfs))
 

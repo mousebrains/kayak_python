@@ -264,7 +264,7 @@ def fetch_usgs_ogc(args: argparse.Namespace) -> None:
         print(f"Updating latest observations for {len(updated_pairs)} source/type pairs...")
         # Build source→gauge reverse map
         source_to_gauge: dict[int, int] = {}
-        for gs in session.query(GaugeSource).all():
+        for gs in session.scalars(select(GaugeSource)):
             source_to_gauge[gs.source_id] = gs.gauge_id
         for sid, dtype in updated_pairs:
             if not isinstance(sid, int) or not isinstance(dtype, DataType):

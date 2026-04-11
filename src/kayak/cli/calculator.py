@@ -11,6 +11,8 @@ import operator
 import re
 from collections.abc import Callable
 
+from sqlalchemy import select
+
 from kayak.db.data_db import get_latest_gauge, store_observation, update_latest, update_latest_gauge
 from kayak.db.engine import get_session
 from kayak.db.models import DataType, Gauge, GaugeSource, Source
@@ -90,16 +92,18 @@ def calculator(args: argparse.Namespace) -> None:
     session = get_session()
     try:
         # Find sources with calculation expressions
-        calc_sources = session.query(Source).filter(Source.calc_expression_id.isnot(None)).all()
+        calc_sources = list(
+            session.scalars(select(Source).where(Source.calc_expression_id.isnot(None)))
+        )
 
         print(f"Found {len(calc_sources)} calculated sources")
 
         # Build gauge name -> gauge_id lookup
-        name_to_gauge_id = {g.name: g.id for g in session.query(Gauge).all()}
+        name_to_gauge_id = {g.name: g.id for g in session.scalars(select(Gauge))}
 
         # Build source_id -> gauge_id and gauge_id -> gauge_name reverse lookups
         source_to_gauge: dict[int, int] = {}
-        for gs in session.query(GaugeSource).all():
+        for gs in session.scalars(select(GaugeSource)):
             source_to_gauge[gs.source_id] = gs.gauge_id
         gauge_id_to_name: dict[int, str] = {gid: name for name, gid in name_to_gauge_id.items()}
 
