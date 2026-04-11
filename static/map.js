@@ -11,6 +11,8 @@ L.control.layers({'Topo':topo,'Street':street,'Satellite':sat}).addTo(map);
 
 var colors={okay:'#4caf50',low:'#e8a735',high:'#e53935',unknown:'#2196F3'};
 
+function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+
 fetch('/static/reaches.geojson').then(function(r){return r.json()}).then(function(data){
   var geojsonLayer=L.geoJSON(data,{
     style:function(f){
@@ -22,12 +24,12 @@ fetch('/static/reaches.geojson').then(function(r){return r.json()}).then(functio
     },
     onEachFeature:function(f,layer){
       var p=f.properties;
-      var badge='<span style="color:'+( colors[p.status]||colors.unknown)+'">&#9679;</span> '+p.status;
-      layer.bindPopup('<b><a href="/description.php?id='+p.id+'">'+p.name+'</a></b><br>'+badge);
+      var badge='<span style="color:'+(colors[p.status]||colors.unknown)+'">&#9679;</span> '+esc(p.status||'');
+      layer.bindPopup('<b><a href="/description.php?id='+parseInt(p.id,10)+'">'+esc(p.name||'')+'</a></b><br>'+badge);
     }
   }).addTo(map);
   if(data.features.length)map.fitBounds(geojsonLayer.getBounds().pad(0.05));else map.setView([44.0,-120.5],7);
-});
+}).catch(function(){map.setView([44.0,-120.5],7)});
 
 var legend=L.control({position:'bottomright'});
 legend.onAdd=function(){

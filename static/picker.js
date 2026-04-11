@@ -91,10 +91,14 @@
     }
     const needed = names.filter(n => !stateCache.has(n));
     if (needed.length) {
-      const url = '/picker.php?ajax=1&states=' + encodeURIComponent(needed.join(','));
-      const resp = await fetch(url);
-      const rows = await resp.json();
-      for (const n of needed) stateCache.set(n, rows);
+      try {
+        const url = '/picker.php?ajax=1&states=' + encodeURIComponent(needed.join(','));
+        const resp = await fetch(url);
+        const rows = await resp.json();
+        for (const n of needed) stateCache.set(n, rows);
+      } catch {
+        return;  // keep stale data on network error
+      }
     }
     buildAllRows();
     search.disabled = false;
@@ -109,7 +113,7 @@
 
   tbody.addEventListener('change', function(e) {
     if (e.target.type !== 'checkbox') return;
-    const id = parseInt(e.target.dataset.id);
+    const id = parseInt(e.target.dataset.id, 10);
     if (e.target.checked) selected.add(id);
     else selected.delete(id);
     updateActions();

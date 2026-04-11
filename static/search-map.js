@@ -1,8 +1,9 @@
 (function(){
 var el=document.getElementById('search-map');
 if(!el)return;
-var reaches=JSON.parse(el.dataset.reaches);
-var colors=JSON.parse(el.dataset.colors);
+try{var reaches=JSON.parse(el.dataset.reaches);var colors=JSON.parse(el.dataset.colors)}
+catch{return;}
+if(!reaches||!colors)return;
 var map=L.map('search-map');
 var topo=L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{
   attribution:'OpenTopoMap',maxZoom:17});
