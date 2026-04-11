@@ -28,6 +28,9 @@ from kayak.db.models import (
 logger = logging.getLogger(__name__)
 
 
+DELTA_LOOKBACK_WINDOW = timedelta(hours=6)
+"""How far back to look for a previous observation when computing delta_per_hour."""
+
 # ---------------------------------------------------------------------------
 # Source / Gauge lookups
 # ---------------------------------------------------------------------------
@@ -201,7 +204,7 @@ def update_latest(
     if latest_row is None:
         return
 
-    cutoff = latest_row.observed_at - timedelta(hours=6)
+    cutoff = latest_row.observed_at - DELTA_LOOKBACK_WINDOW
     prev_row = session.execute(
         select(Observation)
         .where(
@@ -315,7 +318,7 @@ def update_latest_gauge(
     if latest_row is None:
         return
 
-    cutoff = latest_row.observed_at - timedelta(hours=6)
+    cutoff = latest_row.observed_at - DELTA_LOOKBACK_WINDOW
     prev_row = session.execute(
         select(Observation)
         .where(

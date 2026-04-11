@@ -5,16 +5,19 @@ from datetime import UTC, datetime, timedelta
 from kayak.db.data_db import (
     get_all_latest,
     get_bulk_observations,
+    get_gauge_by_name,
     get_latest,
     get_observations,
     get_rating_table,
+    get_source_by_name,
     merge_sources,
     put_rating_table,
     store_observation,
     store_observations,
     update_latest,
+    update_latest_gauge,
 )
-from kayak.db.models import DataType, FetchUrl, Rating, Source
+from kayak.db.models import DataType, FetchUrl, Gauge, GaugeSource, Rating, Source
 
 
 def _make_source(session, name="src1"):
@@ -343,3 +346,65 @@ def test_get_bulk_observations(session):
     assert src2.id in result
     assert len(result[src1.id]) == 3
     assert len(result[src2.id]) == 3
+
+
+# ---------------------------------------------------------------------------
+# get_source_by_name / get_gauge_by_name
+# ---------------------------------------------------------------------------
+
+
+def test_get_source_by_name_found(session):
+    src = _make_source(session, name="findme")
+    result = get_source_by_name(session, "findme")
+    assert result is not None
+    assert result.id == src.id
+
+
+def test_get_source_by_name_not_found(session):
+    assert get_source_by_name(session, "nonexistent") is None
+
+
+def test_get_gauge_by_name_found(session):
+    gauge = Gauge(name="test_gauge")
+    session.add(gauge)
+    session.flush()
+    result = get_gauge_by_name(session, "test_gauge")
+    assert result is not None
+    assert result.id == gauge.id
+
+
+def test_get_gauge_by_name_not_found(session):
+    assert get_gauge_by_name(session, "nonexistent") is None
+
+
+# ---------------------------------------------------------------------------
+# update_latest_gauge
+# ---------------------------------------------------------------------------
+
+
+def test_update_latest_gauge_basic(session):
+    src = _make_source(session, name="gauge_src")
+    gauge = Gauge(name="test_g")
+    session.add(gauge)
+    session.flush()
+    gs = GaugeSource(gauge_id=gauge.id, source_id=src.id)
+    session.add(gs)
+    session.flush()
+
+    now = datetime.now(UTC)
+    store_observation(session, src.id, DataType.flow, now - timedelta(hours=12), 100.0)
+    store_observation(session, src.id, DataType.flow, now, 150.0)
+    session.flush()
+
+    update_latest_gauge(session, gauge.id, DataType.flow)
+    session.flush()
+
+    from kayak.db.models import LatestGaugeObservation
+
+    latest = (
+        session.query(LatestGaugeObservation)
+        .filter_by(gauge_id=gauge.id, data_type=DataType.flow)
+        .one_or_none()
+    )
+    assert latest is not None
+    assert latest.value == 150.0

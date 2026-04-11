@@ -141,7 +141,15 @@ def calculator(args: argparse.Namespace) -> None:
                     next_remaining.append(source)
             remaining = next_remaining
             if not progress:
-                # Circular dependency — append remaining as-is
+                circular_names = [
+                    gauge_id_to_name.get(source_to_gauge.get(s.id, -1), s.name)
+                    for s in remaining
+                ]
+                logger.warning(
+                    "Circular dependency detected among calculated sources: %s. "
+                    "Evaluating in arbitrary order.",
+                    ", ".join(circular_names),
+                )
                 sorted_sources.extend(remaining)
                 break
         calc_sources = sorted_sources
