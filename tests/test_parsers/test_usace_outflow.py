@@ -1,6 +1,6 @@
 """Tests for the USACE Outflow parser."""
 
-from datetime import UTC, datetime
+from datetime import datetime
 
 from kayak.db.models import DataType, FetchUrl, Observation, Source
 from kayak.parsers.usace_outflow import USACEOutflowParser
