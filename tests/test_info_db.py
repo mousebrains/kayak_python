@@ -285,6 +285,7 @@ def test_get_calculated_source_ids_empty(session):
 # classify_level
 # ---------------------------------------------------------------------------
 
+
 class TestClassifyLevel:
     def _make_reach_with_levels(self, session):
         gauge = Gauge(name="clf_g")

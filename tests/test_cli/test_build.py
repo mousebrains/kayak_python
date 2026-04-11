@@ -518,7 +518,11 @@ class TestBuildHTMLTable:
 
     def test_status_value_html_escaped(self, session):
         reaches = _make_reaches(session, count=1)
-        fake_row = {"display_name": "XSS River", "flow": 100.0, "status": '<script>alert(1)</script>'}
+        fake_row = {
+            "display_name": "XSS River",
+            "flow": 100.0,
+            "status": "<script>alert(1)</script>",
+        }
         with (
             mock.patch("kayak.cli.build._get_row_data", return_value=fake_row),
             mock.patch("kayak.cli.build._build_sparkline", return_value=""),

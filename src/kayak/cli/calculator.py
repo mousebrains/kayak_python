@@ -142,8 +142,7 @@ def calculator(args: argparse.Namespace) -> None:
             remaining = next_remaining
             if not progress:
                 circular_names = [
-                    gauge_id_to_name.get(source_to_gauge.get(s.id, -1), s.name)
-                    for s in remaining
+                    gauge_id_to_name.get(source_to_gauge.get(s.id, -1), s.name) for s in remaining
                 ]
                 logger.warning(
                     "Circular dependency detected among calculated sources: %s. "

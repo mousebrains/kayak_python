@@ -100,9 +100,12 @@ class TestNWRFCTextPlotBasic:
         assert obs[0].data_type == DataType.inflow
 
     def test_extract_station_from_url(self):
-        assert NWRFCTextPlotParser._extract_station(
-            "https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=TESTW&pe=QR"
-        ) == "TESTW"
+        assert (
+            NWRFCTextPlotParser._extract_station(
+                "https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=TESTW&pe=QR"
+            )
+            == "TESTW"
+        )
 
     def test_extract_station_missing(self):
         assert NWRFCTextPlotParser._extract_station("https://example.com/noparams") == ""
