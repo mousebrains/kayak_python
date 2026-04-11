@@ -5,6 +5,10 @@ a{color:#2060A0;text-decoration:none}
 a:hover{text-decoration:underline}
 a:focus-visible{outline:2px solid #2060A0;outline-offset:2px;border-radius:2px}
 
+/* Skip link (accessibility) */
+.skip-link{position:absolute;left:-999px;top:auto;width:1px;height:1px;overflow:hidden;z-index:200}
+.skip-link:focus{position:fixed;top:0;left:0;width:auto;height:auto;padding:.5rem 1rem;background:#2060A0;color:#fff;font-size:1rem;z-index:200}
+
 /* Header */
 header{background:#2060A0;color:#fff;padding:.5rem 1rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;position:sticky;top:0;z-index:100}
 header h1{font-size:1.1rem;white-space:nowrap}

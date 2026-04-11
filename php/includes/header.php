@@ -36,10 +36,11 @@ $css
 </style>
 </head>
 <body>
+<a href="#main" class="skip-link">Skip to main content</a>
 <header>
   <h1><a href="/index.html">River Levels</a></h1>
-  <nav><a href="/picker.php"$picker_cls>Picker</a> <a href="/map.html">Map</a></nav>
+  <nav aria-label="Site navigation"><a href="/picker.php"$picker_cls>Picker</a> <a href="/map.html">Map</a></nav>
 </header>
-<main>
+<main id="main">
 HTML;
 }

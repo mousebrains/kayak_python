@@ -533,7 +533,7 @@ def _build_html_table(
         if col["field"] == "state" and not is_all_page:
             continue
         cls = ' class="secondary"' if col["field"] in _SECONDARY_FIELDS else ""
-        lines.append(f"  <th{cls}>{col['name_html']}</th>")
+        lines.append(f"  <th scope=\"col\"{cls}>{col['name_html']}</th>")
     lines.append("</tr></thead>")
     lines.append("<tbody>")
 
@@ -701,14 +701,15 @@ def _build_page(
 </style>
 </head>
 <body>
+<a href="#main" class="skip-link">Skip to main content</a>
 <header>
   <h1><a href="/index.html">River Levels</a></h1>
-  <nav>
+  <nav aria-label="State navigation">
     {nav_html}
   </nav>
   {letter_nav_html}
 </header>
-<main>
+<main id="main">
 {table_html}
 <div style="font-size:.75rem;color:#555;margin-top:1rem;line-height:1.6">
 <p><b>Status:</b>
@@ -755,7 +756,7 @@ def _build_placeholder_page(css: str, states: list[str], state: str) -> str:
 <body>
 <header>
   <h1><a href="/index.html">River Levels</a></h1>
-  <nav>
+  <nav aria-label="State navigation">
     {nav_html}
   </nav>
 </header>
@@ -801,7 +802,7 @@ main {{padding:0;max-width:none;}}
 <body>
 <header>
   <h1><a href="/index.html">River Levels</a></h1>
-  <nav>
+  <nav aria-label="State navigation">
     {nav_html}
   </nav>
 </header>
