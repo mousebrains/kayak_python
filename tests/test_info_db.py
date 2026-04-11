@@ -3,6 +3,7 @@
 from kayak.db.info_db import (
     all_state_names,
     all_states,
+    classify_level,
     display_name,
     get_all_primary_source_ids,
     get_calculated_source_ids,
@@ -17,9 +18,11 @@ from kayak.db.models import (
     CalcExpression,
     DataType,
     FetchUrl,
+    FlowLevel,
     Gauge,
     GaugeSource,
     Reach,
+    ReachLevel,
     ReachState,
     Source,
     State,
@@ -276,3 +279,78 @@ def test_get_calculated_source_ids(session):
 def test_get_calculated_source_ids_empty(session):
     """Empty source_ids returns empty set."""
     assert get_calculated_source_ids(session, []) == set()
+
+
+# ---------------------------------------------------------------------------
+# classify_level
+# ---------------------------------------------------------------------------
+
+class TestClassifyLevel:
+    def _make_reach_with_levels(self, session):
+        gauge = Gauge(name="clf_g")
+        session.add(gauge)
+        session.flush()
+        reach = Reach(name="clf_r", gauge_id=gauge.id)
+        session.add(reach)
+        session.flush()
+        levels = [
+            ReachLevel(
+                reach_id=reach.id,
+                level=FlowLevel.low,
+                low=0.0,
+                low_data_type=DataType.flow,
+                high=500.0,
+                high_data_type=DataType.flow,
+            ),
+            ReachLevel(
+                reach_id=reach.id,
+                level=FlowLevel.okay,
+                low=500.0,
+                low_data_type=DataType.flow,
+                high=2000.0,
+                high_data_type=DataType.flow,
+            ),
+            ReachLevel(
+                reach_id=reach.id,
+                level=FlowLevel.high,
+                low=2000.0,
+                low_data_type=DataType.flow,
+                high=5000.0,
+                high_data_type=DataType.flow,
+            ),
+        ]
+        session.add_all(levels)
+        session.flush()
+        return reach
+
+    def test_classify_flow_okay(self, session):
+        reach = self._make_reach_with_levels(session)
+        assert classify_level(reach, DataType.flow, 1000.0) == FlowLevel.okay
+
+    def test_classify_flow_low(self, session):
+        reach = self._make_reach_with_levels(session)
+        assert classify_level(reach, DataType.flow, 100.0) == FlowLevel.low
+
+    def test_classify_flow_high(self, session):
+        reach = self._make_reach_with_levels(session)
+        assert classify_level(reach, DataType.flow, 3000.0) == FlowLevel.high
+
+    def test_classify_boundary_inclusive(self, session):
+        reach = self._make_reach_with_levels(session)
+        # 500 is at the boundary of low [0, 500] and okay [500, 2000]
+        result = classify_level(reach, DataType.flow, 500.0)
+        assert result in (FlowLevel.low, FlowLevel.okay)
+
+    def test_classify_no_levels_returns_none(self, session):
+        gauge = Gauge(name="nolvl_g")
+        session.add(gauge)
+        session.flush()
+        reach = Reach(name="nolvl_r", gauge_id=gauge.id)
+        session.add(reach)
+        session.flush()
+        assert classify_level(reach, DataType.flow, 1000.0) is None
+
+    def test_classify_wrong_data_type_returns_none(self, session):
+        reach = self._make_reach_with_levels(session)
+        # All levels are for DataType.flow, querying with gauge should not match
+        assert classify_level(reach, DataType.gauge, 1000.0) is None
