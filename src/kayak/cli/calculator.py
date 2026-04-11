@@ -6,9 +6,11 @@ to produce derived observations.
 
 from __future__ import annotations
 
+import argparse
 import ast
 import logging
 import operator
+from collections.abc import Callable
 
 from kayak.db.data_db import get_latest, store_observation, update_latest
 from kayak.db.engine import get_session
@@ -17,7 +19,7 @@ from kayak.db.models import DataType, Gauge, Source
 
 logger = logging.getLogger(__name__)
 
-_BINOPS = {
+_BINOPS: dict[type, Callable[[float, float], float]] = {
     ast.Add: operator.add,
     ast.Sub: operator.sub,
     ast.Mult: operator.mul,
@@ -25,18 +27,18 @@ _BINOPS = {
     ast.Pow: operator.pow,
 }
 
-_UNARYOPS = {
+_UNARYOPS: dict[type, Callable[[float], float]] = {
     ast.UAdd: operator.pos,
     ast.USub: operator.neg,
 }
 
-def _safe_round(value, ndigits=None):
+def _safe_round(value: float, ndigits: float | None = None) -> float:
     """round() wrapper that accepts float ndigits from the evaluator."""
     if ndigits is not None:
         ndigits = int(ndigits)
     return round(value, ndigits)
 
-_SAFE_FUNCS = {"max": max, "min": min, "round": _safe_round}
+_SAFE_FUNCS: dict[str, Callable[..., float]] = {"max": max, "min": min, "round": _safe_round}
 
 
 def _safe_eval(expr: str) -> float:
@@ -47,21 +49,21 @@ def _safe_eval(expr: str) -> float:
     """
     tree = ast.parse(expr, mode="eval")
 
-    def _eval(node):
+    def _eval(node: ast.AST) -> float:
         if isinstance(node, ast.Expression):
             return _eval(node.body)
         if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
             return float(node.value)
         if isinstance(node, ast.BinOp):
-            op_fn = _BINOPS.get(type(node.op))
-            if op_fn is None:
+            bin_fn = _BINOPS.get(type(node.op))
+            if bin_fn is None:
                 raise ValueError(f"Unsupported operator: {type(node.op).__name__}")
-            return op_fn(_eval(node.left), _eval(node.right))
+            return bin_fn(_eval(node.left), _eval(node.right))
         if isinstance(node, ast.UnaryOp):
-            op_fn = _UNARYOPS.get(type(node.op))
-            if op_fn is None:
+            unary_fn = _UNARYOPS.get(type(node.op))
+            if unary_fn is None:
                 raise ValueError(f"Unsupported unary op: {type(node.op).__name__}")
-            return op_fn(_eval(node.operand))
+            return unary_fn(_eval(node.operand))
         if isinstance(node, ast.Call):
             if not isinstance(node.func, ast.Name):
                 raise ValueError(f"Unsupported call: {ast.dump(node.func)}")
@@ -74,14 +76,14 @@ def _safe_eval(expr: str) -> float:
     return float(_eval(tree))
 
 
-def addArgs(subparsers):
+def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Register the 'calculator' subcommand."""
     parser = subparsers.add_parser("calculator",
                                    help="Build synthetic/calculated gage readings from expressions")
     parser.set_defaults(func=calculator)
 
 
-def calculator(args):
+def calculator(args: argparse.Namespace) -> None:
     """Build synthetic/calculated gage readings from expressions."""
 
     session = get_session()

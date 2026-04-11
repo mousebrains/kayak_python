@@ -1,12 +1,17 @@
 """Database initialization command (replaces gen.sql/rebuild)."""
 
+from __future__ import annotations
+
+import argparse
+
+from sqlalchemy.orm import Session
 
 from kayak.config_data import load_sources
 from kayak.db.engine import get_engine
 from kayak.db.models import Base, FetchUrl, State
 
 
-def _seed_states(session):
+def _seed_states(session: Session) -> None:
     """Seed state reference data."""
     states = [
         ("Utah", "UT"), ("Oregon", "OR"), ("Arizona", "AZ"), ("California", "CA"),
@@ -19,7 +24,7 @@ def _seed_states(session):
             session.add(State(name=name, abbreviation=abbr))
 
 
-def sync_sources(session):
+def sync_sources(session: Session) -> int:
     """Sync URL/parser definitions from data/sources.yaml into FetchUrl table."""
     sources = load_sources()
     count = 0
@@ -41,7 +46,7 @@ def sync_sources(session):
     return count
 
 
-def addArgs(subparsers):
+def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Register the 'init-db' subcommand."""
     parser = subparsers.add_parser("init-db",
                                    help="Create database tables and optionally seed reference data")
@@ -50,7 +55,7 @@ def addArgs(subparsers):
     parser.add_argument("--no-seed", action="store_true", help="Skip seeding reference data")
 
 
-def init_db(args):
+def init_db(args: argparse.Namespace) -> None:
     """Create database tables and optionally seed reference data."""
     engine = get_engine()
 

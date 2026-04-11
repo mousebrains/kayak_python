@@ -13,6 +13,7 @@ briefly per batch, allowing concurrent readers and writers.
 
 from __future__ import annotations
 
+import argparse
 import logging
 
 from sqlalchemy import text
@@ -105,7 +106,7 @@ SELECT COUNT(*) FROM ranked WHERE rn > 1
 """
 
 
-def addArgs(subparsers):
+def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Register the 'decimate' subcommand."""
     parser = subparsers.add_parser(
         "decimate",
@@ -130,7 +131,7 @@ def addArgs(subparsers):
     )
 
 
-def decimate(args):
+def decimate(args: argparse.Namespace) -> None:
     """Thin old observations."""
     from datetime import UTC, datetime, timedelta
 
@@ -184,7 +185,7 @@ def decimate(args):
             {"archive_cutoff": params["archive_cutoff"]},
         ).scalar()
 
-        total_deletes = hourly_deletes + sixhour_deletes
+        total_deletes = (hourly_deletes or 0) + (sixhour_deletes or 0)
         print(f"\nWould delete: {total_deletes:,} observations")
         print(f"  Hourly thinning: {hourly_deletes:,}")
         print(f"  6-hourly thinning: {sixhour_deletes:,}")
@@ -218,13 +219,13 @@ def decimate(args):
             src_params = {**params, "source_id": source_id}
 
             result1 = session.execute(text(_HOURLY_SQL), src_params)
-            hourly = result1.rowcount
+            hourly = result1.rowcount  # type: ignore[attr-defined]
 
             result2 = session.execute(
                 text(_6HOURLY_SQL),
                 {"archive_cutoff": params["archive_cutoff"], "source_id": source_id},
             )
-            sixhourly = result2.rowcount
+            sixhourly = result2.rowcount  # type: ignore[attr-defined]
 
             if hourly > 0 or sixhourly > 0:
                 session.commit()

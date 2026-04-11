@@ -17,7 +17,6 @@ from kayak.db.models import (
     FetchUrl,
     Gauge,
     GaugeSource,
-    Observation,
     Source,
 )
 

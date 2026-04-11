@@ -10,6 +10,7 @@ Runs the full data pipeline in order:
 
 from __future__ import annotations
 
+import argparse
 import logging
 import time
 
@@ -21,7 +22,7 @@ from kayak.db.engine import get_engine
 logger = logging.getLogger(__name__)
 
 
-def addArgs(subparsers):
+def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Register the 'pipeline' subcommand."""
     parser = subparsers.add_parser("pipeline",
                                    help="Run the full data pipeline")
@@ -32,7 +33,7 @@ def addArgs(subparsers):
     fetch.addArgs_options(parser)
 
 
-def pipeline(args):
+def pipeline(args: argparse.Namespace) -> None:
     """Run the full data pipeline (fetch -> calc-rating -> merge -> calculator -> build)."""
     steps = []
 

@@ -24,6 +24,8 @@ dev = [
     "pytest-cov>=4.1",
     "ruff>=0.5",
     "mypy>=1.10",
+    "types-PyYAML>=6.0",
+    "types-requests>=2.31",
 ]
 
 [project.scripts]
@@ -69,17 +71,8 @@ known-first-party = ["kayak"]
 python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
-disallow_untyped_defs = false
+disallow_untyped_defs = true
 check_untyped_defs = true
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "kayak.db.models"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-module = "kayak.utils.*"
-disallow_untyped_defs = true
 
 [tool.hatch.envs.default]
 features = ["dev"]

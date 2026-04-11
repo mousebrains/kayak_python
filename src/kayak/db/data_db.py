@@ -10,7 +10,7 @@ import statistics
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_upsert
 from sqlalchemy.orm import Session
 
@@ -425,7 +425,7 @@ def merge_sources(
     # Delete the target's existing observations in this range before writing,
     # so stale rows from previous merges or fetches don't linger.
     session.execute(
-        Observation.__table__.delete().where(
+        delete(Observation).where(
             Observation.source_id == target_source_id,
             Observation.data_type == data_type,
             Observation.observed_at >= since,

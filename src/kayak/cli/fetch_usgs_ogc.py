@@ -7,12 +7,15 @@ the correct Source record via the gauge → gauge_source → source relationship
 
 from __future__ import annotations
 
+import argparse
 import logging
 import os
 import time
+from collections.abc import Callable
 
 import requests
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from kayak.db.data_db import store_observations, update_latest
 from kayak.db.engine import get_session
@@ -31,7 +34,7 @@ def c_to_f(celsius: float) -> float:
 
 
 # Maps USGS parameter code → (DataType, optional conversion function)
-PARAM_MAP: dict[str, tuple[DataType, object]] = {
+PARAM_MAP: dict[str, tuple[DataType, Callable[[float], float] | None]] = {
     "00060": (DataType.flow, None),           # discharge cfs
     "00065": (DataType.gauge, None),          # gage height ft
     "00010": (DataType.temperature, c_to_f),  # temp °C → °F
@@ -39,7 +42,7 @@ PARAM_MAP: dict[str, tuple[DataType, object]] = {
 }
 
 
-def addArgs(subparsers):
+def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Register the 'fetch-usgs-ogc' subcommand."""
     parser = subparsers.add_parser(
         "fetch-usgs-ogc",
@@ -60,7 +63,7 @@ def addArgs(subparsers):
     )
 
 
-def _build_site_map(session) -> dict[str, int]:
+def _build_site_map(session: Session) -> dict[str, int]:
     """Build a mapping of usgs_id → source_id from the database.
 
     Joins gauge → gauge_source → source to find the source_id for each
@@ -107,13 +110,13 @@ def _fetch_page(url: str, api_key: str | None) -> dict | None:
             logger.error("HTTP %d for %s", resp.status_code, url)
             return None
 
-        return resp.json()
+        return resp.json()  # type: ignore[no-any-return]
 
     logger.error("Gave up after rate-limit retries for %s", url)
     return None
 
 
-def _fetch_continuous(site_map, api_key, hours, batch_size):
+def _fetch_continuous(site_map: dict[str, int], api_key: str | None, hours: int, batch_size: int) -> list[dict[str, object]]:
     """Fetch continuous (15-min) data for all sites and parameter codes.
 
     Performs only network I/O — no database access.  Returns a list of
@@ -121,7 +124,7 @@ def _fetch_continuous(site_map, api_key, hours, batch_size):
     """
     from datetime import UTC, datetime
 
-    all_rows: list[dict] = []
+    all_rows: list[dict[str, object]] = []
     site_ids = list(site_map.keys())
 
     # Only fetch 00060, 00065, 00010 (skip 00011 — sites report one or the other)
@@ -146,9 +149,10 @@ def _fetch_continuous(site_map, api_key, hours, batch_size):
             )
 
             page_num = 0
-            while url:
+            next_url: str | None = url
+            while next_url is not None:
                 page_num += 1
-                data = _fetch_page(url, api_key)
+                data = _fetch_page(next_url, api_key)
                 if data is None:
                     break
 
@@ -192,10 +196,10 @@ def _fetch_continuous(site_map, api_key, hours, batch_size):
                     param_count += 1
 
                 # Follow pagination
-                url = None
+                next_url = None
                 for link in data.get("links", []):
                     if link.get("rel") == "next":
-                        url = link.get("href")
+                        next_url = link.get("href")
                         break
 
         logger.info(
@@ -207,7 +211,7 @@ def _fetch_continuous(site_map, api_key, hours, batch_size):
     return all_rows
 
 
-def fetch_usgs_ogc(args):
+def fetch_usgs_ogc(args: argparse.Namespace) -> None:
     """Fetch USGS data via the OGC API."""
     api_key = os.environ.get("USGS_API_KEY")
 
@@ -248,8 +252,9 @@ def fetch_usgs_ogc(args):
         stored = store_observations(session, all_rows)
         updated_pairs = {(row["source_id"], row["data_type"]) for row in all_rows}
         print(f"Updating latest observations for {len(updated_pairs)} source/type pairs...")
-        for source_id, data_type in updated_pairs:
-            update_latest(session, source_id, data_type)
+        for sid, dtype in updated_pairs:
+            assert isinstance(sid, int) and isinstance(dtype, DataType)
+            update_latest(session, sid, dtype)
         session.commit()
         print(f"Committed {stored} observations to database")
     finally:

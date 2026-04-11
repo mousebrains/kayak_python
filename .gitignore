@@ -35,4 +35,6 @@ static/reaches.geojson
 backups
 
 # Stream trace data caches (NHD, OSM, merged)
+OSM-cache/
+NHD-cache/
 Trace-cache/

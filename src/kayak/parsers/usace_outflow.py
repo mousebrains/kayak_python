@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import math
 import re
+from typing import Any
 
 from kayak.db.models import DataType
 from kayak.parsers.base import BaseParser
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 class USACEOutflowParser(BaseParser):
     name = "usace.outflow"
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._state = 0
         self._project = ""

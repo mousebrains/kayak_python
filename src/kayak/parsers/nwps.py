@@ -50,7 +50,6 @@ class NWPSParser(BaseParser):
         flow_is_kcfs = secondary_units == "kcfs"
 
         now = datetime.now(UTC)
-        cutoff = now - timedelta(hours=36)
 
         for entry in data.get("data") or []:
             valid_time = entry.get("validTime")
@@ -59,7 +58,7 @@ class NWPSParser(BaseParser):
 
             # Strip trailing "Z" — parse_datetime handles UTC by default
             when = parse_datetime(valid_time.rstrip("Z"))
-            if when is None or when > now or when < cutoff:
+            if when is None or when > now:
                 continue
 
             # Stage (primary)

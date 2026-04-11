@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass
+from typing import Any
 
 from kayak.db.models import DataType
 from kayak.parsers.base import BaseParser
@@ -52,7 +53,7 @@ class _ColumnInfo:
 class USBRParser(BaseParser):
     name = "usbr"
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._columns: list[_ColumnInfo | None] = []
         self._header_parsed = False

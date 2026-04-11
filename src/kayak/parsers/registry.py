@@ -5,6 +5,7 @@ Replaces the 40-line if/else chain in fetcher.C::makeParser().
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -13,7 +14,7 @@ if TYPE_CHECKING:
 _REGISTRY: dict[str, type[BaseParser]] = {}
 
 
-def register(name: str):
+def register(name: str) -> Callable[[type[BaseParser]], type[BaseParser]]:
     """Class decorator to register a parser under a given name.
 
     Usage::
@@ -22,7 +23,7 @@ def register(name: str):
         class USGSParser(BaseParser):
             ...
     """
-    def decorator(cls):
+    def decorator(cls: type[BaseParser]) -> type[BaseParser]:
         _REGISTRY[name] = cls
         return cls
     return decorator
@@ -38,7 +39,7 @@ def get_parser_names() -> list[str]:
     return sorted(_REGISTRY.keys())
 
 
-def ensure_all_loaded():
+def ensure_all_loaded() -> None:
     """Import all parser modules to trigger registration.
 
     Called once at startup to populate the registry.

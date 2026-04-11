@@ -7,6 +7,7 @@ If both exist, fills in gaps.
 
 from __future__ import annotations
 
+import argparse
 import logging
 
 from kayak.db.data_db import (
@@ -23,14 +24,14 @@ from kayak.utils.conversions import interpolate_rating
 logger = logging.getLogger(__name__)
 
 
-def addArgs(subparsers):
+def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Register the 'calc-rating' subcommand."""
     parser = subparsers.add_parser("calc-rating",
                                    help="Apply rating tables to convert between gage height and flow")
     parser.set_defaults(func=calc_rating)
 
 
-def calc_rating(args):
+def calc_rating(args: argparse.Namespace) -> None:
     """Apply rating tables to convert between gage height and flow."""
 
     session = get_session()

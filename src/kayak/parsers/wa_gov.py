@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import math
+from typing import Any
 
 from kayak.db.models import DataType
 from kayak.parsers.base import BaseParser
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 class WaGovParser(BaseParser):
     name = "wa.gov"
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._state = 0
         self._station = ""

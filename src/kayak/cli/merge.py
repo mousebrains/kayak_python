@@ -6,6 +6,7 @@ the GaugeSource relationships.
 
 from __future__ import annotations
 
+import argparse
 import logging
 
 from kayak.db.data_db import merge_sources, update_latest
@@ -16,14 +17,14 @@ from kayak.db.models import DataType, Gauge
 logger = logging.getLogger(__name__)
 
 
-def addArgs(subparsers):
+def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Register the 'merge' subcommand."""
     parser = subparsers.add_parser("merge",
                                    help="Merge data from multiple source stations into combined stations")
     parser.set_defaults(func=merge)
 
 
-def merge(args):
+def merge(args: argparse.Namespace) -> None:
     """Merge data from multiple source stations into combined stations."""
 
     session = get_session()

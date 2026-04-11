@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import math
 from datetime import UTC, datetime
+from typing import Any
 
 from kayak.db.models import DataType
 from kayak.parsers.base import BaseParser
@@ -62,14 +63,14 @@ class NWRFCXMLParser(BaseParser):
 
         return self._db_updates
 
-    def _parse_site(self, site_elem, station: str, now: datetime):
+    def _parse_site(self, site_elem: Any, station: str, now: datetime) -> None:
         """Parse one site's observed data."""
         for elem in site_elem.iter():
             tag = self._local_tag(elem)
             if tag in ("observedData", "observed"):
                 self._parse_observed(elem, station, now)
 
-    def _parse_observed(self, observed_elem, station: str, now: datetime):
+    def _parse_observed(self, observed_elem: Any, station: str, now: datetime) -> None:
         """Parse observed data block."""
         when = None
         for elem in observed_elem.iter():
@@ -103,6 +104,6 @@ class NWRFCXMLParser(BaseParser):
         return True
 
     @staticmethod
-    def _local_tag(elem) -> str:
+    def _local_tag(elem: Any) -> str:
         tag = str(elem.tag)
         return tag.split("}")[-1] if "}" in tag else tag

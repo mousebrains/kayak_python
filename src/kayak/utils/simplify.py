@@ -28,14 +28,14 @@ def _perpendicular_distance(
     dx = end[0] - start[0]
     dy = end[1] - start[1]
     if dx == 0 and dy == 0:
-        return ((point[0] - start[0]) ** 2 + (point[1] - start[1]) ** 2) ** 0.5
+        return float(((point[0] - start[0]) ** 2 + (point[1] - start[1]) ** 2) ** 0.5)
     # Normalize
     mag_sq = dx * dx + dy * dy
     u = ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / mag_sq
     u = max(0, min(1, u))
     proj_x = start[0] + u * dx
     proj_y = start[1] + u * dy
-    return ((point[0] - proj_x) ** 2 + (point[1] - proj_y) ** 2) ** 0.5
+    return float(((point[0] - proj_x) ** 2 + (point[1] - proj_y) ** 2) ** 0.5)
 
 
 def simplify(points: list[tuple[float, float]], epsilon: float) -> list[tuple[float, float]]:

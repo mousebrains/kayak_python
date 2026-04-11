@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass
+from typing import Any
 
 from kayak.parsers.base import BaseParser
 from kayak.parsers.registry import register
@@ -164,7 +165,7 @@ class USGSParser(BaseParser):
 
     name = "usgs"
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._state = 0
         self._columns: list[str] = []

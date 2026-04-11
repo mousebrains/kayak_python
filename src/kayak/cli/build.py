@@ -7,6 +7,7 @@ styling, state navigation links, and inline SVG sparklines.
 
 from __future__ import annotations
 
+import argparse
 import csv
 import io
 import json
@@ -17,6 +18,9 @@ import tempfile
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
+
+from sqlalchemy.orm import Session
 
 from kayak.config import BASE_DIR
 from kayak.config_data import load_builder_columns
@@ -267,8 +271,9 @@ def _build_sparkline(
 # CSV / Text builders (unchanged logic)
 # ---------------------------------------------------------------------------
 
-def _build_csv(reaches, columns, state_name: str,
-               primary_source_ids, calculated_ids, all_latest) -> str:
+def _build_csv(reaches: list[Reach], columns: list[dict[str, Any]], state_name: str,
+               primary_source_ids: dict[int, int], calculated_ids: set[int],
+               all_latest: dict[tuple[int, DataType], LatestObservation]) -> str:
     output = io.StringIO()
     writer = csv.writer(output)
     headers = [c["name_text"] for c in columns if "c" in c["use"] and c["type"] != "noop"]
@@ -290,8 +295,9 @@ def _build_csv(reaches, columns, state_name: str,
     return output.getvalue()
 
 
-def _build_text(reaches, columns, state_name: str,
-                primary_source_ids, calculated_ids, all_latest) -> str:
+def _build_text(reaches: list[Reach], columns: list[dict[str, Any]], state_name: str,
+                primary_source_ids: dict[int, int], calculated_ids: set[int],
+                all_latest: dict[tuple[int, DataType], LatestObservation]) -> str:
     lines = []
     header = ""
     for col in columns:
@@ -349,8 +355,10 @@ def _levels_key(reach: Reach) -> tuple:
     ))
 
 
-def _build_html_table(reaches, columns, primary_source_ids, calculated_ids,
-                      all_latest, sparkline_obs, *, is_all_page: bool = False
+def _build_html_table(reaches: list[Reach], columns: list[dict[str, Any]],
+                      primary_source_ids: dict[int, int], calculated_ids: set[int],
+                      all_latest: dict[tuple[int, DataType], LatestObservation],
+                      sparkline_obs: dict[int, list[Observation]], *, is_all_page: bool = False
                       ) -> tuple[str, list[str]]:
     """Build the <table> body for a set of reaches using pre-loaded data.
 
@@ -473,10 +481,10 @@ def _build_html_table(reaches, columns, primary_source_ids, calculated_ids,
 
 
 def _build_geojson(
-    reaches,
+    reaches: list[Reach],
     primary_source_ids: dict[int, int],
     calculated_ids: set[int],
-    all_latest: dict,
+    all_latest: dict[tuple[int, DataType], LatestObservation],
     epsilon: float = 0.001,
 ) -> str:
     """Build a GeoJSON FeatureCollection of all mappable reaches."""
@@ -497,7 +505,7 @@ def _build_geojson(
                 coords = [[round(x, 5), round(y, 5)] for x, y in simplified]
                 geometry = {"type": "LineString", "coordinates": coords}
             elif len(points) == 1:
-                geometry = {"type": "Point", "coordinates": [round(points[0][0], 5), round(points[0][1], 5)]}
+                geometry = {"type": "Point", "coordinates": [round(points[0][0], 5), round(points[0][1], 5)]}  # type: ignore[arg-type]
         if geometry is None and reach.latitude_start and reach.longitude_start and reach.latitude_end and reach.longitude_end:
             coords = [
                 [round(float(reach.longitude_start), 5), round(float(reach.latitude_start), 5)],
@@ -507,7 +515,7 @@ def _build_geojson(
         if geometry is None and reach.latitude and reach.longitude:
             geometry = {
                 "type": "Point",
-                "coordinates": [round(float(reach.longitude), 5), round(float(reach.latitude), 5)],
+                "coordinates": [round(float(reach.longitude), 5), round(float(reach.latitude), 5)],  # type: ignore[arg-type]
             }
         if geometry is None:
             continue
@@ -687,7 +695,7 @@ Data sourced from USGS, NOAA, USACE, USBR, and other government agencies. <a hre
 # CLI entry point
 # ---------------------------------------------------------------------------
 
-def addArgs(subparsers):
+def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Register the 'build' subcommand."""
     parser = subparsers.add_parser(
         "build", help="Generate static HTML/CSV/text files to output directory"
@@ -700,7 +708,7 @@ def addArgs(subparsers):
     parser.set_defaults(func=build)
 
 
-def build(args):
+def build(args: argparse.Namespace) -> None:
     """Generate static HTML/CSV/text files to disk."""
     output_dir = Path(getattr(args, "output_dir", None) or str(BASE_DIR / "public_html"))
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -754,11 +762,11 @@ def build(args):
         session.close()
 
 
-def _build_and_write(session, reaches, columns, state: str,
-                     states: list[str], css: str, output_dir: Path,
+def _build_and_write(session: Session, reaches: list[Reach], columns: list[dict[str, Any]],
+                     state: str, states: list[str], css: str, output_dir: Path,
                      *, is_all_page: bool = False,
-                     preloaded: tuple | None = None,
-                     filename: str | None = None):
+                     preloaded: tuple[dict[int, int], set[int], dict[tuple[int, DataType], LatestObservation]] | None = None,
+                     filename: str | None = None) -> None:
     """Build and write CSV, text, and HTML for a state (or all)."""
     suffix = f"_{state}" if state else ""
     label = state or "all"

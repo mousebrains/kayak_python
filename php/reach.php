@@ -102,9 +102,10 @@ if ($q !== null && $q !== '') {
              WHERE rg.reach_id IN ($ph)"
         );
         $gb_stmt->execute($reach_ids);
-        // Guidebook abbreviation map
+        // Soggy Sneakers edition number by guidebook id
+        $ss_edition = [9 => 1, 1 => 2, 2 => 3, 3 => 4, 4 => 5];
+        // Non-SS guidebook abbreviation map
         $gb_abbrev = [
-            1 => 'SS', 2 => 'SS', 3 => 'SS', 4 => 'SS', 9 => 'SS',  // Soggy Sneakers
             5 => 'ID',    // Idaho
             6 => 'WA',    // Guide to WW Rivers of Washington
             7 => 'PO',    // Paddling Oregon
@@ -112,9 +113,21 @@ if ($q !== null && $q !== '') {
             10 => 'OK',   // Oregon Kayaking
             11 => 'DF',   // Dreamflows
         ];
+        $reach_ss = [];  // reach_id => [edition numbers]
         foreach ($gb_stmt->fetchAll() as $gb) {
-            $abbr = $gb_abbrev[$gb['gid']] ?? substr($gb['title'], 0, 2);
-            $reach_guides[$gb['reach_id']][$abbr] = true;
+            $gid = $gb['gid'];
+            $rid = $gb['reach_id'];
+            if (isset($ss_edition[$gid])) {
+                $reach_ss[$rid][] = $ss_edition[$gid];
+            } else {
+                $abbr = $gb_abbrev[$gid] ?? substr($gb['title'], 0, 2);
+                $reach_guides[$rid][$abbr] = true;
+            }
+        }
+        // Build "SS135" style labels from collected editions
+        foreach ($reach_ss as $rid => $editions) {
+            sort($editions);
+            $reach_guides[$rid]['SS' . implode('', $editions)] = true;
         }
 
         // Add AW for reaches with aw_id set (even without a guidebook row)

@@ -6,6 +6,7 @@ observations in the database.
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import logging
 from dataclasses import dataclass, field
@@ -36,7 +37,7 @@ def _hour_allowed(hours_spec: str) -> bool:
         return True
 
 
-def addArgs_options(parser):
+def addArgs_options(parser: argparse.ArgumentParser) -> None:
     """Add fetch-specific options to a parser."""
     parser.add_argument("-d", "--dry-run", action="store_true", help="Do not store data")
     parser.add_argument("-f", "--fetch-only", action="store_true", help="Fetch but do not parse")
@@ -57,7 +58,7 @@ def addArgs_options(parser):
                         help="Max concurrent requests per host (default: 8)")
 
 
-def addArgs(subparsers):
+def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Register the 'fetch' subcommand."""
     parser = subparsers.add_parser("fetch",
                                    help="Fetch data from remote agencies, parse, and store in database")
@@ -77,7 +78,7 @@ class _FetchWork:
     fetch_url_id: int | None = None
 
 
-def fetch(args):
+def fetch(args: argparse.Namespace) -> None:
     """Fetch data from remote agencies, parse, and store in database."""
 
     ensure_all_loaded()
@@ -235,7 +236,7 @@ def fetch(args):
         session.close()
 
 
-def _get_content_from_file(raw_url, input_dir):
+def _get_content_from_file(raw_url: str, input_dir: str) -> str | None:
     """Read content from a saved file in input_dir.
 
     Returns the text content, or None if the file does not exist.
@@ -248,7 +249,7 @@ def _get_content_from_file(raw_url, input_dir):
     return file_path.read_text(encoding="utf-8", errors="replace")
 
 
-def _get_content(url, raw_url, input_dir, output_dir):
+def _get_content(url: str, raw_url: str, input_dir: str | None, output_dir: str | None) -> str | None:
     """Get text content either from a saved file or by fetching the URL.
 
     Returns the text content, or None if the content could not be obtained.
@@ -276,9 +277,9 @@ def _get_content(url, raw_url, input_dir, output_dir):
 
 
 def _fetch_single(
-    url, parser_name, url_prefix, output_dir, input_dir,
-    dry_run, fetch_only,
-):
+    url: str, parser_name: str, url_prefix: str, output_dir: str | None, input_dir: str | None,
+    dry_run: bool, fetch_only: bool,
+) -> None:
     """Fetch and parse a single URL (the -U -t mode)."""
     full_url = url_prefix + url
 

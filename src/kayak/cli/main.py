@@ -1,5 +1,7 @@
 """Argparse CLI entry point (replaces individual C++ programs)."""
 
+from __future__ import annotations
+
 import argparse
 import sys
 
@@ -18,7 +20,7 @@ from kayak.cli.logger import addArgs as addLoggerArgs
 from kayak.cli.logger import mkLogger
 
 
-def main():
+def main() -> None:
     """levels - River level data aggregation from government agencies."""
     parser = argparse.ArgumentParser(
         prog="levels",
