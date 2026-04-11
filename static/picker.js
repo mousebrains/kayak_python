@@ -136,6 +136,6 @@
     navigator.clipboard.writeText(url).then(function() {
       copiedEl.style.display = '';
       setTimeout(function() { copiedEl.style.display = 'none'; }, 2000);
-    });
+    }).catch(function() {});
   });
 })();

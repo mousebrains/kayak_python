@@ -104,6 +104,8 @@ function selectWithData() {
   updateCount();
 }
 
+function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+
 document.addEventListener('DOMContentLoaded', function() {
   var tbody = document.getElementById('tbody');
   data.forEach(function(r) {
@@ -113,15 +115,15 @@ document.addEventListener('DOMContentLoaded', function() {
     tr.dataset.id = r.id;
     tr.dataset.hasData = hasData ? '1' : '0';
     tr.innerHTML =
-      '<td class="cb"><input type="checkbox" class="row-cb" value="' + r.id + '" ' + (hasData ? '' : 'checked') + '></td>' +
-      '<td>' + r.id + '</td>' +
-      '<td>' + r.name + '</td>' +
-      '<td>' + r.gauge + '</td>' +
-      '<td>' + (r.aw || '') + '</td>' +
+      '<td class="cb"><input type="checkbox" class="row-cb" value="' + parseInt(r.id, 10) + '" ' + (hasData ? '' : 'checked') + '></td>' +
+      '<td>' + parseInt(r.id, 10) + '</td>' +
+      '<td>' + esc(r.name) + '</td>' +
+      '<td>' + parseInt(r.gauge, 10) + '</td>' +
+      '<td>' + esc(r.aw || '') + '</td>' +
       '<td class="count">' + (r.gb || '') + '</td>' +
       '<td class="count">' + (r.lv || '') + '</td>' +
-      '<td>' + r.gbd.map(function(g) { return '<span class="tag tag-gb">' + g + '</span>'; }).join(' ') + '</td>' +
-      '<td>' + r.lvd.map(function(l) { return '<span class="tag tag-lv">' + l + '</span>'; }).join(' ') + '</td>';
+      '<td>' + r.gbd.map(function(g) { return '<span class="tag tag-gb">' + esc(g) + '</span>'; }).join(' ') + '</td>' +
+      '<td>' + r.lvd.map(function(l) { return '<span class="tag tag-lv">' + esc(l) + '</span>'; }).join(' ') + '</td>';
     tbody.appendChild(tr);
   });
 
