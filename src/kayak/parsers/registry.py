@@ -3,6 +3,8 @@
 Replaces the 40-line if/else chain in fetcher.C::makeParser().
 """
 
+from __future__ import annotations
+
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
