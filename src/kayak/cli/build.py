@@ -14,6 +14,7 @@ import logging
 import os
 import shutil
 import tempfile
+import time
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -830,17 +831,52 @@ def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -
     )
     parser.add_argument(
         "--output-dir",
-        default=str(BASE_DIR / "public_html"),
-        help="Output directory (default: public_html/)",
+        default=os.environ.get("OUTPUT_DIR", str(BASE_DIR / "public_html")),
+        help="Output directory (default: $OUTPUT_DIR or public_html/)",
     )
     parser.set_defaults(func=build)
 
 
-def build(args: argparse.Namespace) -> None:
-    """Generate static HTML/CSV/text files to disk."""
-    output_dir = Path(getattr(args, "output_dir", None) or str(BASE_DIR / "public_html"))
-    output_dir.mkdir(parents=True, exist_ok=True)
+def _deploy_source_files(output_dir: Path) -> None:
+    """Copy source files from the repo into the output directory.
 
+    Makes the output directory self-contained — no symlinks pointing
+    back into the repo.  Covers static assets, PHP files, and config.
+    """
+    # Static assets (icons, JS, manifest, service worker)
+    static_dir = output_dir / "static"
+    static_dir.mkdir(parents=True, exist_ok=True)
+    src_static = BASE_DIR / "static"
+    for path in src_static.iterdir():
+        if path.is_file():
+            shutil.copy2(path, static_dir / path.name)
+
+    # PHP files → output root
+    php_dir = BASE_DIR / "php"
+    for path in php_dir.iterdir():
+        if path.is_file() and path.suffix == ".php":
+            shutil.copy2(path, output_dir / path.name)
+
+    # PHP includes
+    includes_dir = output_dir / "includes"
+    includes_dir.mkdir(parents=True, exist_ok=True)
+    for path in (php_dir / "includes").iterdir():
+        if path.is_file():
+            shutil.copy2(path, includes_dir / path.name)
+
+    # CSS for PHP inlining (header.php reads __DIR__/../style.css)
+    shutil.copy2(_CSS_PATH, output_dir / "style.css")
+
+    # Config / static files from the in-repo public_html
+    repo_public = BASE_DIR / "public_html"
+    for name in (".htaccess", "404.html", "robots.txt", "no_show_review.js", "no_show_review.html"):
+        src = repo_public / name
+        if src.is_file():
+            shutil.copy2(src, output_dir / name)
+
+
+def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
+    """Generate all site content into output_dir."""
     session = get_session()
     try:
         columns = _get_builder_columns()
@@ -857,17 +893,12 @@ def build(args: argparse.Namespace) -> None:
         calculated_gauge_ids = get_calculated_gauge_ids(session, gauge_ids)
         all_latest = get_all_latest_gauges(session, gauge_ids)
 
-        # Static assets
-        static_dir = output_dir / "static"
-        static_dir.mkdir(parents=True, exist_ok=True)
-        js_dest = static_dir / "levels.js"
-        if not js_dest.resolve().samefile(_JS_PATH.resolve()):
-            shutil.copy2(_JS_PATH, js_dest)
+        # Deploy source files (static assets, PHP, config)
+        _deploy_source_files(output_dir)
 
-        # Copy CSS to php/ so the PHP layer can inline it (www-data can't
-        # follow symlinks into src/, so this must be a real copy).
-        php_css_dest = BASE_DIR / "php" / "style.css"
-        shutil.copy2(_CSS_PATH, php_css_dest)
+        # Generated static assets
+        static_dir = output_dir / "static"
+        shutil.copy2(_JS_PATH, static_dir / "levels.js")
 
         # GeoJSON → static/reaches.geojson
         geojson = _build_geojson(all_reaches, calculated_gauge_ids, all_latest)
@@ -896,10 +927,67 @@ def build(args: argparse.Namespace) -> None:
             if state in states:
                 links_page = _build_placeholder_page(css, states, state)
                 _atomic_write(output_dir / f"{state}.html", links_page)
-
-        print(f"Build complete → {output_dir}")
     finally:
         session.close()
+
+
+def _set_acls(directory: Path) -> None:
+    """Set POSIX ACLs so www-data can read the deployed directory."""
+    import subprocess
+
+    subprocess.run(
+        ["setfacl", "-R", "-m", "u:www-data:rX", str(directory)],
+        check=True,
+    )
+    subprocess.run(
+        ["setfacl", "-R", "-d", "-m", "u:www-data:rX", str(directory)],
+        check=True,
+    )
+
+
+def build(args: argparse.Namespace) -> None:
+    """Generate static HTML/CSV/text files to disk.
+
+    If output_dir is a symlink (production deploy), builds into a fresh
+    temporary directory and atomically swaps the symlink.  If it is a
+    regular directory, builds in place (development).
+    """
+    output_dir = Path(
+        getattr(args, "output_dir", None)
+        or os.environ.get("OUTPUT_DIR")
+        or str(BASE_DIR / "public_html")
+    )
+
+    if output_dir.is_symlink():
+        # --- Atomic deploy mode ---
+        old_target = output_dir.resolve()
+        new_target = output_dir.parent / f"{output_dir.name}_{int(time.time())}"
+        new_target.mkdir(parents=True)
+        try:
+            _build_to_dir(new_target, args)
+            _set_acls(new_target)
+            # Atomic swap: create temp symlink then rename over the live one
+            tmp_link = output_dir.parent / f"{output_dir.name}_tmp"
+            tmp_link.symlink_to(new_target)
+            tmp_link.rename(output_dir)
+            print(f"Build complete → {output_dir} → {new_target}")
+            # Remove old target if it differs and still exists
+            if old_target != new_target and old_target.is_dir():
+                shutil.rmtree(old_target)
+        except BaseException:
+            # Clean up the half-built directory on any error
+            shutil.rmtree(new_target, ignore_errors=True)
+            # Also clean up tmp_link if it was created but rename failed
+            with suppress(FileNotFoundError):
+                tmp_link = output_dir.parent / f"{output_dir.name}_tmp"
+                if tmp_link.is_symlink():
+                    tmp_link.unlink()
+            raise
+    else:
+        # --- In-place mode (development) ---
+        output_dir.mkdir(parents=True, exist_ok=True)
+        _build_to_dir(output_dir, args)
+        print(f"Build complete → {output_dir}")
 
 
 def _build_and_write(
