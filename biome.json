@@ -2,7 +2,11 @@
   "$schema": "https://biomejs.dev/schemas/2.4.11/schema.json",
   "files": {
     "includes": [
-      "static/**/*.js",
+      "static/sw.js",
+      "static/map.js",
+      "static/picker.js",
+      "static/reach-map.js",
+      "static/search-map.js",
       "public_html/no_show_review.js",
       "src/kayak/web/static/levels.js",
       "php/style.css",

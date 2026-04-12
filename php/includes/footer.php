@@ -7,7 +7,7 @@ function include_footer(): void {
 <footer>
 Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.
 </footer>
-<script src="/static/levels.js"></script>
+<script src="/static/levels.js" defer></script>
 </body>
 </html>
 HTML;

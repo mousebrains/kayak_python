@@ -53,7 +53,7 @@
       const chk = selected.has(r.id) ? ' checked' : '';
       html.push(
         '<tr>',
-        '<td><input type="checkbox" data-id="' + r.id + '"' + chk + '></td>',
+        '<td><label><input type="checkbox" data-id="' + r.id + '"' + chk + '><span class="sr-only"> Select ' + esc(name) + '</span></label></td>',
         '<td>' + esc(name) + '</td>',
         '<td class="col-location">' + esc(r.location || '') + '</td>',
         '<td class="col-flow">' + fmtFlow(r.flow) + '</td>',

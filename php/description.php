@@ -17,6 +17,7 @@ $end_date = validate_date(filter_input(INPUT_GET, 'end', FILTER_SANITIZE_SPECIAL
 if (!$id) { http_response_code(400); exit('Missing id parameter'); }
 
 $db = get_db();
+$has_map = false;
 
 $reach = get_reach_or_404($id);
 
@@ -50,7 +51,10 @@ $levels_stmt->execute([$id]);
 $flow_levels = $levels_stmt->fetchAll();
 
 header('Cache-Control: max-age=300');
-include_header("$name - Description");
+$preconnects = '<link rel="preconnect" href="https://a.tile.opentopomap.org">'
+    . '<link rel="preconnect" href="https://b.tile.opentopomap.org">'
+    . '<link rel="preconnect" href="https://c.tile.opentopomap.org">';
+include_header("$name - Description", '', "Real-time river data for $name — flow, gage height, and conditions.", $preconnects);
 
 echo '<h2>' . htmlspecialchars($name) . '</h2>';
 
@@ -126,12 +130,12 @@ if ($gauge) {
     $form_start = $start_date ?: $default_start;
     $form_end = $end_date ?: $default_end;
 
-    echo '<form method="get" style="margin:.5rem 0;font-size:.85rem">';
+    echo '<form method="get" style="margin:.5rem 0;font-size:.85rem;display:flex;align-items:center;flex-wrap:wrap;gap:.5rem">';
     echo '<input type="hidden" name="id" value="' . $id . '">';
-    echo '<label>Start: <input type="date" name="start" value="' . htmlspecialchars($form_start) . '"></label> ';
-    echo '<label>End: <input type="date" name="end" value="' . htmlspecialchars($form_end) . '"></label> ';
-    echo '<button type="submit">Update</button> ';
-    echo '<a href="/data.php?id=' . $id . '" style="margin-left:.5rem">Data inspector</a>';
+    echo '<label style="display:inline-flex;align-items:center;gap:.3rem;min-height:44px">Start: <input type="date" name="start" value="' . htmlspecialchars($form_start) . '" style="min-height:44px;padding:4px 8px"></label>';
+    echo '<label style="display:inline-flex;align-items:center;gap:.3rem;min-height:44px">End: <input type="date" name="end" value="' . htmlspecialchars($form_end) . '" style="min-height:44px;padding:4px 8px"></label>';
+    echo '<button type="submit" style="min-height:44px;padding:8px 16px">Update</button>';
+    echo '<a href="/data.php?id=' . $id . '" style="display:inline-flex;align-items:center;min-height:44px">Data inspector</a>';
     echo '</form>';
 
     if ($start_date && $end_date) {
@@ -302,11 +306,11 @@ if (count($map_points) >= 1 || $geom) {
     $points_attr = htmlspecialchars($map_json, ENT_QUOTES, 'UTF-8');
     $track_attr = htmlspecialchars($track_json, ENT_QUOTES, 'UTF-8');
     $color_attr = htmlspecialchars($track_color, ENT_QUOTES, 'UTF-8');
-    echo '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous"/>';
-    echo '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>';
+    $leaflet_css = file_get_contents(__DIR__ . '/static/leaflet.css');
+    echo '<style>' . $leaflet_css . '</style>';
     echo '<div id="reach-map" style="height:350px;margin-top:1rem;border:1px solid #ccc" data-points="' . $points_attr . '" data-track="' . $track_attr . '" data-track-color="' . $color_attr . '"></div>';
-    echo '<script src="/static/reach-map.js"></script>';
     echo '<table class="desc-table">';
+    $has_map = true;
 }
 
 // HTML-safe fields list for raw output
@@ -469,8 +473,15 @@ if ($guidebooks || $reach['aw_id']) {
     echo '</table>';
 }
 
-echo '<p style="margin-top:1rem"><a href="/index.html">Back to main page</a>';
-echo ' | <a href="/reach.php?id=' . $id . '">Reach details</a>';
-echo ' | <a href="/edit.php?id=' . $id . '">Edit</a></p>';
+echo '<nav style="margin-top:1rem;display:flex;flex-wrap:wrap;gap:.5rem">';
+echo '<a href="/index.html" style="display:inline-flex;align-items:center;min-height:44px;padding:8px 12px">Back to main page</a>';
+echo '<a href="/reach.php?id=' . $id . '" style="display:inline-flex;align-items:center;min-height:44px;padding:8px 12px">Reach details</a>';
+echo '<a href="/edit.php?id=' . $id . '" style="display:inline-flex;align-items:center;min-height:44px;padding:8px 12px">Edit</a>';
+echo '</nav>';
+
+if ($has_map) {
+    echo '<script src="/static/leaflet.js" defer></script>';
+    echo '<script src="/static/reach-map.js" defer></script>';
+}
 
 include_footer();

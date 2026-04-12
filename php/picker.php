@@ -72,12 +72,13 @@ include_header('Build Your Own Levels Page', 'picker');
   <label><input type="checkbox" value="<?= htmlspecialchars($primary_state) ?>" checked><span><?= htmlspecialchars($primary_state) ?></span></label>
 </div>
 
+<label for="search" class="sr-only">Filter reaches by name</label>
 <input type="text" class="picker-search" id="search" placeholder="Filter reaches by name…">
 
 <table class="picker-sections" id="sections">
   <thead>
     <tr>
-      <th style="width:1%"><input type="checkbox" id="select-all" title="Select all / deselect all"></th>
+      <th style="width:1%"><label><input type="checkbox" id="select-all"><span class="sr-only"> Select all</span></label></th>
       <th>Name</th>
       <th class="col-location">Location</th>
       <th class="col-flow">Flow</th>
@@ -95,6 +96,6 @@ include_header('Build Your Own Levels Page', 'picker');
   <span class="copied" id="copied" style="display:none">Copied!</span>
 </div>
 
-<script src="/static/picker.js?v=2"></script>
+<script src="/static/picker.js?v=3" defer></script>
 <?php
 include_footer();

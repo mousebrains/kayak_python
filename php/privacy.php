@@ -11,6 +11,7 @@ $title = "Privacy Policy";
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= $title ?> — WKCC River Levels</title>
+<meta name="description" content="Privacy policy for the WKCC River Levels site — what data we collect and how we use it.">
 <style>
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
        max-width: 48em; margin: 2em auto; padding: 0 1em; line-height: 1.6; color: #222; }
@@ -21,6 +22,7 @@ a { color: #2060A0; }
 </style>
 </head>
 <body>
+<main>
 <h1><?= $title ?></h1>
 <p class="updated">Last updated: March 23, 2026</p>
 
@@ -60,7 +62,7 @@ base maps:</p>
   <li><a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> (street map tiles)</li>
   <li><a href="https://opentopomap.org/about">OpenTopoMap</a> (topographic map tiles)</li>
   <li><a href="https://www.esri.com/en-us/privacy/overview">Esri</a> (satellite imagery tiles)</li>
-  <li><a href="https://www.unpkg.com">unpkg.com</a> (Leaflet mapping library)</li>
+  <li><a href="https://leafletjs.com">Leaflet</a> (mapping library, served locally)</li>
 </ul>
 <p>These services may log your IP address when your browser requests map tiles.
 Their respective privacy policies apply to that data.</p>
@@ -85,5 +87,6 @@ your data, please contact the
 revised date.</p>
 
 <p style="margin-top: 2em;"><a href="/">← Back to river levels</a></p>
+</main>
 </body>
 </html>

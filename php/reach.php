@@ -192,8 +192,8 @@ if ($q !== null && $q !== '') {
                     '#42d4f4','#f032e6','#bfef45','#469990','#dcbeff',
                     '#9A6324','#800000','#aaffc3','#808000','#000075'];
         if ($map_reaches) {
-            echo '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>';
-            echo '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>';
+            echo '<link rel="stylesheet" href="/static/leaflet.css">';
+            echo '<script src="/static/leaflet.js"></script>';
             $map_json = htmlspecialchars(json_encode($map_reaches), ENT_QUOTES, 'UTF-8');
             $colors_json = htmlspecialchars(json_encode($colors), ENT_QUOTES, 'UTF-8');
             echo '<div id="search-map" style="height:350px;margin-bottom:1rem;border:1px solid #ccc" data-reaches="' . $map_json . '" data-colors="' . $colors_json . '"></div>';
@@ -532,8 +532,8 @@ if ($map_points || $reach['geom']) {
         }
     }
 
-    echo '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>';
-    echo '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>';
+    echo '<link rel="stylesheet" href="/static/leaflet.css">';
+    echo '<script src="/static/leaflet.js"></script>';
     $pts_json = htmlspecialchars(json_encode($map_points), ENT_QUOTES, 'UTF-8');
     echo '<div id="reach-map" style="height:400px;margin-top:1rem;border:1px solid #ccc" data-points="' . $pts_json . '"';
     if ($track) {

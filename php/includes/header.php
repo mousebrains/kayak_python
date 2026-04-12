@@ -15,9 +15,10 @@ function get_inline_css(): string {
     return $css;
 }
 
-function include_header(string $title = 'River Levels', string $active = ''): void {
+function include_header(string $title = 'River Levels', string $active = '', string $description = '', string $extra_head = ''): void {
     $css = get_inline_css();
     $esc_title = htmlspecialchars($title);
+    $esc_desc = $description ? htmlspecialchars($description) : 'Real-time river levels, flow, and gage data from USGS, NOAA, USACE, and other government agencies.';
     $picker_cls = $active === 'picker' ? ' class="active"' : '';
     echo <<<HTML
 <!DOCTYPE html>
@@ -26,10 +27,12 @@ function include_header(string $title = 'River Levels', string $active = ''): vo
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>$esc_title</title>
+<meta name="description" content="$esc_desc">
 <link rel="manifest" href="/static/manifest.json">
-<meta name="theme-color" content="#2060A0">
+<meta name="theme-color" content="#1b5591">
 <link rel="icon" href="/static/favicon.ico">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
+$extra_head
 <style>
 $css
 </style>

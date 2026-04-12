@@ -26,9 +26,17 @@ document.querySelectorAll('time[datetime]').forEach(function(el){
   });
 })();
 
-// Unregister any previously installed service workers
+// Lazy-load sparkline SVGs after first paint (only on pages with placeholders)
+if(document.querySelector('span.spark[data-gid]')){
+  fetch('/static/sparklines.json').then(function(r){return r.json()}).then(function(data){
+    document.querySelectorAll('span.spark[data-gid]').forEach(function(el){
+      var svg=data[el.dataset.gid];
+      if(svg)el.innerHTML=svg;
+    });
+  }).catch(function(){});
+}
+
+// Service worker — network-first with cache fallback for slow connections
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.getRegistrations().then(function(regs){
-    regs.forEach(function(r){r.unregister();});
-  });
+  navigator.serviceWorker.register('/sw.js');
 }

@@ -6,7 +6,6 @@ styling, state navigation links, and inline SVG sparklines.
 """
 
 import argparse
-import base64
 import csv
 import html as html_mod
 import io
@@ -49,7 +48,7 @@ SPARKLINE_DOWNSAMPLE_POINTS = 60  # Target points after LTTB downsampling
 SPARKLINE_DEFAULT_WIDTH = 80
 SPARKLINE_DEFAULT_HEIGHT = 20
 SPARKLINE_STROKE_WIDTH = "1.5"
-SPARKLINE_COLOR = "#2060A0"
+SPARKLINE_COLOR = "#1b5591"
 
 # Data freshness
 DATA_STALE_THRESHOLD = timedelta(hours=48)
@@ -61,7 +60,7 @@ GEOJSON_SIMPLIFY_EPSILON = 0.001
 GEOJSON_COORD_PRECISION = 5
 
 # Branding
-BRAND_COLOR = "#2060A0"
+BRAND_COLOR = "#1b5591"
 
 
 def _atomic_write(path: Path, content: str) -> None:
@@ -192,8 +191,6 @@ _JS_PATH = _STATIC_DIR / "levels.js"
 
 _LEVELS_JS_VERSION = int(_JS_PATH.stat().st_mtime)
 _LEVELS_JS = f'<script src="/static/levels.js?v={_LEVELS_JS_VERSION}" defer></script>'
-
-_FAVICON_B64 = base64.b64encode((BASE_DIR / "static" / "favicon.ico").read_bytes()).decode()
 
 
 def _load_css() -> str:
@@ -431,14 +428,13 @@ def _filter_visible_rows(
     reaches: list[Reach],
     calculated_gauge_ids: set[int],
     all_latest: dict[tuple[int, DataType], LatestGaugeObservation],
-    sparkline_obs: dict[int, list[Observation]],
-) -> list[tuple[Reach, dict, str]]:
+) -> list[tuple[Reach, dict]]:
     """Filter reaches to those with current data and build row dicts.
 
     Excludes expired reaches (data > 7 days old) and reaches with no
-    flow/gage/temperature data. Returns (reach, row_dict, sparkline_svg) tuples.
+    flow/gage/temperature data. Returns (reach, row_dict) tuples.
     """
-    visible: list[tuple[Reach, dict, str]] = []
+    visible: list[tuple[Reach, dict]] = []
     for reach in reaches:
         row = _get_row_data(reach, calculated_gauge_ids, all_latest)
         if row.get("expired"):
@@ -448,12 +444,11 @@ def _filter_visible_rows(
         )
         if not has_data:
             continue
-        sparkline = _build_sparkline(reach, sparkline_obs)
-        visible.append((reach, row, sparkline))
+        visible.append((reach, row))
     return visible
 
 
-def _compute_gauge_groups(visible: list[tuple[Reach, dict, str]]) -> list[int]:
+def _compute_gauge_groups(visible: list[tuple[Reach, dict]]) -> list[int]:
     """Compute rowspan groups for consecutive reaches sharing the same gauge.
 
     Returns a list of the same length as *visible*. For the first row in each
@@ -482,17 +477,18 @@ def _compute_gauge_groups(visible: list[tuple[Reach, dict, str]]) -> list[int]:
     return group_span
 
 
-def _format_cell_value(col: dict[str, Any], row: dict, reach_id: int, sparkline: str) -> str:
+def _format_cell_value(col: dict[str, Any], row: dict, reach_id: int, gauge_id: int | None) -> str:
     """Format a single table cell value based on its column type."""
     val = row.get(col["field"], "")
 
     if col["type"] == "name":
         est = '<span class="est"> (est)</span>' if row.get("is_estimated") else ""
-        return f'<a href="/description.php?id={reach_id}">{html_mod.escape(str(val))}</a>{est}'
+        return f'<a href="/description.php?id={reach_id}">{html_mod.escape(str(val))}{est}</a>'
     elif col["type"] == "flow" and isinstance(val, int | float):
         lvl = html_mod.escape(str(row["flow_level"])) if row.get("flow_level") else ""
         lvl_cls = f' class="level-{lvl}"' if lvl else ""
-        return f"<span{lvl_cls}>{val:,.0f}</span>{sparkline}"
+        gid_attr = f' data-gid="{gauge_id}"' if gauge_id else ""
+        return f'<span{lvl_cls}>{val:,.0f}</span><span class="spark"{gid_attr}></span>'
     elif col["type"] == "gage" and isinstance(val, int | float):
         lvl = html_mod.escape(str(row["gage_level"])) if row.get("gage_level") else ""
         lvl_cls = f' class="level-{lvl}"' if lvl else ""
@@ -515,7 +511,6 @@ def _build_html_table(
     columns: list[dict[str, Any]],
     calculated_gauge_ids: set[int],
     all_latest: dict[tuple[int, DataType], LatestGaugeObservation],
-    sparkline_obs: dict[int, list[Observation]],
     *,
     is_all_page: bool = False,
 ) -> tuple[str, list[str]]:
@@ -542,14 +537,15 @@ def _build_html_table(
     lines.append("</tr></thead>")
     lines.append("<tbody>")
 
-    visible = _filter_visible_rows(reaches, calculated_gauge_ids, all_latest, sparkline_obs)
+    visible = _filter_visible_rows(reaches, calculated_gauge_ids, all_latest)
     group_span = _compute_gauge_groups(visible)
 
     # Render rows
     prev_letter = ""
     letters: list[str] = []
-    for idx, (reach, row, sparkline) in enumerate(visible):
+    for idx, (reach, row) in enumerate(visible):
         reach_id = reach.id
+        gauge_id = reach.gauge.id if reach.gauge else None
         span = group_span[idx]
         is_first = span > 0
 
@@ -577,7 +573,7 @@ def _build_html_table(
             if is_gauge_col and not is_first:
                 continue  # spanned by earlier row
 
-            val = _format_cell_value(col, row, reach_id, sparkline)
+            val = _format_cell_value(col, row, reach_id, gauge_id)
             label = col["name_text"]
             td_cls = _TD_CLASS.get(col["type"], "")
             if col["field"] in _SECONDARY_FIELDS:
@@ -691,14 +687,21 @@ def _build_page(
     now_iso = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
     now_display = now_utc.strftime("%Y-%m-%d %H:%M UTC")
 
+    desc = (
+        f"Real-time river levels, flow, and gage data for {current_state} from USGS, NOAA, USACE, and other agencies."
+        if current_state != "All States"
+        else "Real-time river levels, flow, and gage data from USGS, NOAA, USACE, and other government agencies."
+    )
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{title}</title>
+<meta name="description" content="{desc}">
 <meta name="theme-color" content="{BRAND_COLOR}">
-<link rel="icon" href="data:image/x-icon;base64,{_FAVICON_B64}">
+<link rel="icon" href="/static/favicon.ico">
 <style>
 {css}
 </style>
@@ -714,14 +717,14 @@ def _build_page(
 </header>
 <main id="main">
 {table_html}
-<div style="font-size:.75rem;color:#555;margin-top:1rem;line-height:1.6">
+<div style="font-size:.75rem;color:var(--c-text-muted);margin-top:1rem;line-height:1.6">
 <p><b>Status:</b>
 <span class="level-low">Low</span> &ndash;
 <span class="level-okay">Okay</span> &ndash;
 <span class="level-high">High</span>
 (thresholds set per reach based on flow or gage height)</p>
 </div>
-<p style="font-size:.7rem;color:#888;margin-top:.5rem">Updated <time datetime="{now_iso}">{now_display}</time></p>
+<p style="font-size:.7rem;color:var(--c-text-muted);margin-top:.5rem">Updated <time datetime="{now_iso}">{now_display}</time></p>
 </main>
 <footer>
 Data sourced from USGS, NOAA, USACE, USBR, and other government agencies. <a href="/privacy.php">Privacy Policy</a>
@@ -740,7 +743,10 @@ def _build_placeholder_page(css: str, states: list[str], state: str) -> str:
     """Build a links page for a non-primary state."""
     nav_html = _build_nav(states, active_state=state)
     links = _STATE_LINKS.get(state, [])
-    link_items = "\n".join(f'<li><a href="{url}">{label}</a></li>' for label, url in links)
+    link_items = "\n".join(
+        f'<li><a href="{url}" style="display:inline-flex;align-items:center;min-height:44px">{label}</a></li>'
+        for label, url in links
+    )
     links_html = f"<ul>\n{link_items}\n</ul>" if links else ""
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -748,8 +754,9 @@ def _build_placeholder_page(css: str, states: list[str], state: str) -> str:
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{state} River Levels</title>
+<meta name="description" content="Real-time river levels, flow, and gage data for {state} from USGS, NOAA, USACE, and other agencies.">
 <meta name="theme-color" content="{BRAND_COLOR}">
-<link rel="icon" href="data:image/x-icon;base64,{_FAVICON_B64}">
+<link rel="icon" href="/static/favicon.ico">
 <style>
 {css}
 </style>
@@ -780,6 +787,8 @@ Data sourced from USGS, NOAA, USACE, USBR, and other government agencies. <a hre
 def _build_map_page(css: str, states: list[str]) -> str:
     """Build map.html with an interactive Leaflet map of Oregon reaches."""
     nav_html = _build_nav(states)
+    leaflet_css_path = BASE_DIR / "static" / "leaflet.css"
+    leaflet_css = leaflet_css_path.read_text() if leaflet_css_path.exists() else ""
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -787,10 +796,11 @@ def _build_map_page(css: str, states: list[str]) -> str:
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>River Map</title>
+<meta name="description" content="Interactive map of river reaches with real-time flow and level data.">
 <meta name="theme-color" content="{BRAND_COLOR}">
-<link rel="icon" href="data:image/x-icon;base64,{_FAVICON_B64}">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous"/>
+<link rel="icon" href="/static/favicon.ico">
 <style>
+{leaflet_css}
 {css}
 #map {{height:calc(100vh - 5rem);width:100%;}}
 .legend {{background:var(--c-surface);padding:8px 12px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.3);line-height:1.6;font-size:.85rem;}}
@@ -811,8 +821,8 @@ main {{padding:0;max-width:none;}}
 <footer>
 Data sourced from USGS, NOAA, USACE, USBR, and other government agencies. <a href="/privacy.php">Privacy Policy</a>
 </footer>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
-<script src="/static/map.js"></script>
+<script src="/static/leaflet.js" defer></script>
+<script src="/static/map.js" defer></script>
 </body>
 </html>"""
 
@@ -841,13 +851,19 @@ def _deploy_source_files(output_dir: Path) -> None:
     Makes the output directory self-contained — no symlinks pointing
     back into the repo.  Covers static assets, PHP files, and config.
     """
-    # Static assets (icons, JS, manifest, service worker)
+    # Static assets (icons, JS, manifest)
     static_dir = output_dir / "static"
     static_dir.mkdir(parents=True, exist_ok=True)
     src_static = BASE_DIR / "static"
     for path in src_static.iterdir():
         if path.is_file():
-            shutil.copy2(path, static_dir / path.name)
+            if path.name == "sw.js":
+                # Service worker must live at root to control scope '/'
+                shutil.copy2(path, output_dir / path.name)
+            else:
+                shutil.copy2(path, static_dir / path.name)
+        elif path.is_dir():
+            shutil.copytree(path, static_dir / path.name, dirs_exist_ok=True)
 
     # PHP files → output root
     php_dir = BASE_DIR / "php"
@@ -1031,9 +1047,20 @@ def _build_and_write(
     text_content = _build_text(reaches, columns, state, calculated_gauge_ids, all_latest)
     _atomic_write(output_dir / f"levels{suffix}.text", text_content)
 
-    # HTML — complete self-contained page with inline sparklines
+    # HTML — sparklines loaded lazily via JS
     table_html, letters = _build_html_table(
-        reaches, columns, calculated_gauge_ids, all_latest, sparkline_obs, is_all_page=is_all_page
+        reaches, columns, calculated_gauge_ids, all_latest, is_all_page=is_all_page
     )
     page_html = _build_page(table_html, css, states, state, title, letters=letters)
     _atomic_write(output_dir / filename, page_html)
+
+    # Sparklines JSON — keyed by gauge_id, loaded by levels.js after paint
+    sparklines: dict[str, str] = {}
+    for reach in reaches:
+        if reach.gauge and reach.gauge.id not in sparklines:
+            svg = _build_sparkline(reach, sparkline_obs)
+            if svg:
+                sparklines[str(reach.gauge.id)] = svg
+    static_dir = output_dir / "static"
+    static_dir.mkdir(parents=True, exist_ok=True)
+    _atomic_write(static_dir / "sparklines.json", json.dumps(sparklines))

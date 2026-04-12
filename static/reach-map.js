@@ -14,7 +14,7 @@ var satellite=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/
 topo.addTo(map);
 L.control.layers({'Topo':topo,'Street':street,'Satellite':satellite}).addTo(map);
 var bounds=[];
-var colors={'Put-in':'green','Gauge':'blue','Take-out':'red'};
+var colors={'Put-in':'#1a7a1a','Gauge':'#1b5591','Take-out':'#b30000'};
 for(var k in pts){
   var c=pts[k].split(',');
   var ll=[parseFloat(c[0]),parseFloat(c[1])];

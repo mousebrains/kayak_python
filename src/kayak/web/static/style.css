@@ -2,11 +2,11 @@
 :root{
   --c-bg:#f5f7fa;
   --c-text:#333;
-  --c-text-muted:#666;
-  --c-text-faint:#777;
-  --c-primary:#2060A0;
-  --c-link:#2060A0;
-  --c-primary-hover:#184a80;
+  --c-text-muted:#595959;
+  --c-text-faint:#666;
+  --c-primary:#1b5591;
+  --c-link:#1b5591;
+  --c-primary-hover:#13406d;
   --c-primary-light:#e8f0fa;
   --c-surface:#fff;
   --c-border:#ddd;
@@ -14,33 +14,34 @@
   --c-border-input:#ccc;
   --c-stripe:#f0f4f8;
   --c-hover:#e0e8f0;
-  --c-low:#c00;
-  --c-okay:#078007;
-  --c-high:#e80;
+  --c-low:#b30000;
+  --c-okay:#006d00;
+  --c-high:#a86800;
   --c-success:#070
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--c-bg);color:var(--c-text)}
-a{color:var(--c-link);text-decoration:none}
+a{color:var(--c-link);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:2px}
 a:hover{text-decoration:underline}
 a:focus-visible{outline:2px solid var(--c-link);outline-offset:2px;border-radius:2px}
 
 /* Skip link (accessibility) */
 .skip-link{position:absolute;left:-999px;top:auto;width:1px;height:1px;overflow:hidden;z-index:200}
 .skip-link:focus{position:fixed;top:0;left:0;width:auto;height:auto;padding:.5rem 1rem;background:var(--c-primary);color:#fff;font-size:1rem;z-index:200}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
 
 /* Header */
 header{background:var(--c-primary);color:#fff;padding:.5rem 1rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;position:sticky;top:0;z-index:100}
 header h1{font-size:1.1rem;white-space:nowrap}
-header h1 a{color:#fff}
+header h1 a{color:#fff;text-decoration:none}
 header nav{display:flex;flex-wrap:wrap;gap:.3rem}
-header nav a{color:rgba(255,255,255,.85);font-size:.8rem;padding:2px 6px;border-radius:3px}
+header nav a{color:rgba(255,255,255,.85);font-size:.8rem;padding:6px 10px;border-radius:3px;min-height:44px;display:inline-flex;align-items:center;text-decoration:none}
 header nav a:hover{background:rgba(255,255,255,.15);text-decoration:none}
-header nav a.active{background:rgba(255,255,255,.25);color:#fff}
+header nav a.active{background:rgba(255,255,255,.9);color:var(--c-primary)}
 
 /* Letter navigation */
 .letter-nav{display:flex;flex-wrap:wrap;gap:2px;margin-left:auto}
-.letter-nav a{display:inline-block;min-width:1.4em;padding:1px 3px;text-align:center;font-size:.75rem;font-weight:600;color:rgba(255,255,255,.85);border-radius:3px;text-decoration:none}
+.letter-nav a{display:inline-flex;align-items:center;justify-content:center;min-width:2em;min-height:44px;padding:4px;text-align:center;font-size:.75rem;font-weight:600;color:rgba(255,255,255,.85);border-radius:3px;text-decoration:none}
 .letter-nav a:hover{background:rgba(255,255,255,.25);color:#fff;text-decoration:none}
 [id^="letter-"]{scroll-margin-top:4rem}
 
@@ -50,15 +51,17 @@ main{padding:.5rem}
 
 /* Footer */
 footer{text-align:center;padding:.5rem;color:var(--c-text-muted);font-size:.7rem}
+footer a{display:inline-flex;align-items:center;min-height:44px}
 
 /* Table — desktop default */
 table.levels{width:100%;border-collapse:collapse;font-size:.85rem}
 table.levels th{background:var(--c-primary);color:#fff;padding:4px 8px;text-align:left;white-space:nowrap}
 table.levels th a{color:#fff}
-table.levels td{padding:3px 8px;border-bottom:1px solid var(--c-border);white-space:nowrap}
+table.levels td{padding:10px 8px;border-bottom:1px solid var(--c-border);white-space:nowrap}
 table.levels tr:nth-child(even){background:var(--c-stripe)}
 table.levels tr:hover{background:var(--c-hover)}
-table.levels a{color:var(--c-link)}
+table.levels a{color:var(--c-link);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:2px}
+table.levels td.td-name a{display:block;padding:10px 8px;margin:-10px -8px}
 
 /* Sparkline cell */
 .spark{display:inline-block;vertical-align:middle;margin-left:4px}
@@ -106,8 +109,9 @@ tr.stale td{color:var(--c-text-faint);font-style:italic}
 
 /* Description page */
 .desc-table{border-collapse:collapse;width:100%}
-.desc-table td{padding:4px 8px;border-bottom:1px solid var(--c-border-light);vertical-align:top}
+.desc-table td{padding:8px;border-bottom:1px solid var(--c-border-light);vertical-align:top}
 .desc-table td:first-child{font-weight:700;white-space:nowrap;width:1%;color:var(--c-text-muted)}
+.desc-table a{display:inline-block;min-height:44px;line-height:44px}
 
 /* Edit form */
 .edit-form label{display:block;margin:.5rem 0 .2rem;font-weight:700;font-size:.85rem}
@@ -150,17 +154,18 @@ tr.stale td{color:var(--c-text-faint);font-style:italic}
 /* Picker — section table */
 .picker-sections{width:100%;border-collapse:collapse;font-size:.85rem}
 .picker-sections th{background:var(--c-primary);color:#fff;padding:4px 8px;text-align:left;white-space:nowrap}
-.picker-sections td{padding:3px 8px;border-bottom:1px solid var(--c-border);white-space:nowrap}
+.picker-sections td{padding:8px;border-bottom:1px solid var(--c-border);white-space:nowrap}
 .picker-sections tr:nth-child(even){background:var(--c-stripe)}
 .picker-sections tr:hover{background:var(--c-hover)}
-.picker-sections input[type=checkbox]{margin:0}
+.picker-sections input[type=checkbox]{width:20px;height:20px;margin:0}
+.picker-sections label{display:inline-flex;align-items:center;min-height:44px;min-width:44px;justify-content:center}
 
 /* Picker — sticky action bar */
 .picker-actions{position:sticky;bottom:0;background:var(--c-surface);border-top:2px solid var(--c-primary);padding:.5rem 1rem;display:flex;align-items:center;gap:1rem;font-size:.85rem;z-index:10}
 .picker-actions .count{font-weight:700}
 .picker-actions a,.picker-actions button{display:inline-block;padding:6px 16px;background:var(--c-primary);color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:.8rem;text-decoration:none}
 .picker-actions a:hover,.picker-actions button:hover{background:var(--c-primary-hover);text-decoration:none}
-.picker-actions a.disabled{opacity:.4;pointer-events:none}
+.picker-actions a.disabled{opacity:.6;pointer-events:none}
 .picker-actions .copied{color:var(--c-success);font-size:.75rem}
 
 /* Picker responsive */
@@ -176,8 +181,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   :root{
     --c-bg:#1a1d23;
     --c-text:#d4d4d8;
-    --c-text-muted:#a1a1aa;
-    --c-text-faint:#71717a;
+    --c-text-muted:#a8a8b3;
+    --c-text-faint:#9191a0;
     --c-link:#6ab0f3;
     --c-primary-hover:#2a6298;
     --c-primary-light:#1e293b;

@@ -150,7 +150,7 @@ if (!$pivoted) {
         echo "</tr>\n";
     }
     echo '</table>';
-    echo '<p style="font-size:.85rem;color:#666">' . count($pivoted) . ' rows</p>';
+    echo '<p style="font-size:.85rem;color:var(--c-text-muted)">' . count($pivoted) . ' rows</p>';
 }
 
 // Source legend
