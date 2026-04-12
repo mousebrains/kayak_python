@@ -402,8 +402,9 @@ class TestBuildHTMLTable:
         fake_row = {"display_name": "Clackamas", "flow": 900.0}
         with (
             mock.patch("kayak.cli.build._get_row_data", return_value=fake_row),
+            mock.patch("kayak.cli.build._build_sparkline", return_value=""),
         ):
-            result, _letters = _build_html_table(reaches, COLS_SIMPLE, set(), {})
+            result, _letters = _build_html_table(reaches, COLS_SIMPLE, set(), {}, {})
         assert "<table" in result
         assert "</table>" in result
 
@@ -412,8 +413,9 @@ class TestBuildHTMLTable:
         fake_row = {"display_name": "Sandy", "flow": 750.0}
         with (
             mock.patch("kayak.cli.build._get_row_data", return_value=fake_row),
+            mock.patch("kayak.cli.build._build_sparkline", return_value=""),
         ):
-            result, _ = _build_html_table(reaches, COLS_SIMPLE, set(), {})
+            result, _ = _build_html_table(reaches, COLS_SIMPLE, set(), {}, {})
         assert "750" in result
 
     def test_name_link(self, session):
@@ -421,8 +423,9 @@ class TestBuildHTMLTable:
         fake_row = {"display_name": "White Salmon", "flow": 1200.0}
         with (
             mock.patch("kayak.cli.build._get_row_data", return_value=fake_row),
+            mock.patch("kayak.cli.build._build_sparkline", return_value=""),
         ):
-            result, _ = _build_html_table(reaches, COLS_SIMPLE, set(), {})
+            result, _ = _build_html_table(reaches, COLS_SIMPLE, set(), {}, {})
         assert "description.php" in result
         assert "White Salmon" in result
 
@@ -434,8 +437,9 @@ class TestBuildHTMLTable:
         ]
         with (
             mock.patch("kayak.cli.build._get_row_data", side_effect=rows),
+            mock.patch("kayak.cli.build._build_sparkline", return_value=""),
         ):
-            result, _ = _build_html_table(reaches, COLS_SIMPLE, set(), {})
+            result, _ = _build_html_table(reaches, COLS_SIMPLE, set(), {}, {})
         assert "Fresh River" in result
         assert "Old River" not in result
 
@@ -444,8 +448,9 @@ class TestBuildHTMLTable:
         fake_row = {"display_name": "Empty River"}  # no flow/gage/temperature
         with (
             mock.patch("kayak.cli.build._get_row_data", return_value=fake_row),
+            mock.patch("kayak.cli.build._build_sparkline", return_value=""),
         ):
-            result, _ = _build_html_table(reaches, COLS_SIMPLE, set(), {})
+            result, _ = _build_html_table(reaches, COLS_SIMPLE, set(), {}, {})
         assert "Empty River" not in result
 
     def test_stale_class_applied(self, session):
@@ -453,8 +458,9 @@ class TestBuildHTMLTable:
         fake_row = {"display_name": "Stale River", "flow": 200.0, "stale": True}
         with (
             mock.patch("kayak.cli.build._get_row_data", return_value=fake_row),
+            mock.patch("kayak.cli.build._build_sparkline", return_value=""),
         ):
-            result, _ = _build_html_table(reaches, COLS_SIMPLE, set(), {})
+            result, _ = _build_html_table(reaches, COLS_SIMPLE, set(), {}, {})
         assert "stale" in result
 
     def test_letter_nav_generated(self, session):
@@ -470,8 +476,9 @@ class TestBuildHTMLTable:
         ]
         with (
             mock.patch("kayak.cli.build._get_row_data", side_effect=rows),
+            mock.patch("kayak.cli.build._build_sparkline", return_value=""),
         ):
-            _, letters = _build_html_table(reaches, COLS_SIMPLE, set(), {})
+            _, letters = _build_html_table(reaches, COLS_SIMPLE, set(), {}, {})
         assert "A" in letters
         assert "B" in letters
         assert "G" in letters
@@ -492,8 +499,9 @@ class TestBuildHTMLTable:
         ]
         with (
             mock.patch("kayak.cli.build._get_row_data", side_effect=rows),
+            mock.patch("kayak.cli.build._build_sparkline", return_value=""),
         ):
-            result, _ = _build_html_table(reaches, COLS, set(), {})
+            result, _ = _build_html_table(reaches, COLS, set(), {}, {})
         assert 'rowspan="2"' in result
 
     def test_status_column_rendering(self, session):
@@ -501,8 +509,9 @@ class TestBuildHTMLTable:
         fake_row = {"display_name": "Status River", "flow": 100.0, "status": "high"}
         with (
             mock.patch("kayak.cli.build._get_row_data", return_value=fake_row),
+            mock.patch("kayak.cli.build._build_sparkline", return_value=""),
         ):
-            result, _ = _build_html_table(reaches, COLS, set(), {})
+            result, _ = _build_html_table(reaches, COLS, set(), {}, {})
         assert "level-high" in result
 
     def test_status_value_html_escaped(self, session):
@@ -514,8 +523,9 @@ class TestBuildHTMLTable:
         }
         with (
             mock.patch("kayak.cli.build._get_row_data", return_value=fake_row),
+            mock.patch("kayak.cli.build._build_sparkline", return_value=""),
         ):
-            result, _ = _build_html_table(reaches, COLS, set(), {})
+            result, _ = _build_html_table(reaches, COLS, set(), {}, {})
         assert "<script>" not in result
         assert "&lt;script&gt;" in result
 
@@ -525,8 +535,9 @@ class TestBuildHTMLTable:
         fake_row = {"display_name": "Test", "flow": 100.0}
         with (
             mock.patch("kayak.cli.build._get_row_data", return_value=fake_row),
+            mock.patch("kayak.cli.build._build_sparkline", return_value=""),
         ):
-            result, _ = _build_html_table(reaches, [COLS_SIMPLE[0], evil_col], set(), {})
+            result, _ = _build_html_table(reaches, [COLS_SIMPLE[0], evil_col], set(), {}, {})
         # Quotes in label should be escaped so they can't break the attribute
         assert "&quot;" in result
         # Should NOT have an unescaped quote breaking out of data-label
@@ -537,8 +548,9 @@ class TestBuildHTMLTable:
         fake_row = {"display_name": "Est River", "flow": 100.0, "is_estimated": True}
         with (
             mock.patch("kayak.cli.build._get_row_data", return_value=fake_row),
+            mock.patch("kayak.cli.build._build_sparkline", return_value=""),
         ):
-            result, _ = _build_html_table(reaches, COLS_SIMPLE, set(), {})
+            result, _ = _build_html_table(reaches, COLS_SIMPLE, set(), {}, {})
         assert "(est)" in result
 
     def test_gage_value_rendering(self, session):
@@ -546,8 +558,9 @@ class TestBuildHTMLTable:
         fake_row = {"display_name": "Gage River", "gage": 4.25}
         with (
             mock.patch("kayak.cli.build._get_row_data", return_value=fake_row),
+            mock.patch("kayak.cli.build._build_sparkline", return_value=""),
         ):
-            result, _ = _build_html_table(reaches, COLS, set(), {})
+            result, _ = _build_html_table(reaches, COLS, set(), {}, {})
         assert "4.2" in result  # gage renders as .1f
 
     def test_time_column_rendering(self, session):
@@ -556,8 +569,9 @@ class TestBuildHTMLTable:
         fake_row = {"display_name": "Time River", "flow": 100.0, "time": dt}
         with (
             mock.patch("kayak.cli.build._get_row_data", return_value=fake_row),
+            mock.patch("kayak.cli.build._build_sparkline", return_value=""),
         ):
-            result, _ = _build_html_table(reaches, COLS, set(), {})
+            result, _ = _build_html_table(reaches, COLS, set(), {}, {})
         assert "<time" in result
         assert "04/10 14:30" in result
 

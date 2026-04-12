@@ -428,13 +428,14 @@ def _filter_visible_rows(
     reaches: list[Reach],
     calculated_gauge_ids: set[int],
     all_latest: dict[tuple[int, DataType], LatestGaugeObservation],
-) -> list[tuple[Reach, dict]]:
+    sparkline_obs: dict[int, list[Observation]],
+) -> list[tuple[Reach, dict, str]]:
     """Filter reaches to those with current data and build row dicts.
 
     Excludes expired reaches (data > 7 days old) and reaches with no
-    flow/gage/temperature data. Returns (reach, row_dict) tuples.
+    flow/gage/temperature data. Returns (reach, row_dict, sparkline_svg) tuples.
     """
-    visible: list[tuple[Reach, dict]] = []
+    visible: list[tuple[Reach, dict, str]] = []
     for reach in reaches:
         row = _get_row_data(reach, calculated_gauge_ids, all_latest)
         if row.get("expired"):
@@ -444,11 +445,12 @@ def _filter_visible_rows(
         )
         if not has_data:
             continue
-        visible.append((reach, row))
+        sparkline = _build_sparkline(reach, sparkline_obs)
+        visible.append((reach, row, sparkline))
     return visible
 
 
-def _compute_gauge_groups(visible: list[tuple[Reach, dict]]) -> list[int]:
+def _compute_gauge_groups(visible: list[tuple[Reach, dict, str]]) -> list[int]:
     """Compute rowspan groups for consecutive reaches sharing the same gauge.
 
     Returns a list of the same length as *visible*. For the first row in each
@@ -477,7 +479,7 @@ def _compute_gauge_groups(visible: list[tuple[Reach, dict]]) -> list[int]:
     return group_span
 
 
-def _format_cell_value(col: dict[str, Any], row: dict, reach_id: int, gauge_id: int | None) -> str:
+def _format_cell_value(col: dict[str, Any], row: dict, reach_id: int, sparkline: str) -> str:
     """Format a single table cell value based on its column type."""
     val = row.get(col["field"], "")
 
@@ -487,8 +489,7 @@ def _format_cell_value(col: dict[str, Any], row: dict, reach_id: int, gauge_id: 
     elif col["type"] == "flow" and isinstance(val, int | float):
         lvl = html_mod.escape(str(row["flow_level"])) if row.get("flow_level") else ""
         lvl_cls = f' class="level-{lvl}"' if lvl else ""
-        gid_attr = f' data-gid="{gauge_id}"' if gauge_id else ""
-        return f'<span{lvl_cls}>{val:,.0f}</span><span class="spark"{gid_attr}></span>'
+        return f"<span{lvl_cls}>{val:,.0f}</span>{sparkline}"
     elif col["type"] == "gage" and isinstance(val, int | float):
         lvl = html_mod.escape(str(row["gage_level"])) if row.get("gage_level") else ""
         lvl_cls = f' class="level-{lvl}"' if lvl else ""
@@ -511,6 +512,7 @@ def _build_html_table(
     columns: list[dict[str, Any]],
     calculated_gauge_ids: set[int],
     all_latest: dict[tuple[int, DataType], LatestGaugeObservation],
+    sparkline_obs: dict[int, list[Observation]],
     *,
     is_all_page: bool = False,
 ) -> tuple[str, list[str]]:
@@ -537,15 +539,14 @@ def _build_html_table(
     lines.append("</tr></thead>")
     lines.append("<tbody>")
 
-    visible = _filter_visible_rows(reaches, calculated_gauge_ids, all_latest)
+    visible = _filter_visible_rows(reaches, calculated_gauge_ids, all_latest, sparkline_obs)
     group_span = _compute_gauge_groups(visible)
 
     # Render rows
     prev_letter = ""
     letters: list[str] = []
-    for idx, (reach, row) in enumerate(visible):
+    for idx, (reach, row, sparkline) in enumerate(visible):
         reach_id = reach.id
-        gauge_id = reach.gauge.id if reach.gauge else None
         span = group_span[idx]
         is_first = span > 0
 
@@ -573,7 +574,7 @@ def _build_html_table(
             if is_gauge_col and not is_first:
                 continue  # spanned by earlier row
 
-            val = _format_cell_value(col, row, reach_id, gauge_id)
+            val = _format_cell_value(col, row, reach_id, sparkline)
             label = col["name_text"]
             td_cls = _TD_CLASS.get(col["type"], "")
             if col["field"] in _SECONDARY_FIELDS:
@@ -1033,20 +1034,9 @@ def _build_and_write(
     text_content = _build_text(reaches, columns, state, calculated_gauge_ids, all_latest)
     _atomic_write(output_dir / f"levels{suffix}.text", text_content)
 
-    # HTML — complete self-contained page (sparklines loaded lazily via JS)
+    # HTML — complete self-contained page with inline sparklines
     table_html, letters = _build_html_table(
-        reaches, columns, calculated_gauge_ids, all_latest, is_all_page=is_all_page
+        reaches, columns, calculated_gauge_ids, all_latest, sparkline_obs, is_all_page=is_all_page
     )
     page_html = _build_page(table_html, css, states, state, title, letters=letters)
     _atomic_write(output_dir / filename, page_html)
-
-    # Sparklines JSON — keyed by gauge_id, loaded by levels.js after paint
-    sparklines: dict[str, str] = {}
-    for reach in reaches:
-        if reach.gauge and reach.gauge.id not in sparklines:
-            svg = _build_sparkline(reach, sparkline_obs)
-            if svg:
-                sparklines[str(reach.gauge.id)] = svg
-    static_dir = output_dir / "static"
-    static_dir.mkdir(parents=True, exist_ok=True)
-    _atomic_write(static_dir / "sparklines.json", json.dumps(sparklines))
