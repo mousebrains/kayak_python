@@ -6,6 +6,7 @@ styling, state navigation links, and inline SVG sparklines.
 """
 
 import argparse
+import base64
 import csv
 import html as html_mod
 import io
@@ -191,6 +192,8 @@ _JS_PATH = _STATIC_DIR / "levels.js"
 
 _LEVELS_JS_VERSION = int(_JS_PATH.stat().st_mtime)
 _LEVELS_JS = f'<script src="/static/levels.js?v={_LEVELS_JS_VERSION}" defer></script>'
+
+_FAVICON_B64 = base64.b64encode((BASE_DIR / "static" / "favicon.ico").read_bytes()).decode()
 
 
 def _load_css() -> str:
@@ -694,10 +697,8 @@ def _build_page(
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{title}</title>
-<link rel="manifest" href="/static/manifest.json">
 <meta name="theme-color" content="{BRAND_COLOR}">
-<link rel="icon" href="/static/favicon.ico">
-<link rel="apple-touch-icon" href="/static/icon-180.png">
+<link rel="icon" href="data:image/x-icon;base64,{_FAVICON_B64}">
 <style>
 {css}
 </style>
@@ -747,10 +748,8 @@ def _build_placeholder_page(css: str, states: list[str], state: str) -> str:
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{state} River Levels</title>
-<link rel="manifest" href="/static/manifest.json">
 <meta name="theme-color" content="{BRAND_COLOR}">
-<link rel="icon" href="/static/favicon.ico">
-<link rel="apple-touch-icon" href="/static/icon-180.png">
+<link rel="icon" href="data:image/x-icon;base64,{_FAVICON_B64}">
 <style>
 {css}
 </style>
@@ -788,10 +787,8 @@ def _build_map_page(css: str, states: list[str]) -> str:
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>River Map</title>
-<link rel="manifest" href="/static/manifest.json">
 <meta name="theme-color" content="{BRAND_COLOR}">
-<link rel="icon" href="/static/favicon.ico">
-<link rel="apple-touch-icon" href="/static/icon-180.png">
+<link rel="icon" href="data:image/x-icon;base64,{_FAVICON_B64}">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous"/>
 <style>
 {css}

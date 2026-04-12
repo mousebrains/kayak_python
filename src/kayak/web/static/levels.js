@@ -26,11 +26,9 @@ document.querySelectorAll('time[datetime]').forEach(function(el){
   });
 })();
 
-// Service worker — unregister any stale root-scope SW, then register with default scope
+// Unregister any previously installed service workers
 if('serviceWorker' in navigator){
   navigator.serviceWorker.getRegistrations().then(function(regs){
-    regs.forEach(function(r){if(r.scope!==location.origin+'/static/')r.unregister();});
-  }).then(function(){
-    return navigator.serviceWorker.register('/static/sw.js');
-  }).catch(function(){});
+    regs.forEach(function(r){r.unregister();});
+  });
 }
