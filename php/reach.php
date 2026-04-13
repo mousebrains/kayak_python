@@ -10,6 +10,8 @@ require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
 
 $db = get_db();
+$has_map = false;
+$map_scripts = '';
 
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 $q  = filter_input(INPUT_GET, 'q', FILTER_DEFAULT);
@@ -19,10 +21,11 @@ $hidden = filter_input(INPUT_GET, 'hidden', FILTER_VALIDATE_INT);
 $hidden = ($hidden === 1) ? 1 : 0;
 
 // --- Search mode ---
-if ($q !== null && $q !== '') {
-    $q = trim($q);
-    $pat = "%$q%";
-    if ($st !== '') {
+$q_trimmed = ($q !== null && $q !== '') ? trim($q) : '';
+if ($q_trimmed !== '' || $st !== '') {
+    $q = $q_trimmed;
+    if ($q !== '' && $st !== '') {
+        $pat = "%$q%";
         $stmt = $db->prepare(
             'SELECT r.id, COALESCE(NULLIF(r.display_name, \'\'), r.name) AS name, r.river,
                     r.description, r.gauge_id, r.latitude_start, r.longitude_start,
@@ -37,7 +40,8 @@ if ($q !== null && $q !== '') {
              ORDER BY r.sort_name'
         );
         $stmt->execute([$pat, $pat, $pat, $st, $hidden]);
-    } else {
+    } elseif ($q !== '') {
+        $pat = "%$q%";
         $stmt = $db->prepare(
             'SELECT r.id, COALESCE(NULLIF(r.display_name, \'\'), r.name) AS name, r.river,
                     r.description, r.gauge_id, r.latitude_start, r.longitude_start,
@@ -49,6 +53,21 @@ if ($q !== null && $q !== '') {
              ORDER BY r.sort_name'
         );
         $stmt->execute([$pat, $pat, $pat, $hidden]);
+    } else {
+        // State filter only, no text search
+        $stmt = $db->prepare(
+            'SELECT r.id, COALESCE(NULLIF(r.display_name, \'\'), r.name) AS name, r.river,
+                    r.description, r.gauge_id, r.latitude_start, r.longitude_start,
+                    r.latitude_end, r.longitude_end, r.latitude, r.longitude,
+                    r.sort_name, r.aw_id, r.geom
+             FROM reach r
+             JOIN reach_state rs ON rs.reach_id = r.id
+             JOIN state s ON s.id = rs.state_id
+             WHERE s.abbreviation = ?
+               AND r.no_show = ?
+             ORDER BY r.sort_name'
+        );
+        $stmt->execute([$st, $hidden]);
     }
     $results = $stmt->fetchAll();
 
@@ -140,11 +159,15 @@ if ($q !== null && $q !== '') {
     }
 
     header('Cache-Control: no-cache');
-    include_header('Reach Search');
+    $preconnects = '<link rel="preconnect" href="https://a.tile.opentopomap.org">'
+        . '<link rel="preconnect" href="https://b.tile.opentopomap.org">'
+        . '<link rel="preconnect" href="https://c.tile.opentopomap.org">';
+    include_header('Reach Search', '', '', $preconnects);
     echo '<h2>Reach Search</h2>';
 
     if (!$results) {
-        echo '<p>No reaches matching &ldquo;' . htmlspecialchars($q) . '&rdquo;.</p>';
+        $label = $q !== '' ? '&ldquo;' . htmlspecialchars($q) . '&rdquo;' : htmlspecialchars($st);
+        echo '<p>No reaches matching ' . $label . '.</p>';
     } else {
         // Map with reach locations
         $map_reaches = [];
@@ -192,15 +215,17 @@ if ($q !== null && $q !== '') {
                     '#42d4f4','#f032e6','#bfef45','#469990','#dcbeff',
                     '#9A6324','#800000','#aaffc3','#808000','#000075'];
         if ($map_reaches) {
-            echo '<link rel="stylesheet" href="/static/leaflet.css">';
-            echo '<script src="/static/leaflet.js"></script>';
+            $leaflet_css = file_get_contents(__DIR__ . '/static/leaflet.css');
+            echo '<style>' . $leaflet_css . '</style>';
             $map_json = htmlspecialchars(json_encode($map_reaches), ENT_QUOTES, 'UTF-8');
             $colors_json = htmlspecialchars(json_encode($colors), ENT_QUOTES, 'UTF-8');
             echo '<div id="search-map" style="height:350px;margin-bottom:1rem;border:1px solid #ccc" data-reaches="' . $map_json . '" data-colors="' . $colors_json . '"></div>';
-            echo '<script src="/static/search-map.js"></script>';
+            $has_map = true;
+            $map_scripts = '<script src="/static/leaflet.js" defer></script><script src="/static/search-map.js" defer></script>';
         }
 
-        echo '<p>' . count($results) . ' reaches matching &ldquo;' . htmlspecialchars($q) . '&rdquo;:</p>';
+        $label = $q !== '' ? '&ldquo;' . htmlspecialchars($q) . '&rdquo;' : htmlspecialchars($st);
+        echo '<p>' . count($results) . ' reaches matching ' . $label . ':</p>';
         echo '<table class="desc-table">';
         echo '<tr><th>ID</th><th>Name</th><th>Description</th><th>Class</th><th>Sort Name</th><th>Guides</th><th>Flow / Gage</th></tr>';
         foreach ($results as $idx => $r) {
@@ -232,6 +257,7 @@ if ($q !== null && $q !== '') {
     }
 
     echo '<p style="margin-top:1rem"><a href="/reach.php">Browse all reaches</a></p>';
+    if ($has_map) echo $map_scripts;
     include_footer();
     exit;
 }
@@ -312,7 +338,10 @@ $guidebooks = $gb_stmt->fetchAll();
 
 // --- Render ---
 header('Cache-Control: no-cache');
-include_header($name . ' - Reach');
+$preconnects = '<link rel="preconnect" href="https://a.tile.opentopomap.org">'
+    . '<link rel="preconnect" href="https://b.tile.opentopomap.org">'
+    . '<link rel="preconnect" href="https://c.tile.opentopomap.org">';
+include_header($name . ' - Reach', '', '', $preconnects);
 
 // Navigation bar
 echo '<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">';
@@ -331,7 +360,8 @@ if ($next) {
 $all_states = $db->query('SELECT abbreviation FROM state ORDER BY abbreviation')->fetchAll(PDO::FETCH_COLUMN);
 echo '<form method="get" action="/reach.php" style="display:flex;gap:.25rem;margin-left:auto">';
 echo '<input type="text" name="q" placeholder="Search reaches…" style="width:14rem" value="' . htmlspecialchars($q ?? '') . '">';
-echo '<select name="st"><option value="">All states</option>';
+echo '<label for="st" class="sr-only">State</label>';
+echo '<select name="st" id="st"><option value="">All states</option>';
 foreach ($all_states as $s) {
     $sel = ($st === $s) ? ' selected' : '';
     $esc = htmlspecialchars($s, ENT_QUOTES);
@@ -392,14 +422,6 @@ if ($reach['latitude_end'] !== null && $reach['longitude_end'] !== null) {
     $lon = number_format((float)$reach['longitude_end'], 6, '.', '');
     $url = "https://www.google.com/maps?q=$lat,$lon";
     $fields['Take-out'] = "<a href=\"" . htmlspecialchars($url) . "\" target=\"_blank\" rel=\"noopener\">$lat, $lon</a>";
-}
-
-// AW link
-if ($reach['aw_id']) {
-    $aw_url = "https://www.americanwhitewater.org/content/River/view/river-detail/"
-        . intval($reach['aw_id']) . "/";
-    $fields['AW ID'] = '<a href="' . htmlspecialchars($aw_url) . '" target="_blank" rel="noopener">'
-        . intval($reach['aw_id']) . '</a>';
 }
 
 $fields += [
@@ -532,8 +554,8 @@ if ($map_points || $reach['geom']) {
         }
     }
 
-    echo '<link rel="stylesheet" href="/static/leaflet.css">';
-    echo '<script src="/static/leaflet.js"></script>';
+    $leaflet_css = file_get_contents(__DIR__ . '/static/leaflet.css');
+    echo '<style>' . $leaflet_css . '</style>';
     $pts_json = htmlspecialchars(json_encode($map_points), ENT_QUOTES, 'UTF-8');
     echo '<div id="reach-map" style="height:400px;margin-top:1rem;border:1px solid #ccc" data-points="' . $pts_json . '"';
     if ($track) {
@@ -541,7 +563,8 @@ if ($map_points || $reach['geom']) {
         echo ' data-track="' . $track_json . '"';
     }
     echo '></div>';
-    echo '<script src="/static/reach-map.js"></script>';
+    $has_map = true;
+    $map_scripts = '<script src="/static/leaflet.js" defer></script><script src="/static/reach-map.js" defer></script>';
 }
 
 // Footer links
@@ -550,4 +573,5 @@ echo '<a href="/description.php?id=' . $id . '">Description</a>';
 echo ' | <a href="/data.php?id=' . $id . '">Data inspector</a>';
 echo ' | <a href="/index.html">Back to main page</a></p>';
 
+if ($has_map) echo $map_scripts;
 include_footer();

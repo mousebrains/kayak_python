@@ -134,15 +134,44 @@ def fetch_tile_segments(aw_id, min_lon, min_lat, max_lon, max_lat, z=ZOOM):
     return segments
 
 
-def chain_segments(segments, putin=None):
+def chain_segments(segments, putin=None, takeout=None):
     """Chain tile segments into a single ordered LineString.
 
     Orients and orders segments so the line flows from put-in to take-out.
-    If putin is provided, the chain starts from the segment nearest to it.
-    Otherwise, segments are ordered east-to-west (most common flow direction).
+    If putin and takeout are provided, segments are sorted by their projection
+    onto the put-in → take-out axis, which handles meanders correctly.
+    Otherwise falls back to greedy nearest-endpoint chaining.
     """
     if not segments:
         return []
+
+    if putin and takeout:
+        # Project each segment's midpoint onto the putin→takeout axis
+        dx = takeout[0] - putin[0]
+        dy = takeout[1] - putin[1]
+        axis_len_sq = dx * dx + dy * dy
+        if axis_len_sq == 0:
+            axis_len_sq = 1
+
+        def project(pt):
+            return ((pt[0] - putin[0]) * dx + (pt[1] - putin[1]) * dy) / axis_len_sq
+
+        # Orient each segment so it flows in the putin→takeout direction
+        for i, seg in enumerate(segments):
+            if project(seg[0]) > project(seg[-1]):
+                segments[i] = list(reversed(seg))
+
+        # Sort by projection of segment start point
+        segments.sort(key=lambda s: project(s[0]))
+
+        # Chain in sorted order, connecting endpoints
+        chain = segments[0][:]
+        for seg in segments[1:]:
+            if dist(chain[-1], seg[0]) < 0.0001:
+                chain.extend(seg[1:])
+            else:
+                chain.extend(seg)
+        return chain
 
     if putin:
         # Orient each segment: the end nearest putin should be the start
@@ -238,12 +267,40 @@ def main():
         print("No geometry found.", file=sys.stderr)
         sys.exit(1)
 
-    chain = chain_segments(segments, putin=putin)
+    chain = chain_segments(segments, putin=putin, takeout=takeout)
     geom_str = ",".join(f"{lon} {lat}" for lon, lat in chain)
 
     print(f"  Chained: {len(chain)} points")
     print(f"  Start: {chain[0]}")
     print(f"  End: {chain[-1]}")
+
+    # Continuity check: flag gaps between consecutive points
+    MAX_GAP = 0.01  # ~1km in degrees
+    gaps = []
+    for i in range(1, len(chain)):
+        d = math.sqrt(dist(chain[i - 1], chain[i]))
+        if d > MAX_GAP:
+            gaps.append((i, d))
+    if gaps:
+        print(f"  WARNING: {len(gaps)} gap(s) in trace (>{MAX_GAP:.3f}°):")
+        for idx, d in gaps[:10]:
+            print(f"    point {idx}: {d:.4f}° between {chain[idx - 1]} and {chain[idx]}")
+        if len(gaps) > 10:
+            print(f"    ... and {len(gaps) - 10} more")
+    else:
+        print("  Continuity: OK (no gaps)")
+
+    # Check start/end proximity to put-in/take-out
+    if putin:
+        d_pi = math.sqrt(dist(putin, chain[0]))
+        print(
+            f"  Start→put-in: {d_pi:.4f}°{'  OK' if d_pi < 0.01 else '  WARNING: far from put-in'}"
+        )
+    if takeout:
+        d_to = math.sqrt(dist(takeout, chain[-1]))
+        print(
+            f"  End→take-out: {d_to:.4f}°{'  OK' if d_to < 0.01 else '  WARNING: far from take-out'}"
+        )
 
     if args.save:
         if not args.reach_id:
