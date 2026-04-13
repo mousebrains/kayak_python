@@ -31,6 +31,7 @@ Examples:
 """
 
 import argparse
+import contextlib
 import math
 import os
 import sys
@@ -51,16 +52,16 @@ def haversine(lat1, lon1, lat2, lon2):
     dlon = math.radians(lon2 - lon1)
     a = (
         math.sin(dlat / 2) ** 2
-        + math.cos(math.radians(lat1))
-        * math.cos(math.radians(lat2))
-        * math.sin(dlon / 2) ** 2
+        + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
     )
     return 2 * R * math.asin(math.sqrt(a))
 
 
-def find_huc4(lat, lon):
-    """Find which HUC4 covers the given coordinates.
+def find_huc4(lat, lon, buffer_deg=0.15):
+    """Find which HUC4 has flowlines near the given coordinates.
 
+    Uses a spatial query rather than just bounding-box extent, so overlapping
+    HUC4s are resolved by actual flowline proximity.
     Checks pre-extracted GPKGs first (fast), then raw GDB ZIPs.
     """
     # Try pre-extracted GPKGs first
@@ -72,8 +73,13 @@ def find_huc4(lat, lon):
             ds = ogr.Open(path)
             layer = ds.GetLayerByName("flowline")
             if layer:
-                ext = layer.GetExtent()
-                if ext[0] <= lon <= ext[1] and ext[2] <= lat <= ext[3]:
+                layer.SetSpatialFilterRect(
+                    lon - buffer_deg,
+                    lat - buffer_deg,
+                    lon + buffer_deg,
+                    lat + buffer_deg,
+                )
+                if layer.GetFeatureCount() > 0:
                     huc4 = f.replace("trace_", "").replace(".gpkg", "")
                     ds = None
                     return huc4
@@ -88,8 +94,13 @@ def find_huc4(lat, lon):
             ds = ogr.Open(path)
             layer = ds.GetLayerByName("NHDFlowline")
             if layer:
-                ext = layer.GetExtent()
-                if ext[0] <= lon <= ext[1] and ext[2] <= lat <= ext[3]:
+                layer.SetSpatialFilterRect(
+                    lon - buffer_deg,
+                    lat - buffer_deg,
+                    lon + buffer_deg,
+                    lat + buffer_deg,
+                )
+                if layer.GetFeatureCount() > 0:
                     huc4 = f.split("_")[2]
                     ds = None
                     return huc4
@@ -146,8 +157,9 @@ def find_nearest_flowline(lat, lon, src, buffer_deg=0.15):
     path, fl_layer_name, _, _ = src
     ds = ogr.Open(path)
     layer = ds.GetLayerByName(fl_layer_name)
-    layer.SetSpatialFilterRect(lon - buffer_deg, lat - buffer_deg,
-                               lon + buffer_deg, lat + buffer_deg)
+    layer.SetSpatialFilterRect(
+        lon - buffer_deg, lat - buffer_deg, lon + buffer_deg, lat + buffer_deg
+    )
 
     pt = ogr.Geometry(ogr.wkbPoint)
     pt.AddPoint(lon, lat)
@@ -225,9 +237,11 @@ def find_nearest_on_path(lat, lon, path, src):
 def extract_coords(geom):
     """Extract (lat, lon) pairs from a geometry, linearizing curves."""
     coords = []
-    linear = geom.GetLinearGeometry() if geom.GetGeometryName() not in (
-        "LINESTRING", "MULTILINESTRING"
-    ) else geom
+    linear = (
+        geom.GetLinearGeometry()
+        if geom.GetGeometryName() not in ("LINESTRING", "MULTILINESTRING")
+        else geom
+    )
     if linear.GetGeometryName() == "MULTILINESTRING":
         for i in range(linear.GetGeometryCount()):
             line = linear.GetGeometryRef(i)
@@ -253,23 +267,21 @@ def build_trace(path, geoms, putin, takeout):
             continue
         seg = extract_coords(geoms[nid])
         if all_coords and seg:
-            d_fwd = math.hypot(all_coords[-1][0] - seg[0][0],
-                               all_coords[-1][1] - seg[0][1])
-            d_rev = math.hypot(all_coords[-1][0] - seg[-1][0],
-                               all_coords[-1][1] - seg[-1][1])
+            d_fwd = math.hypot(all_coords[-1][0] - seg[0][0], all_coords[-1][1] - seg[0][1])
+            d_rev = math.hypot(all_coords[-1][0] - seg[-1][0], all_coords[-1][1] - seg[-1][1])
             if d_rev < d_fwd:
                 seg = list(reversed(seg))
-            if (abs(seg[0][0] - all_coords[-1][0]) < 1e-8 and
-                    abs(seg[0][1] - all_coords[-1][1]) < 1e-8):
+            if (
+                abs(seg[0][0] - all_coords[-1][0]) < 1e-8
+                and abs(seg[0][1] - all_coords[-1][1]) < 1e-8
+            ):
                 seg = seg[1:]
         all_coords.extend(seg)
 
     # Orient from put-in to take-out
     if all_coords:
-        d_start = haversine(all_coords[0][0], all_coords[0][1],
-                            putin[0], putin[1])
-        d_end = haversine(all_coords[-1][0], all_coords[-1][1],
-                          putin[0], putin[1])
+        d_start = haversine(all_coords[0][0], all_coords[0][1], putin[0], putin[1])
+        d_end = haversine(all_coords[-1][0], all_coords[-1][1], putin[0], putin[1])
         if d_end < d_start:
             all_coords = list(reversed(all_coords))
 
@@ -295,6 +307,7 @@ def make_map(coords, putin, takeout, name, miles, filename):
     try:
         import contextily as cx
         import matplotlib
+
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except ImportError:
@@ -316,11 +329,8 @@ def make_map(coords, putin, takeout, name, miles, filename):
     try:
         cx.add_basemap(ax, crs="EPSG:4326", source=cx.providers.OpenTopoMap, zoom=11)
     except Exception:
-        try:
-            cx.add_basemap(ax, crs="EPSG:4326",
-                           source=cx.providers.Esri.WorldTopoMap, zoom=11)
-        except Exception:
-            pass
+        with contextlib.suppress(Exception):
+            cx.add_basemap(ax, crs="EPSG:4326", source=cx.providers.Esri.WorldTopoMap, zoom=11)
 
     ax.legend(loc="upper right", fontsize=12)
     title = f"{name} — {miles:.1f} miles" if name else f"Reach trace — {miles:.1f} miles"
@@ -334,21 +344,21 @@ def make_map(coords, putin, takeout, name, miles, filename):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Trace a stream reach using NHD HR network data."
+    parser = argparse.ArgumentParser(description="Trace a stream reach using NHD HR network data.")
+    parser.add_argument("--putin", required=True, help="Put-in coordinates as LAT,LON")
+    parser.add_argument("--takeout", required=True, help="Take-out coordinates as LAT,LON")
+    parser.add_argument(
+        "--name", default=None, help="Reach name (for map title, default: auto-detect)"
     )
-    parser.add_argument("--putin", required=True,
-                        help="Put-in coordinates as LAT,LON")
-    parser.add_argument("--takeout", required=True,
-                        help="Take-out coordinates as LAT,LON")
-    parser.add_argument("--name", default=None,
-                        help="Reach name (for map title, default: auto-detect)")
-    parser.add_argument("--huc4", default=None,
-                        help="HUC4 code (default: auto-detect from coordinates)")
-    parser.add_argument("--output", default=None,
-                        help="Output base name (default: derived from --name or 'trace')")
-    parser.add_argument("--csv-only", action="store_true",
-                        help="Output CSV only, skip map generation")
+    parser.add_argument(
+        "--huc4", default=None, help="HUC4 code (default: auto-detect from coordinates)"
+    )
+    parser.add_argument(
+        "--output", default=None, help="Output base name (default: derived from --name or 'trace')"
+    )
+    parser.add_argument(
+        "--csv-only", action="store_true", help="Output CSV only, skip map generation"
+    )
     args = parser.parse_args()
 
     putin = tuple(float(x) for x in args.putin.split(","))
@@ -387,10 +397,8 @@ def main():
 
     # Step 3: Find nearest flowlines to put-in and take-out
     print("Finding nearest flowlines...")
-    start_id, start_name, start_dist = find_nearest_flowline(
-        putin[0], putin[1], src)
-    end_id, end_name, end_dist = find_nearest_flowline(
-        takeout[0], takeout[1], src)
+    start_id, start_name, start_dist = find_nearest_flowline(putin[0], putin[1], src)
+    end_id, end_name, end_dist = find_nearest_flowline(takeout[0], takeout[1], src)
 
     if start_id is None or end_id is None:
         print("ERROR: Could not find flowlines near the coordinates.")
@@ -423,8 +431,7 @@ def main():
             current = dn
 
         if extended_path:
-            end_idx, geoms = find_nearest_on_path(
-                takeout[0], takeout[1], extended_path, src)
+            end_idx, geoms = find_nearest_on_path(takeout[0], takeout[1], extended_path, src)
             start_idx = 0
             # Also trim start to nearest to put-in
             pt = ogr.Geometry(ogr.wkbPoint)
@@ -437,7 +444,7 @@ def main():
                         best_start = d
                         start_idx = i
 
-            path = extended_path[start_idx:end_idx + 1]
+            path = extended_path[start_idx : end_idx + 1]
             print(f"  Trimmed to {len(path)} segments (indices {start_idx}..{end_idx})")
         else:
             print("ERROR: Could not trace downstream from put-in.")
