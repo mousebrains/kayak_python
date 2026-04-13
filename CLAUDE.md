@@ -71,6 +71,16 @@ Ruff config: Python 3.13 target, 100-char line length, rules `E W F I UP B SIM R
 php -S localhost:8000 -t public_html  # Serve PHP pages + static build output
 ```
 
+### Stream Tracing
+
+```bash
+bash scripts/extract_trace_data.sh       # One-time: pre-extract HUC4 GDBs → fast GPKGs (~20 min)
+python3 scripts/trace_reach.py \         # Trace a reach between put-in and take-out
+    --putin LAT,LON --takeout LAT,LON --name "River Name"
+```
+
+Traces stream paths using NHDPlus HR HydroSeq network data. Requires `Trace-cache/` with raw NHD HR GDB ZIPs and/or pre-extracted GPKGs (gitignored, ~5 GB). See `docs/tracing.md` for full documentation.
+
 ## Architecture
 
 ### Data Pipeline (`levels pipeline`)
