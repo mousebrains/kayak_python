@@ -13,6 +13,18 @@ $db = get_db();
 $has_map = false;
 $map_scripts = '';
 
+// Compact layout — desktop utility page; overrides global touch-target sizes.
+$compact_css = '<style>'
+    . '.desc-table td{padding:2px 6px}'
+    . '.desc-table a{display:inline;min-height:0;line-height:normal}'
+    . '.desc-table{font-size:.9rem;margin-bottom:.25rem}'
+    . 'h2{margin:.25rem 0 .35rem;font-size:1.25rem}'
+    . 'h3{margin:.6rem 0 .2rem;font-size:1rem}'
+    . 'main{padding:.25rem .5rem}'
+    . '#reach-map{height:320px !important;margin-top:.5rem !important}'
+    . '#search-map{height:280px !important;margin-bottom:.5rem !important}'
+    . '</style>';
+
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 $q  = filter_input(INPUT_GET, 'q', FILTER_DEFAULT);
 $st = filter_input(INPUT_GET, 'st', FILTER_DEFAULT);
@@ -163,6 +175,7 @@ if ($q_trimmed !== '' || $st !== '') {
         . '<link rel="preconnect" href="https://b.tile.opentopomap.org">'
         . '<link rel="preconnect" href="https://c.tile.opentopomap.org">';
     include_header('Reach Search', '', '', $preconnects);
+    echo $compact_css;
     echo '<h2>Reach Search</h2>';
 
     if (!$results) {
@@ -342,6 +355,7 @@ $preconnects = '<link rel="preconnect" href="https://a.tile.opentopomap.org">'
     . '<link rel="preconnect" href="https://b.tile.opentopomap.org">'
     . '<link rel="preconnect" href="https://c.tile.opentopomap.org">';
 include_header($name . ' - Reach', '', '', $preconnects);
+echo $compact_css;
 
 // Navigation bar
 echo '<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">';
