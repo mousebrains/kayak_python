@@ -34,7 +34,6 @@ import argparse
 import contextlib
 import math
 import os
-import sys
 
 from osgeo import ogr
 
@@ -285,6 +284,21 @@ def build_trace(path, geoms, putin, takeout):
         if d_end < d_start:
             all_coords = list(reversed(all_coords))
 
+    # Trim to put-in and take-out — find closest points and clip
+    if len(all_coords) > 2:
+        pi_idx = min(
+            range(len(all_coords)),
+            key=lambda i: (all_coords[i][0] - putin[0]) ** 2 + (all_coords[i][1] - putin[1]) ** 2,
+        )
+        to_idx = min(
+            range(len(all_coords)),
+            key=lambda i: (all_coords[i][0] - takeout[0]) ** 2
+            + (all_coords[i][1] - takeout[1]) ** 2,
+        )
+        if pi_idx > to_idx:
+            pi_idx, to_idx = to_idx, pi_idx
+        all_coords = all_coords[pi_idx : to_idx + 1]
+
     return all_coords
 
 
@@ -343,6 +357,101 @@ def make_map(coords, putin, takeout, name, miles, filename):
     plt.close()
 
 
+def trace_reach(putin, takeout, huc4=None, verbose=False):
+    """Trace a stream reach and return a list of (lat, lon) vertices.
+
+    Args:
+        putin: (lat, lon) tuple for put-in point
+        takeout: (lat, lon) tuple for take-out point
+        huc4: HUC4 code string, or None to auto-detect
+        verbose: print progress to stdout
+
+    Returns:
+        list of (lat, lon) tuples from put-in to take-out
+
+    Raises:
+        ValueError: if HUC4 not found or trace fails
+    """
+    log = print if verbose else lambda *a, **k: None
+
+    if huc4 is None:
+        log("Finding HUC4...")
+        huc4 = find_huc4(putin[0], putin[1])
+        if not huc4:
+            huc4 = find_huc4(takeout[0], takeout[1])
+        if not huc4:
+            raise ValueError(f"Could not find HUC4 for putin={putin}, takeout={takeout}")
+    log(f"Using HUC4: {huc4}")
+
+    src = data_source(huc4)
+    log(f"  Data: {src[0]}")
+
+    log("Loading VAA network index...")
+    by_hydroseq, by_nhdpid = load_vaa(src)
+    log(f"  {len(by_nhdpid):,} flowlines indexed")
+
+    log("Finding nearest flowlines...")
+    start_id, start_name, start_dist = find_nearest_flowline(putin[0], putin[1], src)
+    end_id, end_name, end_dist = find_nearest_flowline(takeout[0], takeout[1], src)
+
+    if start_id is None or end_id is None:
+        raise ValueError("Could not find flowlines near the coordinates.")
+
+    log(f"  Put-in:   {start_name or '(unnamed)'} (NHDPlusID {start_id}, {start_dist:.5f}°)")
+    log(f"  Take-out: {end_name or '(unnamed)'} (NHDPlusID {end_id}, {end_dist:.5f}°)")
+
+    log("Tracing downstream...")
+    path = trace_hydroseq(start_id, end_id, by_hydroseq, by_nhdpid)
+
+    if path is None:
+        log("  Exact end not on main stem, tracing extended and trimming...")
+        current = by_nhdpid[start_id][0]
+        extended_path = []
+        for _ in range(2000):
+            if current not in by_hydroseq:
+                break
+            nid, dn = by_hydroseq[current]
+            extended_path.append(nid)
+            if dn == 0:
+                break
+            current = dn
+
+        if not extended_path:
+            raise ValueError("Could not trace downstream from put-in.")
+
+        end_idx, geoms = find_nearest_on_path(takeout[0], takeout[1], extended_path, src)
+        start_idx = 0
+        pt = ogr.Geometry(ogr.wkbPoint)
+        pt.AddPoint(putin[1], putin[0])
+        best_start = float("inf")
+        for i, nid in enumerate(extended_path):
+            if nid in geoms:
+                d = pt.Distance(geoms[nid])
+                if d < best_start:
+                    best_start = d
+                    start_idx = i
+
+        path = extended_path[start_idx : end_idx + 1]
+        log(f"  Trimmed to {len(path)} segments (indices {start_idx}..{end_idx})")
+    else:
+        _, geoms = find_nearest_on_path(takeout[0], takeout[1], path, src)
+
+    # Load any missing geometries and collect stream names
+    data_path, fl_layer_name, _, _ = src
+    ds = ogr.Open(data_path)
+    layer = ds.GetLayerByName(fl_layer_name)
+    path_set = set(path)
+    for feat in layer:
+        nid = feat.GetField("NHDPlusID")
+        if nid in path_set and nid not in geoms:
+            geoms[nid] = feat.GetGeometryRef().Clone()
+    ds = None
+
+    coords = build_trace(path, geoms, putin, takeout)
+    log(f"Trace: {total_distance(coords):.1f} miles, {len(coords):,} points, {len(path)} segments")
+    return coords
+
+
 def main():
     parser = argparse.ArgumentParser(description="Trace a stream reach using NHD HR network data.")
     parser.add_argument("--putin", required=True, help="Put-in coordinates as LAT,LON")
@@ -364,7 +473,6 @@ def main():
     putin = tuple(float(x) for x in args.putin.split(","))
     takeout = tuple(float(x) for x in args.takeout.split(","))
 
-    # Determine output base name
     if args.output:
         base = args.output
     elif args.name:
@@ -372,116 +480,10 @@ def main():
     else:
         base = "trace"
 
-    # Step 1: Find HUC4
-    if args.huc4:
-        huc4 = args.huc4
-    else:
-        print("Finding HUC4...")
-        huc4 = find_huc4(putin[0], putin[1])
-        if not huc4:
-            huc4 = find_huc4(takeout[0], takeout[1])
-        if not huc4:
-            print("ERROR: Could not find a HUC4 GDB covering these coordinates.")
-            print(f"  Put-in:   {putin[0]}, {putin[1]}")
-            print(f"  Take-out: {takeout[0]}, {takeout[1]}")
-            sys.exit(1)
-    print(f"Using HUC4: {huc4}")
-
-    src = data_source(huc4)
-    print(f"  Data: {src[0]}")
-
-    # Step 2: Load VAA network
-    print("Loading VAA network index...")
-    by_hydroseq, by_nhdpid = load_vaa(src)
-    print(f"  {len(by_nhdpid):,} flowlines indexed")
-
-    # Step 3: Find nearest flowlines to put-in and take-out
-    print("Finding nearest flowlines...")
-    start_id, start_name, start_dist = find_nearest_flowline(putin[0], putin[1], src)
-    end_id, end_name, end_dist = find_nearest_flowline(takeout[0], takeout[1], src)
-
-    if start_id is None or end_id is None:
-        print("ERROR: Could not find flowlines near the coordinates.")
-        sys.exit(1)
-
-    print(f"  Put-in:   {start_name or '(unnamed)'} (NHDPlusID {start_id}, {start_dist:.5f}°)")
-    print(f"  Take-out: {end_name or '(unnamed)'} (NHDPlusID {end_id}, {end_dist:.5f}°)")
-
-    # Auto-detect name
-    name = args.name or start_name
-
-    # Step 4: Trace downstream using HydroSeq chain
-    print("Tracing downstream...")
-    path = trace_hydroseq(start_id, end_id, by_hydroseq, by_nhdpid)
-
-    if path is None:
-        # The exact end_id might not be on the main stem — trace past it
-        # and find the nearest segment to the take-out
-        print("  Exact end not on main stem, tracing extended and trimming...")
-        # Trace 500 steps past start and find nearest to take-out
-        current = by_nhdpid[start_id][0]
-        extended_path = []
-        for _ in range(2000):
-            if current not in by_hydroseq:
-                break
-            nid, dn = by_hydroseq[current]
-            extended_path.append(nid)
-            if dn == 0:
-                break
-            current = dn
-
-        if extended_path:
-            end_idx, geoms = find_nearest_on_path(takeout[0], takeout[1], extended_path, src)
-            start_idx = 0
-            # Also trim start to nearest to put-in
-            pt = ogr.Geometry(ogr.wkbPoint)
-            pt.AddPoint(putin[1], putin[0])
-            best_start = float("inf")
-            for i, nid in enumerate(extended_path):
-                if nid in geoms:
-                    d = pt.Distance(geoms[nid])
-                    if d < best_start:
-                        best_start = d
-                        start_idx = i
-
-            path = extended_path[start_idx : end_idx + 1]
-            print(f"  Trimmed to {len(path)} segments (indices {start_idx}..{end_idx})")
-        else:
-            print("ERROR: Could not trace downstream from put-in.")
-            sys.exit(1)
-    else:
-        # Load geometries for the path
-        _, geoms = find_nearest_on_path(takeout[0], takeout[1], path, src)
-
-    # Show stream names along path
-    data_path, fl_layer_name, _, _ = src
-    ds = ogr.Open(data_path)
-    layer = ds.GetLayerByName(fl_layer_name)
-    path_names = {}
-    path_set = set(path)
-    for feat in layer:
-        nid = feat.GetField("NHDPlusID")
-        if nid in path_set and nid not in geoms:
-            geoms[nid] = feat.GetGeometryRef().Clone()
-        if nid in path_set:
-            path_names[nid] = feat.GetField("GNIS_Name")
-    ds = None
-
-    cur_name = None
-    name_list = []
-    for nid in path:
-        n = path_names.get(nid)
-        if n != cur_name:
-            cur_name = n
-            name_list.append(n or "(unnamed)")
-    print(f"  Stream names: {' -> '.join(name_list)}")
-
-    # Step 5: Build coordinate trace
-    coords = build_trace(path, geoms, putin, takeout)
+    coords = trace_reach(putin, takeout, huc4=args.huc4, verbose=True)
+    name = args.name
     miles = total_distance(coords)
-    print(f"\nTrace: {miles:.1f} miles, {len(coords):,} points, {len(path)} segments")
 
-    # Step 6: Write outputs
     csv_file = f"{base}.csv"
     write_csv(coords, csv_file)
     print(f"Wrote {csv_file}")
