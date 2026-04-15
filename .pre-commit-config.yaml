@@ -33,6 +33,11 @@ repos:
         additional_dependencies: ["@biomejs/biome@2.4.11"]
         files: \.(js|css)$
 
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.28.0
+    hooks:
+      - id: gitleaks
+
   - repo: local
     hooks:
       - id: php-lint
