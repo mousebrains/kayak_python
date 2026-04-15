@@ -153,6 +153,14 @@ if ($gauge) {
         'temperature' => 'Temperature (F)',
     ];
 
+    // Match build policy: only show inflow if flow isn't available for this gauge.
+    $flow_stmt = $db->prepare(
+        "SELECT 1 FROM observation o JOIN gauge_source gs ON o.source_id = gs.source_id
+         WHERE gs.gauge_id = ? AND o.data_type = 'flow' LIMIT 1"
+    );
+    $flow_stmt->execute([$gauge['id']]);
+    if ($flow_stmt->fetchColumn()) unset($plot_types['inflow']);
+
     foreach ($plot_types as $dtype => $y_label) {
         if ($until) {
             $stmt = $db->prepare(
