@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Removed
+- Legacy MySQL sync pipeline: `scripts/{import_from_dump,sync_legacy_observations,load_observations_sqlite,link_sources,dump_and_import}.*`
+  and `systemd/kayak-sync.{service,timer,sh}`. The Python fetch pipeline now
+  replaces all data previously imported from the legacy MySQL databases.
+- `[mysql]` optional dependency (PyMySQL) from `pyproject.toml`.
+- MySQL `DATABASE_URL` example from `.env.example`.
+- Stale "(replaces X.C)" docstring tags across `src/kayak/` modules and related
+  `Mirrors DataDB::*` references. The C++ source they pointed at is no longer
+  in the tree.
+- "Legacy C++ Code" section from `CLAUDE.md`.
+
 ### Added
 - GitHub Actions CI workflow (lint, typecheck, test on Python 3.11-3.13)
 - Makefile for common development commands
