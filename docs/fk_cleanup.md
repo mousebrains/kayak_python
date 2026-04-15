@@ -167,23 +167,30 @@ The next pipeline tick will recompute `latest_observation` and
 With `foreign_key_check` clean, you can:
 
 - Run `scripts/import_metadata.py` without FK-violation warnings.
-- Turn on `PRAGMA foreign_keys = ON` at connection time in the Python
-  code if desired (currently it's off by default in `kayak.db.engine` —
-  see `src/kayak/db/engine.py`). That would catch any *new* violations
-  at write time rather than letting them accumulate silently.
 - Re-run `scripts/db_pull.sh` + `scripts/export_metadata.py` locally to
   check in a clean metadata snapshot under `data/db/`.
+
+Both the Python ORM (`src/kayak/db/engine.py`) and the PHP layer
+(`php/includes/db.php`) already set `PRAGMA foreign_keys = ON` on every
+connection, so any *new* violation written through those paths will fail
+loudly at write time. The remaining write paths that don't enforce are:
+
+- `scripts/db_push.sh` — explicitly turns FKs off around the merge and
+  protects with a JOIN to `source`/`gauge` that skips orphans.
+- Ad-hoc `sqlite3` CLI sessions, which default to FKs off per connection.
+- The retired legacy MySQL importer (`scripts/import_from_dump.py`),
+  which is the most likely original source of the orphans we just cleaned
+  up.
 
 ## Why orphans accumulated
 
 Likely causes:
 
 - Legacy MySQL sync (`scripts/import_from_dump.py`, now retired) built
-  the DB with `foreign_keys` disabled to speed up bulk inserts.
+  the DB with `foreign_keys` disabled to speed up bulk inserts. This is
+  the most likely primary source.
 - Manual edits via `sqlite3` CLI don't enforce FKs unless the session
   ran `PRAGMA foreign_keys = ON` (off by default per connection).
-- Row-level writes from the Python code don't enforce FKs either,
-  because `kayak.db.engine` never turns them on.
-
-Flip `PRAGMA foreign_keys = ON` in the engine setup once the DB is clean
-to prevent regressions.
+- Older versions of `kayak.db.engine` predate the per-connection
+  `PRAGMA foreign_keys=ON` listener (added in commit 6821a54), so
+  pipeline writes from before that commit would not have enforced.
