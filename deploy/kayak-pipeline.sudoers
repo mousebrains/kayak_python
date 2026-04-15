@@ -1,0 +1,36 @@
+# /etc/sudoers.d/kayak-pipeline
+#
+# Allows user `pat` to start and stop the kayak systemd units without a
+# password. scripts/db_push.sh relies on this to pause the pipeline while
+# swapping the SQLite database.
+#
+# Install (on the live server, as root):
+#
+#     install -m 440 -o root -g root \
+#         /home/pat/kayak/deploy/kayak-pipeline.sudoers \
+#         /etc/sudoers.d/kayak-pipeline
+#     visudo -cf /etc/sudoers.d/kayak-pipeline   # validate
+#
+# Requirements:
+#   - file mode must be 440
+#   - owner must be root:root
+#   - the file must pass `visudo -cf` before being reloaded
+#
+# Path note: Debian 12+ ships /usr/bin/systemctl (with /bin as a symlink).
+# Confirm with `command -v systemctl` before deploying on older releases.
+
+Cmnd_Alias KAYAK_CTL = \
+    /usr/bin/systemctl start kayak-pipeline.timer, \
+    /usr/bin/systemctl stop  kayak-pipeline.timer, \
+    /usr/bin/systemctl start kayak-pipeline.service, \
+    /usr/bin/systemctl stop  kayak-pipeline.service, \
+    /usr/bin/systemctl start kayak-decimate.timer, \
+    /usr/bin/systemctl stop  kayak-decimate.timer, \
+    /usr/bin/systemctl start kayak-decimate.service, \
+    /usr/bin/systemctl stop  kayak-decimate.service, \
+    /usr/bin/systemctl start kayak-backup.timer, \
+    /usr/bin/systemctl stop  kayak-backup.timer, \
+    /usr/bin/systemctl start kayak-backup.service, \
+    /usr/bin/systemctl stop  kayak-backup.service
+
+pat ALL=(root) NOPASSWD: KAYAK_CTL
