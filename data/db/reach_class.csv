@@ -4,58 +4,22 @@ id,reach_id,name,low,low_data_type,high,high_data_type
 13,526,IV V,,flow,,flow
 14,543,III,500.0,flow,1500.0,flow
 15,543,III-IV,,flow,,flow
-19,624,II,,flow,,flow
-20,625,I,,flow,,flow
-21,626,I,,flow,,flow
-22,654,IV V,,flow,,flow
-23,660,III V,,flow,,flow
 24,665,V VI,,flow,,flow
-25,755,IV V,,flow,,flow
-26,790,III IV V,,flow,,flow
-28,816,V,,flow,,flow
 30,828,II,,flow,,flow
-31,830,III IV,,flow,,flow
-33,832,II,,flow,,flow
-34,833,II,,flow,,flow
-35,858,II III,,flow,,flow
-36,936,IV V,,flow,,flow
-37,1034,IV V,,flow,,flow
 39,1084,I,,flow,,flow
 40,1086,III-IV,,flow,,flow
-41,1106,III IV,,flow,,flow
 42,1107,II,,flow,,flow
-50,1224,I II,,flow,,flow
-51,1225,III IV,,flow,,flow
-52,1226,IV VI,,flow,,flow
-54,1228,II III,,flow,,flow
-55,1229,IV V,,flow,,flow
-56,1230,IV,,flow,,flow
-58,1242,III IV,,flow,,flow
 59,1305,II III,,flow,,flow
 60,1306,III IV,,flow,,flow
-61,1361,II III,,flow,,flow
-62,1362,III,,flow,,flow
 63,1395,III IV,,flow,,flow
-64,1410,IV V,,flow,,flow
-65,1485,III IV,,flow,,flow
 66,1486,II III,,flow,,flow
-69,1558,I,,flow,,flow
 70,1766,III IV,,flow,,flow
 71,1767,II,,flow,,flow
 72,1768,II III,,flow,,flow
 73,1769,II IV,,flow,,flow
 74,1770,I,,flow,,flow
-75,1771,II III,,flow,,flow
-76,1772,II IV,,flow,,flow
-78,1801,III,,flow,,flow
-81,1932,IV V,,flow,,flow
-89,2132,III,,flow,,flow
-90,2194,II III,,flow,,flow
 91,2210,III,,flow,,flow
 92,2211,IV V,,flow,,flow
-94,2220,III IV,,flow,,flow
-95,2221,III,,flow,,flow
-96,2222,II,,flow,,flow
 98,2337,III IV,,flow,,flow
 99,2428,IV V,,flow,,flow
 102,2469,I VI,,flow,,flow
@@ -66,91 +30,46 @@ id,reach_id,name,low,low_data_type,high,high_data_type
 109,2660,II,,flow,,flow
 113,2665,II,,flow,,flow
 114,2712,III IV,,flow,,flow
-116,2720,II III,,flow,,flow
-117,2721,IV V,,flow,,flow
 118,2723,II III,,flow,,flow
-121,2760,III IV,,flow,,flow
-122,2761,II,,flow,,flow
 123,2824,II III,,flow,,flow
 124,2829,III IV,,flow,,flow
 125,2830,I,,flow,,flow
-126,2831,III,,flow,,flow
 127,2832,III IV,,flow,,flow
 128,2833,II,,flow,,flow
 130,3001,III,,flow,,flow
 131,3011,I II,,flow,,flow
-132,3012,III V,,flow,,flow
-135,3064,V,,flow,,flow
-138,3068,III IV V,,flow,,flow
-140,3082,III,,flow,,flow
-141,3084,III IV,,flow,,flow
 142,3212,IV V,,flow,,flow
-143,3213,III VI,,flow,,flow
-144,3214,III IV,,flow,,flow
 151,3290,II-III,600.0,flow,4000.0,flow
 152,3290,III,,flow,,flow
 153,3293,IV-V,800.0,flow,1700.0,flow
 154,3293,V,1700.0,flow,3000.0,flow
 155,3293,V-VI,,flow,,flow
 156,3294,III,,flow,,flow
-157,3514,IV V,,flow,,flow
 160,3652,III IV,,flow,,flow
 162,3655,IV,,flow,,flow
 164,3658,V,,flow,,flow
-165,3678,II IV,,flow,,flow
-166,3679,III,,flow,,flow
 167,3767,III IV,,flow,,flow
 168,3770,III,1000.0,flow,20000.0,flow
 169,3770,III-IV,20000.0,flow,50000.0,flow
 170,3770,IV,,flow,,flow
-178,3796,III IV,,flow,,flow
-180,3879,II,,flow,,flow
-181,3880,IV,,flow,,flow
-182,3881,II,,flow,,flow
 183,3882,I,,flow,,flow
-184,3883,IV,,flow,,flow
-190,3933,III IV,,flow,,flow
-193,3937,III,,flow,,flow
-194,3939,II III,,flow,,flow
-195,3940,I,,flow,,flow
 198,3943,I,,flow,,flow
 201,3990,III,1000.0,flow,20000.0,flow
-206,4013,III,,flow,,flow
-208,4026,IV V,,flow,,flow
 210,4039,II III,,flow,,flow
-211,4042,II III,,flow,,flow
-213,4084,III IV,,flow,,flow
-214,4085,III IV V,,flow,,flow
-215,4086,I,,flow,,flow
 216,4114,I II,,flow,,flow
-226,4340,IV V,,flow,,flow
 227,4409,IV,,flow,,flow
-230,4506,III IV,,flow,,flow
-231,4507,II III,,flow,,flow
-232,4585,III,,flow,,flow
-233,4615,III IV,,flow,,flow
 236,4689,III IV,,flow,,flow
 237,4690,II III,,flow,,flow
 238,4691,II III,,flow,,flow
 244,4700,I II,,flow,,flow
-246,4800,III IV,,flow,,flow
 247,4815,II III,,flow,,flow
-249,4851,V VI,,flow,,flow
-250,4852,III IV,,flow,,flow
 251,4912,IV V,,flow,,flow
-252,4913,IV V,,flow,,flow
-253,4935,III IV,,flow,,flow
-254,4936,III IV,,flow,,flow
 255,4940,III IV,,flow,,flow
-257,4954,IV V,,flow,,flow
-258,4955,IV VI,,flow,,flow
 261,4986,II III,,flow,,flow
 262,4987,I II,,flow,,flow
 264,4995,I II,,flow,,flow
-266,5040,III,,flow,,flow
 268,5046,III IV V,,flow,,flow
 270,5051,IV V,,flow,,flow
-272,5146,III IV,,flow,,flow
 282,109,II+,,,,
 371,1092,I-II,,,,
 381,1220,III-IV+,,,,

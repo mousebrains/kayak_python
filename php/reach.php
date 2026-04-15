@@ -22,7 +22,7 @@ $compact_css = '<style>'
     . 'h3{margin:.6rem 0 .2rem;font-size:1rem}'
     . 'main{padding:.25rem .5rem}'
     . '#reach-map{height:320px !important;margin-top:.5rem !important}'
-    . '#search-map{height:280px !important;margin-bottom:.5rem !important}'
+    . '#search-map{height:65vh !important;min-height:480px !important;margin-top:.5rem !important}'
     . '</style>';
 
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
@@ -227,15 +227,6 @@ if ($q_trimmed !== '' || $st !== '') {
         $colors = ['#e6194b','#3cb44b','#4363d8','#f58231','#911eb4',
                     '#42d4f4','#f032e6','#bfef45','#469990','#dcbeff',
                     '#9A6324','#800000','#aaffc3','#808000','#000075'];
-        if ($map_reaches) {
-            $leaflet_css = file_get_contents(__DIR__ . '/static/leaflet.css');
-            echo '<style>' . $leaflet_css . '</style>';
-            $map_json = htmlspecialchars(json_encode($map_reaches), ENT_QUOTES, 'UTF-8');
-            $colors_json = htmlspecialchars(json_encode($colors), ENT_QUOTES, 'UTF-8');
-            echo '<div id="search-map" style="height:350px;margin-bottom:1rem;border:1px solid #ccc" data-reaches="' . $map_json . '" data-colors="' . $colors_json . '"></div>';
-            $has_map = true;
-            $map_scripts = '<script src="/static/leaflet.js" defer></script><script src="/static/search-map.js" defer></script>';
-        }
 
         $label = $q !== '' ? '&ldquo;' . htmlspecialchars($q) . '&rdquo;' : htmlspecialchars($st);
         echo '<p>' . count($results) . ' reaches matching ' . $label . ':</p>';
@@ -266,6 +257,16 @@ if ($q_trimmed !== '' || $st !== '') {
             echo "<tr><td>{$r['id']}</td><td>{$swatch}<a href=\"/reach.php?id={$r['id']}\">$rname</a></td><td>$desc</td><td>$cls</td><td>$sname</td><td>$guides</td><td>$reading</td></tr>\n";
         }
         echo '</table>';
+
+        if ($map_reaches) {
+            $leaflet_css = file_get_contents(__DIR__ . '/static/leaflet.css');
+            echo '<style>' . $leaflet_css . '</style>';
+            $map_json = htmlspecialchars(json_encode($map_reaches), ENT_QUOTES, 'UTF-8');
+            $colors_json = htmlspecialchars(json_encode($colors), ENT_QUOTES, 'UTF-8');
+            echo '<div id="search-map" style="height:65vh;min-height:480px;margin-top:1rem;border:1px solid #ccc" data-reaches="' . $map_json . '" data-colors="' . $colors_json . '"></div>';
+            $has_map = true;
+            $map_scripts = '<script src="/static/leaflet.js" defer></script><script src="/static/search-map.js" defer></script>';
+        }
 
     }
 
