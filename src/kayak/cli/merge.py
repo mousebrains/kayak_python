@@ -1,4 +1,4 @@
-"""Merger command (replaces merger.C).
+"""Merger command.
 
 Combines data from multiple source stations into merged gauges via
 the GaugeSource relationships.

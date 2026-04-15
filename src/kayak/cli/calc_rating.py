@@ -1,4 +1,4 @@
-"""Rating table calculator (replaces calcRating.C).
+"""Rating table calculator.
 
 Applies gage height <-> flow conversions via interpolated rating tables.
 If only gage data exists, converts to flow. If only flow, converts to gage.

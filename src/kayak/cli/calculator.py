@@ -1,4 +1,4 @@
-"""Calculator for synthetic/derived gage readings (replaces calculator.C).
+"""Calculator for synthetic/derived gage readings.
 
 Evaluates CalcExpression entries that reference other sources' Latest values
 to produce derived observations.

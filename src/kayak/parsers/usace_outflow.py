@@ -1,4 +1,4 @@
-"""USACE Outflow parser (replaces Parse_USACE_Outflow.C).
+"""USACE Outflow parser.
 
 Format: Space-delimited with PROJECT identifier.
 States: 0=Find "PROJECT-", 1=Find "REPORT" date, 2=Parse hour:value data

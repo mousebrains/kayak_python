@@ -1,4 +1,4 @@
-"""Application configuration (replaces Paths.C).
+"""Application configuration.
 
 All settings are loaded from environment variables with sensible defaults.
 Use a .env file for local development.

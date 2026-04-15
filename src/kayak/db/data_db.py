@@ -1,7 +1,4 @@
-"""Observation storage and query helpers (replaces DataDB.C).
-
-All queries are keyed by source_id (int FK) instead of station name strings.
-"""
+"""Observation storage and query helpers."""
 
 import itertools
 import logging
@@ -71,7 +68,6 @@ def store_observation(
 ) -> bool:
     """Store a single observation, rejecting invalid data.
 
-    Mirrors DataDB::operator() validation:
     - Rejects timestamps in the future
     - Rejects negative flow values (unless source is in allow_negative_flow_sources)
     """
@@ -211,7 +207,6 @@ def update_latest(
 ) -> None:
     """Recompute the LatestObservation row for a source/type from observations.
 
-    Mirrors DataDB::wrapup() latest-value logic:
     - Latest value is the most recent observation
     - Previous value is the most recent observation > 6 hours before latest
     - delta_per_hour is the hourly rate of change over that window

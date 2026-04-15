@@ -1,4 +1,4 @@
-"""USGS RDB tab-delimited parser (replaces Parse_USGS.C).
+"""USGS RDB tab-delimited parser.
 
 Parses USGS waterdata RDB (tab-delimited) files with a 3-state machine:
   State 0: Header line (agency_cd, site_no, datetime, tz_cd, ...)

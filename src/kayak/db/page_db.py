@@ -1,4 +1,4 @@
-"""Page cache query helpers (replaces PageDB.C)."""
+"""Page cache query helpers."""
 
 from datetime import UTC, datetime
 

@@ -1,8 +1,4 @@
-"""HTTP client wrapper (replaces Curl.C/H).
-
-Provides a simple requests-based HTTP client with the same interface
-semantics as the C++ Curl class.
-"""
+"""HTTP client wrapper."""
 
 import asyncio
 import logging

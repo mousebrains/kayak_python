@@ -1,4 +1,4 @@
-"""Washington State DOE parser (replaces Parse_Wa_Gov.C).
+"""Washington State DOE parser.
 
 Format: Space/tab delimited with "DATE TIME" header.
 States: 0=Wait for header, 1=Skip separator, 2+=Data rows

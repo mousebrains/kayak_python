@@ -1,4 +1,4 @@
-"""Data fetcher command (replaces fetcher.C).
+"""Data fetcher command.
 
 Fetches data from remote government agencies, parses it, and stores
 observations in the database.

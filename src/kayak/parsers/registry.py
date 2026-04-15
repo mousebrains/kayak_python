@@ -1,7 +1,4 @@
-"""Parser factory with decorator-based registration.
-
-Replaces the 40-line if/else chain in fetcher.C::makeParser().
-"""
+"""Parser factory with decorator-based registration."""
 
 from __future__ import annotations
 

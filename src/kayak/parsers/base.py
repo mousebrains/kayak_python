@@ -1,8 +1,7 @@
-"""Abstract base parser (replaces Parse.C/H).
+"""Abstract base parser.
 
 Each parser processes text fetched from a government agency data source.
-The C++ pattern used a virtual ``line()`` method called for each line.
-In Python we keep the same pattern but with an ABC.
+Subclasses implement ``parse_line()``, which is called for each line.
 """
 
 import html

@@ -1,8 +1,4 @@
-"""Reach/Gauge/State query helpers (replaces InfoDB.C).
-
-Uses the normalized schema with Reach, Gauge, State, and junction tables
-instead of the flat Master/MergedMaster approach.
-"""
+"""Reach/Gauge/State query helpers."""
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload

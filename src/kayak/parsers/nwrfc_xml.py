@@ -1,4 +1,4 @@
-"""NWRFC XML parser (replaces Parse_NWRFC_XML.C).
+"""NWRFC XML parser.
 
 Format: XML with nested SiteData/observedData/observedValue.
 Extracts stage (feet), discharge (cfs), and inflow (cfs).

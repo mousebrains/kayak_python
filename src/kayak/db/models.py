@@ -1,9 +1,4 @@
-"""SQLAlchemy 2.x ORM models for the kayak database.
-
-Normalized schema with 18 tables (16 from production + Page/PageAction).
-Replaces the flat Master/MergedMaster/Correction schema with proper
-Reach/Gauge/Source relationships.
-"""
+"""SQLAlchemy 2.x ORM models for the kayak database."""
 
 from __future__ import annotations
 
@@ -35,7 +30,7 @@ from sqlalchemy.orm import (
 
 
 class DataType(enum.StrEnum):
-    """Measurement types (replaces DataDB::TYPE)."""
+    """Measurement types."""
 
     gauge = "gauge"
     flow = "flow"
@@ -52,7 +47,7 @@ class FlowLevel(enum.StrEnum):
 
 
 class PageAction(enum.StrEnum):
-    """Page cache action types (replaces PageDB::ACTION)."""
+    """Page cache action types."""
 
     PAGE = "page"
     FILE = "file"
@@ -576,7 +571,7 @@ class ReachGuidebook(Base):
 
 
 class Page(Base):
-    """Pre-rendered page cache (replaces Pages table in levels_page)."""
+    """Pre-rendered page cache."""
 
     __tablename__ = "pages"
 
