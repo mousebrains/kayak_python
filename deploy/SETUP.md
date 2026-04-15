@@ -461,28 +461,6 @@ setfacl -d -m u:www-data:rw /home/pat/DB                   # default for new DB 
 /home/pat/.venv/bin/levels pipeline      # fetch live data, generate HTML
 ```
 
-### Importing gauges and reaches
-
-`init-db` creates the schema and seeds states, sources, and fetch URLs from
-`data/sources.yaml`. **Gauges and reaches** must be imported separately from a
-legacy MySQL dump:
-
-```bash
-/home/pat/.venv/bin/python scripts/import_from_dump.py \
-    --dump /path/to/current.sql \
-    --db /home/pat/DB/kayak.db \
-    --skip-timeseries           # metadata only; observations come from the pipeline
-```
-
-Alternatively, observation CSV dumps in `legacy/` can be loaded with:
-
-```bash
-python3 scripts/load_observations_sqlite.py \
-    --db /home/pat/DB/kayak.db \
-    --observations legacy/observation.csv \
-    --latest legacy/latest_observation.csv
-```
-
 ### config.py .env resolution
 
 `kayak.config` checks `~/.config/kayak/.env` first, then falls back to the

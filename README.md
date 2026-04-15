@@ -54,10 +54,6 @@ levels pipeline
 php -S localhost:8000 -t public_html
 ```
 
-After `init-db`, gauges and reaches must be imported separately from a
-production database dump. See [CLAUDE.md](CLAUDE.md) for the full import
-workflow using `scripts/import_from_dump.py`.
-
 ## CLI Commands
 
 | Command | Purpose |

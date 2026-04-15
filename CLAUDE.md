@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Kayak aggregates real-time river level, flow, gage, and temperature data from government agencies (USGS, NOAA, USACE, USBR, IDWR, etc.) for the Willamette Kayak and Canoe Club (levels.wkcc.org). The project has been rewritten from C++ CGI into a Python package (`kayak`) with a PHP web layer. The legacy C++ code remains in `src/*.C`/`src/*.H` but is no longer built.
+Kayak aggregates real-time river level, flow, gage, and temperature data from government agencies (USGS, NOAA, USACE, USBR, IDWR, etc.) for the Willamette Kayak and Canoe Club (levels.wkcc.org). The project is a Python package (`kayak`) with a PHP web layer.
 
 ## Local Development Setup
 
@@ -30,13 +30,12 @@ python3 -m venv /home/pat/.venv
 /home/pat/.venv/bin/levels pipeline      # Fetch live data and generate HTML
 ```
 
-`init-db` seeds states, sources, and fetch URLs from `data/sources.yaml`. Gauges and reaches must be imported separately from the legacy MySQL dump (see Migration & Sync Scripts below).
+`init-db` seeds states, sources, and fetch URLs from `data/sources.yaml`.
 
 ## Build and Development Commands
 
 ```bash
 pip install -e ".[dev]"              # Install in editable mode with dev deps (pytest, ruff, mypy)
-pip install -e ".[dev,mysql]"        # Also include PyMySQL for migration scripts
 
 levels --help                        # CLI entry point (registered in pyproject.toml)
 levels init-db                       # Create tables, seed states/sources from data/*.yaml
@@ -128,31 +127,8 @@ Each subcommand module in `src/kayak/cli/` exposes `addArgs(subparsers)` and set
 - **Source layout:** Python package lives under `src/kayak/`; pytest config sets `pythonpath = ["src"]`
 - **Configuration:** All settings via env vars or `.env` file; `kayak.config` checks `~/.config/kayak/.env` first, then falls back to default `load_dotenv()` search; `kayak.config_data` uses `@lru_cache` for YAML files in `data/`
 - **Database access:** `kayak.db.engine.get_session(url)` provides sessions; CLI commands manage session lifecycle
-- **Upsert pattern:** `store_observation()` uses SQLite `ON CONFLICT DO UPDATE` / MySQL `ON DUPLICATE KEY UPDATE`
+- **Upsert pattern:** `store_observation()` uses SQLite `ON CONFLICT DO UPDATE`
 - **Test isolation:** Every test gets a fresh in-memory SQLite engine and a transactional session that rolls back
 - **Test fixtures:** `tests/conftest.py` provides `engine`, `session`, `sample_source`, `sample_gauge`, `sample_reach`, `linked_source_gauge`
 - **PHP DB connection:** `php/includes/db.php` reads `SQLITE_PATH` env var; SQLite PDO only
-
-## Migration & Sync Scripts
-
-Scripts in `scripts/` handle data migration between the legacy MySQL databases and the new schema:
-
-| Script | Purpose |
-|---|---|
-| `import_from_dump.py` | Import production MySQL dump (`levels_todo`) into local SQLite. Populates gauges, reaches, ratings, and optionally observations. Required for local dev setup after `init-db`. |
-| `sync_legacy_observations.py` | Sync legacy observations into local SQLite. Supports `--days N` window. Used for dev setup. |
-| `load_observations_sqlite.py` | Load `observation.csv` and `latest_observation.csv` dumps into a SQLite database. Self-contained (stdlib only, no dependencies). |
-
-```bash
-# Dump observations from MySQL for SQLite import
-python3 scripts/load_observations_sqlite.py --db kayak.db
-
-# Via SSH tunnel (legacy MySQL scripts)
-ssh -L 3307:mysql.wkcc.dreamhosters.com:3306 tpw@levels.wkcc.org -N &
-python3 scripts/sync_legacy_observations.py --legacy mysql+pymysql://levels:Deschutes@127.0.0.1:3307/levels_data --days 7
-```
-
-## Legacy C++ Code
-
-The original C++ codebase remains in `src/*.C`/`src/*.H` with `src/Makefile`. It used `.C`/`.H` extensions, mysql++ library, three separate MySQL databases, and CGI binaries. This code is no longer built but is retained for reference.
 
