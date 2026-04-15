@@ -98,6 +98,7 @@ class Gauge(Base):
     nwsli_id: Mapped[str | None] = mapped_column(Text)
     snotel_id: Mapped[str | None] = mapped_column(Text)
     usgs_id: Mapped[str | None] = mapped_column(String(32))
+    huc: Mapped[str | None] = mapped_column(Text)
     allow_negative_flow: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=text("0")
     )
