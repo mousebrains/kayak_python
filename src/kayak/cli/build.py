@@ -600,8 +600,6 @@ def _build_geojson(
     features: list[dict] = []
     for reach in reaches:
         row = _get_row_data(reach, calculated_gauge_ids, all_latest)
-        if row.get("expired"):
-            continue
         status = row.get("status", "unknown")
         name = reach.display_name or reach.name or ""
         props = {"id": reach.id, "name": name, "status": status}
