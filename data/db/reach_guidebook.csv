@@ -24,10 +24,12 @@ reach_id,guidebook_id,page,run,url
 567,4,244,144,
 567,7,26,4,
 567,11,,,https://www.dreamflows.com/xlist-or.php#Site765
-600,3,205,123,
 665,3,173,100,
 665,10,,,https://www.oregonkayaking.net/creeks/canyoncreek/canyoncreek.html
 791,2,64,29,
+791,4,80,32,
+791,7,46,9,
+791,9,37,,
 828,3,232,143,
 1035,2,60,26,
 1035,4,72,27,
@@ -160,9 +162,8 @@ reach_id,guidebook_id,page,run,url
 2833,7,226,53,
 2833,9,83,,
 2833,11,,646,https://www.dreamflows.com/xlist-or.php#Site646
+3000,7,231,54,
 3000,11,,,https://www.dreamflows.com/xlist-or.php#Site766
-3001,3,35,2,
-3001,11,,,https://www.dreamflows.com/xlist-or.php#Site229
 3011,2,40,11,
 3048,2,48,18,
 3048,9,25,,
@@ -407,6 +408,9 @@ reach_id,guidebook_id,page,run,url
 5470,4,"121,123","62,63",
 5470,7,258,60,
 5470,11,,,https://www.dreamflows.com/xlist-or.php#Site456
+5471,2,292,,
+5471,4,77,31,
+5471,7,46,9,
 5472,2,122,79,
 5472,3,155,86,
 5472,4,166,92,
@@ -422,6 +426,7 @@ reach_id,guidebook_id,page,run,url
 5477,10,,,https://www.oregonkayaking.net/rivers/roaring08/roaring08.html
 5478,2,294,,
 5478,7,185,43,
+5479,3,91,38,
 5479,11,,,https://www.dreamflows.com/xlist-or.php#Site807
 5480,2,192,140,
 5480,3,243,150,
@@ -457,6 +462,11 @@ reach_id,guidebook_id,page,run,url
 5492,4,146,76,
 5492,7,399,88.1,
 5492,10,,,https://www.oregonkayaking.net/rivers/mmpg/mmpg.html
+5493,2,27,1,
+5493,3,35,2,
+5493,4,28,1,
+5493,7,231,54,
+5493,9,18,,
 5493,11,,,https://www.dreamflows.com/xlist-or.php#Site229
 5495,11,,,https://www.dreamflows.com/xlist-or.php#Site456
 5496,11,,,https://www.dreamflows.com/xlist-or.php#Site227
@@ -503,6 +513,10 @@ reach_id,guidebook_id,page,run,url
 5514,2,164,118,
 5514,4,385,,
 5514,10,,,https://www.oregonkayaking.net/rivers/nfmollala/nfmollala.html
+5516,2,163,117,
+5516,3,205,123,
+5516,4,212,122,
+5516,7,30,5,
 5516,11,,,https://www.dreamflows.com/xlist-or.php#Site716
 5518,7,71,15,
 5518,10,,,https://www.oregonkayaking.net/rivers/gem/gem.html
@@ -531,6 +545,7 @@ reach_id,guidebook_id,page,run,url
 5531,11,,,https://www.dreamflows.com/xlist-or.php#Site720
 5532,10,,,https://www.oregonkayaking.net/creeks/rockore/rockore.html
 5533,11,,,https://www.dreamflows.com/xlist-or.php#Site267
+5533,12,,,https://mthoodh2o.blogspot.com/2014/10/beaver.html
 5534,7,213,49.1,
 5534,10,,,https://www.oregonkayaking.net/rivers/mac_head/mac_head.html
 5534,11,,,https://www.dreamflows.com/xlist-or.php#Site704
@@ -560,6 +575,9 @@ reach_id,guidebook_id,page,run,url
 5548,10,,,https://www.oregonkayaking.net/rivers/niagara/niagara.html
 5548,11,,,https://www.dreamflows.com/xlist-or.php#Site241
 5549,10,,,https://www.oregonkayaking.net/creeks/nohorn/nohorn.html
+5550,2,292,,
+5550,3,77,28,
+5550,7,46,9,
 5550,11,,,https://www.dreamflows.com/xlist-or.php#Site210
 5552,10,,,https://www.oregonkayaking.net/creeks/upper_butte/upper_butte.html
 5552,11,,,https://www.dreamflows.com/xlist-or.php#Site716
@@ -609,6 +627,7 @@ reach_id,guidebook_id,page,run,url
 5580,11,,,https://www.dreamflows.com/xlist-or.php#Site238
 5581,10,,,https://www.oregonkayaking.net/rivers/mf_hood/mf_hood.html
 5582,10,,,https://www.oregonkayaking.net/rivers/nf_salmonberry/nf_salmonberry.html
+5583,7,231,54,
 5583,11,,,https://www.dreamflows.com/xlist-or.php#Site766
 5584,2,91,54,
 5584,3,116,58,
@@ -744,3 +763,6 @@ reach_id,guidebook_id,page,run,url
 5817,7,71,15,
 5817,10,,,https://www.oregonkayaking.net/rivers/coalcreek/coalcreek.html
 5817,11,,,https://www.dreamflows.com/xlist-or.php#Site209
+5819,3,89,37,
+5819,4,91,40,
+5820,4,93,41,

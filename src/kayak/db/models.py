@@ -390,6 +390,7 @@ class Reach(Base):
     longitude_end: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
     map_name: Mapped[str | None] = mapped_column(Text)
     no_show: Mapped[bool] = mapped_column(default=False, server_default=text("0"))
+    map_only: Mapped[bool] = mapped_column(default=False, server_default=text("0"))
     notes: Mapped[str | None] = mapped_column(Text)
     optimal_flow: Mapped[float | None] = mapped_column()
     region: Mapped[str | None] = mapped_column(Text)
@@ -401,6 +402,7 @@ class Reach(Base):
     river: Mapped[str | None] = mapped_column(Text)
     max_gradient: Mapped[float | None] = mapped_column()
     geom: Mapped[str | None] = mapped_column(Text)
+    huc: Mapped[str | None] = mapped_column(Text)
 
     # relationships
     gauge: Mapped[Gauge | None] = relationship(back_populates="reaches")

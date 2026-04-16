@@ -897,10 +897,12 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
         states = all_state_names(session)
         css = _load_css()
 
-        # All visible gauged reaches — used for index.html, GeoJSON, CSV, text
+        # All visible reaches — used for GeoJSON/map (includes map_only)
         all_reaches = reaches_query(session, visible_only=True, with_gauge=True)
+        # Index/CSV/text reaches exclude map_only
+        index_reaches = [r for r in all_reaches if not r.map_only]
 
-        print(f"Building site: {len(all_reaches)} reaches")
+        print(f"Building site: {len(index_reaches)} reaches")
 
         # Pre-load data for all reaches at gauge level
         gauge_ids = [r.gauge_id for r in all_reaches if r.gauge_id]
@@ -914,7 +916,7 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
         static_dir = output_dir / "static"
         shutil.copy2(_JS_PATH, static_dir / "levels.js")
 
-        # GeoJSON → static/reaches.geojson
+        # GeoJSON → static/reaches.geojson (includes map_only reaches)
         geojson = _build_geojson(all_reaches, calculated_gauge_ids, all_latest)
         _atomic_write(static_dir / "reaches.geojson", geojson)
         logger.info("GeoJSON: %d bytes", len(geojson))
@@ -923,10 +925,10 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
         map_html = _build_map_page(css, states)
         _atomic_write(output_dir / "map.html", map_html)
 
-        # index.html = all reaches levels table
+        # index.html = all reaches levels table (excludes map_only)
         _build_and_write(
             session,
-            all_reaches,
+            index_reaches,
             columns,
             PRIMARY_STATE,
             states,
