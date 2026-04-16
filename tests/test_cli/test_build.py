@@ -651,7 +651,7 @@ class TestBuildGeoJSON:
         data = json.loads(result)
         assert data["features"][0]["geometry"]["type"] == "Point"
 
-    def test_expired_reaches_excluded(self, session):
+    def test_expired_reaches_included_in_geojson(self, session):
         gauge = Gauge(name="exp_g2")
         session.add(gauge)
         session.flush()
@@ -683,7 +683,7 @@ class TestBuildGeoJSON:
         import json
 
         data = json.loads(result)
-        assert len(data["features"]) == 0
+        assert len(data["features"]) == 1
 
     def test_no_geometry_excluded(self, session):
         reach = Reach(name="nogeom", display_name="No Geom River")
