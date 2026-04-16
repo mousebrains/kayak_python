@@ -258,12 +258,38 @@ if ($q_trimmed !== '' || $st !== '') {
         }
         echo '</table>';
 
+        // Collect unique gauges with locations for map
+        $map_gauges = [];
+        if ($gauge_ids) {
+            $ph = implode(',', array_fill(0, count($gauge_ids), '?'));
+            $g_stmt = $db->prepare(
+                "SELECT id, name, latitude, longitude FROM gauge WHERE id IN ($ph) AND latitude IS NOT NULL AND longitude IS NOT NULL"
+            );
+            $g_stmt->execute($gauge_ids);
+            foreach ($g_stmt->fetchAll() as $g) {
+                $glabel = $g['name'];
+                if (isset($reach_readings[$g['id']])) {
+                    $parts = [];
+                    $rr = $reach_readings[$g['id']];
+                    if (isset($rr['flow'])) $parts[] = number_format((float)$rr['flow']['value'], 0) . ' cfs';
+                    if (isset($rr['gauge'])) $parts[] = number_format((float)$rr['gauge']['value'], 2) . ' ft';
+                    if ($parts) $glabel .= ' (' . implode(' / ', $parts) . ')';
+                }
+                $map_gauges[] = [
+                    'name' => $glabel,
+                    'lat' => (float)$g['latitude'],
+                    'lon' => (float)$g['longitude'],
+                ];
+            }
+        }
+
         if ($map_reaches) {
             $leaflet_css = file_get_contents(__DIR__ . '/static/leaflet.css');
             echo '<style>' . $leaflet_css . '</style>';
             $map_json = htmlspecialchars(json_encode($map_reaches), ENT_QUOTES, 'UTF-8');
             $colors_json = htmlspecialchars(json_encode($colors), ENT_QUOTES, 'UTF-8');
-            echo '<div id="search-map" style="height:65vh;min-height:480px;margin-top:1rem;border:1px solid #ccc" data-reaches="' . $map_json . '" data-colors="' . $colors_json . '"></div>';
+            $gauges_json = htmlspecialchars(json_encode($map_gauges), ENT_QUOTES, 'UTF-8');
+            echo '<div id="search-map" style="height:65vh;min-height:480px;margin-top:1rem;border:1px solid #ccc" data-reaches="' . $map_json . '" data-colors="' . $colors_json . '" data-gauges="' . $gauges_json . '"></div>';
             $has_map = true;
             $map_scripts = '<script src="/static/leaflet.js" defer></script><script src="/static/search-map.js" defer></script>';
         }
