@@ -123,9 +123,6 @@ id,url,parser,hours,is_active,last_fetched_at
 10872,"https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&format=csv&list=FLGY,PCKY,MSEY,JKSY,ALPY,GREY,SALY,PALI,DRYI,LORI,MNNI,SHYI,SIFI,HENI,HFAI,CHEI,ANTI,REXI,SNAI,AMFI,MINI,MILI,MHPI,SKHI,LWOI,BRFI,ANDI,BTSI,MORI,BIGI,BOMI,PARI,PRLI,DEDI,MVPI,PAYI,CSCI,HRSI,PLEI,PRPI,SWAI,SNYI,WEII,HCDI,ROMO,MADO,WARO,SFMO,MABO,BEUO,VALO,MALO,PRHO,PWDO,WCRO,PDTO,MYKO,MCKO,BIRO,YOKO,UMUO,UMDO,UMAO,CRAO,WICO,LAPO,BENO,DEBO,CRPO,PRVO,MLCO,OCRO,OCHO,CRSO,LEFO,GSTO,SCLO,SCOO,DLLO,BASO,BCSO,BCTO,EGSO,FSHO,MFDO,SDCO,HGHM",usbr,,1,2026-04-17 03:19:20.833698
 10873,"https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22GPR.Flow-Out.Inst.0.0.Best%22,%22GPR.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d",usace.cda,,1,2026-04-17 03:19:20.847321
 10874,"https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22HCR.Flow-Out.Inst.0.0.Best%22,%22HCR.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d",usace.cda,,1,2026-04-17 03:19:20.912975
-10875,https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/30C070/30C070_STG_FM.TXT,wa.gov,,1,2026-04-17 03:19:24.566130
-10876,https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/30C070/30C070_DSG_FM.TXT,wa.gov,,1,2026-04-17 03:19:27.940984
-10877,https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/30C070/30C070_WTM_FM.TXT,wa.gov,,1,2026-04-17 03:19:31.413240
 10878,https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_STG_FM.TXT,wa.gov,,1,2026-04-17 03:19:33.812354
 10879,https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_DSG_FM.TXT,wa.gov,,1,2026-04-17 03:19:36.359045
 10880,https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_WTM_FM.TXT,wa.gov,,1,2026-04-17 03:19:38.880634

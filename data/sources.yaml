@@ -172,9 +172,10 @@ usace.cda:
 
 wa.gov:
   urls:
-    - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/30C070/30C070_STG_FM.TXT"
-    - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/30C070/30C070_DSG_FM.TXT"
-    - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/30C070/30C070_WTM_FM.TXT"
+    # 30C070 Klickitat River at Wahkiacus — station dead since 2025-07-02; disabled 2026-04-17
+    # - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/30C070/30C070_STG_FM.TXT"
+    # - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/30C070/30C070_DSG_FM.TXT"
+    # - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/30C070/30C070_WTM_FM.TXT"
     - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_STG_FM.TXT"
     - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_DSG_FM.TXT"
     - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_WTM_FM.TXT"
