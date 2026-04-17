@@ -13,7 +13,8 @@ var colors={okay:'#4caf50',low:'#e8a735',high:'#e53935',unknown:'#2196F3'};
 
 function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 
-fetch('/static/reaches.geojson').then(function(r){return r.json()}).then(function(data){
+var mtime=document.getElementById('map').dataset.mtime||'';
+fetch('/static/reaches.geojson?v='+mtime).then(function(r){return r.json()}).then(function(data){
   var geojsonLayer=L.geoJSON(data,{
     style:function(f){
       return {color:colors[f.properties.status]||colors.unknown,weight:3,opacity:0.7};

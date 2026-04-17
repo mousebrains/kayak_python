@@ -10,6 +10,7 @@ from kayak.cli.build import (
     _build_geojson,
     _build_html_table,
     _build_letter_nav,
+    _build_map_page,
     _build_nav,
     _build_page,
     _build_sparkline,
@@ -756,6 +757,13 @@ class TestBuildPage:
         )
         assert "letter-nav" in result
         assert "#letter-A" in result
+
+
+class TestBuildMapPage:
+    def test_embeds_geojson_mtime(self):
+        result = _build_map_page("", ["Oregon"], 1700000000)
+        assert 'id="map"' in result
+        assert 'data-mtime="1700000000"' in result
 
 
 class TestLevelsKey:

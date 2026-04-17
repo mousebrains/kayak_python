@@ -782,7 +782,7 @@ Data sourced from USGS, NOAA, USACE, USBR, and other government agencies. <a hre
 # ---------------------------------------------------------------------------
 
 
-def _build_map_page(css: str, states: list[str]) -> str:
+def _build_map_page(css: str, states: list[str], geojson_mtime: int) -> str:
     """Build map.html with an interactive Leaflet map of Oregon reaches."""
     nav_html = _build_nav(states)
     leaflet_css_path = BASE_DIR / "static" / "leaflet.css"
@@ -814,7 +814,7 @@ main {{padding:0;max-width:none;}}
   </nav>
 </header>
 <main>
-<div id="map"></div>
+<div id="map" data-mtime="{geojson_mtime}"></div>
 </main>
 <footer>
 Data sourced from USGS, NOAA, USACE, USBR, and other government agencies. <a href="/privacy.php">Privacy Policy</a>
@@ -919,8 +919,10 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
         _atomic_write(static_dir / "reaches.geojson", geojson)
         logger.info("GeoJSON: %d bytes", len(geojson))
 
-        # Map page → map.html
-        map_html = _build_map_page(css, states)
+        # Map page → map.html. data-mtime lets map.js cache-bust the
+        # immutable-cached geojson by fetching /static/reaches.geojson?v=<mtime>.
+        geojson_mtime = int((static_dir / "reaches.geojson").stat().st_mtime)
+        map_html = _build_map_page(css, states, geojson_mtime)
         _atomic_write(output_dir / "map.html", map_html)
 
         # index.html = all reaches levels table (excludes map_only)
