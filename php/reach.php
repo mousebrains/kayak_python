@@ -8,6 +8,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
+require_once __DIR__ . '/includes/html.php';
 
 $db = get_db();
 $has_map = false;
@@ -472,10 +473,13 @@ $fields += [
 ];
 
 $html_fields = ['Put-in', 'Take-out', 'AW ID'];
+$autolink_fields = ['Description', 'Notes'];
 foreach ($fields as $label => $value) {
     if ($value === null || trim((string)$value) === '') continue;
     if (in_array($label, $html_fields)) {
         echo "<tr><td>$label</td><td>$value</td></tr>\n";
+    } elseif (in_array($label, $autolink_fields)) {
+        echo "<tr><td>$label</td><td>" . nl2br(autolink_urls((string)$value)) . "</td></tr>\n";
     } else {
         $esc = htmlspecialchars((string)$value);
         echo "<tr><td>$label</td><td>$esc</td></tr>\n";

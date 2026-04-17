@@ -8,12 +8,15 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
+require_once __DIR__ . '/includes/html.php';
 require_once __DIR__ . '/includes/svg_plot.php';
 require_once __DIR__ . '/includes/validate.php';
 
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 $start_date = validate_date(filter_input(INPUT_GET, 'start', FILTER_SANITIZE_SPECIAL_CHARS));
 $end_date = validate_date(filter_input(INPUT_GET, 'end', FILTER_SANITIZE_SPECIAL_CHARS));
+$hidden = filter_input(INPUT_GET, 'hidden', FILTER_VALIDATE_INT);
+$hidden = ($hidden === 1) ? 1 : 0;
 if (!$id) { http_response_code(400); exit('Missing id parameter'); }
 
 $db = get_db();
@@ -22,6 +25,22 @@ $has_map = false;
 $reach = get_reach_or_404($id);
 
 $name = $reach['display_name'] ?: $reach['name'];
+
+// --- Navigation by sort_name, independent of gauge status ---
+$prev_stmt = $db->prepare('SELECT id FROM reach WHERE (sort_name < ? OR (sort_name = ? AND id < ?)) AND no_show = ? ORDER BY sort_name DESC, id DESC LIMIT 1');
+$prev_stmt->execute([$reach['sort_name'], $reach['sort_name'], $id, $hidden]);
+$prev = $prev_stmt->fetch();
+
+$next_stmt = $db->prepare('SELECT id FROM reach WHERE (sort_name > ? OR (sort_name = ? AND id > ?)) AND no_show = ? ORDER BY sort_name ASC, id ASC LIMIT 1');
+$next_stmt->execute([$reach['sort_name'], $reach['sort_name'], $id, $hidden]);
+$next = $next_stmt->fetch();
+
+$total_stmt = $db->prepare('SELECT COUNT(*) FROM reach WHERE no_show = ?');
+$total_stmt->execute([$hidden]);
+$total = $total_stmt->fetchColumn();
+$pos_stmt = $db->prepare('SELECT COUNT(*) FROM reach WHERE (sort_name < ? OR (sort_name = ? AND id <= ?)) AND no_show = ?');
+$pos_stmt->execute([$reach['sort_name'], $reach['sort_name'], $id, $hidden]);
+$position = $pos_stmt->fetchColumn();
 
 // Load gauge info
 $gauge = null;
@@ -55,6 +74,22 @@ $preconnects = '<link rel="preconnect" href="https://a.tile.opentopomap.org">'
     . '<link rel="preconnect" href="https://b.tile.opentopomap.org">'
     . '<link rel="preconnect" href="https://c.tile.opentopomap.org">';
 include_header("$name - Description", '', "Real-time river data for $name — flow, gage height, and conditions.", $preconnects);
+
+// Navigation bar (prev/next by sort order, independent of gauge status)
+echo '<nav aria-label="Reach navigation" style="display:flex;align-items:center;gap:1rem;margin-bottom:.5rem;flex-wrap:wrap">';
+$hq = $hidden ? '&amp;hidden=1' : '';
+if ($prev) {
+    echo '<a href="/description.php?id=' . $prev['id'] . $hq . '">&laquo; Prev</a>';
+} else {
+    echo '<span style="color:#999">&laquo; Prev</span>';
+}
+echo "<span>Reach $position of $total</span>";
+if ($next) {
+    echo '<a href="/description.php?id=' . $next['id'] . $hq . '">Next &raquo;</a>';
+} else {
+    echo '<span style="color:#999">Next &raquo;</span>';
+}
+echo '</nav>';
 
 echo '<h2>' . htmlspecialchars($name) . '</h2>';
 
@@ -323,11 +358,14 @@ if (count($map_points) >= 1 || $geom) {
 
 // HTML-safe fields list for raw output
 $html_fields = ['Gauge Location', 'Put-in', 'Take-out'];
+$autolink_fields = ['Description', 'Notes'];
 
 foreach ($fields as $label => $value) {
     if ($value === null || trim((string)$value) === '') continue;
     if (in_array($label, $html_fields)) {
         echo "<tr><td>$label</td><td>$value</td></tr>\n";
+    } elseif (in_array($label, $autolink_fields)) {
+        echo "<tr><td>$label</td><td>" . nl2br(autolink_urls((string)$value)) . "</td></tr>\n";
     } else {
         $esc = htmlspecialchars((string)$value);
         echo "<tr><td>$label</td><td>$esc</td></tr>\n";
