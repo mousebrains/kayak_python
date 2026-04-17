@@ -43,8 +43,14 @@ def get_negative_flow_source_ids(session: Session) -> set[int]:
 
 
 def get_source_by_name(session: Session, name: str) -> Source | None:
-    """Fetch a Source by its name."""
-    return session.execute(select(Source).where(Source.name == name)).scalar_one_or_none()
+    """Fetch a Source by its name, or None.
+
+    Source.name is not unique — the same physical station may have multiple
+    source rows (e.g., WA DOE publishes separate URLs per data type; `NMFO3`
+    is published by both NWS and nwps). Callers needing a specific row should
+    disambiguate by agency or fetch_url_id.
+    """
+    return session.execute(select(Source).where(Source.name == name)).scalars().first()
 
 
 def get_gauge_by_name(session: Session, name: str) -> Gauge | None:

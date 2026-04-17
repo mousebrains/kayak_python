@@ -365,6 +365,16 @@ def test_get_source_by_name_not_found(session):
     assert get_source_by_name(session, "nonexistent") is None
 
 
+def test_get_source_by_name_duplicates(session):
+    src1 = Source(name="NMFO3", agency="NWS")
+    src2 = Source(name="NMFO3", agency="nwps")
+    session.add_all([src1, src2])
+    session.flush()
+    result = get_source_by_name(session, "NMFO3")
+    assert result is not None
+    assert result.id in {src1.id, src2.id}
+
+
 def test_get_gauge_by_name_found(session):
     gauge = Gauge(name="test_gauge")
     session.add(gauge)
