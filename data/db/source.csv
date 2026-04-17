@@ -17,7 +17,6 @@ id,name,agency,fetch_url_id,calc_expression_id
 222,14201500,,10888,
 231,Calapooia_Holly_calc,,,1
 240,14219000,USGS,10890,
-241,CANYON_calc,Calculation,,2
 286,14400000,USGS,10888,
 298,14231900,USGS,10890,
 301,TLYO3,NWS,10837,
@@ -386,3 +385,4 @@ id,name,agency,fetch_url_id,calc_expression_id
 5594,OCHO,usbr,10872,
 5595,SCLO,usbr,10872,
 5596,SCOO,usbr,10872,
+5597,14302480,USGS,,
