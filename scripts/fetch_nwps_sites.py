@@ -6,11 +6,11 @@ latitude and west of -111° longitude, and stores them in an 'nwps_site' table.
 
 import sqlite3
 import sys
+import time
 
 import requests
 
 NWPS_URL = "https://api.water.noaa.gov/nwps/v1/gauges"
-STATES = ["OR", "WA", "ID", "NV", "CA"]
 
 CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS nwps_site (
@@ -36,23 +36,31 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 def main():
     db_path = sys.argv[1] if len(sys.argv) > 1 else "/home/pat/kayak/Gauge-metadata-cache/gauges.db"
 
-    filtered = []
-    for state in STATES:
-        print(f"Fetching {state}...", end=" ", flush=True)
-        resp = requests.get(NWPS_URL, params={"state": state}, timeout=120)
-        resp.raise_for_status()
-        gauges = resp.json()["gauges"]
-        kept = [
-            g
-            for g in gauges
-            if g.get("latitude")
-            and g.get("longitude")
-            and g["latitude"] >= 40.0
-            and g["longitude"] <= -111.0
-        ]
-        print(f"{len(kept)} sites (of {len(gauges)})")
-        filtered.extend(kept)
-    print(f"  Total after filtering: {len(filtered)}")
+    # NWPS returns the same full gauge list regardless of state= parameter, and the
+    # endpoint throttles under repeated calls (504). Fetch once with retries.
+    print("Fetching NWPS gauges (one request, retry on 504)...", flush=True)
+    for attempt in range(4):
+        try:
+            resp = requests.get(NWPS_URL, timeout=180)
+            resp.raise_for_status()
+            break
+        except requests.HTTPError as e:
+            if e.response is not None and e.response.status_code == 504 and attempt < 3:
+                wait = 2 ** (attempt + 2)
+                print(f"  504; retrying in {wait}s...")
+                time.sleep(wait)
+                continue
+            raise
+    gauges = resp.json()["gauges"]
+    filtered = [
+        g
+        for g in gauges
+        if g.get("latitude")
+        and g.get("longitude")
+        and g["latitude"] >= 40.0
+        and g["longitude"] <= -111.0
+    ]
+    print(f"  {len(filtered)} PNW sites (of {len(gauges)} total)")
 
     conn = sqlite3.connect(db_path)
     conn.execute(CREATE_TABLE)
