@@ -1,4 +1,5 @@
 .DS_Store
+.claude
 
 # Legacy system dumps to initialize this system.
 legacy
