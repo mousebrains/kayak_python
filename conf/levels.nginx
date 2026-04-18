@@ -120,6 +120,12 @@ server {
         root /var/www/certbot;
     }
 
+    # security.txt (RFC 9116) — beats the dotfile-block regex via exact match.
+    location = /.well-known/security.txt {
+        alias /home/pat/kayak/static/security.txt;
+        add_header Cache-Control "public, max-age=86400";
+    }
+
     # Custom error page
     error_page 404 /404.html;
     location = /404.html {
