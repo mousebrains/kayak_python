@@ -246,3 +246,4 @@ id,name,agency,fetch_url_id,calc_expression_id
 5597,14302480,USGS,,
 5598,14170000,USGS,,
 5600,FALO3,nwrfc.textplot,10912,
+5601,Fall_Creek_above_Winberry_calc,,,28
