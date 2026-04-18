@@ -10,7 +10,9 @@ set -euo pipefail
 
 HOST=$(hostname)
 TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-UP=$(uptime -p)
+# `uptime -p` reads /proc/uptime which ProcSubset=pid hides. Use the
+# kernel boot timestamp from systemctl (D-Bus, no /proc required).
+BOOTED=$(systemctl show -p KernelTimestamp --value)
 DISK=$(df -h /home | tail -1 | awk '{print $4" free of "$2}')
 
 DB=/home/pat/DB/kayak.db
@@ -30,7 +32,7 @@ Kayak levels host heartbeat
 
 Sent:        $TS
 Host:        $HOST
-Uptime:      $UP
+Booted:      $BOOTED
 Disk /home:  $DISK
 DB mtime:    $DB_MTIME
 Pipeline:    last=$PL_LAST status=$PL_STATUS
