@@ -66,7 +66,10 @@ reach_id,guidebook_id,page,run,url
 1306,7,107,23,
 1407,10,,,https://www.oregonkayaking.net/creeks/elk/elk.html
 1407,11,,,https://www.dreamflows.com/xlist-or.php#Site581
-1486,3,142,76,
+1486,2,108,68,
+1486,3,141,75,
+1486,4,150,79,
+1486,7,119,26,
 1766,2,257,188,
 1766,3,334,209,
 1766,7,124,28,
@@ -602,6 +605,9 @@ reach_id,guidebook_id,page,run,url
 5516,4,212,122,
 5516,7,30,5,
 5516,11,,,https://www.dreamflows.com/xlist-or.php#Site716
+5517,2,110,69,
+5517,3,142,76,
+5517,4,151,80,
 5518,7,71,15,
 5518,10,,,https://www.oregonkayaking.net/rivers/gem/gem.html
 5518,11,,,https://www.dreamflows.com/xlist-or.php#Site209
@@ -915,3 +921,5 @@ reach_id,guidebook_id,page,run,url
 5839,3,49,11,
 5839,4,41,10,
 5839,7,354,80,
+5840,3,140,74,
+5840,4,149,78,
