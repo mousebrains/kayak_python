@@ -96,7 +96,6 @@ reach_id,guidebook_id,page,run,url
 1770,7,124,28,
 1770,11,,107,
 2042,3,378,,
-2042,13,,,https://www.whitewaterguidebook.com/oregon/lower-imnaha-river/
 2111,3,326,205,
 2111,4,334,195,
 2114,4,324,190,
@@ -123,7 +122,9 @@ reach_id,guidebook_id,page,run,url
 2469,2,127,84,
 2532,3,372,,
 2533,2,289,217,
+2617,2,128,85,
 2617,3,162,91,
+2617,4,172,95,
 2657,2,121,78,
 2657,3,154,85,
 2657,4,164,90 and 91,
@@ -150,7 +151,11 @@ reach_id,guidebook_id,page,run,url
 2665,7,215,49.3,
 2665,9,58,,
 2665,11,,,https://www.dreamflows.com/xlist-or.php#Site143
+2712,2,218,163,
 2712,3,282,179,
+2712,4,284,16,
+2712,7,236,50,
+2712,9,92,,
 2712,13,,,https://www.whitewaterguidebook.com/oregon/lower-metolius-river/
 2723,2,112,71,
 2723,3,144,78,
@@ -160,6 +165,7 @@ reach_id,guidebook_id,page,run,url
 2725,3,146,79,
 2725,4,154,82,
 2725,9,45,,
+2824,2,126,83,
 2824,3,160,90,
 2829,2,168,121,
 2829,3,210,127,
@@ -188,6 +194,8 @@ reach_id,guidebook_id,page,run,url
 3000,7,231,54,
 3000,11,,,https://www.dreamflows.com/xlist-or.php#Site766
 3011,2,40,11,
+3011,4,43,11,
+3011,7,235,55,
 3048,2,48,18,
 3048,9,25,,
 3053,5,12,,
@@ -304,15 +312,12 @@ reach_id,guidebook_id,page,run,url
 4700,2,76,40,
 4700,4,99,46,
 4700,7,368,83,
-4815,3,340,214,
 4912,2,197,144,
 4912,3,247,154,
 4912,7,143,33,
 4912,11,,,https://www.dreamflows.com/xlist-or.php#Site679
 4912,12,,,https://mthoodh2o.blogspot.com/2017/09/west-fork-hood.html
 4912,13,,,https://www.whitewaterguidebook.com/oregon/west-fork-hood/
-4940,3,290,184,
-4940,13,,,https://www.whitewaterguidebook.com/oregon/white-river-keeps-milll-white-crossing/
 4953,3,264,167,
 4981,2,136,94,
 4981,3,175,101,
@@ -630,6 +635,10 @@ reach_id,guidebook_id,page,run,url
 5524,3,99,45,
 5524,4,101,48,
 5524,11,,,https://www.dreamflows.com/xlist-or.php#Site208
+5525,2,226,168,
+5525,3,290,184,
+5525,4,293,173,
+5525,7,376,85,
 5525,10,,,https://www.oregonkayaking.net/rivers/whitelower/whitelower.html
 5525,11,,,https://www.dreamflows.com/xlist-or.php#Site204
 5525,13,,,https://www.whitewaterguidebook.com/oregon/lower-white-river/
@@ -748,6 +757,10 @@ reach_id,guidebook_id,page,run,url
 5575,7,189,44,
 5576,10,,,https://www.oregonkayaking.net/rivers/black_rock_fork/black_rock_fork.html
 5577,10,,,https://www.oregonkayaking.net/creeks/french/french.html
+5580,2,38,10,
+5580,3,50,12,
+5580,4,43,11,
+5580,7,235,55,
 5580,11,,,https://www.dreamflows.com/xlist-or.php#Site238
 5581,10,,,https://www.oregonkayaking.net/rivers/mf_hood/mf_hood.html
 5581,13,,,https://www.whitewaterguidebook.com/oregon/lower-middle-fork-of-the-hood-river/
@@ -935,3 +948,5 @@ reach_id,guidebook_id,page,run,url
 5839,7,354,80,
 5840,3,140,74,
 5840,4,149,78,
+5841,7,152,35,
+5841,13,,,https://www.whitewaterguidebook.com/oregon/lower-imnaha-river/
