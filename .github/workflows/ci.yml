@@ -29,9 +29,9 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Install biome
-        run: |
-          curl -fsSL "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.4.11/biome-linux-x64" -o /usr/local/bin/biome
-          chmod +x /usr/local/bin/biome
+        uses: biomejs/setup-biome@v2
+        with:
+          version: 2.4.11
 
       - name: PHP syntax check
         run: |
