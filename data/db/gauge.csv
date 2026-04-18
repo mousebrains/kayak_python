@@ -212,4 +212,4 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 2112,14188750,,,"Crabtree Creek near Scio, OR",44.6731389,-122.91925,14188750,,,,,,14188750,,,155.0,17090005,0
 2113,Hood_EFMF_calc,,,EF+MF Hood (Tucker minus WF),45.60399488596845,-121.63237149447836,,,,,,,,,,,17070105,0
 2114,14302480,,,"Trask River above Cedar Creek, near Tillamook, OR",45.4462181,-123.7103974,14302480,,,,,,14302480,,,156.0,17100203,0
-2115,Fall_Creek_Inflow,,,Fall Creek reservoir inflow (NWRFC FALO3),43.9444,-122.7736,,,,,,,,,,,17090001,0
+2115,Fall_Creek_Inflow,,,Fall Creek reservoir inflow (NWRFC FALO3),43.972015,-122.65907,,,,,,,,,,,17090001,0
