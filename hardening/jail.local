@@ -37,7 +37,7 @@ logpath = /var/log/nginx/access.log
 [nginx-default-block]
 enabled = true
 filter = nginx-default-block
-maxretry = 3
-findtime = 10m
+maxretry = 2
+findtime = 1d
 bantime = 1d
 logpath = /var/log/nginx/blocked-access.log

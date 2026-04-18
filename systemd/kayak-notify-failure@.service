@@ -4,6 +4,7 @@ Description=Send failure notification for %i
 [Service]
 Type=oneshot
 User=pat
-ExecStart=/bin/bash -c 'echo "ALERT: %i failed at $(date -u +\"%%Y-%%m-%%d %%H:%%M UTC\")" | logger -t kayak-alert -p user.err'
-# To enable email notifications, uncomment and configure:
-# ExecStart=/bin/bash -c 'echo "Unit %i failed at $(date -u)" | mail -s "Kayak: %i failed" pat.kayak@gmail.com'
+# Log to syslog (source of truth) then attempt email. Mail failures are
+# piped back to syslog so a broken msmtp doesn't silently drop alerts.
+# Requires /etc/msmtprc to have a real Gmail app password set.
+ExecStart=/bin/bash -c 'MSG="ALERT: %i failed at $(date -u +\"%%Y-%%m-%%dT%%H:%%M:%%SZ\")"; echo "$MSG" | logger -t kayak-alert -p user.err; echo "$MSG" | mail -s "Kayak: %i failed" pat.kayak@gmail.com 2>&1 | logger -t kayak-alert -p user.err'

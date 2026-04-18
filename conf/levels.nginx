@@ -16,6 +16,13 @@ server {
     include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
 
+    # OCSP stapling — cache the CA's revocation status so clients don't have to
+    # fetch it themselves on the TLS handshake.
+    ssl_stapling on;
+    ssl_stapling_verify on;
+    resolver 1.1.1.1 8.8.8.8 valid=300s;
+    resolver_timeout 5s;
+
     server_name levels.mousebrains.com levels-test.wkcc.org; # levels.wkcc.org;
 
     # Hide server identity completely (requires libnginx-mod-http-headers-more-filter)
@@ -40,8 +47,13 @@ server {
     gzip_min_length 256;
     gzip_vary on;
 
+    # Restrict HTTP methods to GET, HEAD, POST
+    if ($request_method !~ ^(GET|HEAD|POST)$) {
+        return 405;
+    }
+
     # Block known malicious scanners and exploit tools
-    if ($http_user_agent ~* (zgrab|masscan|scanner/1\.0|libredtail|xfa1|Gh0st|^Hello|nvdorz|FreePBX-Scanner)) {
+    if ($http_user_agent ~* (zgrab|masscan|scanner/1\.0|libredtail|xfa1|Gh0st|^Hello|nvdorz|FreePBX-Scanner|Claude-SearchBot|ClaudeBot|r00ts3c|Scrapy|python-requests)) {
         return 444;
     }
 
@@ -68,7 +80,7 @@ server {
     # Generated HTML/CSV/text pages — short cache, regenerated hourly
     location / {
         try_files $uri $uri/ =404;
-        expires 12m;
+        expires 5m;
         add_header Cache-Control "public";
         include /etc/nginx/snippets/security-headers.conf;
     }

@@ -66,6 +66,13 @@ class TestSafeEval:
         with pytest.raises(ValueError):
             _safe_eval("abs(-5)")
 
+    def test_resolves_names_from_values(self):
+        assert _safe_eval("_v0 + _v1", {"_v0": 10.0, "_v1": 5.0}) == 15.0
+
+    def test_raises_on_missing_name(self):
+        with pytest.raises(ValueError, match="Undefined name"):
+            _safe_eval("_v0 + _v1", {"_v0": 10.0})
+
 
 # ---------------------------------------------------------------------------
 # calculator() integration tests
@@ -192,3 +199,44 @@ def test_negative_result_clamped_to_zero(session):
     latest = get_latest(session, source_id, DataType.flow)
     assert latest is not None
     assert latest.value == 0.0
+
+
+def test_substring_refs_do_not_collide(session):
+    """When one ref name is a substring of another, both resolve correctly.
+
+    Regression test: the old string-replace would substitute the shorter ref
+    inside the longer one. E.g. with refs "x::flow" and "x::flowrate", the
+    pattern "x::flow" matches inside "x::flowrate". Longest-first substitution
+    via placeholders prevents this.
+    """
+    # Names chosen so one is a substring of the other. Observation values
+    # differ so we can prove both got resolved correctly.
+    ref_sources = [
+        ("gauge_X", DataType.flow, 7.0),
+        ("gauge_X_tributary", DataType.flow, 100.0),
+    ]
+    expression = "gauge_X_tributary::flow + gauge_X::flow"
+    time_expression = "gauge_X_tributary::flow gauge_X::flow"
+
+    source_id = _make_calc_source(session, expression, time_expression, ref_sources)
+    _run_calculator(session)
+
+    latest = get_latest(session, source_id, DataType.flow)
+    assert latest is not None
+    # Correct answer: 100 + 7 = 107. If the substring bug were present, the
+    # shorter ref "gauge_X::flow" would substitute inside "gauge_X_tributary::flow"
+    # and produce a syntactically garbled expression.
+    assert latest.value == 107.0
+
+
+def test_non_finite_reference_is_skipped(session):
+    """If any referenced value is non-finite (nan/inf), skip the calculation."""
+    ref_sources = [("src_a", DataType.flow, float("inf"))]
+    expression = "src_a::flow * 2"
+    time_expression = "src_a::flow"
+
+    source_id = _make_calc_source(session, expression, time_expression, ref_sources)
+    _run_calculator(session)
+
+    latest = get_latest(session, source_id, DataType.flow)
+    assert latest is None

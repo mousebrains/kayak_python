@@ -7,6 +7,7 @@ to produce derived observations.
 import argparse
 import ast
 import logging
+import math
 import operator
 import re
 from collections.abc import Callable
@@ -49,19 +50,25 @@ def _safe_round(value: float, ndigits: float | None = None) -> float:
 _SAFE_FUNCS: dict[str, Callable[..., float]] = {"max": max, "min": min, "round": _safe_round}
 
 
-def _safe_eval(expr: str) -> float:
+def _safe_eval(expr: str, values: dict[str, float] | None = None) -> float:
     """Evaluate a simple arithmetic expression safely via AST.
 
-    Supports: numeric constants, +, -, *, /, **, unary +/-, max(), min().
-    Raises ValueError for any unsupported constructs.
+    Supports: numeric constants, +, -, *, /, **, unary +/-, max(), min(), round().
+    If `values` is given, bare names (e.g. `_v0`) resolve to floats from that dict;
+    names not present raise ValueError. Any other construct raises ValueError.
     """
     tree = ast.parse(expr, mode="eval")
+    lookup = values or {}
 
     def _eval(node: ast.AST) -> float:
         if isinstance(node, ast.Expression):
             return _eval(node.body)
         if isinstance(node, ast.Constant) and isinstance(node.value, int | float):
             return float(node.value)
+        if isinstance(node, ast.Name):
+            if node.id not in lookup:
+                raise ValueError(f"Undefined name: {node.id}")
+            return float(lookup[node.id])
         if isinstance(node, ast.BinOp):
             bin_fn = _BINOPS.get(type(node.op))
             if bin_fn is None:
@@ -223,6 +230,15 @@ def calculator(args: argparse.Namespace) -> None:
                         logger.warning("No latest gauge value for %s/%s", ref_name, ref_type_str)
                         skip = True
                         break
+                    if not math.isfinite(latest.value):
+                        logger.warning(
+                            "Non-finite latest value for %s/%s: %r",
+                            ref_name,
+                            ref_type_str,
+                            latest.value,
+                        )
+                        skip = True
+                        break
 
                     values[ref] = latest.value
                     times.append(latest.observed_at)
@@ -233,17 +249,24 @@ def calculator(args: argparse.Namespace) -> None:
                 # Use the earliest time from all references
                 when = min(times)
 
-                # Evaluate the expression by substituting values
+                # Rewrite each ref to a placeholder identifier before AST parse.
+                # Refs contain "::" which isn't a valid Python identifier, so we
+                # replace them with "_v0", "_v1", ... and pass a lookup dict to
+                # _safe_eval. Replace longest refs first so a shorter ref can't
+                # corrupt a longer one via substring match.
                 expr = expression
-                for ref, val in values.items():
-                    expr = expr.replace(ref, str(val))
+                placeholder_values: dict[str, float] = {}
+                for i, ref in enumerate(sorted(values, key=len, reverse=True)):
+                    placeholder = f"_v{i}"
+                    expr = expr.replace(ref, placeholder)
+                    placeholder_values[placeholder] = values[ref]
 
                 # Clean up SQL functions for Python eval
                 expr = expr.replace("greatest(", "max(")
                 expr = expr.replace("least(", "min(")
 
                 try:
-                    result = _safe_eval(expr)
+                    result = _safe_eval(expr, placeholder_values)
                 except (ValueError, SyntaxError) as e:
                     logger.error("Error evaluating '%s': %s", expr, e)
                     continue

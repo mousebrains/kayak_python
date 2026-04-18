@@ -7,7 +7,20 @@ import aiohttp
 import pytest
 import requests
 
-from kayak.utils.http_client import FetchResult, async_fetch_many, fetch
+from kayak.utils.http_client import FetchResult, _validate_url, async_fetch_many, fetch
+
+
+@pytest.fixture(autouse=True)
+def _public_getaddrinfo():
+    """Keep _validate_url offline: return a fixed public IP (8.8.8.8) for any
+    hostname. Tests that exercise the validator directly override this with
+    their own `getaddrinfo` patch inside the test body."""
+    with patch(
+        "kayak.utils.http_client.socket.getaddrinfo",
+        return_value=[(2, 1, 6, "", ("8.8.8.8", 0))],
+    ):
+        yield
+
 
 # ---------------------------------------------------------------------------
 # FetchResult with no response
@@ -170,6 +183,97 @@ class TestFetch:
         fetch("http://example.com/data", timeout=10)
         _, kwargs = mock_get.call_args
         assert kwargs["timeout"] == 10
+
+    @patch("kayak.utils.http_client.requests.get")
+    def test_fetch_disables_redirects(self, mock_get):
+        """Sync fetch must not follow redirects, else a 3xx could bypass
+        _validate_url (the redirect target wouldn't be re-validated)."""
+        mock_resp = MagicMock(spec=requests.Response)
+        mock_resp.status_code = 200
+        mock_get.return_value = mock_resp
+        fetch("http://example.com/data")
+        _, kwargs = mock_get.call_args
+        assert kwargs["allow_redirects"] is False
+
+    @patch("kayak.utils.http_client.requests.get")
+    def test_fetch_rejects_ssrf_url(self, mock_get):
+        """fetch() returns an error FetchResult (no HTTP call) when the URL
+        resolves to an internal IP."""
+        with patch(
+            "kayak.utils.http_client.socket.getaddrinfo",
+            return_value=[(2, 1, 6, "", ("169.254.169.254", 0))],
+        ):
+            result = fetch("http://metadata.example/")
+        assert result.ok is False
+        assert result.error is not None
+        assert "blocked IP" in result.error
+        mock_get.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# _validate_url
+# ---------------------------------------------------------------------------
+
+
+class TestValidateUrl:
+    def test_rejects_non_http_scheme(self):
+        with pytest.raises(ValueError, match="Scheme not allowed"):
+            _validate_url("file:///etc/passwd")
+        with pytest.raises(ValueError, match="Scheme not allowed"):
+            _validate_url("ftp://example.com/")
+
+    def test_rejects_empty_hostname(self):
+        with pytest.raises(ValueError, match="No hostname"):
+            _validate_url("http:///path")
+
+    def test_rejects_rfc1918(self):
+        with (
+            patch(
+                "kayak.utils.http_client.socket.getaddrinfo",
+                return_value=[(2, 1, 6, "", ("10.0.0.1", 0))],
+            ),
+            pytest.raises(ValueError, match="blocked IP"),
+        ):
+            _validate_url("http://internal.example/")
+
+    def test_rejects_loopback(self):
+        with (
+            patch(
+                "kayak.utils.http_client.socket.getaddrinfo",
+                return_value=[(2, 1, 6, "", ("127.0.0.1", 0))],
+            ),
+            pytest.raises(ValueError, match="blocked IP"),
+        ):
+            _validate_url("http://localhost/")
+
+    def test_rejects_metadata_ip(self):
+        with (
+            patch(
+                "kayak.utils.http_client.socket.getaddrinfo",
+                return_value=[(2, 1, 6, "", ("169.254.169.254", 0))],
+            ),
+            pytest.raises(ValueError, match="blocked IP"),
+        ):
+            _validate_url("http://metadata.cloud/")
+
+    def test_accepts_public_ip(self):
+        with patch(
+            "kayak.utils.http_client.socket.getaddrinfo",
+            return_value=[(2, 1, 6, "", ("8.8.8.8", 0))],
+        ):
+            _validate_url("http://dns.example/")  # no raise
+
+    def test_dns_failure_raises(self):
+        import socket
+
+        with (
+            patch(
+                "kayak.utils.http_client.socket.getaddrinfo",
+                side_effect=socket.gaierror("nodename nor servname provided"),
+            ),
+            pytest.raises(ValueError, match="DNS resolution failed"),
+        ):
+            _validate_url("http://no-such-host.example/")
 
 
 # ---------------------------------------------------------------------------

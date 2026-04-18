@@ -11,3 +11,19 @@ EnvironmentFile=/home/pat/.config/kayak/.env
 ExecStart=/home/pat/.venv/bin/levels decimate --vacuum
 TimeoutStartSec=600
 Nice=15
+
+# Sandboxing.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/pat/DB /home/pat/.config
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM

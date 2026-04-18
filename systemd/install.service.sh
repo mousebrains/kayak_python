@@ -6,7 +6,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEST=/etc/systemd/system
-UNITS=(kayak-pipeline.service kayak-pipeline.timer kayak-decimate.service kayak-decimate.timer kayak-backup.service kayak-backup.timer)
+UNITS=(kayak-pipeline.service kayak-pipeline.timer kayak-decimate.service kayak-decimate.timer kayak-backup.service kayak-backup.timer kayak-notify-failure@.service)
 TIMERS=(kayak-pipeline.timer kayak-decimate.timer kayak-backup.timer)
 
 if [[ $EUID -ne 0 ]]; then

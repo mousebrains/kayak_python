@@ -9,3 +9,19 @@ WorkingDirectory=/home/pat/kayak
 EnvironmentFile=/home/pat/.config/kayak/.env
 ExecStart=/home/pat/kayak/systemd/kayak-backup.sh
 Nice=15
+
+# Sandboxing.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/pat/DB /home/pat/kayak/backups /home/pat/.config
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM

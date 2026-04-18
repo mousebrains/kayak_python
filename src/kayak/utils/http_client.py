@@ -1,7 +1,9 @@
 """HTTP client wrapper."""
 
 import asyncio
+import ipaddress
 import logging
+import socket
 import ssl
 import time
 from collections import defaultdict
@@ -39,6 +41,49 @@ def _insecure_ssl_context() -> ssl.SSLContext:
     # servers still require.
     ctx.set_ciphers("DEFAULT:@SECLEVEL=1")
     return ctx
+
+
+def _validate_url(url: str) -> None:
+    """Reject non-http(s) schemes and hosts that resolve to internal IPs.
+
+    Defends against SSRF if `sources.yaml` / `fetch_url` rows ever contain
+    attacker-controlled URLs pointing at cloud metadata (169.254.169.254),
+    loopback, RFC1918, or other internal ranges.
+
+    Known limitation — TOCTOU: we resolve the hostname once here; the HTTP
+    client resolves it again when making the request. A hostile DNS server
+    could flip results between calls. Acceptable tradeoff given the threat
+    model (attacker needs write access to sources.yaml, which lives in a
+    repo owned by pat).
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"Scheme not allowed: {parsed.scheme!r}")
+    host = parsed.hostname
+    if not host:
+        raise ValueError(f"No hostname in URL: {url!r}")
+
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror as e:
+        raise ValueError(f"DNS resolution failed for {host!r}: {e}") from e
+
+    for info in infos:
+        sockaddr = info[4]
+        ip_str = sockaddr[0]
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError:
+            continue
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
+            raise ValueError(f"Host {host!r} resolved to blocked IP {ip_str}")
 
 
 class FetchResult:
@@ -105,9 +150,20 @@ def fetch(url: str, timeout: int | None = None) -> FetchResult:
 
     TLS certificate verification is on by default. It is disabled only for
     hosts in `_INSECURE_HOSTS` (see module docstring).
+
+    URLs that fail `_validate_url` (non-http(s), internal/metadata IPs) are
+    rejected without making a request. Redirects are not followed — a 3xx
+    response is returned as-is so a redirect to an internal address can't
+    bypass validation.
     """
     if timeout is None:
         timeout = FETCH_TIMEOUT
+
+    try:
+        _validate_url(url)
+    except ValueError as e:
+        logger.error("URL validation failed for %s: %s", url, e)
+        return FetchResult(url=url, error=str(e))
 
     verify = not _is_insecure_host(url)
 
@@ -119,6 +175,7 @@ def fetch(url: str, timeout: int | None = None) -> FetchResult:
                 timeout=timeout,
                 headers={"User-Agent": FETCH_USER_AGENT},
                 verify=verify,
+                allow_redirects=False,
             )
             if response.status_code in _RETRYABLE_STATUS_CODES and attempt < _MAX_RETRIES - 1:
                 wait = 2**attempt
@@ -164,7 +221,17 @@ async def _async_fetch_one(
     timeout: int,
     insecure_ctx: ssl.SSLContext,
 ) -> FetchResult:
-    """Fetch a single URL with retry logic under a per-host semaphore."""
+    """Fetch a single URL with retry logic under a per-host semaphore.
+
+    aiohttp defaults to `allow_redirects=False` on `session.get`, so a 3xx
+    is surfaced without validator bypass.
+    """
+    try:
+        _validate_url(url)
+    except ValueError as e:
+        logger.error("URL validation failed for %s: %s", url, e)
+        return FetchResult(url=url, error=str(e))
+
     # Per-request ssl override: insecure context for known-bad hosts, else
     # True (use the connector's default context, which verifies properly).
     ssl_arg: ssl.SSLContext | bool = insecure_ctx if _is_insecure_host(url) else True
