@@ -108,6 +108,8 @@ nwrfc.xml:
 nwrfc.textplot:
   urls:
     - url: "https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=APLO3&pe=QI"
+    # FALO3 inflow — feeds the Fall_Creek_Inflow gauge used by upstream reaches
+    - url: "https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=FALO3&pe=QI"
 
 # Replaced by fetch-usgs-ogc which only fetches gauges already in the DB.
 # The bulk state fetches below created thousands of unlinked source records.

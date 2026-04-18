@@ -45,6 +45,11 @@ class NWRFCTextPlotParser(BaseParser):
         if ">inflow<" in header_lower:
             data_type = DataType.inflow
 
+        # Timestamps in the table are Pacific local time; the header says
+        # "Date/Time (PDT)" in summer and "(PST)" in winter. Pick up whichever
+        # the page advertises and convert to UTC.
+        tz = "PDT" if "(pdt)" in header_lower else "PST" if "(pst)" in header_lower else None
+
         now = datetime.now(UTC)
 
         # Extract table rows: each <tr> has 4 <td> cells
@@ -58,7 +63,7 @@ class NWRFCTextPlotParser(BaseParser):
             time_str = m.group(1).strip()
             val_str = m.group(2).strip()
 
-            when = parse_datetime(time_str)
+            when = parse_datetime(time_str, tz_name=tz)
             if when is None or when > now:
                 continue
 

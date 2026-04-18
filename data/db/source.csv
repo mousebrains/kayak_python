@@ -245,4 +245,4 @@ id,name,agency,fetch_url_id,calc_expression_id
 5590,WLAO3,nwps,10867,
 5597,14302480,USGS,,
 5598,14170000,USGS,,
-5599,Fall_Creek_Inflow_calc,,,28
+5600,FALO3,nwrfc.textplot,10912,
