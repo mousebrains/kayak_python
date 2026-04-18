@@ -35,7 +35,7 @@ def session(engine):
     """Provide a transactional session that rolls back after the test."""
     connection = engine.connect()
     transaction = connection.begin()
-    sess = Session(bind=connection)
+    sess = Session(bind=connection, join_transaction_mode="create_savepoint")
 
     yield sess
 
