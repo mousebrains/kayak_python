@@ -39,8 +39,17 @@ class NWRFCXMLParser(BaseParser):
             logger.error("lxml required for NWRFC XML parser")
             return 0
 
+        # Disable entity resolution, network access, and DTD loading to block
+        # XXE and billion-laughs attacks. Inbound XML comes over TLS but
+        # we defend in depth.
+        parser = etree.XMLParser(
+            resolve_entities=False,
+            no_network=True,
+            load_dtd=False,
+            huge_tree=False,
+        )
         try:
-            root = etree.fromstring(text.encode("utf-8"))
+            root = etree.fromstring(text.encode("utf-8"), parser)
         except etree.XMLSyntaxError as e:
             logger.error("XML parse error for %s: %s", self.url, e)
             return 0

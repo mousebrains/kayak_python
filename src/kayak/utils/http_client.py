@@ -15,6 +15,32 @@ from kayak.config import FETCH_TIMEOUT, FETCH_USER_AGENT
 logger = logging.getLogger(__name__)
 
 
+# Hosts whose TLS chain or cipher suite can't be validated with a stock Debian
+# CA bundle. Every entry here is a MITM risk — only add hosts we've confirmed
+# need relaxed TLS *and* where the payload is non-sensitive public data (river
+# observations). Keep this list minimal.
+_INSECURE_HOSTS: frozenset[str] = frozenset(
+    {
+        "www.nwd-wc.usace.army.mil",  # USACE — DoD CA not in standard bundle
+    }
+)
+
+
+def _is_insecure_host(url: str) -> bool:
+    return (urlparse(url).hostname or "") in _INSECURE_HOSTS
+
+
+def _insecure_ssl_context() -> ssl.SSLContext:
+    """SSL context for hosts in _INSECURE_HOSTS: no verify, legacy ciphers."""
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    # Allow legacy non-forward-secrecy ciphers (e.g. AES256-SHA) that older
+    # servers still require.
+    ctx.set_ciphers("DEFAULT:@SECLEVEL=1")
+    return ctx
+
+
 class FetchResult:
     """Result of an HTTP fetch (mirrors Curl class interface)."""
 
@@ -77,14 +103,13 @@ _MAX_RETRIES = 3
 def fetch(url: str, timeout: int | None = None) -> FetchResult:
     """Fetch a URL and return a FetchResult.
 
-    Mirrors the C++ Curl constructor behavior:
-    - SSL verification disabled (verify=False)
-    - 5-minute default timeout
-    - Custom user agent
-    - Retries up to 3 times on transient errors with exponential backoff
+    TLS certificate verification is on by default. It is disabled only for
+    hosts in `_INSECURE_HOSTS` (see module docstring).
     """
     if timeout is None:
         timeout = FETCH_TIMEOUT
+
+    verify = not _is_insecure_host(url)
 
     last_result: FetchResult | None = None
     for attempt in range(_MAX_RETRIES):
@@ -93,7 +118,7 @@ def fetch(url: str, timeout: int | None = None) -> FetchResult:
                 url,
                 timeout=timeout,
                 headers={"User-Agent": FETCH_USER_AGENT},
-                verify=False,
+                verify=verify,
             )
             if response.status_code in _RETRYABLE_STATUS_CODES and attempt < _MAX_RETRIES - 1:
                 wait = 2**attempt
@@ -137,14 +162,23 @@ async def _async_fetch_one(
     session: aiohttp.ClientSession,
     semaphore: asyncio.Semaphore,
     timeout: int,
+    insecure_ctx: ssl.SSLContext,
 ) -> FetchResult:
     """Fetch a single URL with retry logic under a per-host semaphore."""
+    # Per-request ssl override: insecure context for known-bad hosts, else
+    # True (use the connector's default context, which verifies properly).
+    ssl_arg: ssl.SSLContext | bool = insecure_ctx if _is_insecure_host(url) else True
+
     last_result: FetchResult | None = None
     for attempt in range(_MAX_RETRIES):
         try:
             async with (
                 semaphore,
-                session.get(url, timeout=aiohttp.ClientTimeout(total=timeout)) as resp,
+                session.get(
+                    url,
+                    timeout=aiohttp.ClientTimeout(total=timeout),
+                    ssl=ssl_arg,
+                ) as resp,
             ):
                 body = await resp.text(errors="replace")
                 status = resp.status
@@ -215,13 +249,10 @@ async def async_fetch_many(
         lambda: asyncio.Semaphore(concurrency_per_host)
     )
 
-    ssl_ctx = ssl.create_default_context()
-    ssl_ctx.check_hostname = False
-    ssl_ctx.verify_mode = ssl.CERT_NONE
-    # Lower cipher security level to include non-forward-secrecy ciphers
-    # (e.g. AES256-SHA) needed by older servers like USACE.
-    ssl_ctx.set_ciphers("DEFAULT:@SECLEVEL=1")
-    connector = aiohttp.TCPConnector(ssl=ssl_ctx)
+    # Default connector verifies TLS; individual requests to known-bad hosts
+    # override with `ssl=insecure_ctx` in _async_fetch_one().
+    insecure_ctx = _insecure_ssl_context()
+    connector = aiohttp.TCPConnector()
     async with aiohttp.ClientSession(
         connector=connector,
         headers={"User-Agent": FETCH_USER_AGENT},
@@ -230,7 +261,7 @@ async def async_fetch_many(
         for url in urls:
             host = urlparse(url).hostname or ""
             sem = host_semaphores[host]
-            tasks.append(_async_fetch_one(url, session, sem, timeout))
+            tasks.append(_async_fetch_one(url, session, sem, timeout, insecure_ctx))
         results = await asyncio.gather(*tasks)
 
     return dict(zip(urls, results, strict=True))

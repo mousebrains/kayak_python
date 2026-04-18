@@ -128,11 +128,20 @@ class TestFetch:
         assert result.url == "http://example.com/data"
 
     @patch("kayak.utils.http_client.requests.get")
-    def test_fetch_passes_verify_false(self, mock_get):
+    def test_fetch_verifies_tls_by_default(self, mock_get):
         mock_resp = MagicMock(spec=requests.Response)
         mock_resp.status_code = 200
         mock_get.return_value = mock_resp
-        fetch("http://example.com/data")
+        fetch("https://example.com/data")
+        _, kwargs = mock_get.call_args
+        assert kwargs["verify"] is True
+
+    @patch("kayak.utils.http_client.requests.get")
+    def test_fetch_skips_verify_for_insecure_host(self, mock_get):
+        mock_resp = MagicMock(spec=requests.Response)
+        mock_resp.status_code = 200
+        mock_get.return_value = mock_resp
+        fetch("https://www.nwd-wc.usace.army.mil/foo")
         _, kwargs = mock_get.call_args
         assert kwargs["verify"] is False
 
@@ -193,7 +202,7 @@ class _FakeSession:
         self._responses = responses or {}
         self._call_count = 0
 
-    def get(self, url, timeout=None):
+    def get(self, url, timeout=None, ssl=None):
         if url in self._responses:
             resp = self._responses[url]
             if isinstance(resp, list):
@@ -300,7 +309,7 @@ class TestAsyncFetchMany:
         call_count = 0
 
         class RetrySession:
-            def get(self, url, timeout=None):
+            def get(self, url, timeout=None, ssl=None):
                 nonlocal call_count
                 call_count += 1
                 if call_count < 3:

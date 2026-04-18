@@ -142,7 +142,7 @@ rm -f "${DB}-wal" "${DB}-shm"
 
 echo "--- Installing new DB ---"
 mv "$NEW_DB" "$DB"
-chmod 664 "$DB"
+chmod 660 "$DB"
 
 echo "--- Restarting timers ---"
 for unit in kayak-pipeline.timer kayak-decimate.timer kayak-backup.timer; do
