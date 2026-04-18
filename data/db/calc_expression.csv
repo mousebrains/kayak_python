@@ -27,3 +27,4 @@ id,data_type,expression,time_expression,note
 25,flow,"round(greatest(0, v8::11502500::flow - qg::11501000::flow))",v8::11502500::flow  qg::11501000::flow,
 26,flow,"round(greatest(0, greatest(((((0.2594 * d9::EF_Lewis_Washington_merge::flow) - (0.1159 * cm::14113000::flow)) + (0.5535 * uE::White_Salmon_Underwood_merge::flow)) + (0.08136 * 59::Clackamas_Three_Lynx_merge::flow)) - 264.5, 0)))",d9::EF_Lewis_Washington_merge::flow cm::14113000::flow uE::White_Salmon_Underwood_merge::flow 59::Clackamas_Three_Lynx_merge::flow,
 27,flow,"round(greatest(0, hd::Hood_Tucker_merge::flow - wf::WFHO3::flow))",hd::Hood_Tucker_merge::flow wf::WFHO3::flow,EF+MF Hood = Tucker - WF Hood
+28,flow,"round(greatest(0, fa::Fall_Creek_Lowell_merge::inflow), 1)",fa::Fall_Creek_Lowell_merge::inflow,Fall Creek reservoir inflow (USACE FAL.Flow-In) projected as flow for upstream reaches 5840/1486
