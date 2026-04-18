@@ -775,15 +775,12 @@ id,reach_id,level,low,low_data_type,high,high_data_type
 1394,5355,low,,,3.0,flow
 1395,5355,okay,3.0,flow,10.0,flow
 1396,5355,high,10.0,flow,,
-1403,5475,low,,,3.0,flow
-1404,5475,okay,3.0,flow,5.0,flow
-1405,5475,high,5.0,flow,,
 1406,5478,low,,,6.0,flow
 1407,5478,okay,6.0,flow,12.0,flow
 1408,5478,high,12.0,flow,,
-1409,5494,low,,,3.5,flow
-1410,5494,okay,3.5,flow,4.5,flow
-1411,5494,high,4.5,flow,,
+1409,5494,low,,,1300.0,flow
+1410,5494,okay,1300.0,flow,2100.0,flow
+1411,5494,high,2100.0,flow,,
 1412,5496,low,,,500.0,flow
 1413,5496,okay,500.0,flow,6000.0,flow
 1414,5496,high,6000.0,flow,,
@@ -997,3 +994,6 @@ id,reach_id,level,low,low_data_type,high,high_data_type
 1637,5575,low,,,1400.0,flow
 1638,5575,okay,1400.0,flow,3300.0,flow
 1639,5575,high,3300.0,flow,,
+1640,5475,low,,,400.0,flow
+1641,5475,okay,400.0,flow,1600.0,flow
+1642,5475,high,1600.0,flow,,

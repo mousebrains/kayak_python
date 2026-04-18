@@ -49,12 +49,14 @@ reach_id,guidebook_id,page,run,url
 1130,10,,,https://www.oregonkayaking.net/rivers/crooked/crooked.html
 1130,11,,,https://www.dreamflows.com/xlist-or.php#Site521
 1130,13,,,https://www.whitewaterguidebook.com/oregon/crooked-river/
-1201,10,,,https://www.oregonkayaking.net/creeks/deer/deer.html
 1220,2,237,179,
 1220,3,304,195,
 1220,4,307,183,
 1220,7,90,19,
 1220,11,,,https://www.dreamflows.com/xlist-or.php#Site520
+1285,3,328,206,
+1285,4,337,197,
+1285,7,101,21,
 1285,13,,,https://www.whitewaterguidebook.com/oregon/donner-und-blitzen-river/
 1305,2,51,20,
 1305,3,61,20,
@@ -518,6 +520,10 @@ reach_id,guidebook_id,page,run,url
 5486,7,361,82,
 5486,11,,,https://www.dreamflows.com/xlist-or.php#Site306
 5486,13,,,https://www.whitewaterguidebook.com/oregon/north-fork-umpqua/
+5488,2,"172,174","125,126",
+5488,3,"222,223","135,136",
+5488,4,"229,230","134,134",
+5488,7,110,24,
 5488,13,,,https://www.whitewaterguidebook.com/oregon/eagle-creek-wallowa-mountains/
 5490,11,,,https://www.dreamflows.com/xlist-or.php#Site718
 5492,2,107,66,
@@ -532,6 +538,8 @@ reach_id,guidebook_id,page,run,url
 5493,7,231,54,
 5493,9,18,,
 5493,11,,,https://www.dreamflows.com/xlist-or.php#Site229
+5494,2,292,,
+5494,3,137,71,
 5495,11,,,https://www.dreamflows.com/xlist-or.php#Site456
 5495,13,,,https://www.whitewaterguidebook.com/oregon/rogue-river-nugget-powerhouse/
 5496,2,198,146,

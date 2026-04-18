@@ -446,7 +446,6 @@ $fields = [
     'Elevation' => $reach['elevation'] ? number_format((float)$reach['elevation'], 0) . ' ft' : null,
     'Elevation Lost' => $reach['elevation_lost'] ? number_format((float)$reach['elevation_lost'], 0) . ' ft' : null,
     'Optimal Flow' => $reach['optimal_flow'] ? number_format((float)$reach['optimal_flow'], 0) . ' CFS' : null,
-    'Map Name' => $reach['map_name'],
     'No Show' => $reach['no_show'] ? 'Yes' : null,
     'Updated' => $reach['updated_at'],
 ];

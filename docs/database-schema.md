@@ -181,7 +181,6 @@ A paddleable section of river with put-in/take-out coordinates, metadata, and a 
 | latitude_end | NUMERIC(9,6) | Take-out latitude |
 | longitude_end | NUMERIC(9,6) | Take-out longitude |
 | geom | TEXT | LineString trace as "lon lat,lon lat,..." |
-| map_name | TEXT | |
 | no_show | BOOLEAN | Hidden from public display |
 | notes | TEXT | Internal notes |
 | optimal_flow | FLOAT | Ideal flow in CFS |

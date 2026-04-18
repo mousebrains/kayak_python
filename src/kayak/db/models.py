@@ -388,7 +388,6 @@ class Reach(Base):
     longitude_start: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
     latitude_end: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
     longitude_end: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
-    map_name: Mapped[str | None] = mapped_column(Text)
     no_show: Mapped[bool] = mapped_column(default=False, server_default=text("0"))
     map_only: Mapped[bool] = mapped_column(default=False, server_default=text("0"))
     notes: Mapped[str | None] = mapped_column(Text)
