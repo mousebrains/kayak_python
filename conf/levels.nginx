@@ -126,6 +126,11 @@ server {
         add_header Cache-Control "public, max-age=86400";
     }
 
+    # Legacy path — some tools still probe /security.txt directly.
+    location = /security.txt {
+        return 301 /.well-known/security.txt;
+    }
+
     # Custom error page
     error_page 404 /404.html;
     location = /404.html {
