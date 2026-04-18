@@ -15,7 +15,6 @@ id,reach_id,name,low,low_data_type,high,high_data_type
 74,1770,I,,flow,,flow
 91,2210,III,,flow,,flow
 92,2211,IV V,,flow,,flow
-98,2337,III IV,,flow,,flow
 99,2428,IV V,,flow,,flow
 102,2469,I VI,,flow,,flow
 103,2532,IV,,flow,,flow

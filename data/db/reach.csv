@@ -52,7 +52,6 @@ id,updated_at,gauge_id,name,display_name,sort_name,nature,description,difficulti
 2214,,764,11523000,Klamath,Klamath ag 13,,Dolans Bar to Weitchpec,,,8475.0,355.98,202.60000610351562,17.9,11.300000190734863,,41.3035,-123.535,41.318301,-123.524224,41.187396,-123.712891,,0,,,,,,,,236,Klamath,,1801,0
 2219,,766,PITW,Klickitat River,Klickitat 1,Pool Drop,,,Columbia,1297.0,288.9,220.0,11.0,20.0,great surfing,45.7565,-121.21,45.809299468994,-120.92400360107,45.845798492432,-121.06099700928,Klickitat.WA,0,,750.0,Southern Washington,Not Remote,forest/houses,Jan-Dec,,,,,,0
 2223,,767,14107000,Klickitat River,Klickitat 0,,,,,151.0,2720.0,,,,,46.2648,-121.245,,,,,,0,,,,,,,,,,,,0
-2337,,795,Layng,Layng Creek,Layng,Pool Drop,,,,,,189.0,4.5,42.0,20 falls at end,,,,,,,Layng,0,,2000.0,Upper Willamette,Not Remote,forest/rural,Nov-Apr,,,,,,0
 2379,,815,HSSW,EF Lewis River,Lewis ac 0,,,,,125.0,356.8,65.0,3.0,21.7,,45.8368,-122.466,45.812328338623,-122.54250335693,45.814292907715,-122.58856201172,,0,,,,,,,,,,,,0
 2401,,818,11507500,Link River,Link,,,,,3810.0,4083.71,,,,,42.2235,-121.794,42.231955,-121.800626,42.218233,-121.788556,,0,,,,,,,,11613,,,,0
 2428,,839,Klickitat ac,Little Klickitat River,Klickitat 2,,,,,,,868.0,9.8,88.2,,,,45.809299468994,-120.92400360107,45.845798492432,-121.06099700928,,0,,250.0,Southern Washington,,,Feb-Apr,,2153,,,,0
@@ -328,7 +327,7 @@ https://storymaps.arcgis.com/stories/67e9eca2ac0d45959f03e6ce0e3a37f8",100.0,Mid
 5572,,1784,aw_3199,Jackson Creek,Jackson wz ,,1) Upper: NF300 to Cover Camp,IV(V),,,,825.0,7.9,104.5,,42.987449999999995,-122.6225,42.998,-122.558,42.9769,-122.687,,0,,,,,,,,3199,Jackson Creek,160.0,,0
 5573,,878,aw_10820,Rickreall,Rickreall z ,,Rock Quarry to SE Fir Villa Rd (Lower),II-III,,,,207.0,7.0,29.8,,44.919349999999994,-123.33000000000001,44.9188,-123.379,44.9199,-123.281,,0,,,,,,,,10820,Rickreall,0.0,,0
 5574,,231,aw_10385,Butte Creek,Butte ao 01,,Wilson Road spur to Butte Falls Rd,III-IV,,,2387.9,505.0,2.7,187.0,,44.91515,-122.4765,44.911110590444785,-122.45283370612299,44.918017825541014,-122.49985650489742,,0,,,,,,,,10385,Butte Creek,0.0,,0
-5575,,1291,aw_2727,Layng Creek,Layng Creek z ,,Junetta Creek to Wildwood Falls,II-III(IV),,,,172.0,3.1,55.0,,43.716350000000006,-122.75649999999999,43.7327,-122.695,43.7,-122.818,,0,,,,,,,,2727,Layng Creek,0.0,,0
+5575,2026-04-18 01:20:30,1291,aw_2727,Layng Creek,Layng,Pool Drop,Junetta Creek to Wildwood Falls,II-III(IV),Willamette,,1395.1,387.3,7.66,50.6,20 falls at end,43.715951,-122.756302,43.732308,-122.695514,43.699594,-122.817091,,0,,2000.0,Upper Willamette,Not Remote,forest/rural,Nov-Apr,,2727,Layng Creek,81.4,1709,0
 5576,,,aw_10422,Black Rock Fork South Umpqua,Umpqua b BR 01,,Black Rock Fork South Umpqua,IV-V,,,2349.0,380.6,2.69,141.5,,43.11895,-122.5875,43.1327635866483,-122.57963790495809,43.10514856622022,-122.59511802037719,,0,,,,,,,,10422,Black Rock Fork,0.0,,0
 5577,,216,aw_10399,French Creek,French Creek z ,,4 miles upstream of Detroit Lake to Detroit Lake,IV+,,,,695.0,3.2,215.9,,44.75705,-122.1785,44.769,-122.2,44.7451,-122.157,,0,,,,,,,,10399,French Creek,0.0,,0
 5579,,1045,aw_10412,Salmonberry,Salmonberry z ,,Beaver Slide Road to Nehalem River,III+(IV),,,,685.0,10.4,65.8,,45.727850000000004,-123.57400000000001,45.7059,-123.495,45.7498,-123.653,,0,,,,,,,,10412,Salmonberry,0.0,,0
