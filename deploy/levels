@@ -151,6 +151,54 @@ server {
         add_header Cache-Control "no-store";
     }
 
+    # Phase 2 editor endpoints
+    location = /propose.php { limit_req zone=php burst=5 nodelay;
+        try_files $uri =404;
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+        fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
+        fastcgi_param EDITOR_FEATURE $editor_feature;
+        fastcgi_param SITE_URL $site_url;
+        fastcgi_param MAIL_FROM $mail_from;
+        include /home/pat/kayak/conf/security-headers.conf;
+        add_header Cache-Control "no-store";
+    }
+    location = /comment.php { limit_req zone=php burst=5 nodelay;
+        try_files $uri =404;
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+        fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
+        fastcgi_param EDITOR_FEATURE $editor_feature;
+        fastcgi_param SITE_URL $site_url;
+        fastcgi_param MAIL_FROM $mail_from;
+        include /home/pat/kayak/conf/security-headers.conf;
+        add_header Cache-Control "no-store";
+    }
+    location = /review.php { limit_req zone=php burst=5 nodelay;
+        try_files $uri =404;
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+        fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
+        fastcgi_param EDITOR_FEATURE $editor_feature;
+        fastcgi_param SITE_URL $site_url;
+        fastcgi_param MAIL_FROM $mail_from;
+        include /home/pat/kayak/conf/security-headers.conf;
+        add_header Cache-Control "no-store";
+    }
+    location = /admin.php { limit_req zone=php burst=5 nodelay;
+        try_files $uri =404;
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+        fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
+        fastcgi_param EDITOR_FEATURE $editor_feature;
+        include /home/pat/kayak/conf/security-headers.conf;
+        add_header Cache-Control "no-store";
+    }
+
     # Let's Encrypt ACME challenge
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;

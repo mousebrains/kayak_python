@@ -283,3 +283,26 @@ function safe_next_url(?string $next): string {
     if (!preg_match('#^/[^/]#', $next)) return '/';
     return $next;
 }
+
+/**
+ * Return the email address(es) of the site maintainer(s) for notifications.
+ * Priority: MAINTAINER_EMAIL env var, then all editor rows with
+ * status='maintainer', then a hard-coded fallback.
+ */
+function maintainer_emails(): array {
+    $env = auth_env('MAINTAINER_EMAIL');
+    if ($env !== '') {
+        return array_values(array_filter(array_map('trim', explode(',', $env))));
+    }
+    try {
+        $stmt = get_db()->prepare(
+            "SELECT email FROM editor WHERE status = 'maintainer' ORDER BY id"
+        );
+        $stmt->execute();
+        $rows = array_column($stmt->fetchAll(), 'email');
+        if ($rows) return $rows;
+    } catch (Throwable) {
+        // fall through
+    }
+    return ['pat.kayak@gmail.com'];
+}

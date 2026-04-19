@@ -112,7 +112,11 @@ $reaches = $reaches_stmt->fetchAll();
 
 // --- Render ---
 header('Cache-Control: no-cache');
-include_header($gauge['name'] . ' - Gauge');
+include_header(
+    $gauge['name'] . ' - Gauge',
+    '', '', '',
+    ['type' => 'gauge', 'id' => (int)$gauge['id']]
+);
 
 // Navigation bar
 echo '<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">';

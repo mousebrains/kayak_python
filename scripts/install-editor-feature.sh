@@ -72,7 +72,17 @@ backup_replace /etc/nginx/conf.d/ratelimit.conf "$REPO/deploy/nginx-ratelimit.co
 
 echo
 echo "=== nginx editor-feature env map ==="
-backup_replace /etc/nginx/conf.d/editor-env.conf "$REPO/deploy/nginx-editor-env.conf"
+# Do NOT overwrite an existing editor-env.conf: the operator edits it to
+# flip the feature flag and set hCaptcha keys, and those customizations
+# must survive a re-run of this script.
+if [[ -e /etc/nginx/conf.d/editor-env.conf ]]; then
+    echo "  /etc/nginx/conf.d/editor-env.conf already present — leaving it alone."
+    echo "  (to reset to the repo defaults, remove the file and re-run)"
+else
+    install -m 0644 "$REPO/deploy/nginx-editor-env.conf" /etc/nginx/conf.d/editor-env.conf
+    NEW_FILES+=(/etc/nginx/conf.d/editor-env.conf)
+    echo "  installed /etc/nginx/conf.d/editor-env.conf"
+fi
 
 echo
 echo "=== nginx site config ==="

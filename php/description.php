@@ -73,7 +73,13 @@ header('Cache-Control: max-age=300');
 $preconnects = '<link rel="preconnect" href="https://a.tile.opentopomap.org">'
     . '<link rel="preconnect" href="https://b.tile.opentopomap.org">'
     . '<link rel="preconnect" href="https://c.tile.opentopomap.org">';
-include_header("$name - Description", '', "Real-time river data for $name — flow, gage height, and conditions.", $preconnects);
+include_header(
+    "$name - Description",
+    '',
+    "Real-time river data for $name — flow, gage height, and conditions.",
+    $preconnects,
+    ['type' => 'reach', 'id' => $id]
+);
 
 // Navigation bar (prev/next by sort order, independent of gauge status)
 echo '<nav aria-label="Reach navigation" style="display:flex;align-items:center;gap:1rem;margin-bottom:.5rem;flex-wrap:wrap">';
