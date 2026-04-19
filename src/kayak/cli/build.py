@@ -646,6 +646,11 @@ def _build_geojson(
     return json.dumps(collection, separators=(",", ":"))
 
 
+def _editor_feature_on() -> bool:
+    v = os.environ.get("EDITOR_FEATURE", "").strip().lower()
+    return v in ("1", "true", "yes")
+
+
 def _build_nav(states: list[str], active_state: str = "") -> str:
     """Build abbreviation-based nav bar. OR links to index.html, others to {State}.html."""
     links: list[str] = []
@@ -659,7 +664,24 @@ def _build_nav(states: list[str], active_state: str = "") -> str:
         links.append(f'<a href="{href}"{cls}>{abbrev}</a>')
     links.append('<a href="/picker.php">Picker</a>')
     links.append('<a href="https://www.windy.com/?44.0,-120.5,7">OR Weather</a>')
+    if _editor_feature_on():
+        links.append('<a href="/comment.php">Comment</a>')
     return "\n    ".join(links)
+
+
+def _build_right_cluster() -> str:
+    """Right cluster on the header bar — Login + WKCC (desktop-only via CSS).
+
+    Static pages can only render the logged-out state; once the user clicks
+    anywhere dynamic the PHP nav takes over.
+    """
+    parts: list[str] = []
+    if _editor_feature_on():
+        parts.append('<a href="/login.php">Login</a>')
+    parts.append('<a href="https://wkcc.org" rel="noopener" target="_blank">WKCC</a>')
+    return (
+        '<nav class="site-nav-right" aria-label="Account and external">' + "".join(parts) + "</nav>"
+    )
 
 
 def _build_letter_nav(letters: list[str]) -> str:
@@ -711,6 +733,7 @@ def _build_page(
   <nav aria-label="State navigation">
     {nav_html}
   </nav>
+  {_build_right_cluster()}
   {letter_nav_html}
 </header>
 <main id="main">
@@ -765,6 +788,7 @@ def _build_placeholder_page(css: str, states: list[str], state: str) -> str:
   <nav aria-label="State navigation">
     {nav_html}
   </nav>
+  {_build_right_cluster()}
 </header>
 <main>
 <h2>{state}</h2>
@@ -812,6 +836,7 @@ main {{padding:0;max-width:none;}}
   <nav aria-label="State navigation">
     {nav_html}
   </nav>
+  {_build_right_cluster()}
 </header>
 <main>
 <div id="map" data-mtime="{geojson_mtime}"></div>
