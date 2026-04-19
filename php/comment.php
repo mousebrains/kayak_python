@@ -71,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $cr_id = (int)$db->lastInsertId();
 
             $maint_emails = maintainer_emails();
-            $site = rtrim(auth_env('SITE_URL') ?: 'https://levels.wkcc.org', '/');
+            $site = rtrim(auth_env('SITE_URL') ?: 'https://levels.mousebrains.com', '/');
             $email_body = render_maintainer_notification(
                 'Site feedback',
                 (string)$ed['email'],

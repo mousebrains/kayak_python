@@ -26,7 +26,7 @@ a { color: #2060A0; }
 <h1><?= $title ?></h1>
 <p class="updated">Last updated: April 19, 2026</p>
 
-<p>This website (<strong>levels.wkcc.org</strong>) is operated by the
+<p>This website (<strong>levels.mousebrains.com</strong>) is operated by the
 <a href="https://wkcc.org">Willamette Kayak and Canoe Club</a> (WKCC) to provide
 real-time river level, flow, and gauge data for paddlers in the Pacific Northwest.</p>
 
