@@ -24,7 +24,7 @@ a { color: #2060A0; }
 <body>
 <main>
 <h1><?= $title ?></h1>
-<p class="updated">Last updated: March 23, 2026</p>
+<p class="updated">Last updated: April 19, 2026</p>
 
 <p>This website (<strong>levels.wkcc.org</strong>) is operated by the
 <a href="https://wkcc.org">Willamette Kayak and Canoe Club</a> (WKCC) to provide
@@ -36,15 +36,31 @@ real-time river level, flow, and gauge data for paddlers in the Pacific Northwes
   <li><strong>Server access logs:</strong> When you visit a page, our web server records
       your IP address, the page requested, your browser's user-agent string, the referring
       URL, and a timestamp. This is standard web server logging.</li>
-  <li><strong>No cookies for visitors:</strong> This site does not set or read any cookies during
-      normal browsing. The administrative editing interface uses a server-side session cookie
-      scoped to that single page; it is not used for tracking.</li>
+  <li><strong>Cookies, if you choose to contribute:</strong> Browsing alone sets no cookies.
+      If you sign in to propose edits or leave a comment, we set two cookies:
+      <code>ed_sess</code> (a random value identifying your login session, valid for
+      seven days) and <code>ed_csrf</code> (a form-submission security token). Both are
+      HttpOnly, SameSite=Lax, and marked Secure on HTTPS. They are used only for
+      authentication and form security — not for tracking.</li>
+  <li><strong>Contributor email address:</strong> If you sign in, we store your email
+      address so we can send you the one-time login link, notify you when the maintainer
+      reviews your proposed edits, and attribute your approved contributions to you
+      on the site (if you provide a display name). You can request deletion at any
+      time by contacting the club.</li>
+  <li><strong>Proposed edits and comments:</strong> Anything you submit through the
+      Comment form is stored in our database for the maintainer to review.</li>
   <li><strong>No analytics or tracking:</strong> We do not use Google Analytics, Facebook
       pixels, or any third-party tracking services.</li>
-  <li><strong>No personal accounts:</strong> There is no user registration or login system.</li>
-  <li><strong>No data collection forms:</strong> The site does not collect names, email
-      addresses, or other personal information through forms.</li>
 </ul>
+
+<h2>Login Email and Bot Protection</h2>
+<p>Login links are emailed via our server's outgoing mail, which relays through
+Google's mail infrastructure. See
+<a href="https://policies.google.com/privacy">Google's privacy policy</a>
+for details on that step. Sign-in and contact forms may present an
+<a href="https://www.hcaptcha.com/privacy">hCaptcha</a> challenge to deter
+automated abuse; hCaptcha sees your IP address and browser details when
+the challenge is solved.</p>
 
 <h2>How We Use Server Logs</h2>
 <p>Access logs are used solely for:</p>

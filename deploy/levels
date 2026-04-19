@@ -81,6 +81,11 @@ server {
 
         # Pass environment to PHP
         fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
+        fastcgi_param EDITOR_FEATURE $editor_feature;
+        fastcgi_param HCAPTCHA_SITE_KEY $hcaptcha_site_key;
+        fastcgi_param HCAPTCHA_SECRET $hcaptcha_secret;
+        fastcgi_param MAIL_FROM $mail_from;
+        fastcgi_param SITE_URL $site_url;
 
         # Security + cache headers
         include /home/pat/kayak/conf/security-headers.conf;
@@ -95,8 +100,55 @@ server {
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
         include fastcgi_params;
         fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
+        fastcgi_param EDITOR_FEATURE $editor_feature;
         include /home/pat/kayak/conf/security-headers.conf;
         add_header Cache-Control "no-cache, no-store";
+    }
+
+    # Auth endpoints — stricter rate limit (3/min), no cache
+    location = /login.php { limit_req zone=auth burst=2 nodelay;
+        try_files $uri =404;
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+        fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
+        fastcgi_param EDITOR_FEATURE $editor_feature;
+        fastcgi_param HCAPTCHA_SITE_KEY $hcaptcha_site_key;
+        fastcgi_param HCAPTCHA_SECRET $hcaptcha_secret;
+        fastcgi_param MAIL_FROM $mail_from;
+        fastcgi_param SITE_URL $site_url;
+        include /home/pat/kayak/conf/security-headers.conf;
+        add_header Cache-Control "no-store";
+    }
+    location = /auth.php { limit_req zone=auth burst=2 nodelay;
+        try_files $uri =404;
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+        fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
+        fastcgi_param EDITOR_FEATURE $editor_feature;
+        include /home/pat/kayak/conf/security-headers.conf;
+        add_header Cache-Control "no-store";
+    }
+    location = /logout.php { limit_req zone=auth burst=2 nodelay;
+        try_files $uri =404;
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+        fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
+        fastcgi_param EDITOR_FEATURE $editor_feature;
+        include /home/pat/kayak/conf/security-headers.conf;
+        add_header Cache-Control "no-store";
+    }
+    location = /account.php { limit_req zone=php burst=5 nodelay;
+        try_files $uri =404;
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+        fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
+        fastcgi_param EDITOR_FEATURE $editor_feature;
+        include /home/pat/kayak/conf/security-headers.conf;
+        add_header Cache-Control "no-store";
     }
 
     # Let's Encrypt ACME challenge

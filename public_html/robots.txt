@@ -15,4 +15,11 @@ Disallow: /
 
 User-agent: *
 Disallow: /edit.php
+Disallow: /login.php
+Disallow: /auth.php
+Disallow: /logout.php
+Disallow: /account.php
+Disallow: /admin.php
+Disallow: /propose.php
+Disallow: /comment.php
 Allow: /

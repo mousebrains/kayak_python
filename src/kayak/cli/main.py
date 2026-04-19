@@ -13,6 +13,7 @@ from kayak.cli import (
     init_db,
     merge,
     pipeline,
+    seed_maintainer,
 )
 from kayak.cli.logger import addArgs as addLoggerArgs
 from kayak.cli.logger import mkLogger
@@ -39,6 +40,7 @@ def main() -> None:
     build.addArgs(subparsers)
     decimate.addArgs(subparsers)
     pipeline.addArgs(subparsers)
+    seed_maintainer.addArgs(subparsers)
 
     args = parser.parse_args()
     mkLogger(args)

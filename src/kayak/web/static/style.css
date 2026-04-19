@@ -38,6 +38,9 @@ header nav{display:flex;flex-wrap:wrap;gap:.3rem}
 header nav a{color:rgba(255,255,255,.85);font-size:.8rem;padding:6px 10px;border-radius:3px;min-height:44px;display:inline-flex;align-items:center;text-decoration:none}
 header nav a:hover{background:rgba(255,255,255,.15);text-decoration:none}
 header nav a.active{background:rgba(255,255,255,.9);color:var(--c-primary)}
+header nav.site-nav-right{margin-left:auto}
+.site-nav-id{color:rgba(255,255,255,.75);font-size:.75rem;padding:6px 8px;display:inline-flex;align-items:center;min-height:44px;max-width:14em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:768px){header nav.site-nav-right{display:none}}
 
 /* Letter navigation */
 .letter-nav{display:flex;flex-wrap:wrap;gap:2px;margin-left:auto}

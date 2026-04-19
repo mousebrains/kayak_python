@@ -14,6 +14,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     func,
     text,
 )
@@ -56,6 +57,42 @@ class PageAction(enum.StrEnum):
     EDIT = "edit"
     SVG = "svg"
     PNG = "png"
+
+
+class EditorStatus(enum.StrEnum):
+    """Editor account states.
+
+    pending    — auto-created on first email verification; limited proposal scope.
+    minimal    — maintainer-approved; can submit trip reports and photos.
+    full       — maintainer-approved; can propose metadata fields (coords, class, etc.).
+    banned     — soft-blocked; submissions rejected.
+    maintainer — site admin; bypasses review queue, uses strong auth.
+    """
+
+    pending = "pending"
+    minimal = "minimal"
+    full = "full"
+    banned = "banned"
+    maintainer = "maintainer"
+
+
+class ChangeTarget(enum.StrEnum):
+    """Polymorphic target for a change_request row."""
+
+    reach = "reach"
+    gauge = "gauge"
+    source = "source"
+    site = "site"
+    trip_report = "trip_report"
+
+
+class ChangeStatus(enum.StrEnum):
+    """Moderation status of a change_request row."""
+
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
+    auto_applied = "auto_applied"
 
 
 # ---------------------------------------------------------------------------
@@ -583,3 +620,229 @@ class Page(Base):
     modified: Mapped[datetime | None] = mapped_column(default=func.now())
     mimetype: Mapped[str | None] = mapped_column(Text)
     body: Mapped[str | None] = mapped_column(Text)
+
+
+# ---------------------------------------------------------------------------
+# editor (Phase 1 — editor accounts for proposing changes)
+# ---------------------------------------------------------------------------
+
+
+class Editor(Base):
+    """A user who can propose changes via the Comment / propose flow.
+
+    Created implicitly on first magic-link verification (status='pending').
+    Maintainer promotes to 'minimal' or 'full' from the admin UI to widen
+    the set of fields they can edit. 'maintainer' status is seeded manually
+    and uses strong auth (WebAuthn) rather than magic links.
+    """
+
+    __tablename__ = "editor"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    display_name: Mapped[str | None] = mapped_column(String(128))
+    status: Mapped[EditorStatus] = mapped_column(
+        nullable=False, default=EditorStatus.pending, server_default="pending"
+    )
+    request_note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+    reviewed_at: Mapped[datetime | None] = mapped_column()
+    reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("editor.id", ondelete="SET NULL"))
+    last_login_at: Mapped[datetime | None] = mapped_column()
+
+    __table_args__ = (Index("ix_editor_status", "status"),)
+
+
+# ---------------------------------------------------------------------------
+# editor_session (cookie-backed session token, hashed at rest)
+# ---------------------------------------------------------------------------
+
+
+class EditorSession(Base):
+    """Session cookie record. Only sha256(cookie_value) is stored.
+
+    Flat 7-day expiry. Logout sets revoked_at; expired/revoked rows are
+    reaped lazily on lookup.
+    """
+
+    __tablename__ = "editor_session"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    editor_id: Mapped[int] = mapped_column(
+        ForeignKey("editor.id", ondelete="CASCADE"), nullable=False
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(nullable=False)
+    last_seen_at: Mapped[datetime | None] = mapped_column()
+    ip: Mapped[str | None] = mapped_column(String(45))
+    user_agent: Mapped[str | None] = mapped_column(String(512))
+    revoked_at: Mapped[datetime | None] = mapped_column()
+
+    __table_args__ = (Index("ix_editor_session_editor_id", "editor_id"),)
+
+
+# ---------------------------------------------------------------------------
+# editor_magic_link (one-shot email login token)
+# ---------------------------------------------------------------------------
+
+
+class EditorMagicLink(Base):
+    """Single-use token sent via email to verify an editor's address.
+
+    Stored as sha256(token) so a DB leak does not permit replay. 30-min
+    expiry. used_at is set on first successful consumption; subsequent
+    lookups reject.
+    """
+
+    __tablename__ = "editor_magic_link"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    editor_id: Mapped[int] = mapped_column(
+        ForeignKey("editor.id", ondelete="CASCADE"), nullable=False
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column()
+    ip_issued: Mapped[str | None] = mapped_column(String(45))
+    next_url: Mapped[str | None] = mapped_column(String(512))
+
+    __table_args__ = (Index("ix_editor_magic_link_editor_id", "editor_id"),)
+
+
+# ---------------------------------------------------------------------------
+# maintainer_credential (WebAuthn passkey — Phase 1b)
+# ---------------------------------------------------------------------------
+
+
+class MaintainerCredential(Base):
+    """WebAuthn (passkey) credential for a maintainer.
+
+    Phase 1 ships the table; Phase 1b wires registration + assertion.
+    One maintainer may enroll multiple credentials (phone, laptop, backup YubiKey).
+    """
+
+    __tablename__ = "maintainer_credential"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    editor_id: Mapped[int] = mapped_column(
+        ForeignKey("editor.id", ondelete="CASCADE"), nullable=False
+    )
+    credential_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    public_key: Mapped[str] = mapped_column(Text, nullable=False)
+    sign_count: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    transports: Mapped[str | None] = mapped_column(String(128))
+    nickname: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+    last_used_at: Mapped[datetime | None] = mapped_column()
+    revoked_at: Mapped[datetime | None] = mapped_column()
+
+    __table_args__ = (Index("ix_maintainer_credential_editor_id", "editor_id"),)
+
+
+# ---------------------------------------------------------------------------
+# change_request (polymorphic proposal queue)
+# ---------------------------------------------------------------------------
+
+
+class ChangeRequest(Base):
+    """A proposed change to a reach, gauge, source, or a site-level comment.
+
+    payload_json shape depends on target_type (see design doc). Only
+    maintainer approval writes the change into the live tables; the
+    applied_json column captures exactly what was written after any
+    maintainer edits.
+    """
+
+    __tablename__ = "change_request"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    target_type: Mapped[ChangeTarget] = mapped_column(nullable=False)
+    target_id: Mapped[int | None] = mapped_column()
+    editor_id: Mapped[int] = mapped_column(
+        ForeignKey("editor.id", ondelete="CASCADE"), nullable=False
+    )
+    submitted_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+    subject: Mapped[str | None] = mapped_column(String(256))
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
+    notes_to_maint: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[ChangeStatus] = mapped_column(
+        nullable=False, default=ChangeStatus.pending, server_default="pending"
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column()
+    reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("editor.id", ondelete="SET NULL"))
+    reviewer_note: Mapped[str | None] = mapped_column(Text)
+    applied_json: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        Index("ix_change_request_status", "status"),
+        Index("ix_change_request_target", "target_type", "target_id"),
+        Index("ix_change_request_editor_id", "editor_id"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# change_request_attachment (photos; Phase 4)
+# ---------------------------------------------------------------------------
+
+
+class ChangeRequestAttachment(Base):
+    """Uploaded binary attached to a change_request (photos for trip reports).
+
+    Phase 1 ships the schema; no upload endpoint yet. Binaries live on
+    disk under a dedicated uploads root, keyed by sha256 filename.
+    """
+
+    __tablename__ = "change_request_attachment"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    change_request_id: Mapped[int] = mapped_column(
+        ForeignKey("change_request.id", ondelete="CASCADE"), nullable=False
+    )
+    filename: Mapped[str] = mapped_column(String(256), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    storage_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    caption: Mapped[str | None] = mapped_column(Text)
+    uploaded_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("change_request_id", "sha256", name="uq_attachment_request_sha"),
+        Index("ix_attachment_change_request_id", "change_request_id"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# edit_history (post-apply changelog)
+# ---------------------------------------------------------------------------
+
+
+class EditHistory(Base):
+    """Audit trail of fields actually written to the live tables.
+
+    One row per (target_type, target_id, field). Populated both by the
+    maintainer's direct edit path (/edit.php) and by approval of a
+    change_request. changed_by is either 'maintainer:<editor_id>' or
+    'editor:<editor_id>'.
+    """
+
+    __tablename__ = "edit_history"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    target_type: Mapped[ChangeTarget] = mapped_column(nullable=False)
+    target_id: Mapped[int | None] = mapped_column()
+    change_request_id: Mapped[int | None] = mapped_column(
+        ForeignKey("change_request.id", ondelete="SET NULL")
+    )
+    field: Mapped[str] = mapped_column(String(64), nullable=False)
+    old_value: Mapped[str | None] = mapped_column(Text)
+    new_value: Mapped[str | None] = mapped_column(Text)
+    changed_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+    changed_by: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        Index("ix_edit_history_target", "target_type", "target_id"),
+        Index("ix_edit_history_changed_at", "changed_at"),
+    )
