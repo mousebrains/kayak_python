@@ -11,7 +11,10 @@
 #
 # Run as root:  sudo bash scripts/install-editor-feature.sh
 #
-# Safe to re-run. Existing files are backed up to *.bak.<UTC timestamp>.
+# Safe to re-run. Backups of replaced files are written under
+#   /var/backups/kayak-nginx/<UTC timestamp>/
+# (never inside nginx's include paths — a .bak file in sites-enabled/ is
+# parsed by nginx and yields duplicate listen errors).
 
 set -euo pipefail
 
@@ -22,44 +25,63 @@ fi
 
 REPO=/home/pat/kayak
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+BACKUP_DIR=/var/backups/kayak-nginx/$STAMP
+mkdir -p "$BACKUP_DIR"
+echo "Backups for this run: $BACKUP_DIR"
+echo
 
-backup() {
-    local path=$1
-    if [[ -e $path ]]; then
-        cp -a "$path" "$path.bak.$STAMP"
-        echo "  backed up $path -> $path.bak.$STAMP"
+# Files we'll create fresh (no prior copy). Rollback deletes them.
+NEW_FILES=()
+# Files we replace. Rollback moves the backup back over them.
+REPLACED_FILES=()
+
+backup_replace() {
+    # Install $2 at $1, backing up any existing file.
+    local dest=$1 src=$2
+    if [[ -e $dest ]]; then
+        cp -a "$dest" "$BACKUP_DIR/$(basename "$dest")"
+        echo "  backed up $dest"
+        REPLACED_FILES+=("$dest")
+    else
+        NEW_FILES+=("$dest")
     fi
+    install -m 0644 "$src" "$dest"
+    echo "  installed $dest"
+}
+
+rollback() {
+    echo "ABORT: rolling back." >&2
+    for f in "${REPLACED_FILES[@]-}"; do
+        [[ -n ${f:-} ]] || continue
+        local bak
+        bak=$BACKUP_DIR/$(basename "$f")
+        if [[ -e $bak ]]; then
+            install -m 0644 "$bak" "$f"
+            echo "  restored $f"
+        fi
+    done
+    for f in "${NEW_FILES[@]-}"; do
+        [[ -n ${f:-} ]] || continue
+        rm -f "$f"
+        echo "  removed $f"
+    done
 }
 
 echo "=== nginx rate-limit zones ==="
-backup /etc/nginx/conf.d/ratelimit.conf
-install -m 0644 "$REPO/deploy/nginx-ratelimit.conf" /etc/nginx/conf.d/ratelimit.conf
-echo "  installed /etc/nginx/conf.d/ratelimit.conf"
+backup_replace /etc/nginx/conf.d/ratelimit.conf "$REPO/deploy/nginx-ratelimit.conf"
 
 echo
 echo "=== nginx editor-feature env map ==="
-backup /etc/nginx/conf.d/editor-env.conf
-install -m 0644 "$REPO/deploy/nginx-editor-env.conf" /etc/nginx/conf.d/editor-env.conf
-echo "  installed /etc/nginx/conf.d/editor-env.conf (defaults: feature OFF)"
+backup_replace /etc/nginx/conf.d/editor-env.conf "$REPO/deploy/nginx-editor-env.conf"
 
 echo
 echo "=== nginx site config ==="
-backup /etc/nginx/sites-enabled/levels
-install -m 0644 "$REPO/conf/levels.nginx" /etc/nginx/sites-enabled/levels
-echo "  installed /etc/nginx/sites-enabled/levels"
+backup_replace /etc/nginx/sites-enabled/levels "$REPO/conf/levels.nginx"
 
 echo
 echo "=== nginx syntax check ==="
 if ! nginx -t; then
-    echo "ABORT: nginx -t failed. Restoring backups." >&2
-    for f in /etc/nginx/conf.d/ratelimit.conf \
-             /etc/nginx/conf.d/editor-env.conf \
-             /etc/nginx/sites-enabled/levels; do
-        if [[ -e $f.bak.$STAMP ]]; then
-            mv "$f.bak.$STAMP" "$f"
-            echo "  restored $f"
-        fi
-    done
+    rollback
     exit 1
 fi
 
