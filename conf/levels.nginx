@@ -121,7 +121,8 @@ server {
         include /etc/nginx/snippets/security-headers.conf;
     }
 
-    # Auth endpoints — stricter rate limit (zone=auth, 3/min), no cache
+    # Auth endpoints — stricter rate limit (zone=auth, 3/min), no cache.
+    # /login.php uses the hCaptcha-enabled CSP variant so the widget can load.
     location = /login.php { limit_req zone=auth burst=2 nodelay;
         try_files $uri =404;
         fastcgi_pass unix:/run/php/php-fpm.sock;
@@ -134,7 +135,7 @@ server {
         fastcgi_param MAIL_FROM $mail_from;
         fastcgi_param SITE_URL $site_url;
         add_header Cache-Control "no-store";
-        include /etc/nginx/snippets/security-headers.conf;
+        include /etc/nginx/snippets/security-headers-hcaptcha.conf;
     }
     location = /auth.php { limit_req zone=auth burst=2 nodelay;
         try_files $uri =404;

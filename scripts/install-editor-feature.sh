@@ -67,6 +67,12 @@ rollback() {
     done
 }
 
+echo "=== nginx security-headers snippets ==="
+mkdir -p /etc/nginx/snippets
+backup_replace /etc/nginx/snippets/security-headers.conf "$REPO/conf/security-headers.conf"
+backup_replace /etc/nginx/snippets/security-headers-hcaptcha.conf "$REPO/conf/security-headers-hcaptcha.conf"
+
+echo
 echo "=== nginx rate-limit zones ==="
 backup_replace /etc/nginx/conf.d/ratelimit.conf "$REPO/deploy/nginx-ratelimit.conf"
 
