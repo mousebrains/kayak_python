@@ -11,6 +11,10 @@
   const copiedEl = document.getElementById('copied');
   const selectAll = document.getElementById('select-all');
   let allRows = [];
+  let filterBar = null;
+
+  window.kayakFilters = window.kayakFilters || {};
+  window.kayakFilters._manualInit = true;  // we'll call init() after first fetch
 
   function checkedStates() {
     return Array.from(pills.querySelectorAll('input:checked')).map(cb => cb.value);
@@ -28,7 +32,7 @@
 
   function esc(s) {
     const d = document.createElement('div');
-    d.textContent = s;
+    d.textContent = s == null ? '' : s;
     return d.innerHTML;
   }
 
@@ -39,9 +43,13 @@
       if (!rows) continue;
       for (const r of rows) byId.set(r.id, r);
     }
-    allRows = Array.from(byId.values()).sort(
-      (a, b) => (a.sort_name || '').localeCompare(b.sort_name || '')
-    );
+    // Fall back through sort_name → name so rows with NULL sort_name land
+    // in their alphabetical home instead of sorting to the top.
+    allRows = Array.from(byId.values()).sort((a, b) => {
+      const keyA = (a.sort_name || a.name || '').toString();
+      const keyB = (b.sort_name || b.name || '').toString();
+      return keyA.localeCompare(keyB);
+    });
   }
 
   function renderTable() {
@@ -51,8 +59,12 @@
       const name = r.name || '';
       if (q && !name.toLowerCase().includes(q)) continue;
       const chk = selected.has(r.id) ? ' checked' : '';
+      const tiers = (r.tiers && r.tiers.length) ? r.tiers.join(',') : '?';
       html.push(
-        '<tr>',
+        '<tr data-state="' + esc(r.state_first || '') + '"' +
+        ' data-basin="' + esc(r.basin || '') + '"' +
+        ' data-status="' + esc(r.status || 'unknown') + '"' +
+        ' data-tier="' + esc(tiers) + '">',
         '<td><label><input type="checkbox" data-id="' + r.id + '"' + chk + '><span class="sr-only"> Select ' + esc(name) + '</span></label></td>',
         '<td>' + esc(name) + '</td>',
         '<td class="col-location">' + esc(r.location || '') + '</td>',
@@ -63,7 +75,17 @@
       );
     }
     tbody.innerHTML = html.join('');
+    reinitFilters();
     updateActions();
+  }
+
+  function reinitFilters() {
+    if (!window.kayakFilters || !window.kayakFilters.init) return;
+    filterBar = window.kayakFilters.init({
+      barContainer: document.getElementById('filter-bar'),
+      rowsContainer: tbody,
+      onChange: function() { /* count/select-all accounting below */ updateActions(); },
+    });
   }
 
   function updateActions() {
@@ -95,7 +117,14 @@
         const url = '/picker.php?ajax=1&states=' + encodeURIComponent(needed.join(','));
         const resp = await fetch(url);
         const rows = await resp.json();
-        for (const n of needed) stateCache.set(n, rows);
+        // Stamp the state name on each row so data-state is populated for
+        // the shared filter module. Rows belonging to multiple checked
+        // states show up once per state in the response; picker dedupes
+        // by id so we pick the first state name we see.
+        for (const n of needed) {
+          const tagged = rows.map(r => Object.assign({}, r, {state_first: r.state_first || n}));
+          stateCache.set(n, tagged);
+        }
       } catch {
         return;  // keep stale data on network error
       }
@@ -108,7 +137,6 @@
   pills.addEventListener('change', loadStates);
   search.addEventListener('input', renderTable);
 
-  // Auto-load if a state is pre-checked
   if (checkedStates().length) loadStates();
 
   tbody.addEventListener('change', function(e) {
@@ -122,12 +150,17 @@
   selectAll.addEventListener('change', function() {
     const checked = selectAll.checked;
     const q = search.value.toLowerCase();
-    for (const r of allRows) {
-      if (q && !(r.name || '').toLowerCase().includes(q)) continue;
-      if (checked) selected.add(r.id);
-      else selected.delete(r.id);
-    }
-    renderTable();
+    // Only toggle rows currently visible (both text-matched and filter-matched).
+    tbody.querySelectorAll('tr:not([hidden])').forEach(function(tr) {
+      const cb = tr.querySelector('input[data-id]');
+      if (!cb) return;
+      const id = parseInt(cb.dataset.id, 10);
+      const label = tr.querySelector('td:nth-child(2)').textContent.toLowerCase();
+      if (q && !label.includes(q)) return;
+      cb.checked = checked;
+      if (checked) selected.add(id); else selected.delete(id);
+    });
+    updateActions();
   });
 
   copyBtn.addEventListener('click', function() {

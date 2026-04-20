@@ -77,6 +77,17 @@ server {
         include /etc/nginx/snippets/security-headers.conf;
     }
 
+    # Dynamic per-reach status, refreshed by every hourly pipeline run.
+    # Exact match wins over the /static/ prefix and overrides the 7d immutable
+    # policy with a short TTL. Both expires and add_header must be explicit
+    # here because nginx's add_header does not inherit from an ancestor block
+    # once this block sets its own.
+    location = /static/reaches-state.json {
+        expires 5m;
+        add_header Cache-Control "public, max-age=300";
+        include /etc/nginx/snippets/security-headers.conf;
+    }
+
     # Generated HTML/CSV/text pages — short cache, regenerated hourly
     location / {
         try_files $uri $uri/ =404;

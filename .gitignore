@@ -31,6 +31,8 @@ public_html/*.html
 public_html/*.csv
 public_html/*.text
 static/reaches.geojson
+static/reaches-geom.json
+static/reaches-state.json
 php/style.css
 
 # DB backups

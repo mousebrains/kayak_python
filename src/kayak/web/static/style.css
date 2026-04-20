@@ -144,6 +144,31 @@ tr.stale td{color:var(--c-text-faint);font-style:italic}
 .plot-container{text-align:center;padding:1rem 0}
 .plot-container svg{max-width:100%;height:auto}
 
+/* Shared filter bar — index/state/picker/custom pages */
+.filter-bar{margin:.5rem 0 1rem;font-size:.85rem;border:1px solid var(--c-border-light);border-radius:4px;background:var(--c-surface)}
+.filter-group{border-bottom:1px solid var(--c-border-light)}
+.filter-group:last-of-type{border-bottom:0}
+.filter-group summary{cursor:pointer;font-weight:700;padding:.4rem .8rem;user-select:none;list-style:none}
+.filter-group summary::-webkit-details-marker{display:none}
+.filter-group summary::before{content:"\25B8";margin-right:.5rem;display:inline-block;transition:transform .1s}
+.filter-group[open] summary::before{transform:rotate(90deg)}
+.filter-group .fg-count{color:var(--c-text-muted);font-weight:400;font-size:.75rem;margin-left:.4rem}
+.filter-pills{display:flex;flex-wrap:wrap;gap:.3rem;padding:.2rem .8rem .5rem;align-items:center}
+.fg-toggle{display:inline-flex;gap:.3rem;margin-right:.3rem;font-size:.75rem;align-items:center}
+.fg-toggle button{background:transparent;border:1px solid var(--c-border-input);border-radius:3px;color:var(--c-link);cursor:pointer;padding:1px 8px;font-size:.7rem}
+.fg-toggle button:hover{background:var(--c-hover);text-decoration:underline}
+.filter-pills label{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;background:var(--c-surface);border:1px solid var(--c-border-input);border-radius:16px;cursor:pointer;user-select:none;min-height:32px;transition:background .15s,border-color .15s}
+.filter-pills input{display:none}
+.filter-pills label:has(input:checked){background:var(--c-primary);border-color:var(--c-primary);color:#fff}
+.filter-pills .swatch{display:inline-block;width:10px;height:10px;border-radius:2px;border:1px solid rgba(0,0,0,.15)}
+.filter-meta{display:flex;gap:1rem;align-items:center;padding:.4rem .8rem;font-size:.8rem;color:var(--c-text-muted);border-top:1px solid var(--c-border-light)}
+.fb-count{font-weight:600;color:var(--c-text)}
+.fb-reset{background:transparent;border:1px solid var(--c-border-input);border-radius:3px;padding:3px 10px;font-size:.75rem;cursor:pointer;color:var(--c-text)}
+.fb-reset:hover{background:var(--c-hover)}
+@media(max-width:640px){
+  .filter-pills label{min-height:44px;padding:8px 14px}
+}
+
 /* Picker — state pills */
 .picker-states{display:flex;flex-wrap:wrap;gap:.4rem;padding:.5rem 0}
 .picker-states label{display:block;padding:4px 12px;background:var(--c-surface);border:1px solid var(--c-border-input);border-radius:16px;font-size:.8rem;cursor:pointer;user-select:none;transition:background .15s,border-color .15s}

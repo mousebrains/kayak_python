@@ -1,13 +1,11 @@
 """Tests for kayak.cli.build output generators."""
 
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from unittest import mock
 
 from kayak.cli.build import (
     _atomic_write,
     _build_csv,
-    _build_geojson,
     _build_html_table,
     _build_letter_nav,
     _build_map_page,
@@ -484,8 +482,10 @@ class TestBuildHTMLTable:
         assert "B" in letters
         assert "G" in letters
 
-    def test_gauge_grouping_rowspan(self, session):
-        """Two reaches sharing the same gauge should merge gauge columns."""
+    def test_no_rowspan_on_shared_gauge(self, session):
+        """Each reach now renders its own gauge cells; rowspan was removed so
+        filtering can hide individual rows without leaving spanned cells
+        orphaned."""
         gauge = Gauge(name="shared_gauge")
         session.add(gauge)
         session.flush()
@@ -503,7 +503,9 @@ class TestBuildHTMLTable:
             mock.patch("kayak.cli.build._build_sparkline", return_value=""),
         ):
             result, _ = _build_html_table(reaches, COLS, set(), {})
-        assert 'rowspan="2"' in result
+        assert "rowspan=" not in result
+        # Each row gets its own flow cell.
+        assert result.count('class="td-flow"') == 2
 
     def test_status_column_rendering(self, session):
         reaches = _make_reaches(session, count=1)
@@ -577,124 +579,8 @@ class TestBuildHTMLTable:
         assert "04/10 14:30" in result
 
 
-# ---------------------------------------------------------------------------
-# _build_geojson
-# ---------------------------------------------------------------------------
-
-
-class TestBuildGeoJSON:
-    def test_linestring_from_geom(self, session):
-        gauge = Gauge(name="geo_g")
-        session.add(gauge)
-        session.flush()
-        reach = Reach(
-            name="geo_r",
-            display_name="Geo River",
-            gauge_id=gauge.id,
-            geom="-122.5 44.0,-122.4 44.1,-122.3 44.2",
-        )
-        session.add(reach)
-        session.flush()
-
-        now = datetime.now(UTC)
-        latest = LatestGaugeObservation(
-            gauge_id=gauge.id,
-            data_type=DataType.flow,
-            observed_at=now,
-            value=100.0,
-        )
-        session.add(latest)
-        session.flush()
-
-        result = _build_geojson(
-            [reach],
-            set(),
-            {(gauge.id, DataType.flow): latest},
-        )
-        import json
-
-        data = json.loads(result)
-        assert data["type"] == "FeatureCollection"
-        assert len(data["features"]) == 1
-        assert data["features"][0]["geometry"]["type"] == "LineString"
-
-    def test_point_from_coordinates(self, session):
-        gauge = Gauge(name="pt_g")
-        session.add(gauge)
-        session.flush()
-        reach = Reach(
-            name="pt_r",
-            display_name="Point River",
-            gauge_id=gauge.id,
-            latitude=Decimal("44.0"),
-            longitude=Decimal("-122.5"),
-        )
-        session.add(reach)
-        session.flush()
-
-        now = datetime.now(UTC)
-        latest = LatestGaugeObservation(
-            gauge_id=gauge.id,
-            data_type=DataType.flow,
-            observed_at=now,
-            value=50.0,
-        )
-        session.add(latest)
-        session.flush()
-
-        result = _build_geojson(
-            [reach],
-            set(),
-            {(gauge.id, DataType.flow): latest},
-        )
-        import json
-
-        data = json.loads(result)
-        assert data["features"][0]["geometry"]["type"] == "Point"
-
-    def test_expired_reaches_included_in_geojson(self, session):
-        gauge = Gauge(name="exp_g2")
-        session.add(gauge)
-        session.flush()
-        reach = Reach(
-            name="exp_r2",
-            display_name="Expired",
-            gauge_id=gauge.id,
-            latitude=Decimal("44.0"),
-            longitude=Decimal("-122.5"),
-        )
-        session.add(reach)
-        session.flush()
-
-        old = datetime.now(UTC) - timedelta(days=10)
-        latest = LatestGaugeObservation(
-            gauge_id=gauge.id,
-            data_type=DataType.flow,
-            observed_at=old,
-            value=50.0,
-        )
-        session.add(latest)
-        session.flush()
-
-        result = _build_geojson(
-            [reach],
-            set(),
-            {(gauge.id, DataType.flow): latest},
-        )
-        import json
-
-        data = json.loads(result)
-        assert len(data["features"]) == 1
-
-    def test_no_geometry_excluded(self, session):
-        reach = Reach(name="nogeom", display_name="No Geom River")
-        session.add(reach)
-        session.flush()
-        result = _build_geojson([reach], set(), {})
-        import json
-
-        data = json.loads(result)
-        assert len(data["features"]) == 0
+# Coverage for the split geojson builders lives in
+# tests/test_build_geojson_split.py.
 
 
 # ---------------------------------------------------------------------------
@@ -760,10 +646,16 @@ class TestBuildPage:
 
 
 class TestBuildMapPage:
-    def test_embeds_geojson_mtime(self):
-        result = _build_map_page("", ["Oregon"], 1700000000)
+    def test_embeds_split_urls(self):
+        result = _build_map_page(
+            "",
+            ["Oregon"],
+            "/static/reaches-geom.json?v=abc123",
+            "/static/reaches-state.json",
+        )
         assert 'id="map"' in result
-        assert 'data-mtime="1700000000"' in result
+        assert 'data-geom-url="/static/reaches-geom.json?v=abc123"' in result
+        assert 'data-state-url="/static/reaches-state.json"' in result
 
 
 class TestLevelsKey:

@@ -7,10 +7,12 @@ styling, state navigation links, and inline SVG sparklines.
 
 import argparse
 import csv
+import hashlib
 import html as html_mod
 import io
 import json
 import logging
+import math
 import os
 import shutil
 import tempfile
@@ -33,6 +35,7 @@ from kayak.db.info_db import (
     reaches_query,
 )
 from kayak.db.models import DataType, LatestGaugeObservation, Observation, Reach
+from kayak.utils.class_tiers import parse_class_tiers
 from kayak.utils.lttb import downsample, running_median
 from kayak.utils.simplify import parse_geom, simplify
 
@@ -55,9 +58,12 @@ DATA_STALE_THRESHOLD = timedelta(hours=48)
 DATA_EXPIRY_THRESHOLD = timedelta(days=7)
 SPARKLINE_OBSERVATION_WINDOW = timedelta(hours=48)
 
-# GeoJSON geometry simplification
+# GeoJSON geometry simplification. Coordinate precision is matched to the
+# simplify epsilon - quantizing below the simplification grid would be wasted
+# bytes. At 44N, 1e-4 deg ~= 8-11 m, below NHD's horizontal accuracy.
 GEOJSON_SIMPLIFY_EPSILON = 0.001
-GEOJSON_COORD_PRECISION = 5
+GEOJSON_COORD_PRECISION = 4
+assert math.ceil(-math.log10(GEOJSON_SIMPLIFY_EPSILON)) + 1 <= GEOJSON_COORD_PRECISION
 
 # Branding
 BRAND_COLOR = "#1b5591"
@@ -188,8 +194,10 @@ _STATE_LINKS: dict[str, list[tuple[str, str]]] = {
 _STATIC_DIR = Path(__file__).resolve().parent.parent / "web" / "static"
 _CSS_PATH = _STATIC_DIR / "style.css"
 _JS_PATH = _STATIC_DIR / "levels.js"
+_FILTERS_JS_PATH = _STATIC_DIR / "filters.js"
 
 _LEVELS_JS_VERSION = int(_JS_PATH.stat().st_mtime)
+_FILTERS_JS_VERSION = int(_FILTERS_JS_PATH.stat().st_mtime)
 _LEVELS_JS = f'<script src="/static/levels.js?v={_LEVELS_JS_VERSION}" defer></script>'
 
 
@@ -448,35 +456,6 @@ def _filter_visible_rows(
     return visible
 
 
-def _compute_gauge_groups(visible: list[tuple[Reach, dict]]) -> list[int]:
-    """Compute rowspan groups for consecutive reaches sharing the same gauge.
-
-    Returns a list of the same length as *visible*. For the first row in each
-    group, the value is the group size (rowspan). For subsequent rows, the
-    value is 0 (meaning gauge-specific columns are spanned by the first row).
-    """
-    group_span: list[int] = [0] * len(visible)
-    i = 0
-    while i < len(visible):
-        reach_i = visible[i][0]
-        if not reach_i.gauge_id:
-            group_span[i] = 1
-            i += 1
-            continue
-        key = (reach_i.gauge_id, _levels_key(reach_i))
-        j = i + 1
-        while j < len(visible):
-            reach_j = visible[j][0]
-            if not reach_j.gauge_id:
-                break
-            if (reach_j.gauge_id, _levels_key(reach_j)) != key:
-                break
-            j += 1
-        group_span[i] = j - i
-        i = j
-    return group_span
-
-
 def _format_cell_value(col: dict[str, Any], row: dict, reach_id: int, gauge_id: int | None) -> str:
     """Format a single table cell value based on its column type."""
     val = row.get(col["field"], "")
@@ -506,6 +485,24 @@ def _format_cell_value(col: dict[str, Any], row: dict, reach_id: int, gauge_id: 
         return html_mod.escape(str(val)) if val else ""
 
 
+def _row_filter_attrs(reach: Reach, row: dict) -> str:
+    """Build the data-state/basin/status/tier attr block for one <tr>."""
+    state = reach.states[0].name if reach.states else ""
+    basin = reach.basin or ""
+    status = row.get("status") or "unknown"
+    tiers: set[str] = set()
+    for c in reach.classes:
+        tiers.update(parse_class_tiers(c.name))
+    ordered = sorted(tiers, key=lambda t: ("I", "II", "III", "IV", "V").index(t))
+    tier_attr = ",".join(ordered) if ordered else "?"
+    return (
+        f' data-state="{html_mod.escape(state)}"'
+        f' data-basin="{html_mod.escape(basin)}"'
+        f' data-status="{html_mod.escape(status)}"'
+        f' data-tier="{html_mod.escape(tier_attr)}"'
+    )
+
+
 def _build_html_table(
     reaches: list[Reach],
     columns: list[dict[str, Any]],
@@ -516,10 +513,9 @@ def _build_html_table(
 ) -> tuple[str, list[str]]:
     """Build the <table> body for a set of reaches using pre-loaded data.
 
-    Three phases:
+    Two phases:
       1. Filter to visible rows (have current data, not expired)
-      2. Compute gauge groups (consecutive reaches sharing a gauge get rowspan)
-      3. Render HTML rows with formatted cell values
+      2. Render HTML rows with formatted cell values + filter data-attrs
 
     Returns (html, letters) where letters is the ordered list of first-letters
     that appear in the visible rows (used for the letter navigation bar).
@@ -538,16 +534,13 @@ def _build_html_table(
     lines.append("<tbody>")
 
     visible = _filter_visible_rows(reaches, calculated_gauge_ids, all_latest)
-    group_span = _compute_gauge_groups(visible)
 
     # Render rows
     prev_letter = ""
     letters: list[str] = []
-    for idx, (reach, row) in enumerate(visible):
+    for reach, row in visible:
         reach_id = reach.id
         gauge_id = reach.gauge.id if reach.gauge else None
-        span = group_span[idx]
-        is_first = span > 0
 
         # Track first-letter groups for the letter navigation bar
         sort_name = reach.sort_name or reach.display_name or ""
@@ -560,7 +553,9 @@ def _build_html_table(
 
         stale = " stale" if row.get("stale") else ""
         lines.append(
-            f'<tr{letter_id} class="clickable-row{stale}" data-href="/description.php?id={reach_id}">'
+            f'<tr{letter_id} class="clickable-row{stale}"'
+            f' data-href="/description.php?id={reach_id}"'
+            f"{_row_filter_attrs(reach, row)}>"
         )
 
         for col in columns:
@@ -569,10 +564,6 @@ def _build_html_table(
             if col["field"] == "state" and not is_all_page:
                 continue
 
-            is_gauge_col = col["field"] in _GAUGE_FIELDS
-            if is_gauge_col and not is_first:
-                continue  # spanned by earlier row
-
             val = _format_cell_value(col, row, reach_id, gauge_id)
             label = col["name_text"]
             td_cls = _TD_CLASS.get(col["type"], "")
@@ -580,70 +571,202 @@ def _build_html_table(
                 td_cls = (td_cls + " secondary").strip()
 
             cls_attr = f' class="{td_cls}"' if td_cls else ""
-            rowspan = f' rowspan="{span}"' if is_gauge_col and span > 1 else ""
-            lines.append(
-                f'  <td{cls_attr}{rowspan} data-label="{html_mod.escape(label)}">{val}</td>'
-            )
+            lines.append(f'  <td{cls_attr} data-label="{html_mod.escape(label)}">{val}</td>')
         lines.append("</tr>")
 
     lines.append("</tbody></table>")
     return "\n".join(lines), letters
 
 
-def _build_geojson(
+def _collect_filter_data(
     reaches: list[Reach],
     calculated_gauge_ids: set[int],
     all_latest: dict[tuple[int, DataType], LatestGaugeObservation],
-    epsilon: float = GEOJSON_SIMPLIFY_EPSILON,
-) -> str:
-    """Build a GeoJSON FeatureCollection of all mappable reaches."""
-    features: list[dict] = []
-    for reach in reaches:
-        row = _get_row_data(reach, calculated_gauge_ids, all_latest)
-        status = row.get("status", "unknown")
-        name = reach.display_name or reach.name or ""
-        props = {"id": reach.id, "name": name, "status": status}
+) -> dict[str, list[str]]:
+    """Union of values present across the visible rows, for filter-pill rendering."""
+    visible = _filter_visible_rows(reaches, calculated_gauge_ids, all_latest)
+    states: set[str] = set()
+    basins: set[str] = set()
+    statuses: set[str] = set()
+    tiers: set[str] = set()
+    for reach, row in visible:
+        for s in reach.states:
+            states.add(s.name)
+        basins.add(reach.basin or "")
+        statuses.add(row.get("status") or "unknown")
+        row_tiers: set[str] = set()
+        for c in reach.classes:
+            row_tiers.update(parse_class_tiers(c.name))
+        if row_tiers:
+            tiers.update(row_tiers)
+        else:
+            tiers.add("?")
+    return {
+        "state": sorted(s for s in states if s),
+        "basin": sorted(basins),  # keep "" so a "(none)" pill can surface
+        "status": [s for s in ("low", "okay", "high", "unknown") if s in statuses],
+        "tier": [t for t in ("I", "II", "III", "IV", "V", "?") if t in tiers],
+    }
 
-        geometry = None
-        if reach.geom:
-            points = parse_geom(reach.geom)
-            if len(points) >= 2:
-                simplified = simplify(points, epsilon)
-                p = GEOJSON_COORD_PRECISION
-                coords = [[round(x, p), round(y, p)] for x, y in simplified]
-                geometry = {"type": "LineString", "coordinates": coords}
-            elif len(points) == 1:
-                p = GEOJSON_COORD_PRECISION
-                geometry = {
-                    "type": "Point",
-                    "coordinates": [round(points[0][0], p), round(points[0][1], p)],  # type: ignore[arg-type]
-                }
-        if (
-            geometry is None
-            and reach.latitude_start
-            and reach.longitude_start
-            and reach.latitude_end
-            and reach.longitude_end
-        ):
-            p = GEOJSON_COORD_PRECISION
-            coords = [
+
+def _build_filter_bar(data: dict[str, list[str]], *, is_all_page: bool) -> str:
+    """HTML block rendered above the levels table; hooked up by filters.js."""
+    status_swatch = {
+        "low": "#e8a735",
+        "okay": "#4caf50",
+        "high": "#e53935",
+        "unknown": "#2196F3",
+    }
+    status_label = {"low": "Low", "okay": "Okay", "high": "High", "unknown": "Unknown"}
+
+    def pill(group: str, value: str, display: str, swatch: str = "") -> str:
+        safe_val = html_mod.escape(value, quote=True)
+        safe_disp = html_mod.escape(display)
+        sw = f'<span class="swatch" style="background:{swatch}"></span>' if swatch else ""
+        return f'<label><input type="checkbox" value="{safe_val}" checked>{sw}{safe_disp}</label>'
+
+    def group_html(
+        key: str,
+        label: str,
+        values: list[str],
+        display_fn: Any,
+        swatch_fn: Any = lambda v: "",
+        split_csv: bool = False,
+    ) -> str:
+        if not values:
+            return ""
+        pills = "\n      ".join(pill(key, v, display_fn(v), swatch_fn(v)) for v in values)
+        split_attr = ' data-split="csv"' if split_csv else ""
+        toggle = (
+            '<span class="fg-toggle">'
+            '<button type="button" data-all>All</button>'
+            '<button type="button" data-none>None</button>'
+            "</span>"
+        )
+        return (
+            f'  <details class="filter-group">\n'
+            f'    <summary>{label} <span class="fg-count">{len(values)}</span></summary>\n'
+            f'    <div class="filter-pills" data-group="{key}"{split_attr}>\n'
+            f"      {toggle}\n"
+            f"      {pills}\n"
+            f"    </div>\n"
+            f"  </details>"
+        )
+
+    groups: list[str] = []
+    if is_all_page:
+        groups.append(group_html("state", "State", data["state"], lambda v: v))
+    basin_display = lambda v: v if v else "(none)"  # noqa: E731
+    groups.append(group_html("basin", "Basin", data["basin"], basin_display))
+    groups.append(
+        group_html(
+            "status",
+            "Status",
+            data["status"],
+            lambda v: status_label.get(v, v),
+            lambda v: status_swatch.get(v, ""),
+        )
+    )
+    # Tiers appear in CSV form on <tr data-tier="III,IV"> so filters.js
+    # must split the row's attribute before intersecting with checked pills.
+    groups.append(group_html("tier", "Class", data["tier"], lambda v: v, split_csv=True))
+
+    inner = "\n".join(g for g in groups if g)
+    # Default-hidden; filters.js injects a "Filter" nav toggle and the user
+    # reveals the bar on demand.
+    return (
+        '<div class="filter-bar" id="filter-bar" hidden>\n'
+        f"{inner}\n"
+        '  <div class="filter-meta" aria-live="polite">\n'
+        '    <span class="fb-count"></span>\n'
+        '    <button type="button" class="fb-reset">Reset</button>\n'
+        "  </div>\n"
+        "</div>"
+    )
+
+
+def _reach_geometry(reach: Reach, epsilon: float) -> dict | None:
+    """Return a GeoJSON geometry dict for *reach* (simplified + rounded) or None.
+
+    Falls back from WKT ``geom`` → start/end lat-lon pair → single lat-lon point.
+    """
+    p = GEOJSON_COORD_PRECISION
+    if reach.geom:
+        points = parse_geom(reach.geom)
+        if len(points) >= 2:
+            simplified = simplify(points, epsilon)
+            return {
+                "type": "LineString",
+                "coordinates": [[round(x, p), round(y, p)] for x, y in simplified],
+            }
+        if len(points) == 1:
+            pt = points[0]
+            return {"type": "Point", "coordinates": [round(pt[0], p), round(pt[1], p)]}
+    if (
+        reach.latitude_start is not None
+        and reach.longitude_start is not None
+        and reach.latitude_end is not None
+        and reach.longitude_end is not None
+    ):
+        return {
+            "type": "LineString",
+            "coordinates": [
                 [round(float(reach.longitude_start), p), round(float(reach.latitude_start), p)],
                 [round(float(reach.longitude_end), p), round(float(reach.latitude_end), p)],
-            ]
-            geometry = {"type": "LineString", "coordinates": coords}
-        if geometry is None and reach.latitude and reach.longitude:
-            p = GEOJSON_COORD_PRECISION
-            geometry = {
-                "type": "Point",
-                "coordinates": [round(float(reach.longitude), p), round(float(reach.latitude), p)],  # type: ignore[arg-type]
-            }
+            ],
+        }
+    if reach.latitude is not None and reach.longitude is not None:
+        return {
+            "type": "Point",
+            "coordinates": [round(float(reach.longitude), p), round(float(reach.latitude), p)],
+        }
+    return None
+
+
+def _build_reaches_static(
+    reaches: list[Reach],
+    epsilon: float = GEOJSON_SIMPLIFY_EPSILON,
+) -> str:
+    """Static per-reach geometry + metadata.
+
+    Changes only when a reach is edited or retraced, so this file is
+    long-cached by the browser (the hourly rebuild produces identical
+    bytes most of the time).
+    """
+    features: list[dict] = []
+    for reach in reaches:
+        geometry = _reach_geometry(reach, epsilon)
         if geometry is None:
             continue
-
+        tiers: set[str] = set()
+        for c in reach.classes:
+            tiers.update(parse_class_tiers(c.name))
+        ordered_tiers = sorted(tiers, key=lambda t: ("I", "II", "III", "IV", "V").index(t))
+        props = {
+            "id": reach.id,
+            "name": reach.display_name or reach.name or "",
+            "tiers": ordered_tiers or ["?"],
+            "state": reach.states[0].name if reach.states else "",
+        }
         features.append({"type": "Feature", "properties": props, "geometry": geometry})
+    return json.dumps({"type": "FeatureCollection", "features": features}, separators=(",", ":"))
 
-    collection = {"type": "FeatureCollection", "features": features}
-    return json.dumps(collection, separators=(",", ":"))
+
+def _build_reaches_state(
+    reaches: list[Reach],
+    calculated_gauge_ids: set[int],
+    all_latest: dict[tuple[int, DataType], LatestGaugeObservation],
+) -> str:
+    """Flat ``{reach_id: status}`` map — the bit that changes every build."""
+    out: dict[str, str] = {}
+    for reach in reaches:
+        # Only emit reaches whose geometry also makes it into the static
+        # file; otherwise the client would carry state it cannot paint.
+        if _reach_geometry(reach, GEOJSON_SIMPLIFY_EPSILON) is None:
+            continue
+        row = _get_row_data(reach, calculated_gauge_ids, all_latest)
+        out[str(reach.id)] = row.get("status", "unknown")
+    return json.dumps(out, separators=(",", ":"))
 
 
 def _editor_feature_on() -> bool:
@@ -714,6 +837,7 @@ def _build_page(
     current_state: str,
     title: str,
     letters: list[str] | None = None,
+    filter_bar_html: str = "",
 ) -> str:
     """Wrap the table HTML in a complete HTML document with inlined CSS."""
     nav_html = _build_nav(states, active_state=current_state)
@@ -726,6 +850,12 @@ def _build_page(
         f"Real-time river levels, flow, and gage data for {current_state} from USGS, NOAA, USACE, and other agencies."
         if current_state != "All States"
         else "Real-time river levels, flow, and gage data from USGS, NOAA, USACE, and other government agencies."
+    )
+
+    filter_tag = (
+        f'<script src="/static/filters.js?v={_FILTERS_JS_VERSION}" defer></script>'
+        if filter_bar_html
+        else ""
     )
 
     return f"""<!DOCTYPE html>
@@ -752,6 +882,7 @@ def _build_page(
   {letter_nav_html}
 </header>
 <main id="main">
+{filter_bar_html}
 {table_html}
 <div style="font-size:.75rem;color:var(--c-text-muted);margin-top:1rem;line-height:1.6">
 <p><b>Status:</b>
@@ -764,6 +895,7 @@ def _build_page(
 </main>
 {_build_footer_html()}
 {_LEVELS_JS}
+{filter_tag}
 </body>
 </html>"""
 
@@ -817,8 +949,8 @@ def _build_placeholder_page(css: str, states: list[str], state: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _build_map_page(css: str, states: list[str], geojson_mtime: int) -> str:
-    """Build map.html with an interactive Leaflet map of Oregon reaches."""
+def _build_map_page(css: str, states: list[str], geom_url: str, state_url: str) -> str:
+    """Build map.html with an interactive Leaflet map of all reaches."""
     nav_html = _build_nav(states)
     leaflet_css_path = BASE_DIR / "static" / "leaflet.css"
     leaflet_css = leaflet_css_path.read_text() if leaflet_css_path.exists() else ""
@@ -836,9 +968,22 @@ def _build_map_page(css: str, states: list[str], geojson_mtime: int) -> str:
 {leaflet_css}
 {css}
 #map {{height:calc(100vh - 5rem);width:100%;}}
-.legend {{background:var(--c-surface);padding:8px 12px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.3);line-height:1.6;font-size:.85rem;}}
-.legend i {{width:14px;height:14px;display:inline-block;margin-right:6px;border-radius:2px;vertical-align:middle;}}
 main {{padding:0;max-width:none;}}
+.map-filter{{background:var(--c-surface);padding:6px 10px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.3);font-size:.85rem;color:var(--c-text);max-width:13rem}}
+.map-filter fieldset{{border:0;padding:0;margin:0 0 .35rem}}
+.map-filter legend{{font-weight:700;font-size:.75rem;text-transform:uppercase;letter-spacing:.02em;color:var(--c-text-muted);padding:0 0 2px}}
+.map-filter label{{display:flex;align-items:center;gap:6px;padding:2px 0;min-height:1.6rem;cursor:pointer}}
+.map-filter input[type=checkbox]{{margin:0;flex:0 0 auto}}
+.map-filter .swatch{{display:inline-block;width:10px;height:10px;border-radius:2px;border:1px solid rgba(0,0,0,.15)}}
+.map-filter .mf-count{{font-size:.75rem;color:var(--c-text-muted);padding-top:2px;border-top:1px solid var(--c-border-light);margin-top:.35rem}}
+.map-filter .mf-err{{color:var(--c-low);font-size:.75rem}}
+.map-filter-toggle{{display:none;background:var(--c-surface);padding:6px 10px;border:0;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.3);font-size:.85rem;cursor:pointer}}
+@media(max-width:640px){{
+  .map-filter-toggle{{display:block}}
+  .map-filter{{display:none}}
+  .map-filter.is-open{{display:block}}
+  .map-filter label{{min-height:44px}}
+}}
 </style>
 </head>
 <body>
@@ -850,7 +995,7 @@ main {{padding:0;max-width:none;}}
   {_build_right_cluster()}
 </header>
 <main>
-<div id="map" data-mtime="{geojson_mtime}"></div>
+<div id="map" data-geom-url="{html_mod.escape(geom_url, quote=True)}" data-state-url="{html_mod.escape(state_url, quote=True)}"></div>
 </main>
 {_build_footer_html()}
 <script src="/static/leaflet.js" defer></script>
@@ -947,19 +1092,32 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
         # Generated static assets
         static_dir = output_dir / "static"
         shutil.copy2(_JS_PATH, static_dir / "levels.js")
+        shutil.copy2(_FILTERS_JS_PATH, static_dir / "filters.js")
 
-        # GeoJSON → static/reaches.geojson (includes map_only reaches)
-        geojson = _build_geojson(all_reaches, calculated_gauge_ids, all_latest)
-        _atomic_write(static_dir / "reaches.geojson", geojson)
-        logger.info("GeoJSON: %d bytes", len(geojson))
+        # Split the reach dataset into a stable-geometry file (long-cached,
+        # content-hashed URL) and a hourly-changing per-reach status file.
+        static_json = _build_reaches_static(all_reaches)
+        state_json = _build_reaches_state(all_reaches, calculated_gauge_ids, all_latest)
+        geom_hash = hashlib.sha256(static_json.encode()).hexdigest()[:10]
+        _atomic_write(static_dir / "reaches-geom.json", static_json)
+        _atomic_write(static_dir / "reaches-state.json", state_json)
+        logger.info(
+            "reaches-geom.json: %d bytes; reaches-state.json: %d bytes",
+            len(static_json),
+            len(state_json),
+        )
+        # Drop the retired combined file if an older build left one behind.
+        with suppress(FileNotFoundError):
+            (static_dir / "reaches.geojson").unlink()
 
-        # Map page → map.html. data-mtime lets map.js cache-bust the
-        # immutable-cached geojson by fetching /static/reaches.geojson?v=<mtime>.
-        geojson_mtime = int((static_dir / "reaches.geojson").stat().st_mtime)
-        map_html = _build_map_page(css, states, geojson_mtime)
+        geom_url = f"/static/reaches-geom.json?v={geom_hash}"
+        state_url = "/static/reaches-state.json"
+        map_html = _build_map_page(css, states, geom_url, state_url)
         _atomic_write(output_dir / "map.html", map_html)
 
-        # index.html = all reaches levels table (excludes map_only)
+        # index.html = all reaches levels table (excludes map_only). Data
+        # spans every state, so this is the "all page" that gets the state
+        # filter group in the filter bar.
         _build_and_write(
             session,
             index_reaches,
@@ -970,6 +1128,7 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
             output_dir,
             filename="index.html",
             preloaded=(calculated_gauge_ids, all_latest),
+            is_all_page=True,
         )
 
         # Links pages for all nav states (including Oregon)
@@ -1087,7 +1246,17 @@ def _build_and_write(
     table_html, letters = _build_html_table(
         reaches, columns, calculated_gauge_ids, all_latest, is_all_page=is_all_page
     )
-    page_html = _build_page(table_html, css, states, state, title, letters=letters)
+    filter_data = _collect_filter_data(reaches, calculated_gauge_ids, all_latest)
+    filter_bar_html = _build_filter_bar(filter_data, is_all_page=is_all_page)
+    page_html = _build_page(
+        table_html,
+        css,
+        states,
+        state,
+        title,
+        letters=letters,
+        filter_bar_html=filter_bar_html,
+    )
     _atomic_write(output_dir / filename, page_html)
 
     # Sparklines JSON — keyed by gauge_id, loaded by levels.js after paint
