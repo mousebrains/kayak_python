@@ -1060,7 +1060,7 @@ def _deploy_source_files(output_dir: Path) -> None:
 
     # Config / static files from the in-repo public_html
     repo_public = BASE_DIR / "public_html"
-    for name in (".htaccess", "404.html", "robots.txt", "no_show_review.js", "no_show_review.html"):
+    for name in (".htaccess", "404.html", "robots.txt"):
         src = repo_public / name
         if src.is_file():
             shutil.copy2(src, output_dir / name)
