@@ -30,14 +30,17 @@ def _safe_subpath(base_dir: Path, raw_url: str) -> Path:
     return candidate
 
 
-def _hour_allowed(hours_spec: str) -> bool:
-    """Check if current hour is allowed by the hours constraint.
+def _hour_allowed(hours_spec: str, now: datetime | None = None) -> bool:
+    """Check if the current hour is allowed by the hours constraint.
+
+    ``now`` defaults to ``datetime.now(UTC)`` but tests can inject a fixed
+    clock to avoid flakiness around the hour boundary.
 
     Empty string means all hours are allowed.
     """
     if not hours_spec or not hours_spec.strip():
         return True
-    current_hour = datetime.now(UTC).hour
+    current_hour = (now or datetime.now(UTC)).hour
     try:
         allowed = {int(h.strip()) for h in hours_spec.split(",") if h.strip()}
         return current_hour in allowed

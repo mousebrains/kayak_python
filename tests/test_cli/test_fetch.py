@@ -20,17 +20,16 @@ def test_hour_allowed_matching_hour():
     """Returns True when the current UTC hour is in the spec."""
     from datetime import UTC, datetime
 
-    current_hour = datetime.now(UTC).hour
-    assert _hour_allowed(str(current_hour)) is True
+    fixed = datetime(2026, 4, 20, 15, 30, tzinfo=UTC)
+    assert _hour_allowed("15", now=fixed) is True
 
 
 def test_hour_allowed_non_matching_hour():
     """Returns False when the current UTC hour is not in the spec."""
     from datetime import UTC, datetime
 
-    current_hour = datetime.now(UTC).hour
-    other_hour = (current_hour + 12) % 24
-    assert _hour_allowed(str(other_hour)) is False
+    fixed = datetime(2026, 4, 20, 15, 30, tzinfo=UTC)
+    assert _hour_allowed("3", now=fixed) is False
 
 
 def test_hour_allowed_invalid_spec():
