@@ -8,11 +8,6 @@ parameters:
     # PHP 8.4 target — matches composer.json.
     phpVersion: 80400
     ignoreErrors:
-        # Array type-hints would add a lot of boilerplate without real
-        # payoff in a dynamic-typed PHP codebase.
-        -
-            identifier: missingType.iterableValue
-
         # description.php builds $station_urls conditionally from gauge
         # fields, then iterates it with an NWRFC fallback for NWS-agency
         # sources. PHPStan narrows $key to 'USGS' because it can't prove
