@@ -290,6 +290,32 @@ env[SQLITE_PATH] = /home/tpw/kayak/kayak.db
 
 Alternatively, the nginx config passes `SQLITE_PATH` via `fastcgi_param`, so this step is optional.
 
+### Secrets (HCAPTCHA_SECRET, EDIT_PASSWORD)
+
+Keep secrets out of nginx config files (those are world-readable). Store them
+in a restricted env file and expose them only to PHP-FPM workers:
+
+```bash
+# One-time bootstrap
+sudo install -D -m 0600 -o root -g www-data \
+    deploy/secrets.env.example /etc/kayak/secrets.env
+sudo -e /etc/kayak/secrets.env                 # fill in values
+
+# Pool overlay that reads the env file and re-exports to workers
+sudo install -D -m 0644 deploy/kayak-fpm-pool.conf \
+    /etc/php/$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')/fpm/pool.d/kayak.conf
+
+# Drop the secret lines from nginx (keeps HCAPTCHA_SITE_KEY etc.)
+sudo sed -i '/fastcgi_param HCAPTCHA_SECRET/d' /etc/nginx/sites-available/levels
+sudo sed -i 's|^\(\s*map $host $hcaptcha_secret.*\)|# \1|' /etc/nginx/conf.d/editor-env.conf
+sudo rm -f /etc/nginx/snippets/edit-password.conf
+sudo sed -i '/edit-password.conf/d' /etc/nginx/sites-available/levels
+```
+
+Then reload both services. PHP's `_hcaptcha_env()` helper prefers `getenv()`
+over `$_SERVER[]`, so once PHP-FPM has the values in its environment the
+code keeps working without change.
+
 Restart PHP-FPM:
 
 ```bash
