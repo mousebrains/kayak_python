@@ -9,7 +9,7 @@ import logging
 
 from sqlalchemy import select
 
-from kayak.db.data_db import merge_sources, update_latest
+from kayak.db.data_db import merge_sources, update_all_latest_gauges, update_latest
 from kayak.db.engine import get_session
 from kayak.db.info_db import get_source_ids_for_gauge
 from kayak.db.models import DataType, Gauge
@@ -63,6 +63,13 @@ def merge(args: argparse.Namespace) -> None:
             session.commit()
 
         print(f"Found {merge_count} observations merged")
+
+        # Gauge-level latest cache is built off latest_observation — merge
+        # rewrote several sources, so refresh it before anything downstream
+        # (build, calculator) reads stale deltas.
+        if merge_count > 0:
+            update_all_latest_gauges(session)
+
         print("Merge complete")
     finally:
         session.close()

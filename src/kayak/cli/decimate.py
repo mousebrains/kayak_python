@@ -16,7 +16,9 @@ import logging
 
 from sqlalchemy import text
 
+from kayak.db.data_db import update_all_latest_gauges, update_latest
 from kayak.db.engine import get_engine, get_session
+from kayak.db.models import DataType
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +219,7 @@ def decimate(args: argparse.Namespace) -> None:
         print(f"\nDecimating across {len(source_ids)} sources...")
         total_hourly = 0
         total_6hourly = 0
+        affected_sources: list[int] = []
 
         for source_id in source_ids:
             src_params = {**params, "source_id": source_id}
@@ -231,14 +234,27 @@ def decimate(args: argparse.Namespace) -> None:
             sixhourly = result2.rowcount  # type: ignore[attr-defined]
 
             if hourly > 0 or sixhourly > 0:
+                # Rebuild the latest_observation rows for this source before
+                # committing. If the most-recent row fell into a decimated
+                # bucket and got deleted, its cache entry would otherwise
+                # point at a now-missing observation.
+                for dtype in DataType:
+                    update_latest(session, source_id, dtype)
                 session.commit()
                 total_hourly += hourly
                 total_6hourly += sixhourly
+                affected_sources.append(source_id)
                 logger.info("source_id=%d: hourly=%d, 6-hourly=%d", source_id, hourly, sixhourly)
 
         print(f"  Hourly: {total_hourly:,} rows deleted")
         print(f"  6-hourly: {total_6hourly:,} rows deleted")
         print(f"Done — {total_hourly + total_6hourly:,} total rows deleted")
+
+        # Gauge-level cache is derived from latest_observation — rebuild it
+        # once after all source-level caches are fresh.
+        if affected_sources:
+            print("Refreshing gauge-level latest cache...")
+            update_all_latest_gauges(session)
 
     finally:
         session.close()
