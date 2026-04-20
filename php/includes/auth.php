@@ -91,6 +91,13 @@ function set_editor_session(int $editor_id): string {
 
     setcookie(EDITOR_SESSION_COOKIE, $tok, _cookie_params(EDITOR_SESSION_DAYS * 86400));
     $_COOKIE[EDITOR_SESSION_COOKIE] = $tok;
+
+    // Rotate the CSRF token on privilege escalation: pre-auth cookie never
+    // carries into the post-auth session, closing the classic fixation vector.
+    $new_csrf = generate_token();
+    setcookie(EDITOR_CSRF_COOKIE, $new_csrf, _cookie_params(0));
+    $_COOKIE[EDITOR_CSRF_COOKIE] = $new_csrf;
+
     return $tok;
 }
 
@@ -197,6 +204,36 @@ function normalize_email(string $email): string {
 }
 
 /**
+ * Cap on magic-link issuance per email and per IP within a rolling hour.
+ * Returns true when the caller should proceed. Same silent response for
+ * "over the cap" and "under the cap" keeps the login.php UX identical so
+ * we don't leak whether the email exists.
+ */
+function magic_link_under_throttle(PDO $db, string $email, string $ip): bool {
+    $email_cap = 5;    // magic links per email per hour
+    $ip_cap    = 20;   // magic links from one IP per hour (shared households)
+
+    if ($email !== '') {
+        $stmt = $db->prepare(
+            "SELECT COUNT(*) FROM editor_magic_link eml
+             JOIN editor e ON e.id = eml.editor_id
+             WHERE e.email = ? AND eml.created_at > datetime('now', '-1 hour')"
+        );
+        $stmt->execute([$email]);
+        if ((int)$stmt->fetchColumn() >= $email_cap) return false;
+    }
+    if ($ip !== '') {
+        $stmt = $db->prepare(
+            "SELECT COUNT(*) FROM editor_magic_link
+             WHERE ip_issued = ? AND created_at > datetime('now', '-1 hour')"
+        );
+        $stmt->execute([$ip]);
+        if ((int)$stmt->fetchColumn() >= $ip_cap) return false;
+    }
+    return true;
+}
+
+/**
  * Upsert an editor by email and issue a magic-link token. Returns the
  * raw token (to embed in a URL) and the editor id.
  *
@@ -207,7 +244,13 @@ function issue_magic_link(string $email, ?string $next_url = null): array {
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         throw new RuntimeException('Invalid email');
     }
+    $ip = (string)($_SERVER['REMOTE_ADDR'] ?? '');
     $db = get_db();
+    // Rate-limit first — cheap read, returns the same outward response as
+    // a successful issuance so we don't leak which emails have been tried.
+    if (!magic_link_under_throttle($db, $email, $ip)) {
+        return ['editor_id' => 0, 'token' => '', 'banned' => true];
+    }
     $db->beginTransaction();
     try {
         $stmt = $db->prepare('SELECT id, status FROM editor WHERE email = ?');
@@ -229,7 +272,6 @@ function issue_magic_link(string $email, ?string $next_url = null): array {
         $tok = generate_token();
         $hash = hash_token($tok);
         $expires = gmdate('Y-m-d H:i:s', time() + 30 * 60);
-        $ip = $_SERVER['REMOTE_ADDR'] ?? '';
 
         $db->prepare(
             "INSERT INTO editor_magic_link
