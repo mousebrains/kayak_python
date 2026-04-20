@@ -427,6 +427,7 @@ class Reach(Base):
     longitude_end: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
     no_show: Mapped[bool] = mapped_column(default=False, server_default=text("0"))
     map_only: Mapped[bool] = mapped_column(default=False, server_default=text("0"))
+    no_flow_range: Mapped[bool] = mapped_column(default=False, server_default=text("0"))
     notes: Mapped[str | None] = mapped_column(Text)
     optimal_flow: Mapped[float | None] = mapped_column()
     region: Mapped[str | None] = mapped_column(Text)
