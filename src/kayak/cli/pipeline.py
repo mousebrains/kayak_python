@@ -26,6 +26,11 @@ def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -
     parser = subparsers.add_parser("pipeline", help="Run the full data pipeline")
     parser.set_defaults(func=pipeline)
     parser.add_argument("--skip-fetch", action="store_true", help="Skip the fetch step")
+    parser.add_argument(
+        "--continue-on-error",
+        action="store_true",
+        help="Keep running subsequent steps after a failure (default: stop-at-end exit code)",
+    )
 
     # Include all fetch options (dry-run, input-dir, etc.)
     fetch.addArgs_options(parser)
@@ -62,6 +67,8 @@ def pipeline(args: argparse.Namespace) -> None:
         ]
     )
 
+    failures: list[tuple[str, str]] = []
+
     for step_name, func in steps:
         print(f"\n{'=' * 60}", flush=True)
         print(f"Running: {step_name}", flush=True)
@@ -73,6 +80,7 @@ def pipeline(args: argparse.Namespace) -> None:
             pass
         except Exception as e:
             logger.error("Error in %s: %s", step_name, e)
+            failures.append((step_name, str(e)))
         elapsed = time.time() - start
         print(f"Completed {step_name} in {elapsed:.1f}s", flush=True)
 
@@ -86,4 +94,12 @@ def pipeline(args: argparse.Namespace) -> None:
         logger.warning("PRAGMA optimize failed: %s", e)
 
     print(f"\n{'=' * 60}", flush=True)
+    if failures:
+        print(f"Pipeline finished with {len(failures)} failure(s):", flush=True)
+        for step_name, msg in failures:
+            print(f"  - {step_name}: {msg}", flush=True)
+        if not args.continue_on_error:
+            raise SystemExit(1)
+        print("(exit code suppressed by --continue-on-error)", flush=True)
+        return
     print("Pipeline complete", flush=True)
