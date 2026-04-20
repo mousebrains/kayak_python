@@ -1,7 +1,8 @@
 """Fetch NWS/NWPS gauge metadata and store in the gauge metadata cache.
 
-Downloads gauge metadata from the NWPS API, filters to sites north of 40°
-latitude and west of -111° longitude, and stores them in an 'nwps_site' table.
+Downloads gauge metadata from the NWPS API and stores all US gauges in an
+'nwps_site' table. Storage is cheap (~12k rows) and a full cache lets us
+cover CNRFC/MBRFC/CBRFC etc. alongside the main PNW set.
 """
 
 import sqlite3
@@ -52,15 +53,8 @@ def main():
                 continue
             raise
     gauges = resp.json()["gauges"]
-    filtered = [
-        g
-        for g in gauges
-        if g.get("latitude")
-        and g.get("longitude")
-        and g["latitude"] >= 40.0
-        and g["longitude"] <= -111.0
-    ]
-    print(f"  {len(filtered)} PNW sites (of {len(gauges)} total)")
+    filtered = [g for g in gauges if g.get("latitude") and g.get("longitude")]
+    print(f"  {len(filtered)} sites (of {len(gauges)} total)")
 
     conn = sqlite3.connect(db_path)
     conn.execute(CREATE_TABLE)
