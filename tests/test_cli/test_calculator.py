@@ -240,3 +240,41 @@ def test_non_finite_reference_is_skipped(session):
 
     latest = get_latest(session, source_id, DataType.flow)
     assert latest is None
+
+
+def test_circular_dependency_raises(session):
+    """A cycle among calc sources fails the pipeline step instead of being silently reordered."""
+    # time_expression format is "agency::ref_name::datatype" — three tokens
+    # joined by double colons (see _get_deps regex in calculator.py).
+    calc_a_expr = CalcExpression(
+        data_type=DataType.flow,
+        expression="v::calc_b::flow + 1",
+        time_expression="v::calc_b::flow",
+    )
+    calc_b_expr = CalcExpression(
+        data_type=DataType.flow,
+        expression="v::calc_a::flow + 1",
+        time_expression="v::calc_a::flow",
+    )
+    session.add_all([calc_a_expr, calc_b_expr])
+    session.flush()
+
+    src_a = Source(name="calc_a", agency="CALC", calc_expression_id=calc_a_expr.id)
+    src_b = Source(name="calc_b", agency="CALC", calc_expression_id=calc_b_expr.id)
+    session.add_all([src_a, src_b])
+    session.flush()
+
+    gauge_a = Gauge(name="calc_a")
+    gauge_b = Gauge(name="calc_b")
+    session.add_all([gauge_a, gauge_b])
+    session.flush()
+    session.add_all(
+        [
+            GaugeSource(gauge_id=gauge_a.id, source_id=src_a.id),
+            GaugeSource(gauge_id=gauge_b.id, source_id=src_b.id),
+        ]
+    )
+    session.flush()
+
+    with pytest.raises(ValueError, match="Circular dependency"):
+        _run_calculator(session)

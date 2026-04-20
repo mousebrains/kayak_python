@@ -161,13 +161,10 @@ def calculator(args: argparse.Namespace) -> None:
                 circular_names = [
                     gauge_id_to_name.get(source_to_gauge.get(s.id, -1), s.name) for s in remaining
                 ]
-                logger.warning(
-                    "Circular dependency detected among calculated sources: %s. "
-                    "Evaluating in arbitrary order.",
-                    ", ".join(circular_names),
+                raise ValueError(
+                    "Circular dependency detected among calculated sources: "
+                    + ", ".join(circular_names)
                 )
-                sorted_sources.extend(remaining)
-                break
         calc_sources = sorted_sources
 
         for source in calc_sources:
