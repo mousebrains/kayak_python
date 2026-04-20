@@ -327,7 +327,7 @@ include_header(
     </ul>
   <?php endif ?>
 
-  <?php if ($existing && !$saved): ?>
+  <?php if ($existing): ?>
     <p style="font-size:.85rem;color:var(--c-text-muted)">
       You already have a pending proposal for this reach (submitted
       <?= htmlspecialchars((string)$existing['submitted_at']) ?>); submitting
