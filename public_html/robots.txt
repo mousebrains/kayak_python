@@ -22,5 +22,6 @@ Disallow: /account.php
 Disallow: /admin.php
 Disallow: /propose.php
 Disallow: /comment.php
+Disallow: /contact.php
 Disallow: /review.php
 Allow: /

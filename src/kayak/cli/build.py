@@ -687,7 +687,7 @@ def _build_footer_html() -> str:
     if _editor_feature_on():
         items.append('<a href="/login.php">Login</a>')
         items.append('<a href="/comment.php">Comment</a>')
-    items.append('<a href="mailto:pat.kayak@gmail.com">Pat Welch</a>')
+        items.append('<a href="/contact.php">Contact</a>')
     items.append('<a href="/privacy.php">Privacy Policy</a>')
     links = " &middot; ".join(items)
     return (

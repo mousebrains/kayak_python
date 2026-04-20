@@ -32,22 +32,33 @@ function mail_dump_dir(): ?string {
  * Send a plain-text email.
  *
  * Returns true on apparent success. `mail()` reporting success only means
- * the message was handed to the MTA, not that it was delivered.
+ * the message was handed to the MTA, not that it was delivered. Pass
+ * $extra_headers like ['Reply-To' => 'someone@example.com'] to override
+ * the defaults.
  */
-function send_email(string $to, string $subject, string $body): bool {
+function send_email(string $to, string $subject, string $body, array $extra_headers = []): bool {
     if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
         error_log("send_email: refused invalid recipient: $to");
         return false;
     }
     $from = mail_from();
-    $headers = implode("\r\n", [
-        "From: $from",
-        "Reply-To: $from",
-        "MIME-Version: 1.0",
-        "Content-Type: text/plain; charset=UTF-8",
-        "Content-Transfer-Encoding: 8bit",
-        "X-Mailer: kayak-levels",
-    ]);
+    $default_headers = [
+        'From'                      => $from,
+        'Reply-To'                  => $from,
+        'MIME-Version'              => '1.0',
+        'Content-Type'              => 'text/plain; charset=UTF-8',
+        'Content-Transfer-Encoding' => '8bit',
+        'X-Mailer'                  => 'kayak-levels',
+    ];
+    // Sanitize extra header values — strip CR/LF to prevent header injection.
+    foreach ($extra_headers as $k => $v) {
+        $default_headers[$k] = preg_replace('/[\r\n]+/', ' ', (string)$v);
+    }
+    $headers = implode("\r\n", array_map(
+        fn($k, $v) => "$k: $v",
+        array_keys($default_headers),
+        array_values($default_headers)
+    ));
 
     $dump = mail_dump_dir();
     if ($dump !== null) {

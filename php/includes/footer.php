@@ -19,7 +19,7 @@ function include_footer(): void {
         }
         $items[] = '<a href="/comment.php">Comment</a>';
     }
-    $items[] = '<a href="mailto:pat.kayak@gmail.com">Pat Welch</a>';
+    $items[] = '<a href="/contact.php">Contact</a>';
     $items[] = '<a href="/privacy.php">Privacy Policy</a>';
     $links = implode(' &middot; ', $items);
 
