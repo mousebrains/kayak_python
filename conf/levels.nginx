@@ -70,10 +70,12 @@ server {
         return 404;
     }
 
-    # Static assets — long cache, immutable content
+    # Static assets — long cache, immutable content (content-hashed where
+    # mutable, e.g. style-<hash>.css; legacy unhashed assets still benefit
+    # from a long max-age via periodic CSS-hash / JS-version URL churn).
     location /static/ {
-        expires 7d;
-        add_header Cache-Control "public, immutable";
+        expires 365d;
+        add_header Cache-Control "public, max-age=31536000, immutable";
         include /etc/nginx/snippets/security-headers.conf;
     }
 

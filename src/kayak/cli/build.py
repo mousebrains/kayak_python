@@ -209,6 +209,11 @@ def _load_css() -> str:
         return ""
 
 
+def _css_link_tag(css_hash: str) -> str:
+    """Return the <link> tag that replaces per-page inline CSS."""
+    return f'<link rel="stylesheet" href="/static/style-{css_hash}.css">'
+
+
 def _get_builder_columns() -> list[dict]:
     cols = load_builder_columns()
     return sorted(cols, key=lambda c: c["sort_key"])
@@ -832,14 +837,14 @@ def _build_letter_nav(letters: list[str]) -> str:
 
 def _build_page(
     table_html: str,
-    css: str,
+    css_link: str,
     states: list[str],
     current_state: str,
     title: str,
     letters: list[str] | None = None,
     filter_bar_html: str = "",
 ) -> str:
-    """Wrap the table HTML in a complete HTML document with inlined CSS."""
+    """Wrap the table HTML in a complete HTML document linking to external CSS."""
     nav_html = _build_nav(states, active_state=current_state)
     letter_nav_html = _build_letter_nav(letters) if letters else ""
     now_utc = datetime.now(UTC)
@@ -867,9 +872,7 @@ def _build_page(
 <meta name="description" content="{desc}">
 <meta name="theme-color" content="{BRAND_COLOR}">
 <link rel="icon" href="/static/favicon.ico">
-<style>
-{css}
-</style>
+{css_link}
 </head>
 <body>
 <a href="#main" class="skip-link">Skip to main content</a>
@@ -905,7 +908,7 @@ def _build_page(
 # ---------------------------------------------------------------------------
 
 
-def _build_placeholder_page(css: str, states: list[str], state: str) -> str:
+def _build_placeholder_page(css_link: str, states: list[str], state: str) -> str:
     """Build a links page for a non-primary state."""
     nav_html = _build_nav(states, active_state=state)
     links = _STATE_LINKS.get(state, [])
@@ -923,9 +926,7 @@ def _build_placeholder_page(css: str, states: list[str], state: str) -> str:
 <meta name="description" content="Real-time river levels, flow, and gage data for {state} from USGS, NOAA, USACE, and other agencies.">
 <meta name="theme-color" content="{BRAND_COLOR}">
 <link rel="icon" href="/static/favicon.ico">
-<style>
-{css}
-</style>
+{css_link}
 </head>
 <body>
 <header>
@@ -949,11 +950,9 @@ def _build_placeholder_page(css: str, states: list[str], state: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _build_map_page(css: str, states: list[str], geom_url: str, state_url: str) -> str:
+def _build_map_page(css_link: str, states: list[str], geom_url: str, state_url: str) -> str:
     """Build map.html with an interactive Leaflet map of all reaches."""
     nav_html = _build_nav(states)
-    leaflet_css_path = BASE_DIR / "static" / "leaflet.css"
-    leaflet_css = leaflet_css_path.read_text() if leaflet_css_path.exists() else ""
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -964,9 +963,9 @@ def _build_map_page(css: str, states: list[str], geom_url: str, state_url: str) 
 <meta name="description" content="Interactive map of river reaches with real-time flow and level data.">
 <meta name="theme-color" content="{BRAND_COLOR}">
 <link rel="icon" href="/static/favicon.ico">
+<link rel="stylesheet" href="/static/leaflet.css">
+{css_link}
 <style>
-{leaflet_css}
-{css}
 #map {{height:calc(100vh - 5rem);width:100%;}}
 main {{padding:0;max-width:none;}}
 .map-filter{{background:var(--c-surface);padding:6px 10px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.3);font-size:.85rem;color:var(--c-text);max-width:13rem}}
@@ -1073,6 +1072,8 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
         columns = _get_builder_columns()
         states = all_state_names(session)
         css = _load_css()
+        css_hash = hashlib.sha256(css.encode()).hexdigest()[:10]
+        css_link = _css_link_tag(css_hash)
 
         # All visible reaches — used for GeoJSON/map (includes map_only)
         all_reaches = reaches_query(session, visible_only=True, with_gauge=True)
@@ -1093,6 +1094,11 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
         static_dir = output_dir / "static"
         shutil.copy2(_JS_PATH, static_dir / "levels.js")
         shutil.copy2(_FILTERS_JS_PATH, static_dir / "filters.js")
+        # Content-hashed stylesheet — cacheable forever (URL changes on content
+        # change). Sidecar lets PHP header.php pick up the same hashed URL so
+        # static and dynamic pages share one cache entry.
+        (static_dir / f"style-{css_hash}.css").write_text(css)
+        (static_dir / "style.css.hash").write_text(css_hash)
 
         # Split the reach dataset into a stable-geometry file (long-cached,
         # content-hashed URL) and a hourly-changing per-reach status file.
@@ -1112,7 +1118,7 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
 
         geom_url = f"/static/reaches-geom.json?v={geom_hash}"
         state_url = "/static/reaches-state.json"
-        map_html = _build_map_page(css, states, geom_url, state_url)
+        map_html = _build_map_page(css_link, states, geom_url, state_url)
         _atomic_write(output_dir / "map.html", map_html)
 
         # index.html = all reaches levels table (excludes map_only). Data
@@ -1124,7 +1130,7 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
             columns,
             PRIMARY_STATE,
             states,
-            css,
+            css_link,
             output_dir,
             filename="index.html",
             preloaded=(calculated_gauge_ids, all_latest),
@@ -1134,7 +1140,7 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
         # Links pages for all nav states (including Oregon)
         for state in _NAV_STATES:
             if state in states:
-                links_page = _build_placeholder_page(css, states, state)
+                links_page = _build_placeholder_page(css_link, states, state)
                 _atomic_write(output_dir / f"{state}.html", links_page)
     finally:
         session.close()
@@ -1205,7 +1211,7 @@ def _build_and_write(
     columns: list[dict[str, Any]],
     state: str,
     states: list[str],
-    css: str,
+    css_link: str,
     output_dir: Path,
     *,
     is_all_page: bool = False,
@@ -1250,7 +1256,7 @@ def _build_and_write(
     filter_bar_html = _build_filter_bar(filter_data, is_all_page=is_all_page)
     page_html = _build_page(
         table_html,
-        css,
+        css_link,
         states,
         state,
         title,

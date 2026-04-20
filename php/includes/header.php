@@ -1,7 +1,10 @@
 <?php
 declare(strict_types=1);
 /**
- * Shared HTML header with inlined CSS.
+ * Shared HTML header linking to the content-hashed external stylesheet
+ * written by `levels build` at /static/style-<hash>.css. Falls back to
+ * inline CSS if the hash sidecar is missing (e.g. dev setups before a
+ * build has run).
  *
  * Usage:
  *   include_header('Title');                              // minimal
@@ -16,13 +19,29 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
 
-function get_inline_css(): string {
-    static $css = null;
-    if ($css === null) {
-        $path = __DIR__ . '/../style.css';
-        $css = file_exists($path) ? file_get_contents($path) : '';
+/**
+ * Return the <link> / <style> block to embed in <head>. Prefers the hashed
+ * external stylesheet (written by build); falls back to inline CSS if the
+ * sidecar is missing.
+ */
+function css_head_block(): string {
+    static $block = null;
+    if ($block !== null) return $block;
+    $doc_root = __DIR__ . '/..';
+    $hash_path = $doc_root . '/static/style.css.hash';
+    if (is_readable($hash_path)) {
+        $hash = trim((string)file_get_contents($hash_path));
+        if ($hash !== '' && is_readable("$doc_root/static/style-$hash.css")) {
+            $block = '<link rel="stylesheet" href="/static/style-'
+                   . htmlspecialchars($hash, ENT_QUOTES) . '.css">';
+            return $block;
+        }
     }
-    return $css;
+    // Fallback: inline whatever style.css exists so the page still renders.
+    $path = $doc_root . '/style.css';
+    $css = is_readable($path) ? (string)file_get_contents($path) : '';
+    $block = "<style>\n$css\n</style>";
+    return $block;
 }
 
 /** Build the Comment link target given a context struct and the request URI. */
@@ -80,7 +99,7 @@ function include_header(
     string $extra_head = '',
     array $context = []
 ): void {
-    $css = get_inline_css();
+    $css_block = css_head_block();
     $esc_title = htmlspecialchars($title);
     $esc_desc = $description
         ? htmlspecialchars($description)
@@ -99,9 +118,7 @@ function include_header(
 <link rel="icon" href="/static/favicon.ico">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
 $extra_head
-<style>
-$css
-</style>
+$css_block
 </head>
 <body>
 <a href="#main" class="skip-link">Skip to main content</a>
