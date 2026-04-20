@@ -664,23 +664,38 @@ def _build_nav(states: list[str], active_state: str = "") -> str:
         links.append(f'<a href="{href}"{cls}>{abbrev}</a>')
     links.append('<a href="/picker.php">Picker</a>')
     links.append('<a href="https://www.windy.com/?44.0,-120.5,7">OR Weather</a>')
-    if _editor_feature_on():
-        links.append('<a href="/comment.php">Comment</a>')
     return "\n    ".join(links)
 
 
 def _build_right_cluster() -> str:
-    """Right cluster on the header bar — Login + WKCC (desktop-only via CSS).
-
-    Static pages can only render the logged-out state; once the user clicks
-    anywhere dynamic the PHP nav takes over.
-    """
-    parts: list[str] = []
-    if _editor_feature_on():
-        parts.append('<a href="/login.php">Login</a>')
-    parts.append('<a href="https://wkcc.org" rel="noopener" target="_blank">WKCC</a>')
+    """Right cluster on the header bar — just WKCC, desktop-only via CSS."""
     return (
-        '<nav class="site-nav-right" aria-label="Account and external">' + "".join(parts) + "</nav>"
+        '<nav class="site-nav-right" aria-label="Account and external">'
+        '<a href="https://wkcc.org" rel="noopener" target="_blank">WKCC</a>'
+        "</nav>"
+    )
+
+
+def _build_footer_html() -> str:
+    """Footer shared by all static pages.
+
+    Login and Comment live here (only when EDITOR_FEATURE is on at build
+    time) so the header can stay focused on navigation. Pat Welch mailto
+    and Privacy Policy are always rendered.
+    """
+    items: list[str] = []
+    if _editor_feature_on():
+        items.append('<a href="/login.php">Login</a>')
+        items.append('<a href="/comment.php">Comment</a>')
+    items.append('<a href="mailto:pat.kayak@gmail.com">Pat Welch</a>')
+    items.append('<a href="/privacy.php">Privacy Policy</a>')
+    links = " &middot; ".join(items)
+    return (
+        "<footer>\n"
+        f"<p>{links}</p>\n"
+        "<p>Data sourced from USGS, NOAA, USACE, USBR, "
+        "and other government agencies.</p>\n"
+        "</footer>"
     )
 
 
@@ -747,9 +762,7 @@ def _build_page(
 </div>
 <p style="font-size:.7rem;color:var(--c-text-muted);margin-top:.5rem">Updated <time datetime="{now_iso}">{now_display}</time></p>
 </main>
-<footer>
-Data sourced from USGS, NOAA, USACE, USBR, and other government agencies. <a href="/privacy.php">Privacy Policy</a>
-</footer>
+{_build_footer_html()}
 {_LEVELS_JS}
 </body>
 </html>"""
@@ -794,9 +807,7 @@ def _build_placeholder_page(css: str, states: list[str], state: str) -> str:
 <h2>{state}</h2>
 {links_html}
 </main>
-<footer>
-Data sourced from USGS, NOAA, USACE, USBR, and other government agencies. <a href="/privacy.php">Privacy Policy</a>
-</footer>
+{_build_footer_html()}
 </body>
 </html>"""
 
@@ -841,9 +852,7 @@ main {{padding:0;max-width:none;}}
 <main>
 <div id="map" data-mtime="{geojson_mtime}"></div>
 </main>
-<footer>
-Data sourced from USGS, NOAA, USACE, USBR, and other government agencies. <a href="/privacy.php">Privacy Policy</a>
-</footer>
+{_build_footer_html()}
 <script src="/static/leaflet.js" defer></script>
 <script src="/static/map.js" defer></script>
 </body>

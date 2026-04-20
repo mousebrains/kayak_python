@@ -1,11 +1,33 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/auth.php';
+
 function include_footer(): void {
+    $feature = editor_feature_enabled();
+    $ed      = $feature ? current_editor() : null;
+
+    $items = [];
+    if ($feature) {
+        if ($ed) {
+            $items[] = is_maintainer($ed)
+                ? '<a href="/admin.php">Admin</a>'
+                : '<a href="/account.php">Account</a>';
+            $items[] = '<a href="/logout.php">Log out</a>';
+        } else {
+            $items[] = '<a href="/login.php">Login</a>';
+        }
+        $items[] = '<a href="/comment.php">Comment</a>';
+    }
+    $items[] = '<a href="mailto:pat.kayak@gmail.com">Pat Welch</a>';
+    $items[] = '<a href="/privacy.php">Privacy Policy</a>';
+    $links = implode(' &middot; ', $items);
+
     echo <<<HTML
 </main>
 <footer>
-Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.
+<p>$links</p>
+<p>Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.</p>
 </footer>
 <script src="/static/levels.js" defer></script>
 </body>

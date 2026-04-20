@@ -54,30 +54,18 @@ function render_nav(string $active, array $context): string {
           . '<a href="/picker.php"' . $picker_cls . '>Picker</a>'
           . '<a href="/map.html"' . $map_cls . '>Map</a>';
 
-    if ($feature) {
-        if ($maint && ($context['type'] ?? null) === 'reach' && !empty($context['id'])) {
-            $left .= '<a href="/edit.php?id=' . (int)$context['id'] . '"' . $comment_cls . '>Edit</a>';
-        } else {
-            $left .= '<a href="' . htmlspecialchars(_comment_href($context)) . '"' . $comment_cls . '>Comment</a>';
-        }
+    // Maintainers still get a prominent Edit shortcut on reach pages.
+    // Everyone else reaches the Comment form through the footer.
+    if ($feature && $maint && ($context['type'] ?? null) === 'reach' && !empty($context['id'])) {
+        $left .= '<a href="/edit.php?id=' . (int)$context['id'] . '"' . $comment_cls . '>Edit</a>';
     }
     $left .= '</nav>';
 
     $right = '<nav class="site-nav-right" aria-label="Account and external">';
-    if ($feature) {
-        if ($ed) {
-            $label = htmlspecialchars($ed['display_name'] ?: $ed['email']);
-            $right .= '<span class="site-nav-id" title="' . htmlspecialchars((string)$ed['email']) . '">'
-                    . $label . '</span>';
-            if ($maint) {
-                $right .= '<a href="/admin.php">Admin</a>';
-            } else {
-                $right .= '<a href="/account.php">Account</a>';
-            }
-            $right .= '<a href="/logout.php">Log out</a>';
-        } else {
-            $right .= '<a href="/login.php">Login</a>';
-        }
+    if ($feature && $ed) {
+        $label = htmlspecialchars($ed['display_name'] ?: $ed['email']);
+        $right .= '<span class="site-nav-id" title="' . htmlspecialchars((string)$ed['email']) . '">'
+                . $label . '</span>';
     }
     $right .= '<a href="https://wkcc.org" rel="noopener" target="_blank">WKCC</a>';
     $right .= '</nav>';
