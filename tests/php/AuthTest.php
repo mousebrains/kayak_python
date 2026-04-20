@@ -12,9 +12,9 @@ final class AuthTest extends TestCase
 {
     public static function setUpBeforeClass(): void
     {
-        if (!function_exists('get_db')) {
-            eval('function get_db(): PDO { return new PDO("sqlite::memory:"); }');
-        }
+        // db.php defines get_db() but doesn't call it at load; these tests
+        // pass their own PDO directly to magic_link_under_throttle, so
+        // get_db is never invoked.
         require_once __DIR__ . '/../../php/includes/auth.php';
     }
 

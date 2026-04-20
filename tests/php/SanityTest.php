@@ -11,14 +11,9 @@ final class SanityTest extends TestCase
 {
     public static function setUpBeforeClass(): void
     {
-        // auth.php pulls in db.php; tests exercise the URL helper only, but
-        // we still need db.php's get_db() not to trigger a real DB open.
-        // Stubbing via a dummy function declared before auth.php loads does
-        // the job.
-        if (!function_exists('get_db')) {
-            // phpcs:ignore Generic.Functions.FunctionCallArgumentSpacing
-            eval('function get_db(): PDO { return new PDO("sqlite::memory:"); }');
-        }
+        // auth.php transitively loads db.php which defines get_db() but
+        // does NOT call it at load time — safe to include. Tests here
+        // exercise pure helpers that don't touch the DB at all.
         require_once __DIR__ . '/../../php/includes/auth.php';
     }
 
