@@ -141,3 +141,22 @@ WKCC River Levels
 https://levels.mousebrains.com
 TXT;
 }
+
+/**
+ * Render an in-progress reply from the maintainer — the proposal is still
+ * pending but the maintainer has a question or comment to relay.
+ */
+function render_editor_reply_email(string $target_label, string $reply_body): string {
+    return <<<TXT
+The maintainer replied on your proposed change to $target_label:
+
+$reply_body
+
+Your proposal is still pending. You can update it by visiting the reach
+and submitting again, or wait for the maintainer's next action.
+
+—
+WKCC River Levels
+https://levels.mousebrains.com
+TXT;
+}

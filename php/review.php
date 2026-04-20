@@ -179,6 +179,28 @@ function review_notify_editor(PDO $db, array $cr, string $decision, string $note
     );
 }
 
+/** Send a maintainer reply without changing the request's status. */
+function review_send_reply(PDO $db, array $cr, string $reply, int $maint_id): void {
+    $prev = (string)($cr['reviewer_note'] ?? '');
+    $stamp = gmdate('Y-m-d H:i') . 'Z';
+    $entry = "[$stamp maintainer] " . $reply;
+    $merged = $prev === '' ? $entry : rtrim($prev) . "\n\n" . $entry;
+    $db->prepare('UPDATE change_request SET reviewer_note = ? WHERE id = ?')
+        ->execute([$merged, $cr['id']]);
+
+    $st = $db->prepare('SELECT email FROM editor WHERE id = ?');
+    $st->execute([$cr['editor_id']]);
+    $row = $st->fetch();
+    if ($row && !empty($row['email'])) {
+        $target_label = $cr['subject'] ?: ($cr['target_type'] . ' #' . $cr['target_id']);
+        send_email(
+            (string)$row['email'],
+            "[levels] maintainer reply on your proposal",
+            render_editor_reply_email($target_label, $reply)
+        );
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Controller
 // ---------------------------------------------------------------------------
@@ -253,6 +275,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         review_reject($db, $cr, $note, (int)$maint['id']);
         review_notify_editor($db, $cr, 'rejected', $note);
         $flash = 'Rejected.';
+    } elseif ($action === 'reply') {
+        $note = trim((string)($_POST['reviewer_note'] ?? ''));
+        if ($note === '') {
+            $flash_err = 'Reply cannot be empty.';
+        } else {
+            review_send_reply($db, $cr, $note, (int)$maint['id']);
+            $flash = 'Reply sent — proposal kept pending.';
+        }
     }
 }
 
@@ -364,12 +394,17 @@ if ($cr_id) {
     }
 
     echo '<h3 style="margin-top:1rem">Decision</h3>';
-    echo '<label>Reviewer note (included in email to editor)</label>';
+    echo '<label>Reviewer note / reply (included in the email to the editor)</label>';
     echo '<textarea name="reviewer_note" style="width:100%;min-height:4em"></textarea>';
+    if ($cr['reviewer_note']) {
+        echo '<p style="margin-top:.25rem;font-size:.8rem;color:var(--c-text-muted)">Earlier notes:</p>';
+        echo '<pre style="white-space:pre-wrap;background:#f6f8fa;border:1px solid #e1e4e8;border-radius:4px;padding:.5rem;font-size:.8rem">'
+           . htmlspecialchars((string)$cr['reviewer_note']) . '</pre>';
+    }
     echo '<p style="margin-top:.5rem">';
     echo '<button type="submit" name="action" value="approve">Approve and apply</button>';
-    echo ' <button type="submit" name="action" value="reject" '
-       . 'onclick="return confirm(\'Reject this proposal?\')">Reject</button>';
+    echo ' <button type="submit" name="action" value="reply">Send reply (keep pending)</button>';
+    echo ' <button type="submit" name="action" value="reject">Reject</button>';
     echo ' <a href="/review.php" style="margin-left:1rem">Back to queue</a>';
     echo '</p>';
     echo '</form>';
