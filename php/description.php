@@ -12,6 +12,63 @@ require_once __DIR__ . '/includes/html.php';
 require_once __DIR__ . '/includes/svg_plot.php';
 require_once __DIR__ . '/includes/validate.php';
 
+/** True iff at least one observation of $type exists for the gauge in [since, until]. */
+function _desc_has_obs(PDO $db, int $gauge_id, string $type, string $since, ?string $until): bool {
+    if ($until !== null) {
+        $stmt = $db->prepare(
+            "SELECT 1 FROM observation o
+             JOIN gauge_source gs ON o.source_id = gs.source_id
+             WHERE gs.gauge_id = ? AND o.data_type = ? AND o.observed_at >= ? AND o.observed_at <= ?
+             LIMIT 1"
+        );
+        $stmt->execute([$gauge_id, $type, $since, $until]);
+    } else {
+        $stmt = $db->prepare(
+            "SELECT 1 FROM observation o
+             JOIN gauge_source gs ON o.source_id = gs.source_id
+             WHERE gs.gauge_id = ? AND o.data_type = ? AND o.observed_at >= ?
+             LIMIT 1"
+        );
+        $stmt->execute([$gauge_id, $type, $since]);
+    }
+    return (bool)$stmt->fetchColumn();
+}
+
+/** Fetch [times[], values[]] for one data_type in the visible window. */
+function _desc_fetch_series(PDO $db, int $gauge_id, string $type, string $since, ?string $until): array {
+    if ($until !== null) {
+        $stmt = $db->prepare(
+            'SELECT o.observed_at, o.value FROM observation o
+             JOIN gauge_source gs ON o.source_id = gs.source_id
+             WHERE gs.gauge_id = ? AND o.data_type = ? AND o.observed_at >= ? AND o.observed_at <= ?
+             ORDER BY o.observed_at'
+        );
+        $stmt->execute([$gauge_id, $type, $since, $until]);
+    } else {
+        $stmt = $db->prepare(
+            'SELECT o.observed_at, o.value FROM observation o
+             JOIN gauge_source gs ON o.source_id = gs.source_id
+             WHERE gs.gauge_id = ? AND o.data_type = ? AND o.observed_at >= ?
+             ORDER BY o.observed_at'
+        );
+        $stmt->execute([$gauge_id, $type, $since]);
+    }
+    $times = []; $values = [];
+    foreach ($stmt->fetchAll() as $r) {
+        $times[]  = strtotime($r['observed_at']);
+        $values[] = (float)$r['value'];
+    }
+    return [$times, $values];
+}
+
+/** Emit one single-axis plot div, or nothing if the series has <2 points. */
+function _desc_render_single_plot(array $times, array $values, string $name, string $y_label, bool $is_flow): void {
+    if (count($times) < 2) return;
+    $title = htmlspecialchars($name) . " — $y_label";
+    $svg = generate_svg_plot($times, $values, $title, $y_label, 800, 350, 200, $is_flow);
+    echo '<div class="plot-container">' . $svg . '</div>';
+}
+
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 $start_date = validate_date(filter_input(INPUT_GET, 'start', FILTER_SANITIZE_SPECIAL_CHARS));
 $end_date = validate_date(filter_input(INPUT_GET, 'end', FILTER_SANITIZE_SPECIAL_CHARS));
@@ -187,53 +244,46 @@ if ($gauge) {
         $until = null;
     }
 
-    $plot_types = [
-        'flow'        => 'Flow (CFS)',
-        'inflow'      => 'Inflow (CFS)',
-        'gauge'       => 'Gage Height (Ft)',
-        'temperature' => 'Temperature (F)',
-    ];
+    $has_flow   = _desc_has_obs($db, (int)$gauge['id'], 'flow',        $since, $until);
+    $has_inflow = _desc_has_obs($db, (int)$gauge['id'], 'inflow',      $since, $until);
+    $has_gauge  = _desc_has_obs($db, (int)$gauge['id'], 'gauge',       $since, $until);
+    $has_temp   = _desc_has_obs($db, (int)$gauge['id'], 'temperature', $since, $until);
 
-    // Match build policy: only show inflow if flow isn't available for this gauge.
-    $flow_stmt = $db->prepare(
-        "SELECT 1 FROM observation o JOIN gauge_source gs ON o.source_id = gs.source_id
-         WHERE gs.gauge_id = ? AND o.data_type = 'flow' LIMIT 1"
-    );
-    $flow_stmt->execute([$gauge['id']]);
-    if ($flow_stmt->fetchColumn()) unset($plot_types['inflow']);
+    // Flow takes precedence over inflow for the primary "flow-like" series.
+    $primary_type  = $has_flow ? 'flow' : ($has_inflow ? 'inflow' : null);
+    $primary_label = $primary_type === 'flow'   ? 'Flow (CFS)'
+                   : ($primary_type === 'inflow' ? 'Inflow (CFS)' : '');
 
-    foreach ($plot_types as $dtype => $y_label) {
-        if ($until) {
-            $stmt = $db->prepare(
-                'SELECT o.observed_at, o.value FROM observation o
-                 JOIN gauge_source gs ON o.source_id = gs.source_id
-                 WHERE gs.gauge_id = ? AND o.data_type = ? AND o.observed_at >= ? AND o.observed_at <= ?
-                 ORDER BY o.observed_at'
-            );
-            $stmt->execute([$gauge['id'], $dtype, $since, $until]);
+    if ($primary_type !== null && $has_gauge) {
+        // Use a wider lookback for the rating curve than the visible window —
+        // axis ticks should cover the plotted y-range even if the visible
+        // window itself has few paired points.
+        $lookup_since = date('Y-m-d H:i:s', $latest_ts - 60 * 86400);
+        $lookup = derive_rating_lookup($db, (int)$gauge['id'], $primary_type, $lookup_since);
+
+        [$ft, $fv] = _desc_fetch_series($db, (int)$gauge['id'], $primary_type, $since, $until);
+        if ($lookup !== null && count($ft) >= 2) {
+            $title = htmlspecialchars($name) . " — $primary_label / Gage Height";
+            echo '<div class="plot-container">'
+               . generate_rating_dual_plot($ft, $fv, $lookup, $title, $primary_label)
+               . '</div>';
         } else {
-            $stmt = $db->prepare(
-                'SELECT o.observed_at, o.value FROM observation o
-                 JOIN gauge_source gs ON o.source_id = gs.source_id
-                 WHERE gs.gauge_id = ? AND o.data_type = ? AND o.observed_at >= ?
-                 ORDER BY o.observed_at'
-            );
-            $stmt->execute([$gauge['id'], $dtype, $since]);
+            // Fallback: render two single-axis plots (previous behavior).
+            _desc_render_single_plot($ft, $fv, $name, $primary_label, $primary_type === 'flow');
+            [$gt, $gv] = _desc_fetch_series($db, (int)$gauge['id'], 'gauge', $since, $until);
+            _desc_render_single_plot($gt, $gv, $name, 'Gage Height (Ft)', false);
         }
-        $rows = $stmt->fetchAll();
+    } elseif ($primary_type !== null) {
+        [$ft, $fv] = _desc_fetch_series($db, (int)$gauge['id'], $primary_type, $since, $until);
+        _desc_render_single_plot($ft, $fv, $name, $primary_label, $primary_type === 'flow');
+    } elseif ($has_gauge) {
+        [$gt, $gv] = _desc_fetch_series($db, (int)$gauge['id'], 'gauge', $since, $until);
+        _desc_render_single_plot($gt, $gv, $name, 'Gage Height (Ft)', false);
+    }
 
-        if (count($rows) < 2) continue;
-
-        $times = []; $values = [];
-        foreach ($rows as $r) {
-            $times[]  = strtotime($r['observed_at']);
-            $values[] = (float)$r['value'];
-        }
-
-        $title = htmlspecialchars($name) . " — $y_label";
-        $is_flow = ($dtype === 'flow');
-        $svg = generate_svg_plot($times, $values, $title, $y_label, 800, 350, 200, $is_flow);
-        echo '<div class="plot-container">' . $svg . '</div>';
+    if ($has_temp) {
+        [$tt, $tv] = _desc_fetch_series($db, (int)$gauge['id'], 'temperature', $since, $until);
+        _desc_render_single_plot($tt, $tv, $name, 'Temperature (F)', false);
     }
 }
 

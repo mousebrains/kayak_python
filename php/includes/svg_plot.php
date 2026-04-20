@@ -42,6 +42,132 @@ function nice_axis(float $data_min, float $data_max): array {
 }
 
 /**
+ * Build a piecewise-linear (gauge_ft, flow_cfs) lookup from paired observations.
+ *
+ * Pairs $primary_type ('flow' or 'inflow') with 'gauge' on matching
+ * (source_id, observed_at). Drops primary <= 0 (tide/release zeros).
+ * Bins by gauge_ft and emits (median gauge_ft, median flow) per non-empty bin,
+ * sorted by gauge_ft and filtered to monotone-increasing flow so the inverse
+ * flow->gauge lookup is well-defined.
+ *
+ * @return array<int, array{0: float, 1: float}>|null  Sorted (gauge_ft, flow_cfs) pairs, or null if < 2 bins survive.
+ */
+function derive_rating_lookup(
+    PDO $db,
+    int $gauge_id,
+    string $primary_type,
+    string $since,
+    int $n_bins = 50
+): ?array {
+    if ($primary_type !== 'flow' && $primary_type !== 'inflow') return null;
+
+    $stmt = $db->prepare(
+        "SELECT g.value AS gauge_ft, p.value AS primary_val
+         FROM observation p
+         JOIN observation g ON g.source_id = p.source_id
+                          AND g.observed_at = p.observed_at
+         JOIN gauge_source gs ON gs.source_id = p.source_id
+         WHERE gs.gauge_id = ?
+           AND p.data_type = ?
+           AND g.data_type = 'gauge'
+           AND p.observed_at >= ?
+           AND p.value > 0"
+    );
+    $stmt->execute([$gauge_id, $primary_type, $since]);
+
+    $rows = [];
+    $gmin = INF; $gmax = -INF;
+    while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $g = (float)$r['gauge_ft'];
+        $v = (float)$r['primary_val'];
+        $rows[] = [$g, $v];
+        if ($g < $gmin) $gmin = $g;
+        if ($g > $gmax) $gmax = $g;
+    }
+    if (count($rows) < 2 || $gmax - $gmin < 1e-9) return null;
+
+    $bin_width = ($gmax - $gmin) / $n_bins;
+    $bins = array_fill(0, $n_bins, []);
+    foreach ($rows as [$g, $v]) {
+        $idx = min($n_bins - 1, (int)floor(($g - $gmin) / $bin_width));
+        $bins[$idx][] = [$g, $v];
+    }
+
+    $lookup = [];
+    foreach ($bins as $bin) {
+        if (!$bin) continue;
+        $gs = array_column($bin, 0);
+        $vs = array_column($bin, 1);
+        sort($gs);
+        sort($vs);
+        $n = count($bin);
+        $mid = intdiv($n, 2);
+        $g_med = $n % 2 ? $gs[$mid] : ($gs[$mid - 1] + $gs[$mid]) / 2;
+        $v_med = $n % 2 ? $vs[$mid] : ($vs[$mid - 1] + $vs[$mid]) / 2;
+        $lookup[] = [$g_med, $v_med];
+    }
+    usort($lookup, fn($a, $b) => $a[0] <=> $b[0]);
+
+    // Enforce monotone-increasing flow so flow->gauge inverse stays well-defined.
+    $filtered = [];
+    $prev_flow = -INF;
+    foreach ($lookup as $pair) {
+        if ($pair[1] > $prev_flow) {
+            $filtered[] = $pair;
+            $prev_flow = $pair[1];
+        }
+    }
+
+    return count($filtered) >= 2 ? $filtered : null;
+}
+
+/**
+ * Forward rating: gauge ft -> flow cfs (linear interp, clamped at endpoints).
+ *
+ * Mirrors src/kayak/utils/conversions.py::interpolate_rating.
+ *
+ * @param array<int, array{0: float, 1: float}> $lookup  Sorted by gauge_ft.
+ */
+function rate_gauge_to_flow(array $lookup, float $gauge_ft): ?float {
+    $n = count($lookup);
+    if ($n === 0) return null;
+    if ($gauge_ft <= $lookup[0][0]) return (float)$lookup[0][1];
+    if ($gauge_ft >= $lookup[$n - 1][0]) return (float)$lookup[$n - 1][1];
+    for ($i = 0; $i < $n - 1; $i++) {
+        [$g1, $f1] = $lookup[$i];
+        [$g2, $f2] = $lookup[$i + 1];
+        if ($g1 <= $gauge_ft && $gauge_ft <= $g2) {
+            if ($g2 == $g1) return (float)$f1;
+            return $f1 + ($f2 - $f1) / ($g2 - $g1) * ($gauge_ft - $g1);
+        }
+    }
+    return null;
+}
+
+/**
+ * Inverse rating: flow cfs -> gauge ft (linear interp, clamped at endpoints).
+ *
+ * Assumes $lookup has monotone-increasing flow (derive_rating_lookup enforces this).
+ *
+ * @param array<int, array{0: float, 1: float}> $lookup  Sorted by gauge_ft, monotone in flow.
+ */
+function rate_flow_to_gauge(array $lookup, float $flow_cfs): ?float {
+    $n = count($lookup);
+    if ($n === 0) return null;
+    if ($flow_cfs <= $lookup[0][1]) return (float)$lookup[0][0];
+    if ($flow_cfs >= $lookup[$n - 1][1]) return (float)$lookup[$n - 1][0];
+    for ($i = 0; $i < $n - 1; $i++) {
+        [$g1, $f1] = $lookup[$i];
+        [$g2, $f2] = $lookup[$i + 1];
+        if ($f1 <= $flow_cfs && $flow_cfs <= $f2) {
+            if ($f2 == $f1) return (float)$g1;
+            return $g1 + ($g2 - $g1) / ($f2 - $f1) * ($flow_cfs - $f1);
+        }
+    }
+    return null;
+}
+
+/**
  * Generate a lightweight time-series SVG plot.
  *
  * @param array  $times   Array of Unix timestamps.
@@ -144,120 +270,101 @@ SVG;
 }
 
 /**
- * Generate a dual-axis SVG plot with flow (left axis) and gauge height (right axis).
+ * Dual-axis plot: one flow line, left axis linear (CFS), right axis is a
+ * rating-curve re-labelling of the same Y coordinate (gage ft). The right-axis
+ * ticks land on "nice" gauge-height values and are placed at the y-pixel that
+ * maps to that gauge's flow through $rating_lookup.
  *
- * @param array  $flow_times   Unix timestamps for flow data.
- * @param array  $flow_values  Flow values (CFS).
- * @param array  $gauge_times  Unix timestamps for gauge data.
- * @param array  $gauge_values Gauge height values (ft).
- * @param string $title        Plot title.
- * @param int    $width        SVG width.
- * @param int    $height       SVG height.
- * @param int    $target_points LTTB target per series.
- * @return string SVG markup.
+ * @param array $flow_times      Unix timestamps.
+ * @param array $flow_values     Flow values (CFS).
+ * @param array<int, array{0: float, 1: float}> $rating_lookup  Sorted (gauge_ft, flow_cfs) pairs.
+ * @param string $title          Plot title.
+ * @param string $primary_label  Left-axis label, e.g. 'Flow (CFS)' or 'Inflow (CFS)'.
  */
-function generate_dual_svg_plot(
+function generate_rating_dual_plot(
     array $flow_times,
     array $flow_values,
-    array $gauge_times,
-    array $gauge_values,
+    array $rating_lookup,
     string $title,
+    string $primary_label,
     int $width = 800,
     int $height = 350,
     int $target_points = 200
 ): string {
-    // Build and sort pairs for each series
-    $flow_pairs = [];
-    for ($i = 0; $i < count($flow_times); $i++) {
+    $n = count($flow_times);
+    if ($n === 0) return _empty_svg($title, $width, $height);
+
+    $pairs = [];
+    for ($i = 0; $i < $n; $i++) {
         if ($flow_values[$i] !== null) {
-            $flow_pairs[] = [(float)$flow_times[$i], (float)$flow_values[$i]];
+            $pairs[] = [(float)$flow_times[$i], (float)$flow_values[$i]];
         }
     }
-    usort($flow_pairs, fn($a, $b) => $a[0] <=> $b[0]);
+    usort($pairs, fn($a, $b) => $a[0] <=> $b[0]);
+    if (count($pairs) < 2) return _empty_svg($title, $width, $height);
 
-    $gauge_pairs = [];
-    for ($i = 0; $i < count($gauge_times); $i++) {
-        if ($gauge_values[$i] !== null) {
-            $gauge_pairs[] = [(float)$gauge_times[$i], (float)$gauge_values[$i]];
-        }
-    }
-    usort($gauge_pairs, fn($a, $b) => $a[0] <=> $b[0]);
+    $pairs = lttb_downsample($pairs, $target_points);
 
-    $has_flow = count($flow_pairs) >= 2;
-    $has_gauge = count($gauge_pairs) >= 2;
-
-    if (!$has_flow && !$has_gauge) {
-        return _empty_svg($title, $width, $height);
-    }
-
-    // Downsample
-    if ($has_flow) $flow_pairs = lttb_downsample($flow_pairs, $target_points);
-    if ($has_gauge) $gauge_pairs = lttb_downsample($gauge_pairs, $target_points);
-
-    // Margins — right margin wider for second Y axis
     $ml = 80; $mr = 80; $mt = 30; $mb = 45;
     $pw = $width - $ml - $mr;
     $ph = $height - $mt - $mb;
 
-    // X range from combined data
-    $all_x = [];
-    if ($has_flow) { $all_x[] = $flow_pairs[0][0]; $all_x[] = $flow_pairs[count($flow_pairs)-1][0]; }
-    if ($has_gauge) { $all_x[] = $gauge_pairs[0][0]; $all_x[] = $gauge_pairs[count($gauge_pairs)-1][0]; }
-    $x_min = min($all_x);
-    $x_max = max($all_x);
+    $x_min = $pairs[0][0];
+    $x_max = $pairs[count($pairs) - 1][0];
+    $fy_vals = array_column($pairs, 1);
+    [$fy_min, $fy_max, $fy_step] = nice_axis(min($fy_vals), max($fy_vals));
     $x_range = $x_max - $x_min ?: 1;
+    $fy_range = $fy_max - $fy_min ?: 1;
 
-    // Flow Y axis (left)
-    $flow_grid = '';
-    $flow_line = '';
-    if ($has_flow) {
-        $fy_vals = array_column($flow_pairs, 1);
-        [$fy_min, $fy_max, $fy_step] = nice_axis(min($fy_vals), max($fy_vals));
-        $fy_range = $fy_max - $fy_min ?: 1;
-        $fy_decimals = $fy_step >= 1 ? 0 : ($fy_step >= 0.1 ? 1 : 2);
+    // Flow polyline
+    $pts = '';
+    foreach ($pairs as [$x, $y]) {
+        $px = $ml + (int)(($x - $x_min) / $x_range * $pw);
+        $py = $mt + (int)(($fy_max - $y) / $fy_range * $ph);
+        $pts .= "$px,$py ";
+    }
+    $flow_line = '<polyline fill="none" stroke="#2060A0" stroke-width="1.5" stroke-linejoin="round" points="' . rtrim($pts) . '"/>';
 
-        for ($yv = $fy_min; $yv <= $fy_max + $fy_step * 0.01; $yv += $fy_step) {
-            $py = $mt + (int)(($fy_max - $yv) / $fy_range * $ph);
-            $label = number_format($yv, $fy_decimals);
-            $flow_grid .= "<line x1=\"$ml\" y1=\"$py\" x2=\"" . ($ml + $pw) . "\" y2=\"$py\" stroke=\"#ddd\" stroke-width=\"0.5\"/>\n";
-            $flow_grid .= "<text x=\"" . ($ml - 5) . "\" y=\"" . ($py + 4) . "\" text-anchor=\"end\" font-size=\"14\" fill=\"#2060A0\">$label</text>\n";
-        }
-
-        $pts = '';
-        foreach ($flow_pairs as [$x, $y]) {
-            $px = $ml + (int)(($x - $x_min) / $x_range * $pw);
-            $py = $mt + (int)(($fy_max - $y) / $fy_range * $ph);
-            $pts .= "$px,$py ";
-        }
-        $flow_line = '<polyline fill="none" stroke="#2060A0" stroke-width="1.5" stroke-linejoin="round" points="' . rtrim($pts) . '"/>';
+    // Left-axis (flow) gridlines + labels
+    $grid = '';
+    $fy_decimals = $fy_step >= 1 ? 0 : ($fy_step >= 0.1 ? 1 : 2);
+    for ($yv = $fy_min; $yv <= $fy_max + $fy_step * 0.01; $yv += $fy_step) {
+        $py = $mt + (int)(($fy_max - $yv) / $fy_range * $ph);
+        $label = number_format($yv, $fy_decimals);
+        $grid .= "<line x1=\"$ml\" y1=\"$py\" x2=\"" . ($ml + $pw) . "\" y2=\"$py\" stroke=\"#ddd\" stroke-width=\"0.5\"/>\n";
+        $grid .= "<text x=\"" . ($ml - 5) . "\" y=\"" . ($py + 4) . "\" text-anchor=\"end\" font-size=\"14\" fill=\"#2060A0\">$label</text>\n";
     }
 
-    // Gauge Y axis (right)
-    $gauge_grid = '';
-    $gauge_line = '';
-    if ($has_gauge) {
-        $gy_vals = array_column($gauge_pairs, 1);
-        [$gy_min, $gy_max, $gy_step] = nice_axis(min($gy_vals), max($gy_vals));
-        $gy_range = $gy_max - $gy_min ?: 1;
+    // Right-axis: nice gauge-height tick values, placed at y-pixel of their rated flow.
+    $right_grid = '';
+    $right_x = $ml + $pw;
+    $gy_visible_min = rate_flow_to_gauge($rating_lookup, (float)$fy_min);
+    $gy_visible_max = rate_flow_to_gauge($rating_lookup, (float)$fy_max);
+    if ($gy_visible_min !== null && $gy_visible_max !== null) {
+        $lo = min($gy_visible_min, $gy_visible_max);
+        $hi = max($gy_visible_min, $gy_visible_max);
+        [$gy_min, $gy_max, $gy_step] = nice_axis($lo, $hi);
         $gy_decimals = $gy_step >= 1 ? 0 : ($gy_step >= 0.1 ? 1 : 2);
 
-        $right_x = $ml + $pw;
-        for ($yv = $gy_min; $yv <= $gy_max + $gy_step * 0.01; $yv += $gy_step) {
-            $py = $mt + (int)(($gy_max - $yv) / $gy_range * $ph);
-            $label = number_format($yv, $gy_decimals);
-            if (!$has_flow) {
-                $gauge_grid .= "<line x1=\"$ml\" y1=\"$py\" x2=\"$right_x\" y2=\"$py\" stroke=\"#ddd\" stroke-width=\"0.5\"/>\n";
+        $valid_ticks = [];
+        for ($gv = $gy_min; $gv <= $gy_max + $gy_step * 0.01; $gv += $gy_step) {
+            $qv = rate_gauge_to_flow($rating_lookup, $gv);
+            if ($qv === null || $qv < $fy_min || $qv > $fy_max) continue;
+            $valid_ticks[] = [$gv, $qv];
+        }
+        // Fallback: if no nice tick landed in-range, place labels at visible endpoints.
+        if (!$valid_ticks) {
+            foreach ([$lo, $hi] as $gv) {
+                $qv = rate_gauge_to_flow($rating_lookup, $gv);
+                if ($qv !== null) $valid_ticks[] = [$gv, $qv];
             }
-            $gauge_grid .= "<text x=\"" . ($right_x + 5) . "\" y=\"" . ($py + 4) . "\" text-anchor=\"start\" font-size=\"14\" fill=\"#C04020\">$label</text>\n";
         }
-
-        $pts = '';
-        foreach ($gauge_pairs as [$x, $y]) {
-            $px = $ml + (int)(($x - $x_min) / $x_range * $pw);
-            $py = $mt + (int)(($gy_max - $y) / $gy_range * $ph);
-            $pts .= "$px,$py ";
+        foreach ($valid_ticks as [$gv, $qv]) {
+            $py = $mt + (int)(($fy_max - $qv) / $fy_range * $ph);
+            $label = number_format($gv, $gy_decimals);
+            $right_grid .= "<line x1=\"$right_x\" y1=\"$py\" x2=\"" . ($right_x + 3) . "\" y2=\"$py\" stroke=\"#C04020\" stroke-width=\"0.5\"/>\n";
+            $right_grid .= "<text x=\"" . ($right_x + 5) . "\" y=\"" . ($py + 4) . "\" text-anchor=\"start\" font-size=\"14\" fill=\"#C04020\">$label</text>\n";
         }
-        $gauge_line = '<polyline fill="none" stroke="#C04020" stroke-width="1.5" stroke-linejoin="round" points="' . rtrim($pts) . '"/>';
     }
 
     // X-axis date labels
@@ -274,34 +381,19 @@ function generate_dual_svg_plot(
     }
 
     $esc_title = htmlspecialchars($title);
-
-    // Y-axis labels
-    $flow_label = $has_flow ? '<text x="12" y="' . $mt . '" font-size="11" fill="#2060A0" transform="rotate(-90,12,' . $mt . ')" text-anchor="end">Flow (CFS)</text>' : '';
+    $esc_flow_label = htmlspecialchars($primary_label);
     $gauge_label_x = $width - 12;
-    $gauge_label = $has_gauge ? '<text x="' . $gauge_label_x . '" y="' . $mt . '" font-size="11" fill="#C04020" transform="rotate(90,' . $gauge_label_x . ',' . $mt . ')" text-anchor="end">Gage Height (Ft)</text>' : '';
-
-    // Legend
-    $legend_x = $ml + $pw - 180;
-    $legend = '';
-    if ($has_flow && $has_gauge) {
-        $legend .= "<line x1=\"" . ($legend_x) . "\" y1=\"" . ($mt + 10) . "\" x2=\"" . ($legend_x + 20) . "\" y2=\"" . ($mt + 10) . "\" stroke=\"#2060A0\" stroke-width=\"2\"/>";
-        $legend .= "<text x=\"" . ($legend_x + 24) . "\" y=\"" . ($mt + 14) . "\" font-size=\"11\" fill=\"#2060A0\">Flow</text>";
-        $legend .= "<line x1=\"" . ($legend_x + 70) . "\" y1=\"" . ($mt + 10) . "\" x2=\"" . ($legend_x + 90) . "\" y2=\"" . ($mt + 10) . "\" stroke=\"#C04020\" stroke-width=\"2\"/>";
-        $legend .= "<text x=\"" . ($legend_x + 94) . "\" y=\"" . ($mt + 14) . "\" font-size=\"11\" fill=\"#C04020\">Gage Height</text>";
-    }
 
     return <<<SVG
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 $width $height" width="$width" height="$height">
 <text x="{$ml}" y="18" font-size="13" font-weight="bold" fill="#333">$esc_title</text>
-$flow_label
-$gauge_label
-$flow_grid
-$gauge_grid
+<text x="12" y="{$mt}" font-size="11" fill="#2060A0" transform="rotate(-90,12,{$mt})" text-anchor="end">$esc_flow_label</text>
+<text x="{$gauge_label_x}" y="{$mt}" font-size="11" fill="#C04020" transform="rotate(90,{$gauge_label_x},{$mt})" text-anchor="end">Gage Height (Ft)</text>
+$grid
+$right_grid
 $x_labels
 <rect x="$ml" y="$mt" width="$pw" height="$ph" fill="none" stroke="#ccc" stroke-width="0.5"/>
 $flow_line
-$gauge_line
-$legend
 </svg>
 SVG;
 }
