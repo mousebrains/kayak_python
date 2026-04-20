@@ -19,10 +19,14 @@ require_editor_feature();
 
 $next = safe_next_url($_GET['next'] ?? $_POST['next'] ?? null);
 
-// Already signed in? Go home (or to next).
+// Already signed in? If an explicit ?next was supplied (e.g. the Comment
+// link bouncing through login), honor it. Otherwise land on /account.php
+// so the visitor sees that they're signed in rather than silently hitting
+// the same page they came from.
 $ed_current = current_editor();
 if ($ed_current !== null) {
-    header("Location: $next");
+    $explicit_next = filter_input(INPUT_GET, 'next', FILTER_SANITIZE_SPECIAL_CHARS);
+    header('Location: ' . ($explicit_next ? safe_next_url($explicit_next) : '/account.php'));
     exit;
 }
 
