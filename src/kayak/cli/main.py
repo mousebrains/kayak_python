@@ -12,6 +12,7 @@ from kayak.cli import (
     fetch_usgs_ogc,
     init_db,
     merge,
+    migrate,
     pipeline,
     seed_maintainer,
 )
@@ -32,6 +33,7 @@ def main() -> None:
     subparsers = parser.add_subparsers(dest="command")
 
     init_db.addArgs(subparsers)
+    migrate.addArgs(subparsers)
     fetch.addArgs(subparsers)
     fetch_usgs_ogc.addArgs(subparsers)
     merge.addArgs(subparsers)

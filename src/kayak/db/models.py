@@ -8,6 +8,7 @@ from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     ForeignKey,
     Index,
     Integer,
@@ -524,6 +525,13 @@ class ReachClass(Base):
     # relationships
     reach: Mapped[Reach] = relationship(back_populates="classes")
 
+    __table_args__ = (
+        CheckConstraint(
+            "low IS NULL OR high IS NULL OR low <= high",
+            name="ck_reach_class_low_le_high",
+        ),
+    )
+
 
 # ---------------------------------------------------------------------------
 # reach_level
@@ -551,6 +559,13 @@ class ReachLevel(Base):
 
     # relationships
     reach: Mapped[Reach] = relationship(back_populates="levels")
+
+    __table_args__ = (
+        CheckConstraint(
+            "low IS NULL OR high IS NULL OR low <= high",
+            name="ck_reach_level_low_le_high",
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -82,6 +82,16 @@ def init_db(args: argparse.Namespace) -> None:
     print("Creating tables...")
     Base.metadata.create_all(engine)
 
+    # Fresh DBs start at the head of the migration series — metadata.create_all
+    # already produced the target schema, so every known migration is
+    # effectively already applied. Stamping them prevents re-run on next
+    # `levels migrate`.
+    from kayak.cli.migrate import stamp_all_known
+
+    stamped = stamp_all_known()
+    if stamped:
+        print(f"Stamped {stamped} migration(s) as applied.")
+
     if not args.no_seed:
         from kayak.db.engine import get_session
 
