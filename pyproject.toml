@@ -73,5 +73,18 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 check_untyped_defs = true
 
+[[tool.mypy.overrides]]
+# Tracing module is a wholesale move of a standalone script that pre-dates
+# the strict-typing regime; typing it gradually rather than front-loading
+# 19+ annotations in a refactor commit.
+module = "kayak.tracing.*"
+disallow_untyped_defs = false
+check_untyped_defs = false
+
+[[tool.mypy.overrides]]
+# Third-party geospatial/plotting libs ship no stubs.
+module = ["osgeo.*", "matplotlib.*", "contextily.*"]
+ignore_missing_imports = true
+
 [tool.hatch.envs.default]
 features = ["dev"]

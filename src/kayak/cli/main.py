@@ -15,6 +15,7 @@ from kayak.cli import (
     migrate,
     pipeline,
     seed_maintainer,
+    trace_reach,
 )
 from kayak.cli.logger import addArgs as addLoggerArgs
 from kayak.cli.logger import mkLogger
@@ -43,6 +44,7 @@ def main() -> None:
     decimate.addArgs(subparsers)
     pipeline.addArgs(subparsers)
     seed_maintainer.addArgs(subparsers)
+    trace_reach.addArgs(subparsers)
 
     args = parser.parse_args()
     mkLogger(args)

@@ -1,0 +1,77 @@
+"""``levels trace`` — trace a stream reach along NHD HR flowlines.
+
+Thin CLI wrapper around :mod:`kayak.tracing.trace`. The heavy GDAL import
+is deferred into the entry function so ``levels --help`` loads fast on
+systems that don't have the osgeo package installed — only users who
+actually invoke ``levels trace`` pay for it.
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+
+
+def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Register the 'trace' subcommand."""
+    parser = subparsers.add_parser(
+        "trace",
+        help="Trace a stream reach between put-in and take-out using NHD HR data",
+    )
+    parser.set_defaults(func=trace)
+    parser.add_argument("--putin", required=True, help="Put-in coordinates as LAT,LON")
+    parser.add_argument("--takeout", required=True, help="Take-out coordinates as LAT,LON")
+    parser.add_argument(
+        "--name", default=None, help="Reach name (for map title; default: auto-detect)"
+    )
+    parser.add_argument(
+        "--huc4", default=None, help="HUC4 code (default: auto-detect from coordinates)"
+    )
+    parser.add_argument(
+        "--output", default=None, help="Output base name (default: derived from --name or 'trace')"
+    )
+    parser.add_argument(
+        "--csv-only", action="store_true", help="Output CSV only, skip map generation"
+    )
+
+
+def trace(args: argparse.Namespace) -> None:
+    """Entry point for ``levels trace``.
+
+    Imports ``kayak.tracing.trace`` lazily so the GDAL/osgeo dependency
+    is only loaded when this command actually runs.
+    """
+    try:
+        from kayak.tracing import trace as impl
+    except ImportError as exc:
+        print(
+            f"error: cannot load tracing module — GDAL/osgeo may be missing: {exc}",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    putin = tuple(float(x) for x in args.putin.split(","))
+    takeout = tuple(float(x) for x in args.takeout.split(","))
+
+    if args.output:
+        base = args.output
+    elif args.name:
+        base = args.name.lower().replace(" ", "_") + "_trace"
+    else:
+        base = "trace"
+
+    coords = impl.trace_reach(putin, takeout, huc4=args.huc4, verbose=True)
+    miles = impl.total_distance(coords)
+
+    csv_file = f"{base}.csv"
+    impl.write_csv(coords, csv_file)
+    print(f"Wrote {csv_file}")
+
+    if not args.csv_only:
+        png_file = f"{base}.png"
+        impl.make_map(coords, putin, takeout, args.name, miles, png_file)
+        print(f"Wrote {png_file}")
+
+    print(f"\nPut-in:   {putin[0]:.6f}, {putin[1]:.6f}")
+    print(f"Take-out: {takeout[0]:.6f}, {takeout[1]:.6f}")
+    print(f"Distance: {miles:.1f} miles")
