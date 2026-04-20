@@ -23,6 +23,8 @@ from kayak.db.models import DataType, GaugeSource, Source
 
 logger = logging.getLogger(__name__)
 
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+
 
 class BaseParser(ABC):
     """Abstract base for all data source parsers.
@@ -196,8 +198,5 @@ class BaseParser(ABC):
     @staticmethod
     def _strip_html(text: str) -> str:
         """Strip HTML tags and decode entities (mirrors HTMLrender)."""
-        # Remove tags
-        clean = re.sub(r"<[^>]+>", "", text)
-        # Decode HTML entities
-        clean = html.unescape(clean)
-        return clean
+        clean = _HTML_TAG_RE.sub("", text)
+        return html.unescape(clean)

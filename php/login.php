@@ -25,8 +25,7 @@ $next = safe_next_url($_GET['next'] ?? $_POST['next'] ?? null);
 // the same page they came from.
 $ed_current = current_editor();
 if ($ed_current !== null) {
-    $explicit_next = filter_input(INPUT_GET, 'next', FILTER_SANITIZE_SPECIAL_CHARS);
-    header('Location: ' . ($explicit_next ? safe_next_url($explicit_next) : '/account.php'));
+    header('Location: ' . (isset($_GET['next']) ? $next : '/account.php'));
     exit;
 }
 

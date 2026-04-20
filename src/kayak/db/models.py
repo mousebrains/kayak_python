@@ -160,6 +160,12 @@ class Source(Base):
     Each source is either fetched from a remote URL (via fetch_url) or
     calculated from other sources (via calc_expression). Multiple sources
     may feed the same gauge, with observations merged by the merge step.
+
+    ``name`` is indexed but intentionally NOT unique — the same logical
+    station can appear under multiple agencies (e.g. USGS + NWRFC sharing a
+    station number). Callers looking up by name must use ``.first()``
+    rather than ``.scalar_one_or_none()`` or risk a ``MultipleResultsFound``
+    error on those stations.
     """
 
     __tablename__ = "source"
