@@ -1,0 +1,13 @@
+parameters:
+    level: 5
+    paths:
+        - php
+    excludePaths:
+        - tests
+        - vendor
+    # PHP 8.4 target — matches composer.json.
+    phpVersion: 80400
+    # The codebase uses dynamic SQLite binding patterns that aren't fully
+    # typeable without adding stubs. level 5 catches the high-value issues
+    # (undefined vars, typos, wrong arg counts) without drowning in noise.
+    checkMissingIterableValueType: false

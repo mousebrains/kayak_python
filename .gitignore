@@ -41,6 +41,11 @@ backups
 # Ad-hoc audit dumps (often contain secrets from nginx -T or similar)
 *.log
 
+# PHP tooling (composer.lock is intentionally committed for deterministic installs)
+vendor/
+.phpunit.cache/
+.phpunit.result.cache
+
 # Stream trace data caches (NHD, OSM, merged)
 OSM-cache/
 NHD-cache/
