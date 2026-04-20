@@ -1,0 +1,331 @@
+"""Observation storage, queries, rating tables, and source-merge."""
+
+from __future__ import annotations
+
+import itertools
+import logging
+import statistics
+from collections import defaultdict
+from datetime import UTC, datetime, timedelta
+
+from sqlalchemy import delete, select
+from sqlalchemy.dialects.sqlite import insert as sqlite_upsert
+from sqlalchemy.orm import Session
+
+from kayak.db.models import DataType, Observation, RatingData
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Observation storage
+# ---------------------------------------------------------------------------
+
+
+def store_observation(
+    session: Session,
+    source_id: int,
+    data_type: DataType | str,
+    when: datetime,
+    value: float,
+    *,
+    allow_negative_flow_sources: set[int] | None = None,
+) -> bool:
+    """Store a single observation, rejecting invalid data.
+
+    - Rejects timestamps in the future
+    - Rejects negative flow values (unless source is in allow_negative_flow_sources)
+    """
+    if isinstance(data_type, str):
+        try:
+            data_type = DataType(data_type)
+        except ValueError:
+            logger.error("Unknown data type: %s", data_type)
+            return False
+
+    when = when.replace(microsecond=0)
+    now = datetime.now(UTC)
+    if when.tzinfo is None:
+        when_utc = when.replace(tzinfo=UTC)
+    else:
+        when_utc = when.astimezone(UTC)
+
+    if when_utc > now + timedelta(hours=1):
+        logger.warning("Rejecting future timestamp %s for source_id=%d", when, source_id)
+        return False
+
+    if (
+        data_type == DataType.flow
+        and value < 0
+        and not (allow_negative_flow_sources and source_id in allow_negative_flow_sources)
+    ):
+        logger.error("Rejecting negative flow %s for source_id=%d", value, source_id)
+        return False
+
+    stmt = (
+        sqlite_upsert(Observation)
+        .values(
+            source_id=source_id,
+            observed_at=when,
+            data_type=data_type,
+            value=value,
+        )
+        .on_conflict_do_update(
+            index_elements=["source_id", "observed_at", "data_type"],
+            set_={"value": value},
+        )
+    )
+    session.execute(stmt)
+    return True
+
+
+def store_observations(
+    session: Session,
+    values: list[dict],
+    *,
+    allow_negative_flow_sources: set[int] | None = None,
+) -> int:
+    """Store multiple observations in a single batch INSERT.
+
+    Each dict must have keys: source_id, data_type, observed_at, value.
+    Same validation rules as store_observation(): rejects future timestamps
+    and negative flow values (unless source is in allow_negative_flow_sources).
+    Returns count of rows stored.
+    """
+    now = datetime.now(UTC)
+    future_cutoff = now + timedelta(hours=1)
+    valid_rows = []
+
+    for row in values:
+        data_type = row["data_type"]
+        if isinstance(data_type, str):
+            try:
+                data_type = DataType(data_type)
+            except ValueError:
+                logger.error("Unknown data type: %s", data_type)
+                continue
+
+        when = row["observed_at"].replace(microsecond=0)
+        if when.tzinfo is None:
+            when_utc = when.replace(tzinfo=UTC)
+        else:
+            when_utc = when.astimezone(UTC)
+
+        if when_utc > future_cutoff:
+            logger.warning(
+                "Rejecting future timestamp %s for source_id=%d",
+                when,
+                row["source_id"],
+            )
+            continue
+
+        value = row["value"]
+        if (
+            data_type == DataType.flow
+            and value < 0
+            and not (
+                allow_negative_flow_sources and row["source_id"] in allow_negative_flow_sources
+            )
+        ):
+            logger.error(
+                "Rejecting negative flow %s for source_id=%d",
+                value,
+                row["source_id"],
+            )
+            continue
+
+        valid_rows.append(
+            {
+                "source_id": row["source_id"],
+                "data_type": data_type,
+                "observed_at": when,
+                "value": value,
+            }
+        )
+
+    if not valid_rows:
+        return 0
+
+    # SQLite has a 999-variable limit; each row uses 4 variables → batch at 200
+    for batch in itertools.batched(valid_rows, 200, strict=False):
+        stmt = (
+            sqlite_upsert(Observation)
+            .values(batch)
+            .on_conflict_do_update(
+                index_elements=["source_id", "observed_at", "data_type"],
+                set_={"value": sqlite_upsert(Observation).excluded.value},
+            )
+        )
+        session.execute(stmt)
+    return len(valid_rows)
+
+
+# ---------------------------------------------------------------------------
+# Observation queries
+# ---------------------------------------------------------------------------
+
+
+def get_observations(
+    session: Session,
+    source_id: int,
+    data_type: DataType,
+    since: datetime | None = None,
+    until: datetime | None = None,
+) -> list[Observation]:
+    """Fetch observation records for a source/type in time range."""
+    if since is None:
+        since = datetime.now(UTC) - timedelta(days=60)
+
+    stmt = select(Observation).where(
+        Observation.source_id == source_id,
+        Observation.data_type == data_type,
+        Observation.observed_at >= since,
+    )
+    if until is not None:
+        stmt = stmt.where(Observation.observed_at <= until)
+    stmt = stmt.order_by(Observation.observed_at.desc())
+    return list(session.scalars(stmt))
+
+
+def get_bulk_observations(
+    session: Session,
+    source_ids: list[int],
+    data_type: DataType,
+    since: datetime,
+) -> dict[int, list[Observation]]:
+    """Fetch observations for multiple sources in a single query.
+
+    Returns a dict keyed by source_id with lists of Observation sorted
+    descending by observed_at.
+    """
+    if not source_ids:
+        return {}
+    stmt = (
+        select(Observation)
+        .where(
+            Observation.source_id.in_(source_ids),
+            Observation.data_type == data_type,
+            Observation.observed_at >= since,
+        )
+        .order_by(Observation.source_id, Observation.observed_at.desc())
+    )
+    rows = list(session.scalars(stmt))
+    result: dict[int, list[Observation]] = defaultdict(list)
+    for row in rows:
+        result[row.source_id].append(row)
+    return dict(result)
+
+
+# ---------------------------------------------------------------------------
+# Rating tables (gauge-height ↔ flow lookup)
+# ---------------------------------------------------------------------------
+
+
+def get_rating_table(
+    session: Session,
+    rating_id: int,
+) -> list[tuple[float, float]]:
+    """Fetch rating table entries sorted by gauge_height_ft."""
+    rows = session.execute(
+        select(RatingData.gauge_height_ft, RatingData.flow_cfs)
+        .where(RatingData.rating_id == rating_id)
+        .order_by(RatingData.gauge_height_ft)
+    ).all()
+    return [(r.gauge_height_ft, r.flow_cfs) for r in rows]
+
+
+def put_rating_table(
+    session: Session,
+    rating_id: int,
+    entries: list[tuple[float, float]],
+) -> None:
+    """Store rating table entries for a rating_id."""
+    session.execute(delete(RatingData).where(RatingData.rating_id == rating_id))
+    for feet, cfs in entries:
+        session.add(RatingData(rating_id=rating_id, gauge_height_ft=feet, flow_cfs=cfs))
+
+
+# ---------------------------------------------------------------------------
+# Source merge (median fusion of multiple sources into a target)
+# ---------------------------------------------------------------------------
+
+
+def merge_sources(
+    session: Session,
+    target_source_id: int,
+    input_source_ids: list[int],
+    data_type: DataType,
+    since: datetime | None = None,
+    window_minutes: int = 15,
+) -> int:
+    """Merge observations from multiple sources into a target.
+
+    For each output timestamp, collects all observations from all input
+    sources within ±window_minutes and computes the median. This smooths
+    out noise from measurement jitter and small offsets between sources.
+
+    Returns count of new rows inserted.
+    """
+    if since is None:
+        since = datetime.now(UTC) - timedelta(days=10)
+
+    window = timedelta(minutes=window_minutes)
+
+    # Collect all (timestamp, value) pairs from all input sources.
+    # Normalize timestamps to second precision so that e.g. "00:00:00"
+    # and "00:00:00.000000" collapse to the same output point.
+    all_obs: list[tuple[datetime, float]] = []
+    for src_id in input_source_ids:
+        obs_rows = get_observations(session, src_id, data_type, since=since)
+        for row in obs_rows:
+            t = row.observed_at.replace(microsecond=0)
+            all_obs.append((t, row.value))
+
+    if not all_obs:
+        return 0
+
+    all_obs.sort(key=lambda x: x[0])
+
+    # Collect unique timestamps as output points
+    timestamps = sorted({t for t, _ in all_obs})
+
+    rows = []
+    # Use two pointers to find values within the window for each timestamp
+    n = len(all_obs)
+    lo = 0
+    for observed_at in timestamps:
+        win_start = observed_at - window
+        win_end = observed_at + window
+
+        # Advance lo pointer past expired entries
+        while lo < n and all_obs[lo][0] < win_start:
+            lo += 1
+
+        # Collect values in window
+        vals = []
+        for i in range(lo, n):
+            if all_obs[i][0] > win_end:
+                break
+            vals.append(all_obs[i][1])
+
+        if vals:
+            rows.append(
+                {
+                    "source_id": target_source_id,
+                    "data_type": data_type,
+                    "observed_at": observed_at,
+                    "value": round(statistics.median(vals), 2),
+                }
+            )
+
+    # Delete the target's existing observations in this range before writing,
+    # so stale rows from previous merges or fetches don't linger.
+    session.execute(
+        delete(Observation).where(
+            Observation.source_id == target_source_id,
+            Observation.data_type == data_type,
+            Observation.observed_at >= since,
+        )
+    )
+
+    return store_observations(session, rows)
