@@ -293,34 +293,32 @@ Alternatively, the nginx config passes `SQLITE_PATH` via `fastcgi_param`, so thi
 ### Secrets (HCAPTCHA_SECRET, EDIT_PASSWORD)
 
 Keep secrets out of nginx config files (those are world-readable). Store them
-in a restricted env file and expose them only to PHP-FPM workers:
+in a restricted env file and expose them only to PHP-FPM workers.
+
+All of the work below is packaged in `deploy/migrate-secrets.sh`:
 
 ```bash
-# One-time bootstrap
-sudo install -D -m 0600 -o root -g www-data \
-    deploy/secrets.env.example /etc/kayak/secrets.env
-sudo -e /etc/kayak/secrets.env                 # fill in values
+# First run — installs /etc/kayak/secrets.env from the template and exits so
+# you can edit it. Values are empty at this point; migrate-secrets.sh will
+# refuse to proceed until both HCAPTCHA_SECRET and EDIT_PASSWORD are set.
+sudo deploy/migrate-secrets.sh
 
-# Pool overlay that reads the env file and re-exports to workers
-sudo install -D -m 0644 deploy/kayak-fpm-pool.conf \
-    /etc/php/$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')/fpm/pool.d/kayak.conf
+# Fill in the real values (hCaptcha site secret + a fresh random EDIT_PASSWORD).
+sudo -e /etc/kayak/secrets.env
 
-# Drop the secret lines from nginx (keeps HCAPTCHA_SITE_KEY etc.)
-sudo sed -i '/fastcgi_param HCAPTCHA_SECRET/d' /etc/nginx/sites-available/levels
-sudo sed -i 's|^\(\s*map $host $hcaptcha_secret.*\)|# \1|' /etc/nginx/conf.d/editor-env.conf
-sudo rm -f /etc/nginx/snippets/edit-password.conf
-sudo sed -i '/edit-password.conf/d' /etc/nginx/sites-available/levels
+# Second run — installs the PHP-FPM pool overlay + systemd drop-in, strips
+# HCAPTCHA_SECRET lines from nginx, removes the obsolete edit-password.conf
+# snippet, validates nginx, restarts php-fpm, reloads nginx.
+sudo deploy/migrate-secrets.sh
 ```
 
-Then reload both services. PHP's `_hcaptcha_env()` helper prefers `getenv()`
-over `$_SERVER[]`, so once PHP-FPM has the values in its environment the
-code keeps working without change.
+PHP's `_hcaptcha_env()` helper prefers `getenv()` over `$_SERVER[]`, so once
+PHP-FPM has the values in its environment the application code keeps working
+without change.
 
-Restart PHP-FPM:
-
-```bash
-sudo systemctl restart php*-fpm
-```
+If you're migrating an existing deployment that previously had secrets in
+nginx (`t2-12.log`-style exposure), **rotate both values** before installing
+`/etc/kayak/secrets.env` — treat the old ones as disclosed.
 
 ## 8. Systemd timers (pipeline + decimate)
 

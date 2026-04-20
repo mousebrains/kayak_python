@@ -111,7 +111,6 @@ server {
         fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
         fastcgi_param EDITOR_FEATURE $editor_feature;
         fastcgi_param HCAPTCHA_SITE_KEY $hcaptcha_site_key;
-        fastcgi_param HCAPTCHA_SECRET $hcaptcha_secret;
         fastcgi_param MAIL_FROM $mail_from;
         fastcgi_param SITE_URL $site_url;
 
@@ -129,7 +128,7 @@ server {
         include fastcgi_params;
         fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
         fastcgi_param EDITOR_FEATURE $editor_feature;
-        include /etc/nginx/snippets/edit-password.conf;
+        # EDIT_PASSWORD now loaded from /etc/kayak/secrets.env via PHP-FPM pool env.
         add_header Cache-Control "no-cache, no-store";
         include /etc/nginx/snippets/security-headers.conf;
     }
@@ -144,7 +143,6 @@ server {
         fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
         fastcgi_param EDITOR_FEATURE $editor_feature;
         fastcgi_param HCAPTCHA_SITE_KEY $hcaptcha_site_key;
-        fastcgi_param HCAPTCHA_SECRET $hcaptcha_secret;
         fastcgi_param MAIL_FROM $mail_from;
         fastcgi_param SITE_URL $site_url;
         add_header Cache-Control "no-store";
@@ -215,7 +213,6 @@ server {
         fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
         fastcgi_param EDITOR_FEATURE $editor_feature;
         fastcgi_param HCAPTCHA_SITE_KEY $hcaptcha_site_key;
-        fastcgi_param HCAPTCHA_SECRET $hcaptcha_secret;
         fastcgi_param MAIL_FROM $mail_from;
         fastcgi_param SITE_URL $site_url;
         add_header Cache-Control "no-store";

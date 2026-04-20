@@ -83,7 +83,6 @@ server {
         fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
         fastcgi_param EDITOR_FEATURE $editor_feature;
         fastcgi_param HCAPTCHA_SITE_KEY $hcaptcha_site_key;
-        fastcgi_param HCAPTCHA_SECRET $hcaptcha_secret;
         fastcgi_param MAIL_FROM $mail_from;
         fastcgi_param SITE_URL $site_url;
 
@@ -114,7 +113,6 @@ server {
         fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
         fastcgi_param EDITOR_FEATURE $editor_feature;
         fastcgi_param HCAPTCHA_SITE_KEY $hcaptcha_site_key;
-        fastcgi_param HCAPTCHA_SECRET $hcaptcha_secret;
         fastcgi_param MAIL_FROM $mail_from;
         fastcgi_param SITE_URL $site_url;
         include /home/pat/kayak/conf/security-headers.conf;

@@ -38,6 +38,9 @@ php/style.css
 # DB backups
 backups
 
+# Ad-hoc audit dumps (often contain secrets from nginx -T or similar)
+*.log
+
 # Stream trace data caches (NHD, OSM, merged)
 OSM-cache/
 NHD-cache/
