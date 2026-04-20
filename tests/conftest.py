@@ -1,11 +1,17 @@
 """Shared test fixtures using in-memory SQLite."""
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 
 from kayak.db.models import (
     Base,
+    Editor,
+    EditorMagicLink,
+    EditorSession,
+    EditorStatus,
     FetchUrl,
     Gauge,
     GaugeSource,
@@ -86,3 +92,57 @@ def linked_source_gauge(session, sample_source, sample_gauge) -> tuple[Source, G
     session.add(GaugeSource(gauge_id=sample_gauge.id, source_id=sample_source.id))
     session.flush()
     return sample_source, sample_gauge
+
+
+# ---------------------------------------------------------------------------
+# Editor / session / magic-link fixtures (T4-29)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def editor(session) -> Editor:
+    """A pending editor — the default state after first magic-link verification."""
+    ed = Editor(email="alice@example.com", display_name="Alice", status=EditorStatus.pending)
+    session.add(ed)
+    session.flush()
+    return ed
+
+
+@pytest.fixture()
+def maintainer(session) -> Editor:
+    """An editor with maintainer status."""
+    ed = Editor(email="pat@example.com", display_name="Pat", status=EditorStatus.maintainer)
+    session.add(ed)
+    session.flush()
+    return ed
+
+
+@pytest.fixture()
+def editor_session(session, editor) -> EditorSession:
+    """An unexpired, unrevoked 7-day session for the given editor."""
+    now = datetime.now(UTC)
+    sess = EditorSession(
+        editor_id=editor.id,
+        token_hash="a" * 64,
+        created_at=now,
+        expires_at=now + timedelta(days=7),
+        ip="127.0.0.1",
+    )
+    session.add(sess)
+    session.flush()
+    return sess
+
+
+@pytest.fixture()
+def magic_link(session, editor) -> EditorMagicLink:
+    """A fresh magic link with 30-min expiry for the given editor."""
+    now = datetime.now(UTC)
+    link = EditorMagicLink(
+        editor_id=editor.id,
+        token_hash="b" * 64,
+        created_at=now,
+        expires_at=now + timedelta(minutes=30),
+    )
+    session.add(link)
+    session.flush()
+    return link
