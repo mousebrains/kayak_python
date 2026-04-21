@@ -195,6 +195,27 @@ tr.stale td{color:var(--c-text-faint);font-style:italic}
   .filter-pills label{min-height:44px;padding:8px 14px}
   .filter-pills-sub label{min-height:44px;padding:8px 14px}
 }
+/* Picker — selected reaches list (drag-and-drop reorder). */
+.selected-section{margin:.8rem 0;padding:.5rem .8rem;border:1px solid var(--c-border-light);border-radius:4px;background:var(--c-surface)}
+.selected-heading{display:flex;align-items:center;gap:.8rem;margin:0 0 .4rem;font-size:.9rem}
+.clear-btn{margin-left:auto;background:transparent;border:1px solid var(--c-border-input);border-radius:3px;padding:2px 8px;font-size:.75rem;cursor:pointer;color:var(--c-text)}
+.clear-btn:hover{background:var(--c-hover)}
+.selected-list{list-style:none;padding:0;margin:0}
+.selected-list li{display:flex;align-items:center;gap:.6rem;padding:.35rem .5rem;border-bottom:1px solid var(--c-border-light);user-select:none}
+.selected-list li:last-child{border-bottom:0}
+.selected-list li:focus-visible{outline:2px solid var(--c-primary);outline-offset:-2px;border-radius:3px}
+.selected-list .num{color:var(--c-text-muted);min-width:2ch;text-align:right;font-variant-numeric:tabular-nums}
+.selected-list .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.selected-list .drag-handle{cursor:grab;background:transparent;border:0;color:var(--c-text-muted);font-size:1.1rem;padding:4px 8px;touch-action:none}
+.selected-list .drag-handle:active{cursor:grabbing}
+.selected-list .remove-btn{background:transparent;border:0;color:var(--c-text-muted);cursor:pointer;padding:4px 8px;font-size:.9rem}
+.selected-list .remove-btn:hover{color:#e53935}
+.selected-list li.dragging{opacity:.4}
+.selected-list .drop-target{background:var(--c-hover);border:2px dashed var(--c-primary);border-radius:3px;list-style:none}
+.selected-list .empty{color:var(--c-text-muted);font-style:italic;padding:.5rem;justify-content:center}
+@media(max-width:640px){
+  .selected-list .drag-handle,.selected-list .remove-btn{padding:8px 12px;font-size:1.2rem}
+}
 
 /* Picker — state pills */
 .picker-states{display:flex;flex-wrap:wrap;gap:.4rem;padding:.5rem 0}

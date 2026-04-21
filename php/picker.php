@@ -196,6 +196,14 @@ $fg_toggle = '<span class="fg-toggle">'
   <tbody id="tbody"></tbody>
 </table>
 
+<section class="selected-section" aria-labelledby="selected-heading">
+  <h3 id="selected-heading" class="selected-heading">
+    Selected (display order)
+    <button type="button" id="clear-btn" class="clear-btn">Clear</button>
+  </h3>
+  <ol id="selected-list" class="selected-list" aria-live="polite"></ol>
+</section>
+
 <div class="picker-actions" id="actions" style="display:none">
   <span class="count" id="count">0 selected</span>
   <a id="view-link" class="disabled" href="#">View Custom Page</a>
@@ -205,8 +213,9 @@ $fg_toggle = '<span class="fg-toggle">'
 
 <?php
 $filters_mtime = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/filters.js') ?: 1;
+$picker_mtime  = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/picker.js')  ?: 1;
 ?>
 <script src="/static/filters.js?v=<?= $filters_mtime ?>" defer></script>
-<script src="/static/picker.js?v=4" defer></script>
+<script src="/static/picker.js?v=<?= $picker_mtime ?>" defer></script>
 <?php
 include_footer();

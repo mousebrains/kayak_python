@@ -59,12 +59,19 @@ LEFT JOIN reach_level rl
       AND rl.low  <= lo_flow.value
       AND lo_flow.value <= rl.high
 WHERE r.id IN ($placeholders)
-ORDER BY r.sort_name
 SQL;
 
 $stmt = $db->prepare($sql);
 $stmt->execute($ids);
 $reaches = $stmt->fetchAll();
+
+// Render rows in URL order, not DB sort_name order — picker.php's drag-reorder
+// relies on this. Rows whose IDs are absent from $ids fall to the end (defensive
+// — the WHERE r.id IN (...) clause should make that impossible).
+$pos = array_flip($ids);
+usort($reaches, fn($a, $b) =>
+    ($pos[$a['id']] ?? PHP_INT_MAX) <=> ($pos[$b['id']] ?? PHP_INT_MAX)
+);
 
 // Load classes for all reaches in one query. Keep both the raw comma-joined
 // display string (used for the Class column) and a parsed tier set (used for
