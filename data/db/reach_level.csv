@@ -113,9 +113,6 @@ id,reach_id,level,low,low_data_type,high,high_data_type
 392,3048,low,,flow,400.0,flow
 393,3048,okay,400.0,flow,1500.0,flow
 394,3048,high,1500.0,flow,,flow
-395,3053,low,,flow,3000.0,flow
-396,3053,okay,3000.0,flow,15000.0,flow
-397,3053,high,15000.0,flow,,flow
 398,5514,low,,flow,300.0,flow
 399,5514,okay,300.0,flow,1200.0,flow
 400,5514,high,1200.0,flow,,flow
@@ -164,9 +161,6 @@ id,reach_id,level,low,low_data_type,high,high_data_type
 572,4008,low,,flow,300.0,flow
 573,4008,okay,300.0,flow,1500.0,flow
 574,4008,high,1500.0,flow,,flow
-575,4012,low,,flow,600.0,flow
-576,4012,okay,600.0,flow,3000.0,flow
-577,4012,high,3000.0,flow,,flow
 587,4038,low,,flow,700.0,flow
 588,4038,okay,700.0,flow,3000.0,flow
 589,4038,high,3000.0,flow,,flow
@@ -418,9 +412,6 @@ id,reach_id,level,low,low_data_type,high,high_data_type
 1013,5317,low,,,3000.0,flow
 1014,5317,okay,3000.0,flow,80000.0,flow
 1015,5317,high,80000.0,flow,,
-1016,5319,low,,,800.0,flow
-1017,5319,okay,800.0,flow,3500.0,flow
-1018,5319,high,3500.0,flow,,
 1022,5325,low,,,7000.0,flow
 1023,5325,okay,7000.0,flow,80000.0,flow
 1024,5325,high,80000.0,flow,,
@@ -433,9 +424,6 @@ id,reach_id,level,low,low_data_type,high,high_data_type
 1034,5331,low,,,450.0,flow
 1035,5331,okay,450.0,flow,2500.0,flow
 1036,5331,high,2500.0,flow,,
-1037,5334,low,,,2500.0,flow
-1038,5334,okay,2500.0,flow,16000.0,flow
-1039,5334,high,16000.0,flow,,
 1040,5336,low,,,500.0,flow
 1041,5336,okay,500.0,flow,3000.0,flow
 1042,5336,high,3000.0,flow,,
@@ -1168,3 +1156,15 @@ id,reach_id,level,low,low_data_type,high,high_data_type
 1871,5343,low,,flow,500.0,flow
 1872,5343,okay,500.0,flow,20000.0,flow
 1873,5343,high,20000.0,flow,,flow
+1874,3053,low,,flow,2500.0,flow
+1875,3053,okay,2500.0,flow,16000.0,flow
+1876,3053,high,16000.0,flow,,flow
+1877,5334,low,,flow,2500.0,flow
+1878,5334,okay,2500.0,flow,16000.0,flow
+1879,5334,high,16000.0,flow,,flow
+1880,5319,low,,flow,800.0,flow
+1881,5319,okay,800.0,flow,3500.0,flow
+1882,5319,high,3500.0,flow,,flow
+1883,4012,low,,flow,600.0,flow
+1884,4012,okay,600.0,flow,3000.0,flow
+1885,4012,high,3000.0,flow,,flow

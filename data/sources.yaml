@@ -117,6 +117,8 @@ nwrfc.xml:
     - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SELI1&pe=HG&dtype=b&numdays=1"
     # Lochsa (Idaho) — LOCI1 matches USGS 13337000 digit-for-digit; outage redundancy
     - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LOCI1&pe=HG&dtype=b&numdays=1"
+    # SF Clearwater (Idaho) — STII1 matches USGS 13338500 Stites; outage redundancy
+    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=STII1&pe=HG&dtype=b&numdays=1"
 
 nwrfc.textplot:
   urls:
