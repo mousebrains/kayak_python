@@ -120,7 +120,6 @@ reach_id,guidebook_id,page,run,url
 2219,3,257,162,
 2428,6,258,,
 2428,10,,,https://www.oregonkayaking.net/creeks/little_klick/little_klick.html
-2448,5,36,,
 2469,2,127,84,
 2532,3,372,,
 2533,2,289,217,
@@ -374,6 +373,8 @@ reach_id,guidebook_id,page,run,url
 5300,5,230,,
 5302,5,92,,
 5305,5,180,,
+5306,5,36,,
+5307,5,38,,
 5308,5,54,,
 5309,5,72,,
 5312,2,269,197,
