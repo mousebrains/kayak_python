@@ -201,11 +201,17 @@ $fg_toggle = '<span class="fg-toggle">'
     Selected (display order)
     <button type="button" id="clear-btn" class="clear-btn">Clear</button>
   </h3>
+  <p class="selected-hint">
+    Drag the <span class="hint-handle" aria-hidden="true">☰</span> handle to reorder.
+    Tap <span class="hint-x" aria-hidden="true">✕</span> to remove.
+    Keyboard: focus an item then Up/Down arrows to move, Delete to remove.
+  </p>
   <ol id="selected-list" class="selected-list" aria-live="polite"></ol>
 </section>
 
 <div class="picker-actions" id="actions" style="display:none">
   <span class="count" id="count">0 selected</span>
+  <button type="button" id="edit-order-btn" class="edit-order-btn">Edit order ↑</button>
   <a id="view-link" class="disabled" href="#">View Custom Page</a>
   <button id="copy-btn" type="button">Copy Link</button>
   <span class="copied" id="copied" style="display:none">Copied!</span>

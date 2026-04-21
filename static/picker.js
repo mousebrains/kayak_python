@@ -15,6 +15,7 @@
   const selectAll = document.getElementById('select-all');
   const ol       = document.getElementById('selected-list');
   const clearBtn = document.getElementById('clear-btn');
+  const editOrderBtn = document.getElementById('edit-order-btn');
 
   let allRows = [];
 
@@ -146,6 +147,7 @@
     const n = selectedList.length;
     countEl.textContent = n + ' selected';
     actions.style.display = (n || allRows.length) ? '' : 'none';
+    if (editOrderBtn) editOrderBtn.style.display = n ? '' : 'none';
     if (n) {
       const url = location.origin + '/custom.php?ids=' + selectedList.join(',');
       viewLink.href = url;
@@ -322,6 +324,19 @@
       tbody.querySelectorAll('input[data-id]').forEach(cb => { cb.checked = false; });
       renderSelected();
       updateActions();
+    });
+  }
+
+  // Jump back up to the selected list (handy after scrolling through a long
+  // available-reaches table to the action bar).
+  if (editOrderBtn) {
+    editOrderBtn.addEventListener('click', function() {
+      const section = document.querySelector('.selected-section');
+      if (!section) return;
+      section.scrollIntoView({behavior: 'smooth', block: 'start'});
+      // Move keyboard focus to the first item so arrow keys work immediately.
+      const first = ol.querySelector('li[data-id]');
+      if (first) first.focus({preventScroll: true});
     });
   }
 

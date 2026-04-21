@@ -213,6 +213,10 @@ tr.stale td{color:var(--c-text-faint);font-style:italic}
 .selected-list li.dragging{opacity:.4}
 .selected-list .drop-target{background:var(--c-hover);border:2px dashed var(--c-primary);border-radius:3px;list-style:none}
 .selected-list .empty{color:var(--c-text-muted);font-style:italic;padding:.5rem;justify-content:center}
+.selected-hint{margin:0 0 .4rem;color:var(--c-text-muted);font-size:.78rem;line-height:1.4}
+.selected-hint .hint-handle,.selected-hint .hint-x{display:inline-block;padding:0 .15rem;color:var(--c-text);font-weight:600}
+.edit-order-btn{background:transparent;border:1px solid var(--c-border-input);border-radius:3px;padding:3px 10px;font-size:.8rem;cursor:pointer;color:var(--c-link)}
+.edit-order-btn:hover{background:var(--c-hover);text-decoration:underline}
 @media(max-width:640px){
   .selected-list .drag-handle,.selected-list .remove-btn{padding:8px 12px;font-size:1.2rem}
 }
