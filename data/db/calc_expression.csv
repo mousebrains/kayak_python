@@ -10,7 +10,7 @@ id,data_type,expression,time_expression,note
 7,flow,"round(greatest(0, bm::Hood_Tucker_merge::flow - um::WFHO3::flow), 1)",bm::Hood_Tucker_merge::flow um::WFHO3::flow,
 8,gauge,"round(greatest(0, oV::Suislaw_Mapleton_merge::gauge), 1)",oV::Suislaw_Mapleton_merge::gauge,
 9,flow,"round(greatest(0, greatest((((0.1184 * d9::EF_Lewis_Washington_merge::flow) - (0.07072 * cm::14113000::flow)) + (0.6048 * uE::White_Salmon_Underwood_merge::flow)) - 148.5, 0)))",d9::EF_Lewis_Washington_merge::flow cm::14113000::flow uE::White_Salmon_Underwood_merge::flow,
-11,flow,"round(least(eT::MCKENZIE_VIDA_merge::flow - f0::14159500::flow - 34::Blue_dam_merge::flow, greatest(eY::TRBO::flow, 0.0895 * eT::MCKENZIE_VIDA_merge::flow + 1.3630 * eY::TRBO::flow - 0.1151 * f0::14159500::flow + 0.0191 * eW::SF_McKenzie_Cougar_merge::flow + 0.4098 * dR::Lookout_Blue_merge::flow)))",eT::MCKENZIE_VIDA_merge::flow eY::TRBO::flow f0::14159500::flow eW::SF_McKenzie_Cougar_merge::flow dR::Lookout_Blue_merge::flow 34::Blue_dam_merge::flow,
+11,flow,"round(least(eT::MCKENZIE_VIDA_merge::flow - f0::SF_McKenzie_near_Rainbow::flow - 34::Blue_dam_merge::flow, greatest(eY::Clear_Lake_outlet::flow, 0.0895 * eT::MCKENZIE_VIDA_merge::flow + 1.3630 * eY::Clear_Lake_outlet::flow - 0.1151 * f0::SF_McKenzie_near_Rainbow::flow + 0.0191 * eW::SF_McKenzie_Cougar_merge::flow + 0.4098 * dR::Lookout_Blue_merge::flow)))",eT::MCKENZIE_VIDA_merge::flow eY::Clear_Lake_outlet::flow f0::SF_McKenzie_near_Rainbow::flow eW::SF_McKenzie_Cougar_merge::flow dR::Lookout_Blue_merge::flow 34::Blue_dam_merge::flow,
 12,flow,"round(greatest(0, pg::Smith_Crescent_City_merge::flow * 0.17))",pg::Smith_Crescent_City_merge::flow,
 13,flow,"round(greatest(0, (0.194065 * q::14306500::flow) - 9.517))",q::14306500::flow,
 14,flow,"round(greatest(0, (fl::MF_Willamette_below_NF_merge::flow - fo::14145500::flow) * 0.55))",fl::MF_Willamette_below_NF_merge::flow fo::14145500::flow,
@@ -24,7 +24,6 @@ id,data_type,expression,time_expression,note
 22,flow,"round(greatest(0, ((((7y::Deschutes_Moody_merge::flow - 7E::14092500::flow) * 0.08176241) + (tW::14097100::flow * 0.67373819)) + (oK::14092750::flow * 1.29898500)) - 88.55061144))",7y::Deschutes_Moody_merge::flow 7E::14092500::flow tW::14097100::flow oK::14092750::flow,
 23,gauge,"round(-4.020 + 1.539 * uE::White_Salmon_Underwood_merge::gauge, 2)",uE::White_Salmon_Underwood_merge::gauge,
 24,flow,"round(greatest(0, 0.75 * uP::Wiley_Foster_merge::flow))",uP::Wiley_Foster_merge::flow,
-25,flow,"round(greatest(0, v8::11502500::flow - qg::11501000::flow))",v8::11502500::flow  qg::11501000::flow,
 26,flow,"round(greatest(0, greatest(((((0.2594 * d9::EF_Lewis_Washington_merge::flow) - (0.1159 * cm::14113000::flow)) + (0.5535 * uE::White_Salmon_Underwood_merge::flow)) + (0.08136 * 59::Clackamas_Three_Lynx_merge::flow)) - 264.5, 0)))",d9::EF_Lewis_Washington_merge::flow cm::14113000::flow uE::White_Salmon_Underwood_merge::flow 59::Clackamas_Three_Lynx_merge::flow,
 27,flow,"round(greatest(0, hd::Hood_Tucker_merge::flow - wf::WFHO3::flow))",hd::Hood_Tucker_merge::flow wf::WFHO3::flow,EF+MF Hood = Tucker - WF Hood
 28,flow,"round(greatest(0, fa::Fall_Creek_Inflow::inflow - wb::14150800::flow), 1)",fa::Fall_Creek_Inflow::inflow wb::14150800::flow,Fall Creek above Winberry: total reservoir inflow minus Winberry tributary
