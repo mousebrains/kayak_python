@@ -237,7 +237,11 @@ def _get_row_data(
         "gauge_location": reach.description or (reach.gauge.location if reach.gauge else "") or "",
         "drainage": reach.basin or "",
         "class": "",
-        "state": ", ".join(s.name for s in reach.states) if reach.states else "",
+        # Render the cell as the 2-letter abbreviation (rightmost column on
+        # index.html). Filter still uses full state names via data-state.
+        "state": ", ".join(_STATE_ABBREVS.get(s.name, s.name) for s in reach.states)
+        if reach.states
+        else "",
         "db_name": reach.name,
     }
 

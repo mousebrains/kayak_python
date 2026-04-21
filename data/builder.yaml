@@ -79,14 +79,6 @@ columns:
     name_text: "Name"
     name_html: "Name"
 
-  - sort_key: 250
-    use: "h"
-    type: "text"
-    field: "state"
-    length: 4
-    name_text: "State"
-    name_html: "State"
-
   - sort_key: 300
     use: "fhct"
     type: "text"
@@ -142,3 +134,11 @@ columns:
     length: 7
     name_text: "Class"
     name_html: "Class"
+
+  - sort_key: 1000
+    use: "h"
+    type: "text"
+    field: "state"
+    length: 2
+    name_text: "St"
+    name_html: "St"
