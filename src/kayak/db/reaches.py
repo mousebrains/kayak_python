@@ -103,9 +103,16 @@ def iter_reaches_with_putin(session: Session) -> Iterable[Reach]:
     )
 
 
-def set_reach_huc(session: Session, reach_id: int, huc12: str) -> None:
-    """Overwrite ``reach.huc`` for one reach with a HUC12 code."""
-    session.execute(update(Reach).where(Reach.id == reach_id).values(huc=huc12))
+def set_reach_huc(session: Session, reach_id: int, huc12: str, basin: str | None = None) -> None:
+    """Overwrite ``reach.huc`` (and optionally ``reach.basin``) for one reach.
+
+    Pass ``basin`` to also set the WBD-derived HUC8 name into the basin column;
+    omit it to leave basin untouched.
+    """
+    values: dict[str, str] = {"huc": huc12}
+    if basin is not None:
+        values["basin"] = basin
+    session.execute(update(Reach).where(Reach.id == reach_id).values(**values))
 
 
 def get_reach_huc_counts(session: Session) -> dict[int, int]:

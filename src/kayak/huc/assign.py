@@ -24,6 +24,7 @@ import geopandas as gpd
 import pyogrio
 from shapely.geometry import Point
 from shapely.strtree import STRtree
+from sqlalchemy import select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
@@ -172,7 +173,8 @@ def run(
 ) -> dict[str, int]:
     """Assign HUC12 to every reach (or one with ``--reach-id``).
 
-    Returns a counts dict keyed ``assigned``, ``unchanged``,
+    Returns a counts dict keyed ``assigned`` (huc and/or basin written),
+    ``huc_changed``, ``basin_changed`` (diagnostic sub-counts), ``unchanged``,
     ``outside_coverage``, ``no_coords``.
     """
     gpkg_path = Path(gpkg)
@@ -193,6 +195,11 @@ def run(
             session.commit()
 
         tree, codes = load_huc12(gpkg_path)
+
+        # HUC8 -> name lookup so each reach's basin can mirror its HUC8.
+        huc8_name_map: dict[str, str] = {
+            row.code: row.name for row in session.scalars(select(HucName).where(HucName.level == 8))
+        }
 
         if reach_id is not None:
             reach = get_reach(session, reach_id)
@@ -217,14 +224,37 @@ def run(
                     reach.longitude_start,
                 )
                 continue
-            if huc == reach.huc:
+
+            new_basin = huc8_name_map.get(huc[:8])
+            huc_changed = huc != reach.huc
+            basin_changed = new_basin is not None and new_basin != reach.basin
+
+            if not (huc_changed or basin_changed):
                 counts["unchanged"] += 1
                 continue
+
             counts["assigned"] += 1
+            if huc_changed:
+                counts["huc_changed"] += 1
+            if basin_changed:
+                counts["basin_changed"] += 1
+
             if dry_run:
-                logger.info("[dry-run] reach %d %s -> %s", reach.id, reach.huc, huc)
+                logger.info(
+                    "[dry-run] reach %d huc %s -> %s, basin %r -> %r",
+                    reach.id,
+                    reach.huc,
+                    huc,
+                    reach.basin,
+                    new_basin,
+                )
             else:
-                set_reach_huc(session, reach.id, huc)
+                set_reach_huc(
+                    session,
+                    reach.id,
+                    huc,
+                    basin=new_basin if basin_changed else None,
+                )
 
         if not dry_run:
             session.commit()
@@ -234,6 +264,8 @@ def run(
     summary = dict(counts)
     print(
         f"HUC assignment: assigned={summary.get('assigned', 0)} "
+        f"(huc_changed={summary.get('huc_changed', 0)}, "
+        f"basin_changed={summary.get('basin_changed', 0)}) "
         f"unchanged={summary.get('unchanged', 0)} "
         f"outside_coverage={summary.get('outside_coverage', 0)} "
         f"no_coords={summary.get('no_coords', 0)}" + (" (dry-run)" if dry_run else "")

@@ -22,6 +22,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from kayak.config import BASE_DIR
@@ -34,7 +35,7 @@ from kayak.db.info_db import (
     get_calculated_gauge_ids,
     reaches_query,
 )
-from kayak.db.models import DataType, LatestGaugeObservation, Observation, Reach
+from kayak.db.models import DataType, HucName, LatestGaugeObservation, Observation, Reach
 from kayak.utils.class_tiers import parse_class_tiers
 from kayak.utils.lttb import downsample, running_median
 from kayak.utils.simplify import parse_geom, simplify
@@ -491,9 +492,10 @@ def _format_cell_value(col: dict[str, Any], row: dict, reach_id: int, gauge_id: 
 
 
 def _row_filter_attrs(reach: Reach, row: dict) -> str:
-    """Build the data-state/basin/status/tier attr block for one <tr>."""
+    """Build the data-state/basin/huc8/status/tier attr block for one <tr>."""
     state = reach.states[0].name if reach.states else ""
     basin = reach.basin or ""
+    huc8 = (reach.huc or "")[:8]
     status = row.get("status") or "unknown"
     tiers: set[str] = set()
     for c in reach.classes:
@@ -503,6 +505,7 @@ def _row_filter_attrs(reach: Reach, row: dict) -> str:
     return (
         f' data-state="{html_mod.escape(state)}"'
         f' data-basin="{html_mod.escape(basin)}"'
+        f' data-huc8="{html_mod.escape(huc8)}"'
         f' data-status="{html_mod.escape(status)}"'
         f' data-tier="{html_mod.escape(tier_attr)}"'
     )
@@ -587,17 +590,23 @@ def _collect_filter_data(
     reaches: list[Reach],
     calculated_gauge_ids: set[int],
     all_latest: dict[tuple[int, DataType], LatestGaugeObservation],
-) -> dict[str, list[str]]:
-    """Union of values present across the visible rows, for filter-pill rendering."""
+    huc6_names: dict[str, str],
+) -> dict[str, Any]:
+    """Union of values present across the visible rows, for filter-pill rendering.
+
+    The basin filter is hierarchical: groups HUC8 codes by their HUC6 parent.
+    ``huc6_names`` maps 6-digit HUC6 codes to display names (from huc_name).
+    """
     visible = _filter_visible_rows(reaches, calculated_gauge_ids, all_latest)
     states: set[str] = set()
-    basins: set[str] = set()
     statuses: set[str] = set()
     tiers: set[str] = set()
+    # huc6_code -> set of (huc8_code, huc8_name) tuples present in the rows.
+    huc6_to_huc8s: dict[str, set[tuple[str, str]]] = {}
+    has_no_huc = False
     for reach, row in visible:
         for s in reach.states:
             states.add(s.name)
-        basins.add(reach.basin or "")
         statuses.add(row.get("status") or "unknown")
         row_tiers: set[str] = set()
         for c in reach.classes:
@@ -606,15 +615,32 @@ def _collect_filter_data(
             tiers.update(row_tiers)
         else:
             tiers.add("?")
+        if reach.huc and len(reach.huc) >= 8:
+            huc6 = reach.huc[:6]
+            huc8 = reach.huc[:8]
+            huc6_to_huc8s.setdefault(huc6, set()).add((huc8, reach.basin or huc8))
+        else:
+            has_no_huc = True
+    huc6_groups = [
+        {
+            "huc6": huc6,
+            "name": huc6_names.get(huc6, huc6),
+            "huc8s": sorted(huc8s),
+        }
+        for huc6, huc8s in sorted(
+            huc6_to_huc8s.items(), key=lambda kv: huc6_names.get(kv[0], kv[0])
+        )
+    ]
     return {
         "state": sorted(s for s in states if s),
-        "basin": sorted(basins),  # keep "" so a "(none)" pill can surface
+        "huc6_groups": huc6_groups,
+        "has_no_huc": has_no_huc,
         "status": [s for s in ("low", "okay", "high", "unknown") if s in statuses],
         "tier": [t for t in ("I", "II", "III", "IV", "V", "?") if t in tiers],
     }
 
 
-def _build_filter_bar(data: dict[str, list[str]], *, is_all_page: bool) -> str:
+def _build_filter_bar(data: dict[str, Any], *, is_all_page: bool) -> str:
     """HTML block rendered above the levels table; hooked up by filters.js."""
     status_swatch = {
         "low": "#e8a735",
@@ -658,11 +684,63 @@ def _build_filter_bar(data: dict[str, list[str]], *, is_all_page: bool) -> str:
             f"  </details>"
         )
 
+    def basin_group_html(huc6_groups: list[dict], has_no_huc: bool) -> str:
+        """Render the basin filter as nested HUC6 disclosures with HUC8 child pills.
+
+        The outer filter group has data-group="huc8" — filters.js matches each
+        row's data-huc8 against the checked HUC8 pill values. Parent HUC6
+        checkboxes are visual-only (data-huc6=...); JS uses them to bulk-toggle
+        their children but they are NOT collected into the match logic.
+        """
+        if not huc6_groups and not has_no_huc:
+            return ""
+        total = sum(len(g["huc8s"]) for g in huc6_groups) + (1 if has_no_huc else 0)
+        toggle = (
+            '<span class="fg-toggle">'
+            '<button type="button" data-all>All</button>'
+            '<button type="button" data-none>None</button>'
+            "</span>"
+        )
+        sub_blocks: list[str] = []
+        for g in huc6_groups:
+            huc6 = html_mod.escape(g["huc6"], quote=True)
+            name = html_mod.escape(g["name"])
+            count = len(g["huc8s"])
+            child_pills = "\n          ".join(pill("huc8", code, name) for code, name in g["huc8s"])
+            sub_blocks.append(
+                f'      <details class="filter-subgroup">\n'
+                f"        <summary>"
+                f'<label class="huc6-parent">'
+                f'<input type="checkbox" data-huc6="{huc6}" checked>'
+                f"{name}</label>"
+                f' <span class="fg-count">{count}</span>'
+                f"</summary>\n"
+                f'        <div class="filter-pills-sub">\n'
+                f"          {child_pills}\n"
+                f"        </div>\n"
+                f"      </details>"
+            )
+        if has_no_huc:
+            sub_blocks.append(
+                '      <div class="filter-pills-sub no-huc-row">\n'
+                f"        {pill('huc8', '', '(no HUC)')}\n"
+                "      </div>"
+            )
+        body = "\n".join(sub_blocks)
+        return (
+            f'  <details class="filter-group" open>\n'
+            f'    <summary>Basin <span class="fg-count">{total}</span></summary>\n'
+            f'    <div class="filter-pills" data-group="huc8">\n'
+            f"      {toggle}\n"
+            f"{body}\n"
+            f"    </div>\n"
+            f"  </details>"
+        )
+
     groups: list[str] = []
     if is_all_page:
         groups.append(group_html("state", "State", data["state"], lambda v: v))
-    basin_display = lambda v: v if v else "(none)"  # noqa: E731
-    groups.append(group_html("basin", "Basin", data["basin"], basin_display))
+    groups.append(basin_group_html(data["huc6_groups"], data["has_no_huc"]))
     groups.append(
         group_html(
             "status",
@@ -1252,7 +1330,10 @@ def _build_and_write(
     table_html, letters = _build_html_table(
         reaches, columns, calculated_gauge_ids, all_latest, is_all_page=is_all_page
     )
-    filter_data = _collect_filter_data(reaches, calculated_gauge_ids, all_latest)
+    huc6_names: dict[str, str] = {
+        row.code: row.name for row in session.scalars(select(HucName).where(HucName.level == 6))
+    }
+    filter_data = _collect_filter_data(reaches, calculated_gauge_ids, all_latest, huc6_names)
     filter_bar_html = _build_filter_bar(filter_data, is_all_page=is_all_page)
     page_html = _build_page(
         table_html,

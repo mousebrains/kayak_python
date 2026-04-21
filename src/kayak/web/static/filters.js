@@ -8,8 +8,15 @@
  *      Inside each .filter-pills, an .fg-toggle node carries the
  *      All/None buttons; a .filter-meta block carries the count + reset.
  *
- *   2. Table rows with data-state, data-basin, data-status, data-tier
- *      attributes (hyphenated → .dataset.state etc.).
+ *      The basin group (data-group="huc8") nests <details class="filter-subgroup">
+ *      blocks per HUC6, each with a parent checkbox carrying data-huc6 and
+ *      child HUC8 pills inside .filter-pills-sub. Parents are visual-only —
+ *      they bulk-toggle their children but are excluded from match logic.
+ *
+ *   2. Table rows with data-state, data-basin, data-huc8, data-status,
+ *      data-tier attributes (hyphenated → .dataset.state etc.).
+ *      The basin filter matches against data-huc8 (8-digit code), not
+ *      data-basin (which stays for display + PHP back-compat).
  *
  * Behaviour:
  *   - Filter-bar starts hidden. We inject a "Filter" link into the page
@@ -17,11 +24,11 @@
  *   - Each group has All/None buttons that check/uncheck every pill in
  *     that group (without touching other groups).
  *   - URL hash round-trips the non-default filter state with short keys
- *     (st=state, b=basin, s=status, c=class).
+ *     (st=state, b=basin (now HUC8 codes), s=status, c=class).
  *   - Rows that fail the predicate get the [hidden] attribute.
  */
 (function(){
-  var HASH_KEYS = {state:'st', basin:'b', status:'s', tier:'c'};
+  var HASH_KEYS = {state:'st', huc8:'b', status:'s', tier:'c'};
   var DESKTOP_QUERY = '(min-width:641px)';
 
   function readHash(){
@@ -69,7 +76,11 @@
     barEl.querySelectorAll('.filter-pills').forEach(function(container){
       var key = container.dataset.group;
       if (!key) return;
-      var pills = Array.from(container.querySelectorAll('input[type=checkbox]')).map(function(input){
+      // Exclude HUC6 parent checkboxes — they're visual bulk-toggle handles,
+      // not real filter pills (they have no `value`-bearing semantic).
+      var inputs = Array.from(container.querySelectorAll('input[type=checkbox]'))
+        .filter(function(i){ return !i.hasAttribute('data-huc6'); });
+      var pills = inputs.map(function(input){
         return {input: input, label: input.closest('label')};
       });
       groups.push({key: key, container: container, pills: pills,
@@ -77,6 +88,42 @@
                    splitCSV: container.dataset.split === 'csv'});
     });
     return groups;
+  }
+
+  /* HUC6 parent checkbox <-> HUC8 child checkbox sync.
+   * - Parent toggles all child huc8 pills under its <details class="filter-subgroup">
+   * - Any child toggle recomputes parent's checked/indeterminate state.
+   * Returns a `syncParents()` callback so callers (All/None, reset, applyHash)
+   * can refresh all parent states after programmatically toggling children. */
+  function wireHucHierarchy(barEl, ctx){
+    var parents = Array.from(barEl.querySelectorAll('input[type=checkbox][data-huc6]'));
+    var pairs = parents.map(function(parent){
+      var subgroup = parent.closest('details.filter-subgroup');
+      var children = subgroup
+        ? Array.from(subgroup.querySelectorAll('.filter-pills-sub input[type=checkbox]'))
+        : [];
+      return {parent: parent, children: children};
+    });
+
+    function refreshParent(pair){
+      var checked = pair.children.filter(function(x){return x.checked}).length;
+      pair.parent.checked = (checked === pair.children.length);
+      pair.parent.indeterminate = (checked > 0 && checked < pair.children.length);
+    }
+    function syncAllParents(){ pairs.forEach(refreshParent); }
+
+    pairs.forEach(function(pair){
+      pair.parent.addEventListener('change', function(){
+        pair.children.forEach(function(c){ c.checked = pair.parent.checked; });
+        pair.parent.indeterminate = false;
+        refilter(ctx);
+      });
+      pair.children.forEach(function(c){
+        c.addEventListener('change', function(){ refreshParent(pair); });
+      });
+      refreshParent(pair);
+    });
+    return syncAllParents;
   }
 
   function matches(row, groups){
@@ -128,7 +175,7 @@
     nav.appendChild(a);
   }
 
-  function wireAllNone(group, ctx){
+  function wireAllNone(group, ctx, afterToggle){
     var container = group.container;
     container.addEventListener('click', function(e){
       var t = e.target;
@@ -136,10 +183,12 @@
       if (t.matches('[data-all]')) {
         e.preventDefault();
         group.pills.forEach(function(p){ p.input.checked = true; });
+        if (afterToggle) afterToggle();
         refilter(ctx);
       } else if (t.matches('[data-none]')) {
         e.preventDefault();
         group.pills.forEach(function(p){ p.input.checked = false; });
+        if (afterToggle) afterToggle();
         refilter(ctx);
       }
     });
@@ -151,7 +200,7 @@
     var tbody = opts && opts.rowsContainer || document.querySelector('table.levels tbody');
     if (!tbody) return null;
 
-    var rows = Array.from(tbody.querySelectorAll('tr[data-state], tr[data-basin], tr[data-status], tr[data-tier]'));
+    var rows = Array.from(tbody.querySelectorAll('tr[data-state], tr[data-basin], tr[data-huc8], tr[data-status], tr[data-tier]'));
     var groups = collectGroups(bar);
     var countEl = bar.querySelector('.fb-count');
     var resetBtn = bar.querySelector('.fb-reset');
@@ -165,18 +214,21 @@
 
     applyHash(groups);
 
+    var syncHucParents = wireHucHierarchy(bar, ctx);
     groups.forEach(function(g){
       g.container.addEventListener('change', function(e){
         if (e.target && e.target.type === 'checkbox') refilter(ctx);
       });
-      wireAllNone(g, ctx);
+      wireAllNone(g, ctx, syncHucParents);
     });
+    syncHucParents();  // align parent checkboxes with whatever applyHash set
 
     if (resetBtn) {
       resetBtn.addEventListener('click', function(){
         groups.forEach(function(g){
           g.pills.forEach(function(p){ p.input.checked = true; });
         });
+        syncHucParents();
         refilter(ctx);
       });
     }

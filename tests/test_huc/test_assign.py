@@ -163,9 +163,20 @@ def test_run_overwrites_existing_huc4(session, synthetic_gpkg):
     assert counts["assigned"] == 1
 
 
-def test_run_unchanged_when_huc_matches(session, synthetic_gpkg):
-    """Re-running on already-assigned reaches counts them as unchanged."""
-    reach = _make_reach(session, name="already", lat=0.5, lon=0.5, huc="170912340101")
+def test_run_unchanged_when_huc_and_basin_match(session, synthetic_gpkg):
+    """Re-running on a reach whose huc + basin already match counts as unchanged."""
+    # synthetic HUC8 17091234 has name "Synthetic Basin" — pre-seed both columns
+    # so the per-reach loop has nothing to write.
+    reach = Reach(
+        name="already",
+        display_name="already",
+        sort_name="already",
+        latitude_start=0.5,
+        longitude_start=0.5,
+        huc="170912340101",
+        basin="Synthetic Basin",
+    )
+    session.add(reach)
     session.commit()
 
     with (
@@ -177,8 +188,38 @@ def test_run_unchanged_when_huc_matches(session, synthetic_gpkg):
 
     session.refresh(reach)
     assert reach.huc == "170912340101"
+    assert reach.basin == "Synthetic Basin"
     assert counts["unchanged"] == 1
     assert counts.get("assigned", 0) == 0
+
+
+def test_run_writes_basin_from_huc8_name(session, synthetic_gpkg):
+    """A reach whose huc matches but basin is stale gets just the basin updated."""
+    reach = Reach(
+        name="basin_only",
+        display_name="basin_only",
+        sort_name="basin_only",
+        latitude_start=0.5,
+        longitude_start=0.5,
+        huc="170912340101",
+        basin="StaleCuratorTag",
+    )
+    session.add(reach)
+    session.commit()
+
+    with (
+        patch("kayak.huc.assign.get_session", return_value=session),
+        patch.object(session, "close", lambda: None),
+        patch.object(session, "commit", lambda: None),
+    ):
+        counts = run(gpkg=synthetic_gpkg)
+
+    session.refresh(reach)
+    assert reach.huc == "170912340101"
+    assert reach.basin == "Synthetic Basin"  # HUC8 17091234 name
+    assert counts["assigned"] == 1
+    assert counts.get("huc_changed", 0) == 0
+    assert counts["basin_changed"] == 1
 
 
 def test_dry_run_does_not_write(session, synthetic_gpkg):
