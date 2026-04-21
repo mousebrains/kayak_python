@@ -108,7 +108,7 @@ function derive_rating_lookup(
     if (count($rows) < 2 || $gmax - $gmin < 1e-9) return null;
 
     $bin_width = ($gmax - $gmin) / $n_bins;
-    $bins = array_fill(0, $n_bins, []);
+    $bins = [];
     foreach ($rows as [$g, $v]) {
         $idx = min($n_bins - 1, (int)floor(($g - $gmin) / $bin_width));
         $bins[$idx][] = [$g, $v];
@@ -116,7 +116,6 @@ function derive_rating_lookup(
 
     $lookup = [];
     foreach ($bins as $bin) {
-        if (!$bin) continue;
         $gs = array_column($bin, 0);
         $vs = array_column($bin, 1);
         sort($gs);
