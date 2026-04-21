@@ -42,6 +42,8 @@ METADATA_TABLES = [
 # Columns excluded per-table (regenerable or too large for text VCS).
 EXCLUDED_COLUMNS = {
     "reach": {"geom"},
+    # last_fetched_at gets bumped on every pipeline run — pure churn in git.
+    "fetch_url": {"last_fetched_at"},
 }
 
 

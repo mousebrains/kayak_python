@@ -1,119 +1,113 @@
-id,url,parser,hours,is_active,last_fetched_at
-10749,https://api.water.noaa.gov/nwps/v1/gauges/IMNO3/stageflow/observed,nwps,,1,2026-04-17 20:54:55.931190
-10751,https://api.water.noaa.gov/nwps/v1/gauges/MODO3/stageflow/observed,nwps,,1,2026-04-17 20:54:56.354825
-10752,https://api.water.noaa.gov/nwps/v1/gauges/MONO3/stageflow/observed,nwps,,1,2026-04-17 20:54:56.763291
-10753,https://api.water.noaa.gov/nwps/v1/gauges/SERO3/stageflow/observed,nwps,,1,2026-04-17 20:54:57.158496
-10754,https://api.water.noaa.gov/nwps/v1/gauges/TRYO3/stageflow/observed,nwps,,1,2026-04-17 20:54:57.522534
-10755,https://api.water.noaa.gov/nwps/v1/gauges/AGNO3/stageflow/observed,nwps,,1,2026-04-17 20:54:57.929724
-10757,https://api.water.noaa.gov/nwps/v1/gauges/ARWO3/stageflow/observed,nwps,,1,2026-04-17 20:54:58.306141
-10758,https://api.water.noaa.gov/nwps/v1/gauges/AZAO3/stageflow/observed,nwps,,1,2026-04-17 20:54:58.716931
-10760,https://api.water.noaa.gov/nwps/v1/gauges/COGO3/stageflow/observed,nwps,,1,2026-04-17 20:54:59.079691
-10762,https://api.water.noaa.gov/nwps/v1/gauges/EKTO3/stageflow/observed,nwps,,1,2026-04-17 20:54:59.442778
-10763,https://api.water.noaa.gov/nwps/v1/gauges/ELKO3/stageflow/observed,nwps,,1,2026-04-17 20:54:59.809244
-10764,https://api.water.noaa.gov/nwps/v1/gauges/GLNO3/stageflow/observed,nwps,,1,2026-04-17 20:55:00.172108
-10765,https://api.water.noaa.gov/nwps/v1/gauges/GRAO3/stageflow/observed,nwps,,1,2026-04-17 20:55:00.544493
-10766,https://api.water.noaa.gov/nwps/v1/gauges/KRBO3/stageflow/observed,nwps,,1,2026-04-17 20:55:00.953656
-10768,https://api.water.noaa.gov/nwps/v1/gauges/POWO3/stageflow/observed,nwps,,1,2026-04-17 20:55:01.356997
-10769,https://api.water.noaa.gov/nwps/v1/gauges/RDLO3/stageflow/observed,nwps,,1,2026-04-17 20:55:01.787010
-10770,https://api.water.noaa.gov/nwps/v1/gauges/RYGO3/stageflow/observed,nwps,,1,2026-04-17 20:55:02.192057
-10771,https://api.water.noaa.gov/nwps/v1/gauges/SCRO3/stageflow/observed,nwps,,1,2026-04-17 20:55:02.598824
-10772,https://api.water.noaa.gov/nwps/v1/gauges/SURO3/stageflow/observed,nwps,,1,2026-04-17 20:55:02.599546
-10773,https://api.water.noaa.gov/nwps/v1/gauges/TILO3/stageflow/observed,nwps,,1,2026-04-17 20:55:03.004285
-10774,https://api.water.noaa.gov/nwps/v1/gauges/WMSO3/stageflow/observed,nwps,,1,2026-04-17 20:55:03.391117
-10775,https://api.water.noaa.gov/nwps/v1/gauges/WNRO3/stageflow/observed,nwps,,1,2026-04-17 20:55:03.787635
-10776,https://api.water.noaa.gov/nwps/v1/gauges/WSNO3/stageflow/observed,nwps,,1,2026-04-17 20:55:04.183917
-10777,https://api.water.noaa.gov/nwps/v1/gauges/ALBO3/stageflow/observed,nwps,,1,2026-04-17 20:55:04.568002
-10778,https://api.water.noaa.gov/nwps/v1/gauges/BCKO3/stageflow/observed,nwps,,1,2026-04-17 20:55:05.726137
-10779,https://api.water.noaa.gov/nwps/v1/gauges/BCLO3/stageflow/observed,nwps,,1,2026-04-17 20:55:06.157313
-10780,https://api.water.noaa.gov/nwps/v1/gauges/BLUO3/stageflow/observed,nwps,,1,2026-04-17 20:55:06.570009
-10781,https://api.water.noaa.gov/nwps/v1/gauges/BONO3/stageflow/observed,nwps,,1,2026-04-17 20:55:06.776116
-10782,https://api.water.noaa.gov/nwps/v1/gauges/CANO3/stageflow/observed,nwps,,1,2026-04-17 20:55:07.160918
-10783,https://api.water.noaa.gov/nwps/v1/gauges/CASW1/stageflow/observed,nwps,,1,2026-04-17 20:55:07.542369
-10786,https://api.water.noaa.gov/nwps/v1/gauges/COCO3/stageflow/observed,nwps,,1,2026-04-17 20:55:07.819678
-10788,https://api.water.noaa.gov/nwps/v1/gauges/ESTO3/stageflow/observed,nwps,,1,2026-04-17 20:55:08.196601
-10790,https://api.water.noaa.gov/nwps/v1/gauges/FRMO3/stageflow/observed,nwps,,1,2026-04-17 20:55:08.567330
-10792,https://api.water.noaa.gov/nwps/v1/gauges/FSSO3/stageflow/observed,nwps,,1,2026-04-17 20:55:08.978204
-10794,https://api.water.noaa.gov/nwps/v1/gauges/HARO3/stageflow/observed,nwps,,1,2026-04-17 20:55:09.368918
-10795,https://api.water.noaa.gov/nwps/v1/gauges/HODO3/stageflow/observed,nwps,,1,2026-04-17 20:55:09.765124
-10796,https://api.water.noaa.gov/nwps/v1/gauges/HSSW1/stageflow/observed,nwps,,1,2026-04-17 20:55:10.131696
-10797,https://api.water.noaa.gov/nwps/v1/gauges/JASO3/stageflow/observed,nwps,,1,2026-04-17 20:55:11.234214
-10798,https://api.water.noaa.gov/nwps/v1/gauges/JFFO3/stageflow/observed,nwps,,1,2026-04-17 20:55:11.604695
-10803,https://api.water.noaa.gov/nwps/v1/gauges/LSMO3/stageflow/observed,nwps,,1,2026-04-17 20:55:12.775970
-10804,https://api.water.noaa.gov/nwps/v1/gauges/MAYW1/stageflow/observed,nwps,,1,2026-04-17 20:55:12.824213
-10805,https://api.water.noaa.gov/nwps/v1/gauges/MCMO3/stageflow/observed,nwps,,1,2026-04-17 20:55:13.246178
-10806,https://api.water.noaa.gov/nwps/v1/gauges/MCZO3/stageflow/observed,nwps,,1,2026-04-17 20:55:13.520706
-10807,https://api.water.noaa.gov/nwps/v1/gauges/MEHO3/stageflow/observed,nwps,,1,2026-04-17 20:55:13.881850
-10809,https://api.water.noaa.gov/nwps/v1/gauges/MIWO3/stageflow/observed,nwps,,1,2026-04-17 20:55:14.235667
-10810,https://api.water.noaa.gov/nwps/v1/gauges/MKLO3/stageflow/observed,nwps,,1,2026-04-17 20:55:14.415571
-10811,https://api.water.noaa.gov/nwps/v1/gauges/MNRO3/stageflow/observed,nwps,,1,2026-04-17 20:55:14.803166
-10812,https://api.water.noaa.gov/nwps/v1/gauges/MPLO3/stageflow/observed,nwps,,1,2026-04-17 20:55:15.161205
-10816,https://api.water.noaa.gov/nwps/v1/gauges/OAKO3/stageflow/observed,nwps,,1,2026-04-17 20:55:16.866744
-10817,https://api.water.noaa.gov/nwps/v1/gauges/OCUO3/stageflow/observed,nwps,,1,2026-04-17 20:55:17.956248
-10819,https://api.water.noaa.gov/nwps/v1/gauges/PHIO3/stageflow/observed,nwps,,1,2026-04-17 20:55:18.325389
-10820,https://api.water.noaa.gov/nwps/v1/gauges/PRTO3/stageflow/observed,nwps,,1,2026-04-17 20:55:18.919267
-10822,https://api.water.noaa.gov/nwps/v1/gauges/QCCO3/stageflow/observed,nwps,,1,2026-04-17 20:55:20.033702
-10824,https://api.water.noaa.gov/nwps/v1/gauges/SFCO3/stageflow/observed,nwps,,1,2026-04-17 20:55:21.201677
-10826,https://api.water.noaa.gov/nwps/v1/gauges/SILO3/stageflow/observed,nwps,,1,2026-04-17 20:55:21.576469
-10828,https://api.water.noaa.gov/nwps/v1/gauges/SLMO3/stageflow/observed,nwps,,1,2026-04-17 20:55:21.958996
-10829,https://api.water.noaa.gov/nwps/v1/gauges/SNDO3/stageflow/observed,nwps,,1,2026-04-17 20:55:22.417648
-10830,https://api.water.noaa.gov/nwps/v1/gauges/SPRO3/stageflow/observed,nwps,,1,2026-04-17 20:55:22.842795
-10831,https://api.water.noaa.gov/nwps/v1/gauges/SSCO3/stageflow/observed,nwps,,1,2026-04-17 20:55:23.941846
-10833,https://api.water.noaa.gov/nwps/v1/gauges/SUVO3/stageflow/observed,nwps,,1,2026-04-17 20:55:24.327056
-10834,https://api.water.noaa.gov/nwps/v1/gauges/SYCO3/stageflow/observed,nwps,,1,2026-04-17 20:55:24.704402
-10835,https://api.water.noaa.gov/nwps/v1/gauges/TIDO3/stageflow/observed,nwps,,1,2026-04-17 20:55:25.081879
-10836,https://api.water.noaa.gov/nwps/v1/gauges/TLMO3/stageflow/observed,nwps,,1,2026-04-17 20:55:25.443170
-10837,https://api.water.noaa.gov/nwps/v1/gauges/TLYO3/stageflow/observed,nwps,,1,2026-04-17 20:55:25.843246
-10838,https://api.water.noaa.gov/nwps/v1/gauges/TOTW1/stageflow/observed,nwps,,1,2026-04-17 20:55:26.204968
-10839,https://api.water.noaa.gov/nwps/v1/gauges/TRAO3/stageflow/observed,nwps,,1,2026-04-17 20:55:26.558497
-10841,https://api.water.noaa.gov/nwps/v1/gauges/UNDW1/stageflow/observed,nwps,,1,2026-04-17 20:55:26.916164
-10843,https://api.water.noaa.gov/nwps/v1/gauges/VENO3/stageflow/observed,nwps,,1,2026-04-17 20:55:28.033689
-10844,https://api.water.noaa.gov/nwps/v1/gauges/VIDO3/stageflow/observed,nwps,,1,2026-04-17 20:55:28.438220
-10847,https://api.water.noaa.gov/nwps/v1/gauges/WSLO3/stageflow/observed,nwps,,1,2026-04-17 20:55:29.307243
-10848,https://api.water.noaa.gov/nwps/v1/gauges/WTLO3/stageflow/observed,nwps,,1,2026-04-17 20:55:30.432342
-10850,https://api.water.noaa.gov/nwps/v1/gauges/GLIO3/stageflow/observed,nwps,,1,2026-04-17 20:55:30.432963
-10851,https://api.water.noaa.gov/nwps/v1/gauges/WASW1/stageflow/observed,nwps,,1,2026-04-17 20:55:30.786998
-10852,https://api.water.noaa.gov/nwps/v1/gauges/FALO3/stageflow/observed,nwps,,1,2026-04-17 20:55:31.471809
-10853,https://api.water.noaa.gov/nwps/v1/gauges/EUGO3/stageflow/observed,nwps,,1,2026-04-17 20:55:31.908234
-10856,https://api.water.noaa.gov/nwps/v1/gauges/CWMO3/stageflow/observed,nwps,,1,2026-04-17 20:55:32.322091
-10858,https://api.water.noaa.gov/nwps/v1/gauges/LGNO3/stageflow/observed,nwps,,1,2026-04-17 20:55:32.674475
-10859,https://api.water.noaa.gov/nwps/v1/gauges/AURO3/stageflow/observed,nwps,,1,2026-04-17 20:55:33.029527
-10863,https://api.water.noaa.gov/nwps/v1/gauges/RSBO3/stageflow/observed,nwps,,1,2026-04-17 20:55:33.030663
-10864,https://api.water.noaa.gov/nwps/v1/gauges/GOSO3/stageflow/observed,nwps,,1,2026-04-17 20:55:33.409001
-10865,https://api.water.noaa.gov/nwps/v1/gauges/LONO3/stageflow/observed,nwps,,1,2026-04-17 20:55:33.783596
-10866,https://api.water.noaa.gov/nwps/v1/gauges/CORO3/stageflow/observed,nwps,,1,2026-04-17 20:55:34.143016
-10867,https://api.water.noaa.gov/nwps/v1/gauges/WLAO3/stageflow/observed,nwps,,1,2026-04-17 20:55:34.506931
-10868,https://api.water.noaa.gov/nwps/v1/gauges/BEAO3/stageflow/observed,nwps,,1,2026-04-17 20:55:34.951123
-10869,https://api.water.noaa.gov/nwps/v1/gauges/BRTO3/stageflow/observed,nwps,,1,2026-04-17 20:55:35.318406
-10871,https://api.water.noaa.gov/nwps/v1/gauges/WFHO3/stageflow/observed,nwps,,1,2026-04-17 20:55:35.673808
-10873,"https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22GPR.Flow-Out.Inst.0.0.Best%22,%22GPR.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d",usace.cda,,1,2026-04-17 20:55:35.986347
-10874,"https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22HCR.Flow-Out.Inst.0.0.Best%22,%22HCR.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d",usace.cda,,1,2026-04-17 20:55:36.053034
-10878,https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_STG_FM.TXT,wa.gov,,1,2026-04-17 20:55:38.659927
-10879,https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_DSG_FM.TXT,wa.gov,,1,2026-04-17 20:55:41.205190
-10880,https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_WTM_FM.TXT,wa.gov,,1,2026-04-17 20:55:43.777873
-10881,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=az&period=P1D&parameterCd=00060,00065,00010",usgs,,1,2026-04-05 10:13:12.371456
-10882,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=ca&period=P1D&parameterCd=00060,00065,00010",usgs,,1,2026-04-05 10:13:21.675220
-10883,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=co&period=P1D&parameterCd=00060,00065,00010",usgs,,1,2026-04-05 10:13:28.835916
-10884,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=id&period=P1D&parameterCd=00060,00065,00010",usgs,,1,2026-04-05 10:13:32.409994
-10885,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=mt&period=P1D&parameterCd=00060,00065,00010",usgs,,1,2026-04-05 10:13:36.464280
-10886,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=nv&period=P1D&parameterCd=00060,00065,00010",usgs,,1,2026-04-05 10:13:40.921481
-10887,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=nm&period=P1D&parameterCd=00060,00065,00010",usgs,,1,2026-04-05 10:13:44.154928
-10888,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=or&period=P1D&parameterCd=00060,00065,00010",usgs,,1,2026-04-05 10:13:50.841009
-10889,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=ut&period=P1D&parameterCd=00060,00065,00010",usgs,,1,2026-04-05 10:13:54.214166
-10890,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=wa&period=P1D&parameterCd=00060,00065,00010",usgs,,1,2026-04-05 10:13:59.489401
-10891,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=wy&period=P1D&parameterCd=00060,00065,00010",usgs,,1,2026-04-05 10:14:01.313397
-10892,"https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22BCL.Flow-Out.Inst.0.0.Best%22,%22BCL.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d",usace.cda,,1,2026-04-17 20:55:36.109779
-10893,"https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22DET.Flow-Out.Inst.0.0.Best%22,%22DET.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d",usace.cda,,1,2026-04-17 20:55:36.123267
-10894,"https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22DOR.Flow-Out.Inst.0.0.Best%22,%22DOR.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d",usace.cda,,1,2026-04-17 20:55:36.167182
-10895,"https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22LOP.Flow-Out.Inst.0.0.Best%22,%22LOP.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d",usace.cda,,1,2026-04-17 20:55:36.175062
-10896,"https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22LOS.Flow-Out.Inst.0.0.Best%22,%22LOS.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d",usace.cda,,1,2026-04-17 20:55:36.215396
-10897,"https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22FAL.Flow-Out.Inst.0.0.Best%22,%22FAL.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d",usace.cda,,1,2026-04-17 20:55:36.270229
-10899,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=ks&period=P1D&parameterCd=00060,00065,00010",usgs,,1,
-10900,https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=APLO3&pe=QI,nwrfc.textplot,,1,2026-04-17 20:55:35.902193
-10901,https://api.water.noaa.gov/nwps/v1/gauges/BRBO3/stageflow/observed,nwps,,0,
-10903,https://api.water.noaa.gov/nwps/v1/gauges/MUSO3/stageflow/observed,nwps,,1,2026-04-17 20:55:15.514897
-10904,https://api.water.noaa.gov/nwps/v1/gauges/NMFO3/stageflow/observed,nwps,,1,2026-04-17 20:55:15.877063
-10906,https://www.nwrfc.noaa.gov/xml/xml.cgi?id=CMRO3&pe=HG&dtype=b&numdays=1,nwrfc.xml,,1,2026-04-17 20:55:35.713813
-10908,https://api.water.noaa.gov/nwps/v1/gauges/WINO3/stageflow/observed,nwps,,1,2026-04-17 20:55:33.030130
-10909,https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LOCO3&pe=HG&dtype=b&numdays=1,nwrfc.xml,,1,2026-04-17 20:55:35.785428
-10910,https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WNFO3&pe=HG&dtype=b&numdays=1,nwrfc.xml,,1,2026-04-17 20:55:35.832802
-10911,"https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&format=csv&list=BENO,CSCI,DEBO,HCDI,HRSI,ROMO,UMAO,WICO",usbr,,1,2026-04-17 20:55:35.973696
+id,url,parser,hours,is_active
+10749,https://api.water.noaa.gov/nwps/v1/gauges/IMNO3/stageflow/observed,nwps,,1
+10751,https://api.water.noaa.gov/nwps/v1/gauges/MODO3/stageflow/observed,nwps,,1
+10752,https://api.water.noaa.gov/nwps/v1/gauges/MONO3/stageflow/observed,nwps,,1
+10753,https://api.water.noaa.gov/nwps/v1/gauges/SERO3/stageflow/observed,nwps,,1
+10754,https://api.water.noaa.gov/nwps/v1/gauges/TRYO3/stageflow/observed,nwps,,1
+10755,https://api.water.noaa.gov/nwps/v1/gauges/AGNO3/stageflow/observed,nwps,,1
+10757,https://api.water.noaa.gov/nwps/v1/gauges/ARWO3/stageflow/observed,nwps,,1
+10758,https://api.water.noaa.gov/nwps/v1/gauges/AZAO3/stageflow/observed,nwps,,1
+10760,https://api.water.noaa.gov/nwps/v1/gauges/COGO3/stageflow/observed,nwps,,1
+10762,https://api.water.noaa.gov/nwps/v1/gauges/EKTO3/stageflow/observed,nwps,,1
+10763,https://api.water.noaa.gov/nwps/v1/gauges/ELKO3/stageflow/observed,nwps,,1
+10764,https://api.water.noaa.gov/nwps/v1/gauges/GLNO3/stageflow/observed,nwps,,1
+10765,https://api.water.noaa.gov/nwps/v1/gauges/GRAO3/stageflow/observed,nwps,,1
+10766,https://api.water.noaa.gov/nwps/v1/gauges/KRBO3/stageflow/observed,nwps,,1
+10768,https://api.water.noaa.gov/nwps/v1/gauges/POWO3/stageflow/observed,nwps,,1
+10769,https://api.water.noaa.gov/nwps/v1/gauges/RDLO3/stageflow/observed,nwps,,1
+10770,https://api.water.noaa.gov/nwps/v1/gauges/RYGO3/stageflow/observed,nwps,,1
+10771,https://api.water.noaa.gov/nwps/v1/gauges/SCRO3/stageflow/observed,nwps,,1
+10772,https://api.water.noaa.gov/nwps/v1/gauges/SURO3/stageflow/observed,nwps,,1
+10773,https://api.water.noaa.gov/nwps/v1/gauges/TILO3/stageflow/observed,nwps,,1
+10774,https://api.water.noaa.gov/nwps/v1/gauges/WMSO3/stageflow/observed,nwps,,1
+10775,https://api.water.noaa.gov/nwps/v1/gauges/WNRO3/stageflow/observed,nwps,,1
+10776,https://api.water.noaa.gov/nwps/v1/gauges/WSNO3/stageflow/observed,nwps,,1
+10777,https://api.water.noaa.gov/nwps/v1/gauges/ALBO3/stageflow/observed,nwps,,1
+10778,https://api.water.noaa.gov/nwps/v1/gauges/BCKO3/stageflow/observed,nwps,,1
+10779,https://api.water.noaa.gov/nwps/v1/gauges/BCLO3/stageflow/observed,nwps,,1
+10780,https://api.water.noaa.gov/nwps/v1/gauges/BLUO3/stageflow/observed,nwps,,1
+10781,https://api.water.noaa.gov/nwps/v1/gauges/BONO3/stageflow/observed,nwps,,1
+10782,https://api.water.noaa.gov/nwps/v1/gauges/CANO3/stageflow/observed,nwps,,1
+10783,https://api.water.noaa.gov/nwps/v1/gauges/CASW1/stageflow/observed,nwps,,1
+10786,https://api.water.noaa.gov/nwps/v1/gauges/COCO3/stageflow/observed,nwps,,1
+10788,https://api.water.noaa.gov/nwps/v1/gauges/ESTO3/stageflow/observed,nwps,,1
+10790,https://api.water.noaa.gov/nwps/v1/gauges/FRMO3/stageflow/observed,nwps,,1
+10792,https://api.water.noaa.gov/nwps/v1/gauges/FSSO3/stageflow/observed,nwps,,1
+10794,https://api.water.noaa.gov/nwps/v1/gauges/HARO3/stageflow/observed,nwps,,1
+10795,https://api.water.noaa.gov/nwps/v1/gauges/HODO3/stageflow/observed,nwps,,1
+10796,https://api.water.noaa.gov/nwps/v1/gauges/HSSW1/stageflow/observed,nwps,,1
+10797,https://api.water.noaa.gov/nwps/v1/gauges/JASO3/stageflow/observed,nwps,,1
+10798,https://api.water.noaa.gov/nwps/v1/gauges/JFFO3/stageflow/observed,nwps,,1
+10803,https://api.water.noaa.gov/nwps/v1/gauges/LSMO3/stageflow/observed,nwps,,1
+10804,https://api.water.noaa.gov/nwps/v1/gauges/MAYW1/stageflow/observed,nwps,,1
+10805,https://api.water.noaa.gov/nwps/v1/gauges/MCMO3/stageflow/observed,nwps,,1
+10806,https://api.water.noaa.gov/nwps/v1/gauges/MCZO3/stageflow/observed,nwps,,1
+10807,https://api.water.noaa.gov/nwps/v1/gauges/MEHO3/stageflow/observed,nwps,,1
+10809,https://api.water.noaa.gov/nwps/v1/gauges/MIWO3/stageflow/observed,nwps,,1
+10810,https://api.water.noaa.gov/nwps/v1/gauges/MKLO3/stageflow/observed,nwps,,1
+10811,https://api.water.noaa.gov/nwps/v1/gauges/MNRO3/stageflow/observed,nwps,,1
+10812,https://api.water.noaa.gov/nwps/v1/gauges/MPLO3/stageflow/observed,nwps,,1
+10816,https://api.water.noaa.gov/nwps/v1/gauges/OAKO3/stageflow/observed,nwps,,1
+10817,https://api.water.noaa.gov/nwps/v1/gauges/OCUO3/stageflow/observed,nwps,,1
+10819,https://api.water.noaa.gov/nwps/v1/gauges/PHIO3/stageflow/observed,nwps,,1
+10820,https://api.water.noaa.gov/nwps/v1/gauges/PRTO3/stageflow/observed,nwps,,1
+10822,https://api.water.noaa.gov/nwps/v1/gauges/QCCO3/stageflow/observed,nwps,,1
+10824,https://api.water.noaa.gov/nwps/v1/gauges/SFCO3/stageflow/observed,nwps,,1
+10826,https://api.water.noaa.gov/nwps/v1/gauges/SILO3/stageflow/observed,nwps,,1
+10828,https://api.water.noaa.gov/nwps/v1/gauges/SLMO3/stageflow/observed,nwps,,1
+10829,https://api.water.noaa.gov/nwps/v1/gauges/SNDO3/stageflow/observed,nwps,,1
+10830,https://api.water.noaa.gov/nwps/v1/gauges/SPRO3/stageflow/observed,nwps,,1
+10831,https://api.water.noaa.gov/nwps/v1/gauges/SSCO3/stageflow/observed,nwps,,1
+10833,https://api.water.noaa.gov/nwps/v1/gauges/SUVO3/stageflow/observed,nwps,,1
+10834,https://api.water.noaa.gov/nwps/v1/gauges/SYCO3/stageflow/observed,nwps,,1
+10835,https://api.water.noaa.gov/nwps/v1/gauges/TIDO3/stageflow/observed,nwps,,1
+10836,https://api.water.noaa.gov/nwps/v1/gauges/TLMO3/stageflow/observed,nwps,,1
+10837,https://api.water.noaa.gov/nwps/v1/gauges/TLYO3/stageflow/observed,nwps,,1
+10838,https://api.water.noaa.gov/nwps/v1/gauges/TOTW1/stageflow/observed,nwps,,1
+10839,https://api.water.noaa.gov/nwps/v1/gauges/TRAO3/stageflow/observed,nwps,,1
+10841,https://api.water.noaa.gov/nwps/v1/gauges/UNDW1/stageflow/observed,nwps,,1
+10843,https://api.water.noaa.gov/nwps/v1/gauges/VENO3/stageflow/observed,nwps,,1
+10844,https://api.water.noaa.gov/nwps/v1/gauges/VIDO3/stageflow/observed,nwps,,1
+10847,https://api.water.noaa.gov/nwps/v1/gauges/WSLO3/stageflow/observed,nwps,,1
+10848,https://api.water.noaa.gov/nwps/v1/gauges/WTLO3/stageflow/observed,nwps,,1
+10850,https://api.water.noaa.gov/nwps/v1/gauges/GLIO3/stageflow/observed,nwps,,1
+10851,https://api.water.noaa.gov/nwps/v1/gauges/WASW1/stageflow/observed,nwps,,1
+10853,https://api.water.noaa.gov/nwps/v1/gauges/EUGO3/stageflow/observed,nwps,,1
+10856,https://api.water.noaa.gov/nwps/v1/gauges/CWMO3/stageflow/observed,nwps,,1
+10858,https://api.water.noaa.gov/nwps/v1/gauges/LGNO3/stageflow/observed,nwps,,1
+10859,https://api.water.noaa.gov/nwps/v1/gauges/AURO3/stageflow/observed,nwps,,1
+10863,https://api.water.noaa.gov/nwps/v1/gauges/RSBO3/stageflow/observed,nwps,,1
+10864,https://api.water.noaa.gov/nwps/v1/gauges/GOSO3/stageflow/observed,nwps,,1
+10865,https://api.water.noaa.gov/nwps/v1/gauges/LONO3/stageflow/observed,nwps,,1
+10866,https://api.water.noaa.gov/nwps/v1/gauges/CORO3/stageflow/observed,nwps,,1
+10867,https://api.water.noaa.gov/nwps/v1/gauges/WLAO3/stageflow/observed,nwps,,1
+10868,https://api.water.noaa.gov/nwps/v1/gauges/BEAO3/stageflow/observed,nwps,,1
+10869,https://api.water.noaa.gov/nwps/v1/gauges/BRTO3/stageflow/observed,nwps,,1
+10871,https://api.water.noaa.gov/nwps/v1/gauges/WFHO3/stageflow/observed,nwps,,1
+10873,"https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22GPR.Flow-Out.Inst.0.0.Best%22,%22GPR.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d",usace.cda,,1
+10878,https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_STG_FM.TXT,wa.gov,,1
+10879,https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_DSG_FM.TXT,wa.gov,,1
+10880,https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_WTM_FM.TXT,wa.gov,,1
+10881,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=az&period=P1D&parameterCd=00060,00065,00010",usgs,,1
+10882,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=ca&period=P1D&parameterCd=00060,00065,00010",usgs,,1
+10883,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=co&period=P1D&parameterCd=00060,00065,00010",usgs,,1
+10884,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=id&period=P1D&parameterCd=00060,00065,00010",usgs,,1
+10885,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=mt&period=P1D&parameterCd=00060,00065,00010",usgs,,1
+10886,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=nv&period=P1D&parameterCd=00060,00065,00010",usgs,,1
+10887,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=nm&period=P1D&parameterCd=00060,00065,00010",usgs,,1
+10888,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=or&period=P1D&parameterCd=00060,00065,00010",usgs,,1
+10889,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=ut&period=P1D&parameterCd=00060,00065,00010",usgs,,1
+10890,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=wa&period=P1D&parameterCd=00060,00065,00010",usgs,,1
+10891,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=wy&period=P1D&parameterCd=00060,00065,00010",usgs,,1
+10897,"https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22FAL.Flow-Out.Inst.0.0.Best%22,%22FAL.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d",usace.cda,,1
+10899,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=ks&period=P1D&parameterCd=00060,00065,00010",usgs,,1
+10900,https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=APLO3&pe=QI,nwrfc.textplot,,1
+10901,https://api.water.noaa.gov/nwps/v1/gauges/BRBO3/stageflow/observed,nwps,,0
+10903,https://api.water.noaa.gov/nwps/v1/gauges/MUSO3/stageflow/observed,nwps,,1
+10904,https://api.water.noaa.gov/nwps/v1/gauges/NMFO3/stageflow/observed,nwps,,1
+10906,https://www.nwrfc.noaa.gov/xml/xml.cgi?id=CMRO3&pe=HG&dtype=b&numdays=1,nwrfc.xml,,1
+10908,https://api.water.noaa.gov/nwps/v1/gauges/WINO3/stageflow/observed,nwps,,1
+10909,https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LOCO3&pe=HG&dtype=b&numdays=1,nwrfc.xml,,1
+10910,https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WNFO3&pe=HG&dtype=b&numdays=1,nwrfc.xml,,1
+10911,"https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&format=csv&list=BENO,CSCI,DEBO,HCDI,HRSI,ROMO,UMAO,WICO",usbr,,1
+10912,https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=FALO3&pe=QI,nwrfc.textplot,,1

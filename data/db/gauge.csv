@@ -1,11 +1,4 @@
 id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geos_id,nws_id,nwsli_id,snotel_id,usgs_id,rating_id,elevation,drainage_area,huc,allow_negative_flow
-1,LookoutPoint_OR_Resv,,,,43.91389,-122.75,,,,,LOPO3,,,,712.0,,,0
-2,BigCliff_OR_Resv,,,,,,,,,,,,,,,,,0
-3,Detroit_OR_Resv,,,,,,,,,,,,,,,,,0
-4,LostCreek_OR_Resv,,,,,,,,,,,,,,,,,0
-5,Dexter_OR_Resv,,,,,,,,,,,,,,,,,0
-6,Dorena_OR_Resv,,,,,,,,,,,,,,,,,0
-7,FallCreek_OR_Resv,,,,,,,,,,,,,,,,,0
 26,14306500,,,Tidewater,44.3859538093346,-123.831778038249,14306500,TIDO,,,TIDO3,,14306500,1,48.16,334.0,171002050403,0
 43,Applegate_Wilderville_merge,,,Wilderville,42.3540058135007,-123.406727581687,14369500,ARWOX,,,ARWO3,,14369500,2,947.18,698.0,171003090603,0
 116,14096850,,,"blw Quartz Cr, Nr Simnasho",44.958727244191,-121.394228590228,14096850,,,,,,14096850,,2260.0,145.0,170703060505,0
@@ -84,7 +77,6 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 945,14091500,,,,44.6262275,-121.4839433,14091500,,,,,,14091500,,1974.36,316.0,170703011003,0
 951,MF_Willamette_below_NF_merge,,,Below NF-MF,43.8012351684092,-122.56088788998,14148000,OAKO,,,OAKO3,,14148000,34,935.0,924.0,170900010701,0
 953,MF_Willamette_Jasper_merge,,,Jasper,43.9981816559059,-122.905912564085,14152000,UJASO,,,JASO3,,14152000,,513.45,1340.0,170900011003,0
-955,HillsCreek_OR_Resv,,,,43.7209565532805,-122.437825561731,14145500,HCRO,,,HCRO3,,14145500,,1544.0,392.0,170900010505,0
 980,13331500,,,nr Minam,45.6198669449839,-117.726589171683,13331500,,,,,,13331500,,2540.48,240.0,170601050507,0
 982,12083000,,,Mineral,46.744240678860976,-122.1445289684145,12083000,MCNW,,,,,12083000,,1310.34,75.2,171100150109,0
 1000,Mohawk_Springfield_merge,,,Springfield,44.0929031662724,-122.957305170928,14165000,SPRO,,,SPRO3,,14165000,,442.0,177.0,170900040605,0

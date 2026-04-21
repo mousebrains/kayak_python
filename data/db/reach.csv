@@ -1,12 +1,4 @@
 id,updated_at,gauge_id,name,display_name,sort_name,nature,description,difficulties,basin,basin_area,elevation,elevation_lost,length,gradient,features,latitude,longitude,latitude_start,longitude_start,latitude_end,longitude_end,no_show,notes,optimal_flow,region,remoteness,scenery,season,watershed_type,aw_id,river,max_gradient,huc,map_only,no_flow_range
-1,,1,LOPO3,,Lookout Point 0,,,,,,,,,,,,,,,,,1,,,,,,,,,,,,0,0
-2,,2,Big Cliff,,Big Cliff,,,,,,,,,,,,,,,,,1,,,,,,,,,,,,0,0
-3,,3,Detroit,,Detroit,,,,,,,,,,,,,,,,,1,,,,,,,,,,,,0,0
-4,,4,Lost Creek aa,,Lost Creek 0,,,,,,,,,,,,,,,,,1,,,,,,,,,,,,0,0
-5,,5,Dexter,,Dexter,,,,,,,,,,,,,,,,,1,,,,,,,,,,,,0,0
-6,,6,Dorena,,Dorena,,,,,,,,,,,,,,,,,1,,,,,,,,,,,,0,0
-7,,7,Fall Creek,,Fall Creek,,,,,,,,,,,,,,,,,1,,,,,,,,,,,,0,0
-8,,,GPRO3,,Green Peter 0,,,,,,,,,,,,,,,,,1,,,,,,,,,,,,0,0
 72,,26,TIDO,Alsea,Alsea ag 04,Pool Drop,Mill Creek Park to Tidewater,,Alsea,,256.7,253.0,35.5,7.1,,44.39788977042021,-123.76657847300952,44.384765879835015,-123.62198855141042,44.411013661005406,-123.91116839460861,0,,800.0,North Coast,Not Remote,rural,Nov-Apr,,1483,,,171002050402,0,0
 109,,43,Applegate River,Applegate,Applegate 0 c,,Applegate Dam to Rogue River,II+,Applegate,225.0,1747.51,906.0,46.7,19.4,,42.247846,-123.279373,42.066506,-123.109095,42.429185,-123.449651,0,,,,,,,,11614,,,171003090201,0,0
 425,,185,BRTO,Blue River,Blue a 0,Pool Drop,,Technical,Mckenzie,,1386.0,508.0,5.4,93.3,Technical,44.22,-122.27,44.259602,-122.217003,44.204498,-122.262001,0,,400.0,Upper Willamette,Not Remote,forest/logging,Nov-Apr,,1486,,,170900040402,0,0
@@ -65,7 +57,6 @@ https://storymaps.arcgis.com/stories/67e9eca2ac0d45959f03e6ce0e3a37f8",100.0,Mid
 2712,,945,14091500,Metolius River,Metolius 0,Continous,Camp Sherman to Monty,,Upper Deschutes,,2940.0,968.0,26.0,37.2,spring fed,44.540596,-121.561839,44.456258,-121.643064,44.624935,-121.480614,0,,1500.0,Central Oregon,Somewhat Remote,forest/fishing,Jan-Dec,Wild and Scenic,1529,Metolius,,170703010911,0,0
 2723,,951,OAKO,MF Willamette,Willamette 0b MF 0,Pool Drop,Oakridge to Black Canyon,,Middle Fork Willamette,,935.0,309.8,12.14,25.5,dam control,43.8,-122.57,43.71356741740896,-122.42528633239586,43.80813502918721,-122.56533259705932,0,,1300.0,Upper Willamette,Not Remote,forest/rural,Jan-Dec,,1566,,,170900010505,0,0
 2725,,953,UJASO,MF Willamette,Willamette 0b MF 1,Continous,Dexter to Jasper,,Middle Fork Willamette,,513.0,103.7,7.24,14.3,dam control,44,-122.9,43.925317407563966,-122.81140290002602,43.9877496203871,-122.89996308778325,0,,2000.0,Upper Willamette,Not Remote,rural,Jan-Dec,,1567,,,170900010703,0,0
-2727,,955,HCRO3,Hills Creek,Hills Creek 0,,,,,,1208.0,,,,,43.72,-122.43,,,,,1,,,,,,,,,,,,0,0
 2783,,980,13331500,Minam River,Minam,,,,Wallowa,240.0,2540.48,944.0,12.0,78.6,,45.6199,-117.727,45.226525,-117.524561,45.346958,-117.625346,0,,,,,,,,11639,,,170601050502,0,0
 2786,,982,MCNW,Mineral Creek,Mineral aa 0,,,,Nisqually,75.2,1340.0,141.0,4.1,34.1,,46.7443,-122.145,46.709552764893,-122.1554107666,46.762424468994,-122.19267272949,0,,,,,,,,3533,,,171100150109,0,0
 2824,,1000,SPRO,Mohawk River,Mohawk 0,Continous,Mohawk R. Rd to Hileman Rd,Technical,Mckenzie,,802.0,232.0,6.2,37.3,high waterfall,44.232024,-122.793349,44.256003,-122.755359,44.208044,-122.831338,0,,400.0,Upper Willamette,Not Remote,forest/rural,Nov-Apr,,3762,Mohawk,,170900040601,0,0
