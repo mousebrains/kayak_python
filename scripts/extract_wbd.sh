@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Extract WBD watershed-boundary polygon layers from NHDPlus HR HUC4 GDB ZIPs
-# into a single GeoPackage with three layers (HUC8/HUC10/HUC12).
+# into a single GeoPackage with all six WBD levels (HUC2/4/6/8/10/12).
 #
 # Used as the source of truth by `levels assign-huc` to assign a 12-digit HUC12
 # to every reach via point-in-polygon lookup of its put-in coordinates. See
@@ -46,7 +46,7 @@ mkdir -p "$(dirname "$OUT")"
 for zip in "${zips[@]}"; do
     huc4=$(basename "$zip" | sed -E 's/NHDPLUS_H_([0-9]+)_HU4_GDB\.zip/\1/')
     gdb="/vsizip/$zip/NHDPLUS_H_${huc4}_HU4_GDB.gdb"
-    for layer in WBDHU8 WBDHU10 WBDHU12; do
+    for layer in WBDHU2 WBDHU4 WBDHU6 WBDHU8 WBDHU10 WBDHU12; do
         echo "  $huc4 / $layer"
         ogr2ogr -f GPKG -update -append -nln "$layer" "$OUT" "$gdb" "$layer"
     done

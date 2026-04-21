@@ -70,23 +70,34 @@ def assign_one(tree: STRtree, codes: list[str], lat: float, lon: float) -> str |
 
 
 def upsert_huc_names(session: Session, gpkg: Path) -> int:
-    """Read WBDHU8/10/12 attribute tables; bulk-upsert into ``huc_name``.
+    """Read every WBD attribute table present; bulk-upsert into ``huc_name``.
 
-    Returns the total number of rows written (sum across the three layers).
+    Tolerates missing layers — older ``wbd.gpkg`` files built before
+    ``extract_wbd.sh`` added HU2/HU4/HU6 only carry HU8/10/12, and the
+    upsert just skips what isn't there.
+
+    Returns the total number of rows written across all layers.
     """
     total = 0
     for layer, level, code_col in (
+        ("WBDHU2", 2, "HUC2"),
+        ("WBDHU4", 4, "HUC4"),
+        ("WBDHU6", 6, "HUC6"),
         ("WBDHU8", 8, "HUC8"),
         ("WBDHU10", 10, "HUC10"),
         ("WBDHU12", 12, "HUC12"),
     ):
         # Attribute-only read: skip geometry to keep peak memory low.
-        df = pyogrio.read_dataframe(
-            gpkg,
-            layer=layer,
-            columns=[code_col, "Name", "States"],
-            read_geometry=False,
-        )
+        try:
+            df = pyogrio.read_dataframe(
+                gpkg,
+                layer=layer,
+                columns=[code_col, "Name", "States"],
+                read_geometry=False,
+            )
+        except Exception as exc:
+            logger.info("Skipping %s — not in %s (%s)", layer, gpkg, exc)
+            continue
         rows = []
         for row in df.itertuples(index=False):
             code = getattr(row, code_col, None)

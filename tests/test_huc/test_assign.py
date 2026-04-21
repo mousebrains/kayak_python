@@ -57,12 +57,25 @@ def synthetic_gpkg(tmp_path_factory) -> Path:
     gdf10.to_file(out, layer="WBDHU10", driver="GPKG")
 
     # One HUC8 covering the full extent.
+    full = Polygon([(0, 0), (3, 0), (3, 1), (0, 1)])
     gdf8 = geopandas.GeoDataFrame(
         {"HUC8": ["17091234"], "Name": ["Synthetic Basin"], "States": ["OR"]},
-        geometry=[Polygon([(0, 0), (3, 0), (3, 1), (0, 1)])],
+        geometry=[full],
         crs="EPSG:4326",
     )
     gdf8.to_file(out, layer="WBDHU8", driver="GPKG")
+
+    # HUC2/4/6 all single polygons covering the same extent for this fixture.
+    for layer, code_col, code, label in (
+        ("WBDHU6", "HUC6", "170912", "Synthetic Region 6"),
+        ("WBDHU4", "HUC4", "1709", "Synthetic Region 4"),
+        ("WBDHU2", "HUC2", "17", "Pacific Northwest (synthetic)"),
+    ):
+        geopandas.GeoDataFrame(
+            {code_col: [code], "Name": [label], "States": ["OR"]},
+            geometry=[full],
+            crs="EPSG:4326",
+        ).to_file(out, layer=layer, driver="GPKG")
 
     return out
 
@@ -184,15 +197,21 @@ def test_dry_run_does_not_write(session, synthetic_gpkg):
     assert counts["assigned"] == 1
 
 
-def test_upsert_huc_names_loads_three_levels(session, synthetic_gpkg):
+def test_upsert_huc_names_loads_all_six_levels(session, synthetic_gpkg):
     rows = upsert_huc_names(session, synthetic_gpkg)
     session.commit()
-    assert rows == 3 + 2 + 1  # HUC12 + HUC10 + HUC8
+    assert rows == 1 + 1 + 1 + 1 + 2 + 3  # HUC2 + HUC4 + HUC6 + HUC8 + HUC10 + HUC12
 
     # Spot-check one row at each level.
+    huc2 = session.get(HucName, "17")
+    huc4 = session.get(HucName, "1709")
+    huc6 = session.get(HucName, "170912")
     huc8 = session.get(HucName, "17091234")
     huc10 = session.get(HucName, "1709123401")
     huc12 = session.get(HucName, "170912340101")
+    assert (huc2.level, huc2.name) == (2, "Pacific Northwest (synthetic)")
+    assert (huc4.level, huc4.name) == (4, "Synthetic Region 4")
+    assert (huc6.level, huc6.name) == (6, "Synthetic Region 6")
     assert (huc8.level, huc8.name) == (8, "Synthetic Basin")
     assert (huc10.level, huc10.name) == (10, "West Sub")
     assert (huc12.level, huc12.name) == (12, "West Cell")
