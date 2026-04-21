@@ -113,6 +113,8 @@ nwrfc.xml:
     - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=JOHI1&pe=HG&dtype=b&numdays=1"
     - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=RIGI1&pe=HG&dtype=b&numdays=1"
     - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WHBI1&pe=HG&dtype=b&numdays=1"
+    # Selway (Idaho) — SELI1 matches USGS 13336500 digit-for-digit; outage redundancy
+    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SELI1&pe=HG&dtype=b&numdays=1"
 
 nwrfc.textplot:
   urls:

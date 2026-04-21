@@ -161,9 +161,6 @@ id,reach_id,level,low,low_data_type,high,high_data_type
 560,3943,low,,flow,1000.0,flow
 561,3943,okay,1000.0,flow,5000.0,flow
 562,3943,high,5000.0,flow,,flow
-569,3990,low,,flow,1000.0,flow
-570,3990,okay,1000.0,flow,20000.0,flow
-571,3990,high,20000.0,flow,,flow
 572,4008,low,,flow,300.0,flow
 573,4008,okay,300.0,flow,1500.0,flow
 574,4008,high,1500.0,flow,,flow
@@ -433,9 +430,6 @@ id,reach_id,level,low,low_data_type,high,high_data_type
 1022,5325,low,,,7000.0,flow
 1023,5325,okay,7000.0,flow,80000.0,flow
 1024,5325,high,80000.0,flow,,
-1025,5326,low,,,700.0,flow
-1026,5326,okay,700.0,flow,35000.0,flow
-1027,5326,high,35000.0,flow,,
 1028,5327,low,,,8000.0,flow
 1029,5327,okay,8000.0,flow,80000.0,flow
 1030,5327,high,80000.0,flow,,
@@ -1168,3 +1162,9 @@ id,reach_id,level,low,low_data_type,high,high_data_type
 1853,3770,low,,,1000.0,flow
 1854,3770,okay,1000.0,flow,100000.0,flow
 1855,3770,high,100000.0,flow,,
+1856,3990,low,,flow,1000.0,flow
+1857,3990,okay,1000.0,flow,40000.0,flow
+1858,3990,high,40000.0,flow,,flow
+1859,5326,low,,flow,700.0,flow
+1860,5326,okay,700.0,flow,35000.0,flow
+1861,5326,high,35000.0,flow,,flow
