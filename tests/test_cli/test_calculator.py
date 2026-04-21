@@ -278,3 +278,57 @@ def test_circular_dependency_raises(session):
 
     with pytest.raises(ValueError, match="Circular dependency"):
         _run_calculator(session)
+
+
+def test_calc_reads_other_datatype_from_own_gauge(session):
+    """A calc that reads a different data type from its own gauge isn't a cycle.
+
+    Regression for Fall_Creek_above_Winberry_calc: it produces 'flow' on the
+    Fall_Creek_Inflow gauge while reading that gauge's 'inflow' (supplied by a
+    different, fetched source on the same gauge). The topo sort must not flag
+    this as a self-cycle.
+    """
+    # A calc producing 'flow' that consumes 'inflow' from its own gauge.
+    calc_expr = CalcExpression(
+        data_type=DataType.flow,
+        expression="v::shared_gauge::inflow - x::tributary::flow",
+        time_expression="v::shared_gauge::inflow x::tributary::flow",
+    )
+    session.add(calc_expr)
+    session.flush()
+
+    calc_src = Source(name="self_ref_calc", agency="CALC", calc_expression_id=calc_expr.id)
+    session.add(calc_src)
+    session.flush()
+
+    # The calc's own gauge — also has a fetched inflow source on it.
+    shared_gauge = Gauge(name="shared_gauge")
+    session.add(shared_gauge)
+    session.flush()
+    session.add(GaugeSource(gauge_id=shared_gauge.id, source_id=calc_src.id))
+
+    inflow_src = Source(name="inflow_fetch", agency="TEST")
+    session.add(inflow_src)
+    session.flush()
+    session.add(GaugeSource(gauge_id=shared_gauge.id, source_id=inflow_src.id))
+
+    trib_src = Source(name="tributary_fetch", agency="TEST")
+    trib_gauge = Gauge(name="tributary")
+    session.add_all([trib_src, trib_gauge])
+    session.flush()
+    session.add(GaugeSource(gauge_id=trib_gauge.id, source_id=trib_src.id))
+
+    now = datetime.now(UTC) - timedelta(hours=1)
+    store_observation(session, inflow_src.id, DataType.inflow, now, 650.0)
+    update_latest(session, inflow_src.id, DataType.inflow)
+    update_latest_gauge(session, shared_gauge.id, DataType.inflow)
+    store_observation(session, trib_src.id, DataType.flow, now, 195.0)
+    update_latest(session, trib_src.id, DataType.flow)
+    update_latest_gauge(session, trib_gauge.id, DataType.flow)
+    session.flush()
+
+    _run_calculator(session)  # must not raise
+
+    latest = get_latest(session, calc_src.id, DataType.flow)
+    assert latest is not None
+    assert latest.value == 455.0  # 650 - 195

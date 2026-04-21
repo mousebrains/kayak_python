@@ -131,10 +131,11 @@ def calculator(args: argparse.Namespace) -> None:
             ce = source.calc_expression
             if not ce or not ce.time_expression:
                 return []
+            own_gauge = gauge_id_to_name.get(source_to_gauge.get(source.id, -1), "")
             return [
                 ref_name
                 for _, ref_name, _ in re.findall(r"(\w+)::(\w+)::(\w+)", ce.time_expression)
-                if ref_name in calc_gauge_names
+                if ref_name in calc_gauge_names and ref_name != own_gauge
             ]
 
         # Simple topo sort: sources with no calc deps first, then dependents
