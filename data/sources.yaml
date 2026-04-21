@@ -104,6 +104,15 @@ nwrfc.xml:
     # LOPO3 (Lookout Point Dam) — retired 2026-04-17: no USGS equivalent, no reach needs it
     # WNFO3 (Wiley Creek) — matches USGS 14187000 digit-for-digit (2026-04-17); outage redundancy
     - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WNFO3&pe=HG&dtype=b&numdays=1"
+    # Idaho Salmon basin — NWRFC forecast points paired with USGS feed for outage redundancy.
+    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SMNI1&pe=HG&dtype=b&numdays=1"
+    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SRYI1&pe=HG&dtype=b&numdays=1"
+    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MIDI1&pe=HG&dtype=b&numdays=1"
+    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MSSI1&pe=HG&dtype=b&numdays=1"
+    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=KRSI1&pe=HG&dtype=b&numdays=1"
+    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=JOHI1&pe=HG&dtype=b&numdays=1"
+    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=RIGI1&pe=HG&dtype=b&numdays=1"
+    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WHBI1&pe=HG&dtype=b&numdays=1"
 
 nwrfc.textplot:
   urls:
