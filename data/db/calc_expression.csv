@@ -27,3 +27,4 @@ id,data_type,expression,time_expression,note
 26,flow,"round(greatest(0, greatest(((((0.2594 * d9::EF_Lewis_Washington_merge::flow) - (0.1159 * cm::14113000::flow)) + (0.5535 * uE::White_Salmon_Underwood_merge::flow)) + (0.08136 * 59::Clackamas_Three_Lynx_merge::flow)) - 264.5, 0)))",d9::EF_Lewis_Washington_merge::flow cm::14113000::flow uE::White_Salmon_Underwood_merge::flow 59::Clackamas_Three_Lynx_merge::flow,
 27,flow,"round(greatest(0, hd::Hood_Tucker_merge::flow - wf::WFHO3::flow))",hd::Hood_Tucker_merge::flow wf::WFHO3::flow,EF+MF Hood = Tucker - WF Hood
 28,flow,"round(greatest(0, fa::Fall_Creek_Inflow::inflow - wb::14150800::flow), 1)",fa::Fall_Creek_Inflow::inflow wb::14150800::flow,Fall Creek above Winberry: total reservoir inflow minus Winberry tributary
+29,flow,al::Applegate_Lake::inflow,al::Applegate_Lake::inflow,MF Applegate flow = Applegate Lake inflow (single tributary at reservoir)
