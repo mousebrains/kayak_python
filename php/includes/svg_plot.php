@@ -4,6 +4,27 @@ declare(strict_types=1);
 require_once __DIR__ . '/lttb.php';
 
 /**
+ * Split "Label (Unit)" into [label, unit]. Returns [$y_label, ''] if no parens.
+ * @return array{0: string, 1: string}
+ */
+function _split_y_label(string $y_label): array {
+    if (preg_match('/^(.+?)\s*\(([^)]+)\)\s*$/', $y_label, $m)) {
+        return [$m[1], $m[2]];
+    }
+    return [$y_label, ''];
+}
+
+/**
+ * JSON-encode a series payload for a data-series="..." SVG attribute.
+ * HTML-escapes for safe interpolation inside double-quoted attribute.
+ */
+function _series_data_attr(array $series): string {
+    $json = json_encode($series, JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION);
+    if ($json === false) return '';
+    return htmlspecialchars($json, ENT_QUOTES, 'UTF-8');
+}
+
+/**
  * Compute nice Y-axis bounds and step for round tick labels.
  *
  * @return array [$y_min, $y_max, $step]
@@ -257,9 +278,19 @@ function generate_svg_plot(
 
     $esc_title = htmlspecialchars($title);
     $esc_ylabel = htmlspecialchars($y_label);
+    $series_attr = _series_data_attr([
+        'kind'     => 'single',
+        'points'   => array_map(fn($p) => [(int)$p[0], $p[1]], $pairs),
+        'label'    => _split_y_label($y_label)[0],
+        'unit'     => _split_y_label($y_label)[1],
+        'decimals' => $y_decimals,
+        'y_min'    => $y_min,
+        'y_max'    => $y_max,
+        'margins'  => ['ml' => $ml, 'mr' => $mr, 'mt' => $mt, 'mb' => $mb, 'w' => $width, 'h' => $height],
+    ]);
 
     return <<<SVG
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 $width $height" width="$width" height="$height">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 $width $height" width="$width" height="$height" data-series="$series_attr">
 <text x="{$ml}" y="18" font-size="13" font-weight="bold" fill="#333">$esc_title</text>
 <text x="12" y="{$mt}" font-size="10" fill="#666" transform="rotate(-90,12,{$mt})" text-anchor="end">$esc_ylabel</text>
 $grid
@@ -383,9 +414,21 @@ function generate_rating_dual_plot(
     $esc_title = htmlspecialchars($title);
     $esc_flow_label = htmlspecialchars($primary_label);
     $gauge_label_x = $width - 12;
+    $series_attr = _series_data_attr([
+        'kind'           => 'dual',
+        'points'         => array_map(fn($p) => [(int)$p[0], $p[1]], $pairs),
+        'label'          => _split_y_label($primary_label)[0],
+        'unit'           => _split_y_label($primary_label)[1],
+        'decimals'       => $fy_decimals,
+        'y_min'          => $fy_min,
+        'y_max'          => $fy_max,
+        'rating'         => $rating_lookup,
+        'gauge_decimals' => 1,
+        'margins'        => ['ml' => $ml, 'mr' => $mr, 'mt' => $mt, 'mb' => $mb, 'w' => $width, 'h' => $height],
+    ]);
 
     return <<<SVG
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 $width $height" width="$width" height="$height">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 $width $height" width="$width" height="$height" data-series="$series_attr">
 <text x="{$ml}" y="18" font-size="13" font-weight="bold" fill="#333">$esc_title</text>
 <text x="12" y="{$mt}" font-size="11" fill="#2060A0" transform="rotate(-90,12,{$mt})" text-anchor="end">$esc_flow_label</text>
 <text x="{$gauge_label_x}" y="{$mt}" font-size="11" fill="#C04020" transform="rotate(90,{$gauge_label_x},{$mt})" text-anchor="end">Gage Height (Ft)</text>

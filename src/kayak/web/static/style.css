@@ -141,8 +141,20 @@ tr.stale td{color:var(--c-text-faint);font-style:italic}
 .readings-table td{font-size:.85rem}
 
 /* Plot container */
-.plot-container{text-align:center;padding:1rem 0}
+.plot-container{text-align:center;padding:1rem 0;position:relative}
 .plot-container svg{max-width:100%;height:auto}
+.plot-tooltip{position:absolute;pointer-events:none;background:#fff;color:#111;
+  border:1px solid #444;padding:4px 8px;font:12px/1.4 system-ui,sans-serif;
+  border-radius:3px;box-shadow:0 1px 3px rgba(0,0,0,.3);white-space:pre;z-index:10;text-align:left}
+@media(prefers-color-scheme:dark){
+  .plot-tooltip{background:#0f1115;color:#f4f4f5;border-color:#a1a1aa;
+    box-shadow:0 1px 4px rgba(0,0,0,.6)}
+  .plot-crosshair{stroke:#d4d4d8}
+}
+.plot-tooltip[hidden]{display:none}
+.plot-crosshair{stroke:#888;stroke-width:.5;stroke-dasharray:3,3;pointer-events:none}
+.plot-marker-flow{fill:#2060A0;stroke:#fff;stroke-width:1;pointer-events:none}
+.plot-marker-gauge{fill:#C04020;stroke:#fff;stroke-width:1;pointer-events:none}
 
 /* Shared filter bar — index/state/picker/custom pages */
 .filter-bar{margin:.5rem 0 1rem;font-size:.85rem;border:1px solid var(--c-border-light);border-radius:4px;background:var(--c-surface)}

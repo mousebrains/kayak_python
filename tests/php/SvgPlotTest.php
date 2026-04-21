@@ -102,6 +102,73 @@ final class SvgPlotTest extends TestCase
         $this->assertStringContainsString('No data available', $svg);
     }
 
+    public function test_generate_svg_plot_emits_data_series(): void
+    {
+        $svg = generate_svg_plot(
+            [1700000000, 1700003600, 1700007200],
+            [100.0, 150.0, 200.0],
+            'Test',
+            'Flow (CFS)'
+        );
+        $payload = self::parse_data_series($svg);
+        $this->assertSame('single', $payload['kind']);
+        $this->assertSame('Flow', $payload['label']);
+        $this->assertSame('CFS', $payload['unit']);
+        $this->assertIsArray($payload['points']);
+        $this->assertGreaterThanOrEqual(2, count($payload['points']));
+        $this->assertSame(1700000000, $payload['points'][0][0]);
+        $this->assertArrayHasKey('y_min', $payload);
+        $this->assertArrayHasKey('y_max', $payload);
+        $this->assertArrayHasKey('margins', $payload);
+        $this->assertSame(80, $payload['margins']['ml']);
+    }
+
+    public function test_generate_rating_dual_plot_emits_data_series_with_rating(): void
+    {
+        $rating = [[3.0, 100.0], [4.0, 200.0], [5.0, 400.0]];
+        $svg = generate_rating_dual_plot(
+            [1700000000, 1700003600, 1700007200],
+            [120.0, 180.0, 250.0],
+            $rating,
+            'Test',
+            'Flow (CFS)'
+        );
+        $payload = self::parse_data_series($svg);
+        $this->assertSame('dual', $payload['kind']);
+        $this->assertSame($rating, $payload['rating']);
+        $this->assertSame(1, $payload['gauge_decimals']);
+        $this->assertSame('Flow', $payload['label']);
+        $this->assertSame('CFS', $payload['unit']);
+    }
+
+    public function test_split_y_label_without_unit(): void
+    {
+        // Caller passes a label that doesn't have parens — helper returns it as-is.
+        $svg = generate_svg_plot(
+            [1700000000, 1700003600],
+            [100.0, 200.0],
+            'Test',
+            'Bare Label'
+        );
+        $payload = self::parse_data_series($svg);
+        $this->assertSame('Bare Label', $payload['label']);
+        $this->assertSame('', $payload['unit']);
+    }
+
+    /** Extract the JSON payload from the <svg data-series="..."> attribute. */
+    private static function parse_data_series(string $svg): array
+    {
+        if (!preg_match('/data-series="([^"]+)"/', $svg, $m)) {
+            throw new \RuntimeException('no data-series attribute found');
+        }
+        $json = html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
+        $payload = json_decode($json, true);
+        if (!is_array($payload)) {
+            throw new \RuntimeException('data-series JSON decode failed');
+        }
+        return $payload;
+    }
+
     /**
      * @param list<array{int, string, string, float}> $observations  (source_id, observed_at, data_type, value)
      */
