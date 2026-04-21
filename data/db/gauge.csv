@@ -205,3 +205,4 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 2116,WLAO3,,,Willamina,45.047222,-123.502778,WLAO3,,,WLAO3,WLAO3,,,,242.1,,170900080404,0
 2117,McKenzie_below_Trail_Br_Dam,,,,44.2679,-122.0498,14158850,,,,,,14158850,,1980.0,184.0,17090004,0
 2118,SF_McKenzie_near_Rainbow,,,,44.136,-122.2484,14159500,,,,,,14159500,,1236.0,208.0,17090004,0
+2119,McKenzie_above_South_Fork,,,,44.1664,-122.2558,CMRO3,CMRO3,,,CMRO3,,,,1160.0,,17090004,0
