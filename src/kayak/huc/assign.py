@@ -69,6 +69,14 @@ def assign_one(tree: STRtree, codes: list[str], lat: float, lon: float) -> str |
     return codes[int(idxs[0])]
 
 
+# Known HUC2 region names. Used to backfill HUC2 rows that WBD doesn't ship in
+# every HUC4 GDB — notably the 1601-1604 Great Basin GDBs lack a WBDHU2 layer
+# for HUC2=16, so the bulk extract never sees that name.
+_HUC2_FALLBACK_NAMES: dict[str, str] = {
+    "16": "Great Basin Region",
+}
+
+
 def upsert_huc_names(session: Session, gpkg: Path) -> int:
     """Read every WBD attribute table present; bulk-upsert into ``huc_name``.
 
@@ -129,6 +137,25 @@ def upsert_huc_names(session: Session, gpkg: Path) -> int:
             session.execute(stmt)
         total += len(rows)
         logger.info("Upserted %d %s rows into huc_name", len(rows), layer)
+
+    # Backfill HUC2 names that WBD didn't supply (insert-only; never overwrites
+    # a real WBD entry, which always wins on conflict). Reported count includes
+    # rows that were already present — they're harmless idempotent no-ops.
+    fallback_rows = [
+        {"code": code, "level": 2, "name": name, "states": None}
+        for code, name in _HUC2_FALLBACK_NAMES.items()
+    ]
+    if fallback_rows:
+        stmt = (
+            sqlite_insert(HucName)
+            .values(fallback_rows)
+            .on_conflict_do_nothing(index_elements=["code"])
+        )
+        session.execute(stmt)
+        total += len(fallback_rows)
+        logger.info(
+            "Backfilled %d HUC2 fallback names (some may already exist)", len(fallback_rows)
+        )
     return total
 
 

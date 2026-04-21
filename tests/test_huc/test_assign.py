@@ -200,7 +200,8 @@ def test_dry_run_does_not_write(session, synthetic_gpkg):
 def test_upsert_huc_names_loads_all_six_levels(session, synthetic_gpkg):
     rows = upsert_huc_names(session, synthetic_gpkg)
     session.commit()
-    assert rows == 1 + 1 + 1 + 1 + 2 + 3  # HUC2 + HUC4 + HUC6 + HUC8 + HUC10 + HUC12
+    # HUC2 + HUC4 + HUC6 + HUC8 + HUC10 + HUC12 + 1 hardcoded HUC2 fallback row
+    assert rows == 1 + 1 + 1 + 1 + 2 + 3 + 1
 
     # Spot-check one row at each level.
     huc2 = session.get(HucName, "17")

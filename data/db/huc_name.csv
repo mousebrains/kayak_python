@@ -1,4 +1,15 @@
 code,level,name,states
+1404,4,Great Divide-Upper Green,"CO,UT,WY"
+140401,6,Upper Green,"CO,UT,WY"
+1406,4,Lower Green,"CO,UT"
+140600,6,Lower Green,"CO,UT"
+1407,4,Upper Colorado-Dirty Devil,"AZ,UT"
+140700,6,Upper Colorado-Dirty Devil,"AZ,UT"
+1501,4,Lower Colorado-Lake Mead,"AZ,NV,UT"
+150100,6,Lower Colorado-Lake Mead,"AZ,NV,UT"
+16,2,Great Basin Region,
+1601,4,Bear,"ID,UT,WY"
+160101,6,Upper Bear,"ID,UT,WY"
 16010101,8,Upper Bear,"UT,WY"
 1601010101,10,Stillwater Fork-Bear River,"UT,WY"
 160101010101,12,Hayden Fork,UT
@@ -79,6 +90,7 @@ code,level,name,states
 160101020305,12,Pegram Creek,ID
 160101020306,12,Sheep Creek-Bear River,ID
 160101020307,12,Bear River-Taylor Creek,"ID,WY"
+160102,6,Lower Bear,"ID,UT"
 16010201,8,Bear Lake,"ID,UT"
 1601020101,10,Big Creek-Frontal Bear Lake,"ID,UT"
 160102010101,12,Cottonwood Canyon,UT
@@ -235,6 +247,8 @@ code,level,name,states
 160102040503,12,Mantua Reservoir-Box Elder Creek,UT
 160102040504,12,Box Elder Creek-Black Slough,UT
 160102040505,12,Bear River-Frontal Great Salt Lake,UT
+1602,4,Great Salt Lake,"ID,NV,UT,WY"
+160201,6,Weber,"UT,WY"
 16020101,8,Upper Weber,"UT,WY"
 1602010101,10,Beaver Creek,UT
 160201010101,12,Left Fork Beaver Creek-Beaver Creek,UT
@@ -327,6 +341,7 @@ code,level,name,states
 160201020701,12,Second Salt Creek-Frontal Willard Bay,UT
 160201020702,12,First Salt Creek-Frontal Willard Bay,UT
 160201020703,12,Little Weber Creek-Frontal Great Salt Lake,UT
+160202,6,Jordan,UT
 16020201,8,Utah Lake,UT
 1602020101,10,West Creek-Currant Creek,UT
 160202010101,12,Fourmile Creek,UT
@@ -471,6 +486,7 @@ code,level,name,states
 160202040403,12,Little Valley Wash-Frontal Great Salt Lake,UT
 160202040404,12,Crystal Creek-Frontal Great Salt Lake,UT
 160202040405,12,Outlet Jordan River-Frontal Great Salt Lake,UT
+160203,6,Great Salt Lake,"ID,NV,UT"
 16020301,8,Hamlin-Snake Valleys,"NV,UT"
 1602030101,10,Upper Hamlin Valley Wash,"NV,UT"
 160203010101,12,Pine Creek-Hamlin Valley Wash,UT
@@ -1099,6 +1115,8 @@ code,level,name,states
 160203100100,12,Antelope Island,UT
 1602031002,10,Great Salt Lake,UT
 160203100200,12,Great Salt Lake,UT
+1603,4,Escalante Desert-Sevier Lake,"NV,UT"
+160300,6,Escalante Desert-Sevier Lake,"NV,UT"
 16030001,8,Upper Sevier,UT
 1603000101,10,Asay Creek,UT
 160300010101,12,Midway Valley-Midway Creek,UT
@@ -1659,6 +1677,8 @@ code,level,name,states
 160300090409,12,Pony Express Reservoir-Frontal Sevier Lake,UT
 1603000905,10,Sevier Lake,UT
 160300090500,12,Sevier Lake,UT
+1604,4,Black Rock Desert-Humboldt,"CA,NV,OR"
+160401,6,Humboldt,NV
 16040101,8,Upper Humboldt,NV
 1604010101,10,Town Creek-Humboldt River,NV
 160401010101,12,Upper Town Creek,NV
@@ -2141,6 +2161,7 @@ code,level,name,states
 160401090801,12,Paradise Canyon,NV
 160401090802,12,Paiute Canyon,NV
 160401090803,12,China Garden Creek-Little Humboldt River,NV
+160402,6,Black Rock Desert,"CA,NV,OR"
 16040201,8,Upper Quinn,"NV,OR"
 1604020101,10,Oregon Canyon Creek,"NV,OR"
 160402010101,12,Butte Creek,OR
@@ -2447,6 +2468,14 @@ code,level,name,states
 160402050601,12,Hawks Mountain,"NV,OR"
 160402050602,12,Upper Thousand Creek,NV
 160402050603,12,Lower Thousand Creek,NV
+1605,4,Central Lahontan,"CA,NV"
+160501,6,Truckee,"CA,NV"
+160502,6,Carson,"CA,NV"
+1606,4,Central Nevada Desert Basins,"CA,NV"
+160600,6,Central Nevada Desert Basins,"CA,NV"
+17,2,Pacific Northwest Region,"CA,CN,ID,MT,NV,OR,UT,WA,WY"
+1701,4,Kootenai-Pend Oreille-Spokane,"CN,ID,MT,WA"
+170101,6,Kootenai,"CN,ID,MT"
 17010101,8,Middle Kootenai,"CN,ID,MT"
 1701010101,10,Upper Bull River,CN
 170101010101,12,Mount Mike-Bull River,CN
@@ -2875,6 +2904,7 @@ code,level,name,states
 17010110,8,Slocan River,CN
 1701011000,10,Slocan River,CN
 170101100000,12,Slocan River,CN
+170102,6,Pend Oreille,"CN,ID,MT,WA"
 17010201,8,Upper Clark Fork,MT
 1701020101,10,Browns Gulch,MT
 170102010101,12,Headwaters Browns Gulch ,MT
@@ -3860,6 +3890,7 @@ code,level,name,states
 170102161002,12,Nine Mile Creek-Pend d'Oreille River,CN
 170102161003,12,Cedar Creek,"CN,WA"
 170102161004,12,Pend Oreille River,"CN,WA"
+170103,6,Spokane,"ID,MT,WA"
 17010301,8,Upper Coeur d'Alene,"ID,MT"
 1701030101,10,North Fork Coeur d'Alene River,"ID,MT"
 170103010101,12,Spruce Creek-North Fork Coeur d'Alene River,ID
@@ -4074,6 +4105,8 @@ code,level,name,states
 170103080304,12,Lower Deadman Creek,WA
 170103080305,12,Bear Creek-Little Spokane River,WA
 170103080306,12,Dartford Creek-Little Spokane River,WA
+1702,4,Upper Columbia,"CN,WA"
+170200,6,Upper Columbia,"CN,WA"
 17020001,8,Franklin D. Roosevelt Lake,"CN,WA"
 1702000101,10,1702000101-Can,CN
 170200010101,12,Woden Creek,CN
@@ -5212,6 +5245,8 @@ code,level,name,states
 17020021,8,Upper Arrow Lake-Columbia River,CN
 1702002100,10,Upper Arrow Lake-Columbia River,CN
 170200210000,12,Upper Arrow Lake-Columbia River,CN
+1703,4,Yakima,WA
+170300,6,Yakima,WA
 17030001,8,Upper Yakima,WA
 1703000101,10,Cle Elum River,WA
 170300010101,12,Waptus River,WA
@@ -5390,6 +5425,8 @@ code,level,name,states
 170300031203,12,Webber Canyon-Yakima River,WA
 170300031204,12,Coyote Canyon,WA
 170300031205,12,Yakima River,WA
+1704,4,Upper Snake,"ID,MT,NV,UT,WY"
+170401,6,Snake Headwaters,"ID,WY"
 17040101,8,Snake Headwaters,WY
 1704010101,10,Lewis River,WY
 170401010101,12,De Lacy Creek,WY
@@ -5570,6 +5607,7 @@ code,level,name,states
 170401050307,12,Jackknife Creek,"ID,WY"
 170401050308,12,Newswander Canyon-Salt River,"ID,WY"
 170401050309,12,Dry Creek-Salt River,"ID,WY"
+170402,6,Upper Snake,"ID,MT,NV,UT,WY"
 17040201,8,Idaho Falls,ID
 1704020101,10,Lyons Creek-Snake River,ID
 170402010101,12,Lyons Creek,ID
@@ -6542,6 +6580,8 @@ code,level,name,states
 170402210902,12,City of Dietrich,ID
 170402210903,12,City of Shoshone-Little Wood River,ID
 170402210904,12,City of Gooding-Little Wood River,ID
+1705,4,Middle Snake,"ID,NV,OR"
+170501,6,Middle Snake-Boise,"ID,NV,OR"
 17050101,8,C.J. Strike Reservoir,ID
 1705010101,10,Upper Sailor Creek,ID
 170501010101,12,Juniper Draw,ID
@@ -7752,6 +7792,7 @@ code,level,name,states
 170501241102,12,Bear Creek-Weiser River,ID
 170501241103,12,Monroe Creek,ID
 170501241104,12,Weiser River-Snake River,ID
+170502,6,Middle Snake-Powder,"ID,OR"
 17050201,8,Brownlee Reservoir,"ID,OR"
 1705020101,10,Moores Hollow-Snake River,"ID,OR"
 170502010101,12,Moores Hollow,OR
@@ -7926,6 +7967,8 @@ code,level,name,states
 170502031101,12,Daly Creek,OR
 170502031102,12,Immigrant Gulch-Powder River,OR
 170502031103,12,Foster Gulch-Powder River,OR
+1706,4,Lower Snake,"ID,MT,OR,WA"
+170601,6,Lower Snake,"ID,OR,WA"
 17060101,8,Hells Canyon,"ID,OR"
 1706010101,10,Granite Creek-Snake River,"ID,OR"
 170601010101,12,Oxbow Creek-Deep Creek,ID
@@ -8384,6 +8427,7 @@ code,level,name,states
 170601100402,12,Rice Hill,WA
 170601100403,12,Dalton Lake-Snake River,WA
 170601100404,12,Snake River,WA
+170602,6,Salmon,"ID,MT"
 17060201,8,Upper Salmon,ID
 1706020101,10,Valley Creek,ID
 170602010101,12,Elk Creek,ID
@@ -8952,6 +8996,7 @@ code,level,name,states
 170602100503,12,Sheep Creek-Little Salmon River,ID
 170602100504,12,Squaw Creek,ID
 170602100505,12,Hailey Creek-Little Salmon River,ID
+170603,6,Clearwater,"ID,MT,WA"
 17060301,8,Upper Selway,"ID,MT"
 1706030101,10,Headwaters Selway River,"ID,MT"
 170603010101,12,Swet Creek-Selway River,ID
@@ -9285,6 +9330,8 @@ code,level,name,states
 170603080802,12,Dicks Creek,ID
 170603080803,12,Canyon Creek-Dworshak Reservoir,ID
 170603080804,12,Freeman Creek-North Fork Clearwater River,ID
+1707,4,Middle Columbia,"OR,WA"
+170701,6,Middle Columbia,"OR,WA"
 17070101,8,Middle Columbia-Lake Wallula,"OR,WA"
 1707010101,10,Upper Lake Wallula,WA
 170701010101,12,Eureka Flat,WA
@@ -9678,6 +9725,7 @@ code,level,name,states
 170701060407,12,Wheeler Canyon-Klickitat River,WA
 170701060408,12,Silvas Creek,WA
 170701060409,12,Klickitat River,WA
+170702,6,John Day,OR
 17070201,8,Upper John Day,OR
 1707020101,10,Upper South Fork John Day River,OR
 170702010101,12,Lonesome Creek,OR
@@ -9979,6 +10027,7 @@ code,level,name,states
 170702041401,12,Grass Valley Canyono-John Day River,OR
 170702041402,12,Emigrant Canyon-John Day River,OR
 170702041403,12,Biglow Canyon-John Day River,OR
+170703,6,Deschutes,OR
 17070301,8,Upper Deschutes,OR
 1707030101,10,Charleton Creek-Deschutes River,OR
 170703010101,12,Soda Creek,OR
@@ -10389,6 +10438,8 @@ code,level,name,states
 1707030705,10,Lower Trout Creek,OR
 170703070501,12,Tenmile Creek,OR
 170703070502,12,Trout Creek,OR
+1708,4,Lower Columbia,"OR,WA"
+170800,6,Lower Columbia,"OR,WA"
 17080001,8,Lower Columbia-Sandy,"OR,WA"
 1708000101,10,Upper Sandy River,OR
 170800010101,12,Headwaters Sandy River,OR
@@ -10641,6 +10692,8 @@ code,level,name,states
 170800060403,12,Chinook River-Frontal Columbia River,WA
 1708000605,10,Baker Bay-Columbia River,"OR,WA"
 170800060500,12,Baker Bay-Columbia River,"OR,WA"
+1709,4,Willamette,OR
+170900,6,Willamette,OR
 17090001,8,Middle Fork Willamette,OR
 1709000101,10,Headwaters Middle Fork Willamette River,OR
 170900010101,12,Paddys Valley-Middle Fork Willamette River,OR
@@ -11107,6 +11160,8 @@ code,level,name,states
 170900120303,12,Milton Creek,OR
 170900120304,12,Scappoose Creek,OR
 170900120305,12,Multnomah Channel,OR
+1710,4,Oregon-Washington Coastal,"CA,OR,WA"
+171001,6,Washington Coastal,"OR,WA"
 17100101,8,Hoh-Quillayute,WA
 1710010101,10,Sooes River-Frontal Makah Bay,WA
 171001010101,12,Upper Sooes River,WA
@@ -11335,6 +11390,7 @@ code,level,name,states
 171001060702,12,North Beach Peninsula-Frontal Pacific Ocean,WA
 1710010608,10,Peacock Spit-Pacific Ocean,"OR,WA"
 171001060800,12,Peacock Spit-Pacific Ocean,"OR,WA"
+171002,6,Northern Oregon Coastal,OR
 17100201,8,Necanicum,OR
 1710020101,10,Necanicum River-Frontal Pacific Ocean,OR
 171002010101,12,Upper Necanicum River,OR
@@ -11559,6 +11615,7 @@ code,level,name,states
 171002070104,12,Tahkenitch Lake-Frontal Pacific Ocean,OR
 1710020702,10,171002070200-Pacific Ocean,OR
 171002070200,12,171002070200-Pacific Ocean,OR
+171003,6,Southern Oregon Coastal,"CA,OR"
 17100301,8,North Umpqua,OR
 1710030101,10,Diamond Lake,OR
 171003010101,12,Pumice Desert,OR
@@ -12099,6 +12156,8 @@ code,level,name,states
 171003120502,12,Lower Hunter Creek,OR
 1710031206,10,Mack Arch Cove-Pacific Ocean,"CA,OR"
 171003120600,12,Mack Arch Cove-Pacific Ocean,"CA,OR"
+1711,4,Puget Sound,"CN,WA"
+171100,6,Puget Sound,"CN,WA"
 17110001,8,Sumas River,"CN,WA"
 1711000101,10,Upper Chilliwack River,"CN,WA"
 171100010101,12,Indian Creek-Chilliwack River,WA
@@ -12748,6 +12807,8 @@ code,level,name,states
 171100211103,12,Outlet Nitinat River,CN
 1711002112,10,Port San Juan-Strait of Juan De Fuca,"CN,WA"
 171100211200,12,Port San Juan-Strait of Juan De Fuca,"CN,WA"
+1712,4,Oregon Closed Basins,"CA,NV,OR"
+171200,6,Oregon Closed Basins,"CA,NV,OR"
 17120001,8,Harney-Malheur Lakes,OR
 1712000101,10,Poison Creek,OR
 171200010101,12,Upper Poison Creek,OR
@@ -13287,6 +13348,9 @@ code,level,name,states
 171200090802,12,Sunrise Valley,OR
 171200090803,12,Sheepshead Canyon Creek-Frontal Folly Farm Flat,OR
 171200090804,12,Quail Creek-Folly Farm Flat,OR
+18,2,California Region,"CA,MX,NV,OR"
+1801,4,Klamath-Northern California Coastal,"CA,OR"
+180101,6,Northern California Coastal,"CA,OR"
 18010101,8,Smith,"CA,OR"
 1801010101,10,North Fork Smith River,"CA,OR"
 180101010101,12,Upper North Fork Smith River,OR
@@ -13632,6 +13696,7 @@ code,level,name,states
 180101100902,12,Porter Creek-Russian River,CA
 180101100903,12,Dutch Bill Creek-Russian River,CA
 180101100904,12,Willow Creek-Russian River,CA
+180102,6,Klamath,"CA,OR"
 18010201,8,Williamson,OR
 1801020101,10,Jackson Creek-Williamson River,OR
 180102010101,12,Headwaters Williamson River,OR
@@ -14161,6 +14226,8 @@ code,level,name,states
 180102120503,12,Pelletreau Creek-South Fork Trinity River,CA
 180102120504,12,Old Campbell Creek,CA
 180102120505,12,Mingo Creek-South Fork Trinity River,CA
+1802,4,Sacramento,"CA,OR"
+180200,6,Upper Sacramento,"CA,OR"
 18020001,8,Goose Lake,"CA,OR"
 1802000101,10,Drews Creek-Frontal Goose Lake,OR
 180200010101,12,Quartz Creek-Drews Creek,OR
@@ -14432,6 +14499,7 @@ code,level,name,states
 180200050404,12,Backbone Creek,CA
 180200050405,12,Squaw Creek,CA
 180200050406,12,Sugarloaf Creek-Sacramento River,CA
+180201,6,Lower Sacramento,CA
 18020104,8,Sacramento-Stone Corral,CA
 1802010401,10,South Fork Willow Creek,CA
 180201040101,12,Upper South Fork Willow Creek,CA
@@ -15167,6 +15235,8 @@ code,level,name,states
 180201630701,12,Lake Greenhaven-Sacramento River,CA
 180201630702,12,Beaver Lake-Sacramento River,CA
 180201630703,12,Threemile Slough-Sacramento River,CA
+1803,4,Tulare-Buena Vista Lakes,CA
+180300,6,Tulare-Buena Vista Lakes,CA
 18030001,8,Upper Kern,CA
 1803000101,10,Rock Creek-Kern River,CA
 180300010101,12,Kern-Kaweah River,CA
@@ -15730,3 +15800,5 @@ code,level,name,states
 180300122402,12,Tulare Lake Canal-Tulare Lake Bed,CA
 180300122403,12,Wilbur Ditch-Tulare Lake Bed,CA
 180300122404,12,Lower Blakeley Canal-Tulare Lake Bed,CA
+1808,4,North Lahontan,"CA,NV"
+180800,6,North Lahontan,"CA,NV"
