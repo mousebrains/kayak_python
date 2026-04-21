@@ -26,6 +26,11 @@ dev = [
     "types-requests>=2.31",
     "lxml-stubs>=0.5",
 ]
+geo = [
+    "shapely>=2",
+    "geopandas>=1",
+    "pyogrio>=0.10",
+]
 
 [project.scripts]
 levels = "kayak.cli.main:main"
@@ -83,7 +88,7 @@ check_untyped_defs = false
 
 [[tool.mypy.overrides]]
 # Third-party geospatial/plotting libs ship no stubs.
-module = ["osgeo.*", "matplotlib.*", "contextily.*"]
+module = ["osgeo.*", "matplotlib.*", "contextily.*", "geopandas.*", "shapely.*", "pyogrio.*"]
 ignore_missing_imports = true
 
 [tool.hatch.envs.default]

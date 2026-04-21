@@ -36,6 +36,7 @@ METADATA_TABLES = [
     "reach_class",
     "reach_level",
     "reach_guidebook",
+    "huc_name",
 ]
 
 # Columns excluded per-table (regenerable or too large for text VCS).
@@ -96,10 +97,7 @@ def main() -> int:
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     try:
         existing = {
-            row[0]
-            for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         missing = [t for t in METADATA_TABLES if t not in existing]
         if missing:

@@ -4,6 +4,7 @@ import argparse
 import sys
 
 from kayak.cli import (
+    assign_huc,
     build,
     calc_rating,
     calculator,
@@ -45,6 +46,7 @@ def main() -> None:
     pipeline.addArgs(subparsers)
     seed_maintainer.addArgs(subparsers)
     trace_reach.addArgs(subparsers)
+    assign_huc.addArgs(subparsers)
 
     args = parser.parse_args()
     mkLogger(args)

@@ -868,3 +868,26 @@ class EditHistory(Base):
         Index("ix_edit_history_target", "target_type", "target_id"),
         Index("ix_edit_history_changed_at", "changed_at"),
     )
+
+
+# ---------------------------------------------------------------------------
+# huc_name — human-readable labels for HUC8/10/12 codes (NHD WBD lookup)
+# ---------------------------------------------------------------------------
+
+
+class HucName(Base):
+    """Watershed-name lookup for the codes stored in `reach.huc` (HUC12).
+
+    Populated from the WBD layers shipped with NHDPlus HR. Coarser levels are
+    derived from `reach.huc` via `substr(huc, 1, N)`; this table provides the
+    human-readable name for any of those prefixes.
+    """
+
+    __tablename__ = "huc_name"
+
+    code: Mapped[str] = mapped_column(String(12), primary_key=True)
+    level: Mapped[int] = mapped_column(Integer, nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    states: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (Index("ix_huc_name_level", "level"),)

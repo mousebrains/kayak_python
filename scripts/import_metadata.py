@@ -42,6 +42,7 @@ LOAD_ORDER = [
     "reach_class",
     "reach_level",
     "reach_guidebook",
+    "huc_name",
 ]
 
 

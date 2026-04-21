@@ -1,6 +1,8 @@
 """Reach / state catalog helpers and flow-level classification."""
 
-from sqlalchemy import select
+from collections.abc import Iterable
+
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from kayak.db.models import DataType, FlowLevel, Gauge, Reach, State
@@ -89,6 +91,35 @@ def get_gauge_for_reach(session: Session, reach_id: int) -> Gauge | None:
     if reach is None or reach.gauge_id is None:
         return None
     return session.get(Gauge, reach.gauge_id)
+
+
+def iter_reaches_with_putin(session: Session) -> Iterable[Reach]:
+    """Yield every reach that has both put-in latitude and longitude set."""
+    return session.scalars(
+        select(Reach).where(
+            Reach.latitude_start.isnot(None),
+            Reach.longitude_start.isnot(None),
+        )
+    )
+
+
+def set_reach_huc(session: Session, reach_id: int, huc12: str) -> None:
+    """Overwrite ``reach.huc`` for one reach with a HUC12 code."""
+    session.execute(update(Reach).where(Reach.id == reach_id).values(huc=huc12))
+
+
+def get_reach_huc_counts(session: Session) -> dict[int, int]:
+    """Return ``{length: count}`` for ``reach.huc`` values in the DB.
+
+    NULL/empty rows fall under length 0. Useful for quick before/after
+    snapshots: a healthy DB has every row at length 12.
+    """
+    rows = session.execute(
+        select(func.length(Reach.huc), func.count())
+        .group_by(func.length(Reach.huc))
+        .order_by(func.length(Reach.huc))
+    ).all()
+    return {int(length or 0): int(count) for length, count in rows}
 
 
 def classify_level(
