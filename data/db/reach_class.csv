@@ -394,3 +394,9 @@ id,reach_id,name,low,low_data_type,high,high_data_type
 1479,5862,III-IV,1300.0,flow,3000.0,flow
 1480,5863,III-IV,300.0,flow,9000.0,flow
 1481,5858,IV(V),400.0,flow,800.0,flow
+1482,5776,II-III,,flow,,flow
+1483,5850,II,500.0,flow,2000.0,flow
+1484,5810,I-II,,flow,,flow
+1485,4038,II(III),,flow,,flow
+1486,1285,III-III+,,flow,,flow
+1487,5809,I+(II),,flow,,flow
