@@ -32,6 +32,13 @@ async function fetchAndCache(req) {
   if (res.ok) {
     const cache = await caches.open(CACHE);
     cache.put(req, res.clone());
+    return res;
+  }
+  // 5xx: prefer stale cache over a blank server-error page. 4xx passes
+  // through unchanged so real 404s still render.
+  if (res.status >= 500) {
+    const cached = await caches.match(req);
+    if (cached) return cached;
   }
   return res;
 }

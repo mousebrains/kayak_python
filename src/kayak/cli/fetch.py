@@ -260,18 +260,25 @@ def fetch(args: argparse.Namespace) -> None:
 
                 logger.debug("  %d updates", count)
 
+                # Commit after each URL to release the SQLite writer lock
+                # between URLs; otherwise concurrent PHP readers can hit
+                # SQLITE_BUSY while the pipeline is running.
+                if not args.dry_run:
+                    session.commit()
+
             except (ValueError, KeyError, LookupError) as e:
+                session.rollback()
                 logger.error("Parse/data error for %s: %s", w.url, e)
                 continue
             except Exception:
+                session.rollback()
                 logger.exception("Unexpected error for %s", w.url)
                 raise
 
-        if not args.dry_run:
-            session.commit()
-            print("Committed to database")
-        else:
+        if args.dry_run:
             session.rollback()
+        else:
+            print("Committed to database")
 
     finally:
         session.close()
