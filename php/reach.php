@@ -137,7 +137,7 @@ if ($q_trimmed !== '' || $st !== '') {
         );
         $gb_stmt->execute($reach_ids);
         // Soggy Sneakers edition number by guidebook id
-        $ss_edition = [9 => 1, 1 => 2, 2 => 3, 3 => 4, 4 => 5];
+        $ss_edition = [9 => 1, 2 => 3, 3 => 4, 4 => 5];
         // Non-SS guidebook abbreviation map
         $gb_abbrev = [
             5 => 'ID',    // Idaho
