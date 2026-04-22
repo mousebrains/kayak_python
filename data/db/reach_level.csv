@@ -1177,9 +1177,6 @@ id,reach_id,level,low,low_data_type,high,high_data_type
 1919,5051,low,,flow,80.0,flow
 1920,5051,okay,80.0,flow,2000.0,flow
 1921,5051,high,2000.0,flow,,flow
-1922,5858,low,,flow,2500.0,flow
-1923,5858,okay,2500.0,flow,5000.0,flow
-1924,5858,high,5000.0,flow,,flow
 1925,5860,low,,flow,2000.0,flow
 1926,5860,okay,2000.0,flow,4000.0,flow
 1927,5860,high,4000.0,flow,,flow
@@ -1192,3 +1189,6 @@ id,reach_id,level,low,low_data_type,high,high_data_type
 1934,5863,low,,flow,300.0,flow
 1935,5863,okay,300.0,flow,9000.0,flow
 1936,5863,high,9000.0,flow,,flow
+1937,5858,low,,flow,400.0,flow
+1938,5858,okay,400.0,flow,800.0,flow
+1939,5858,high,800.0,flow,,flow
