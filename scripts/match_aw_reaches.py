@@ -509,38 +509,24 @@ def process_cached(meta_db, db, dry_run):
                 if g.get("rmax") is not None:
                     rmax = float(g["rmax"])
             if rmin is not None or rmax is not None:
-                # Only add if reach has no levels yet
+                # Only fill if no existing reach_class row has bounds yet
                 existing = db.execute(
-                    "SELECT COUNT(*) FROM reach_level WHERE reach_id = ?",
+                    "SELECT COUNT(*) FROM reach_class "
+                    "WHERE reach_id = ? AND (low IS NOT NULL OR high IS NOT NULL)",
                     (db_reach_id,),
                 ).fetchone()[0]
                 if existing == 0:
-                    print(f"    [{label}] reach {db_reach_id}: levels rmin={rmin} rmax={rmax}")
+                    print(f"    [{label}] reach {db_reach_id}: range rmin={rmin} rmax={rmax}")
                     if not dry_run:
-                        if rmin is not None:
-                            db.execute(
-                                "INSERT INTO reach_level "
-                                "(reach_id, level, low, low_data_type, "
-                                " high, high_data_type) "
-                                "VALUES (?, 'low', NULL, 'flow', ?, 'flow')",
-                                (db_reach_id, rmin),
-                            )
-                        if rmin is not None and rmax is not None:
-                            db.execute(
-                                "INSERT INTO reach_level "
-                                "(reach_id, level, low, low_data_type, "
-                                " high, high_data_type) "
-                                "VALUES (?, 'okay', ?, 'flow', ?, 'flow')",
-                                (db_reach_id, rmin, rmax),
-                            )
-                        if rmax is not None:
-                            db.execute(
-                                "INSERT INTO reach_level "
-                                "(reach_id, level, low, low_data_type, "
-                                " high, high_data_type) "
-                                "VALUES (?, 'high', ?, 'flow', NULL, 'flow')",
-                                (db_reach_id, rmax),
-                            )
+                        # Backfill low/high onto any existing reach_class rows;
+                        # if none, skip (class name is required and unknown here).
+                        db.execute(
+                            "UPDATE reach_class "
+                            "SET low=?, low_data_type='flow', "
+                            "    high=?, high_data_type='flow' "
+                            "WHERE reach_id=?",
+                            (rmin, rmax, db_reach_id),
+                        )
                     levels_added += 1
 
     if not dry_run:

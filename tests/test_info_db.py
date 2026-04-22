@@ -18,11 +18,10 @@ from kayak.db.models import (
     CalcExpression,
     DataType,
     FetchUrl,
-    FlowLevel,
     Gauge,
     GaugeSource,
     Reach,
-    ReachLevel,
+    ReachClass,
     ReachState,
     Source,
     State,
@@ -294,53 +293,35 @@ class TestClassifyLevel:
         reach = Reach(name="clf_r", gauge_id=gauge.id)
         session.add(reach)
         session.flush()
-        levels = [
-            ReachLevel(
+        session.add(
+            ReachClass(
                 reach_id=reach.id,
-                level=FlowLevel.low,
-                low=0.0,
-                low_data_type=DataType.flow,
-                high=500.0,
-                high_data_type=DataType.flow,
-            ),
-            ReachLevel(
-                reach_id=reach.id,
-                level=FlowLevel.okay,
+                name="III",
                 low=500.0,
                 low_data_type=DataType.flow,
                 high=2000.0,
                 high_data_type=DataType.flow,
-            ),
-            ReachLevel(
-                reach_id=reach.id,
-                level=FlowLevel.high,
-                low=2000.0,
-                low_data_type=DataType.flow,
-                high=5000.0,
-                high_data_type=DataType.flow,
-            ),
-        ]
-        session.add_all(levels)
+            )
+        )
         session.flush()
         return reach
 
     def test_classify_flow_okay(self, session):
         reach = self._make_reach_with_levels(session)
-        assert classify_level(reach, DataType.flow, 1000.0) == FlowLevel.okay
+        assert classify_level(reach, DataType.flow, 1000.0) == "okay"
 
     def test_classify_flow_low(self, session):
         reach = self._make_reach_with_levels(session)
-        assert classify_level(reach, DataType.flow, 100.0) == FlowLevel.low
+        assert classify_level(reach, DataType.flow, 100.0) == "low"
 
     def test_classify_flow_high(self, session):
         reach = self._make_reach_with_levels(session)
-        assert classify_level(reach, DataType.flow, 3000.0) == FlowLevel.high
+        assert classify_level(reach, DataType.flow, 3000.0) == "high"
 
     def test_classify_boundary_inclusive(self, session):
         reach = self._make_reach_with_levels(session)
-        # 500 is at the boundary of low [0, 500] and okay [500, 2000]
-        result = classify_level(reach, DataType.flow, 500.0)
-        assert result in (FlowLevel.low, FlowLevel.okay)
+        # 500 is at the okay-range's low boundary (inclusive)
+        assert classify_level(reach, DataType.flow, 500.0) == "okay"
 
     def test_classify_no_levels_returns_none(self, session):
         gauge = Gauge(name="nolvl_g")

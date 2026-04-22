@@ -40,7 +40,6 @@ LOAD_ORDER = [
     "reach",
     "reach_state",
     "reach_class",
-    "reach_level",
     "reach_guidebook",
     "huc_name",
 ]

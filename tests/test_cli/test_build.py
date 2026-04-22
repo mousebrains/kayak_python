@@ -18,12 +18,11 @@ from kayak.cli.build import (
 )
 from kayak.db.models import (
     DataType,
-    FlowLevel,
     Gauge,
     LatestGaugeObservation,
     Observation,
     Reach,
-    ReachLevel,
+    ReachClass,
     Source,
 )
 
@@ -209,15 +208,15 @@ class TestGetRowData:
         reach = Reach(name="lvl_r", display_name="Level River", gauge_id=gauge.id)
         session.add(reach)
         session.flush()
-        rl = ReachLevel(
+        rc = ReachClass(
             reach_id=reach.id,
-            level=FlowLevel.okay,
+            name="III",
             low=500.0,
             low_data_type=DataType.flow,
             high=2000.0,
             high_data_type=DataType.flow,
         )
-        session.add(rl)
+        session.add(rc)
         session.flush()
 
         now = datetime.now(UTC)
@@ -669,19 +668,19 @@ class TestLevelsKey:
         reach = Reach(name="lvl")
         session.add(reach)
         session.flush()
-        rl = ReachLevel(
+        rc = ReachClass(
             reach_id=reach.id,
-            level=FlowLevel.okay,
+            name="III",
             low=500.0,
             low_data_type=DataType.flow,
             high=2000.0,
             high_data_type=DataType.flow,
         )
-        session.add(rl)
+        session.add(rc)
         session.flush()
         key = _levels_key(reach)
         assert key != ()
-        assert len(key) == 1
+        assert len(key) == 4
 
 
 # ---------------------------------------------------------------------------

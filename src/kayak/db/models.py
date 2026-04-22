@@ -40,14 +40,6 @@ class DataType(enum.StrEnum):
     temperature = "temperature"
 
 
-class FlowLevel(enum.StrEnum):
-    """Flow level classifications for reach_level."""
-
-    low = "low"
-    okay = "okay"
-    high = "high"
-
-
 class PageAction(enum.StrEnum):
     """Page cache action types."""
 
@@ -452,7 +444,6 @@ class Reach(Base):
     gauge: Mapped[Gauge | None] = relationship(back_populates="reaches")
     states: Mapped[list[State]] = relationship(secondary="reach_state", back_populates="reaches")
     classes: Mapped[list[ReachClass]] = relationship(back_populates="reach")
-    levels: Mapped[list[ReachLevel]] = relationship(back_populates="reach")
     guidebooks: Mapped[list[Guidebook]] = relationship(
         secondary="reach_guidebook", back_populates="reaches"
     )
@@ -529,41 +520,6 @@ class ReachClass(Base):
         CheckConstraint(
             "low IS NULL OR high IS NULL OR low <= high",
             name="ck_reach_class_low_le_high",
-        ),
-    )
-
-
-# ---------------------------------------------------------------------------
-# reach_level
-# ---------------------------------------------------------------------------
-
-
-class ReachLevel(Base):
-    """Flow level classification (low/okay/high) for a reach.
-
-    Defines the threshold ranges used to color-code the levels table.
-    A reach may have multiple level rows (one per FlowLevel).
-    """
-
-    __tablename__ = "reach_level"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    reach_id: Mapped[int] = mapped_column(
-        ForeignKey("reach.id", ondelete="CASCADE"), nullable=False
-    )
-    level: Mapped[FlowLevel] = mapped_column(nullable=False)
-    low: Mapped[float | None] = mapped_column()
-    low_data_type: Mapped[DataType | None] = mapped_column()
-    high: Mapped[float | None] = mapped_column()
-    high_data_type: Mapped[DataType | None] = mapped_column()
-
-    # relationships
-    reach: Mapped[Reach] = relationship(back_populates="levels")
-
-    __table_args__ = (
-        CheckConstraint(
-            "low IS NULL OR high IS NULL OR low <= high",
-            name="ck_reach_level_low_le_high",
         ),
     )
 

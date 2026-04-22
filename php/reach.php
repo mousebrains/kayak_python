@@ -363,11 +363,29 @@ $classes_stmt = $db->prepare('SELECT * FROM reach_class WHERE reach_id = ?');
 $classes_stmt->execute([$id]);
 $classes = $classes_stmt->fetchAll();
 
-$levels_stmt = $db->prepare(
-    'SELECT level, low, low_data_type, high, high_data_type FROM reach_level WHERE reach_id = ? ORDER BY level'
+// Derive low/okay/high bands from the reach's primary class range (the
+// first reach_class row with populated bounds). Provides the same array
+// shape the renderer used when reach_level was the source of truth.
+$class_range_stmt = $db->prepare(
+    'SELECT low, low_data_type, high, high_data_type
+     FROM reach_class
+     WHERE reach_id = ? AND (low IS NOT NULL OR high IS NOT NULL)
+     ORDER BY id LIMIT 1'
 );
-$levels_stmt->execute([$id]);
-$flow_levels = $levels_stmt->fetchAll();
+$class_range_stmt->execute([$id]);
+$class_range = $class_range_stmt->fetch();
+$flow_levels = [];
+if ($class_range) {
+    $lo = $class_range['low'];
+    $hi = $class_range['high'];
+    $lo_dt = $class_range['low_data_type'] ?: 'flow';
+    $hi_dt = $class_range['high_data_type'] ?: 'flow';
+    $flow_levels = [
+        ['level' => 'low',  'low' => null, 'low_data_type' => $lo_dt, 'high' => $lo,   'high_data_type' => $lo_dt],
+        ['level' => 'okay', 'low' => $lo,  'low_data_type' => $lo_dt, 'high' => $hi,   'high_data_type' => $hi_dt],
+        ['level' => 'high', 'low' => $hi,  'low_data_type' => $hi_dt, 'high' => null,  'high_data_type' => $hi_dt],
+    ];
+}
 
 $gb_stmt = $db->prepare(
     'SELECT g.title, g.subtitle, g.edition, g.author, g.url AS book_url,

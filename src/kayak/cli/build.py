@@ -431,15 +431,14 @@ _GAUGE_FIELDS = {"time", "flow", "gage", "temperature", "status"}
 
 
 def _levels_key(reach: Reach) -> tuple:
-    """Return a hashable key representing a reach's flow level thresholds."""
-    if not reach.levels:
-        return ()
-    return tuple(
-        sorted(
-            (str(sl.level), sl.low, str(sl.low_data_type), sl.high, str(sl.high_data_type))
-            for sl in reach.levels
-        )
-    )
+    """Return a hashable key representing a reach's flow range.
+
+    Derived from the first reach_class row with populated bounds.
+    """
+    for rc in reach.classes:
+        if rc.low is not None or rc.high is not None:
+            return (rc.low, str(rc.low_data_type), rc.high, str(rc.high_data_type))
+    return ()
 
 
 def _filter_visible_rows(

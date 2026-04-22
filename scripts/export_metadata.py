@@ -34,7 +34,6 @@ METADATA_TABLES = [
     "reach",
     "reach_state",
     "reach_class",
-    "reach_level",
     "reach_guidebook",
     "huc_name",
 ]

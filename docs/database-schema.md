@@ -225,19 +225,6 @@ Whitewater classification ranges for a reach, with optional flow/gage thresholds
 | high | FLOAT | High threshold value |
 | high_data_type | VARCHAR(11) | Threshold type (flow or gauge) |
 
-#### reach_level
-Flow level classifications (low/okay/high) for color-coding on the website.
-
-| Column | Type | Notes |
-|--------|------|-------|
-| id | INTEGER | PK, autoincrement |
-| reach_id | INTEGER | FK -> reach.id (CASCADE), not null |
-| level | VARCHAR(4) | Not null (low, okay, high) |
-| low | FLOAT | Lower bound |
-| low_data_type | VARCHAR(11) | |
-| high | FLOAT | Upper bound |
-| high_data_type | VARCHAR(11) | |
-
 #### guidebook
 Reference guidebook publications.
 

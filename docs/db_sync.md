@@ -81,7 +81,7 @@ Result: your metadata edits are live, and no observations were lost.
 | `latest_observation`, `latest_gauge_observation` | **Replaced from live's final state.** The next pipeline tick will recompute them anyway. |
 | `pages` | **Cleared.** `levels build` regenerates it on the next run. |
 | `source`, `gauge`, `gauge_source`, `fetch_url`, `calc_expression` | **Local wins.** |
-| `reach`, `reach_state`, `reach_class`, `reach_level`, `class_description`, `guidebook`, `reach_guidebook` | **Local wins.** |
+| `reach`, `reach_state`, `reach_class`, `class_description`, `guidebook`, `reach_guidebook` | **Local wins.** |
 | `rating`, `rating_data` | **Local wins.** |
 | `state` | **Local wins.** |
 

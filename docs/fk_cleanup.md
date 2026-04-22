@@ -15,7 +15,6 @@ Snapshot taken 2026-04-15 (via `scripts/db_pull.sh`):
 | Table | Orphan rows | Parent |
 |---|---:|---|
 | `observation` | 209,602 | `source` |
-| `reach_level` | 237 | `reach` |
 | `reach_guidebook` | 106 | `reach` |
 | `reach_state` | 86 | `reach` |
 | `reach_class` | 81 | `reach` |
@@ -100,8 +99,6 @@ DELETE FROM gauge_source
 DELETE FROM reach_state
  WHERE reach_id NOT IN (SELECT id FROM reach);
 DELETE FROM reach_class
- WHERE reach_id NOT IN (SELECT id FROM reach);
-DELETE FROM reach_level
  WHERE reach_id NOT IN (SELECT id FROM reach);
 DELETE FROM reach_guidebook
  WHERE reach_id     NOT IN (SELECT id FROM reach)

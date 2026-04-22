@@ -37,7 +37,12 @@ SELECT DISTINCT r.id,
        lo_flow.value                  AS flow,
        lo_gage.value                  AS gage,
        lo_flow.delta_per_hour         AS flow_delta,
-       rl.level                       AS status
+       CASE
+           WHEN rc_range.low IS NULL OR lo_flow.value IS NULL THEN NULL
+           WHEN lo_flow.value <  rc_range.low  THEN 'low'
+           WHEN lo_flow.value >  rc_range.high THEN 'high'
+           ELSE 'okay'
+       END                            AS status
 FROM reach r
 JOIN reach_state rs ON r.id = rs.reach_id
 JOIN state st ON rs.state_id = st.id
@@ -46,11 +51,12 @@ LEFT JOIN latest_gauge_observation lo_flow
        ON g.id = lo_flow.gauge_id AND lo_flow.data_type = 'flow'
 LEFT JOIN latest_gauge_observation lo_gage
        ON g.id = lo_gage.gauge_id AND lo_gage.data_type = 'gauge'
-LEFT JOIN reach_level rl
-       ON rl.reach_id = r.id
-      AND rl.low_data_type = 'flow'
-      AND rl.low  <= lo_flow.value
-      AND lo_flow.value <= rl.high
+LEFT JOIN (
+    SELECT reach_id, MIN(low) AS low, MAX(high) AS high
+    FROM reach_class
+    WHERE low_data_type = 'flow' AND low IS NOT NULL AND high IS NOT NULL
+    GROUP BY reach_id
+) rc_range ON rc_range.reach_id = r.id
 WHERE r.no_show = 0 AND st.name IN ($placeholders)
 ORDER BY r.sort_name
 SQL;

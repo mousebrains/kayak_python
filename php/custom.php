@@ -40,7 +40,12 @@ SELECT r.id,
        lo_flow.observed_at              AS flow_time,
        lo_gage.observed_at              AS gage_time,
        lo_temp.observed_at              AS temp_time,
-       rl.level                         AS status,
+       CASE
+           WHEN rc_range.low IS NULL OR lo_flow.value IS NULL THEN NULL
+           WHEN lo_flow.value <  rc_range.low  THEN 'low'
+           WHEN lo_flow.value >  rc_range.high THEN 'high'
+           ELSE 'okay'
+       END                              AS status,
        (SELECT st.name FROM state st
           JOIN reach_state rs ON st.id = rs.state_id
           WHERE rs.reach_id = r.id
@@ -53,11 +58,12 @@ LEFT JOIN latest_gauge_observation lo_gage
        ON g.id = lo_gage.gauge_id AND lo_gage.data_type = 'gauge'
 LEFT JOIN latest_gauge_observation lo_temp
        ON g.id = lo_temp.gauge_id AND lo_temp.data_type = 'temperature'
-LEFT JOIN reach_level rl
-       ON rl.reach_id = r.id
-      AND rl.low_data_type = 'flow'
-      AND rl.low  <= lo_flow.value
-      AND lo_flow.value <= rl.high
+LEFT JOIN (
+    SELECT reach_id, MIN(low) AS low, MAX(high) AS high
+    FROM reach_class
+    WHERE low_data_type = 'flow' AND low IS NOT NULL AND high IS NOT NULL
+    GROUP BY reach_id
+) rc_range ON rc_range.reach_id = r.id
 WHERE r.id IN ($placeholders)
 SQL;
 

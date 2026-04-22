@@ -54,22 +54,25 @@ $full_reach_fields = ['display_name',
 $allow_full = in_array($tier, ['full', 'maintainer'], true);
 $reach_fields = $allow_full ? array_merge($text_fields, $full_reach_fields) : $text_fields;
 
-// Current reach_level + reach_class (for form prefill + diffing)
-$cur_levels = [];
+// Current classes + shared flow range (for form prefill + diffing)
+$cur_classes = [];
+$cur_range = ['low' => null, 'high' => null, 'data_type' => 'flow'];
 $st = $db->prepare(
-    'SELECT level, low, low_data_type, high, high_data_type
-     FROM reach_level WHERE reach_id = ? ORDER BY
-       CASE level WHEN \'low\' THEN 0 WHEN \'okay\' THEN 1 WHEN \'high\' THEN 2 ELSE 3 END'
+    'SELECT name, low, low_data_type, high, high_data_type
+     FROM reach_class WHERE reach_id = ? ORDER BY id'
 );
 $st->execute([$id]);
 foreach ($st->fetchAll() as $row) {
-    $cur_levels[$row['level']] = $row;
-}
-$cur_classes = [];
-$st = $db->prepare('SELECT name FROM reach_class WHERE reach_id = ? ORDER BY id');
-$st->execute([$id]);
-foreach ($st->fetchAll() as $row) {
     $cur_classes[] = $row['name'];
+    // First row with populated bounds wins as the primary range
+    if ($cur_range['low'] === null && $cur_range['high'] === null
+        && ($row['low'] !== null || $row['high'] !== null)) {
+        $cur_range = [
+            'low'       => $row['low'],
+            'high'      => $row['high'],
+            'data_type' => $row['low_data_type'] ?: ($row['high_data_type'] ?: 'flow'),
+        ];
+    }
 }
 
 // Load existing pending proposal by this editor for this reach — we update
@@ -164,31 +167,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ));
     }
 
-    // Full tier only: reach_level + reach_class from form
-    $proposed_levels = null;
-    $proposed_classes = null;
-    if ($allow_full && isset($_POST['levels_present'])) {
-        $proposed_levels = [];
-        foreach (['low', 'okay', 'high'] as $tier_name) {
-            $lo = trim((string)($_POST["level_{$tier_name}_low"]  ?? ''));
-            $hi = trim((string)($_POST["level_{$tier_name}_high"] ?? ''));
-            $dt = trim((string)($_POST["level_{$tier_name}_dt"]   ?? 'flow'));
-            if ($lo === '' && $hi === '') continue;
-            $proposed_levels[] = [
-                'level'         => $tier_name,
-                'low'           => $lo !== '' ? (float)$lo : null,
-                'high'          => $hi !== '' ? (float)$hi : null,
-                'low_data_type' => $dt,
-            ];
-        }
-        $issues = array_merge($issues, check_flow_range($proposed_levels));
-    }
+    // Full tier only: reach_class names + shared flow range from form
+    $proposed_class_payload = null;
     if ($allow_full && isset($_POST['classes_present'])) {
         $raw = trim((string)($_POST['classes'] ?? ''));
-        $proposed_classes = $raw === '' ? [] : array_values(array_filter(array_map('trim', explode(',', $raw))));
-        foreach ($proposed_classes as $c) {
+        $names = $raw === '' ? [] : array_values(array_filter(array_map('trim', explode(',', $raw))));
+        foreach ($names as $c) {
             $issues = array_merge($issues, check_class_string('class', $c));
         }
+        $lo = trim((string)($_POST['flow_low']  ?? ''));
+        $hi = trim((string)($_POST['flow_high'] ?? ''));
+        $dt = trim((string)($_POST['flow_data_type'] ?? 'flow'));
+        $range = [
+            'low'       => $lo !== '' ? (float)$lo : null,
+            'high'      => $hi !== '' ? (float)$hi : null,
+            'data_type' => $dt ?: 'flow',
+        ];
+        $issues = array_merge($issues, check_flow_range($range['low'], $range['high'], $range['data_type']));
+        $proposed_class_payload = ['names' => $names, 'range' => $range];
     }
 
     $notes = strip_html_tags(trim((string)($_POST['notes_to_maint'] ?? '')));
@@ -207,13 +203,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $payload['reach'][$f] = $v;
             }
         }
-        if ($proposed_levels !== null) {
-            // Always include levels as a unit if the user is editing them
-            $payload['reach_level'] = $proposed_levels;
-        }
-        if ($proposed_classes !== null
-            && $proposed_classes !== $cur_classes) {
-            $payload['reach_class'] = $proposed_classes;
+        if ($proposed_class_payload !== null) {
+            $cur_range_tuple = [$cur_range['low'], $cur_range['high'], $cur_range['data_type']];
+            $new_range_tuple = [
+                $proposed_class_payload['range']['low'],
+                $proposed_class_payload['range']['high'],
+                $proposed_class_payload['range']['data_type'],
+            ];
+            if ($proposed_class_payload['names'] !== $cur_classes
+                || $cur_range_tuple !== $new_range_tuple) {
+                $payload['reach_class'] = $proposed_class_payload;
+            }
         }
 
         if (empty($payload) && $notes === '') {
@@ -250,14 +250,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $cur_preview = strlen($cur) > 120 ? substr($cur, 0, 117) . '...' : $cur;
                 $summary_lines[] = "$f:\n  old: $cur_preview\n  new: $preview";
             }
-            if (isset($payload['reach_level'])) {
-                $summary_lines[] = 'reach_level: (full replacement of tier values — see review page)';
-            }
             if (isset($payload['reach_class'])) {
+                $fmt_range = function(array $r): string {
+                    $lo = $r['low']  ?? null;
+                    $hi = $r['high'] ?? null;
+                    $dt = $r['data_type'] ?? 'flow';
+                    if ($lo === null && $hi === null) return '(no range)';
+                    return ($lo ?? '-') . ' to ' . ($hi ?? '-') . " $dt";
+                };
+                $new_names = $payload['reach_class']['names'] ?? [];
+                $new_range = $payload['reach_class']['range'] ?? ['low'=>null,'high'=>null,'data_type'=>'flow'];
                 $summary_lines[] = 'reach_class: '
                     . (empty($cur_classes) ? '(none)' : implode(', ', $cur_classes))
                     . ' -> '
-                    . (empty($payload['reach_class']) ? '(none)' : implode(', ', $payload['reach_class']));
+                    . (empty($new_names) ? '(none)' : implode(', ', $new_names));
+                $summary_lines[] = 'flow range: '
+                    . $fmt_range($cur_range) . ' -> ' . $fmt_range($new_range);
             }
             $summary = $summary_lines
                 ? implode("\n\n", $summary_lines)
@@ -360,35 +368,33 @@ include_header(
 
     <?php if ($allow_full): ?>
       <fieldset style="border:1px solid var(--c-border);padding:.6rem;margin-top:.75rem">
-        <legend>Flow range (CFS unless marked)</legend>
-        <input type="hidden" name="levels_present" value="1">
-        <table style="width:100%;font-size:.85rem">
-          <tr><th></th><th>Low</th><th>High</th><th>Type</th></tr>
-          <?php foreach (['low', 'okay', 'high'] as $tn):
-            $row = $cur_levels[$tn] ?? null; ?>
+        <legend>Classes and flow range</legend>
+        <input type="hidden" name="classes_present" value="1">
+        <label>Classes (comma-separated, e.g. <code>III, III+</code>)</label>
+        <input type="text" name="classes"
+               value="<?= htmlspecialchars(implode(', ', $cur_classes)) ?>">
+        <table style="width:100%;font-size:.85rem;margin-top:.5rem">
+          <tr><th>Low</th><th>High</th><th>Type</th></tr>
           <tr>
-            <td><?= ucfirst($tn) ?></td>
-            <td><input type="number" step="any" name="level_<?= $tn ?>_low"
-                       value="<?= htmlspecialchars((string)($row['low'] ?? '')) ?>"></td>
-            <td><input type="number" step="any" name="level_<?= $tn ?>_high"
-                       value="<?= htmlspecialchars((string)($row['high'] ?? '')) ?>"></td>
+            <td><input type="number" step="any" name="flow_low"
+                       value="<?= htmlspecialchars((string)($cur_range['low'] ?? '')) ?>"></td>
+            <td><input type="number" step="any" name="flow_high"
+                       value="<?= htmlspecialchars((string)($cur_range['high'] ?? '')) ?>"></td>
             <td>
-              <select name="level_<?= $tn ?>_dt">
-                <?php $sel = $row['low_data_type'] ?? 'flow';
+              <select name="flow_data_type">
+                <?php $sel = $cur_range['data_type'] ?? 'flow';
                 foreach (['flow', 'gauge'] as $dt): ?>
                   <option value="<?= $dt ?>"<?= $sel === $dt ? ' selected' : '' ?>><?= $dt ?></option>
                 <?php endforeach ?>
               </select>
             </td>
           </tr>
-          <?php endforeach ?>
         </table>
+        <p style="font-size:.8rem;color:var(--c-muted);margin-top:.35rem">
+          Single range applied to every class above. The site derives "below range / in range / above range"
+          bands from these bounds.
+        </p>
       </fieldset>
-
-      <label style="margin-top:.75rem">Classes (comma-separated, e.g. <code>III, III+</code>)</label>
-      <input type="hidden" name="classes_present" value="1">
-      <input type="text" name="classes"
-             value="<?= htmlspecialchars(implode(', ', $cur_classes)) ?>">
 
       <fieldset style="border:1px solid var(--c-border);padding:.6rem;margin-top:.75rem">
         <legend>Put-in / Take-out</legend>

@@ -97,57 +97,29 @@ function check_class_string(string $field, string $value): array {
 }
 
 // ---------------------------------------------------------------------------
-// Flow range (reach_level: low/okay/high tiers)
+// Flow range (single low/high applied to all reach_class rows)
 // ---------------------------------------------------------------------------
 
 /**
- * Validate an array of flow level rows. Each row: level, low, high, low_data_type.
+ * Validate a single flow range (low, high, data_type).
  *
- * - Within a tier: low <= high.
+ * - low <= high.
  * - CFS values in [0, 200000], gauge-ft in [-20, 100].
- * - Tiers must be monotonic: low.high <= okay.low, okay.high <= high.low.
  */
-function check_flow_range(array $levels): array {
+function check_flow_range(?float $low, ?float $high, string $data_type = 'flow'): array {
     $issues = [];
-    $by_tier = [];
     $ranges = ['flow' => [0, 200000], 'gauge' => [-20, 100],
                'inflow' => [0, 200000], 'temperature' => [-20, 120]];
 
-    foreach ($levels as $row) {
-        $tier = $row['level'] ?? '';
-        if (!in_array($tier, ['low', 'okay', 'high'], true)) {
-            $issues[] = ['level' => 'error', 'field' => 'flow_range',
-                         'message' => "Unknown tier: $tier"];
-            continue;
-        }
-        $dt = $row['low_data_type'] ?? 'flow';
-        $lo = isset($row['low'])  && $row['low']  !== '' ? (float)$row['low']  : null;
-        $hi = isset($row['high']) && $row['high'] !== '' ? (float)$row['high'] : null;
-
-        if ($lo !== null && $hi !== null && $lo > $hi) {
-            $issues[] = ['level' => 'error', 'field' => "flow_range.$tier",
-                         'message' => "Low must be \u{2264} high for $tier tier ($lo > $hi)."];
-        }
-        [$rmin, $rmax] = $ranges[$dt] ?? [0, 200000];
-        foreach (['low' => $lo, 'high' => $hi] as $which => $v) {
-            if ($v !== null && ($v < $rmin || $v > $rmax)) {
-                $issues[] = ['level' => 'warning', 'field' => "flow_range.$tier",
-                             'message' => "$tier.$which = $v is outside $dt range [$rmin, $rmax]."];
-            }
-        }
-        $by_tier[$tier] = ['low' => $lo, 'high' => $hi];
+    if ($low !== null && $high !== null && $low > $high) {
+        $issues[] = ['level' => 'error', 'field' => 'flow_range',
+                     'message' => "Low must be \u{2264} high ($low > $high)."];
     }
-
-    // Monotonicity between tiers
-    $order = ['low', 'okay', 'high'];
-    for ($i = 0; $i < count($order) - 1; $i++) {
-        $a = $by_tier[$order[$i]]     ?? null;
-        $b = $by_tier[$order[$i + 1]] ?? null;
-        if ($a === null || $b === null) continue;
-        if ($a['high'] !== null && $b['low'] !== null && $a['high'] > $b['low']) {
+    [$rmin, $rmax] = $ranges[$data_type] ?? [0, 200000];
+    foreach (['low' => $low, 'high' => $high] as $which => $v) {
+        if ($v !== null && ($v < $rmin || $v > $rmax)) {
             $issues[] = ['level' => 'warning', 'field' => 'flow_range',
-                         'message' => sprintf('%s.high (%s) > %s.low (%s) — tiers overlap.',
-                                              $order[$i], $a['high'], $order[$i + 1], $b['low'])];
+                         'message' => "$which = $v is outside $data_type range [$rmin, $rmax]."];
         }
     }
     return $issues;

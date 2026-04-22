@@ -119,12 +119,27 @@ $classes_stmt = $db->prepare('SELECT name FROM reach_class WHERE reach_id = ?');
 $classes_stmt->execute([$id]);
 $classes = array_column($classes_stmt->fetchAll(), 'name');
 
-// Load flow levels (low, okay, high)
-$levels_stmt = $db->prepare(
-    'SELECT level, low, low_data_type, high, high_data_type FROM reach_level WHERE reach_id = ? ORDER BY level'
+// Derive low/okay/high bands from the reach's primary class range.
+$class_range_stmt = $db->prepare(
+    'SELECT low, low_data_type, high, high_data_type
+     FROM reach_class
+     WHERE reach_id = ? AND (low IS NOT NULL OR high IS NOT NULL)
+     ORDER BY id LIMIT 1'
 );
-$levels_stmt->execute([$id]);
-$flow_levels = $levels_stmt->fetchAll();
+$class_range_stmt->execute([$id]);
+$class_range = $class_range_stmt->fetch();
+$flow_levels = [];
+if ($class_range) {
+    $lo = $class_range['low'];
+    $hi = $class_range['high'];
+    $lo_dt = $class_range['low_data_type'] ?: 'flow';
+    $hi_dt = $class_range['high_data_type'] ?: 'flow';
+    $flow_levels = [
+        ['level' => 'low',  'low' => null, 'low_data_type' => $lo_dt, 'high' => $lo,   'high_data_type' => $lo_dt],
+        ['level' => 'okay', 'low' => $lo,  'low_data_type' => $lo_dt, 'high' => $hi,   'high_data_type' => $hi_dt],
+        ['level' => 'high', 'low' => $hi,  'low_data_type' => $hi_dt, 'high' => null,  'high_data_type' => $hi_dt],
+    ];
+}
 
 header('Cache-Control: max-age=300');
 $preconnects = '<link rel="preconnect" href="https://a.tile.opentopomap.org">'

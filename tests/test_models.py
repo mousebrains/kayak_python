@@ -10,7 +10,6 @@ from kayak.db.models import (
     ClassDescription,
     DataType,
     FetchUrl,
-    FlowLevel,
     Gauge,
     GaugeSource,
     Guidebook,
@@ -22,7 +21,6 @@ from kayak.db.models import (
     RatingData,
     Reach,
     ReachClass,
-    ReachLevel,
     Source,
     State,
 )
@@ -174,21 +172,6 @@ def test_reach_class(session, sample_reach):
     reach = session.get(Reach, sample_reach.id)
     assert len(reach.classes) == 1
     assert reach.classes[0].name == "III"
-
-
-def test_reach_level(session, sample_reach):
-    rl = ReachLevel(
-        reach_id=sample_reach.id,
-        level=FlowLevel.okay,
-        low=800.0,
-        low_data_type=DataType.flow,
-    )
-    session.add(rl)
-    session.flush()
-
-    reach = session.get(Reach, sample_reach.id)
-    assert len(reach.levels) == 1
-    assert reach.levels[0].level == FlowLevel.okay
 
 
 def test_rating_and_data(session):

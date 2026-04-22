@@ -26,7 +26,7 @@ $db = get_db();
 /**
  * Load the current state for a change_request's target so we can diff
  * and later build edit_history rows. Returns associative state arrays
- * keyed by 'reach', 'reach_level', 'reach_class'.
+ * keyed by 'reach', 'reach_class' (names + primary range).
  */
 function review_load_target_state(PDO $db, string $type, int $id): ?array {
     if ($type !== 'reach') return null;
@@ -34,20 +34,26 @@ function review_load_target_state(PDO $db, string $type, int $id): ?array {
     $st->execute([$id]);
     $reach = $st->fetch();
     if (!$reach) return null;
+
     $st = $db->prepare(
-        'SELECT level, low, low_data_type, high, high_data_type
-         FROM reach_level WHERE reach_id = ? ORDER BY
-           CASE level WHEN \'low\' THEN 0 WHEN \'okay\' THEN 1 WHEN \'high\' THEN 2 ELSE 3 END'
+        'SELECT name, low, low_data_type, high, high_data_type
+         FROM reach_class WHERE reach_id = ? ORDER BY id'
     );
     $st->execute([$id]);
-    $levels = [];
-    foreach ($st->fetchAll() as $row) $levels[$row['level']] = $row;
-
-    $st = $db->prepare('SELECT name FROM reach_class WHERE reach_id = ? ORDER BY id');
-    $st->execute([$id]);
-    $classes = array_column($st->fetchAll(), 'name');
-
-    return ['reach' => $reach, 'reach_level' => $levels, 'reach_class' => $classes];
+    $rows = $st->fetchAll();
+    $classes = array_column($rows, 'name');
+    $range = ['low' => null, 'high' => null, 'data_type' => 'flow'];
+    foreach ($rows as $row) {
+        if ($row['low'] !== null || $row['high'] !== null) {
+            $range = [
+                'low'       => $row['low'],
+                'high'      => $row['high'],
+                'data_type' => $row['low_data_type'] ?: ($row['high_data_type'] ?: 'flow'),
+            ];
+            break;
+        }
+    }
+    return ['reach' => $reach, 'reach_class' => ['names' => $classes, 'range' => $range]];
 }
 
 function review_approve(PDO $db, array $cr, array $applied, int $maint_id): array {
@@ -85,53 +91,32 @@ function review_approve(PDO $db, array $cr, array $applied, int $maint_id): arra
             }
         }
 
-        // Apply reach_level: replace the set atomically
-        if (isset($applied['reach_level'])) {
-            $old_dump = json_encode($cur['reach_level'], JSON_UNESCAPED_SLASHES);
-            $new_dump = json_encode($applied['reach_level'], JSON_UNESCAPED_SLASHES);
+        // Apply reach_class: names + shared flow range. Replace set atomically.
+        if (isset($applied['reach_class'])) {
+            $old = $cur['reach_class'];
+            $new = $applied['reach_class'];
+            $old_dump = json_encode($old, JSON_UNESCAPED_SLASHES);
+            $new_dump = json_encode($new, JSON_UNESCAPED_SLASHES);
             if ($old_dump !== $new_dump) {
-                $db->prepare('DELETE FROM reach_level WHERE reach_id = ?')->execute([$tid]);
+                $names = $new['names'] ?? [];
+                $range = $new['range'] ?? ['low' => null, 'high' => null, 'data_type' => 'flow'];
+                $dt = $range['data_type'] ?? 'flow';
+                $db->prepare('DELETE FROM reach_class WHERE reach_id = ?')->execute([$tid]);
                 $ins = $db->prepare(
-                    'INSERT INTO reach_level (reach_id, level, low, low_data_type, high, high_data_type)
+                    'INSERT INTO reach_class
+                     (reach_id, name, low, low_data_type, high, high_data_type)
                      VALUES (?, ?, ?, ?, ?, ?)'
                 );
-                foreach ($applied['reach_level'] as $row) {
-                    $ins->execute([
-                        $tid,
-                        $row['level'],
-                        $row['low']  ?? null,
-                        $row['low_data_type']  ?? 'flow',
-                        $row['high'] ?? null,
-                        $row['low_data_type']  ?? 'flow',  // mirror type for both sides
-                    ]);
+                foreach ($names as $n) {
+                    $ins->execute([$tid, $n,
+                                   $range['low']  ?? null, $dt,
+                                   $range['high'] ?? null, $dt]);
                 }
                 $db->prepare(
                     "INSERT INTO edit_history
                      (target_type, target_id, change_request_id, field, old_value, new_value, changed_at, changed_by)
-                     VALUES (?, ?, ?, 'reach_level', ?, ?, datetime('now'), ?)"
-                )->execute([$type, $tid, $cr['id'], $old_dump, $new_dump, 'editor:' . $cr['editor_id']]);
-            }
-        }
-
-        // Apply reach_class: replace
-        if (isset($applied['reach_class'])) {
-            $old = $cur['reach_class'];
-            $new = $applied['reach_class'];
-            if ($old !== $new) {
-                $db->prepare('DELETE FROM reach_class WHERE reach_id = ?')->execute([$tid]);
-                $ins = $db->prepare(
-                    'INSERT INTO reach_class (reach_id, name) VALUES (?, ?)'
-                );
-                foreach ($new as $n) $ins->execute([$tid, $n]);
-
-                $db->prepare(
-                    "INSERT INTO edit_history
-                     (target_type, target_id, change_request_id, field, old_value, new_value, changed_at, changed_by)
                      VALUES (?, ?, ?, 'reach_class', ?, ?, datetime('now'), ?)"
-                )->execute([$type, $tid, $cr['id'],
-                            implode(', ', $old),
-                            implode(', ', $new),
-                            'editor:' . $cr['editor_id']]);
+                )->execute([$type, $tid, $cr['id'], $old_dump, $new_dump, 'editor:' . $cr['editor_id']]);
             }
         }
 
@@ -226,7 +211,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'approve') {
         // Reconstruct the (possibly tweaked) applied payload from POST fields
         $payload = json_decode((string)$cr['payload_json'], true) ?: [];
-        $applied = ['reach' => [], 'reach_level' => null, 'reach_class' => null];
+        $applied = ['reach' => [], 'reach_class' => null];
 
         if (!empty($payload['reach'])) {
             foreach (array_keys($payload['reach']) as $f) {
@@ -237,28 +222,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
-        if (isset($payload['reach_level']) && isset($_POST['levels_present'])) {
-            $applied['reach_level'] = [];
-            foreach (['low', 'okay', 'high'] as $tn) {
-                $lo = trim((string)($_POST["level_{$tn}_low"]  ?? ''));
-                $hi = trim((string)($_POST["level_{$tn}_high"] ?? ''));
-                $dt = trim((string)($_POST["level_{$tn}_dt"]   ?? 'flow'));
-                if ($lo === '' && $hi === '') continue;
-                $applied['reach_level'][] = [
-                    'level' => $tn,
-                    'low'   => $lo !== '' ? (float)$lo : null,
-                    'high'  => $hi !== '' ? (float)$hi : null,
-                    'low_data_type' => $dt,
-                ];
-            }
-        } else {
-            unset($applied['reach_level']);
-        }
         if (isset($payload['reach_class']) && isset($_POST['classes_present'])) {
             $raw = trim((string)($_POST['classes'] ?? ''));
-            $applied['reach_class'] = $raw === ''
-                ? []
-                : array_values(array_filter(array_map('trim', explode(',', $raw))));
+            $names = $raw === '' ? [] : array_values(array_filter(array_map('trim', explode(',', $raw))));
+            $lo = trim((string)($_POST['flow_low']       ?? ''));
+            $hi = trim((string)($_POST['flow_high']      ?? ''));
+            $dt = trim((string)($_POST['flow_data_type'] ?? 'flow'));
+            $applied['reach_class'] = [
+                'names' => $names,
+                'range' => [
+                    'low'       => $lo !== '' ? (float)$lo : null,
+                    'high'      => $hi !== '' ? (float)$hi : null,
+                    'data_type' => $dt ?: 'flow',
+                ],
+            ];
         } else {
             unset($applied['reach_class']);
         }
@@ -361,36 +338,28 @@ if ($cr_id) {
         echo '</table>';
     }
 
-    if (isset($payload['reach_level'])) {
-        echo '<h3>Flow levels (editable)</h3>';
-        echo '<input type="hidden" name="levels_present" value="1">';
-        echo '<table class="desc-table"><tr><th></th><th>Current low/high</th><th>Proposed low</th><th>Proposed high</th><th>Type</th></tr>';
-        $proposed_by_tier = [];
-        foreach ($payload['reach_level'] as $row) $proposed_by_tier[$row['level']] = $row;
-        foreach (['low', 'okay', 'high'] as $tn) {
-            $c = $cur && isset($cur['reach_level'][$tn]) ? $cur['reach_level'][$tn] : null;
-            $p = $proposed_by_tier[$tn] ?? null;
-            $cur_str = $c ? (($c['low'] ?? '') . ' — ' . ($c['high'] ?? '')) : '(none)';
-            echo '<tr><td>' . $tn . '</td>';
-            echo '<td>' . htmlspecialchars($cur_str) . '</td>';
-            echo '<td><input type="number" step="any" name="level_' . $tn . '_low" value="' . htmlspecialchars((string)($p['low'] ?? '')) . '"></td>';
-            echo '<td><input type="number" step="any" name="level_' . $tn . '_high" value="' . htmlspecialchars((string)($p['high'] ?? '')) . '"></td>';
-            echo '<td><select name="level_' . $tn . '_dt">';
-            $sel = $p['low_data_type'] ?? 'flow';
-            foreach (['flow', 'gauge'] as $dt) {
-                echo '<option value="' . $dt . '"' . ($sel === $dt ? ' selected' : '') . '>' . $dt . '</option>';
-            }
-            echo '</select></td></tr>';
-        }
-        echo '</table>';
-    }
-
     if (isset($payload['reach_class'])) {
-        echo '<h3>Classes</h3>';
+        echo '<h3>Classes and flow range (editable)</h3>';
         echo '<input type="hidden" name="classes_present" value="1">';
-        $cur_cls = $cur ? implode(', ', $cur['reach_class']) : '';
-        echo '<p>Current: <code>' . htmlspecialchars($cur_cls) . '</code></p>';
-        echo '<input type="text" name="classes" value="' . htmlspecialchars(implode(', ', $payload['reach_class'])) . '" style="width:100%">';
+        $cur_names = $cur['reach_class']['names'] ?? [];
+        $cur_range = $cur['reach_class']['range'] ?? ['low'=>null,'high'=>null,'data_type'=>'flow'];
+        $p_names = $payload['reach_class']['names'] ?? [];
+        $p_range = $payload['reach_class']['range'] ?? ['low'=>null,'high'=>null,'data_type'=>'flow'];
+        echo '<p>Current classes: <code>' . htmlspecialchars(implode(', ', $cur_names) ?: '(none)') . '</code></p>';
+        $cur_range_str = ($cur_range['low'] ?? '-') . ' to ' . ($cur_range['high'] ?? '-')
+                       . ' ' . ($cur_range['data_type'] ?? 'flow');
+        echo '<p>Current range: <code>' . htmlspecialchars($cur_range_str) . '</code></p>';
+        echo '<label>Proposed classes (comma-separated)</label>';
+        echo '<input type="text" name="classes" value="' . htmlspecialchars(implode(', ', $p_names)) . '" style="width:100%">';
+        echo '<table style="margin-top:.5rem"><tr><th>Low</th><th>High</th><th>Type</th></tr><tr>';
+        echo '<td><input type="number" step="any" name="flow_low" value="'  . htmlspecialchars((string)($p_range['low']  ?? '')) . '"></td>';
+        echo '<td><input type="number" step="any" name="flow_high" value="' . htmlspecialchars((string)($p_range['high'] ?? '')) . '"></td>';
+        echo '<td><select name="flow_data_type">';
+        $sel = $p_range['data_type'] ?? 'flow';
+        foreach (['flow', 'gauge'] as $dt) {
+            echo '<option value="' . $dt . '"' . ($sel === $dt ? ' selected' : '') . '>' . $dt . '</option>';
+        }
+        echo '</select></td></tr></table>';
     }
 
     echo '<h3 style="margin-top:1rem">Decision</h3>';

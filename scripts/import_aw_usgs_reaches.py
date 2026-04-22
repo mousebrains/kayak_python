@@ -471,28 +471,16 @@ def create_reaches(db, aw_reaches, usgs_to_gauge, dry_run):
                     rmin = _float(g["rmin"])
                 if g.get("rmax") is not None:
                     rmax = _float(g["rmax"])
-            if rmin is not None or rmax is not None:
-                if rmin is not None:
-                    db.execute(
-                        "INSERT INTO reach_level "
-                        "(reach_id, level, low, low_data_type, high, high_data_type) "
-                        "VALUES (?, 'low', NULL, 'flow', ?, 'flow')",
-                        (reach_id, rmin),
-                    )
-                if rmin is not None and rmax is not None:
-                    db.execute(
-                        "INSERT INTO reach_level "
-                        "(reach_id, level, low, low_data_type, high, high_data_type) "
-                        "VALUES (?, 'okay', ?, 'flow', ?, 'flow')",
-                        (reach_id, rmin, rmax),
-                    )
-                if rmax is not None:
-                    db.execute(
-                        "INSERT INTO reach_level "
-                        "(reach_id, level, low, low_data_type, high, high_data_type) "
-                        "VALUES (?, 'high', ?, 'flow', NULL, 'flow')",
-                        (reach_id, rmax),
-                    )
+            if (rmin is not None or rmax is not None) and difficulties:
+                # Store the flow range on a reach_class row; reach_level
+                # is deprecated and its low/okay/high bands are now derived
+                # in the renderer from these bounds.
+                db.execute(
+                    "INSERT INTO reach_class "
+                    "(reach_id, name, low, low_data_type, high, high_data_type) "
+                    "VALUES (?, ?, ?, 'flow', ?, 'flow')",
+                    (reach_id, difficulties, rmin, rmax),
+                )
 
             new_reaches.append((reach_id, aw_id))
 

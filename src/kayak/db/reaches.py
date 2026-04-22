@@ -5,7 +5,7 @@ from collections.abc import Iterable
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from kayak.db.models import DataType, FlowLevel, Gauge, Reach, State
+from kayak.db.models import DataType, Gauge, Reach, State
 
 
 def all_states(session: Session) -> list[State]:
@@ -60,7 +60,6 @@ def reaches_query(
             joinedload(Reach.gauge),
             selectinload(Reach.states),
             selectinload(Reach.classes),
-            selectinload(Reach.levels),
         )
 
     if state_name:
@@ -133,21 +132,23 @@ def classify_level(
     reach: Reach,
     data_type: DataType,
     value: float,
-) -> FlowLevel | None:
-    """Return the FlowLevel for a value given a reach's level ranges.
-
-    Checks the reach.levels list for a matching range where the
-    data_type matches and value falls within [low, high].
+) -> str | None:
+    """Classify a value as 'low', 'okay', or 'high' relative to the reach's
+    flow range (the first reach_class row with populated low/high whose
+    data_type matches). Returns None if no range is defined.
     """
-    for sl in reach.levels:
-        # Match on data_type — low_data_type and high_data_type should
-        # both match the queried type (when set).
-        if sl.low_data_type and sl.low_data_type != data_type:
+    for rc in reach.classes:
+        if rc.low is None and rc.high is None:
             continue
-        if sl.high_data_type and sl.high_data_type != data_type:
+        if rc.low_data_type and rc.low_data_type != data_type:
             continue
-        low = sl.low if sl.low is not None else float("-inf")
-        high = sl.high if sl.high is not None else float("inf")
-        if low <= value <= high:
-            return sl.level
+        if rc.high_data_type and rc.high_data_type != data_type:
+            continue
+        low = rc.low
+        high = rc.high
+        if low is not None and value < low:
+            return "low"
+        if high is not None and value > high:
+            return "high"
+        return "okay"
     return None

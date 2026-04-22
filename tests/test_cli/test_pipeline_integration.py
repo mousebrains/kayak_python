@@ -25,7 +25,7 @@ from kayak.db.models import (
     Gauge,
     GaugeSource,
     Reach,
-    ReachLevel,
+    ReachClass,
     ReachState,
     Source,
     State,
@@ -90,20 +90,16 @@ def _seed(db_url: str) -> None:
         ).scalar_one()
         s.add(ReachState(reach_id=reach.id, state_id=or_id))
 
-        # Flow ranges so the build step classifies the observation as "okay".
-        s.add_all(
-            [
-                ReachLevel(reach_id=reach.id, level="low", high=200.0, high_data_type="flow"),
-                ReachLevel(
-                    reach_id=reach.id,
-                    level="okay",
-                    low=200.0,
-                    low_data_type="flow",
-                    high=800.0,
-                    high_data_type="flow",
-                ),
-                ReachLevel(reach_id=reach.id, level="high", low=800.0, low_data_type="flow"),
-            ]
+        # Flow range so the build step classifies the observation as "okay".
+        s.add(
+            ReachClass(
+                reach_id=reach.id,
+                name="III",
+                low=200.0,
+                low_data_type="flow",
+                high=800.0,
+                high_data_type="flow",
+            )
         )
         s.commit()
 
