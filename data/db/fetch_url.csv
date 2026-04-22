@@ -133,3 +133,6 @@ id,url,parser,hours,is_active
 10932,https://www.nwrfc.noaa.gov/xml/xml.cgi?id=KLCW1&pe=HG&dtype=b&numdays=1,nwrfc.xml,,1
 10934,https://api.water.noaa.gov/nwps/v1/gauges/LWWW1/stageflow/observed,nwps,,1
 10935,https://api.water.noaa.gov/nwps/v1/gauges/WCNW1/stageflow/observed,nwps,,1
+10936,https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/28B080/28B080_WTM_FM.TXT,wa.gov,,1
+10937,https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/28B080/28B080_STG_FM.TXT,wa.gov,,1
+10938,https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/28B080/28B080_DSG_FM.TXT,wa.gov,,1
