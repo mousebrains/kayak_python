@@ -342,8 +342,11 @@ reach_id,guidebook_id,page,run,url
 5046,2,111,70,
 5046,3,143,77,
 5046,10,,,https://www.oregonkayaking.net/creeks/winberry/winberry.html
+5051,2,213,158,
 5051,3,270,171,
-5051,10,,,https://www.oregonkayaking.net/rivers/uwind/uwind.html
+5051,4,278,166,
+5051,5,37,12,
+5051,7,405,90,
 5163,11,,,https://www.dreamflows.com/xlist-ca.php#Site519
 5165,2,"68,68","32,33",
 5165,3,"81,82","31,32",
@@ -1047,3 +1050,9 @@ reach_id,guidebook_id,page,run,url
 5854,3,265,168,
 5854,6,31,5,
 5854,7,202,47,
+5855,5,33,7,
+5856,5,34,8,
+5857,2,211,157,
+5857,3,268,170,
+5857,4,276,165,
+5857,5,34,9,

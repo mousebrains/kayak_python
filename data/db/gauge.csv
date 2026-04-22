@@ -202,3 +202,4 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 2123,EFSF_Stibnite,,,,44.905722,-115.3295,,SFSI,,,SFSI1,,13311000,,6466.0,19.3,170602080201,0
 2124,EFSF_Salmon_calc,,,EFSF just below Johnson Cr confluence (Johnson + Stibnite),44.962554,-115.505507,,,,,,,,,,,17060208,0
 2125,LWWW1,,,Willard National Fish Hatchery,45.7648,-121.6303,,LWWW,,,LWWW1,,,,,,170701050905,0
+2126,14128500,,,Carson,45.7267469824777,-121.794774605898,,WCNW,,,WCNW1,,14128500,,,,170701051008,0
