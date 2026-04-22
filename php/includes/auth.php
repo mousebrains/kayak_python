@@ -130,7 +130,8 @@ function current_editor(): ?array {
 
     $hash = hash_token($tok);
     $stmt = get_db()->prepare(
-        'SELECT e.*, s.id AS session_id, s.expires_at AS session_expires_at
+        'SELECT e.*, s.id AS session_id, s.expires_at AS session_expires_at,
+                s.last_seen_at AS session_last_seen_at
          FROM editor_session s
          JOIN editor e ON e.id = s.editor_id
          WHERE s.token_hash = ?
@@ -142,8 +143,19 @@ function current_editor(): ?array {
     $row = $stmt->fetch();
     if (!$row) return $editor = null;
 
-    get_db()->prepare('UPDATE editor_session SET last_seen_at = datetime(\'now\') WHERE id = ?')
-        ->execute([$row['session_id']]);
+    // Throttle to ~60s and swallow SQLITE_BUSY. This runs on every page
+    // load via render_nav(); without the throttle, service-worker prefetch
+    // bursts plus a concurrent pipeline write can exhaust busy_timeout and
+    // turn a bookkeeping update into a 500.
+    $last_ts = (int)strtotime((string)($row['session_last_seen_at'] ?? '') . ' UTC');
+    if ($last_ts < time() - 60) {
+        try {
+            get_db()->prepare('UPDATE editor_session SET last_seen_at = datetime(\'now\') WHERE id = ?')
+                ->execute([$row['session_id']]);
+        } catch (\PDOException $e) {
+            error_log('editor_session last_seen_at update skipped: ' . $e->getMessage());
+        }
+    }
     return $editor = $row;
 }
 
