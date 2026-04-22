@@ -124,7 +124,7 @@ https://storymaps.arcgis.com/stories/67e9eca2ac0d45959f03e6ce0e3a37f8",100.0,Mid
 4997,,1924,PRTO,Willamette,Willamette 0d 5,,Clackamette to Columbia,,Clackamas,,2.0,2.0,24.6,0.10000000149011612,,45.52,-122.67,45.372583,-122.603216,45.651203,-122.766262,0,,,,,,,,,,,170900110607,1,0
 5014,,1931,11493500,Williamson,Williamson,,,,Williamson,1290.0,4483.16,,,,,42.7401,-121.834,42.740643,-121.834071,42.657733,-121.849725,0,,,,,,,,11029,,,180102010602,0,0
 5046,2026-04-18 01:05:36,1948,WCLO,Winberry Creek,Winberry 0,Creek,Campground to Reservoir,III+(V),Middle Fork Willamette,,1125.9,285.1,4.92,58.0,,43.911617,-122.657847,43.900508,-122.619289,43.922726,-122.696405,0,,500.0,Upper Willamette,Not Remote,forest,Nov-Apr,,3209,Winberry Creek,111.4,170900010905,0,0
-5051,,1950,Wind aa,Wind River,Wind 0,Pool Drop,,Portage,Middle Columbia-Hood,,,250.0,5.0,50.0,Falls to Portage,,,45.808498,-121.908997,45.753502,-121.842003,0,,800.0,Southern Washington,Not Very Remote,forest/gorge,Nov-May,,2273,,,170701051004,0,0
+5051,,1950,Wind aa,Wind River,Wind River ag 04,Pool Drop,,Portage,Middle Columbia-Hood,,,250.0,5.0,50.0,Falls to Portage,,,45.808498,-121.908997,45.753502,-121.842003,0,,800.0,Southern Washington,Not Very Remote,forest/gorge,Nov-May,,2274,Wind River,,170701051004,0,0
 5163,,761,aw_11615,Klamath,Klamath ag 04,,Access 6 to 1,II+,Upper Klamath,,,122.69999694824219,5.0,24.600000381469727,,41.978766,-122.221503,41.991229,-122.190844,41.964207,-122.261113,0,,,,,,,,11615,Klamath,,180102060204,0,0
 5165,,1566,aw_297,MF Smith,Smith ag 08,,Patrick Creek to Forks,II-V,Smith,,800.0,678.0,16.5,41.0,,41.836165,-123.95001,41.87357,-123.84365,41.79876,-124.05637,0,,,,,,,,297,Smith,,180101010204,0,0
 5169,,761,aw_3169,Klamath,Klamath ag 03,,Spring Island to Access 6,III-IV+,Upper Klamath,,,581.9000244140625,12.2,47.70000076293945,,42.040466,-122.1313555,42.089098,-122.072251,41.991229,-122.190844,0,,,,,,,,3169,Klamath,90.0,180102060202,0,0
@@ -413,3 +413,6 @@ https://storymaps.arcgis.com/stories/67e9eca2ac0d45959f03e6ce0e3a37f8",100.0,Mid
 5852,,1900,,White Salmon,White Salmon ag 01,,Cascade Creek to Trout Lake,,,,3107.0,1255.2,10.3,121.3,,,,46.1044544840137,-121.60870135700199,46.000256760065994,-121.50790662941567,0,,,,,,,,3542,White Salmon,,170701050803,0,0
 5853,,1900,,White Salmon,White Salmon ag 03,,Green Truss to BZ,,,,1250.3,612.0,5.3,115.8,,,,45.91164903722382,-121.49955151876178,45.85136165643933,-121.50877560718429,0,,,,,,,,2270,White Salmon,,170701050808,0,0
 5854,,2125,,Little White Salmon,Little White Salmon ag 01,,Willard to Columbia,,Middle Columbia-Hood,,915.1,836.2,4.5,187.0,,,,45.76422334260547,-121.62996861169617,45.7155617679899,-121.64450883595363,0,,,,,,,,2156,Little White Salmon,,170701050905,0,1
+5855,,1950,,Wind River,Wind River ag 01,,,,Middle Columbia-Hood,,,,,,,,,,,,,0,,,,,,,,3510,Wind River,,,0,0
+5856,,1950,,Wind River,Wind River ag 02,,,,Middle Columbia-Hood,,,,,,,,,,,,,0,,,,,,,,3511,Wind River,,,0,0
+5857,,1950,,Wind River,Wind River ag 03,,,,Middle Columbia-Hood,,,,,,,,,,,,,0,,,,,,,,2273,Wind River,,,0,0
