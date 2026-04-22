@@ -201,3 +201,4 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 2122,MF SALMON RIVER AT MOUTH NR SHOUP ID,,,,45.293611,-114.596389,,MSSI,,,MSSI1,,13310199,,2986.4,2876.0,170602061005,0
 2123,EFSF_Stibnite,,,,44.905722,-115.3295,,SFSI,,,SFSI1,,13311000,,6466.0,19.3,170602080201,0
 2124,EFSF_Salmon_calc,,,EFSF just below Johnson Cr confluence (Johnson + Stibnite),44.962554,-115.505507,,,,,,,,,,,17060208,0
+2125,LWWW1,,,Willard National Fish Hatchery,45.7648,-121.6303,,LWWW,,,LWWW1,,,,,,170701050905,0

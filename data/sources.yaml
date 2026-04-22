@@ -73,6 +73,7 @@ nwps:
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/TLYO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/TOTW1/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/TRAO3/stageflow/observed"
+    - url: "https://api.water.noaa.gov/nwps/v1/gauges/LWWW1/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/UNDW1/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/VENO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/VIDO3/stageflow/observed"
@@ -125,6 +126,8 @@ nwrfc.xml:
     - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=KLCW1&pe=HG&dtype=b&numdays=1"
     # White Salmon (Washington) — UNDW1 matches USGS 14123500 near Underwood
     - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=UNDW1&pe=HG&dtype=b&numdays=1"
+    # Little White Salmon (Washington) — LWWW1 Willard National Fish Hatchery, stage only
+    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LWWW1&pe=HG&dtype=b&numdays=1"
 
 nwrfc.textplot:
   urls:
