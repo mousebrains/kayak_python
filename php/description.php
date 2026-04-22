@@ -546,7 +546,7 @@ $gb_stmt = $db->prepare(
      FROM reach_guidebook rg
      JOIN guidebook g ON g.id = rg.guidebook_id
      WHERE rg.reach_id = ?
-     ORDER BY g.title, g.edition'
+     ORDER BY g.sort_order, g.title, g.edition'
 );
 $gb_stmt->execute([$id]);
 $guidebooks = $gb_stmt->fetchAll();

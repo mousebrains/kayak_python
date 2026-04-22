@@ -131,4 +131,4 @@ id,url,parser,hours,is_active
 10930,https://www.nwrfc.noaa.gov/xml/xml.cgi?id=STII1&pe=HG&dtype=b&numdays=1,nwrfc.xml,,1
 10931,https://www.nwrfc.noaa.gov/xml/xml.cgi?id=PITW1&pe=HG&dtype=b&numdays=1,nwrfc.xml,,1
 10932,https://www.nwrfc.noaa.gov/xml/xml.cgi?id=KLCW1&pe=HG&dtype=b&numdays=1,nwrfc.xml,,1
-10934,https://api.water.noaa.gov/nwps/v1/gauges/LWWW1/stageflow/observed,nwps.stageflow.observed,,1
+10934,https://api.water.noaa.gov/nwps/v1/gauges/LWWW1/stageflow/observed,nwps,,1

@@ -598,6 +598,7 @@ class Guidebook(Base):
     edition: Mapped[str | None] = mapped_column(String(24))
     author: Mapped[str | None] = mapped_column(Text)
     url: Mapped[str | None] = mapped_column(Text)
+    sort_order: Mapped[int | None] = mapped_column()
 
     # relationships
     reaches: Mapped[list[Reach]] = relationship(

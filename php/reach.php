@@ -132,7 +132,8 @@ if ($q_trimmed !== '' || $st !== '') {
             "SELECT rg.reach_id, g.id AS gid, g.title
              FROM reach_guidebook rg
              JOIN guidebook g ON g.id = rg.guidebook_id
-             WHERE rg.reach_id IN ($ph)"
+             WHERE rg.reach_id IN ($ph)
+             ORDER BY g.sort_order, g.title, g.edition"
         );
         $gb_stmt->execute($reach_ids);
         // Soggy Sneakers edition number by guidebook id
@@ -157,10 +158,12 @@ if ($q_trimmed !== '' || $st !== '') {
                 $reach_guides[$rid][$abbr] = true;
             }
         }
-        // Build "SS135" style labels from collected editions
+        // Build "SS531" style labels from collected editions (newest first)
+        // and prepend so SS appears before non-SS guides
         foreach ($reach_ss as $rid => $editions) {
-            sort($editions);
-            $reach_guides[$rid]['SS' . implode('', $editions)] = true;
+            rsort($editions);
+            $ss_label = 'SS' . implode('', $editions);
+            $reach_guides[$rid] = [$ss_label => true] + ($reach_guides[$rid] ?? []);
         }
 
         // Add AW for reaches with aw_id set (even without a guidebook row)
@@ -372,7 +375,7 @@ $gb_stmt = $db->prepare(
      FROM reach_guidebook rg
      JOIN guidebook g ON g.id = rg.guidebook_id
      WHERE rg.reach_id = ?
-     ORDER BY g.title, g.edition'
+     ORDER BY g.sort_order, g.title, g.edition'
 );
 $gb_stmt->execute([$id]);
 $guidebooks = $gb_stmt->fetchAll();

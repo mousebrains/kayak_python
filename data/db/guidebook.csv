@@ -1,14 +1,14 @@
-id,title,subtitle,edition,author,url
-1,Soggy Sneakers,Guide to Oregon Rivers,2nd,Willamette Kayak and Canoe Club,https://www.wkcc.org
-2,Soggy Sneakers,Guide to Oregon Rivers,3rd,Willamette Kayak and Canoe Club,https://www.wkcc.org
-3,Soggy Sneakers,Guide to Oregon Rivers,4th,Willamette Kayak and Canoe Club,https://www.wkcc.org
-4,Soggy Sneakers,Guide to Oregon Rivers,5th,Willamette Kayak and Canoe Club,https://www.wkcc.org
-5,Idaho,The Whitewater State,1st,Grant Amaral,https://www.goodreads.com/book/show/1231857.Idaho_the_Whitewater_State
-6,A Guide to the Whitewater Rivers of Washington,,2nd,Jeff and Tonya Bennet,https://www.goodreads.com/book/show/2625965-a-guide-to-the-whitewater-rivers-of-washington--over-320-trips-for-raft
-7,Paddling Oregon,,,Robb Keller,https://www.goodreads.com/book/show/1328369.Paddling_Oregon
-8,American Whitewater,,,American Whitewater,https://www.americanwhitewater.org/content/River/view/?
-9,Soggy Sneakers,Guide to Oregon Rivers,1st,Willamette Kayak and Canoe Club,https://www.wkcc.org
-10,Oregon Kayaking,,,Jason Rackley,https://www.oregonkayaking.net
-11,Dreamflows,,,Dreamflows,https://www.dreamflows.com
-12,Mt Hood H2O,Northwest whitewater kayaking blog,,Jacob Cruser,https://mthoodh2o.blogspot.com
-13,Whitewater Guidebook,,,,https://www.whitewaterguidebook.com
+id,title,subtitle,edition,author,url,sort_order
+1,Soggy Sneakers,Guide to Oregon Rivers,2nd,Willamette Kayak and Canoe Club,https://www.wkcc.org,120
+2,Soggy Sneakers,Guide to Oregon Rivers,3rd,Willamette Kayak and Canoe Club,https://www.wkcc.org,30
+3,Soggy Sneakers,Guide to Oregon Rivers,4th,Willamette Kayak and Canoe Club,https://www.wkcc.org,20
+4,Soggy Sneakers,Guide to Oregon Rivers,5th,Willamette Kayak and Canoe Club,https://www.wkcc.org,10
+5,Idaho,The Whitewater State,1st,Grant Amaral,https://www.goodreads.com/book/show/1231857.Idaho_the_Whitewater_State,60
+6,A Guide to the Whitewater Rivers of Washington,,2nd,Jeff and Tonya Bennet,https://www.goodreads.com/book/show/2625965-a-guide-to-the-whitewater-rivers-of-washington--over-320-trips-for-raft,70
+7,Paddling Oregon,,,Robb Keller,https://www.goodreads.com/book/show/1328369.Paddling_Oregon,110
+8,American Whitewater,,,American Whitewater,https://www.americanwhitewater.org/content/River/view/?,50
+9,Soggy Sneakers,Guide to Oregon Rivers,1st,Willamette Kayak and Canoe Club,https://www.wkcc.org,40
+10,Oregon Kayaking,,,Jason Rackley,https://www.oregonkayaking.net,100
+11,Dreamflows,,,Dreamflows,https://www.dreamflows.com,80
+12,Mt Hood H2O,Northwest whitewater kayaking blog,,Jacob Cruser,https://mthoodh2o.blogspot.com,90
+13,Whitewater Guidebook,,,,https://www.whitewaterguidebook.com,130
