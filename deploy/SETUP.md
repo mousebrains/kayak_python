@@ -263,22 +263,35 @@ systemctl list-timers certbot.timer
 
 ## 6. Nginx configuration
 
+`deploy/levels` is the canonical server-block config. Install it into
+`sites-available/` and symlink from `sites-enabled/` so future updates only
+need a copy + reload.
+
 ```bash
 # Install the full config
-sudo cp /home/tpw/kayak/deploy/nginx.conf /etc/nginx/sites-available/kayak.conf
-sudo ln -sf /etc/nginx/sites-available/kayak.conf /etc/nginx/sites-enabled/kayak.conf
+sudo cp /home/pat/kayak/deploy/levels /etc/nginx/sites-available/levels
+sudo ln -sf /etc/nginx/sites-available/levels /etc/nginx/sites-enabled/levels
 sudo rm -f /etc/nginx/sites-enabled/kayak-acme.conf
 
 # Test and reload
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-The nginx config assumes:
-- Document root: `/home/tpw/kayak/public_html`
-- Database: `/home/tpw/kayak/kayak.db`
-- Cert path: `/etc/letsencrypt/live/levels.mousebrains.com/`
+Subsequent updates (same pattern):
 
-Edit `deploy/nginx.conf` to match actual paths if they differ.
+```bash
+sudo cp /home/pat/kayak/deploy/levels /etc/nginx/sites-available/levels
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+The nginx config assumes:
+- Document root: `/home/pat/public_html` (symlink → `/home/pat/kayak/public_html`)
+- Database: `/home/pat/DB/kayak.db` (passed to PHP via `fastcgi_param SQLITE_PATH`)
+- Cert path: `/etc/letsencrypt/live/levels.mousebrains.com/`
+- Snippets: `/etc/nginx/snippets/security-headers.conf`, `security-headers-hcaptcha.conf`, `edit-password.conf`
+- Rate-limit zones: `/etc/nginx/conf.d/ratelimit.conf` (see `deploy/nginx-ratelimit.conf`)
+
+Edit `deploy/levels` to match actual paths if they differ.
 
 ## 7. PHP-FPM configuration
 
@@ -361,7 +374,7 @@ journalctl -u kayak-pipeline.service --since "1 hour ago" --no-pager
 
 ## 10. Enable HSTS
 
-Once SSL is confirmed working, uncomment the HSTS header in `deploy/nginx.conf`:
+Once SSL is confirmed working, uncomment the HSTS header in `deploy/levels`:
 
 ```nginx
 add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
@@ -498,7 +511,7 @@ Check the socket path matches your PHP version:
 ```bash
 ls /run/php/php*-fpm.sock
 ```
-Update `fastcgi_pass` in `deploy/nginx.conf` to match.
+Update `fastcgi_pass` in `deploy/levels` to match.
 
 **Pipeline fails with permission errors:**
 The systemd services run as user `tpw`. Ensure the kayak directory and database are owned by that user:

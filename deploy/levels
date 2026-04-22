@@ -16,10 +16,21 @@ server {
     include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
 
+    # OCSP stapling — cache the CA's revocation status so clients don't have to
+    # fetch it themselves on the TLS handshake.
+    ssl_stapling on;
+    ssl_stapling_verify on;
+    resolver 1.1.1.1 8.8.8.8 valid=300s;
+    resolver_timeout 5s;
+
     server_name levels.mousebrains.com levels-test.wkcc.org; # levels.wkcc.org;
 
-    # HSTS — tell browsers to always use HTTPS
-    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
+    # Hide server identity completely (requires libnginx-mod-http-headers-more-filter)
+    server_tokens off;
+    more_clear_headers Server;
+
+    # Security headers (server-level — apply when no location overrides)
+    include /etc/nginx/snippets/security-headers.conf;
 
     # Document root — where build output + PHP symlinks live
     root /home/pat/public_html;
@@ -36,11 +47,13 @@ server {
     gzip_min_length 256;
     gzip_vary on;
 
-    # Security headers (base set — child blocks with add_header must re-include)
-    include /home/pat/kayak/conf/security-headers.conf;
+    # Restrict HTTP methods to GET, HEAD, POST
+    if ($request_method !~ ^(GET|HEAD|POST)$) {
+        return 405;
+    }
 
     # Block known malicious scanners and exploit tools
-    if ($http_user_agent ~* (zgrab|masscan|scanner/1\.0|libredtail|xfa1|Gh0st|^Hello|nvdorz|FreePBX-Scanner)) {
+    if ($http_user_agent ~* (zgrab|masscan|scanner/1\.0|libredtail|xfa1|Gh0st|^Hello|nvdorz|FreePBX-Scanner|Claude-SearchBot|ClaudeBot|r00ts3c|Scrapy|python-requests)) {
         return 444;
     }
 
@@ -51,28 +64,49 @@ server {
     }
 
     # Block access to PHP includes (db.php, svg_plot.php, etc.)
-    location /includes/ {
+    # Use regex to override the \.php$ location (regex precedence rules)
+    location ~ ^/includes/ {
         deny all;
         return 404;
     }
 
     # Static assets — long cache, immutable content
     location /static/ {
-        include /home/pat/kayak/conf/security-headers.conf;
         expires 7d;
         add_header Cache-Control "public, immutable";
+        include /etc/nginx/snippets/security-headers.conf;
+    }
+
+    # Dynamic per-reach status, refreshed by every hourly pipeline run.
+    # Exact match wins over the /static/ prefix and overrides the 7d immutable
+    # policy with a short TTL. Both expires and add_header must be explicit
+    # here because nginx's add_header does not inherit from an ancestor block
+    # once this block sets its own.
+    location = /static/reaches-state.json {
+        expires 5m;
+        add_header Cache-Control "public, max-age=300";
+        include /etc/nginx/snippets/security-headers.conf;
+    }
+
+    # Service worker — cached by the browser but always revalidated so
+    # SW updates propagate immediately rather than lagging by expires 5m.
+    location = /sw.js {
+        add_header Cache-Control "no-cache";
+        include /etc/nginx/snippets/security-headers.conf;
     }
 
     # Generated HTML/CSV/text pages — short cache, regenerated hourly
     location / {
-        include /home/pat/kayak/conf/security-headers.conf;
+        limit_req zone=global burst=40 nodelay;
         try_files $uri $uri/ =404;
         expires 5m;
         add_header Cache-Control "public";
+        include /etc/nginx/snippets/security-headers.conf;
     }
 
     # PHP endpoints via php-fpm
     location ~ \.php$ {
+        limit_req zone=php burst=20 nodelay;
         try_files $uri =404;
         fastcgi_pass unix:/run/php/php-fpm.sock;
         fastcgi_index index.php;
@@ -83,12 +117,13 @@ server {
         fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
         fastcgi_param EDITOR_FEATURE $editor_feature;
         fastcgi_param HCAPTCHA_SITE_KEY $hcaptcha_site_key;
+        fastcgi_param HCAPTCHA_SECRET $hcaptcha_secret;
         fastcgi_param MAIL_FROM $mail_from;
         fastcgi_param SITE_URL $site_url;
 
-        # Security + cache headers
-        include /home/pat/kayak/conf/security-headers.conf;
+        # Cache PHP responses (5 min for reads, no cache for edits)
         add_header Cache-Control "public, max-age=300";
+        include /etc/nginx/snippets/security-headers.conf;
     }
 
     # Edit endpoint — rate-limited, no cache
@@ -100,11 +135,13 @@ server {
         include fastcgi_params;
         fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
         fastcgi_param EDITOR_FEATURE $editor_feature;
-        include /home/pat/kayak/conf/security-headers.conf;
+        include /etc/nginx/snippets/edit-password.conf;
         add_header Cache-Control "no-cache, no-store";
+        include /etc/nginx/snippets/security-headers.conf;
     }
 
-    # Auth endpoints — stricter rate limit (3/min), no cache
+    # Auth endpoints — stricter rate limit (zone=auth, 3/min), no cache.
+    # /login.php uses the hCaptcha-enabled CSP variant so the widget can load.
     location = /login.php { limit_req zone=auth burst=2 nodelay;
         try_files $uri =404;
         fastcgi_pass unix:/run/php/php-fpm.sock;
@@ -113,10 +150,11 @@ server {
         fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
         fastcgi_param EDITOR_FEATURE $editor_feature;
         fastcgi_param HCAPTCHA_SITE_KEY $hcaptcha_site_key;
+        fastcgi_param HCAPTCHA_SECRET $hcaptcha_secret;
         fastcgi_param MAIL_FROM $mail_from;
         fastcgi_param SITE_URL $site_url;
-        include /home/pat/kayak/conf/security-headers.conf;
         add_header Cache-Control "no-store";
+        include /etc/nginx/snippets/security-headers-hcaptcha.conf;
     }
     location = /auth.php { limit_req zone=auth burst=2 nodelay;
         try_files $uri =404;
@@ -125,8 +163,8 @@ server {
         include fastcgi_params;
         fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
         fastcgi_param EDITOR_FEATURE $editor_feature;
-        include /home/pat/kayak/conf/security-headers.conf;
         add_header Cache-Control "no-store";
+        include /etc/nginx/snippets/security-headers.conf;
     }
     location = /logout.php { limit_req zone=auth burst=2 nodelay;
         try_files $uri =404;
@@ -135,8 +173,8 @@ server {
         include fastcgi_params;
         fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
         fastcgi_param EDITOR_FEATURE $editor_feature;
-        include /home/pat/kayak/conf/security-headers.conf;
         add_header Cache-Control "no-store";
+        include /etc/nginx/snippets/security-headers.conf;
     }
     location = /account.php { limit_req zone=php burst=5 nodelay;
         try_files $uri =404;
@@ -145,11 +183,11 @@ server {
         include fastcgi_params;
         fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
         fastcgi_param EDITOR_FEATURE $editor_feature;
-        include /home/pat/kayak/conf/security-headers.conf;
         add_header Cache-Control "no-store";
+        include /etc/nginx/snippets/security-headers.conf;
     }
 
-    # Phase 2 editor endpoints
+    # Phase 2 editor endpoints — no cache; auth enforced in PHP
     location = /propose.php { limit_req zone=php burst=5 nodelay;
         try_files $uri =404;
         fastcgi_pass unix:/run/php/php-fpm.sock;
@@ -159,8 +197,8 @@ server {
         fastcgi_param EDITOR_FEATURE $editor_feature;
         fastcgi_param SITE_URL $site_url;
         fastcgi_param MAIL_FROM $mail_from;
-        include /home/pat/kayak/conf/security-headers.conf;
         add_header Cache-Control "no-store";
+        include /etc/nginx/snippets/security-headers.conf;
     }
     location = /comment.php { limit_req zone=php burst=5 nodelay;
         try_files $uri =404;
@@ -171,8 +209,23 @@ server {
         fastcgi_param EDITOR_FEATURE $editor_feature;
         fastcgi_param SITE_URL $site_url;
         fastcgi_param MAIL_FROM $mail_from;
-        include /home/pat/kayak/conf/security-headers.conf;
         add_header Cache-Control "no-store";
+        include /etc/nginx/snippets/security-headers.conf;
+    }
+    # Anonymous contact form — hCaptcha-gated, auth rate limit, hcaptcha CSP
+    location = /contact.php { limit_req zone=auth burst=2 nodelay;
+        try_files $uri =404;
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+        fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
+        fastcgi_param EDITOR_FEATURE $editor_feature;
+        fastcgi_param HCAPTCHA_SITE_KEY $hcaptcha_site_key;
+        fastcgi_param HCAPTCHA_SECRET $hcaptcha_secret;
+        fastcgi_param MAIL_FROM $mail_from;
+        fastcgi_param SITE_URL $site_url;
+        add_header Cache-Control "no-store";
+        include /etc/nginx/snippets/security-headers-hcaptcha.conf;
     }
     location = /review.php { limit_req zone=php burst=5 nodelay;
         try_files $uri =404;
@@ -183,8 +236,8 @@ server {
         fastcgi_param EDITOR_FEATURE $editor_feature;
         fastcgi_param SITE_URL $site_url;
         fastcgi_param MAIL_FROM $mail_from;
-        include /home/pat/kayak/conf/security-headers.conf;
         add_header Cache-Control "no-store";
+        include /etc/nginx/snippets/security-headers.conf;
     }
     location = /admin.php { limit_req zone=php burst=5 nodelay;
         try_files $uri =404;
@@ -193,13 +246,24 @@ server {
         include fastcgi_params;
         fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
         fastcgi_param EDITOR_FEATURE $editor_feature;
-        include /home/pat/kayak/conf/security-headers.conf;
         add_header Cache-Control "no-store";
+        include /etc/nginx/snippets/security-headers.conf;
     }
 
     # Let's Encrypt ACME challenge
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
+    }
+
+    # security.txt (RFC 9116) — beats the dotfile-block regex via exact match.
+    location = /.well-known/security.txt {
+        alias /home/pat/kayak/static/security.txt;
+        add_header Cache-Control "public, max-age=86400";
+    }
+
+    # Legacy path — some tools still probe /security.txt directly.
+    location = /security.txt {
+        return 301 /.well-known/security.txt;
     }
 
     # Custom error page
