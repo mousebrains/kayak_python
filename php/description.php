@@ -383,15 +383,15 @@ if ($flow_levels && $readings) {
         $reading_by_type[$r['data_type']] = (float)$r['value'];
     }
     foreach ($flow_levels as $fl) {
-        $dtype = $fl['low_data_type'] ?: $fl['high_data_type'];
-        if ($dtype && isset($reading_by_type[$dtype])) {
+        $dtype = $fl['low_data_type'];
+        if (isset($reading_by_type[$dtype])) {
             $val = $reading_by_type[$dtype];
             $lo = $fl['low'] !== null ? (float)$fl['low'] : null;
             $hi = $fl['high'] !== null ? (float)$fl['high'] : null;
             $in_range = ($lo === null || $val >= $lo) && ($hi === null || $val <= $hi);
             if ($in_range) {
                 $level_colors = ['low' => '#e8a735', 'okay' => '#4caf50', 'high' => '#e53935'];
-                $track_color = $level_colors[$fl['level']] ?? '#888';
+                $track_color = $level_colors[$fl['level']];
                 break;
             }
         }

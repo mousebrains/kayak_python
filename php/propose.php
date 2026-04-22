@@ -258,8 +258,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($lo === null && $hi === null) return '(no range)';
                     return ($lo ?? '-') . ' to ' . ($hi ?? '-') . " $dt";
                 };
-                $new_names = $payload['reach_class']['names'] ?? [];
-                $new_range = $payload['reach_class']['range'] ?? ['low'=>null,'high'=>null,'data_type'=>'flow'];
+                $new_names = $payload['reach_class']['names'];
+                $new_range = $payload['reach_class']['range'];
                 $summary_lines[] = 'reach_class: '
                     . (empty($cur_classes) ? '(none)' : implode(', ', $cur_classes))
                     . ' -> '
@@ -382,7 +382,7 @@ include_header(
                        value="<?= htmlspecialchars((string)($cur_range['high'] ?? '')) ?>"></td>
             <td>
               <select name="flow_data_type">
-                <?php $sel = $cur_range['data_type'] ?? 'flow';
+                <?php $sel = $cur_range['data_type'];
                 foreach (['flow', 'gauge'] as $dt): ?>
                   <option value="<?= $dt ?>"<?= $sel === $dt ? ' selected' : '' ?>><?= $dt ?></option>
                 <?php endforeach ?>
