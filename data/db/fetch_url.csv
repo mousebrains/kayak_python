@@ -129,3 +129,4 @@ id,url,parser,hours,is_active
 10928,https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SELI1&pe=HG&dtype=b&numdays=1,nwrfc.xml,,1
 10929,https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LOCI1&pe=HG&dtype=b&numdays=1,nwrfc.xml,,1
 10930,https://www.nwrfc.noaa.gov/xml/xml.cgi?id=STII1&pe=HG&dtype=b&numdays=1,nwrfc.xml,,1
+10931,https://www.nwrfc.noaa.gov/xml/xml.cgi?id=PITW1&pe=HG&dtype=b&numdays=1,nwrfc.xml,,1
