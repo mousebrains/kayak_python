@@ -60,7 +60,6 @@ nwps:
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/TIDO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/TLMO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/TLYO3/stageflow/observed"
-    - url: "https://api.water.noaa.gov/nwps/v1/gauges/TOTW1/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/TRAO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/LWWW1/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/UNDW1/stageflow/observed"

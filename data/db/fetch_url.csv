@@ -53,7 +53,6 @@ id,url,parser,hours,is_active
 10835,https://api.water.noaa.gov/nwps/v1/gauges/TIDO3/stageflow/observed,nwps,,1
 10836,https://api.water.noaa.gov/nwps/v1/gauges/TLMO3/stageflow/observed,nwps,,1
 10837,https://api.water.noaa.gov/nwps/v1/gauges/TLYO3/stageflow/observed,nwps,,1
-10838,https://api.water.noaa.gov/nwps/v1/gauges/TOTW1/stageflow/observed,nwps,,1
 10839,https://api.water.noaa.gov/nwps/v1/gauges/TRAO3/stageflow/observed,nwps,,1
 10841,https://api.water.noaa.gov/nwps/v1/gauges/UNDW1/stageflow/observed,nwps,,1
 10843,https://api.water.noaa.gov/nwps/v1/gauges/VENO3/stageflow/observed,nwps,,1
