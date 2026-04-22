@@ -121,6 +121,8 @@ nwrfc.xml:
     - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=STII1&pe=HG&dtype=b&numdays=1"
     # Klickitat (Washington) — PITW1 matches USGS 14113000 near Pitt; outage redundancy
     - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=PITW1&pe=HG&dtype=b&numdays=1"
+    # Klickitat (Washington) — KLCW1 matches USGS 14107000 abv West Fork nr Glenwood
+    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=KLCW1&pe=HG&dtype=b&numdays=1"
 
 nwrfc.textplot:
   urls:
