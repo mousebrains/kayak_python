@@ -200,11 +200,13 @@ Create `/home/tpw/kayak/.env`:
 
 ```bash
 SQLITE_PATH=/home/tpw/kayak/kayak.db
-EDIT_USER=admin
-EDIT_PASSWORD=changeme
+EDITOR_FEATURE=1
 ```
 
-The pipeline, systemd services, and PHP all read from this file or its variables.
+The pipeline, systemd services, and PHP all read from this file or its
+variables. Maintainer access to `/edit.php` uses the `ed_sess` editor-session
+cookie — sign in via `/login.php` with an email that has been promoted to
+`status='maintainer'` (see `levels seed-maintainer`).
 
 ## 4. Initialize the database
 
@@ -288,7 +290,7 @@ The nginx config assumes:
 - Document root: `/home/pat/public_html` (symlink → `/home/pat/kayak/public_html`)
 - Database: `/home/pat/DB/kayak.db` (passed to PHP via `fastcgi_param SQLITE_PATH`)
 - Cert path: `/etc/letsencrypt/live/levels.mousebrains.com/`
-- Snippets: `/etc/nginx/snippets/security-headers.conf`, `security-headers-hcaptcha.conf`, `edit-password.conf`
+- Snippets: `/etc/nginx/snippets/security-headers.conf`, `security-headers-hcaptcha.conf`
 - Rate-limit zones: `/etc/nginx/conf.d/ratelimit.conf` (see `deploy/nginx-ratelimit.conf`)
 
 Edit `deploy/levels` to match actual paths if they differ.
@@ -303,35 +305,42 @@ env[SQLITE_PATH] = /home/tpw/kayak/kayak.db
 
 Alternatively, the nginx config passes `SQLITE_PATH` via `fastcgi_param`, so this step is optional.
 
-### Secrets (HCAPTCHA_SECRET, EDIT_PASSWORD)
+### Secrets (HCAPTCHA_SECRET)
 
-Keep secrets out of nginx config files (those are world-readable). Store them
-in a restricted env file and expose them only to PHP-FPM workers.
+Keep the hCaptcha site-verify secret out of nginx config files (those are
+world-readable). Store it in a restricted env file and expose it only to
+PHP-FPM workers.
 
 All of the work below is packaged in `deploy/migrate-secrets.sh`:
 
 ```bash
 # First run — installs /etc/kayak/secrets.env from the template and exits so
-# you can edit it. Values are empty at this point; migrate-secrets.sh will
-# refuse to proceed until both HCAPTCHA_SECRET and EDIT_PASSWORD are set.
+# you can edit it. The value is empty at this point; migrate-secrets.sh will
+# refuse to proceed until HCAPTCHA_SECRET is set.
 sudo deploy/migrate-secrets.sh
 
-# Fill in the real values (hCaptcha site secret + a fresh random EDIT_PASSWORD).
+# Fill in the real hCaptcha site secret.
 sudo -e /etc/kayak/secrets.env
 
 # Second run — installs the PHP-FPM pool overlay + systemd drop-in, strips
-# HCAPTCHA_SECRET lines from nginx, removes the obsolete edit-password.conf
-# snippet, validates nginx, restarts php-fpm, reloads nginx.
+# HCAPTCHA_SECRET lines from nginx, removes the now-obsolete
+# edit-password.conf snippet (legacy /edit.php Basic-Auth plumbing),
+# validates nginx, restarts php-fpm, reloads nginx.
 sudo deploy/migrate-secrets.sh
 ```
 
 PHP's `_hcaptcha_env()` helper prefers `getenv()` over `$_SERVER[]`, so once
-PHP-FPM has the values in its environment the application code keeps working
+PHP-FPM has the value in its environment the application code keeps working
 without change.
 
-If you're migrating an existing deployment that previously had secrets in
-nginx (`t2-12.log`-style exposure), **rotate both values** before installing
-`/etc/kayak/secrets.env` — treat the old ones as disclosed.
+`/edit.php` used to read `EDIT_PASSWORD` via HTTP Basic Auth; it now gates
+maintainer access on the `ed_sess` editor-session cookie (same pattern as
+/review.php). The `EDIT_USER` / `EDIT_PASSWORD` env vars and the
+`edit-password.conf` snippet are no longer used.
+
+If you're migrating an existing deployment that previously had
+`HCAPTCHA_SECRET` in nginx (`t2-12.log`-style exposure), **rotate the value**
+before installing `/etc/kayak/secrets.env` — treat the old one as disclosed.
 
 ## 8. Systemd timers (pipeline + decimate)
 
@@ -480,8 +489,7 @@ cat > /home/pat/.config/kayak/.env <<'EOF'
 SQLITE_PATH=/home/pat/DB/kayak.db
 DATABASE_URL=sqlite:////home/pat/DB/kayak.db
 OUTPUT_DIR=/home/pat/public_html
-EDIT_USER=admin
-EDIT_PASSWORD=changeme
+EDITOR_FEATURE=1
 EOF
 
 # 5. ACLs for nginx (www-data)

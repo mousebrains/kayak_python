@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# migrate-secrets.sh — move HCAPTCHA_SECRET and EDIT_PASSWORD off nginx
-# fastcgi_param into /etc/kayak/secrets.env (mode 0600 root:www-data),
-# exposed to PHP via a PHP-FPM pool env[] overlay + systemd drop-in.
+# migrate-secrets.sh — move HCAPTCHA_SECRET off nginx fastcgi_param into
+# /etc/kayak/secrets.env (mode 0600 root:www-data), exposed to PHP via a
+# PHP-FPM pool env[] overlay + systemd drop-in. Also cleans up the now-
+# obsolete /etc/nginx/snippets/edit-password.conf and the site-file
+# include that referenced it — edit.php moved to editor-cookie auth, so
+# EDIT_PASSWORD is no longer read anywhere.
 #
 # Idempotent: safe to re-run. Won't overwrite an existing secrets.env.
 #
@@ -50,16 +53,9 @@ else
     exit 2
 fi
 
-# Sanity: both required values present (non-empty) in the secrets file.
-missing=()
-for key in HCAPTCHA_SECRET EDIT_PASSWORD; do
-    val="$(grep -E "^${key}=" "$SECRETS_FILE" | head -1 | cut -d= -f2-)"
-    if [[ -z "$val" ]]; then
-        missing+=("$key")
-    fi
-done
-if [[ ${#missing[@]} -gt 0 ]]; then
-    echo "error: $SECRETS_FILE is missing values for: ${missing[*]}" >&2
+# Sanity: required value present (non-empty) in the secrets file.
+if [[ -z "$(grep -E '^HCAPTCHA_SECRET=' "$SECRETS_FILE" | head -1 | cut -d= -f2-)" ]]; then
+    echo "error: $SECRETS_FILE is missing a value for HCAPTCHA_SECRET" >&2
     echo "edit it with: sudo -e $SECRETS_FILE" >&2
     exit 3
 fi
@@ -120,9 +116,9 @@ systemctl reload nginx
 # 5. Post-flight check.
 # ---------------------------------------------------------------------------
 
-say "post-flight: scanning nginx -T for any remaining plaintext HCAPTCHA_SECRET / EDIT_PASSWORD"
-if nginx -T 2>/dev/null | grep -Ei 'HCAPTCHA_SECRET[[:space:]]+[^$]|EDIT_PASSWORD[[:space:]]+[^$]' | grep -v '^#'; then
-    echo "warning: nginx still references one of the secrets directly — inspect above" >&2
+say "post-flight: scanning nginx -T for any remaining plaintext HCAPTCHA_SECRET"
+if nginx -T 2>/dev/null | grep -Ei 'HCAPTCHA_SECRET[[:space:]]+[^$]' | grep -v '^#'; then
+    echo "warning: nginx still references the secret directly — inspect above" >&2
     exit 4
 fi
 

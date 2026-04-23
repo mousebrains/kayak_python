@@ -19,16 +19,11 @@ else
     echo "[SKIP] libnginx-mod-http-headers-more-filter already installed"
 fi
 
-# --- 1. Generate new EDIT_PASSWORD and create restricted snippet ---
-NEW_PASSWORD=$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)
-
-cat > /etc/nginx/snippets/edit-password.conf <<EOF
-fastcgi_param EDIT_PASSWORD ${NEW_PASSWORD};
-EOF
-chmod 600 /etc/nginx/snippets/edit-password.conf
-chown root:root /etc/nginx/snippets/edit-password.conf
-
-echo "[OK] Created /etc/nginx/snippets/edit-password.conf (mode 600)"
+# --- 1. (retired) EDIT_PASSWORD / edit-password.conf ---
+# edit.php used to read EDIT_PASSWORD for HTTP Basic Auth; it now gates
+# maintainer access on the ed_sess editor-session cookie. No password
+# snippet is authored here. If /etc/nginx/snippets/edit-password.conf
+# exists from an older install, `deploy/migrate-secrets.sh` removes it.
 
 # --- 2. Add PHP rate limit zone (if not already present) ---
 if ! grep -q 'zone=php' /etc/nginx/conf.d/ratelimit.conf 2>/dev/null; then
@@ -131,11 +126,7 @@ echo "[OK] fail2ban reloaded"
 echo ""
 echo "=== Done ==="
 echo ""
-echo "New edit.php credentials:"
-echo "  User:     admin"
-echo "  Password: ${NEW_PASSWORD}"
-echo ""
-echo "Save this password — it is stored only in /etc/nginx/snippets/edit-password.conf (mode 600)"
-echo ""
-echo "Verify with:"
-echo "  curl -s -u admin:${NEW_PASSWORD} https://levels-test.wkcc.org/edit.php?id=526 | head -3"
+echo "edit.php auth: editor-session cookie (ed_sess) via /login.php."
+echo "If you haven't yet, seed your maintainer row with:"
+echo "  /home/pat/.venv/bin/levels seed-maintainer --email <your@email>"
+echo "then visit https://levels.wkcc.org/login.php to obtain the cookie."
