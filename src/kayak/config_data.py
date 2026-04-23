@@ -31,14 +31,15 @@ def _load_yaml(filename: str) -> dict[str, Any]:
 
 
 @lru_cache(maxsize=1)
-def load_sources() -> list[dict[str, str]]:
+def load_sources() -> list[dict[str, Any]]:
     """Load source URL/parser definitions from data/sources.yaml.
 
-    Returns list of dicts with keys: parser, url, hours.
-    Skips parser sections with ``enabled: false``.
+    Returns list of dicts with keys: parser, url, hours, stations.
+    ``stations`` is a dict mapping station code → IANA TZ name, empty if
+    not specified in YAML. Skips parser sections with ``enabled: false``.
     """
     data = _load_yaml("sources.yaml")
-    sources: list[dict[str, str]] = []
+    sources: list[dict[str, Any]] = []
     for parser_name, section in data.items():
         if not section.get("enabled", True):
             continue
@@ -48,6 +49,7 @@ def load_sources() -> list[dict[str, str]]:
                     "parser": parser_name,
                     "url": entry["url"],
                     "hours": entry.get("hours", ""),
+                    "stations": entry.get("stations", {}) or {},
                 }
             )
     return sources

@@ -118,7 +118,11 @@ class USBRParser(BaseParser):
         if len(parts) < 2:
             return True
 
-        when = parse_datetime(parts[0])
+        # USBR pn-hydromet publishes each station in its own local timezone
+        # (Oregon Pacific, Idaho Mountain, Malheur-County OR Mountain). We
+        # parse naive and let BaseParser.dump_to_db apply source.timezone
+        # per-station before UTC conversion.
+        when = parse_datetime(parts[0], assume_naive=True)
         if when is None:
             return True
 

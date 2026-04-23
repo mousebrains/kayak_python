@@ -16,7 +16,7 @@ from sqlalchemy import select
 from kayak.cli.init_db import sync_sources
 from kayak.config_data import load_sources
 from kayak.db.engine import get_session
-from kayak.db.models import FetchUrl
+from kayak.db.models import FetchUrl, Source
 from kayak.parsers.registry import ensure_all_loaded, get_parser_class
 
 logger = logging.getLogger(__name__)
@@ -96,6 +96,7 @@ class _FetchWork:
     parser_name: str
     source_id: int | None
     source_map: dict[str, int] = field(default_factory=dict)
+    source_tz_map: dict[str, str] = field(default_factory=dict)
     fetch_url_id: int | None = None
 
 
@@ -177,14 +178,15 @@ def fetch(args: argparse.Namespace) -> None:
 
             source_id = None
             source_map: dict[str, int] = {}
+            source_tz_map: dict[str, str] = {}
             fetch_url_id = None
             if fetch_url is not None:
                 fetch_url_id = fetch_url.id
                 sources = fetch_url.sources
+                source_map = {s.name: s.id for s in sources}
+                source_tz_map = {s.name: s.timezone for s in sources if s.timezone}
                 if len(sources) == 1:
                     source_id = sources[0].id
-                elif len(sources) > 1:
-                    source_map = {s.name: s.id for s in sources}
 
             work_items.append(
                 _FetchWork(
@@ -193,6 +195,7 @@ def fetch(args: argparse.Namespace) -> None:
                     parser_name=parser_name,
                     source_id=source_id,
                     source_map=source_map,
+                    source_tz_map=source_tz_map,
                     fetch_url_id=fetch_url_id,
                 )
             )
@@ -252,6 +255,7 @@ def fetch(args: argparse.Namespace) -> None:
                     session=session,
                     source_id=w.source_id,
                     source_map=w.source_map,
+                    source_tz_map=w.source_tz_map,
                     dry_run=args.dry_run,
                     fetch_url_id=w.fetch_url_id,
                     agency=w.parser_name,
@@ -340,7 +344,13 @@ def _fetch_single(
     dry_run: bool,
     fetch_only: bool,
 ) -> None:
-    """Fetch and parse a single URL (the -U -t mode)."""
+    """Fetch and parse a single URL (the -U -t mode).
+
+    Builds ``source_map`` / ``source_tz_map`` from every Source row already
+    linked to an active fetch_url with this parser, so station dispatch and
+    per-station TZ localization work for historical backfill URLs that
+    aren't in sources.yaml themselves.
+    """
     full_url = url_prefix + url
 
     text_content = _get_content(full_url, url, input_dir, output_dir)
@@ -355,9 +365,20 @@ def _fetch_single(
 
         session = get_session()
         try:
+            # Pull every source that belongs to the requested parser, so
+            # multi-station dispatch and TZ localization still work when
+            # fetching an off-config URL (e.g. USBR start/end backfill).
+            sources = session.scalars(
+                select(Source).join(FetchUrl).where(FetchUrl.parser == parser_name)
+            ).all()
+            source_map = {s.name: s.id for s in sources}
+            source_tz_map = {s.name: s.timezone for s in sources if s.timezone}
+
             parser = parser_cls(
                 url=full_url,
                 session=session,
+                source_map=source_map,
+                source_tz_map=source_tz_map,
                 dry_run=dry_run,
             )
             count = parser.parse(text_content)

@@ -122,6 +122,91 @@ class TestDumpToDbNoSource:
         assert parser._db_updates == 1
 
 
+class TestSourceTzLocalization:
+    """dump_to_db localizes naive datetimes when source_tz_map has the station."""
+
+    def test_naive_with_tz_map_converts_to_utc(self, session):
+        src = _make_source(session, name="STN_MT")
+        parser = ConcreteParser(
+            url="https://example.com/test",
+            session=session,
+            source_map={"STN_MT": src.id},
+            source_tz_map={"STN_MT": "America/Boise"},
+        )
+        # 09:15 MDT (DST active in March 2026) = 15:15 UTC
+        naive = datetime(2026, 3, 15, 9, 15)
+        parser.dump_to_db("STN_MT", DataType.flow, naive, 100.0)
+        parser._flush_buffer()
+        obs = session.query(Observation).filter_by(source_id=src.id).one()
+        assert obs.observed_at.replace(tzinfo=UTC) == datetime(2026, 3, 15, 15, 15, tzinfo=UTC)
+
+    def test_naive_with_tz_map_winter_standard_time(self, session):
+        src = _make_source(session, name="STN_PT")
+        parser = ConcreteParser(
+            url="https://example.com/test",
+            session=session,
+            source_map={"STN_PT": src.id},
+            source_tz_map={"STN_PT": "America/Los_Angeles"},
+        )
+        # 09:15 PST (winter) = 17:15 UTC
+        naive = datetime(2026, 1, 15, 9, 15)
+        parser.dump_to_db("STN_PT", DataType.flow, naive, 100.0)
+        parser._flush_buffer()
+        obs = session.query(Observation).filter_by(source_id=src.id).one()
+        assert obs.observed_at.replace(tzinfo=UTC) == datetime(2026, 1, 15, 17, 15, tzinfo=UTC)
+
+    def test_fixed_offset_tz_no_dst(self, session):
+        src = _make_source(session, name="WA_STN")
+        parser = ConcreteParser(
+            url="https://example.com/test",
+            session=session,
+            source_map={"WA_STN": src.id},
+            source_tz_map={"WA_STN": "Etc/GMT+8"},  # PST year-round
+        )
+        # Etc/GMT+8 is UTC-8 (POSIX quirk). 09:15 local = 17:15 UTC in DST-active
+        # (March) AND standard (January) — the whole point of fixed offsets.
+        dst_active = datetime(2026, 3, 15, 9, 15)
+        standard = datetime(2026, 1, 15, 9, 15)
+        parser.dump_to_db("WA_STN", DataType.flow, dst_active, 1.0)
+        parser.dump_to_db("WA_STN", DataType.gauge, standard, 2.0)
+        parser._flush_buffer()
+        rows = {
+            o.data_type: o.observed_at
+            for o in session.query(Observation).filter_by(source_id=src.id).all()
+        }
+        assert rows[DataType.flow].replace(tzinfo=UTC) == datetime(2026, 3, 15, 17, 15, tzinfo=UTC)
+        assert rows[DataType.gauge].replace(tzinfo=UTC) == datetime(2026, 1, 15, 17, 15, tzinfo=UTC)
+
+    def test_naive_without_tz_map_stored_as_utc(self, session):
+        """Without source_tz_map entry, naive timestamps get UTC stamp at store."""
+        src = _make_source(session, name="STN_UTC")
+        parser = ConcreteParser(
+            url="https://example.com/test",
+            session=session,
+            source_map={"STN_UTC": src.id},
+        )
+        naive = datetime(2026, 3, 15, 9, 15)
+        parser.dump_to_db("STN_UTC", DataType.flow, naive, 100.0)
+        parser._flush_buffer()
+        obs = session.query(Observation).filter_by(source_id=src.id).one()
+        assert obs.observed_at.replace(tzinfo=UTC) == datetime(2026, 3, 15, 9, 15, tzinfo=UTC)
+
+    def test_tz_aware_input_bypasses_localization(self, session):
+        """Already-tz-aware datetimes are stored verbatim (parser already did the work)."""
+        src = _make_source(session, name="STN_AWARE")
+        parser = ConcreteParser(
+            url="https://example.com/test",
+            session=session,
+            source_map={"STN_AWARE": src.id},
+            source_tz_map={"STN_AWARE": "America/Boise"},  # would shift if applied
+        )
+        aware_utc = datetime(2026, 3, 15, 15, 15, tzinfo=UTC)
+        parser.dump_to_db("STN_AWARE", DataType.flow, aware_utc, 100.0)
+        parser._flush_buffer()
+        obs = session.query(Observation).filter_by(source_id=src.id).one()
+        assert obs.observed_at.replace(tzinfo=UTC) == aware_utc
+
+
 class TestAutoCreateSource:
     def test_unknown_station_with_fetch_url_id_creates_source(self, session):
         """Unknown station with fetch_url_id set should auto-create Source and store."""

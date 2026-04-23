@@ -8,7 +8,8 @@ import html
 import logging
 import re
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -41,6 +42,7 @@ class BaseParser(ABC):
         *,
         source_id: int | None = None,
         source_map: dict[str, int] | None = None,
+        source_tz_map: dict[str, str] | None = None,
         dry_run: bool = False,
         fetch_url_id: int | None = None,
         agency: str | None = None,
@@ -49,11 +51,17 @@ class BaseParser(ABC):
         self.session = session
         self.source_id = source_id
         self.source_map = source_map or {}
+        # station → IANA TZ name. Used by dump_to_db to localize naive
+        # timestamps (USBR's per-station local time; wa.gov year-round PST).
+        # Unset means naive timestamps get UTC stamped as-is at store time.
+        self.source_tz_map = source_tz_map or {}
         self.dry_run = dry_run
         self.fetch_url_id = fetch_url_id
         self.agency = agency
         self._db_updates = 0
         self._obs_buffer: list[dict] = []
+        # Cache of ZoneInfo objects to avoid repeated lookups per observation.
+        self._tz_cache: dict[str, ZoneInfo] = {}
 
     # ------------------------------------------------------------------
     # Text feeding (mirrors serveUpLines / serveUpCookedLines)
@@ -108,7 +116,24 @@ class BaseParser(ABC):
         actual DB key is source_id. If source_id is not set (e.g. USGS
         parsers that discover stations dynamically), the station name is
         used for logging only and the observation is stored by source_id.
+
+        If ``when`` is naive and ``source_tz_map`` has an entry for this
+        station, the datetime is interpreted in that timezone and converted
+        to UTC. This is how per-station local-time feeds (USBR's multi-zone
+        CSV, wa.gov year-round PST) get stored correctly without forcing
+        parsers to know the TZ themselves.
         """
+        # Localize naive timestamps using per-station TZ metadata. Must run
+        # BEFORE the debug log so the log reflects the final stored value.
+        if when.tzinfo is None:
+            tz_name = self.source_tz_map.get(station)
+            if tz_name:
+                tz = self._tz_cache.get(tz_name)
+                if tz is None:
+                    tz = ZoneInfo(tz_name)
+                    self._tz_cache[tz_name] = tz
+                when = when.replace(tzinfo=tz).astimezone(UTC)
+
         self._db_updates += 1
 
         logger.debug("DB dump %s/%s %s %s", station, data_type, value, when)
@@ -143,13 +168,23 @@ class BaseParser(ABC):
     def _auto_create_source(self, station: str) -> int:
         """Auto-create a Source record for an unknown station.
 
-        Returns the new source_id and caches it in source_map.
+        Returns the new source_id and caches it in source_map. Emits a
+        warning (not info) because the new row has no ``timezone`` set — if
+        this feed publishes local time, observations will be stored as
+        naive UTC (shifted by the local offset) until the station is added
+        to the URL's ``stations:`` block in data/sources.yaml.
         """
         src = Source(name=station, agency=self.agency, fetch_url_id=self.fetch_url_id)
         self.session.add(src)
         self.session.flush()
         self.source_map[station] = src.id
-        logger.info("Auto-created Source id=%d for station %s", src.id, station)
+        logger.warning(
+            "Auto-created Source id=%d for station %s (no timezone). "
+            "If this feed publishes local time, add it to the stations: block "
+            "for this URL in data/sources.yaml.",
+            src.id,
+            station,
+        )
         return src.id
 
     def _flush_buffer(self) -> None:

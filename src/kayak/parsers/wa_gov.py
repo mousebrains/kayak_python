@@ -83,8 +83,11 @@ class WaGovParser(BaseParser):
         if quality is None or quality <= 0 or quality >= 200:
             return True
 
+        # Timestamps are naive; source.timezone (seeded from sources.yaml
+        # stations: block, typically "Etc/GMT+8" — PST year-round, no DST)
+        # is applied by BaseParser.dump_to_db.
         time_str = parts[0] + " " + parts[1]
-        when = parse_datetime(time_str)
+        when = parse_datetime(time_str, assume_naive=True)
         if when is None:
             return True
 

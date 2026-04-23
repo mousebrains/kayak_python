@@ -147,6 +147,12 @@ class Source(Base):
     station number). Callers looking up by name must use ``.first()``
     rather than ``.scalar_one_or_none()`` or risk a ``MultipleResultsFound``
     error on those stations.
+
+    ``timezone`` is an IANA TZ name (``America/Boise``, ``America/Los_Angeles``,
+    ``Etc/GMT+8``) seeded from the ``stations:`` block in data/sources.yaml
+    and consumed by ``BaseParser.dump_to_db`` to localize naive timestamps
+    before UTC conversion. NULL (the default) means "treat naive timestamps
+    as UTC" — the correct behavior for parsers whose feed is already UTC.
     """
 
     __tablename__ = "source"
@@ -154,6 +160,7 @@ class Source(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     agency: Mapped[str | None] = mapped_column(String(64))
+    timezone: Mapped[str | None] = mapped_column(String(64))
     fetch_url_id: Mapped[int | None] = mapped_column(
         ForeignKey("fetch_url.id", ondelete="SET NULL")
     )

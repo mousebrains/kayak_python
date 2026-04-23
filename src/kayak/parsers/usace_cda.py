@@ -42,6 +42,16 @@ class USACECDAParser(BaseParser):
 
     def parse(self, text: str) -> int:
         """Parse JSON response from USACE web service."""
+        # USACE CDA returns naive timestamps; server TZ is server-default (PST)
+        # unless the URL pins it. parse_datetime() stamps UTC on naive inputs,
+        # so timestamps are only correct if the URL requests UTC explicitly.
+        if "timezone=GMT" not in self.url:
+            raise ValueError(
+                f"USACE CDA URL must include 'timezone=GMT' (got {self.url!r}); "
+                "without it the server defaults to PST and timestamps will be "
+                "stored 8h early."
+            )
+
         self._db_updates = 0
         self._obs_buffer = []
 

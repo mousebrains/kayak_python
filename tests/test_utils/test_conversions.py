@@ -168,6 +168,16 @@ class TestParseDatetime:
             parse_datetime("2024-06-15 10:00:00", tz_name="BOGUS")
         assert "Unknown timezone 'BOGUS'" in caplog.text
 
+    def test_assume_naive_returns_naive_datetime(self):
+        result = parse_datetime("2024-06-15 10:30:00", assume_naive=True)
+        assert result == datetime(2024, 6, 15, 10, 30, 0)
+        assert result.tzinfo is None
+
+    def test_tz_name_overrides_assume_naive(self):
+        """tz_name takes precedence — returns UTC-aware even with assume_naive."""
+        result = parse_datetime("2024-06-15 10:00:00", tz_name="PST", assume_naive=True)
+        assert result == datetime(2024, 6, 15, 18, 0, 0, tzinfo=UTC)
+
     def test_empty_string_returns_none(self):
         assert parse_datetime("") is None
 

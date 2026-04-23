@@ -79,11 +79,23 @@ def interpolate_rating(
     return None
 
 
-def parse_datetime(text: str, tz_name: str | None = None) -> datetime | None:
+def parse_datetime(
+    text: str,
+    tz_name: str | None = None,
+    *,
+    assume_naive: bool = False,
+) -> datetime | None:
     """Parse a date/time string with optional timezone.
 
     Tries several common formats used by government agencies.
-    Returns a timezone-aware datetime in UTC, or None on failure.
+
+    Return type depends on flags:
+      * ``tz_name`` set → tz-aware UTC datetime (input interpreted in tz_name)
+      * ``assume_naive=True`` → naive datetime (caller handles TZ later, e.g.
+        via ``BaseParser.dump_to_db`` and ``source.timezone``)
+      * neither → tz-aware UTC datetime (assumes the input is already UTC)
+
+    Returns ``None`` on parse failure.
     """
     text = text.strip()
     if not text:
@@ -129,6 +141,9 @@ def parse_datetime(text: str, tz_name: str | None = None) -> datetime | None:
         else:
             logger.warning("Unknown timezone '%s', falling back to UTC", tz_name)
             dt = dt.replace(tzinfo=UTC)
+    elif assume_naive:
+        # Caller will apply per-station TZ later (see BaseParser.dump_to_db).
+        pass
     else:
         dt = dt.replace(tzinfo=UTC)
 

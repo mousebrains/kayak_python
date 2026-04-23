@@ -127,7 +127,20 @@ usbr:
   urls:
     # Narrowed 2026-04-17 from 87 → 8 stations (only the linked ones).
     # All 8 appear in gauge_source; the prior 76 orphans produced data nobody read.
+    # USBR pn-hydromet publishes each station's timestamps in its own local
+    # timezone, so the stations: map below is required for correct UTC storage.
+    # Oregon Pacific stations are on America/Los_Angeles (PDT/PST); Idaho
+    # Mountain stations and Malheur-County OR's ROMO are on America/Boise.
     - url: "https://www.usbr.gov/pn-bin/v1/instant.pl?back=3&format=csv&list=BENO,CSCI,DEBO,HCDI,HRSI,ROMO,UMAO,WICO"
+      stations:
+        BENO: America/Los_Angeles
+        DEBO: America/Los_Angeles
+        WICO: America/Los_Angeles
+        UMAO: America/Los_Angeles
+        CSCI: America/Boise
+        HRSI: America/Boise
+        HCDI: America/Boise
+        ROMO: America/Boise
 
 usace.cda:
   urls:
@@ -135,14 +148,23 @@ usace.cda:
     - url: "https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22FAL.Flow-Out.Inst.0.0.Best%22,%22FAL.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d"
 
 wa.gov:
+  # WA DOE publishes timestamps in PST year-round (no DST), per the header of
+  # every *_FM.TXT file. Etc/GMT+8 is the POSIX alias for "UTC-8 always" — the
+  # sign is inverted vs IANA convention but that's correct for fixed PST.
   urls:
     # 30C070 Klickitat River at Wahkiacus — station dead since 2025-07-02; disabled 2026-04-17
     # - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/30C070/30C070_STG_FM.TXT"
     # - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/30C070/30C070_DSG_FM.TXT"
     # - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/30C070/30C070_WTM_FM.TXT"
     - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_STG_FM.TXT"
+      stations:
+        "29C100": Etc/GMT+8
     - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_DSG_FM.TXT"
+      stations:
+        "29C100": Etc/GMT+8
     - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_WTM_FM.TXT"
+      stations:
+        "29C100": Etc/GMT+8
 
 # No Python parser implementation yet
 cdec:
