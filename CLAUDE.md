@@ -36,11 +36,24 @@ python3 -m venv /home/pat/.venv
 
 ```bash
 pip install -e ".[dev]"              # Install in editable mode with dev deps (pytest, ruff, mypy)
+# or: uv sync --locked --all-extras (matches CI)
 
 levels --help                        # CLI entry point (registered in pyproject.toml)
-levels init-db                       # Create tables, seed states/sources from data/*.yaml
-levels pipeline                      # Run full pipeline: fetch → calc-rating → merge → calculator → build
+levels init-db                       # Create tables, seed states/sources, stamp migrations
+levels migrate                       # Apply any pending data/db/migrations/*.sql files
+levels pipeline                      # fetch → fetch-usgs-ogc → calc-rating → update-gauge-cache → calculator → build
 levels build                         # Generate static HTML/CSV/text to public_html/
+
+# Less-common subcommands (see `levels <cmd> --help` for details)
+levels fetch                         # One shot of the pipeline's first stage
+levels fetch-usgs-ogc                # Fetch USGS OGC continuous data for gauges with usgs_id
+levels merge                         # Median-fuse observations across a gauge's sources (manual-only)
+levels calc-rating                   # Interpolate via rating tables (dormant until rating_data loaded)
+levels calculator                    # Evaluate synthetic gauge expressions
+levels decimate                      # Thin old observations (daily via kayak-decimate timer)
+levels seed-maintainer --email …     # Create/promote a maintainer editor row
+levels trace --putin … --takeout …   # Trace a reach along NHD HR flowlines
+levels assign-huc                    # Assign HUC12 codes to reaches (requires [geo] extra)
 ```
 
 ### Testing
@@ -103,16 +116,23 @@ Runs these steps in order:
 
 ### Database
 
-Single normalized SQLite database (`kayak.db`). Schema defined in `src/kayak/db/models.py` (SQLAlchemy 2.x ORM, 18 tables). Key tables:
+Single normalized SQLite database (`kayak.db`). Schema defined in `src/kayak/db/models.py` (SQLAlchemy 2.x ORM, 28 tables). Key tables:
 
 - `source` / `gauge` / `gauge_source` — data sources and physical gauge stations
 - `observation` — time-series data (source_id, observed_at, data_type, value)
-- `latest_observation` — cached most-recent reading with delta_per_hour
-- `reach` — river runs with metadata, coordinates, levels
+- `latest_observation` / `latest_gauge_observation` — cached most-recent reading with delta_per_hour
+- `reach` / `reach_state` / `reach_class` / `reach_guidebook` — paddleable runs with state, class, and guidebook relationships
 - `fetch_url` / `calc_expression` — how to obtain data (fetch vs. calculate)
-- `rating` / `rating_data` — gage height ↔ flow conversion tables
+- `rating` / `rating_data` — gage height ↔ flow conversion tables (dormant — reserved for per-gauge rating curves)
+- `editor` / `editor_session` / `editor_magic_link` / `maintainer_credential` — Phase 1 editor accounts + session cookies
+- `change_request` / `change_request_attachment` / `edit_history` — proposal queue + audit trail
+- `huc_name` — WBD HUC2/4/6/8/10/12 name lookup populated by `levels assign-huc`
+- `schema_migrations` — tracks applied `data/db/migrations/*.sql` versions
 
-Schema changes are applied by adding models to `models.py` and running `levels init-db` (uses `Base.metadata.create_all()`).
+Schema evolution:
+1. Add or change the model in `models.py`.
+2. For new fresh-DB shape only, `levels init-db` (re)creates tables via `Base.metadata.create_all()` and stamps every discovered migration file as applied.
+3. For changes that need to land on an existing DB (ALTER / DROP / rename / CHECK), add a new `data/db/migrations/NNNN_description.sql` and run `levels migrate` — SQL runs in file-order inside a transaction; the row in `schema_migrations` records completion.
 
 ### Parser System
 

@@ -15,7 +15,7 @@ Live site: [levels.wkcc.org](https://levels.wkcc.org)
   USGS / NOAA / USACE / USBR / IDWR APIs
                  |
           levels pipeline          (Python — runs hourly via systemd)
-     fetch → calc-rating → merge → calculator → build
+     fetch → fetch-usgs-ogc → calc-rating → update-gauge-cache → calculator → build
                  |                               |
               SQLite DB                    public_html/
               (kayak.db)                  (static HTML/CSV)
@@ -58,15 +58,19 @@ php -S localhost:8000 -t public_html
 
 | Command | Purpose |
 |---------|---------|
-| `levels init-db` | Create tables, seed states/sources from `data/sources.yaml` |
-| `levels pipeline` | Run full pipeline: fetch + calc-rating + merge + calculator + build |
-| `levels fetch` | Fetch observations from all active sources |
-| `levels fetch-usgs-ogc` | Fetch USGS data via the OGC SensorThings API |
+| `levels init-db` | Create tables, seed states/sources from `data/sources.yaml`, stamp all known migrations |
+| `levels migrate` | Apply pending `data/db/migrations/*.sql` files (tracked in `schema_migrations`) |
+| `levels pipeline` | Run full pipeline: fetch → fetch-usgs-ogc → calc-rating → update-gauge-cache → calculator → build |
+| `levels fetch` | Fetch observations from all active sources (standalone — also runs as pipeline stage 1) |
+| `levels fetch-usgs-ogc` | Fetch USGS continuous data via the OGC API for gauges with `usgs_id` |
 | `levels calc-rating` | Interpolate missing flow/gage values using rating tables |
-| `levels merge` | Merge observations from multiple sources per gauge |
+| `levels merge` | Merge observations from multiple sources per gauge (manual — not in pipeline) |
 | `levels calculator` | Evaluate calculated expressions (synthetic gauges) |
 | `levels build` | Generate static HTML/CSV/text to `public_html/` |
 | `levels decimate` | Thin old observations (keeps 90d full, 1h/365d, 6h/archive) |
+| `levels seed-maintainer --email …` | Create or promote an editor row to status=maintainer |
+| `levels trace --putin … --takeout …` | Trace a reach along NHD HR flowlines |
+| `levels assign-huc` | Assign HUC12 codes to reaches via WBD polygons (requires `[geo]` extra) |
 
 ## PHP API Endpoints
 
@@ -81,7 +85,7 @@ php -S localhost:8000 -t public_html
 | `/source.php?id=N` | Source metadata and recent observations |
 | `/data.php?id=N` | Raw observation data inspector |
 | `/picker.php` | Interactive reach picker |
-| `/edit.php?id=N` | Reach editor (HTTP Basic Auth) |
+| `/edit.php?id=N` | Reach editor (maintainer-only, editor-session cookie auth) |
 | `/custom.php` | Custom levels page builder |
 
 ## Development
