@@ -15,10 +15,13 @@ from kayak.cli.build import (
     _build_text,
     _get_row_data,
     _levels_key,
+    _select_sparkline_series,
 )
 from kayak.db.models import (
     DataType,
+    FetchUrl,
     Gauge,
+    GaugeSource,
     LatestGaugeObservation,
     Observation,
     Reach,
@@ -328,6 +331,90 @@ class TestBuildSparkline:
         result = _build_sparkline(reach, {gauge.id: obs}, width=100, height=30)
         assert 'width="100"' in result
         assert 'height="30"' in result
+
+
+# ---------------------------------------------------------------------------
+# _select_sparkline_series — series-picking for sparkline fallback
+# ---------------------------------------------------------------------------
+
+
+def _seed_obs(session, gauge, data_type, hours_ago_list, base_value=100.0):
+    """Attach observations at the given hours-ago offsets to a new source."""
+    fu = FetchUrl(url=f"https://example.com/{gauge.name}-{data_type.value}", parser="test")
+    session.add(fu)
+    session.flush()
+    src = Source(name=f"{gauge.name}-{data_type.value}", fetch_url_id=fu.id)
+    session.add(src)
+    session.flush()
+    session.add(GaugeSource(gauge_id=gauge.id, source_id=src.id))
+    now = datetime.now(UTC)
+    for i, h in enumerate(hours_ago_list):
+        session.add(
+            Observation(
+                source_id=src.id,
+                observed_at=now - timedelta(hours=h),
+                data_type=data_type,
+                value=base_value + i,
+            )
+        )
+    session.flush()
+
+
+class TestSelectSparklineSeries:
+    def test_picks_flow_when_current(self, session):
+        g = Gauge(name="G_flow_current")
+        session.add(g)
+        session.flush()
+        _seed_obs(session, g, DataType.flow, [5, 2, 0.5])
+        _seed_obs(session, g, DataType.gauge, [5, 2, 0.5], base_value=1.0)
+
+        picked = _select_sparkline_series(session, [g.id])
+        assert g.id in picked
+        assert all(o.data_type == DataType.flow for o in picked[g.id])
+
+    def test_falls_back_to_inflow_when_flow_stale(self, session):
+        g = Gauge(name="G_inflow")
+        session.add(g)
+        session.flush()
+        # flow only has stale points (latest 24h ago)
+        _seed_obs(session, g, DataType.flow, [40, 30, 24])
+        _seed_obs(session, g, DataType.inflow, [5, 2, 0.5])
+
+        picked = _select_sparkline_series(session, [g.id])
+        assert all(o.data_type == DataType.inflow for o in picked[g.id])
+
+    def test_falls_back_to_gauge_when_flow_and_inflow_stale(self, session):
+        g = Gauge(name="G_gauge_fallback")
+        session.add(g)
+        session.flush()
+        _seed_obs(session, g, DataType.flow, [72, 60, 40])  # all >6h
+        _seed_obs(session, g, DataType.inflow, [72, 60, 40])
+        _seed_obs(session, g, DataType.gauge, [5, 2, 0.5])  # fresh
+
+        picked = _select_sparkline_series(session, [g.id])
+        assert all(o.data_type == DataType.gauge for o in picked[g.id])
+
+    def test_no_series_when_all_stale(self, session):
+        g = Gauge(name="G_all_stale")
+        session.add(g)
+        session.flush()
+        _seed_obs(session, g, DataType.flow, [72, 60, 40])
+        _seed_obs(session, g, DataType.gauge, [72, 60, 40])
+
+        picked = _select_sparkline_series(session, [g.id])
+        assert g.id not in picked
+
+    def test_excludes_observations_outside_48h_window(self, session):
+        """The 48h fetch window clips far-past data even if a current point exists."""
+        g = Gauge(name="G_windowed")
+        session.add(g)
+        session.flush()
+        # A current point plus very old ones — only the current makes the window.
+        _seed_obs(session, g, DataType.flow, [200, 150, 0.5])
+
+        picked = _select_sparkline_series(session, [g.id])
+        # All picked points are within 48h (only the 0.5h one should survive).
+        assert len(picked[g.id]) == 1
 
 
 # ---------------------------------------------------------------------------

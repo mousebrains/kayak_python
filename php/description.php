@@ -12,6 +12,21 @@ require_once __DIR__ . '/includes/html.php';
 require_once __DIR__ . '/includes/svg_plot.php';
 require_once __DIR__ . '/includes/validate.php';
 
+/** True iff the gauge's latest observation of $type is within the last $hours. */
+function _desc_has_current_obs(PDO $db, int $gauge_id, string $type, int $hours): bool {
+    $stmt = $db->prepare(
+        'SELECT MAX(o.observed_at) FROM observation o
+         JOIN gauge_source gs ON o.source_id = gs.source_id
+         WHERE gs.gauge_id = ? AND o.data_type = ?'
+    );
+    $stmt->execute([$gauge_id, $type]);
+    $latest = $stmt->fetchColumn();
+    if (!$latest) return false;
+    $ts = strtotime((string)$latest . ' UTC');
+    if ($ts === false) return false;
+    return $ts >= (time() - $hours * 3600);
+}
+
 /** True iff at least one observation of $type exists for the gauge in [since, until]. */
 function _desc_has_obs(PDO $db, int $gauge_id, string $type, string $since, ?string $until): bool {
     if ($until !== null) {
@@ -264,8 +279,20 @@ if ($gauge) {
     $has_gauge  = _desc_has_obs($db, (int)$gauge['id'], 'gauge',       $since, $until);
     $has_temp   = _desc_has_obs($db, (int)$gauge['id'], 'temperature', $since, $until);
 
-    // Flow takes precedence over inflow for the primary "flow-like" series.
-    $primary_type  = $has_flow ? 'flow' : ($has_inflow ? 'inflow' : null);
+    // Primary "flow-like" series: prefer flow, fall back to inflow.
+    // In the default (recent) view, require the latest flow/inflow reading
+    // to be within 6h — otherwise fall through to gauge-height only, which
+    // matches how the index-page sparkline picks its series. When the user
+    // explicitly picks a date range, trust that intent and use any data in
+    // the window so historical flow plots still render.
+    $is_default_view = !($start_date && $end_date);
+    if ($is_default_view) {
+        $flow_current   = _desc_has_current_obs($db, (int)$gauge['id'], 'flow',   6);
+        $inflow_current = _desc_has_current_obs($db, (int)$gauge['id'], 'inflow', 6);
+        $primary_type = $flow_current ? 'flow' : ($inflow_current ? 'inflow' : null);
+    } else {
+        $primary_type = $has_flow ? 'flow' : ($has_inflow ? 'inflow' : null);
+    }
     $primary_label = $primary_type === 'flow'   ? 'Flow (CFS)'
                    : ($primary_type === 'inflow' ? 'Inflow (CFS)' : '');
 

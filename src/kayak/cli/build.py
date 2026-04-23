@@ -59,6 +59,11 @@ DATA_STALE_THRESHOLD = timedelta(hours=48)
 DATA_EXPIRY_THRESHOLD = timedelta(days=7)
 SPARKLINE_OBSERVATION_WINDOW = timedelta(hours=48)
 
+# Sparkline series-selection freshness: a series is considered "current" if
+# its most recent observation is within this window. Used to decide whether
+# flow/inflow is current enough to plot, or to fall back to gauge height.
+SPARKLINE_CURRENT_WINDOW = timedelta(hours=6)
+
 # GeoJSON geometry simplification. Coordinate precision is matched to the
 # simplify epsilon - quantizing below the simplification grid would be wasted
 # bytes. At 44N, 1e-4 deg ~= 8-11 m, below NHD's horizontal accuracy.
@@ -295,6 +300,40 @@ def _get_row_data(
 # ---------------------------------------------------------------------------
 # Sparkline SVG
 # ---------------------------------------------------------------------------
+
+
+def _select_sparkline_series(
+    session: Session, gauge_ids: list[int]
+) -> dict[int, list[Observation]]:
+    """Choose which data-type series drives each gauge's sparkline.
+
+    Per-gauge preference: flow → inflow → gauge, taking whichever has a
+    latest observation within ``SPARKLINE_CURRENT_WINDOW``. If flow or
+    inflow has only stale points, we fall through to gauge-height rather
+    than draw a multi-day-old flow line. Stored values are naive-UTC in
+    SQLite, so we compare against ``datetime.now(UTC)`` after stamping UTC.
+    """
+    since_48h = datetime.now(UTC) - SPARKLINE_OBSERVATION_WINDOW
+    current_cutoff = datetime.now(UTC) - SPARKLINE_CURRENT_WINDOW
+    flow_obs = get_bulk_gauge_observations(session, gauge_ids, DataType.flow, since_48h)
+    inflow_obs = get_bulk_gauge_observations(session, gauge_ids, DataType.inflow, since_48h)
+    gauge_obs = get_bulk_gauge_observations(session, gauge_ids, DataType.gauge, since_48h)
+
+    def _is_current(obs: list[Observation] | None) -> bool:
+        if not obs:
+            return False
+        latest = max(o.observed_at for o in obs)
+        if latest.tzinfo is None:
+            latest = latest.replace(tzinfo=UTC)
+        return latest >= current_cutoff
+
+    selected: dict[int, list[Observation]] = {}
+    for gid in gauge_ids:
+        for series in (flow_obs.get(gid), inflow_obs.get(gid), gauge_obs.get(gid)):
+            if _is_current(series):
+                selected[gid] = series  # type: ignore[assignment]
+                break
+    return selected
 
 
 def _build_sparkline(
@@ -1317,11 +1356,7 @@ def _build_and_write(
     else:
         calculated_gauge_ids = get_calculated_gauge_ids(session, gauge_ids)
         all_latest = get_all_latest_gauges(session, gauge_ids)
-    since_48h = datetime.now(UTC) - SPARKLINE_OBSERVATION_WINDOW
-    sparkline_obs = get_bulk_gauge_observations(session, gauge_ids, DataType.flow, since_48h)
-    inflow_obs = get_bulk_gauge_observations(session, gauge_ids, DataType.inflow, since_48h)
-    for gid, obs in inflow_obs.items():
-        sparkline_obs.setdefault(gid, obs)
+    sparkline_obs = _select_sparkline_series(session, gauge_ids)
 
     # CSV
     csv_content = _build_csv(reaches, columns, state, calculated_gauge_ids, all_latest)
