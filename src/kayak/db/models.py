@@ -160,7 +160,7 @@ class Source(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     agency: Mapped[str | None] = mapped_column(String(64))
-    timezone: Mapped[str | None] = mapped_column(String(64))
+    timezone: Mapped[str | None] = mapped_column(Text)
     fetch_url_id: Mapped[int | None] = mapped_column(
         ForeignKey("fetch_url.id", ondelete="SET NULL")
     )
