@@ -165,6 +165,16 @@ wa.gov:
     - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_WTM_FM.TXT"
       stations:
         "29C100": Etc/GMT+8
+    # 28B080 Washougal River — gauge 184, linked to reach 387 (Washougal)
+    - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/28B080/28B080_STG_FM.TXT"
+      stations:
+        "28B080": Etc/GMT+8
+    - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/28B080/28B080_DSG_FM.TXT"
+      stations:
+        "28B080": Etc/GMT+8
+    - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/28B080/28B080_WTM_FM.TXT"
+      stations:
+        "28B080": Etc/GMT+8
 
 # No Python parser implementation yet
 cdec:
