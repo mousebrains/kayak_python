@@ -16,7 +16,7 @@ All notable changes to this project will be documented in this file.
 - "Legacy C++ Code" section from `CLAUDE.md`.
 
 ### Added
-- GitHub Actions CI workflow (lint, typecheck, test on Python 3.11-3.13)
+- GitHub Actions CI workflow (lint, typecheck, test on Python 3.13)
 - Makefile for common development commands
 - CONTRIBUTING.md with development workflow guide
 - Pre-commit hooks configuration (ruff + mypy)
@@ -38,8 +38,8 @@ All notable changes to this project will be documented in this file.
 - Removed incorrect Flask references from `.env.example`
 
 ### Improved
-- Test coverage: 77% to 81% (build.py: 42% to 75%, new decimate tests)
-- Total test count: 304 to 350
+- Test coverage: 77% to 79% (build.py: 42% to 90%, new decimate tests)
+- Total test count: 304 to 529
 
 ## [0.1.0] - 2026-03-01
 

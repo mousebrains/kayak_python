@@ -52,7 +52,10 @@ server {
         return 405;
     }
 
-    # Block known malicious scanners and exploit tools
+    # Block known malicious scanners and exploit tools.
+    # Claude-SearchBot / ClaudeBot are included because they ignore robots.txt
+    # and generate enough hourly traffic to distort pipeline-freshness signals
+    # without ever being useful to our readers.
     if ($http_user_agent ~* (zgrab|masscan|scanner/1\.0|libredtail|xfa1|Gh0st|^Hello|nvdorz|FreePBX-Scanner|Claude-SearchBot|ClaudeBot|r00ts3c|Scrapy|python-requests)) {
         return 444;
     }

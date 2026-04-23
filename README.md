@@ -88,7 +88,7 @@ php -S localhost:8000 -t public_html
 
 ```bash
 # Testing
-pytest                            # Run all 304 tests (in-memory SQLite)
+pytest                            # Run all tests (in-memory SQLite)
 pytest --cov=kayak                # With coverage report
 pytest -k test_store_observation  # Run a single test
 
@@ -110,8 +110,10 @@ See [deploy/SETUP.md](deploy/SETUP.md) for the full deployment guide.
 
 Key systemd timers:
 - **kayak-pipeline** — hourly at :12 (fetch + build)
+- **kayak-healthcheck** — hourly at :45 (data-freshness check, emails on staleness)
 - **kayak-decimate** — daily at 02:32 (thin old observations)
 - **kayak-backup** — weekly Sunday 03:15 (4-copy retention)
+- **kayak-heartbeat** — weekly Sunday 06:00 (confirms alert pipeline)
 
 ## Documentation
 
@@ -120,7 +122,7 @@ Key systemd timers:
 | [CLAUDE.md](CLAUDE.md) | Architecture, dev setup, conventions, key patterns |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development workflow, testing, adding parsers |
 | [deploy/SETUP.md](deploy/SETUP.md) | Production deployment (Hetzner/Oracle Cloud) |
-| [docs/database-schema.md](docs/database-schema.md) | Full schema reference (18 tables) |
+| [docs/database-schema.md](docs/database-schema.md) | Full schema reference (28 tables) |
 | [docs/schema-overview.svg](docs/schema-overview.svg) | ER diagram |
 | [docs/nginx-hardening.md](docs/nginx-hardening.md) | Security hardening guide |
 
