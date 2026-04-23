@@ -242,7 +242,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // Notify maintainer(s)
             $maint_emails = maintainer_emails();
-            $site = rtrim(auth_env('SITE_URL') ?: 'https://levels.mousebrains.com', '/');
+            $site = rtrim(auth_env('SITE_URL') ?: 'https://levels.wkcc.org', '/');
             $summary_lines = [];
             foreach (($payload['reach'] ?? []) as $f => $v) {
                 $cur = (string)($reach[$f] ?? '');

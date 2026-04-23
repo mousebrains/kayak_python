@@ -32,4 +32,4 @@ OUTPUT_DIR = os.environ.get("OUTPUT_DIR", str(BASE_DIR / "public_html"))
 # Maintainer
 MAINTAINER_EMAIL = "pat.kayak@gmail.com"
 MAINTAINER_NAME = "Pat Welch"
-SITE_URL = os.environ.get("SITE_URL", "http://levels.wkcc.org")
+SITE_URL = os.environ.get("SITE_URL", "https://levels.wkcc.org")

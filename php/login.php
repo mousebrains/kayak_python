@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$issued['banned']) {
                 $tok  = $issued['token'];
                 $site_env = auth_env('SITE_URL');
-                $base = rtrim($site_env !== '' ? $site_env : 'https://levels.mousebrains.com', '/');
+                $base = rtrim($site_env !== '' ? $site_env : 'https://levels.wkcc.org', '/');
                 $link = $base . '/auth.php?t=' . urlencode($tok)
                       . '&next=' . rawurlencode($next);
                 $body = render_magic_link_email(

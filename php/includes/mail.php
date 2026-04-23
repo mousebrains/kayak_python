@@ -102,7 +102,7 @@ will occur.
 
 —
 WKCC River Levels
-https://levels.mousebrains.com
+https://levels.wkcc.org
 TXT;
 }
 
@@ -149,7 +149,7 @@ Thank you for contributing.
 
 —
 WKCC River Levels
-https://levels.mousebrains.com
+https://levels.wkcc.org
 TXT;
 }
 
@@ -168,6 +168,6 @@ and submitting again, or wait for the maintainer's next action.
 
 —
 WKCC River Levels
-https://levels.mousebrains.com
+https://levels.wkcc.org
 TXT;
 }

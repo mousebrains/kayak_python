@@ -162,7 +162,7 @@ cat <<'EOF'
        map $host $editor_feature     { default "1"; }
        map $host $hcaptcha_site_key  { default "<your hcaptcha site key>"; }
        map $host $hcaptcha_secret    { default "<your hcaptcha secret>"; }
-       map $host $mail_from          { default "noreply@levels.mousebrains.com"; }
+       map $host $mail_from          { default "noreply@levels.wkcc.org"; }
 
      then:  sudo nginx -t && sudo systemctl reload nginx
 

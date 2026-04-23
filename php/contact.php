@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $from_txt = $from_addr !== '' ? $from_addr : '(not provided)';
             $subj_txt = $subject   !== '' ? $subject   : '(no subject)';
             $email_body = <<<TXT
-Contact form submission from levels.mousebrains.com
+Contact form submission from levels.wkcc.org
 
 From:    $from_txt
 Subject: $subj_txt
