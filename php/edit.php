@@ -95,7 +95,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $id,
                     $field,
                     $pair['old'] === null ? null : (string)$pair['old'],
-                    $pair['new'] === null ? null : (string)$pair['new'],
+                    // $pair['new'] is always float or non-empty string by
+                    // construction above — empties were skipped and numerics
+                    // were cast.
+                    (string)$pair['new'],
                     $changed_by,
                 ]);
             }
