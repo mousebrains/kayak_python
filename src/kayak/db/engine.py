@@ -20,9 +20,16 @@ def _set_sqlite_pragma(dbapi_conn: object, _connection_record: object) -> None:
 
 
 def get_engine(url: str | None = None) -> Engine:
-    """Return the singleton engine, creating it on first call."""
+    """Return the singleton engine, creating it on first call.
+
+    When ``url`` is supplied, the prior engine (if any) is disposed before the
+    new one is built — otherwise every ``get_engine(url=…)`` call would orphan
+    its connection pool.
+    """
     global _engine
     if _engine is None or url is not None:
+        if _engine is not None and url is not None:
+            _engine.dispose()
         db_url = url or DATABASE_URL
         connect_args = {}
         if db_url.startswith("sqlite"):

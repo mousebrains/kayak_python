@@ -89,8 +89,11 @@ def _build_parameters() -> dict[int, _Parameter]:
         p(400, "ph"),
         p(480, "SalinityPPT"),
         p(931, "SodiumAdsorptionRatio"),
-        p(30208, "flowCubicMetersPerSecond"),
-        p(30209, "flowCubicMetersPerSecond"),
+        # Cubic-meters-per-second flow codes: convert m³/s → cfs.
+        # USGS rarely ships these for US sites but they do appear on a few
+        # border/international feeds; we'd rather convert than drop.
+        p(30208, "flowCubicMetersPerSecond", "flow", min_val=0, slope=35.3147),
+        p(30209, "flowCubicMetersPerSecond", "flow", min_val=0, slope=35.3147),
         p(32209, "chlorophyllAFlurometric"),
         p(32210, "chlorophyllATrichromatic"),
         p(32234, "chlorophyllTotalSpectrophotometric"),
@@ -140,7 +143,7 @@ def _build_parameters() -> dict[int, _Parameter]:
         p(90860, "gotMe"),
         p(91055, "gotMe"),
         p(95202, "gotMe"),
-        p(99060, "dischargeCubicMetersPerSecond"),
+        p(99060, "dischargeCubicMetersPerSecond", "flow", min_val=0, slope=35.3147),
         p(99065, "gageMeters"),
         p(99900, "other"),
         p(99901, "other"),

@@ -230,7 +230,7 @@ def fetch_usgs_ogc(args: argparse.Namespace) -> None:
     """Fetch USGS data via the OGC API."""
     api_key = os.environ.get("USGS_API_KEY")
 
-    hours = getattr(args, "hours", 24)
+    hours = getattr(args, "hours", 12)
     dry_run = getattr(args, "dry_run", False)
     batch_size = getattr(args, "batch_size", BATCH_SIZE)
 

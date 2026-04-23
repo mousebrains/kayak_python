@@ -33,8 +33,14 @@ def test_hour_allowed_non_matching_hour():
 
 
 def test_hour_allowed_invalid_spec():
-    """Invalid (non-integer) spec returns True (fail-open)."""
-    assert _hour_allowed("abc,xyz") is True
+    """Invalid (non-integer) spec returns False (fail-closed).
+
+    A garbled hours column in fetch_url / sources.yaml would silently
+    allow-always under the old fail-open behavior; flipping to False
+    ensures a data-entry typo surfaces as "nothing fetched at this hour"
+    rather than "fetched every hour".
+    """
+    assert _hour_allowed("abc,xyz") is False
 
 
 # ---------------------------------------------------------------------------

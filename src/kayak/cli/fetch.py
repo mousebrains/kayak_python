@@ -36,16 +36,21 @@ def _hour_allowed(hours_spec: str, now: datetime | None = None) -> bool:
     ``now`` defaults to ``datetime.now(UTC)`` but tests can inject a fixed
     clock to avoid flakiness around the hour boundary.
 
-    Empty string means all hours are allowed.
+    Empty / whitespace-only string means all hours are allowed (the
+    "unconstrained" path that the YAML's default value falls through to).
+    A garbled spec (non-integer tokens, e.g. ``"abc,xyz"``) fails closed —
+    returning False so a data-entry typo doesn't silently disable the
+    constraint and fetch every hour.
     """
     if not hours_spec or not hours_spec.strip():
         return True
     current_hour = (now or datetime.now(UTC)).hour
     try:
         allowed = {int(h.strip()) for h in hours_spec.split(",") if h.strip()}
-        return current_hour in allowed
     except ValueError:
-        return True
+        logger.warning("Invalid hours spec %r — treating as disallowed", hours_spec)
+        return False
+    return current_hour in allowed
 
 
 def addArgs_options(parser: argparse.ArgumentParser) -> None:

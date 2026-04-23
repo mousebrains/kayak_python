@@ -32,10 +32,17 @@ _CODE_MAP: dict[str, DataType | None] = {
     "fb": DataType.gauge,
     "wc": DataType.temperature,  # Celsius
     "wf": DataType.temperature,  # Fahrenheit
+    # ws = water-surface temperature. USBR Hydromet ships it in °F; live-DB
+    # spot-check across 7 stations (BENO, CSCI, DEBO, HRSI, ROMO, UMAO, WICO)
+    # showed min ≈ 37 and typical max 48-52, consistent with Fahrenheit water
+    # temperatures in the Pacific Northwest. If USBR ever publishes a new
+    # station whose values land in the Celsius range (0-30), add "ws" to
+    # _CELSIUS_CODES and document the flip here.
     "ws": DataType.temperature,
 }
 
-# Codes whose values are in Celsius and need conversion
+# Codes whose values are in Celsius and need conversion to Fahrenheit
+# before storage. See celsius_to_fahrenheit in kayak.utils.conversions.
 _CELSIUS_CODES = {"wc"}
 
 
