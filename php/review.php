@@ -56,7 +56,20 @@ function review_load_target_state(PDO $db, string $type, int $id): ?array {
     return ['reach' => $reach, 'reach_class' => ['names' => $classes, 'range' => $range]];
 }
 
-function review_approve(PDO $db, array $cr, array $applied, int $maint_id): array {
+/**
+ * Append a new maintainer note to the prior reviewer_note thread, stamped
+ * with the current UTC timestamp. Used by approve / reject / reply so the
+ * conversation is preserved across actions.
+ */
+function merge_reviewer_note(string $prev, string $new): string {
+    $new = trim($new);
+    if ($new === '') return $prev;
+    $stamp = gmdate('Y-m-d H:i') . 'Z';
+    $entry = "[$stamp maintainer] " . $new;
+    return $prev === '' ? $entry : rtrim($prev) . "\n\n" . $entry;
+}
+
+function review_approve(PDO $db, array $cr, array $applied, int $maint_id, string $new_note): array {
     $type = $cr['target_type'];
     $tid  = (int)$cr['target_id'];
     $cur = review_load_target_state($db, $type, $tid);
@@ -120,6 +133,7 @@ function review_approve(PDO $db, array $cr, array $applied, int $maint_id): arra
             }
         }
 
+        $merged_note = merge_reviewer_note((string)($cr['reviewer_note'] ?? ''), $new_note);
         $db->prepare(
             "UPDATE change_request
              SET status = 'approved', reviewed_at = datetime('now'),
@@ -127,7 +141,7 @@ function review_approve(PDO $db, array $cr, array $applied, int $maint_id): arra
              WHERE id = ?"
         )->execute([
             $maint_id,
-            $_POST['reviewer_note'] ?? null,
+            $merged_note,
             json_encode($applied, JSON_UNESCAPED_SLASHES),
             $cr['id'],
         ]);
@@ -141,13 +155,14 @@ function review_approve(PDO $db, array $cr, array $applied, int $maint_id): arra
     return ['ok' => true];
 }
 
-function review_reject(PDO $db, array $cr, string $note, int $maint_id): void {
+function review_reject(PDO $db, array $cr, string $new_note, int $maint_id): void {
+    $merged = merge_reviewer_note((string)($cr['reviewer_note'] ?? ''), $new_note);
     $db->prepare(
         "UPDATE change_request
          SET status = 'rejected', reviewed_at = datetime('now'),
              reviewed_by = ?, reviewer_note = ?
          WHERE id = ?"
-    )->execute([$maint_id, $note, $cr['id']]);
+    )->execute([$maint_id, $merged, $cr['id']]);
 }
 
 function review_notify_editor(PDO $db, array $cr, string $decision, string $note): void {
@@ -166,10 +181,7 @@ function review_notify_editor(PDO $db, array $cr, string $decision, string $note
 
 /** Send a maintainer reply without changing the request's status. */
 function review_send_reply(PDO $db, array $cr, string $reply, int $maint_id): void {
-    $prev = (string)($cr['reviewer_note'] ?? '');
-    $stamp = gmdate('Y-m-d H:i') . 'Z';
-    $entry = "[$stamp maintainer] " . $reply;
-    $merged = $prev === '' ? $entry : rtrim($prev) . "\n\n" . $entry;
+    $merged = merge_reviewer_note((string)($cr['reviewer_note'] ?? ''), $reply);
     $db->prepare('UPDATE change_request SET reviewer_note = ? WHERE id = ?')
         ->execute([$merged, $cr['id']]);
 
@@ -240,9 +252,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             unset($applied['reach_class']);
         }
 
-        $result = review_approve($db, $cr, $applied, (int)$maint['id']);
+        $approve_note = trim((string)($_POST['reviewer_note'] ?? ''));
+        $result = review_approve($db, $cr, $applied, (int)$maint['id'], $approve_note);
         if ($result['ok']) {
-            review_notify_editor($db, $cr, 'approved', (string)($_POST['reviewer_note'] ?? ''));
+            review_notify_editor($db, $cr, 'approved', $approve_note);
             $flash = 'Approved and applied.';
         } else {
             $flash_err = $result['err'] ?? 'Apply failed.';
@@ -313,6 +326,11 @@ if ($cr_id) {
     echo '</table>';
 
     if ($cr['status'] !== 'pending') {
+        if (!empty($cr['reviewer_note'])) {
+            echo '<h3>Maintainer notes</h3>';
+            echo '<pre style="white-space:pre-wrap;background:#f6f8fa;border:1px solid #e1e4e8;border-radius:4px;padding:.5rem">'
+               . htmlspecialchars((string)$cr['reviewer_note']) . '</pre>';
+        }
         if ($applied) {
             echo '<h3>Applied payload</h3><pre style="white-space:pre-wrap">' . htmlspecialchars(json_encode($applied, JSON_PRETTY_PRINT)) . '</pre>';
         }

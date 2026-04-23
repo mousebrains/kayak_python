@@ -18,7 +18,10 @@ require_once __DIR__ . '/includes/source_url.php';
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
 
-require_editor_feature();
+// Intentionally not gated on require_editor_feature(): the contact form is
+// for anyone (no account required), and the footer links to it
+// unconditionally. Gating it would 404 the footer link when the editor
+// feature is off.
 
 $errors = [];
 $saved  = false;
@@ -112,6 +115,7 @@ include_header('Contact the maintainer', '', 'Send a message to the site maintai
   <p style="padding:.6rem;background:#e8f4ea;border:1px solid #b7dcc0;border-radius:4px">
     Thanks — your message is on its way.
   </p>
+  <p style="margin-top:1rem"><a href="/">&larr; Back to river levels</a></p>
 <?php else: ?>
   <?php if ($errors): ?>
     <ul style="padding:.6rem 1.4rem;background:#fde8e8;border:1px solid #f5b5b5;border-radius:4px">

@@ -590,10 +590,21 @@ if ($guidebooks || $reach['aw_id']) {
     echo '</table>';
 }
 
+$btn_style = 'display:inline-flex;align-items:center;min-height:44px;padding:8px 12px';
 echo '<nav style="margin-top:1rem;display:flex;flex-wrap:wrap;gap:.5rem">';
-echo '<a href="/index.html" style="display:inline-flex;align-items:center;min-height:44px;padding:8px 12px">Back to main page</a>';
-echo '<a href="/reach.php?id=' . $id . '" style="display:inline-flex;align-items:center;min-height:44px;padding:8px 12px">Reach details</a>';
-echo '<a href="/edit.php?id=' . $id . '" style="display:inline-flex;align-items:center;min-height:44px;padding:8px 12px">Edit</a>';
+echo '<a href="/index.html" style="' . $btn_style . '">Back to main page</a>';
+echo '<a href="/reach.php?id=' . $id . '" style="' . $btn_style . '">Reach details</a>';
+if (editor_feature_enabled()) {
+    $editor = current_editor();
+    if (is_maintainer($editor)) {
+        echo '<a href="/edit.php?id=' . $id . '" style="' . $btn_style . '">Edit</a>';
+    } elseif ($editor !== null) {
+        echo '<a href="/propose.php?type=reach&amp;id=' . $id . '" style="' . $btn_style . '">Suggest an edit</a>';
+    } else {
+        $next = rawurlencode("/propose.php?type=reach&id=$id");
+        echo '<a href="/login.php?next=' . $next . '" style="' . $btn_style . '">Sign in to suggest an edit</a>';
+    }
+}
 echo '</nav>';
 
 if ($has_map) {

@@ -33,11 +33,17 @@ include_header('Account');
 </table>
 
 <p style="margin-top:1rem;font-size:.85rem;color:var(--c-text-muted)">
-  The Comment link in the top nav lets you propose edits to reaches, gauges,
-  and sources from their description pages. Your submissions are reviewed by
-  the maintainer before being applied.
+  To suggest an edit to a specific reach, open that reach's description page
+  and use the "Suggest an edit" button. For site-level feedback — new
+  features, bugs, data sources to add — use the <a href="/comment.php">Comment</a>
+  link in the footer. Your submissions are reviewed by the maintainer before
+  being applied.
 </p>
 
-<p style="margin-top:1rem"><a href="/logout.php">Log out</a></p>
+<p style="margin-top:1.5rem">
+  <a href="/">&larr; Back to river levels</a>
+  &nbsp;&middot;&nbsp;
+  <a href="/logout.php">Log out</a>
+</p>
 
 <?php include_footer(); ?>

@@ -44,21 +44,6 @@ function css_head_block(): string {
     return $block;
 }
 
-/** Build the Comment link target given a context struct and the request URI. */
-function _comment_href(array $context): string {
-    $type = $context['type'] ?? null;
-    $id   = isset($context['id']) ? (int)$context['id'] : 0;
-    if ($type === 'reach'  && $id > 0) return "/propose.php?type=reach&id=$id";
-    if ($type === 'gauge'  && $id > 0) return "/propose.php?type=gauge&id=$id";
-    if ($type === 'source' && $id > 0) return "/propose.php?type=source&id=$id";
-    // Fallback: sniff REQUEST_URI so pages that haven't been updated still route sensibly.
-    $uri = (string)($_SERVER['REQUEST_URI'] ?? '');
-    if (preg_match('#^/description\.php.*?[?&]id=(\d+)#', $uri, $m)) return "/propose.php?type=reach&id={$m[1]}";
-    if (preg_match('#^/gauge\.php.*?[?&]id=(\d+)#',       $uri, $m)) return "/propose.php?type=gauge&id={$m[1]}";
-    if (preg_match('#^/source\.php.*?[?&]id=(\d+)#',      $uri, $m)) return "/propose.php?type=source&id={$m[1]}";
-    return '/comment.php';
-}
-
 /** Render the nav bar as an HTML string. */
 function render_nav(string $active, array $context): string {
     $picker_cls   = $active === 'picker'   ? ' class="active"' : '';
