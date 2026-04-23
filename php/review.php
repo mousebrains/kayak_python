@@ -302,6 +302,10 @@ if ($cr_id) {
     if ($cr['target_type'] === 'reach' && $cr['target_id']) {
         echo '<tr><td>Reach</td><td><a href="/description.php?id=' . (int)$cr['target_id'] . '">description</a></td></tr>';
     }
+    if (!empty($payload['body'])) {
+        echo '<tr><td>Message</td><td><pre style="white-space:pre-wrap;margin:0">'
+           . htmlspecialchars((string)$payload['body']) . '</pre></td></tr>';
+    }
     if ($cr['notes_to_maint']) {
         echo '<tr><td>Notes</td><td><pre style="white-space:pre-wrap;margin:0">'
            . htmlspecialchars((string)$cr['notes_to_maint']) . '</pre></td></tr>';
@@ -376,7 +380,9 @@ if ($cr_id) {
            . htmlspecialchars((string)$cr['reviewer_note']) . '</pre>';
     }
     echo '<p style="margin-top:.5rem">';
-    echo '<button type="submit" name="action" value="approve">Approve and apply</button>';
+    if ($cr['target_type'] === 'reach') {
+        echo '<button type="submit" name="action" value="approve">Approve and apply</button>';
+    }
     echo ' <button type="submit" name="action" value="reply">Send reply (keep pending)</button>';
     echo ' <button type="submit" name="action" value="reject">Reject</button>';
     echo ' <a href="/review.php" style="margin-left:1rem">Back to queue</a>';
