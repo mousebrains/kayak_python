@@ -38,8 +38,18 @@ def _seed_states(session: Session) -> None:
 
 
 def sync_sources(session: Session) -> int:
-    """Sync URL/parser definitions from data/sources.yaml into FetchUrl table."""
+    """Sync URL/parser definitions from data/sources.yaml into FetchUrl table.
+
+    Upserts every YAML entry with is_active=True, then flips is_active=False
+    on any FetchUrl whose URL is NOT in the YAML — so URLs removed from the
+    config stop being fetched without deleting the row (observations and
+    source rows still reference fetch_url_id via ON DELETE SET NULL).
+
+    Returns the count of newly-inserted FetchUrl rows. Updates and
+    deactivations are logged but not counted in the return value.
+    """
     sources = load_sources()
+    yaml_urls = {src["url"] for src in sources}
     count = 0
     for src in sources:
         url = src["url"]
@@ -58,6 +68,25 @@ def sync_sources(session: Session) -> int:
                 )
             )
             count += 1
+
+    # Deactivate rows whose URL has left the YAML. This is how sources get
+    # retired — we never DELETE the row because observation/source rows
+    # still reference it via fetch_url_id.
+    if yaml_urls:
+        stale = (
+            session.execute(
+                select(FetchUrl).where(
+                    FetchUrl.url.notin_(yaml_urls),
+                    FetchUrl.is_active.is_(True),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if stale:
+            for fu in stale:
+                fu.is_active = False
+            logger.info("Deactivated %d fetch_url row(s) missing from sources.yaml", len(stale))
     return count
 
 

@@ -40,18 +40,6 @@ class DataType(enum.StrEnum):
     temperature = "temperature"
 
 
-class PageAction(enum.StrEnum):
-    """Page cache action types."""
-
-    PAGE = "page"
-    FILE = "file"
-    PLOT = "plot"
-    VIEW = "view"
-    EDIT = "edit"
-    SVG = "svg"
-    PNG = "png"
-
-
 class EditorStatus(enum.StrEnum):
     """Editor account states.
 
@@ -264,6 +252,11 @@ class Rating(Base):
 
     Contains a URL for the rating source and a set of RatingData points
     used for linear interpolation by the calc-rating pipeline step.
+
+    Reserved for future per-gauge rating curves — ``calc-rating`` is a
+    no-op until ``rating_data`` is populated for a gauge. No loader
+    writes to ``rating_data`` today; see ``docs/database-schema.md``
+    (Rating section) for the plan.
     """
 
     __tablename__ = "rating"
@@ -581,24 +574,6 @@ class ReachGuidebook(Base):
     page: Mapped[str | None] = mapped_column(Text)
     run: Mapped[str | None] = mapped_column(Text)
     url: Mapped[str | None] = mapped_column(Text)
-
-
-# ---------------------------------------------------------------------------
-# page (cache table — kept from original schema)
-# ---------------------------------------------------------------------------
-
-
-class Page(Base):
-    """Pre-rendered page cache."""
-
-    __tablename__ = "pages"
-
-    name: Mapped[str] = mapped_column(String(128), primary_key=True)
-    action: Mapped[PageAction] = mapped_column(nullable=False)
-    expires: Mapped[int | None] = mapped_column(Integer)
-    modified: Mapped[datetime | None] = mapped_column(default=func.now())
-    mimetype: Mapped[str | None] = mapped_column(Text)
-    body: Mapped[str | None] = mapped_column(Text)
 
 
 # ---------------------------------------------------------------------------

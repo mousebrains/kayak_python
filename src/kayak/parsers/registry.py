@@ -49,7 +49,6 @@ def ensure_all_loaded() -> None:
         nwrfc_textplot,
         nwrfc_xml,
         usace_cda,
-        usace_outflow,
         usbr,
         usgs,
         wa_gov,

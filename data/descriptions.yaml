@@ -192,13 +192,13 @@ fields:
     column: "bank_full"
     type: "text"
     prefix: "Bank Full"
-    suffix: " CFS<br />"
+    suffix: " ft<br />"
 
   - sort_key: 2700
     column: "flood_stage"
     type: "text"
     prefix: "Flood Stage"
-    suffix: " CFS<br />"
+    suffix: " ft<br />"
 
   - sort_key: 2800
     column: "merged_dbs"

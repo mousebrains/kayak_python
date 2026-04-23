@@ -15,8 +15,6 @@ from kayak.db.models import (
     Guidebook,
     LatestObservation,
     Observation,
-    Page,
-    PageAction,
     Rating,
     RatingData,
     Reach,
@@ -233,16 +231,6 @@ def test_fetch_url(session):
     result = session.query(FetchUrl).first()
     assert result.parser == "usgs.rdb"
     assert result.is_active is True
-
-
-def test_page(session):
-    p = Page(name="main", action=PageAction.PAGE, body="<html>Hello</html>", mimetype="text/html")
-    session.add(p)
-    session.flush()
-
-    result = session.get(Page, "main")
-    assert result.action == PageAction.PAGE
-    assert "Hello" in result.body
 
 
 def test_data_type_enum_values():

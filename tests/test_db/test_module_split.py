@@ -1,10 +1,13 @@
 """T3-20 drift guard.
 
-After the data_db / info_db / page_db → observations/cache/gauges/reaches/
-sources/pages split, the old modules remain as re-export shims. This test
-asserts that every name the shims advertise is callable and points at the
-same object as its new home — so we catch accidental drift (e.g. a rename
-in the new module that isn't mirrored in the shim).
+After the data_db / info_db → observations/cache/gauges/reaches/sources
+split, the old modules remain as re-export shims. This test asserts that
+every name the shims advertise is callable and points at the same object
+as its new home — so we catch accidental drift (e.g. a rename in the new
+module that isn't mirrored in the shim).
+
+The page_db shim + kayak.db.pages module were removed alongside migration
+0006 (drop pages table); no drift guard here.
 """
 
 from __future__ import annotations
@@ -69,17 +72,3 @@ def test_info_db_shim_reexports_match():
     for name, obj in canonical.items():
         assert getattr(info_db, name) is obj, f"info_db.{name} does not match canonical"
     assert set(info_db.__all__) == set(canonical), "info_db.__all__ drifted from canonical set"
-
-
-def test_page_db_shim_reexports_match():
-    from kayak.db import page_db, pages
-
-    canonical = {
-        "store_page": pages.store_page,
-        "get_page": pages.get_page,
-        "get_page_body": pages.get_page_body,
-    }
-
-    for name, obj in canonical.items():
-        assert getattr(page_db, name) is obj, f"page_db.{name} does not match canonical"
-    assert set(page_db.__all__) == set(canonical), "page_db.__all__ drifted from canonical set"

@@ -37,5 +37,13 @@ class TestEnsureAllLoaded:
         """All expected parser names should be registered."""
         ensure_all_loaded()
         names = get_parser_names()
-        for expected in ("usgs", "usbr", "nwrfc.xml", "wa.gov", "usace.outflow"):
+        for expected in (
+            "usgs",
+            "usbr",
+            "nwrfc.xml",
+            "nwrfc.textplot",
+            "wa.gov",
+            "usace.cda",
+            "nwps",
+        ):
             assert expected in names, f"{expected!r} not found in {names}"
