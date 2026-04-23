@@ -53,9 +53,7 @@ def test_update_latest_noop_when_no_cache_and_no_observations(session, sample_so
     )
 
 
-def test_update_latest_gauge_prunes_stale_row_when_observations_gone(
-    session, linked_source_gauge
-):
+def test_update_latest_gauge_prunes_stale_row_when_observations_gone(session, linked_source_gauge):
     source, gauge = linked_source_gauge
     _add_obs(session, source.id, DataType.flow, 250.0)
     cache.update_latest_gauge(session, gauge.id, DataType.flow)
@@ -68,9 +66,7 @@ def test_update_latest_gauge_prunes_stale_row_when_observations_gone(
     assert cache.get_latest_gauge(session, gauge.id, DataType.flow) is None
 
 
-def test_update_latest_gauge_prunes_stale_row_when_sources_unlinked(
-    session, linked_source_gauge
-):
+def test_update_latest_gauge_prunes_stale_row_when_sources_unlinked(session, linked_source_gauge):
     from kayak.db.models import GaugeSource
 
     source, gauge = linked_source_gauge
