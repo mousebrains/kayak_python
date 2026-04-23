@@ -13,6 +13,7 @@ require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/mail.php';
 require_once __DIR__ . '/includes/sanity.php';
+require_once __DIR__ . '/includes/source_url.php';
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
 
@@ -221,22 +222,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $payload_json = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
             $subject = "Proposed edit: $reach_name";
+            $src = sanitize_source_url((string)($_POST['source_url'] ?? ''));
 
             if ($existing) {
                 $db->prepare(
                     "UPDATE change_request
                      SET payload_json = ?, notes_to_maint = ?, subject = ?,
-                         submitted_at = datetime('now')
+                         submitted_at = datetime('now'), source_url = ?
                      WHERE id = ?"
-                )->execute([$payload_json, $notes, $subject, $existing['id']]);
+                )->execute([$payload_json, $notes, $subject, $src !== '' ? $src : null, $existing['id']]);
                 $cr_id = (int)$existing['id'];
             } else {
                 $db->prepare(
                     "INSERT INTO change_request
                      (target_type, target_id, editor_id, submitted_at,
-                      subject, payload_json, notes_to_maint, status)
-                     VALUES ('reach', ?, ?, datetime('now'), ?, ?, ?, 'pending')"
-                )->execute([$id, $ed['id'], $subject, $payload_json, $notes]);
+                      subject, payload_json, notes_to_maint, status, source_url)
+                     VALUES ('reach', ?, ?, datetime('now'), ?, ?, ?, 'pending', ?)"
+                )->execute([$id, $ed['id'], $subject, $payload_json, $notes, $src !== '' ? $src : null]);
                 $cr_id = (int)$db->lastInsertId();
             }
 
@@ -276,7 +278,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 (string)$ed['email'],
                 $summary,
                 $notes,
-                "$site/review.php?id=$cr_id"
+                "$site/review.php?id=$cr_id",
+                $src
             );
             foreach ($maint_emails as $to) {
                 send_email($to, "[levels] proposed edit: $reach_name", $body);
@@ -300,6 +303,9 @@ function _prefill(array $reach, ?array $existing, string $field): string {
 }
 
 $csrf = htmlspecialchars(csrf_token());
+$source_url = $_SERVER['REQUEST_METHOD'] === 'POST'
+    ? sanitize_source_url((string)($_POST['source_url'] ?? ''))
+    : source_url_from_referrer('/propose.php');
 
 header('Cache-Control: no-store');
 include_header(
@@ -347,6 +353,7 @@ include_header(
     <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
     <input type="hidden" name="target_type" value="reach">
     <input type="hidden" name="target_id" value="<?= $id ?>">
+    <input type="hidden" name="source_url" value="<?= htmlspecialchars($source_url) ?>">
     <input type="text" name="website" value="" tabindex="-1" autocomplete="off"
            style="position:absolute;left:-9999px;width:1px;height:1px" aria-hidden="true">
 

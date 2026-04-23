@@ -112,14 +112,17 @@ function render_maintainer_notification(
     string $editor_email,
     string $summary,
     string $notes,
-    string $review_url
+    string $review_url,
+    string $source_url = ''
 ): string {
-    $notes_block = $notes === '' ? '(none)' : $notes;
+    $notes_block  = $notes === ''      ? '(none)'   : $notes;
+    $source_block = $source_url === '' ? '(direct)' : $source_url;
     return <<<TXT
 A change has been proposed.
 
 Target:    $target_label
 From:      $editor_email
+Page:      $source_block
 Review:    $review_url
 
 Summary

@@ -293,6 +293,11 @@ if ($cr_id) {
     echo '<table class="desc-table">';
     echo '<tr><td>From</td><td>' . htmlspecialchars((string)$cr['editor_email']) . ' (' . htmlspecialchars((string)$cr['editor_status']) . ')</td></tr>';
     echo '<tr><td>Submitted</td><td>' . htmlspecialchars((string)$cr['submitted_at']) . '</td></tr>';
+    if (!empty($cr['source_url'])) {
+        $src = (string)$cr['source_url'];
+        echo '<tr><td>Page</td><td><a href="' . htmlspecialchars($src) . '">'
+           . htmlspecialchars($src) . '</a></td></tr>';
+    }
     echo '<tr><td>Status</td><td>' . htmlspecialchars((string)$cr['status']) . '</td></tr>';
     if ($cr['target_type'] === 'reach' && $cr['target_id']) {
         echo '<tr><td>Reach</td><td><a href="/description.php?id=' . (int)$cr['target_id'] . '">description</a></td></tr>';

@@ -728,6 +728,7 @@ class ChangeRequest(Base):
     reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("editor.id", ondelete="SET NULL"))
     reviewer_note: Mapped[str | None] = mapped_column(Text)
     applied_json: Mapped[str | None] = mapped_column(Text)
+    source_url: Mapped[str | None] = mapped_column(Text)
 
     __table_args__ = (
         Index("ix_change_request_status", "status"),

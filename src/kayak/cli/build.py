@@ -889,14 +889,15 @@ def _build_footer_html() -> str:
     """Footer shared by all static pages.
 
     Login and Comment live here (only when EDITOR_FEATURE is on at build
-    time) so the header can stay focused on navigation. Pat Welch mailto
-    and Privacy Policy are always rendered.
+    time) so the header can stay focused on navigation. Contact,
+    Disclaimer, and Privacy Policy are always rendered.
     """
     items: list[str] = []
     if _editor_feature_on():
         items.append('<a href="/login.php">Login</a>')
         items.append('<a href="/comment.php">Comment</a>')
-        items.append('<a href="/contact.php">Contact</a>')
+    items.append('<a href="/contact.php">Contact</a>')
+    items.append('<a href="/disclaimer.php">Disclaimer</a>')
     items.append('<a href="/privacy.php">Privacy Policy</a>')
     links = " &middot; ".join(items)
     return (

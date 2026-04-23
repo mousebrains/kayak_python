@@ -11,6 +11,7 @@ require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/mail.php';
 require_once __DIR__ . '/includes/sanity.php';
+require_once __DIR__ . '/includes/source_url.php';
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
 
@@ -56,17 +57,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (!$errors) {
+            $src = sanitize_source_url((string)($_POST['source_url'] ?? ''));
             $payload = ['body' => $body];
             $db->prepare(
                 "INSERT INTO change_request
                  (target_type, target_id, editor_id, submitted_at, subject,
-                  payload_json, notes_to_maint, status)
-                 VALUES ('site', NULL, ?, datetime('now'), ?, ?, ?, 'pending')"
+                  payload_json, notes_to_maint, status, source_url)
+                 VALUES ('site', NULL, ?, datetime('now'), ?, ?, ?, 'pending', ?)"
             )->execute([
                 $ed['id'],
                 $subject !== '' ? $subject : '(site feedback)',
                 json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
                 $notes,
+                $src !== '' ? $src : null,
             ]);
             $cr_id = (int)$db->lastInsertId();
 
@@ -77,7 +80,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 (string)$ed['email'],
                 "Subject: $subject\n\n$body",
                 $notes,
-                "$site/review.php?id=$cr_id"
+                "$site/review.php?id=$cr_id",
+                $src
             );
             $email_subj = '[levels] site feedback: ' . substr($subject !== '' ? $subject : '(no subject)', 0, 60);
             foreach ($maint_emails as $to) {
@@ -89,6 +93,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $csrf = htmlspecialchars(csrf_token());
+$source_url = $_SERVER['REQUEST_METHOD'] === 'POST'
+    ? sanitize_source_url((string)($_POST['source_url'] ?? ''))
+    : source_url_from_referrer('/comment.php');
 header('Cache-Control: no-store');
 include_header('Site feedback');
 ?>
@@ -113,6 +120,7 @@ include_header('Site feedback');
 
   <form method="POST" action="/comment.php" class="edit-form">
     <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+    <input type="hidden" name="source_url" value="<?= htmlspecialchars($source_url) ?>">
     <input type="text" name="website" value="" tabindex="-1" autocomplete="off"
            style="position:absolute;left:-9999px;width:1px;height:1px" aria-hidden="true">
 

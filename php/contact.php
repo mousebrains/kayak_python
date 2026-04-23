@@ -14,6 +14,7 @@ require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/mail.php';
 require_once __DIR__ . '/includes/hcaptcha.php';
 require_once __DIR__ . '/includes/sanity.php';
+require_once __DIR__ . '/includes/source_url.php';
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
 
@@ -57,11 +58,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $ua       = substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 200);
             $from_txt = $from_addr !== '' ? $from_addr : '(not provided)';
             $subj_txt = $subject   !== '' ? $subject   : '(no subject)';
+            $src      = sanitize_source_url((string)($_POST['source_url'] ?? ''));
+            $src_txt  = $src !== '' ? $src : '(direct)';
             $email_body = <<<TXT
 Contact form submission from levels.wkcc.org
 
 From:    $from_txt
 Subject: $subj_txt
+Page:    $src_txt
 IP:      $ip
 Browser: $ua
 
@@ -92,6 +96,9 @@ TXT;
 }
 
 $csrf = htmlspecialchars(csrf_token());
+$source_url = $_SERVER['REQUEST_METHOD'] === 'POST'
+    ? sanitize_source_url((string)($_POST['source_url'] ?? ''))
+    : source_url_from_referrer('/contact.php');
 header('Cache-Control: no-store');
 include_header('Contact the maintainer', '', 'Send a message to the site maintainer.', hcaptcha_script_tag());
 ?>
@@ -114,6 +121,7 @@ include_header('Contact the maintainer', '', 'Send a message to the site maintai
 
   <form method="POST" action="/contact.php" class="edit-form" style="max-width:640px">
     <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+    <input type="hidden" name="source_url" value="<?= htmlspecialchars($source_url) ?>">
     <input type="text" name="website" value="" tabindex="-1" autocomplete="off"
            style="position:absolute;left:-9999px;width:1px;height:1px" aria-hidden="true">
 

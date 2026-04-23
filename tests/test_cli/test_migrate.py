@@ -79,9 +79,12 @@ def test_0003_does_not_recreate_reach_level(engine: object) -> None:
 
     The reach_level half of the original 0003 was stripped — reach_level is
     gone from models.py and a later commit DROP-ped it. This test runs 0003
-    against a schema that matches Base.metadata.create_all() (so reach_class
-    already exists) while stamping 0001 and 0002 as applied so their
-    already-done ALTERs don't collide with create_all.
+    against a schema that matches Base.metadata.create_all() while stamping
+    every OTHER migration as already applied, so only 0003 runs. We stamp
+    the non-subject migrations because several of them (ADD COLUMN, CREATE
+    TABLE without IF NOT EXISTS, etc.) aren't idempotent against a
+    create_all-built schema — that's fine in production because init_db
+    stamps them on fresh DBs, but the test needs to mirror that.
     """
     from kayak.db.models import Base
 
@@ -89,14 +92,11 @@ def test_0003_does_not_recreate_reach_level(engine: object) -> None:
     with (
         patch("kayak.cli.migrate.get_engine", return_value=engine),
     ):
-        # Stamp 0001+0002 as already applied (their schema changes are
-        # redundant with create_all) so apply_pending picks up from 0003.
-        for version in ("0001", "0002"):
-            migrate_mod.stamp(version)
+        for m in migrate_mod.discover_migrations():
+            if m.version != "0003":
+                migrate_mod.stamp(m.version)
         ran = migrate_mod.apply_pending()
-        # 0003 is what we care about; 0004/0005/0006 will also run cleanly
-        # (IF EXISTS / IF NOT EXISTS guards) but aren't the subject here.
-        assert "0003" in ran
+        assert ran == ["0003"]
 
     with engine.begin() as conn:
         rows = conn.execute(
