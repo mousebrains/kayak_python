@@ -126,7 +126,7 @@ Key systemd timers:
 | [CLAUDE.md](CLAUDE.md) | Architecture, dev setup, conventions, key patterns |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development workflow, testing, adding parsers |
 | [deploy/SETUP.md](deploy/SETUP.md) | Production deployment (Hetzner/Oracle Cloud) |
-| [docs/database-schema.md](docs/database-schema.md) | Full schema reference (28 tables) |
+| [docs/database-schema.md](docs/database-schema.md) | Full schema reference (25 ORM tables + `schema_migrations`) |
 | [docs/schema-overview.svg](docs/schema-overview.svg) | ER diagram |
 | [docs/nginx-hardening.md](docs/nginx-hardening.md) | Security hardening guide |
 

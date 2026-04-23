@@ -12,7 +12,7 @@ The schema spans five domains:
 4. **Editor / moderation** — accounts, sessions, magic links, WebAuthn credentials, change requests, audit history.
 5. **Lookup / housekeeping** — HUC name catalogue, schema migration tracking, and a handful of legacy tables.
 
-28 data tables total. The ER diagram in [`schema-overview.svg`](schema-overview.svg) is auto-stale; trust this document and `sqlite3 $DB .schema` when they disagree.
+25 ORM-defined tables plus the `schema_migrations` bookkeeping table (26 live). The ER diagram in [`schema-overview.svg`](schema-overview.svg) is auto-stale; trust this document and `sqlite3 $DB .schema` when they disagree.
 
 ---
 

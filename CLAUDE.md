@@ -116,7 +116,7 @@ Runs these steps in order:
 
 ### Database
 
-Single normalized SQLite database (`kayak.db`). Schema defined in `src/kayak/db/models.py` (SQLAlchemy 2.x ORM, 28 tables). Key tables:
+Single normalized SQLite database (`kayak.db`). Schema defined in `src/kayak/db/models.py` (SQLAlchemy 2.x ORM, 25 tables; live DB adds `schema_migrations` for 26 total). Key tables:
 
 - `source` / `gauge` / `gauge_source` — data sources and physical gauge stations. `source.timezone` is an IANA TZ name (populated from `sources.yaml` → `stations:`) used by `BaseParser.dump_to_db` to localize naive timestamps from feeds that publish local time (USBR's per-station local TZ; wa.gov PST year-round). NULL = treat naive as UTC.
 - `observation` — time-series data (source_id, observed_at, data_type, value)

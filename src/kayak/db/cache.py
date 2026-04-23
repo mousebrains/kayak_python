@@ -2,7 +2,7 @@
 
 from datetime import timedelta
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from kayak.db.models import (
@@ -45,6 +45,12 @@ def update_latest(
     ).scalar_one_or_none()
 
     if latest_row is None:
+        session.execute(
+            delete(LatestObservation).where(
+                LatestObservation.source_id == source_id,
+                LatestObservation.data_type == data_type,
+            )
+        )
         return
 
     cutoff = latest_row.observed_at - DELTA_LOOKBACK_WINDOW
@@ -146,6 +152,12 @@ def update_latest_gauge(
         session.scalars(select(GaugeSource.source_id).where(GaugeSource.gauge_id == gauge_id))
     )
     if not source_ids:
+        session.execute(
+            delete(LatestGaugeObservation).where(
+                LatestGaugeObservation.gauge_id == gauge_id,
+                LatestGaugeObservation.data_type == data_type,
+            )
+        )
         return
 
     latest_row = session.execute(
@@ -159,6 +171,12 @@ def update_latest_gauge(
     ).scalar_one_or_none()
 
     if latest_row is None:
+        session.execute(
+            delete(LatestGaugeObservation).where(
+                LatestGaugeObservation.gauge_id == gauge_id,
+                LatestGaugeObservation.data_type == data_type,
+            )
+        )
         return
 
     cutoff = latest_row.observed_at - DELTA_LOOKBACK_WINDOW

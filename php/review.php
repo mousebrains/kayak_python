@@ -100,7 +100,7 @@ function review_approve(PDO $db, array $cr, array $applied, int $maint_id, strin
                 )->execute([$type, $tid, $cr['id'], $f,
                             $old === null ? null : (string)$old,
                             $v   === null ? null : (string)$v,
-                            'editor:' . $cr['editor_id']]);
+                            'maintainer:' . $maint_id]);
             }
         }
 
@@ -129,7 +129,7 @@ function review_approve(PDO $db, array $cr, array $applied, int $maint_id, strin
                     "INSERT INTO edit_history
                      (target_type, target_id, change_request_id, field, old_value, new_value, changed_at, changed_by)
                      VALUES (?, ?, ?, 'reach_class', ?, ?, datetime('now'), ?)"
-                )->execute([$type, $tid, $cr['id'], $old_dump, $new_dump, 'editor:' . $cr['editor_id']]);
+                )->execute([$type, $tid, $cr['id'], $old_dump, $new_dump, 'maintainer:' . $maint_id]);
             }
         }
 
