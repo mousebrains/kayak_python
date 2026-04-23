@@ -24,7 +24,18 @@ include_header('Account');
   <?php if (!empty($ed['display_name'])): ?>
   <tr><td>Display name</td><td><?= htmlspecialchars((string)$ed['display_name']) ?></td></tr>
   <?php endif ?>
-  <tr><td>Status</td><td><?= htmlspecialchars((string)$ed['status']) ?></td></tr>
+  <tr><td>Status</td><td>
+    <?= htmlspecialchars((string)$ed['status']) ?>
+    <details style="display:inline-block;margin-left:.5rem;font-size:.85rem;color:var(--c-text-muted);vertical-align:middle">
+      <summary style="cursor:pointer">what's this?</summary>
+      <ul style="margin:.25rem 0 0 0;padding-left:1.1rem">
+        <li><strong>pending</strong> — new account; waiting for the maintainer to approve.</li>
+        <li><strong>minimal</strong> — can propose edits to a reach's description and features.</li>
+        <li><strong>full</strong> — can also propose display name, put-in/take-out coordinates, classes, and flow range.</li>
+        <li><strong>maintainer</strong> — direct edit access; reviews everyone else's proposals.</li>
+      </ul>
+    </details>
+  </td></tr>
   <tr><td>Joined</td><td><?= htmlspecialchars((string)$ed['created_at']) ?></td></tr>
   <?php if (!empty($ed['last_login_at'])): ?>
   <tr><td>Last login</td><td><?= htmlspecialchars((string)$ed['last_login_at']) ?></td></tr>

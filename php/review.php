@@ -290,7 +290,15 @@ if ($cr_id) {
     );
     $st->execute([$cr_id]);
     $cr = $st->fetch();
-    if (!$cr) { http_response_code(404); include_header('Not found'); echo '<p>Not found.</p>'; include_footer(); exit; }
+    if (!$cr) {
+        require_once __DIR__ . '/includes/error.php';
+        render_error_page(
+            404,
+            'Not found',
+            '<p>No change request with id ' . (int)$cr_id . ' exists.</p>'
+            . '<p><a href="/review.php">Back to the review queue</a></p>'
+        );
+    }
 
     $payload = json_decode((string)$cr['payload_json'], true) ?: [];
     $applied = json_decode((string)($cr['applied_json'] ?? 'null'), true);

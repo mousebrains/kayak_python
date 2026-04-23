@@ -116,8 +116,19 @@ $status_filter = $_GET['status'] ?? 'all';
 $statuses = ['pending', 'minimal', 'full', 'banned', 'maintainer', 'all'];
 if (!in_array($status_filter, $statuses, true)) $status_filter = 'all';
 
+// Per-status counts for the filter bar
+$count_rows = $db->query("SELECT status, COUNT(*) AS n FROM editor GROUP BY status")
+                 ->fetchAll();
+$status_counts = ['all' => 0];
+foreach ($count_rows as $r) {
+    $status_counts[(string)$r['status']] = (int)$r['n'];
+    $status_counts['all'] += (int)$r['n'];
+}
+
 $where = $status_filter === 'all' ? '' : 'WHERE status = ?';
 $params = $status_filter === 'all' ? [] : [$status_filter];
+$filtered_total = $status_counts[$status_filter] ?? 0;
+$per_page = 500;
 $stmt = $db->prepare(
     "SELECT e.*,
             (SELECT COUNT(*) FROM change_request cr
@@ -138,7 +149,7 @@ $stmt = $db->prepare(
                 WHEN 'maintainer' THEN 4
                 ELSE 5 END,
               e.created_at DESC
-     LIMIT 500"
+     LIMIT $per_page"
 );
 $stmt->execute($params);
 $editors = $stmt->fetchAll();
@@ -159,11 +170,18 @@ include_header('Admin — editors');
 <p style="font-size:.85rem">
   Filter:
   <?php foreach ($statuses as $s):
+      $n = $status_counts[$s] ?? 0;
       $cls = $s === $status_filter ? ' style="font-weight:700"' : ''; ?>
-    <a href="/admin.php?status=<?= $s ?>"<?= $cls ?>><?= $s ?></a>&nbsp;
+    <a href="/admin.php?status=<?= $s ?>"<?= $cls ?>><?= $s ?> (<?= $n ?>)</a>&nbsp;
   <?php endforeach ?>
   <a href="/review.php" style="float:right">Review queue</a>
 </p>
+
+<?php if ($filtered_total > $per_page): ?>
+<p style="font-size:.85rem;color:var(--c-text-muted)">
+  Showing first <?= $per_page ?> of <?= $filtered_total ?>. Narrow with the status filter above.
+</p>
+<?php endif ?>
 
 <?php // One tiny hidden form per editor row; per-row action buttons reference it via form="...". ?>
 <?php foreach ($editors as $e): ?>

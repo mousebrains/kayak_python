@@ -51,6 +51,13 @@ function get_reach_or_404(int $id): array {
     $stmt = get_db()->prepare('SELECT * FROM reach WHERE id = ?');
     $stmt->execute([$id]);
     $reach = $stmt->fetch();
-    if (!$reach) { http_response_code(404); exit('Reach not found'); }
+    if (!$reach) {
+        require_once __DIR__ . '/error.php';
+        render_error_page(
+            404,
+            'Reach not found',
+            '<p>No reach with id ' . (int)$id . ' exists. It may have been removed or merged.</p>'
+        );
+    }
     return $reach;
 }

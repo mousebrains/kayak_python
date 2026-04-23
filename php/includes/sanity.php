@@ -64,8 +64,26 @@ function check_text_length(string $field, string $value, int $max): array {
 }
 
 function strip_html_tags(string $s): string {
-    // Keep plain text. URL autolinking happens at render time.
-    return trim(strip_tags($s));
+    // Strip HTML tags but preserve legit user text like "<3", "< y", or
+    // "<foo@bar.com>". PHP's native strip_tags eats everything between a
+    // `<` and the next `>`, so "I love <3 boats" becomes "I love ".
+    //
+    // We only strip sequences that look like real HTML tags:
+    //   <tag>, <tag attr>, <tag ... />, </tag>, <!-- comment -->
+    // A tag name must be a letter followed by alphanumerics. Attributes (if
+    // any) must start with whitespace; the run-up to > cannot contain `<`
+    // or `>`. This leaves "<3" alone (3 is not a letter) and
+    // "<foo@bar.com>" alone (`@` is neither whitespace nor `>` after `foo`).
+    //
+    // Loops to stable fixed point (bounded) so split-tag reassembly attacks
+    // like "<scr<script>ipt>" collapse all the way.
+    for ($i = 0; $i < 5; $i++) {
+        $before = $s;
+        $s = preg_replace('/<!--.*?-->/s', '', $s);
+        $s = preg_replace('/<\/?[a-zA-Z][a-zA-Z0-9]*(?:\s[^<>]*)?\/?>/', '', $s);
+        if ($s === $before) break;
+    }
+    return trim($s);
 }
 
 // ---------------------------------------------------------------------------

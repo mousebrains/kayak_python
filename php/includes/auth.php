@@ -32,8 +32,8 @@ function editor_feature_enabled(): bool {
 /** Abort with 404 if the feature flag is not on. */
 function require_editor_feature(): void {
     if (!editor_feature_enabled()) {
-        http_response_code(404);
-        exit('Not found');
+        require_once __DIR__ . '/error.php';
+        render_error_page(404, 'Not found', '<p>This page is not available.</p>');
     }
 }
 
@@ -177,8 +177,15 @@ function require_editor(): array {
 function require_maintainer(): array {
     $ed = require_editor();
     if (!is_maintainer($ed)) {
-        http_response_code(403);
-        exit('Forbidden');
+        require_once __DIR__ . '/error.php';
+        render_error_page(
+            403,
+            'Not allowed',
+            '<p>This page is only available to the site maintainer. You are signed in as '
+            . htmlspecialchars((string)$ed['email'])
+            . ' (' . htmlspecialchars((string)$ed['status']) . ').</p>'
+            . '<p>If you think this is a mistake, please <a href="/contact.php">contact the maintainer</a>.</p>'
+        );
     }
     return $ed;
 }
