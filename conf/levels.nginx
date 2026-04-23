@@ -1,8 +1,19 @@
+# conf/levels.nginx — TARGET state (post-migrate-secrets.sh + post-edit.php-auth-migration).
+# Deployed to /etc/nginx/sites-available/levels on prod.
+# deploy/levels is the CURRENT-LIVE snapshot; regenerate it from this file
+# after the operator runs deploy/migrate-secrets.sh on prod and nginx reloads
+# cleanly. Delta vs. deploy/levels today: no fastcgi_param HCAPTCHA_SECRET
+# (moved to PHP-FPM pool env) and no edit-password.conf include (edit.php
+# now uses ed_sess cookie auth after Phase 6 of the 2026-04-22 plan).
+
 # Redirect HTTP → HTTPS
 server {
     listen 80;
     listen [::]:80;
-    server_name levels.mousebrains.com levels-test.wkcc.org; # levels.wkcc.org;
+    # levels.wkcc.org is the canonical public name (CNAME -> levels.mousebrains.com).
+    # Requires SAN expansion — certbot --expand -d levels.mousebrains.com,levels-test.wkcc.org,levels.wkcc.org —
+    # BEFORE nginx reload on prod, else TLS handshake fails for clients resolving via the new CNAME.
+    server_name levels.mousebrains.com levels-test.wkcc.org levels.wkcc.org;
     return 301 https://$host$request_uri;
 }
 
@@ -23,7 +34,8 @@ server {
     resolver 1.1.1.1 8.8.8.8 valid=300s;
     resolver_timeout 5s;
 
-    server_name levels.mousebrains.com levels-test.wkcc.org; # levels.wkcc.org;
+    # SAN must cover all three before nginx reload — see the redirect block above.
+    server_name levels.mousebrains.com levels-test.wkcc.org levels.wkcc.org;
 
     # Hide server identity completely (requires libnginx-mod-http-headers-more-filter)
     server_tokens off;
@@ -83,7 +95,7 @@ server {
     }
 
     # Dynamic per-reach status, refreshed by every hourly pipeline run.
-    # Exact match wins over the /static/ prefix and overrides the 7d immutable
+    # Exact match wins over the /static/ prefix and overrides the immutable
     # policy with a short TTL. Both expires and add_header must be explicit
     # here because nginx's add_header does not inherit from an ancestor block
     # once this block sets its own.
@@ -93,8 +105,19 @@ server {
         include /etc/nginx/snippets/security-headers.conf;
     }
 
-    # Generated HTML/CSV/text pages — short cache, regenerated hourly
+    # Service worker — cached by the browser but always revalidated so SW
+    # updates propagate immediately rather than lagging by expires 5m.
+    location = /sw.js {
+        add_header Cache-Control "no-cache";
+        include /etc/nginx/snippets/security-headers.conf;
+    }
+
+    # Generated HTML/CSV/text pages — short cache, regenerated hourly.
+    # limit_req zone=global protects against crawl bursts; burst=40 absorbs
+    # normal page-load bursts where a client fetches the table + sparklines +
+    # icons + static assets together.
     location / {
+        limit_req zone=global burst=40 nodelay;
         try_files $uri $uri/ =404;
         expires 5m;
         add_header Cache-Control "public";
@@ -131,7 +154,10 @@ server {
         include fastcgi_params;
         fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
         fastcgi_param EDITOR_FEATURE $editor_feature;
-        # EDIT_PASSWORD now loaded from /etc/kayak/secrets.env via PHP-FPM pool env.
+        # edit.php uses the editor session cookie (ed_sess) for maintainer
+        # auth after Phase 6 of the 2026-04-22 plan; no EDIT_PASSWORD is
+        # required or consumed. EDITOR_FEATURE must be "1" on this host so
+        # maintainers can reach /login.php to obtain the cookie.
         add_header Cache-Control "no-cache, no-store";
         include /etc/nginx/snippets/security-headers.conf;
     }

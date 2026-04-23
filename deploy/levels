@@ -1,8 +1,18 @@
+# deploy/levels — CURRENT-LIVE snapshot (mirrors /etc/nginx/sites-available/levels).
+# Regenerated from conf/levels.nginx after target-state changes land on prod.
+# Today this snapshot still contains the pre-migrate-secrets
+# fastcgi_param HCAPTCHA_SECRET and the edit-password.conf include; both will
+# go away once the operator runs deploy/migrate-secrets.sh and Phase 6 of the
+# 2026-04-22 plan lands on prod.
+
 # Redirect HTTP → HTTPS
 server {
     listen 80;
     listen [::]:80;
-    server_name levels.mousebrains.com levels-test.wkcc.org; # levels.wkcc.org;
+    # levels.wkcc.org is the canonical public name (CNAME -> levels.mousebrains.com).
+    # Requires SAN expansion — certbot --expand -d levels.mousebrains.com,levels-test.wkcc.org,levels.wkcc.org —
+    # BEFORE nginx reload on prod, else TLS handshake fails for clients resolving via the new CNAME.
+    server_name levels.mousebrains.com levels-test.wkcc.org levels.wkcc.org;
     return 301 https://$host$request_uri;
 }
 
@@ -23,7 +33,8 @@ server {
     resolver 1.1.1.1 8.8.8.8 valid=300s;
     resolver_timeout 5s;
 
-    server_name levels.mousebrains.com levels-test.wkcc.org; # levels.wkcc.org;
+    # SAN must cover all three before nginx reload — see the redirect block above.
+    server_name levels.mousebrains.com levels-test.wkcc.org levels.wkcc.org;
 
     # Hide server identity completely (requires libnginx-mod-http-headers-more-filter)
     server_tokens off;
