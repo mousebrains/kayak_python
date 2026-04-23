@@ -19,6 +19,7 @@ function include_footer(): void {
         }
         $items[] = '<a href="/comment.php">Comment</a>';
     }
+    $items[] = '<a href="/about.php">About</a>';
     $items[] = '<a href="/contact.php">Contact</a>';
     $items[] = '<a href="/disclaimer.php">Disclaimer</a>';
     $items[] = '<a href="/privacy.php">Privacy Policy</a>';
