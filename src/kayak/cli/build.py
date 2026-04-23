@@ -511,11 +511,20 @@ def _format_cell_value(col: dict[str, Any], row: dict, reach_id: int, gauge_id: 
     if col["type"] == "name":
         est = '<span class="est"> (est)</span>' if row.get("is_estimated") else ""
         return f'<a href="/description.php?id={reach_id}">{html_mod.escape(str(val))}{est}</a>'
-    elif col["type"] == "flow" and isinstance(val, int | float):
-        lvl = html_mod.escape(str(row["flow_level"])) if row.get("flow_level") else ""
-        lvl_cls = f' class="level-{lvl}"' if lvl else ""
+    elif col["type"] == "flow":
+        # The sparkline slot lives in the flow column regardless of which
+        # series drives it — flow, inflow, or (fallback) gauge height. The
+        # JS populates `<span class="spark">` elements by data-gid from
+        # sparklines.json, so we emit the placeholder whenever a gauge
+        # exists even if this reach's flow value itself is empty.
         gid_attr = f' data-gid="{gauge_id}"' if gauge_id else ""
-        return f'<span{lvl_cls}>{val:,.0f}</span><span class="spark"{gid_attr}></span>'
+        if isinstance(val, int | float):
+            lvl = html_mod.escape(str(row["flow_level"])) if row.get("flow_level") else ""
+            lvl_cls = f' class="level-{lvl}"' if lvl else ""
+            return f'<span{lvl_cls}>{val:,.0f}</span><span class="spark"{gid_attr}></span>'
+        if gauge_id:
+            return f'<span class="spark"{gid_attr}></span>'
+        return ""
     elif col["type"] == "gage" and isinstance(val, int | float):
         lvl = html_mod.escape(str(row["gage_level"])) if row.get("gage_level") else ""
         lvl_cls = f' class="level-{lvl}"' if lvl else ""

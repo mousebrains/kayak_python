@@ -528,6 +528,27 @@ class TestBuildHTMLTable:
         assert "Fresh River" in result
         assert "Old River" not in result
 
+    def test_sparkline_slot_emitted_even_without_flow_value(self, session):
+        """Rows with a gauge but no flow value still need the spark span so
+        the gauge-height fallback sparkline has somewhere to land."""
+        reaches = _make_reaches(session, count=1)
+        gauge = Gauge(name="no_flow_gauge")
+        session.add(gauge)
+        session.flush()
+        reaches[0].gauge_id = gauge.id
+        session.flush()
+        # Row has gage/temperature but no flow value — the fallback case.
+        fake_row = {"display_name": "GaugeOnly River", "gage": 3.4, "temperature": 45.7}
+        with (
+            mock.patch("kayak.cli.build._get_row_data", return_value=fake_row),
+            mock.patch("kayak.cli.build._build_sparkline", return_value=""),
+        ):
+            result, _ = _build_html_table(reaches, COLS_SIMPLE, set(), {})
+        assert "GaugeOnly River" in result
+        # The spark placeholder must carry data-gid=<gauge.id> so levels.js
+        # can inject the pre-built gauge-height SVG from sparklines.json.
+        assert f'class="spark" data-gid="{gauge.id}"' in result
+
     def test_empty_data_filtered(self, session):
         reaches = _make_reaches(session, count=1)
         fake_row = {"display_name": "Empty River"}  # no flow/gage/temperature
