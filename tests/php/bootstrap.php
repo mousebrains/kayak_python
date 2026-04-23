@@ -3,19 +3,16 @@ declare(strict_types=1);
 /**
  * PHPUnit bootstrap — shared test setup.
  *
- * Guarantees:
- * - EDITOR_SESSION_COOKIE / EDITOR_CSRF_COOKIE / EDITOR_SESSION_DAYS are
- *   defined (normally set by php/includes/auth.php — required for loading
- *   auth.php under test).
- * - Exposes ``kayak_test_pdo()``: returns a fresh in-memory PDO with just
- *   enough schema to exercise auth / magic-link / session code. Starter
- *   tests inline the CREATE TABLE they need; this helper saves the repeat.
+ * Exposes ``kayak_test_pdo()``: returns a fresh in-memory PDO with just
+ * enough schema to exercise auth / magic-link / session code. Starter
+ * tests inline the CREATE TABLE they need; this helper saves the repeat.
+ *
+ * The EDITOR_SESSION_COOKIE / EDITOR_CSRF_COOKIE / EDITOR_SESSION_DAYS
+ * constants are defined by php/includes/auth.php. Every test that uses
+ * them also requires auth.php, so they are always present when needed —
+ * no bootstrap-side pre-definitions (those collide with auth.php's
+ * `const` declarations under PHP 9).
  */
-
-// Constants normally defined when PHP bootstraps via nginx fastcgi_param.
-if (!defined('EDITOR_SESSION_COOKIE')) define('EDITOR_SESSION_COOKIE', 'ed_sess');
-if (!defined('EDITOR_CSRF_COOKIE'))    define('EDITOR_CSRF_COOKIE', 'ed_csrf');
-if (!defined('EDITOR_SESSION_DAYS'))   define('EDITOR_SESSION_DAYS', 7);
 
 /** Fresh in-memory SQLite PDO with a minimal editor/magic-link schema. */
 function kayak_test_pdo(): PDO {

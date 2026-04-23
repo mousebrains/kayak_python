@@ -71,3 +71,35 @@ def test_stamp_records_without_running(tmp_path: Path, engine: object) -> None:
         assert migrate_mod.applied_versions() == {"0007"}
         # apply_pending must now skip the broken file.
         assert migrate_mod.apply_pending() == []
+
+
+def test_0003_does_not_recreate_reach_level(engine: object) -> None:
+    """After the 0003 edit, replaying real migration 0003 must not recreate
+    the dropped `reach_level` table.
+
+    The reach_level half of the original 0003 was stripped — reach_level is
+    gone from models.py and a later commit DROP-ped it. This test runs 0003
+    against a schema that matches Base.metadata.create_all() (so reach_class
+    already exists) while stamping 0001 and 0002 as applied so their
+    already-done ALTERs don't collide with create_all.
+    """
+    from kayak.db.models import Base
+
+    Base.metadata.create_all(engine)
+    with (
+        patch("kayak.cli.migrate.get_engine", return_value=engine),
+    ):
+        # Stamp 0001+0002 as already applied (their schema changes are
+        # redundant with create_all) so apply_pending picks up from 0003.
+        for version in ("0001", "0002"):
+            migrate_mod.stamp(version)
+        ran = migrate_mod.apply_pending()
+        # 0003 is what we care about; 0004/0005/0006 will also run cleanly
+        # (IF EXISTS / IF NOT EXISTS guards) but aren't the subject here.
+        assert "0003" in ran
+
+    with engine.begin() as conn:
+        rows = conn.execute(
+            text("SELECT name FROM sqlite_master WHERE type='table' AND name='reach_level'")
+        ).all()
+        assert rows == [], "reach_level must not exist after migration 0003 runs"

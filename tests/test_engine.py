@@ -1,5 +1,7 @@
 """Tests for kayak.db.engine singleton management and SQLite pragmas."""
 
+from unittest.mock import patch
+
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -28,6 +30,19 @@ class TestGetEngine:
 
         assert mod._engine is None
         assert mod._session_factory is None
+
+    def test_url_override_disposes_prior_engine(self):
+        """Passing url=... should dispose the prior engine before replacing it.
+
+        Without this, every rebind orphans the previous connection pool and
+        the DB file stays open until GC eventually clears it — which matters
+        for tests that rapidly swap SQLite files.
+        """
+        e1 = get_engine("sqlite:///:memory:")
+        with patch.object(e1, "dispose", wraps=e1.dispose) as spy:
+            e2 = get_engine("sqlite:///:memory:")
+            assert e1 is not e2
+            spy.assert_called_once()
 
 
 class TestSQLitePragmas:

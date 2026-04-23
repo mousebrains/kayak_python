@@ -92,3 +92,32 @@ def test_sync_sources_returns_new_count(session):
         count = sync_sources(session)
 
     assert count == 1  # only the new URL
+
+
+def test_sync_sources_deactivates_missing_urls(session):
+    """FetchUrl rows whose url is no longer in the YAML get is_active=False.
+
+    Retirement mechanism: the row stays (observations still reference it via
+    source.fetch_url_id), but fetch skips inactive rows.
+    """
+    from kayak.cli.init_db import sync_sources
+
+    # Seed a stale active FetchUrl not in the YAML, plus one the YAML covers.
+    session.add(FetchUrl(url="https://example.com/retired", parser="usgs", is_active=True))
+    session.add(FetchUrl(url="https://example.com/kept", parser="usgs", is_active=True))
+    session.flush()
+
+    fake_sources = [
+        {"url": "https://example.com/kept", "parser": "usgs", "hours": ""},
+        {"url": "https://example.com/fresh", "parser": "usgs", "hours": ""},
+    ]
+    with mock.patch("kayak.cli.init_db.load_sources", return_value=fake_sources):
+        sync_sources(session)
+    session.flush()
+
+    retired = session.query(FetchUrl).filter_by(url="https://example.com/retired").one()
+    kept = session.query(FetchUrl).filter_by(url="https://example.com/kept").one()
+    fresh = session.query(FetchUrl).filter_by(url="https://example.com/fresh").one()
+    assert retired.is_active is False, "URL removed from YAML should deactivate"
+    assert kept.is_active is True, "URL present in YAML should stay active"
+    assert fresh.is_active is True, "new URL is inserted with is_active=True"
