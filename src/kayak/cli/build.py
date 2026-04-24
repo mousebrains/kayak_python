@@ -1698,12 +1698,15 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
 
         # index.html = all reaches levels table (excludes map_only). Data
         # spans every state, so this is the "all page" that gets the state
-        # filter group in the filter bar.
+        # filter group in the filter bar. state="" keeps the nav bar with
+        # no state highlighted, the title as plain "River Levels", and the
+        # companion CSV/text at levels.csv / levels.text rather than
+        # mis-labeling them as Oregon-specific.
         _build_and_write(
             session,
             index_reaches,
             columns,
-            PRIMARY_STATE,
+            "",
             states,
             css_link,
             output_dir,
