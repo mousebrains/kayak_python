@@ -76,7 +76,7 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 75,Nestucca_Beaver_merge,,,Beaver,45.266494460755,-123.847060972396,14303600,BEAO,,,BEAO3,,14303600,27,43.0,180.0,171002030209,0,Nestucca,Nestucca at Beaver,nestucca|9|009957|000180
 76,NF_ALSEA_calc,,,Calculation,44.416192,-123.561792,,,,,,,,,353.8,,171002050103,0,North Fork Alsea,North Fork Alsea at Calculation,alsea|0north|009646|999999
 77,Clearwater_Canyon_merge,,,Canyon Ranger Station,46.8405555555556,-115.621111111111,13340600,CRSI,,,,,13340600,,1706.15,1296.0,170603071002,0,North Fork Clearwater,North Fork Clearwater at Canyon Ranger Station,clearwater|0north|008294|001296
-78,14147500,,,Oakridge,43.7567902423058,-122.505329201326,14147500,NWFO,,,NWFO,,14147500,,1029.6,246.0,170900010608,0,North Fork of Middle Fork Willamette,North Fork of Middle Fork Willamette at Oakridge,willamette|0north|008970|000246
+78,14147500,,,Oakridge,43.7567902423058,-122.505329201326,14147500,NWFO,,,NWFO,,14147500,,1029.6,246.0,170900010608,0,North Fork Middle Fork Willamette,North Fork Middle Fork Willamette at Oakridge,willamette|0north|008970|000246
 79,Owyhee_Rome_merge,,,Rome,42.86638888888889,-117.64916666666667,13181000,ROMO,,,ROMO3,,13181000,28,3361.0,8000.0,170501070705,0,Owyhee,Owyhee at Rome,owyhee|9|006639|008000
 80,Payette_Lowman_merge,,,Lowman,44.0852777777778,-115.622222222222,13235000,PRLI,,,,,13235000,,3770.0,446.0,170501200306,0,South Fork Payette,South Fork Payette at Lowman,payette|0south|006230|000446
 81,13237920,,,Crouch,44.1086111111111,-115.982222222222,13237920,,,,,,13237920,,3001.68,337.0,170501210403,0,Middle Fork Payette,Middle Fork Payette at Crouch,payette|0middle|006998|000337
@@ -178,7 +178,7 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 177,McKenzie_above_South_Fork,,,South Fork,44.1664,-122.2558,CMRO3,CMRO3,,,CMRO3,,,,1160.0,,170900040502,0,McKenzie,McKenzie at South Fork,mckenzie|9|008840|999999
 178,SALMON RIVER AB EAST FORK NR CLAYTON ID,,,East Fork nr Clayton,44.266642,-114.326758,,SAEI,,,SAEI1,,13297380,,5326.2,1200.0,170602010906,0,Salmon,Salmon at East Fork nr Clayton,salmon|9|004674|001200
 179,SALMON RIVER NR SHOUP ID,,,Shoup,45.3225,-114.44,,,,,,,13307000,,3157.6,6239.0,170602031302,0,Salmon,Salmon at Shoup,salmon|9|006842|006239
-180,EFSF_Stibnite,,,Stibnite,44.905722,-115.3295,,SFSI,,,SFSI1,,13311000,,6466.0,19.3,170602080201,0,East Fork of South Fork Salmon,East Fork of South Fork Salmon at Stibnite,salmon|0east|003534|000019
+180,EFSF_Stibnite,,,Stibnite,44.905722,-115.3295,,SFSI,,,SFSI1,,13311000,,6466.0,19.3,170602080201,0,East Fork South Fork Salmon,East Fork South Fork Salmon at Stibnite,salmon|0east|003534|000019
 181,EFSF_Salmon_calc,,,EFSF just below Johnson Cr confluence (Johnson + Stibnite),44.962554,-115.505507,,,,,,,,,4632.4,,170602080302,0,Salmon,Salmon at EFSF just below Johnson Cr confluence (Johnson + Stibnite),salmon|9|005368|999999
 182,LWWW1,,,Willard Nat'l Fish Hatchery near Mill A,45.7648,-121.6303,,LWWW,,,LWWW1,,,,925.0,,170701050905,0,Little White Salmon,Little White Salmon at Willard Nat'l Fish Hatchery near Mill A,little white salmon|9|009075|999999
 183,14128500,,,Carson,45.7267469824777,-121.794774605898,,WCNW,,,WCNW1,,14128500,,112.6,225.0,170701051008,0,Wind,Wind at Carson,wind|9|009887|000225

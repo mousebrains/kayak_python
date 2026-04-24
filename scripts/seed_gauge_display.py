@@ -108,6 +108,9 @@ def normalize_river(raw: str) -> str:
     s = re.sub(r"\s+River$", "", s, flags=re.IGNORECASE)
 
     # 1. Comma-suffix pattern: "Base, X Fork" → "X Fork Base".
+    # (Fork-of-fork connector collapse happens AFTER direction expansion so
+    # "N FK OF M FK X" → "North Fork of Middle Fork X" first, then the "of"
+    # gets dropped below.)
     m = re.match(r"^(?P<base>.+?),\s*(?P<tail>.+)$", s)
     if m:
         base = m.group("base").strip()
@@ -120,6 +123,16 @@ def normalize_river(raw: str) -> str:
         s = f"{_normalize_directions(tail)} {base}"
     else:
         s = _normalize_directions(s)
+    # Collapse "Fork of (the) {Direction} Fork" → "Fork {Direction} Fork".
+    # USGS spells their compound forks "N FK OF M FK WILLAMETTE"; the
+    # paddler community writes them without the "of" ("North Fork Middle
+    # Fork Willamette"), which is what we use for display.
+    s = re.sub(
+        rf"(Fork)\s+of\s+(?:the\s+)?(?=(?:{'|'.join(_DIRECTIONS)})\s+Fork)",
+        r"\1 ",
+        s,
+        flags=re.IGNORECASE,
+    )
     return _collapse_whitespace(s)
 
 
