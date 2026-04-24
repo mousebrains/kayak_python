@@ -1224,12 +1224,12 @@ def _parse_station_uppercase(name: str) -> tuple[str, str]:
         → ``("Shitike Crk", "Peters Pasture, nr Warm Springs")``
     """
     s = _STATE_SUFFIX_RE.sub("", name.strip())
-    # USGS primary delimiters: AT, NEAR, NR, BLW/BELOW, ABV/ABOVE, and the
-    # stray single-letter "A" variant ("KLAMATH R A ORLEANS"). maxsplit=1
+    # USGS primary delimiters: AT, NEAR, NR, BLW/BELOW, ABV/ABOVE/AB, and
+    # the stray single-letter "A" variant ("KLAMATH R A ORLEANS"). maxsplit=1
     # keeps a secondary "NR" ("AT PETERS PASTURE, NR WARM SPRINGS") inside
-    # the location; longer alternatives are listed first so "AT" wins over "A"
-    # when both could match the same position.
-    parts = re.split(r"\s+(?:ABOVE|BELOW|NEAR|ABV|BLW|AT|NR|A)\s+", s, maxsplit=1)
+    # the location; longer alternatives are listed first so "ABOVE" wins
+    # over "AB" (and "AT" over "A") when both could match the same position.
+    parts = re.split(r"\s+(?:ABOVE|BELOW|NEAR|ABV|BLW|AB|AT|NR|A)\s+", s, maxsplit=1)
     if len(parts) != 2:
         return _title_case_usgs(s), ""
     left, right = parts
