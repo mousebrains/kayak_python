@@ -33,8 +33,10 @@ if [ -z "$LATEST" ]; then
     exit 2
 fi
 
-# Convert to epoch for comparison
-LATEST_EPOCH=$(date -d "$LATEST" +%s 2>/dev/null || date -j -f "%Y-%m-%d %H:%M:%S" "$LATEST" +%s 2>/dev/null)
+# Convert to epoch for comparison. SQLite stores observed_at in UTC with no
+# TZ suffix, so parse explicitly as UTC — otherwise `date -d` treats it as
+# local time and AGE_HOURS is off by the local UTC offset.
+LATEST_EPOCH=$(date -u -d "$LATEST UTC" +%s 2>/dev/null || date -j -u -f "%Y-%m-%d %H:%M:%S" "$LATEST" +%s 2>/dev/null)
 NOW_EPOCH=$(date +%s)
 AGE_HOURS=$(( (NOW_EPOCH - LATEST_EPOCH) / 3600 ))
 

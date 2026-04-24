@@ -10,14 +10,16 @@ EnvironmentFile=-/home/pat/.config/kayak/.env
 ExecStart=/home/pat/kayak/scripts/health-check.sh
 Nice=15
 
-# Sandboxing — read-only DB access via health-check.sh, no network required.
+# Sandboxing — DB access via health-check.sh, no network required.
+# NB: SQLite WAL mode needs to create -wal/-shm beside the DB, so the DB
+# dir must be ReadWritePaths even though the script only SELECTs.
 NoNewPrivileges=yes
 PrivateTmp=yes
 PrivateDevices=yes
 PrivateNetwork=yes
 ProtectSystem=strict
 ProtectHome=read-only
-ReadOnlyPaths=/home/pat/DB
+ReadWritePaths=/home/pat/DB
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes

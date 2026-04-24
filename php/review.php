@@ -198,6 +198,39 @@ function review_send_reply(PDO $db, array $cr, string $reply, int $maint_id): vo
     }
 }
 
+/** Terminal close without a payload apply (site comments, mooted proposals). */
+function review_resolve(PDO $db, array $cr, string $new_note, int $maint_id): void {
+    $merged = merge_reviewer_note((string)($cr['reviewer_note'] ?? ''), $new_note);
+    $db->prepare(
+        "UPDATE change_request
+         SET status = 'resolved', reviewed_at = datetime('now'),
+             reviewed_by = ?, reviewer_note = ?
+         WHERE id = ?"
+    )->execute([$maint_id, $merged, $cr['id']]);
+}
+
+function review_reply_and_close(PDO $db, array $cr, string $reply, int $maint_id): void {
+    $merged = merge_reviewer_note((string)($cr['reviewer_note'] ?? ''), $reply);
+    $db->prepare(
+        "UPDATE change_request
+         SET status = 'resolved', reviewed_at = datetime('now'),
+             reviewed_by = ?, reviewer_note = ?
+         WHERE id = ?"
+    )->execute([$maint_id, $merged, $cr['id']]);
+
+    $st = $db->prepare('SELECT email FROM editor WHERE id = ?');
+    $st->execute([$cr['editor_id']]);
+    $row = $st->fetch();
+    if ($row && !empty($row['email'])) {
+        $target_label = $cr['subject'] ?: ($cr['target_type'] . ' #' . $cr['target_id']);
+        send_email(
+            (string)$row['email'],
+            "[levels] your proposal was resolved",
+            render_editor_reply_and_close_email($target_label, $reply)
+        );
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Controller
 // ---------------------------------------------------------------------------
@@ -273,6 +306,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             review_send_reply($db, $cr, $note, (int)$maint['id']);
             $flash = 'Reply sent — proposal kept pending.';
         }
+    } elseif ($action === 'reply_and_close') {
+        $note = trim((string)($_POST['reviewer_note'] ?? ''));
+        if ($note === '') {
+            $flash_err = 'Reply cannot be empty.';
+        } else {
+            review_reply_and_close($db, $cr, $note, (int)$maint['id']);
+            $flash = 'Reply sent and proposal marked resolved.';
+        }
+    } elseif ($action === 'resolve') {
+        $note = trim((string)($_POST['reviewer_note'] ?? ''));
+        review_resolve($db, $cr, $note, (int)$maint['id']);
+        review_notify_editor($db, $cr, 'resolved', $note);
+        $flash = 'Marked resolved.';
     }
 }
 
@@ -410,6 +456,8 @@ if ($cr_id) {
         echo '<button type="submit" name="action" value="approve">Approve and apply</button>';
     }
     echo ' <button type="submit" name="action" value="reply">Send reply (keep pending)</button>';
+    echo ' <button type="submit" name="action" value="reply_and_close">Reply and close</button>';
+    echo ' <button type="submit" name="action" value="resolve">Mark resolved</button>';
     echo ' <button type="submit" name="action" value="reject">Reject</button>';
     echo ' <a href="/review.php" style="margin-left:1rem">Back to queue</a>';
     echo '</p>';
@@ -423,7 +471,7 @@ if ($cr_id) {
 // List view
 // ---------------------------------------------------------------------------
 $q_status = $_GET['status'] ?? 'pending';
-if (!in_array($q_status, ['pending', 'approved', 'rejected', 'all'], true)) {
+if (!in_array($q_status, ['pending', 'approved', 'rejected', 'resolved', 'all'], true)) {
     $q_status = 'pending';
 }
 $where = $q_status === 'all' ? '' : 'WHERE cr.status = ?';
@@ -445,7 +493,7 @@ if ($flash)     echo '<p style="padding:.5rem;background:#e8f4ea;border:1px soli
 if ($flash_err) echo '<p style="padding:.5rem;background:#fde8e8;border:1px solid #f5b5b5;border-radius:4px">' . htmlspecialchars($flash_err) . '</p>';
 
 echo '<p style="font-size:.85rem">Status: ';
-foreach (['pending', 'approved', 'rejected', 'all'] as $s) {
+foreach (['pending', 'approved', 'rejected', 'resolved', 'all'] as $s) {
     $cls = $s === $q_status ? ' style="font-weight:700"' : '';
     echo '<a href="/review.php?status=' . $s . '"' . $cls . '>' . $s . '</a> &nbsp;';
 }

@@ -73,6 +73,7 @@ class ChangeStatus(enum.StrEnum):
     pending = "pending"
     approved = "approved"
     rejected = "rejected"
+    resolved = "resolved"
     auto_applied = "auto_applied"
 
 

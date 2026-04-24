@@ -1,3 +1,12 @@
+// Track header height so sticky thead can sit flush below it
+(function(){
+  var hdr=document.querySelector('header');
+  if(!hdr||typeof ResizeObserver==='undefined')return;
+  function setH(){document.documentElement.style.setProperty('--header-h',hdr.offsetHeight+'px');}
+  setH();
+  new ResizeObserver(setH).observe(hdr);
+})();
+
 // Convert UTC timestamps to local time
 document.querySelectorAll('time[datetime]').forEach(function(el){
   var d=new Date(el.getAttribute('datetime'));

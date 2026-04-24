@@ -174,3 +174,18 @@ WKCC River Levels
 https://levels.wkcc.org
 TXT;
 }
+
+/** Reply + close combined: one email covering both the reply and the closure. */
+function render_editor_reply_and_close_email(string $target_label, string $reply_body): string {
+    return <<<TXT
+The maintainer replied on your proposed change to $target_label:
+
+$reply_body
+
+This proposal has been marked resolved. Thank you for contributing.
+
+—
+WKCC River Levels
+https://levels.wkcc.org
+TXT;
+}
