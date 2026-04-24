@@ -1335,7 +1335,7 @@ def _collect_gauge_rows(
             display_name = f"{river} at {location}" if river and location else river or location
             # Best-effort key so unseeded rows still land in a sensible slot.
             elev = float(g.elevation) if g.elevation is not None else None
-            elev_key = f"{int(round(10000 - elev)):06d}" if elev is not None else "999999"
+            elev_key = f"{round(10000 - elev):06d}" if elev is not None else "999999"
             sort_name = f"{river.lower()}|9|{elev_key}|999999"
 
         row: dict[str, Any] = {
