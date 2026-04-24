@@ -1809,9 +1809,32 @@ def build(args: argparse.Namespace) -> None:
             raise
     else:
         # --- In-place mode (development) ---
-        output_dir.mkdir(parents=True, exist_ok=True)
-        _build_to_dir(output_dir, args)
-        print(f"Build complete → {output_dir}")
+        # Opt-in rename-over-target: build into a staging sibling, then
+        # rename-copy each file into output_dir and sweep orphans. This is
+        # the path being groomed to eventually replace the symlink branch
+        # above (iteration 2 of the plan — dev/CI only while it bakes).
+        mode = os.environ.get("KAYAK_DEPLOY_MODE", "")
+        if mode == "rename":
+            staging = output_dir.parent / f"{output_dir.name}.staging"
+            if staging.exists():
+                shutil.rmtree(staging)
+            staging.mkdir(parents=True)
+            try:
+                _build_to_dir(staging, args)
+                output_dir.mkdir(parents=True, exist_ok=True)
+                kept = _deploy_staging_to_live(staging, output_dir)
+                removed = _sweep_orphans(output_dir, kept)
+                print(
+                    f"Build complete → {output_dir} "
+                    f"(rename mode: {len(kept)} installed, "
+                    f"{len(removed)} orphans removed)"
+                )
+            finally:
+                shutil.rmtree(staging, ignore_errors=True)
+        else:
+            output_dir.mkdir(parents=True, exist_ok=True)
+            _build_to_dir(output_dir, args)
+            print(f"Build complete → {output_dir}")
 
 
 def _build_and_write(

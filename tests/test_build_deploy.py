@@ -1,16 +1,19 @@
-"""Tests for the rename-over-target deploy helpers.
+"""Tests for the rename-over-target deploy helpers and the in-place
+``build()`` wire-up behind ``KAYAK_DEPLOY_MODE=rename``.
 
-These cover the pure file-shuffling primitives that will eventually replace
-the symlink-swap step in ``build()``. No ``build()`` call-site changes yet —
-just the helpers in isolation.
+The symlink branch of ``build()`` is NOT exercised here — it's the prod
+path and the rename work doesn't change it. These tests target the else
+branch (regular-dir output) and its two modes (default vs rename).
 """
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 import pytest
 
+import kayak.cli.build as build_mod
 from kayak.cli.build import _deploy_staging_to_live, _sweep_orphans
 
 
@@ -204,8 +207,6 @@ def test_deploy_error_leaves_live_consistent(tmp_path: Path) -> None:
     We simulate by making the live tree read-only partway through via a
     monkeypatched copy2 that raises on the second file.
     """
-    import kayak.cli.build as build_mod
-
     staging = tmp_path / "stage"
     live = tmp_path / "live"
     live.mkdir()
@@ -233,3 +234,128 @@ def test_deploy_error_leaves_live_consistent(tmp_path: Path) -> None:
     # preserved.html is always there; at most one of a.html/b.html made it.
     assert "preserved.html" in finals
     assert (live / "preserved.html").read_text() == "original"
+
+
+# ---------------------------------------------------------------------------
+# build() wire-up: KAYAK_DEPLOY_MODE=rename on the in-place branch
+# ---------------------------------------------------------------------------
+
+
+def _stub_build_to_dir_factory(files: dict[str, str]):
+    """Factory for a `_build_to_dir` stub that writes a known file set."""
+
+    def _stub(out_dir: Path, _args: argparse.Namespace) -> None:
+        for rel, content in files.items():
+            p = out_dir / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(content)
+
+    return _stub
+
+
+def test_build_default_mode_writes_in_place(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without KAYAK_DEPLOY_MODE set, build() falls through to the existing
+    in-place write (no staging dir, no orphan sweep)."""
+    live = tmp_path / "public_html"
+    live.mkdir()
+    # Pre-existing file — default mode doesn't sweep.
+    (live / "stale.html").write_text("not removed in default mode")
+
+    monkeypatch.setattr(
+        build_mod,
+        "_build_to_dir",
+        _stub_build_to_dir_factory({"index.html": "v1"}),
+    )
+    monkeypatch.delenv("KAYAK_DEPLOY_MODE", raising=False)
+
+    build_mod.build(argparse.Namespace(output_dir=str(live)))
+
+    assert (live / "index.html").read_text() == "v1"
+    assert (live / "stale.html").exists()  # default mode: no sweep
+    assert not (tmp_path / "public_html.staging").exists()
+
+
+def test_build_rename_mode_stages_then_renames(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With KAYAK_DEPLOY_MODE=rename, build() stages, rename-deploys,
+    sweeps orphans, and cleans up the staging dir."""
+    live = tmp_path / "public_html"
+    live.mkdir()
+    (live / "orphan.html").write_text("will be swept")
+    (live / "index.html").write_text("v0")
+    old_index_inode = (live / "index.html").stat().st_ino
+
+    monkeypatch.setattr(
+        build_mod,
+        "_build_to_dir",
+        _stub_build_to_dir_factory(
+            {
+                "index.html": "v1",
+                "static/app.js": "console.log(1)",
+            }
+        ),
+    )
+    monkeypatch.setenv("KAYAK_DEPLOY_MODE", "rename")
+
+    build_mod.build(argparse.Namespace(output_dir=str(live)))
+
+    assert (live / "index.html").read_text() == "v1"
+    assert (live / "index.html").stat().st_ino != old_index_inode
+    assert (live / "static/app.js").read_text() == "console.log(1)"
+    assert not (live / "orphan.html").exists()
+    assert not (tmp_path / "public_html.staging").exists()
+
+
+def test_build_rename_mode_cleans_staging_on_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If _build_to_dir raises mid-build, the staging dir is torn down so a
+    retry doesn't trip over stale scratch state. Live is untouched."""
+    live = tmp_path / "public_html"
+    live.mkdir()
+    (live / "index.html").write_text("untouched")
+
+    def _exploding_build_to_dir(out_dir: Path, _args: argparse.Namespace) -> None:
+        (out_dir / "half.html").write_text("partial")
+        raise RuntimeError("boom mid-build")
+
+    monkeypatch.setattr(build_mod, "_build_to_dir", _exploding_build_to_dir)
+    monkeypatch.setenv("KAYAK_DEPLOY_MODE", "rename")
+
+    with pytest.raises(RuntimeError, match="boom mid-build"):
+        build_mod.build(argparse.Namespace(output_dir=str(live)))
+
+    # Live file unchanged — rename deploy never started.
+    assert (live / "index.html").read_text() == "untouched"
+    # Staging dir cleaned up by the finally block.
+    assert not (tmp_path / "public_html.staging").exists()
+
+
+def test_build_rename_mode_removes_stale_staging_before_rebuild(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A stale .staging dir from a previous aborted run is wiped before
+    the new build writes to it."""
+    live = tmp_path / "public_html"
+    live.mkdir()
+    stale_staging = tmp_path / "public_html.staging"
+    stale_staging.mkdir()
+    (stale_staging / "leftover.html").write_text("from a prior aborted build")
+
+    monkeypatch.setattr(
+        build_mod,
+        "_build_to_dir",
+        _stub_build_to_dir_factory({"index.html": "fresh"}),
+    )
+    monkeypatch.setenv("KAYAK_DEPLOY_MODE", "rename")
+
+    build_mod.build(argparse.Namespace(output_dir=str(live)))
+
+    assert (live / "index.html").read_text() == "fresh"
+    # The stale leftover never made it into live — it was wiped along
+    # with the stale staging dir at the start of the new run.
+    assert not (live / "leftover.html").exists()
+    assert not stale_staging.exists()
