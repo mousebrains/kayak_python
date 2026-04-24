@@ -8,6 +8,12 @@ kayak database to find:
   - Gauges that stopped providing data in the last week
   - Gauges that started providing data in the last week
 
+Advisory only — this script never deletes gauges. Gauges without a linked
+reach are first-class (a few feed calc expressions, others are kept for
+historical/manual-merge use) and are never recommended for removal on that
+basis. Any cleanup tool that wants to delete a gauge must use
+``kayak.db.gauges.delete_gauge``, which enforces the safety chokepoint.
+
 Usage:
     python3 scripts/audit_gauges.py [--no-refresh] [--days 7]
 """

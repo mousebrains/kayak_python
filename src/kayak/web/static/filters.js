@@ -171,6 +171,10 @@
       e.preventDefault();
       bar.hidden = !bar.hidden;
       a.setAttribute('aria-expanded', bar.hidden ? 'false' : 'true');
+      // If the user clicks Filter while scrolled down (e.g., after jumping
+      // to a letter anchor), the bar expands above the viewport and looks
+      // like nothing happened. Scroll it into view when revealing.
+      if (!bar.hidden) bar.scrollIntoView({behavior: 'smooth', block: 'start'});
     });
     nav.appendChild(a);
   }

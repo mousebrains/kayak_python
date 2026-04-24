@@ -72,14 +72,14 @@ id,url,parser,hours,is_active
 71,https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_STG_FM.TXT,wa.gov,,1
 72,https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_DSG_FM.TXT,wa.gov,,1
 73,https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_WTM_FM.TXT,wa.gov,,1
-74,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=ca&period=P1D&parameterCd=00060,00065,00010",usgs,,1
-75,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=id&period=P1D&parameterCd=00060,00065,00010",usgs,,1
-76,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=nv&period=P1D&parameterCd=00060,00065,00010",usgs,,1
-77,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=or&period=P1D&parameterCd=00060,00065,00010",usgs,,1
-78,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=wa&period=P1D&parameterCd=00060,00065,00010",usgs,,1
+74,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=ca&period=P1D&parameterCd=00060,00065,00010",usgs,,0
+75,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=id&period=P1D&parameterCd=00060,00065,00010",usgs,,0
+76,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=nv&period=P1D&parameterCd=00060,00065,00010",usgs,,0
+77,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=or&period=P1D&parameterCd=00060,00065,00010",usgs,,0
+78,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=wa&period=P1D&parameterCd=00060,00065,00010",usgs,,0
 79,"https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22FAL.Flow-Out.Inst.0.0.Best%22,%22FAL.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d",usace.cda,,1
 80,https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=APLO3&pe=QI,nwrfc.textplot,,1
-81,https://api.water.noaa.gov/nwps/v1/gauges/BRBO3/stageflow/observed,nwps,,1
+81,https://api.water.noaa.gov/nwps/v1/gauges/BRBO3/stageflow/observed,nwps,,0
 82,https://api.water.noaa.gov/nwps/v1/gauges/NMFO3/stageflow/observed,nwps,,1
 83,https://www.nwrfc.noaa.gov/xml/xml.cgi?id=CMRO3&pe=HG&dtype=b&numdays=1,nwrfc.xml,,1
 84,https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LOCO3&pe=HG&dtype=b&numdays=1,nwrfc.xml,,1
@@ -102,3 +102,4 @@ id,url,parser,hours,is_active
 101,https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/28B080/28B080_WTM_FM.TXT,wa.gov,,1
 102,https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/28B080/28B080_STG_FM.TXT,wa.gov,,1
 103,https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/28B080/28B080_DSG_FM.TXT,wa.gov,,1
+104,https://api.water.noaa.gov/nwps/v1/gauges/CORO3/stageflow/observed,nwps,,1

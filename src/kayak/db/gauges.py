@@ -1,12 +1,16 @@
 """Gauge lookups and gauge-scoped aggregation helpers."""
 
 from collections import defaultdict
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from kayak.db.models import DataType, Gauge, GaugeSource, Observation, Source
+
+
+class GaugeDeletionGuardError(RuntimeError):
+    """Raised by :func:`delete_gauge` when safety preconditions aren't met."""
 
 
 def get_gauge_by_name(session: Session, name: str) -> Gauge | None:
@@ -115,3 +119,48 @@ def get_bulk_gauge_observations(
         gid = source_to_gauge[row.source_id]
         result[gid].append(row)
     return dict(result)
+
+
+def delete_gauge(
+    session: Session,
+    gauge_id: int,
+    *,
+    allow_with_sources: bool = False,
+    min_stale_days: int = 90,
+) -> None:
+    """Sanctioned deletion path for a Gauge row.
+
+    Reach-less gauges are NOT deletion candidates on their own — callers
+    must pass ``allow_with_sources=True`` only after verifying the gauge
+    has no observations newer than ``min_stale_days`` AND no active
+    sources (reach linkage is intentionally ignored).
+
+    Raises :class:`GaugeDeletionGuardError` if any precondition fails.
+    """
+    gauge = session.get(Gauge, gauge_id)
+    if gauge is None:
+        raise GaugeDeletionGuardError(f"Gauge {gauge_id} not found")
+
+    source_ids = get_source_ids_for_gauge(session, gauge_id)
+    if source_ids and not allow_with_sources:
+        raise GaugeDeletionGuardError(
+            f"Gauge {gauge_id} has {len(source_ids)} source(s); "
+            "pass allow_with_sources=True after confirming intent"
+        )
+
+    if source_ids:
+        cutoff = datetime.now(UTC) - timedelta(days=min_stale_days)
+        recent = session.scalar(
+            select(func.count())
+            .select_from(Observation)
+            .where(
+                Observation.source_id.in_(source_ids),
+                Observation.observed_at >= cutoff,
+            )
+        )
+        if recent:
+            raise GaugeDeletionGuardError(
+                f"Gauge {gauge_id} has {recent} observations newer than {min_stale_days} days"
+            )
+
+    session.delete(gauge)

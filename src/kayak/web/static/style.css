@@ -46,7 +46,8 @@ header nav.site-nav-right{margin-left:auto}
 .letter-nav{display:flex;flex-wrap:wrap;gap:2px;margin-left:auto}
 .letter-nav a{display:inline-flex;align-items:center;justify-content:center;min-width:2em;min-height:44px;padding:4px;text-align:center;font-size:.75rem;font-weight:600;color:rgba(255,255,255,.85);border-radius:3px;text-decoration:none}
 .letter-nav a:hover{background:rgba(255,255,255,.25);color:#fff;text-decoration:none}
-[id^="letter-"]{scroll-margin-top:4rem}
+[id^="letter-"]{scroll-margin-top:calc(var(--header-h,4rem) + 2rem)}
+#filter-bar{scroll-margin-top:calc(var(--header-h,4rem) + .5rem)}
 
 /* Main */
 main{padding:.5rem}
@@ -59,6 +60,7 @@ footer a{display:inline-flex;align-items:center;min-height:44px}
 /* Table — desktop default */
 table.levels{width:100%;border-collapse:collapse;font-size:.85rem}
 table.levels th{background:var(--c-primary);color:#fff;padding:4px 8px;text-align:left;white-space:nowrap}
+table.levels thead th{position:sticky;top:var(--header-h,4rem);z-index:50}
 table.levels th a{color:#fff}
 table.levels td{padding:10px 8px;border-bottom:1px solid var(--c-border);white-space:nowrap}
 table.levels tr:nth-child(even){background:var(--c-stripe)}

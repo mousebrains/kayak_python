@@ -14,7 +14,9 @@ import json
 import logging
 import math
 import os
+import re
 import shutil
+import sqlite3
 import tempfile
 import time
 from contextlib import suppress
@@ -35,7 +37,7 @@ from kayak.db.info_db import (
     get_calculated_gauge_ids,
     reaches_query,
 )
-from kayak.db.models import DataType, HucName, LatestGaugeObservation, Observation, Reach
+from kayak.db.models import DataType, Gauge, HucName, LatestGaugeObservation, Observation, Reach
 from kayak.utils.class_tiers import parse_class_tiers
 from kayak.utils.lttb import downsample, running_median
 from kayak.utils.simplify import parse_geom, simplify
@@ -336,22 +338,15 @@ def _select_sparkline_series(
     return selected
 
 
-def _build_sparkline(
-    reach: Reach,
-    sparkline_obs: dict[int, list[Observation]],
+def _sparkline_svg_from_records(
+    records: list[Observation],
     width: int = 80,
     height: int = 20,
 ) -> str:
-    """Generate a tiny inline SVG sparkline from pre-loaded gauge observation data."""
-    gauge = reach.gauge
-    if not gauge:
-        return ""
-
-    records = sparkline_obs.get(gauge.id, [])
+    """Render the sparkline SVG from raw observations. Empty if insufficient data."""
     if len(records) < 3:
         return ""
 
-    # Build (epoch, value) pairs sorted by time
     pairs = sorted(
         [(r.observed_at.timestamp(), r.value) for r in records if r.value is not None],
         key=lambda p: p[0],
@@ -380,6 +375,19 @@ def _build_sparkline(
         f'<polyline fill="none" stroke="{SPARKLINE_COLOR}" stroke-width="{SPARKLINE_STROKE_WIDTH}" points="{points}"/>'
         f"</svg>"
     )
+
+
+def _build_sparkline(
+    reach: Reach,
+    sparkline_obs: dict[int, list[Observation]],
+    width: int = 80,
+    height: int = 20,
+) -> str:
+    """Generate a tiny inline SVG sparkline from pre-loaded gauge observation data."""
+    gauge = reach.gauge
+    if not gauge:
+        return ""
+    return _sparkline_svg_from_records(sparkline_obs.get(gauge.id, []), width, height)
 
 
 # ---------------------------------------------------------------------------
@@ -912,6 +920,7 @@ def _build_nav(states: list[str], active_state: str = "") -> str:
     """Build abbreviation-based nav bar. OR links to index.html, others to {State}.html."""
     links: list[str] = []
     links.append('<a href="/map.html">Map</a>')
+    links.append('<a href="/gauges.html">Gauges</a>')
     for s in states:
         if s not in _NAV_STATES:
             continue
@@ -1135,6 +1144,411 @@ main {{padding:0;max-width:none;}}
 
 
 # ---------------------------------------------------------------------------
+# Gauges page — supplemental all-gauges listing
+# ---------------------------------------------------------------------------
+
+
+_METADATA_CACHE_PATH = BASE_DIR / "Gauge-metadata-cache" / "gauges.db"
+
+# Trailing state code — ", OR" / ",OR" / " OR" / " OREG" / ", OREG.". Explicit
+# list avoids false-matching any uppercase 2-letter token ("N JUNCTION", etc.).
+_STATE_SUFFIX_RE = re.compile(
+    r",?\s*(?:OR|OREG\.?|WA|WASH\.?|ID|IDA\.?|CA|CAL\.?|NV|NEV\.?"
+    r"|MT|MONT\.?|WY|WYO\.?|UT|AZ|ARIZ\.?|CO|COL\.?|NM|KS|TX|AK|HI)\s*$"
+)
+
+# Fork-prefix abbreviations the user wants kept in all-caps.
+_KEEP_CAPS_TOKENS = {"EF", "NF", "SF", "MF", "WF"}
+
+# Lowercase connector words inside a multi-word fragment.
+_SMALL_WORDS = {"of", "the", "at", "in", "on", "to", "and", "or"}
+
+
+def _load_station_metadata() -> dict[str, dict[str, str]]:
+    """Read descriptive station names from the Gauge-metadata-cache.
+
+    Returns a dict with three sub-dicts keyed by ``lid`` / ``site_no``:
+    ``nwrfc`` (mixed case), ``nwps`` (mixed case), ``usgs`` (UPPERCASE).
+    An empty set of dicts is returned if the cache file is missing or
+    unreadable — callers fall back to the current name-derivation logic.
+    """
+    out: dict[str, dict[str, str]] = {"nwrfc": {}, "nwps": {}, "usgs": {}}
+    if not _METADATA_CACHE_PATH.is_file():
+        return out
+    try:
+        conn = sqlite3.connect(f"file:{_METADATA_CACHE_PATH}?mode=ro", uri=True)
+        try:
+            for kind, query in (
+                ("nwrfc", "SELECT lid, name FROM nwrfc_site WHERE name IS NOT NULL"),
+                ("nwps", "SELECT lid, name FROM nwps_site WHERE name IS NOT NULL"),
+                ("usgs", "SELECT site_no, station_nm FROM usgs_site WHERE station_nm IS NOT NULL"),
+            ):
+                for key, name in conn.execute(query):
+                    out[kind][key] = name
+        finally:
+            conn.close()
+    except sqlite3.Error as exc:
+        logger.warning("metadata cache unreadable at %s: %s", _METADATA_CACHE_PATH, exc)
+    return out
+
+
+def _title_case_usgs(s: str) -> str:
+    """Title-case an UPPERCASE USGS fragment.
+
+    - ``NR`` / ``NEAR`` → lowercase (per user convention in location strings)
+    - ``EF`` / ``NF`` / ``SF`` / ``MF`` / ``WF`` → kept uppercase
+    - Connector words (``of``, ``the`` ...) lowercased when not leading
+    - Other words capitalized (``CRK`` → ``Crk``)
+    """
+    words = s.split()
+    out: list[str] = []
+    for i, w in enumerate(words):
+        low = w.lower()
+        upper = w.upper()
+        if low in ("nr", "near"):
+            out.append(low)
+        elif upper in _KEEP_CAPS_TOKENS:
+            out.append(upper)
+        elif i > 0 and low in _SMALL_WORDS:
+            out.append(low)
+        else:
+            out.append(w.capitalize())
+    return " ".join(out)
+
+
+def _parse_station_uppercase(name: str) -> tuple[str, str]:
+    """Parse a USGS-style UPPERCASE station name to ``(river, location)``.
+
+    ``WILLAMETTE RIVER AT CORVALLIS, OR`` → ``("Willamette", "Corvallis")``
+    ``SHITIKE CRK AT PETERS PASTURE, NR WARM SPRINGS, OR``
+        → ``("Shitike Crk", "Peters Pasture, nr Warm Springs")``
+    """
+    s = _STATE_SUFFIX_RE.sub("", name.strip())
+    # USGS primary delimiters: AT, NEAR, NR, BLW/BELOW, ABV/ABOVE, and the
+    # stray single-letter "A" variant ("KLAMATH R A ORLEANS"). maxsplit=1
+    # keeps a secondary "NR" ("AT PETERS PASTURE, NR WARM SPRINGS") inside
+    # the location; longer alternatives are listed first so "AT" wins over "A"
+    # when both could match the same position.
+    parts = re.split(r"\s+(?:ABOVE|BELOW|NEAR|ABV|BLW|AT|NR|A)\s+", s, maxsplit=1)
+    if len(parts) != 2:
+        return _title_case_usgs(s), ""
+    left, right = parts
+    # Strip trailing " RIVER" or its USGS abbreviation " R".
+    left = re.sub(r"\s+R(?:IVER)?$", "", left)
+    return _title_case_usgs(left), _title_case_usgs(right)
+
+
+def _parse_station_mixed(name: str) -> tuple[str, str]:
+    """Parse a mixed-case NWPS/NWRFC station name to ``(river, location)``.
+
+    Input is already in presentation case; we don't re-title-case. Splits on
+    ``at``/``near``/``above``/``below`` and strips a trailing `` River``
+    suffix from the river. Also collapses the NWRFC-textplot Unicode-minus
+    delimiter (``'WILLAMETTE <U+2212> AT CORVALLIS'``) before splitting.
+    """
+    # Collapse the NWRFC-textplot dashes so that "X <dash> AT Y" splits on " AT ".
+    # Dashes matched: minus (U+2212), en-dash (U+2013), em-dash (U+2014), ASCII hyphen.
+    s = re.sub("\\s*[−–—-]\\s*", " ", name.strip())  # noqa: RUF001
+    parts = re.split(r"\s+(?:at|near|above|below)\s+", s, maxsplit=1, flags=re.IGNORECASE)
+    if len(parts) != 2:
+        return s, ""
+    left, right = parts[0].strip(), parts[1].strip()
+    left = re.sub(r"\s+river$", "", left, flags=re.IGNORECASE)
+    return left, right
+
+
+def _resolve_river_location(
+    gauge: Gauge,
+    metadata: dict[str, dict[str, str]],
+    reach_river: str,
+) -> tuple[str, str]:
+    """Resolve (river, location) for one gauge with layered fallbacks.
+
+    Priority: NWRFC → NWPS → USGS → linked-reach river + gauge.location →
+    gauge-name heuristic.
+    """
+    if gauge.nwsli_id:
+        name = metadata["nwrfc"].get(gauge.nwsli_id) or metadata["nwps"].get(gauge.nwsli_id)
+        if name:
+            return _parse_station_mixed(name)
+    if gauge.usgs_id:
+        name = metadata["usgs"].get(gauge.usgs_id)
+        if name:
+            return _parse_station_uppercase(name)
+    if reach_river:
+        return reach_river, gauge.location or ""
+    return _river_from_gauge_name(gauge.name), gauge.location or ""
+
+
+def _river_from_gauge_name(name: str) -> str:
+    """Best-effort river name from a gauge's canonical name.
+
+    Fallback used when no linked reach has ``reach.river`` set. Pattern
+    ``River_Location_merge`` → ``River``; numeric USGS IDs pass through
+    unchanged.
+    """
+    if not name:
+        return ""
+    if "_" in name:
+        head = name.split("_", 1)[0]
+        if head and not head.isdigit():
+            return head.replace("-", " ")
+    return name
+
+
+def _collect_gauge_rows(
+    session: Session,
+    all_latest: dict[tuple[int, DataType], LatestGaugeObservation],
+    metadata: dict[str, dict[str, str]],
+) -> list[dict[str, Any]]:
+    """Build one row per gauge with at least one current observation.
+
+    Excludes expired (>7d stale) gauges, mirroring the index page rule. Each
+    row carries flow/gage/temperature/time plus state and HUC sets derived
+    from any reaches that reference the gauge (used for filter pills).
+    """
+    gauge_ids_with_data = {gid for gid, _ in all_latest}
+    if not gauge_ids_with_data:
+        return []
+
+    gauges = list(session.scalars(select(Gauge).where(Gauge.id.in_(gauge_ids_with_data))))
+    reach_rows = list(session.scalars(select(Reach).where(Reach.gauge_id.in_(gauge_ids_with_data))))
+    gauge_reaches: dict[int, list[Reach]] = {}
+    for r in reach_rows:
+        if r.gauge_id:
+            gauge_reaches.setdefault(r.gauge_id, []).append(r)
+
+    rows: list[dict[str, Any]] = []
+    for g in gauges:
+        reaches = gauge_reaches.get(g.id, [])
+        reach_river = next((r.river for r in reaches if r.river), "")
+        river, location = _resolve_river_location(g, metadata, reach_river)
+
+        row: dict[str, Any] = {
+            "gauge_id": g.id,
+            "river": river,
+            "location": location,
+        }
+
+        for dtype_name, dtype in [
+            ("flow", DataType.flow),
+            ("gage", DataType.gauge),
+            ("temperature", DataType.temperature),
+            ("inflow", DataType.inflow),
+        ]:
+            latest = all_latest.get((g.id, dtype))
+            if latest is None or latest.value is None:
+                continue
+            if dtype_name == "inflow":
+                if "flow" in row:
+                    continue
+                row["flow"] = latest.value
+            else:
+                row[dtype_name] = latest.value
+            if "time" not in row or latest.observed_at > row["time"]:
+                row["time"] = latest.observed_at
+
+        if not any(k in row for k in ("flow", "gage", "temperature")):
+            continue
+
+        obs_time = row.get("time")
+        if isinstance(obs_time, datetime):
+            if obs_time.tzinfo is None:
+                obs_time = obs_time.replace(tzinfo=UTC)
+            age = datetime.now(UTC) - obs_time
+            if age > DATA_EXPIRY_THRESHOLD:
+                continue
+            if age > DATA_STALE_THRESHOLD:
+                row["stale"] = True
+
+        states: set[str] = set()
+        huc6_to_huc8s: dict[str, set[tuple[str, str]]] = {}
+        has_huc = False
+        for r in reaches:
+            for s in r.states:
+                states.add(s.name)
+            if r.huc and len(r.huc) >= 8:
+                huc6 = r.huc[:6]
+                huc8 = r.huc[:8]
+                huc6_to_huc8s.setdefault(huc6, set()).add((huc8, r.basin or huc8))
+                has_huc = True
+        row["states"] = sorted(states)
+        row["huc6_to_huc8s"] = huc6_to_huc8s
+        row["has_huc"] = has_huc
+        rows.append(row)
+
+    rows.sort(key=lambda r: (r["river"].lower(), r["location"].lower(), r["gauge_id"]))
+    return rows
+
+
+def _build_gauges_table(rows: list[dict[str, Any]]) -> tuple[str, list[str]]:
+    """Render the gauges <table>; returns (html, first-letter list for nav)."""
+    lines: list[str] = []
+    lines.append('<table class="levels">')
+    lines.append("<thead><tr>")
+    lines.append('  <th scope="col">River</th>')
+    lines.append('  <th scope="col">Location</th>')
+    lines.append('  <th scope="col">Date</th>')
+    lines.append('  <th scope="col">Flow<br>cfs</th>')
+    lines.append('  <th scope="col" class="secondary">Spark</th>')
+    lines.append('  <th scope="col">Gauge<br>ft</th>')
+    lines.append('  <th scope="col">Temp<br>&deg;F</th>')
+    lines.append("</tr></thead>")
+    lines.append("<tbody>")
+
+    prev_letter = ""
+    letters: list[str] = []
+    for row in rows:
+        gid = row["gauge_id"]
+        river = row["river"]
+        location = row["location"]
+        sort_key = river or location
+        cur_letter = sort_key[:1].upper() if sort_key else ""
+        letter_id = ""
+        if cur_letter and cur_letter != prev_letter:
+            letter_id = f' id="letter-{cur_letter}"'
+            letters.append(cur_letter)
+            prev_letter = cur_letter
+
+        state = row["states"][0] if row["states"] else ""
+        huc8 = ""
+        for huc8s in row["huc6_to_huc8s"].values():
+            for code, _name in huc8s:
+                huc8 = code
+                break
+            if huc8:
+                break
+
+        stale = " stale" if row.get("stale") else ""
+        # Emit filter attrs only when every group's value is populated. A
+        # partial set would match the filters.js selector `tr[data-state],...`
+        # but then fail match() in any group whose attr is empty, hiding the
+        # row permanently. All-or-nothing keeps orphan gauges visible.
+        attrs = (
+            f' data-state="{html_mod.escape(state)}" data-huc8="{html_mod.escape(huc8)}"'
+            if state and huc8
+            else ""
+        )
+        lines.append(
+            f'<tr{letter_id} class="clickable-row{stale}" data-href="/gauge.php?id={gid}"{attrs}>'
+        )
+
+        lines.append(
+            f'  <td class="td-name" data-label="River">'
+            f'<a href="/gauge.php?id={gid}">{html_mod.escape(river)}</a></td>'
+        )
+        lines.append(f'  <td data-label="Location">{html_mod.escape(location)}</td>')
+
+        time_val = row.get("time")
+        if isinstance(time_val, datetime):
+            iso = time_val.strftime("%Y-%m-%dT%H:%M:%SZ")
+            disp = time_val.strftime("%m/%d %H:%M")
+            date_cell = f'<time datetime="{iso}">{disp}</time>'
+        else:
+            date_cell = ""
+        lines.append(f'  <td class="td-date" data-label="Date">{date_cell}</td>')
+
+        flow_val = row.get("flow")
+        flow_cell = f"{flow_val:,.0f}" if isinstance(flow_val, int | float) else ""
+        lines.append(f'  <td class="td-flow" data-label="Flow">{flow_cell}</td>')
+
+        lines.append(
+            f'  <td class="td-spark secondary" data-label="Spark">'
+            f'<span class="spark" data-gid="{gid}"></span></td>'
+        )
+
+        gage_val = row.get("gage")
+        gage_cell = f"{gage_val:,.1f}" if isinstance(gage_val, int | float) else ""
+        lines.append(f'  <td class="td-gage" data-label="Gauge">{gage_cell}</td>')
+
+        temp_val = row.get("temperature")
+        temp_cell = f"{temp_val:.1f}" if isinstance(temp_val, int | float) else ""
+        lines.append(f'  <td class="td-temp" data-label="Temp">{temp_cell}</td>')
+        lines.append("</tr>")
+
+    lines.append("</tbody></table>")
+    return "\n".join(lines), letters
+
+
+def _build_gauges_filter_bar(rows: list[dict[str, Any]], huc6_names: dict[str, str]) -> str:
+    """Filter bar for gauges page: State + Basin (status/tier don't apply)."""
+    states: set[str] = set()
+    huc6_to_huc8s: dict[str, set[tuple[str, str]]] = {}
+    has_no_huc = False
+    for r in rows:
+        states.update(r["states"])
+        if r["has_huc"]:
+            for huc6, huc8s in r["huc6_to_huc8s"].items():
+                huc6_to_huc8s.setdefault(huc6, set()).update(huc8s)
+        else:
+            has_no_huc = True
+    huc6_groups = [
+        {
+            "huc6": huc6,
+            "name": huc6_names.get(huc6, huc6),
+            "huc8s": sorted(huc8s),
+        }
+        for huc6, huc8s in sorted(
+            huc6_to_huc8s.items(), key=lambda kv: huc6_names.get(kv[0], kv[0])
+        )
+    ]
+    filter_data = {
+        "state": sorted(s for s in states if s),
+        "huc6_groups": huc6_groups,
+        "has_no_huc": has_no_huc,
+        "status": [],
+        "tier": [],
+    }
+    return _build_filter_bar(filter_data, is_all_page=True)
+
+
+def _write_gauges_page(
+    session: Session,
+    all_latest: dict[tuple[int, DataType], LatestGaugeObservation],
+    states: list[str],
+    css_link: str,
+    output_dir: Path,
+) -> None:
+    """Render gauges.html and ensure sparklines.json covers every shown gauge."""
+    metadata = _load_station_metadata()
+    rows = _collect_gauge_rows(session, all_latest, metadata)
+    logger.info("Building gauges.html: %d gauges", len(rows))
+    print(f"Building gauges.html: {len(rows)} gauges")
+
+    table_html, letters = _build_gauges_table(rows)
+    huc6_names: dict[str, str] = {
+        r.code: r.name for r in session.scalars(select(HucName).where(HucName.level == 6))
+    }
+    filter_bar_html = _build_gauges_filter_bar(rows, huc6_names)
+    page_html = _build_page(
+        table_html,
+        css_link,
+        states,
+        current_state="",
+        title="River Gauges",
+        letters=letters,
+        filter_bar_html=filter_bar_html,
+    )
+    _atomic_write(output_dir / "gauges.html", page_html)
+
+    # Merge sparklines for any gauges the index build didn't already cover.
+    sparklines_path = output_dir / "static" / "sparklines.json"
+    try:
+        existing: dict[str, str] = json.loads(sparklines_path.read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        existing = {}
+    missing = [row["gauge_id"] for row in rows if str(row["gauge_id"]) not in existing]
+    if missing:
+        extra_obs = _select_sparkline_series(session, missing)
+        for gid, records in extra_obs.items():
+            svg = _sparkline_svg_from_records(records)
+            if svg:
+                existing[str(gid)] = svg
+        sparklines_path.parent.mkdir(parents=True, exist_ok=True)
+        _atomic_write(sparklines_path, json.dumps(existing))
+
+
+# ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
 
@@ -1267,6 +1681,15 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
             preloaded=(calculated_gauge_ids, all_latest),
             is_all_page=True,
         )
+
+        # gauges.html — supplemental all-gauges listing. Re-fetch the cache
+        # over every gauge id it knows about so we also surface gauges with
+        # no reach linkage (orphans / future reach work).
+        gauges_latest = get_all_latest_gauges(
+            session,
+            list(session.scalars(select(LatestGaugeObservation.gauge_id).distinct())),
+        )
+        _write_gauges_page(session, gauges_latest, states, css_link, output_dir)
 
         # Links pages for all nav states (including Oregon)
         for state in _NAV_STATES:

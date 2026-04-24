@@ -8,11 +8,18 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
+require_once __DIR__ . '/includes/gauge_plots.php';
+require_once __DIR__ . '/includes/gauge_map.php';
+require_once __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/includes/validate.php';
 
 $db = get_db();
 
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 $q  = filter_input(INPUT_GET, 'q', FILTER_DEFAULT);
+$start_date = validate_date(filter_input(INPUT_GET, 'start', FILTER_SANITIZE_SPECIAL_CHARS));
+$end_date   = validate_date(filter_input(INPUT_GET, 'end',   FILTER_SANITIZE_SPECIAL_CHARS));
+$has_map = false;
 
 // --- Search mode ---
 if ($q !== null && $q !== '') {
@@ -189,6 +196,94 @@ foreach ($fields as $label => $value) {
 
 echo '</table>';
 
+// --- Current readings + stale banner ---
+$readings_stmt = $db->prepare(
+    'SELECT data_type, value, observed_at, delta_per_hour
+     FROM latest_gauge_observation WHERE gauge_id = ?'
+);
+$readings_stmt->execute([(int)$gauge['id']]);
+$readings = $readings_stmt->fetchAll();
+
+if ($readings) {
+    $latest_ts_all = 0;
+    foreach ($readings as $r) {
+        if ($r['observed_at']) {
+            $t = strtotime((string)$r['observed_at']);
+            if ($t > $latest_ts_all) $latest_ts_all = $t;
+        }
+    }
+    $age_days = $latest_ts_all ? (int)floor((time() - $latest_ts_all) / 86400) : null;
+    if ($age_days !== null && $age_days > 7) {
+        $last = date('Y-m-d', $latest_ts_all);
+        echo '<p style="padding:.5rem .8rem;background:#fef6e1;border:1px solid #e8a735;border-radius:4px;margin:.5rem 0">'
+           . 'Latest observation was ' . $age_days . ' days ago (' . htmlspecialchars($last) . ').'
+           . '</p>';
+    }
+} else {
+    echo '<p style="padding:.5rem .8rem;background:#fbe8e7;border:1px solid #e53935;border-radius:4px;margin:.5rem 0">'
+       . 'No cached observations for this gauge.'
+       . '</p>';
+}
+
+if ($readings) {
+    $type_labels = [
+        'flow' => 'Flow',
+        'gauge' => 'Gage Height',
+        'temperature' => 'Temperature',
+        'inflow' => 'Inflow',
+    ];
+    $type_units = [
+        'flow' => 'CFS',
+        'gauge' => 'Feet',
+        'temperature' => 'F',
+        'inflow' => 'CFS',
+    ];
+    echo '<table class="readings-table">';
+    echo '<tr><th>Type</th><th>Value</th><th>Time</th><th>Change/hr</th><th>Status</th></tr>';
+    foreach ($readings as $r) {
+        $label = $type_labels[$r['data_type']] ?? htmlspecialchars($r['data_type']);
+        $unit = $type_units[$r['data_type']] ?? '';
+        $raw = (float)$r['value'];
+        if ($r['data_type'] === 'flow' || $r['data_type'] === 'inflow') {
+            $val = number_format($raw, 0) . " $unit";
+        } else {
+            $val = number_format($raw, 1) . " $unit";
+        }
+        $time_iso = $r['observed_at'] ? date('Y-m-d\TH:i:s\Z', strtotime($r['observed_at'])) : '';
+        $time_display = $r['observed_at'] ? date('m/d H:i', strtotime($r['observed_at'])) : 'N/A';
+        $time_html = $time_iso ? "<time datetime=\"$time_iso\">$time_display</time>" : 'N/A';
+        $delta = $r['delta_per_hour'] !== null ? number_format((float)$r['delta_per_hour'], 2) : '';
+        $status = '';
+        if ($r['delta_per_hour'] !== null) {
+            $dph = (float)$r['delta_per_hour'];
+            if (abs($dph) < 0.5) {
+                $status = '<span class="stable">stable</span>';
+            } elseif ($dph > 0) {
+                $status = '<span class="rising">rising</span>';
+            } else {
+                $status = '<span class="falling">falling</span>';
+            }
+        }
+        echo "<tr><td>$label</td><td>$val</td><td>$time_html</td><td>$delta</td><td>$status</td></tr>\n";
+    }
+    echo '</table>';
+}
+
+// --- Date range selector + plots ---
+if ($readings) {
+    [$latest_ts, $since, $until, $is_default_view] =
+        gp_resolve_window($db, (int)$gauge['id'], $start_date, $end_date);
+    gp_render_date_form($id, $start_date, $end_date, $latest_ts);
+    gp_render_plots($db, (int)$gauge['id'], $gauge['name'], $since, $until, $latest_ts, $is_default_view);
+}
+
+// --- Map (single marker at the gauge coordinates) ---
+if ($gauge['latitude'] !== null && $gauge['longitude'] !== null) {
+    $glat = number_format((float)$gauge['latitude'], 5, '.', '');
+    $glon = number_format((float)$gauge['longitude'], 5, '.', '');
+    $has_map = gm_render_map(['Gauge' => "$glat,$glon"]);
+}
+
 // Associated sources
 if ($sources) {
     echo '<h3 style="margin-top:1rem">Associated Sources</h3>';
@@ -224,6 +319,23 @@ if ($reaches) {
     echo '<p style="margin-top:1rem;color:#666">No associated reaches.</p>';
 }
 
-echo '<p style="margin-top:1rem"><a href="/index.html">Back to main page</a></p>';
+// Editor affordances (gauge-only for now — gauge proposals not yet supported
+// by propose.php, so only maintainers see an Edit button).
+$btn_style = 'display:inline-flex;align-items:center;min-height:44px;padding:8px 12px';
+echo '<nav style="margin-top:1rem;display:flex;flex-wrap:wrap;gap:.5rem">';
+echo '<a href="/index.html" style="' . $btn_style . '">Back to main page</a>';
+echo '<a href="/gauges.html" style="' . $btn_style . '">All gauges</a>';
+if (editor_feature_enabled()) {
+    $editor = current_editor();
+    if (is_maintainer($editor)) {
+        echo '<a href="/edit.php?id=' . $id . '&amp;type=gauge" style="' . $btn_style . '">Edit</a>';
+    }
+}
+echo '</nav>';
+
+if ($has_map) {
+    echo '<script src="/static/leaflet.js" defer></script>';
+    echo '<script src="/static/feature-map.js" defer></script>';
+}
 
 include_footer();

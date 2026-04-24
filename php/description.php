@@ -10,79 +10,9 @@ require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
 require_once __DIR__ . '/includes/html.php';
 require_once __DIR__ . '/includes/svg_plot.php';
+require_once __DIR__ . '/includes/gauge_plots.php';
+require_once __DIR__ . '/includes/gauge_map.php';
 require_once __DIR__ . '/includes/validate.php';
-
-/** True iff the gauge's latest observation of $type is within the last $hours. */
-function _desc_has_current_obs(PDO $db, int $gauge_id, string $type, int $hours): bool {
-    $stmt = $db->prepare(
-        'SELECT MAX(o.observed_at) FROM observation o
-         JOIN gauge_source gs ON o.source_id = gs.source_id
-         WHERE gs.gauge_id = ? AND o.data_type = ?'
-    );
-    $stmt->execute([$gauge_id, $type]);
-    $latest = $stmt->fetchColumn();
-    if (!$latest) return false;
-    $ts = strtotime((string)$latest . ' UTC');
-    if ($ts === false) return false;
-    return $ts >= (time() - $hours * 3600);
-}
-
-/** True iff at least one observation of $type exists for the gauge in [since, until]. */
-function _desc_has_obs(PDO $db, int $gauge_id, string $type, string $since, ?string $until): bool {
-    if ($until !== null) {
-        $stmt = $db->prepare(
-            "SELECT 1 FROM observation o
-             JOIN gauge_source gs ON o.source_id = gs.source_id
-             WHERE gs.gauge_id = ? AND o.data_type = ? AND o.observed_at >= ? AND o.observed_at <= ?
-             LIMIT 1"
-        );
-        $stmt->execute([$gauge_id, $type, $since, $until]);
-    } else {
-        $stmt = $db->prepare(
-            "SELECT 1 FROM observation o
-             JOIN gauge_source gs ON o.source_id = gs.source_id
-             WHERE gs.gauge_id = ? AND o.data_type = ? AND o.observed_at >= ?
-             LIMIT 1"
-        );
-        $stmt->execute([$gauge_id, $type, $since]);
-    }
-    return (bool)$stmt->fetchColumn();
-}
-
-/** Fetch [times[], values[]] for one data_type in the visible window. */
-function _desc_fetch_series(PDO $db, int $gauge_id, string $type, string $since, ?string $until): array {
-    if ($until !== null) {
-        $stmt = $db->prepare(
-            'SELECT o.observed_at, o.value FROM observation o
-             JOIN gauge_source gs ON o.source_id = gs.source_id
-             WHERE gs.gauge_id = ? AND o.data_type = ? AND o.observed_at >= ? AND o.observed_at <= ?
-             ORDER BY o.observed_at'
-        );
-        $stmt->execute([$gauge_id, $type, $since, $until]);
-    } else {
-        $stmt = $db->prepare(
-            'SELECT o.observed_at, o.value FROM observation o
-             JOIN gauge_source gs ON o.source_id = gs.source_id
-             WHERE gs.gauge_id = ? AND o.data_type = ? AND o.observed_at >= ?
-             ORDER BY o.observed_at'
-        );
-        $stmt->execute([$gauge_id, $type, $since]);
-    }
-    $times = []; $values = [];
-    foreach ($stmt->fetchAll() as $r) {
-        $times[]  = strtotime($r['observed_at']);
-        $values[] = (float)$r['value'];
-    }
-    return [$times, $values];
-}
-
-/** Emit one single-axis plot div, or nothing if the series has <2 points. */
-function _desc_render_single_plot(array $times, array $values, string $name, string $y_label, bool $is_flow): void {
-    if (count($times) < 2) return;
-    $title = htmlspecialchars($name) . " — $y_label";
-    $svg = generate_svg_plot($times, $values, $title, $y_label, 800, 350, 200, $is_flow);
-    echo '<div class="plot-container">' . $svg . '</div>';
-}
 
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 $start_date = validate_date(filter_input(INPUT_GET, 'start', FILTER_SANITIZE_SPECIAL_CHARS));
@@ -244,89 +174,16 @@ if ($readings) {
 
 // --- Date range selector and inline SVG plots ---
 if ($gauge) {
-    // Compute default dates from latest observation across all sources
-    $latest_ts_row = $db->prepare(
-        'SELECT MAX(o.observed_at) AS latest FROM observation o
-         JOIN gauge_source gs ON o.source_id = gs.source_id
-         WHERE gs.gauge_id = ?'
+    [$latest_ts, $since, $until, $is_default_view] =
+        gp_resolve_window($db, (int)$gauge['id'], $start_date, $end_date);
+    gp_render_date_form(
+        $id,
+        $start_date,
+        $end_date,
+        $latest_ts,
+        [['label' => 'Data inspector', 'url' => "/data.php?id=$id"]]
     );
-    $latest_ts_row->execute([$gauge['id']]);
-    $latest_row = $latest_ts_row->fetch();
-    $latest_ts = $latest_row && $latest_row['latest'] ? strtotime($latest_row['latest']) : time();
-    $default_end = date('Y-m-d', $latest_ts);
-    $default_start = date('Y-m-d', $latest_ts - 10 * 86400);
-    $form_start = $start_date ?: $default_start;
-    $form_end = $end_date ?: $default_end;
-
-    echo '<form method="get" style="margin:.5rem 0;font-size:.85rem;display:flex;align-items:center;flex-wrap:wrap;gap:.5rem">';
-    echo '<input type="hidden" name="id" value="' . $id . '">';
-    echo '<label style="display:inline-flex;align-items:center;gap:.3rem;min-height:44px">Start: <input type="date" name="start" value="' . htmlspecialchars($form_start) . '" style="min-height:44px;padding:4px 8px"></label>';
-    echo '<label style="display:inline-flex;align-items:center;gap:.3rem;min-height:44px">End: <input type="date" name="end" value="' . htmlspecialchars($form_end) . '" style="min-height:44px;padding:4px 8px"></label>';
-    echo '<button type="submit" style="min-height:44px;padding:8px 16px">Update</button>';
-    echo '<a href="/data.php?id=' . $id . '" style="display:inline-flex;align-items:center;min-height:44px">Data inspector</a>';
-    echo '</form>';
-
-    if ($start_date && $end_date) {
-        $since = date('Y-m-d 00:00:00', strtotime($start_date));
-        $until = date('Y-m-d 23:59:59', strtotime($end_date));
-    } else {
-        $since = date('Y-m-d H:i:s', $latest_ts - 10 * 86400);
-        $until = null;
-    }
-
-    $has_flow   = _desc_has_obs($db, (int)$gauge['id'], 'flow',        $since, $until);
-    $has_inflow = _desc_has_obs($db, (int)$gauge['id'], 'inflow',      $since, $until);
-    $has_gauge  = _desc_has_obs($db, (int)$gauge['id'], 'gauge',       $since, $until);
-    $has_temp   = _desc_has_obs($db, (int)$gauge['id'], 'temperature', $since, $until);
-
-    // Primary "flow-like" series: prefer flow, fall back to inflow.
-    // In the default (recent) view, require the latest flow/inflow reading
-    // to be within 6h — otherwise fall through to gauge-height only, which
-    // matches how the index-page sparkline picks its series. When the user
-    // explicitly picks a date range, trust that intent and use any data in
-    // the window so historical flow plots still render.
-    $is_default_view = !($start_date && $end_date);
-    if ($is_default_view) {
-        $flow_current   = _desc_has_current_obs($db, (int)$gauge['id'], 'flow',   6);
-        $inflow_current = _desc_has_current_obs($db, (int)$gauge['id'], 'inflow', 6);
-        $primary_type = $flow_current ? 'flow' : ($inflow_current ? 'inflow' : null);
-    } else {
-        $primary_type = $has_flow ? 'flow' : ($has_inflow ? 'inflow' : null);
-    }
-    $primary_label = $primary_type === 'flow'   ? 'Flow (CFS)'
-                   : ($primary_type === 'inflow' ? 'Inflow (CFS)' : '');
-
-    if ($primary_type !== null && $has_gauge) {
-        // Use a wider lookback for the rating curve than the visible window —
-        // axis ticks should cover the plotted y-range even if the visible
-        // window itself has few paired points.
-        $lookup_since = date('Y-m-d H:i:s', $latest_ts - 60 * 86400);
-        $lookup = derive_rating_lookup($db, (int)$gauge['id'], $primary_type, $lookup_since);
-
-        [$ft, $fv] = _desc_fetch_series($db, (int)$gauge['id'], $primary_type, $since, $until);
-        if ($lookup !== null && count($ft) >= 2) {
-            $title = htmlspecialchars($name) . " — $primary_label / Gage Height";
-            echo '<div class="plot-container">'
-               . generate_rating_dual_plot($ft, $fv, $lookup, $title, $primary_label)
-               . '</div>';
-        } else {
-            // Fallback: render two single-axis plots (previous behavior).
-            _desc_render_single_plot($ft, $fv, $name, $primary_label, $primary_type === 'flow');
-            [$gt, $gv] = _desc_fetch_series($db, (int)$gauge['id'], 'gauge', $since, $until);
-            _desc_render_single_plot($gt, $gv, $name, 'Gage Height (Ft)', false);
-        }
-    } elseif ($primary_type !== null) {
-        [$ft, $fv] = _desc_fetch_series($db, (int)$gauge['id'], $primary_type, $since, $until);
-        _desc_render_single_plot($ft, $fv, $name, $primary_label, $primary_type === 'flow');
-    } elseif ($has_gauge) {
-        [$gt, $gv] = _desc_fetch_series($db, (int)$gauge['id'], 'gauge', $since, $until);
-        _desc_render_single_plot($gt, $gv, $name, 'Gage Height (Ft)', false);
-    }
-
-    if ($has_temp) {
-        [$tt, $tv] = _desc_fetch_series($db, (int)$gauge['id'], 'temperature', $since, $until);
-        _desc_render_single_plot($tt, $tv, $name, 'Temperature (F)', false);
-    }
+    gp_render_plots($db, (int)$gauge['id'], $name, $since, $until, $latest_ts, $is_default_view);
 }
 
 // --- Description fields ---
@@ -428,30 +285,9 @@ if ($flow_levels && $readings) {
 // Inline map with labeled markers and river track (Leaflet + OpenStreetMap)
 $geom = $reach['geom'] ?? null;
 if (count($map_points) >= 1 || $geom) {
-    $map_json = json_encode($map_points);
-    // Convert geom "lon lat,lon lat,..." to [[lat,lon],[lat,lon],...]
-    $track_json = 'null';
-    if ($geom) {
-        $track = [];
-        foreach (explode(',', $geom) as $pair) {
-            $parts = preg_split('/\s+/', trim($pair));
-            if (count($parts) === 2) {
-                $track[] = [(float)$parts[1], (float)$parts[0]];
-            }
-        }
-        if ($track) {
-            $track_json = json_encode($track);
-        }
-    }
     echo '</table>';
-    $points_attr = htmlspecialchars($map_json, ENT_QUOTES, 'UTF-8');
-    $track_attr = htmlspecialchars($track_json, ENT_QUOTES, 'UTF-8');
-    $color_attr = htmlspecialchars($track_color, ENT_QUOTES, 'UTF-8');
-    $leaflet_css = file_get_contents(__DIR__ . '/static/leaflet.css');
-    echo '<style>' . $leaflet_css . '</style>';
-    echo '<div id="reach-map" style="height:350px;margin-top:1rem;border:1px solid #ccc" data-points="' . $points_attr . '" data-track="' . $track_attr . '" data-track-color="' . $color_attr . '"></div>';
+    $has_map = gm_render_map($map_points, $geom, $track_color);
     echo '<table class="desc-table">';
-    $has_map = true;
 }
 
 // HTML-safe fields list for raw output
@@ -636,7 +472,7 @@ echo '</nav>';
 
 if ($has_map) {
     echo '<script src="/static/leaflet.js" defer></script>';
-    echo '<script src="/static/reach-map.js" defer></script>';
+    echo '<script src="/static/feature-map.js" defer></script>';
 }
 
 include_footer();
