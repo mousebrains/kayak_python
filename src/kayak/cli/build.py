@@ -1714,6 +1714,61 @@ def _set_acls(directory: Path) -> None:
     )
 
 
+def _deploy_staging_to_live(staging: Path, live: Path) -> set[Path]:
+    """Copy every regular file in *staging* into *live* via per-file rename.
+
+    For each file under ``staging``:
+      1. Ensure the matching parent dir in ``live`` exists.
+      2. ``shutil.copy2`` to ``<live>/<rel>.new`` — preserves mode + xattrs
+         (Linux ACLs live in xattrs, so ``u:www-data:rX`` carries over from
+         a staging tree that was run through ``_set_acls``).
+      3. ``os.replace`` the temp file over the final name — atomic rename(2)
+         on the same filesystem.
+
+    Returns the set of relative paths installed, for the orphan sweep.
+
+    ``staging`` and ``live`` must be on the same filesystem. Symlinks and
+    empty directories in ``staging`` are skipped — only regular files are
+    propagated.
+    """
+    staging = staging.resolve()
+    live = live.resolve()
+    kept: set[Path] = set()
+    for src in staging.rglob("*"):
+        if not src.is_file() or src.is_symlink():
+            continue
+        rel = src.relative_to(staging)
+        dst = live / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        tmp = dst.with_name(dst.name + ".new")
+        shutil.copy2(src, tmp)
+        os.replace(tmp, dst)
+        kept.add(rel)
+    return kept
+
+
+def _sweep_orphans(live: Path, kept: set[Path]) -> list[Path]:
+    """Delete files in *live* whose relpaths aren't in *kept*.
+
+    Called after ``_deploy_staging_to_live`` so files left over from a
+    previous build (but not produced by this one) get removed. Empty
+    directories are left alone — harmless, and avoids a race with any
+    concurrent reader.
+
+    Returns the list of relative paths removed, for the build log.
+    """
+    live = live.resolve()
+    removed: list[Path] = []
+    for p in live.rglob("*"):
+        if not p.is_file() or p.is_symlink():
+            continue
+        rel = p.relative_to(live)
+        if rel not in kept:
+            p.unlink()
+            removed.append(rel)
+    return removed
+
+
 def build(args: argparse.Namespace) -> None:
     """Generate static HTML/CSV/text files to disk.
 
