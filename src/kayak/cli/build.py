@@ -1783,30 +1783,67 @@ def build(args: argparse.Namespace) -> None:
     )
 
     if output_dir.is_symlink():
-        # --- Atomic deploy mode ---
-        old_target = output_dir.resolve()
-        new_target = output_dir.parent / f"{output_dir.name}_{int(time.time())}"
-        new_target.mkdir(parents=True)
-        try:
-            _build_to_dir(new_target, args)
-            _set_acls(new_target)
-            # Atomic swap: create temp symlink then rename over the live one
-            tmp_link = output_dir.parent / f"{output_dir.name}_tmp"
-            tmp_link.symlink_to(new_target)
-            tmp_link.rename(output_dir)
-            print(f"Build complete → {output_dir} → {new_target}")
-            # Remove old target if it differs and still exists
-            if old_target != new_target and old_target.is_dir():
-                shutil.rmtree(old_target)
-        except BaseException:
-            # Clean up the half-built directory on any error
-            shutil.rmtree(new_target, ignore_errors=True)
-            # Also clean up tmp_link if it was created but rename failed
-            with suppress(FileNotFoundError):
+        mode = os.environ.get("KAYAK_DEPLOY_MODE", "")
+        if mode == "rename":
+            # --- One-shot migration: symlink layout → regular directory ---
+            # Linux rename(2) refuses to replace a symlink with a directory
+            # (ENOTDIR), so the migration is unlink-then-rename. That opens
+            # a ~10-50ms window where the path doesn't exist and requests
+            # 404. Acceptable as a single event in the life of the deploy.
+            # After this run, output_dir is a regular dir and subsequent
+            # builds hit the else branch (in-place rename-over).
+            old_target = output_dir.resolve()
+            staging = output_dir.parent / f"{output_dir.name}.staging"
+            if staging.exists():
+                shutil.rmtree(staging)
+            staging.mkdir(parents=True)
+            try:
+                _build_to_dir(staging, args)
+                _set_acls(staging)
+                output_dir.unlink()
+                try:
+                    os.rename(staging, output_dir)
+                except BaseException:
+                    # Near-impossible on same filesystem; if it happens,
+                    # restore the symlink so the site isn't broken.
+                    with suppress(Exception):
+                        output_dir.symlink_to(old_target)
+                    raise
+                print(f"Build complete → {output_dir} (migrated symlink → regular dir)")
+                # Old dated target is no longer referenced — remove it.
+                if old_target.is_dir() and old_target != output_dir.resolve():
+                    shutil.rmtree(old_target, ignore_errors=True)
+            except BaseException:
+                # Migration failed — staging (if it still exists) goes away,
+                # symlink is intact (unlinked-then-rename either ran both
+                # sides or neither, thanks to the inner restore).
+                shutil.rmtree(staging, ignore_errors=True)
+                raise
+        else:
+            # --- Atomic deploy mode (symlink swap) ---
+            old_target = output_dir.resolve()
+            new_target = output_dir.parent / f"{output_dir.name}_{int(time.time())}"
+            new_target.mkdir(parents=True)
+            try:
+                _build_to_dir(new_target, args)
+                _set_acls(new_target)
+                # Atomic swap: create temp symlink then rename over the live one
                 tmp_link = output_dir.parent / f"{output_dir.name}_tmp"
-                if tmp_link.is_symlink():
-                    tmp_link.unlink()
-            raise
+                tmp_link.symlink_to(new_target)
+                tmp_link.rename(output_dir)
+                print(f"Build complete → {output_dir} → {new_target}")
+                # Remove old target if it differs and still exists
+                if old_target != new_target and old_target.is_dir():
+                    shutil.rmtree(old_target)
+            except BaseException:
+                # Clean up the half-built directory on any error
+                shutil.rmtree(new_target, ignore_errors=True)
+                # Also clean up tmp_link if it was created but rename failed
+                with suppress(FileNotFoundError):
+                    tmp_link = output_dir.parent / f"{output_dir.name}_tmp"
+                    if tmp_link.is_symlink():
+                        tmp_link.unlink()
+                raise
     else:
         # --- In-place mode (development) ---
         # Opt-in rename-over-target: build into a staging sibling, then
@@ -1821,6 +1858,12 @@ def build(args: argparse.Namespace) -> None:
             staging.mkdir(parents=True)
             try:
                 _build_to_dir(staging, args)
+                # Set ACLs on staging so shutil.copy2 carries them via xattrs
+                # into each <live>/<file>.new temp, which then rename-replaces
+                # the final. Without this, copy2's empty-xattr copy would
+                # clobber the inherited default ACL on every deploy and
+                # www-data would lose read access after a few hours.
+                _set_acls(staging)
                 output_dir.mkdir(parents=True, exist_ok=True)
                 kept = _deploy_staging_to_live(staging, output_dir)
                 removed = _sweep_orphans(output_dir, kept)
