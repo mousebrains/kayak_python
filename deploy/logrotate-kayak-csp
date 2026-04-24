@@ -1,0 +1,20 @@
+# Rotation for the CSP violation log written by php/csp-report.php.
+# Installed at: /etc/logrotate.d/kayak-csp
+# The log lives in /home/pat/DB because that's the only www-data-writable
+# path inside the PHP open_basedir. create 0640 www-data adm ensures the
+# post-rotate file is writable by the same user PHP-FPM runs as and
+# readable by pat via the adm group.
+#
+# `su root root` is required because /home/pat/DB is intentionally
+# group-writable (for www-data via ACL), and logrotate refuses to touch a
+# parent dir with non-root write access unless su is declared.
+/home/pat/DB/csp.log {
+    su root root
+    weekly
+    rotate 12
+    missingok
+    notifempty
+    compress
+    delaycompress
+    create 0640 www-data adm
+}

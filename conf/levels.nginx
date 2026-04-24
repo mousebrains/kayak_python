@@ -292,7 +292,9 @@ server {
         internal;
     }
 
-    # Logging
-    access_log /var/log/nginx/kayak-access.log;
+    # Logging — kayak_timed format (defined in conf.d/kayak-log-format.conf)
+    # adds rt=$request_time urt=$upstream_response_time so logs/analyze.py can
+    # compute per-route latency quantiles.
+    access_log /var/log/nginx/kayak-access.log kayak_timed;
     error_log  /var/log/nginx/kayak-error.log;
 }
