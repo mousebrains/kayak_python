@@ -3,7 +3,7 @@
 # install-observability.sh — install the nginx timed-log-format drop-in,
 # the CSP violation report sink, and the logrotate config for the CSP log.
 #
-# Enables two features used by ../logs/analyze.py:
+# Enables two features used by /home/pat/logs.analyze/analyze.py:
 #   - per-route latency quantiles (from rt=$request_time)
 #   - CSP violation diffs (from /home/pat/logs/csp.log)
 #
