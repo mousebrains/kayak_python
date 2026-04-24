@@ -1375,9 +1375,29 @@ def _collect_gauge_rows(
         row["states"] = sorted(states)
         row["huc6_to_huc8s"] = huc6_to_huc8s
         row["has_huc"] = has_huc
+        row["drainage_area"] = float(g.drainage_area) if g.drainage_area is not None else None
+        row["elevation"] = float(g.elevation) if g.elevation is not None else None
         rows.append(row)
 
-    rows.sort(key=lambda r: (r["river"].lower(), r["location"].lower(), r["gauge_id"]))
+    # Within each river: upstream → downstream via elevation DESC (rivers flow
+    # downhill, so higher == further up). drainage_area ASC is a secondary
+    # tiebreaker for gauges at near-identical elevations. Elevation leads
+    # because it's populated more reliably than DA on virtual/side-channel
+    # gauges, and never inverts physical order along a flowline.
+    def _sort_key(r: dict[str, Any]) -> tuple[Any, ...]:
+        da = r.get("drainage_area")
+        el = r.get("elevation")
+        return (
+            r["river"].lower(),
+            el is None,
+            -el if el is not None else 0.0,
+            da is None,
+            da if da is not None else 0.0,
+            r["location"].lower(),
+            r["gauge_id"],
+        )
+
+    rows.sort(key=_sort_key)
     return rows
 
 
