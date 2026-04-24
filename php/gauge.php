@@ -117,10 +117,15 @@ $reaches_stmt = $db->prepare(
 $reaches_stmt->execute([$id]);
 $reaches = $reaches_stmt->fetchAll();
 
+// Prefer the normalized display_name populated by
+// scripts/seed_gauge_display.py; fall back to the internal canonical
+// `name` when the row predates the seeder (e.g. a freshly inserted gauge).
+$gauge_display = $gauge['display_name'] ?: $gauge['name'];
+
 // --- Render ---
 header('Cache-Control: no-cache');
 include_header(
-    $gauge['name'] . ' - Gauge',
+    $gauge_display . ' - Gauge',
     '', '', '',
     ['type' => 'gauge', 'id' => (int)$gauge['id']]
 );
@@ -145,12 +150,13 @@ echo '</form>';
 echo '</div>';
 
 // Gauge details
-echo '<h2>' . htmlspecialchars($gauge['name']) . '</h2>';
+echo '<h2>' . htmlspecialchars($gauge_display) . '</h2>';
 echo '<table class="desc-table">';
 
 $fields = [
     'ID' => $gauge['id'],
     'Name' => $gauge['name'],
+    'River' => $gauge['river'],
     'Location' => $gauge['location'],
     'Station ID' => $gauge['station_id'],
     'USGS ID' => $gauge['usgs_id'],
@@ -274,7 +280,7 @@ if ($readings) {
     [$latest_ts, $since, $until, $is_default_view] =
         gp_resolve_window($db, (int)$gauge['id'], $start_date, $end_date);
     gp_render_date_form($id, $start_date, $end_date, $latest_ts);
-    gp_render_plots($db, (int)$gauge['id'], $gauge['name'], $since, $until, $latest_ts, $is_default_view);
+    gp_render_plots($db, (int)$gauge['id'], $gauge_display, $since, $until, $latest_ts, $is_default_view);
 }
 
 // --- Map (single marker at the gauge coordinates) ---

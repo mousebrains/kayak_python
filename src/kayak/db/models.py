@@ -97,6 +97,14 @@ class Gauge(Base):
     Stores location metadata and agency-specific IDs (USGS, NWS, CBTT, etc.).
     Linked to data sources via the gauge_source M2M table and to a rating table
     for gage-height-to-flow conversions.
+
+    ``river`` / ``location`` / ``display_name`` / ``sort_name`` are populated
+    by ``scripts/seed_gauge_display.py`` and are the source of truth for
+    gauges.html and description pages. ``sort_name`` encodes the full row
+    order (basin → fork rank → elevation DESC → DA ASC) as a single key so
+    the build-time sort is plain alphabetical. Consumers fall back to the
+    agency-metadata resolver only when all four columns are NULL on a gauge
+    (e.g. a freshly inserted row that predates the next seeder run).
     """
 
     __tablename__ = "gauge"
@@ -105,7 +113,10 @@ class Gauge(Base):
     name: Mapped[str] = mapped_column(String(256), unique=True, nullable=False)
     bank_full: Mapped[float | None] = mapped_column()
     flood_stage: Mapped[float | None] = mapped_column()
+    river: Mapped[str | None] = mapped_column(Text)
     location: Mapped[str | None] = mapped_column(Text)
+    display_name: Mapped[str | None] = mapped_column(Text)
+    sort_name: Mapped[str | None] = mapped_column(Text)
     latitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
     longitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
     elevation: Mapped[float | None] = mapped_column()

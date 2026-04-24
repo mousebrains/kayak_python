@@ -1321,13 +1321,29 @@ def _collect_gauge_rows(
     rows: list[dict[str, Any]] = []
     for g in gauges:
         reaches = gauge_reaches.get(g.id, [])
-        reach_river = next((r.river for r in reaches if r.river), "")
-        river, location = _resolve_river_location(g, metadata, reach_river)
+        # Prefer the pre-normalized columns populated by
+        # scripts/seed_gauge_display.py. The resolver-based fallback only
+        # fires for brand-new rows inserted after the last seeder run.
+        if g.river is not None:
+            river = g.river
+            location = g.location or ""
+            display_name = g.display_name or river
+            sort_name = g.sort_name or river.lower()
+        else:
+            reach_river = next((r.river for r in reaches if r.river), "")
+            river, location = _resolve_river_location(g, metadata, reach_river)
+            display_name = f"{river} at {location}" if river and location else river or location
+            # Best-effort key so unseeded rows still land in a sensible slot.
+            elev = float(g.elevation) if g.elevation is not None else None
+            elev_key = f"{int(round(10000 - elev)):06d}" if elev is not None else "999999"
+            sort_name = f"{river.lower()}|9|{elev_key}|999999"
 
         row: dict[str, Any] = {
             "gauge_id": g.id,
             "river": river,
             "location": location,
+            "display_name": display_name,
+            "sort_name": sort_name,
         }
 
         for dtype_name, dtype in [
@@ -1379,25 +1395,11 @@ def _collect_gauge_rows(
         row["elevation"] = float(g.elevation) if g.elevation is not None else None
         rows.append(row)
 
-    # Within each river: upstream → downstream via elevation DESC (rivers flow
-    # downhill, so higher == further up). drainage_area ASC is a secondary
-    # tiebreaker for gauges at near-identical elevations. Elevation leads
-    # because it's populated more reliably than DA on virtual/side-channel
-    # gauges, and never inverts physical order along a flowline.
-    def _sort_key(r: dict[str, Any]) -> tuple[Any, ...]:
-        da = r.get("drainage_area")
-        el = r.get("elevation")
-        return (
-            r["river"].lower(),
-            el is None,
-            -el if el is not None else 0.0,
-            da is None,
-            da if da is not None else 0.0,
-            r["location"].lower(),
-            r["gauge_id"],
-        )
-
-    rows.sort(key=_sort_key)
+    # sort_name encodes the full row order (basin → fork rank → elevation
+    # DESC → DA ASC) as a single alphabetical key, so the sort is a plain
+    # lexicographic comparison on the pre-computed string. See
+    # scripts/seed_gauge_display.py for how the key is assembled.
+    rows.sort(key=lambda r: (r["sort_name"], r["gauge_id"]))
     return rows
 
 
@@ -1422,8 +1424,11 @@ def _build_gauges_table(rows: list[dict[str, Any]]) -> tuple[str, list[str]]:
         gid = row["gauge_id"]
         river = row["river"]
         location = row["location"]
-        sort_key = river or location
-        cur_letter = sort_key[:1].upper() if sort_key else ""
+        # Letter nav follows the basin (first segment of sort_name) so that
+        # e.g. all Umpqua-family rows — North Umpqua, South Umpqua, Umpqua
+        # — share the letter "U" the way they share the table group.
+        basin_key = row["sort_name"].split("|", 1)[0] if row.get("sort_name") else ""
+        cur_letter = (basin_key or river or location or "")[:1].upper()
         letter_id = ""
         if cur_letter and cur_letter != prev_letter:
             letter_id = f' id="letter-{cur_letter}"'

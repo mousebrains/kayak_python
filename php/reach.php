@@ -585,7 +585,7 @@ if ($guidebooks || $reach['aw_id']) {
 if ($gauge) {
     echo '<h3 style="margin-top:1rem">Linked Gauge</h3>';
     echo '<table class="desc-table">';
-    $gname = htmlspecialchars($gauge['name']);
+    $gname = htmlspecialchars($gauge['display_name'] ?: $gauge['name']);
     $gloc = htmlspecialchars($gauge['location'] ?? '');
     echo "<tr><td>Gauge</td><td><a href=\"/gauge.php?id={$gauge['id']}\">$gname</a></td></tr>\n";
     if ($gloc) echo "<tr><td>Location</td><td>$gloc</td></tr>\n";
