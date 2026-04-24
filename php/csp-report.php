@@ -9,10 +9,9 @@ declare(strict_types=1);
  * payloads (arrays of `{"type":"csp-violation","body":{...}}`) are accepted.
  *
  * Each parsed report becomes one JSON-per-line entry in
- * `/home/pat/DB/csp.log` (the DB dir is the only www-data-writable path
- * inside the existing PHP open_basedir). Rotated weekly by
- * /etc/logrotate.d/kayak-csp; harvested into the release directory by
- * ../../logs/syncit.
+ * `/home/pat/logs/csp.log` (a www-data-writable path inside the PHP
+ * open_basedir via ACL). Rotated weekly by /etc/logrotate.d/kayak-csp;
+ * harvested into the release directory by ../../logs/syncit.
  */
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
@@ -68,7 +67,7 @@ foreach ($reports as $r) {
 }
 
 @file_put_contents(
-    '/home/pat/DB/csp.log',
+    '/home/pat/logs/csp.log',
     implode("\n", $lines) . "\n",
     FILE_APPEND | LOCK_EX
 );

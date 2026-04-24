@@ -5,7 +5,7 @@
 #
 # Enables two features used by ../logs/analyze.py:
 #   - per-route latency quantiles (from rt=$request_time)
-#   - CSP violation diffs (from /home/pat/DB/csp.log)
+#   - CSP violation diffs (from /home/pat/logs/csp.log)
 #
 # Does NOT touch /etc/nginx/sites-enabled/levels except to rewrite a single
 # access_log line. The full target-state vhost lands via
@@ -96,14 +96,37 @@ if ! logrotate -d /etc/logrotate.d/kayak-csp >/dev/null 2>&1; then
 fi
 
 echo
-echo "=== default ACL for www-data on /home/pat/DB ==="
-# PHP writes /home/pat/DB/csp.log as www-data; after logrotate creates a
-# fresh file, the ACL must be inherited so writes still succeed.
-if getfacl /home/pat/DB 2>/dev/null | grep -qE '^default:user:www-data:.*w'; then
+echo "=== ACLs for /home/pat/logs (CSP log home) ==="
+# PHP writes /home/pat/logs/csp.log as www-data. The access ACL grants
+# write on the directory itself; the default ACL ensures that whatever
+# logrotate (or the first request after a rotate) creates inherits the
+# right permissions so both www-data (writes) and pat (reads) can work.
+LOGS_DIR=/home/pat/logs
+if [[ ! -d $LOGS_DIR ]]; then
+    install -d -o pat -g pat -m 0755 "$LOGS_DIR"
+    echo "  created $LOGS_DIR"
+fi
+need_access=1
+if getfacl "$LOGS_DIR" 2>/dev/null | grep -qE '^user:www-data:.*w'; then
+    need_access=0
+fi
+if (( need_access )); then
+    setfacl -m u:www-data:rwx "$LOGS_DIR"
+    echo "  added access ACL: u:www-data:rwx on $LOGS_DIR"
+else
+    echo "  access ACL for www-data already present"
+fi
+if getfacl "$LOGS_DIR" 2>/dev/null | grep -qE '^default:user:www-data:.*w'; then
     echo "  default ACL for www-data already present"
 else
-    setfacl -d -m u:www-data:rwx /home/pat/DB
-    echo "  added default ACL: u:www-data:rwx on /home/pat/DB"
+    setfacl -d -m u:www-data:rwx "$LOGS_DIR"
+    echo "  added default ACL: u:www-data:rwx on $LOGS_DIR"
+fi
+if getfacl "$LOGS_DIR" 2>/dev/null | grep -qE '^default:user:pat:.*w'; then
+    echo "  default ACL for pat already present"
+else
+    setfacl -d -m u:pat:rwx "$LOGS_DIR"
+    echo "  added default ACL: u:pat:rwx on $LOGS_DIR"
 fi
 
 echo
@@ -144,10 +167,10 @@ if [[ $resp == "204" ]]; then
     echo "  OK: /csp-report.php returned 204"
     # Give the FPM worker a moment to flush the append.
     sleep 1
-    if tail -n 1 /home/pat/DB/csp.log 2>/dev/null | grep -q installer-smoke; then
-        echo "  OK: /home/pat/DB/csp.log captured the synthetic report"
+    if tail -n 1 /home/pat/logs/csp.log 2>/dev/null | grep -q installer-smoke; then
+        echo "  OK: /home/pat/logs/csp.log captured the synthetic report"
     else
-        echo "  WARNING: synthetic report did not land in /home/pat/DB/csp.log"
+        echo "  WARNING: synthetic report did not land in /home/pat/logs/csp.log"
         echo "    check kayak-error.log for open_basedir / permissions errors"
     fi
 else
