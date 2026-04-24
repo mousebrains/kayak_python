@@ -917,7 +917,13 @@ def _editor_feature_on() -> bool:
 
 
 def _build_nav(states: list[str], active_state: str = "") -> str:
-    """Build abbreviation-based nav bar. OR links to index.html, others to {State}.html."""
+    """Build abbreviation-based nav bar; each state links to its {State}.html page.
+
+    The all-reaches levels table lives at /index.html and is reached via the
+    "River Levels" h1 home link. The per-state pages (Oregon.html etc.) are
+    curated link indexes of external resources (American Whitewater,
+    Dreamflows, agency dashboards).
+    """
     links: list[str] = []
     links.append('<a href="/map.html">Map</a>')
     links.append('<a href="/gauges.html">Gauges</a>')
@@ -926,8 +932,7 @@ def _build_nav(states: list[str], active_state: str = "") -> str:
             continue
         abbrev = _STATE_ABBREVS.get(s, s)
         cls = ' class="active"' if s == active_state else ""
-        href = "/index.html" if s == PRIMARY_STATE else f"/{s}.html"
-        links.append(f'<a href="{href}"{cls}>{abbrev}</a>')
+        links.append(f'<a href="/{s}.html"{cls}>{abbrev}</a>')
     links.append('<a href="/picker.php">Picker</a>')
     links.append('<a href="https://www.windy.com/?44.0,-120.5,7">OR Weather</a>')
     return "\n    ".join(links)
