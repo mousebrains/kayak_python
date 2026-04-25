@@ -203,7 +203,7 @@ $fields = [
     'Features' => $reach['features'],
     'Remoteness' => $reach['remoteness'],
     'Nature' => $reach['nature'],
-    'Watershed' => $reach['watershed_type'],
+    'Watershed type' => $reach['watershed_type'],
     'Optimal Flow' => $reach['optimal_flow'] ? number_format((float)$reach['optimal_flow'], 0) . ' CFS' : null,
 ];
 
