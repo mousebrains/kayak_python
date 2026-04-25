@@ -15,7 +15,7 @@ The development environment uses these paths (configured in `~/.config/kayak/.en
 | Virtual environment | `/home/pat/.venv` |
 | Configuration | `~/.config/kayak/.env` |
 | SQLite database | `/home/pat/DB/kayak.db` |
-| Document root | `/home/pat/public_html` → symlink to `kayak/public_html` |
+| Document root | `/home/pat/public_html` (regular directory; populated by `levels build`) |
 
 `config.py` checks `~/.config/kayak/.env` before falling back to the default `load_dotenv()` search. PHP gets `SQLITE_PATH` from nginx `fastcgi_param`.
 
