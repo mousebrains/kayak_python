@@ -8,7 +8,9 @@
  * Filter state is persisted in the URL hash so filtered views are shareable.
  */
 (function(){
-var COLORS={low:'#e8a735',okay:'#4caf50',high:'#e53935',unknown:'#2196F3'};
+// Saturated tones so the colored line reads against the dark halo casing
+// without looking muddy. Shades roughly tuned to Material 600/700.
+var COLORS={low:'#ef6c00',okay:'#1b8a00',high:'#c62828',unknown:'#1565c0'};
 var STATUSES=['low','okay','high','unknown'];
 var CLASS_TIERS=['I','II','III','IV','V','?'];
 var DEFAULT_VIEW=[44.0,-120.5];
@@ -52,6 +54,16 @@ var sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_
 street.addTo(map);
 L.control.layers({Topo:topo,Street:street,Satellite:sat}).addTo(map);
 
+// Two panes so casings always render beneath colored reaches regardless of
+// add order. Without this, calling bringToFront on the casing during hover
+// breaks the mouseout event, leaving the hover state stuck on. Casings pane
+// has pointerEvents:none so mouse hits go straight through to the reach.
+map.createPane('reach-casings');
+map.getPane('reach-casings').style.zIndex='400';
+map.getPane('reach-casings').style.pointerEvents='none';
+map.createPane('reaches');
+map.getPane('reaches').style.zIndex='410';
+
 function fail(msg){
   map.setView(DEFAULT_VIEW,DEFAULT_ZOOM);
   var ctl=L.control({position:'topright'});
@@ -75,15 +87,24 @@ function renderMap(geom,state){
   var sSet=new Set(initial.s===null?STATUSES:initial.s);
   var cSet=new Set(initial.c===null?CLASS_TIERS:initial.c);
 
+  // Color line opaque + bolder; dark casing acts as a 1px outline for contrast.
+  // Dark (not white) casing because white blends with street tiles and the
+  // pale tones in topo, hiding the colored stripe.
+  var REST_LINE={weight:4,opacity:1.0};
+  var HOVER_LINE={weight:7,opacity:1.0};
+  var REST_CASING={color:'#1a1a1a',weight:5,opacity:0.5,lineJoin:'round',lineCap:'round',interactive:false,pane:'reach-casings'};
+  var HOVER_CASING={weight:9};
+
   var layersById={};
   L.geoJSON(geom,{
+    pane:'reaches',
     style:function(f){
       var s=state[f.properties.id]||'unknown';
-      return {color:COLORS[s]||COLORS.unknown,weight:3,opacity:0.7};
+      return {color:COLORS[s]||COLORS.unknown,weight:REST_LINE.weight,opacity:REST_LINE.opacity,lineJoin:'round',lineCap:'round'};
     },
     pointToLayer:function(f,ll){
       var s=state[f.properties.id]||'unknown';
-      return L.circleMarker(ll,{radius:6,fillColor:COLORS[s]||COLORS.unknown,color:'#333',weight:1,fillOpacity:0.8});
+      return L.circleMarker(ll,{radius:6,fillColor:COLORS[s]||COLORS.unknown,color:'#333',weight:1,fillOpacity:0.8,pane:'reaches'});
     },
     onEachFeature:function(f,layer){
       var p=f.properties;
@@ -93,6 +114,20 @@ function renderMap(geom,state){
       layersById[p.id]=layer;
       layer._mfStatus=s;
       layer._mfTiers=p.tiers||['?'];
+      // Halo casing in its own pane below 'reaches' — no need to reorder
+      // on hover, which is what was breaking mouseout.
+      layer._mfCasing=typeof layer.getLatLngs==='function'
+        ? L.polyline(layer.getLatLngs(),REST_CASING)
+        : null;
+      layer.on('mouseover',function(){
+        layer.setStyle(HOVER_LINE);
+        if(layer._mfCasing)layer._mfCasing.setStyle(HOVER_CASING);
+        layer.bringToFront();
+      });
+      layer.on('mouseout',function(){
+        layer.setStyle(REST_LINE);
+        if(layer._mfCasing)layer._mfCasing.setStyle({weight:REST_CASING.weight});
+      });
     },
   });
 
@@ -112,7 +147,12 @@ function renderMap(geom,state){
     var visible=[];
     for(var id in layersById){
       var l=layersById[id];
-      if(matches(l)){group.addLayer(l);visible.push(l);}
+      if(matches(l)){
+        // Casing first so it renders beneath the colored line (last-added wins in SVG).
+        if(l._mfCasing)group.addLayer(l._mfCasing);
+        group.addLayer(l);
+        visible.push(l);
+      }
     }
     if(countEl)countEl.textContent=visible.length+' reach'+(visible.length===1?'':'es');
     if(firstPaint){

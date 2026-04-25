@@ -68,9 +68,10 @@ SPARKLINE_CURRENT_WINDOW = timedelta(hours=6)
 
 # GeoJSON geometry simplification. Coordinate precision is matched to the
 # simplify epsilon - quantizing below the simplification grid would be wasted
-# bytes. At 44N, 1e-4 deg ~= 8-11 m, below NHD's horizontal accuracy.
-GEOJSON_SIMPLIFY_EPSILON = 0.001
-GEOJSON_COORD_PRECISION = 4
+# bytes. At 44N, 1e-5 deg ~= 0.8-1.1 m (below NHD's horizontal accuracy);
+# 3e-4 deg ~= 24-33 m, which keeps polygonalization invisible up to ~zoom 14.
+GEOJSON_SIMPLIFY_EPSILON = 0.0003
+GEOJSON_COORD_PRECISION = 5
 assert math.ceil(-math.log10(GEOJSON_SIMPLIFY_EPSILON)) + 1 <= GEOJSON_COORD_PRECISION
 
 # Branding
