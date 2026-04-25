@@ -232,7 +232,7 @@ $fg_toggle = '<span class="fg-toggle">'
   </details>
 <?php endif; ?>
   <details class="filter-group">
-    <summary>Basin <span class="fg-count"><?= count($basins_present) ?></span></summary>
+    <summary>Watershed <span class="fg-count"><?= count($basins_present) ?></span></summary>
     <div class="filter-pills" data-group="basin">
       <?= $fg_toggle ?>
 <?php foreach (array_keys($basins_present) as $b): $disp = $b === '' ? '(none)' : $b; ?>
@@ -273,7 +273,7 @@ $fg_toggle = '<span class="fg-toggle">'
   <th><a href="#Units">Flow<br>CFS</a></th>
   <th><a href="#Units">Height<br>Feet</a></th>
   <th><a href="#Units">Temp<br>F</a></th>
-  <th class="secondary">Drainage</th>
+  <th class="secondary">Watershed</th>
   <th class="secondary">Class</th>
 </tr></thead>
 <tbody>
@@ -337,7 +337,7 @@ $fg_toggle = '<span class="fg-toggle">'
   <td class="td-flow" data-label="Flow"><?= $flow ?></td>
   <td class="td-gage" data-label="Height"><?= $gage ?></td>
   <td class="td-temp" data-label="Temp"><?= $temp ?></td>
-  <td class="secondary" data-label="Drainage"><?= $drain ?></td>
+  <td class="secondary" data-label="Watershed"><?= $drain ?></td>
   <td class="secondary" data-label="Class"><?= $class ?></td>
 </tr>
 <?php endforeach; ?>

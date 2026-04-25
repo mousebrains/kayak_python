@@ -6,6 +6,7 @@ import json
 
 from kayak.cli.build import (
     _build_filter_bar,
+    _build_gauges_filter_bar,
     _build_page,
     _collect_filter_data,
     _row_filter_attrs,
@@ -163,7 +164,7 @@ def test_build_filter_bar_omits_basin_when_no_huc_data() -> None:
     data = _data(status=["okay"])
     html = _build_filter_bar(data, is_all_page=False)
     assert 'data-group="huc8"' not in html
-    assert "Basin" not in html
+    assert "Watershed" not in html
 
 
 def test_build_filter_bar_hidden_by_default() -> None:
@@ -294,3 +295,69 @@ def test_build_page_wires_filter_bar_and_script() -> None:
 def test_build_page_omits_filter_script_when_no_bar() -> None:
     page = _build_page("<table></table>", "body{}", ["Oregon"], "Oregon", "Test", letters=[])
     assert "/static/filters.js" not in page
+
+
+# ---------------------------------------------------------------------------
+# _build_gauges_filter_bar — gauge-only inputs, no Reach objects in scope.
+# ---------------------------------------------------------------------------
+
+
+def _gauge_row(state: str, huc: str) -> dict:
+    """Mimic the relevant subset of _collect_gauge_rows output."""
+    return {
+        "state": state,
+        "huc6": huc[:6] if huc else "",
+        "huc8": huc[:8] if huc else "",
+        "has_huc": bool(huc and len(huc) >= 8),
+    }
+
+
+def test_build_gauges_filter_bar_is_self_contained() -> None:
+    rows = [
+        _gauge_row("Oregon", "170900110403"),
+        _gauge_row("Oregon", "170900040501"),
+        _gauge_row("Washington", "170800010101"),
+    ]
+    huc6_names = {"170900": "Willamette", "170800": "Lower Columbia"}
+    huc8_names = {
+        "17090011": "Clackamas",
+        "17090004": "Mckenzie",
+        "17080001": "Lower Columbia-Sandy",
+    }
+    html = _build_gauges_filter_bar(rows, huc6_names, huc8_names)
+
+    assert ">Watershed " in html
+    assert "Basin" not in html
+    assert ">Oregon<" in html
+    assert ">Washington<" in html
+    assert 'value="17090011" checked>Clackamas' in html
+    assert 'value="17090004" checked>Mckenzie' in html
+    assert 'value="17080001" checked>Lower Columbia-Sandy' in html
+    assert "(no HUC)" not in html
+    assert 'data-group="status"' not in html
+    assert 'data-group="tier"' not in html
+
+
+def test_build_gauges_filter_bar_renders_no_huc_for_orphan_gauge() -> None:
+    rows = [
+        _gauge_row("Oregon", "170900110403"),
+        _gauge_row("Idaho", ""),  # no HUC populated
+    ]
+    html = _build_gauges_filter_bar(
+        rows,
+        huc6_names={"170900": "Willamette"},
+        huc8_names={"17090011": "Clackamas"},
+    )
+    assert "(no HUC)" in html
+    assert ">Idaho<" in html
+
+
+def test_build_gauges_filter_bar_falls_back_to_huc8_code() -> None:
+    """HUC8 not in huc_name table — pill label is the bare code, no crash."""
+    rows = [_gauge_row("Oregon", "170900990000")]
+    html = _build_gauges_filter_bar(
+        rows,
+        huc6_names={"170900": "Willamette"},
+        huc8_names={},
+    )
+    assert 'value="17090099" checked>17090099' in html

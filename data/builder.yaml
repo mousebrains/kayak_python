@@ -124,8 +124,8 @@ columns:
     type: "text"
     field: "drainage"
     length: 10
-    name_text: "Drainage"
-    name_html: "Drainage"
+    name_text: "Watershed"
+    name_html: "Watershed"
 
   - sort_key: 900
     use: "fhct"

@@ -111,6 +111,8 @@ _STATE_ABBREVS = {
     "Wyoming": "WY",
 }
 
+_ABBR_TO_STATE = {v: k for k, v in _STATE_ABBREVS.items()}
+
 # States shown in the nav bar (Oregon + adjacent states)
 _NAV_STATES = {"Oregon", "Washington", "Idaho", "Nevada", "California"}
 
@@ -788,7 +790,7 @@ def _build_filter_bar(data: dict[str, Any], *, is_all_page: bool) -> str:
         body = "\n".join(sub_blocks)
         return (
             f'  <details class="filter-group" open>\n'
-            f'    <summary>Basin <span class="fg-count">{total}</span></summary>\n'
+            f'    <summary>Watershed <span class="fg-count">{total}</span></summary>\n'
             f'    <div class="filter-pills" data-group="huc8">\n'
             f"      {toggle}\n"
             f"{body}\n"
@@ -1382,20 +1384,18 @@ def _collect_gauge_rows(
             if age > DATA_STALE_THRESHOLD:
                 row["stale"] = True
 
-        states: set[str] = set()
-        huc6_to_huc8s: dict[str, set[tuple[str, str]]] = {}
-        has_huc = False
-        for r in reaches:
-            for s in r.states:
-                states.add(s.name)
-            if r.huc and len(r.huc) >= 8:
-                huc6 = r.huc[:6]
-                huc8 = r.huc[:8]
-                huc6_to_huc8s.setdefault(huc6, set()).add((huc8, r.basin or huc8))
-                has_huc = True
-        row["states"] = sorted(states)
-        row["huc6_to_huc8s"] = huc6_to_huc8s
-        row["has_huc"] = has_huc
+        # Filter pills come straight from the gauge row — gauges.html no
+        # longer walks linked reaches for state/HUC. data-state on the row is
+        # the full state name (matches reach-side convention); the table cell
+        # still shows the postal abbreviation via _STATE_ABBREVS.
+        state_abbrev = g.state or ""
+        state_name = _ABBR_TO_STATE.get(state_abbrev, "")
+        gauge_huc = g.huc or ""
+        row["state"] = state_name
+        row["state_abbrev"] = state_abbrev
+        row["huc6"] = gauge_huc[:6] if len(gauge_huc) >= 6 else ""
+        row["huc8"] = gauge_huc[:8] if len(gauge_huc) >= 8 else ""
+        row["has_huc"] = bool(row["huc8"])
         row["drainage_area"] = float(g.drainage_area) if g.drainage_area is not None else None
         row["elevation"] = float(g.elevation) if g.elevation is not None else None
         rows.append(row)
@@ -1440,14 +1440,8 @@ def _build_gauges_table(rows: list[dict[str, Any]]) -> tuple[str, list[str]]:
             letters.append(cur_letter)
             prev_letter = cur_letter
 
-        state = row["states"][0] if row["states"] else ""
-        huc8 = ""
-        for huc8s in row["huc6_to_huc8s"].values():
-            for code, _name in huc8s:
-                huc8 = code
-                break
-            if huc8:
-                break
+        state = row["state"]
+        huc8 = row["huc8"]
 
         stale = " stale" if row.get("stale") else ""
         # Emit filter attrs only when every group's value is populated. A
@@ -1500,16 +1494,26 @@ def _build_gauges_table(rows: list[dict[str, Any]]) -> tuple[str, list[str]]:
     return "\n".join(lines), letters
 
 
-def _build_gauges_filter_bar(rows: list[dict[str, Any]], huc6_names: dict[str, str]) -> str:
-    """Filter bar for gauges page: State + Basin (status/tier don't apply)."""
+def _build_gauges_filter_bar(
+    rows: list[dict[str, Any]],
+    huc6_names: dict[str, str],
+    huc8_names: dict[str, str],
+) -> str:
+    """Filter bar for gauges page: State + Watershed (status/tier don't apply).
+
+    Reads ``state``/``huc6``/``huc8``/``has_huc`` directly from each row — the
+    gauges page no longer derives filter values from linked reaches.
+    """
     states: set[str] = set()
     huc6_to_huc8s: dict[str, set[tuple[str, str]]] = {}
     has_no_huc = False
     for r in rows:
-        states.update(r["states"])
+        if r["state"]:
+            states.add(r["state"])
         if r["has_huc"]:
-            for huc6, huc8s in r["huc6_to_huc8s"].items():
-                huc6_to_huc8s.setdefault(huc6, set()).update(huc8s)
+            huc6_to_huc8s.setdefault(r["huc6"], set()).add(
+                (r["huc8"], huc8_names.get(r["huc8"], r["huc8"]))
+            )
         else:
             has_no_huc = True
     huc6_groups = [
@@ -1523,7 +1527,7 @@ def _build_gauges_filter_bar(rows: list[dict[str, Any]], huc6_names: dict[str, s
         )
     ]
     filter_data = {
-        "state": sorted(s for s in states if s),
+        "state": sorted(states),
         "huc6_groups": huc6_groups,
         "has_no_huc": has_no_huc,
         "status": [],
@@ -1549,7 +1553,10 @@ def _write_gauges_page(
     huc6_names: dict[str, str] = {
         r.code: r.name for r in session.scalars(select(HucName).where(HucName.level == 6))
     }
-    filter_bar_html = _build_gauges_filter_bar(rows, huc6_names)
+    huc8_names: dict[str, str] = {
+        r.code: r.name for r in session.scalars(select(HucName).where(HucName.level == 8))
+    }
+    filter_bar_html = _build_gauges_filter_bar(rows, huc6_names, huc8_names)
     page_html = _build_page(
         table_html,
         css_link,

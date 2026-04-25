@@ -311,7 +311,7 @@ if ($sources) {
 if ($reaches) {
     echo '<h3 style="margin-top:1rem">Associated Reaches</h3>';
     echo '<table class="desc-table">';
-    echo '<tr><th>Name</th><th>River</th><th>Class</th><th>Length</th><th>Basin</th></tr>';
+    echo '<tr><th>Name</th><th>River</th><th>Class</th><th>Length</th><th>Watershed</th></tr>';
     foreach ($reaches as $r) {
         $rname = htmlspecialchars($r['name']);
         $river = htmlspecialchars($r['river'] ?? '');
