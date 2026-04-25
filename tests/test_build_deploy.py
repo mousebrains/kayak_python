@@ -1,9 +1,8 @@
-"""Tests for the rename-over-target deploy helpers and the in-place
-``build()`` wire-up behind ``KAYAK_DEPLOY_MODE=rename``.
+"""Tests for the rename-over-target deploy helpers and the ``build()`` wire-up.
 
-The symlink branch of ``build()`` is NOT exercised here — it's the prod
-path and the rename work doesn't change it. These tests target the else
-branch (regular-dir output) and its two modes (default vs rename).
+After iteration 4, ``build()`` has a single deploy path: build to a sibling
+.staging dir, apply ACLs, per-file rename-replace into output_dir, sweep
+orphans. The legacy symlink-swap and one-shot migration paths are gone.
 """
 
 from __future__ import annotations
@@ -237,7 +236,7 @@ def test_deploy_error_leaves_live_consistent(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# build() wire-up: KAYAK_DEPLOY_MODE=rename on the in-place branch
+# build() wire-up: single rename-over-target deploy path
 # ---------------------------------------------------------------------------
 
 
@@ -253,35 +252,8 @@ def _stub_build_to_dir_factory(files: dict[str, str]):
     return _stub
 
 
-def test_build_default_mode_writes_in_place(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Without KAYAK_DEPLOY_MODE set, build() falls through to the existing
-    in-place write (no staging dir, no orphan sweep)."""
-    live = tmp_path / "public_html"
-    live.mkdir()
-    # Pre-existing file — default mode doesn't sweep.
-    (live / "stale.html").write_text("not removed in default mode")
-
-    monkeypatch.setattr(
-        build_mod,
-        "_build_to_dir",
-        _stub_build_to_dir_factory({"index.html": "v1"}),
-    )
-    monkeypatch.delenv("KAYAK_DEPLOY_MODE", raising=False)
-
-    build_mod.build(argparse.Namespace(output_dir=str(live)))
-
-    assert (live / "index.html").read_text() == "v1"
-    assert (live / "stale.html").exists()  # default mode: no sweep
-    assert not (tmp_path / "public_html.staging").exists()
-
-
-def test_build_rename_mode_stages_then_renames(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """With KAYAK_DEPLOY_MODE=rename, build() stages, rename-deploys,
-    sweeps orphans, and cleans up the staging dir."""
+def test_build_stages_then_renames(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """build() stages, rename-deploys, sweeps orphans, cleans the staging dir."""
     live = tmp_path / "public_html"
     live.mkdir()
     (live / "orphan.html").write_text("will be swept")
@@ -299,7 +271,6 @@ def test_build_rename_mode_stages_then_renames(
         ),
     )
     monkeypatch.setattr(build_mod, "_set_acls", lambda _p: None)
-    monkeypatch.setenv("KAYAK_DEPLOY_MODE", "rename")
 
     build_mod.build(argparse.Namespace(output_dir=str(live)))
 
@@ -310,9 +281,26 @@ def test_build_rename_mode_stages_then_renames(
     assert not (tmp_path / "public_html.staging").exists()
 
 
-def test_build_rename_mode_cleans_staging_on_failure(
+def test_build_creates_output_dir_if_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """A missing output_dir is created — first-build-on-fresh-host path."""
+    live = tmp_path / "public_html"
+    # Note: live does not exist yet.
+    monkeypatch.setattr(
+        build_mod,
+        "_build_to_dir",
+        _stub_build_to_dir_factory({"index.html": "v1"}),
+    )
+    monkeypatch.setattr(build_mod, "_set_acls", lambda _p: None)
+
+    build_mod.build(argparse.Namespace(output_dir=str(live)))
+
+    assert live.is_dir()
+    assert (live / "index.html").read_text() == "v1"
+
+
+def test_build_cleans_staging_on_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """If _build_to_dir raises mid-build, the staging dir is torn down so a
     retry doesn't trip over stale scratch state. Live is untouched."""
     live = tmp_path / "public_html"
@@ -325,18 +313,15 @@ def test_build_rename_mode_cleans_staging_on_failure(
 
     monkeypatch.setattr(build_mod, "_build_to_dir", _exploding_build_to_dir)
     monkeypatch.setattr(build_mod, "_set_acls", lambda _p: None)
-    monkeypatch.setenv("KAYAK_DEPLOY_MODE", "rename")
 
     with pytest.raises(RuntimeError, match="boom mid-build"):
         build_mod.build(argparse.Namespace(output_dir=str(live)))
 
-    # Live file unchanged — rename deploy never started.
     assert (live / "index.html").read_text() == "untouched"
-    # Staging dir cleaned up by the finally block.
     assert not (tmp_path / "public_html.staging").exists()
 
 
-def test_build_rename_mode_removes_stale_staging_before_rebuild(
+def test_build_removes_stale_staging_before_rebuild(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A stale .staging dir from a previous aborted run is wiped before
@@ -353,156 +338,9 @@ def test_build_rename_mode_removes_stale_staging_before_rebuild(
         _stub_build_to_dir_factory({"index.html": "fresh"}),
     )
     monkeypatch.setattr(build_mod, "_set_acls", lambda _p: None)
-    monkeypatch.setenv("KAYAK_DEPLOY_MODE", "rename")
 
     build_mod.build(argparse.Namespace(output_dir=str(live)))
 
     assert (live / "index.html").read_text() == "fresh"
-    # The stale leftover never made it into live — it was wiped along
-    # with the stale staging dir at the start of the new run.
     assert not (live / "leftover.html").exists()
     assert not stale_staging.exists()
-
-
-# ---------------------------------------------------------------------------
-# Symlink → regular-directory migration (first rename-mode run on prod)
-# ---------------------------------------------------------------------------
-
-
-def _make_symlink_layout(tmp_path: Path) -> tuple[Path, Path]:
-    """Build a (symlink, target) pair mirroring prod's current layout."""
-    target = tmp_path / "public_html_000"
-    target.mkdir()
-    (target / "pre-existing.html").write_text("content from the previous deploy")
-    live = tmp_path / "public_html"
-    live.symlink_to(target)
-    return live, target
-
-
-def test_build_symlink_migration_to_regular_dir(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """First rename-mode build against a symlink layout migrates it to a
-    regular directory in one os.rename syscall. Subsequent builds would
-    take the else branch."""
-    live, old_target = _make_symlink_layout(tmp_path)
-
-    monkeypatch.setattr(
-        build_mod,
-        "_build_to_dir",
-        _stub_build_to_dir_factory(
-            {
-                "index.html": "v-migrated",
-                "static/app.js": "console.log('post-migration')",
-            }
-        ),
-    )
-    # _set_acls needs a real www-data user — bypass in tests.
-    monkeypatch.setattr(build_mod, "_set_acls", lambda _p: None)
-    monkeypatch.setenv("KAYAK_DEPLOY_MODE", "rename")
-
-    build_mod.build(argparse.Namespace(output_dir=str(live)))
-
-    assert not live.is_symlink()
-    assert live.is_dir()
-    assert (live / "index.html").read_text() == "v-migrated"
-    assert (live / "static/app.js").read_text() == "console.log('post-migration')"
-    # Old dated target and staging dir both cleaned up.
-    assert not old_target.exists()
-    assert not (tmp_path / "public_html.staging").exists()
-
-
-def test_build_symlink_migration_failure_preserves_symlink(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """If _build_to_dir raises during the migration build, the live
-    symlink and its target are left untouched; the staging dir is
-    cleaned up so a retry starts clean."""
-    live, old_target = _make_symlink_layout(tmp_path)
-
-    def _exploding(out_dir: Path, _args: argparse.Namespace) -> None:
-        (out_dir / "half.html").write_text("partial")
-        raise RuntimeError("boom during migration")
-
-    monkeypatch.setattr(build_mod, "_build_to_dir", _exploding)
-    monkeypatch.setattr(build_mod, "_set_acls", lambda _p: None)
-    monkeypatch.setenv("KAYAK_DEPLOY_MODE", "rename")
-
-    with pytest.raises(RuntimeError, match="boom during migration"):
-        build_mod.build(argparse.Namespace(output_dir=str(live)))
-
-    # Symlink layout intact, old content readable through the link.
-    assert live.is_symlink()
-    assert live.resolve() == old_target.resolve()
-    assert (live / "pre-existing.html").read_text() == "content from the previous deploy"
-    # Staging dir wiped.
-    assert not (tmp_path / "public_html.staging").exists()
-
-
-def test_build_symlink_migration_rename_failure_restores_symlink(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Defensive: if os.rename fails after the unlink (near-impossible on
-    same filesystem, but not impossible), the code restores the symlink
-    to its old target so the site isn't left with a dangling path."""
-    import os
-
-    live, old_target = _make_symlink_layout(tmp_path)
-
-    monkeypatch.setattr(
-        build_mod,
-        "_build_to_dir",
-        _stub_build_to_dir_factory({"index.html": "would-have-been-migrated"}),
-    )
-    monkeypatch.setattr(build_mod, "_set_acls", lambda _p: None)
-    monkeypatch.setenv("KAYAK_DEPLOY_MODE", "rename")
-
-    # Make the critical os.rename call inside build.py fail on first use.
-    real_rename = os.rename
-
-    def _failing_rename(src, dst, *a, **kw):
-        raise OSError("simulated rename failure mid-migration")
-
-    monkeypatch.setattr(build_mod.os, "rename", _failing_rename)
-
-    with pytest.raises(OSError, match="simulated rename failure"):
-        build_mod.build(argparse.Namespace(output_dir=str(live)))
-
-    # Symlink was restored (pointing back at old_target) after the
-    # unlink succeeded but rename failed.
-    assert live.is_symlink()
-    # Use os.readlink via real_rename's module to compare targets.
-    assert Path(os.readlink(live)).resolve() == old_target.resolve()
-    assert (old_target / "pre-existing.html").exists()
-    # Staging wiped by the outer except.
-    assert not (tmp_path / "public_html.staging").exists()
-    # Silence unused import warning
-    del real_rename
-
-
-def test_build_symlink_default_mode_still_swaps(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Without KAYAK_DEPLOY_MODE=rename, a symlink output_dir still goes
-    through the old dated-dir + symlink swap path — unchanged behavior."""
-    live, old_target = _make_symlink_layout(tmp_path)
-
-    monkeypatch.setattr(
-        build_mod,
-        "_build_to_dir",
-        _stub_build_to_dir_factory({"index.html": "v-via-symlink-swap"}),
-    )
-    monkeypatch.setattr(build_mod, "_set_acls", lambda _p: None)
-    monkeypatch.delenv("KAYAK_DEPLOY_MODE", raising=False)
-
-    build_mod.build(argparse.Namespace(output_dir=str(live)))
-
-    # Still a symlink — pointing at a new dated target.
-    assert live.is_symlink()
-    new_target = live.resolve()
-    assert new_target != old_target.resolve()
-    assert new_target.is_dir()
-    assert (new_target / "index.html").read_text() == "v-via-symlink-swap"
-    # Old target removed; no .staging sibling lying around.
-    assert not old_target.exists()
-    assert not (tmp_path / "public_html.staging").exists()
