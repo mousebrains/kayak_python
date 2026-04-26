@@ -107,6 +107,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flash = "Revoked all active sessions for editor #$id.";
             break;
 
+        case 'set_display_name':
+            $name = trim((string)($_POST['display_name'] ?? ''));
+            if (strlen($name) > 128) {
+                $flash_err = "Display name too long (max 128 characters).";
+                break;
+            }
+            $value = $name === '' ? null : $name;
+            $db->prepare("UPDATE editor SET display_name = ? WHERE id = ?")
+               ->execute([$value, $id]);
+            $flash = $value === null
+                ? "Cleared display name for editor #$id."
+                : "Set display name for editor #$id to '$name'.";
+            break;
+
         default:
             $flash_err = "Unknown action.";
     }
@@ -213,7 +227,12 @@ include_header('Admin — editors');
             <?php endif ?>
           </td>
           <td><?= htmlspecialchars((string)$e['email']) ?></td>
-          <td><?= htmlspecialchars((string)($e['display_name'] ?? '')) ?></td>
+          <td style="white-space:nowrap">
+            <input type="text" form="ed-<?= $eid ?>" name="display_name"
+                   value="<?= htmlspecialchars((string)($e['display_name'] ?? '')) ?>"
+                   maxlength="128" size="18">
+            <button form="ed-<?= $eid ?>" name="action" value="set_display_name">save</button>
+          </td>
           <td><?= htmlspecialchars($st) ?></td>
           <td><?= (int)$e['n_pending'] ?></td>
           <td><?= (int)$e['n_approved'] ?></td>
