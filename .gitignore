@@ -50,3 +50,6 @@ vendor/
 OSM-cache/
 NHD-cache/
 Trace-cache/
+
+# Ad-hoc research / analysis scratch
+tpw/
