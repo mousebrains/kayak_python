@@ -12,6 +12,7 @@ drift, cache-update ordering, build HTML changes.
 from __future__ import annotations
 
 from argparse import Namespace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -31,18 +32,26 @@ from kayak.db.models import (
     State,
 )
 
-# Minimal USGS RDB response: header + width line + two data rows with flow
-# (parameter code 00060) sampled an hour apart. The parser keys on the column
-# name ``TS_ID_00060`` — ``TS_ID`` is the time-series id; ``_00060`` tells the
-# parser this column is cfs flow.
-_RDB = """\
-# USGS RDB fixture
-#
-agency_cd\tsite_no\tdatetime\ttz_cd\t12345_00060\t12345_00060_cd
-5s\t15s\t20d\t6s\t14n\t10s
-USGS\t12345678\t2026-04-20 12:00\tUTC\t500.0\tP
-USGS\t12345678\t2026-04-20 13:00\tUTC\t525.0\tP
-"""
+
+def _build_rdb() -> str:
+    """Minimal USGS RDB fixture with two rows timestamped near "now".
+
+    The build step filters reaches whose latest observation is older than
+    DATA_EXPIRY_THRESHOLD (7 days), so the timestamps must be recent for the
+    seeded reach to appear in index.html. Generated relative to ``now`` so the
+    test stays stable as wall-clock time advances.
+    """
+    now = datetime.now(UTC).replace(microsecond=0, second=0)
+    t1 = (now - timedelta(hours=2)).strftime("%Y-%m-%d %H:%M")
+    t2 = (now - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M")
+    return (
+        "# USGS RDB fixture\n"
+        "#\n"
+        "agency_cd\tsite_no\tdatetime\ttz_cd\t12345_00060\t12345_00060_cd\n"
+        "5s\t15s\t20d\t6s\t14n\t10s\n"
+        f"USGS\t12345678\t{t1}\tUTC\t500.0\tP\n"
+        f"USGS\t12345678\t{t2}\tUTC\t525.0\tP\n"
+    )
 
 
 def _seed(db_url: str) -> None:
@@ -116,7 +125,7 @@ def test_pipeline_fetch_through_build_smoke(tmp_path: Path) -> None:
     input_dir = tmp_path / "input"
     rdb_path = input_dir / "test:" / "usgs"
     rdb_path.parent.mkdir(parents=True)
-    rdb_path.write_text(_RDB)
+    rdb_path.write_text(_build_rdb())
 
     output_dir = tmp_path / "out"
 
