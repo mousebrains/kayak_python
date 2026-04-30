@@ -918,17 +918,22 @@ def _editor_feature_on() -> bool:
     return v in ("1", "true", "yes")
 
 
-def _build_nav(states: list[str], active_state: str = "") -> str:
+def _build_nav(states: list[str], active_state: str = "", active_page: str = "") -> str:
     """Build abbreviation-based nav bar; each state links to its {State}.html page.
 
     The all-reaches levels table lives at /index.html and is reached via the
     "River Levels" h1 home link. The per-state pages (Oregon.html etc.) are
     curated link indexes of external resources (American Whitewater,
     Dreamflows, agency dashboards).
+
+    active_page highlights a non-state link ("map" or "gauges") so the user
+    has a visual anchor on the corresponding page.
     """
     links: list[str] = []
-    links.append('<a href="/map.html">Map</a>')
-    links.append('<a href="/gauges.html">Gauges</a>')
+    map_cls = ' class="active"' if active_page == "map" else ""
+    gauges_cls = ' class="active"' if active_page == "gauges" else ""
+    links.append(f'<a href="/map.html"{map_cls}>Map</a>')
+    links.append(f'<a href="/gauges.html"{gauges_cls}>Gauges</a>')
     for s in states:
         if s not in _NAV_STATES:
             continue
@@ -990,9 +995,10 @@ def _build_page(
     title: str,
     letters: list[str] | None = None,
     filter_bar_html: str = "",
+    active_page: str = "",
 ) -> str:
     """Wrap the table HTML in a complete HTML document linking to external CSS."""
-    nav_html = _build_nav(states, active_state=current_state)
+    nav_html = _build_nav(states, active_state=current_state, active_page=active_page)
     letter_nav_html = _build_letter_nav(letters) if letters else ""
     now_utc = datetime.now(UTC)
     now_iso = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -1099,7 +1105,7 @@ def _build_placeholder_page(css_link: str, states: list[str], state: str) -> str
 
 def _build_map_page(css_link: str, states: list[str], geom_url: str, state_url: str) -> str:
     """Build map.html with an interactive Leaflet map of all reaches."""
-    nav_html = _build_nav(states)
+    nav_html = _build_nav(states, active_page="map")
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -1417,7 +1423,7 @@ def _build_gauges_table(rows: list[dict[str, Any]]) -> tuple[str, list[str]]:
     lines.append('  <th scope="col">Location</th>')
     lines.append('  <th scope="col">Date</th>')
     lines.append('  <th scope="col">Flow<br>cfs</th>')
-    lines.append('  <th scope="col" class="secondary">Spark</th>')
+    lines.append('  <th scope="col" class="secondary">2-day Trend</th>')
     lines.append('  <th scope="col">Gauge<br>ft</th>')
     lines.append('  <th scope="col">Temp<br>&deg;F</th>')
     lines.append("</tr></thead>")
@@ -1477,7 +1483,7 @@ def _build_gauges_table(rows: list[dict[str, Any]]) -> tuple[str, list[str]]:
         lines.append(f'  <td class="td-flow" data-label="Flow">{flow_cell}</td>')
 
         lines.append(
-            f'  <td class="td-spark secondary" data-label="Spark">'
+            f'  <td class="td-spark secondary" data-label="2-day Trend">'
             f'<span class="spark" data-gid="{gid}"></span></td>'
         )
 
@@ -1565,6 +1571,7 @@ def _write_gauges_page(
         title="River Gauges",
         letters=letters,
         filter_bar_html=filter_bar_html,
+        active_page="gauges",
     )
     _atomic_write(output_dir / "gauges.html", page_html)
 
