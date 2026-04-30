@@ -52,6 +52,15 @@ if (!$reports) {
 
 $lines = [];
 foreach ($reports as $r) {
+    $source_file = $r['source-file'] ?? $r['sourceFile'] ?? null;
+    // Drop reports injected by browser extensions / sandboxed eval — those
+    // come from code outside our pages and aren't actionable.
+    if (is_string($source_file) && (
+        $source_file === 'sandbox eval code'
+        || preg_match('#^(?:chrome|moz|safari|safari-web|edge|ms-browser)-extension://#', $source_file)
+    )) {
+        continue;
+    }
     $lines[] = json_encode([
         'ts'           => date('c'),
         'ip'           => $_SERVER['REMOTE_ADDR']      ?? '-',
@@ -61,9 +70,14 @@ foreach ($reports as $r) {
         'violated'     => $r['violated-directive']  ?? $r['effectiveDirective'] ?? null,
         'effective'    => $r['effective-directive'] ?? null,
         'blocked'      => $r['blocked-uri']         ?? $r['blockedURL']       ?? null,
-        'source_file'  => $r['source-file']         ?? null,
+        'source_file'  => $source_file,
         'line'         => $r['line-number']         ?? $r['lineNumber']       ?? null,
     ], JSON_UNESCAPED_SLASHES);
+}
+
+if (!$lines) {
+    http_response_code(204);
+    exit;
 }
 
 @file_put_contents(
