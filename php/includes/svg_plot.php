@@ -188,6 +188,49 @@ function rate_flow_to_gauge(array $lookup, float $flow_cfs): ?float {
 }
 
 /**
+ * Render low/okay/high background bands (in axis units) clipped to the
+ * visible y-range. Bands are decorative — they never extend the y-axis.
+ *
+ * @param ?array $bands  ['low' => ?float, 'high' => ?float] in axis units, or null.
+ */
+function _bands_svg(?array $bands, float $y_min, float $y_max, int $ml, int $mt, int $pw, int $ph): string {
+    if ($bands === null) return '';
+    $lo = $bands['low'] ?? null;
+    $hi = $bands['high'] ?? null;
+    if ($lo === null && $hi === null) return '';
+
+    // Zones in data coords: [bot_data, top_data].
+    $zones = [];
+    if ($lo !== null && $hi !== null) {
+        $zones[] = ['level' => 'low',  'bot' => $y_min, 'top' => $lo];
+        $zones[] = ['level' => 'okay', 'bot' => $lo,    'top' => $hi];
+        $zones[] = ['level' => 'high', 'bot' => $hi,    'top' => $y_max];
+    } elseif ($lo !== null) {
+        $zones[] = ['level' => 'low',  'bot' => $y_min, 'top' => $lo];
+        $zones[] = ['level' => 'okay', 'bot' => $lo,    'top' => $y_max];
+    } else { // $hi !== null
+        $zones[] = ['level' => 'okay', 'bot' => $y_min, 'top' => $hi];
+        $zones[] = ['level' => 'high', 'bot' => $hi,    'top' => $y_max];
+    }
+
+    $colors = ['low' => '#e8a735', 'okay' => '#4caf50', 'high' => '#e53935'];
+    $y_range = $y_max - $y_min ?: 1;
+    $svg = '';
+    foreach ($zones as $z) {
+        $top = max($y_min, min($y_max, (float)$z['top']));
+        $bot = max($y_min, min($y_max, (float)$z['bot']));
+        if ($top <= $bot) continue;
+        $py_top = $mt + (int)(($y_max - $top) / $y_range * $ph);
+        $py_bot = $mt + (int)(($y_max - $bot) / $y_range * $ph);
+        $h = $py_bot - $py_top;
+        if ($h <= 0) continue;
+        $color = $colors[$z['level']];
+        $svg .= "<rect x=\"$ml\" y=\"$py_top\" width=\"$pw\" height=\"$h\" fill=\"$color\" fill-opacity=\"0.12\"/>\n";
+    }
+    return $svg;
+}
+
+/**
  * Generate a lightweight time-series SVG plot.
  *
  * @param array  $times   Array of Unix timestamps.
@@ -198,6 +241,7 @@ function rate_flow_to_gauge(array $lookup, float $flow_cfs): ?float {
  * @param int    $height  SVG height.
  * @param int    $target_points  LTTB target.
  * @param bool   $is_flow Whether Y-axis values are flow (integer labels).
+ * @param ?array $bands   Optional ['low' => ?float, 'high' => ?float] in axis units.
  * @return string  SVG markup.
  */
 function generate_svg_plot(
@@ -208,7 +252,8 @@ function generate_svg_plot(
     int $width = 800,
     int $height = 350,
     int $target_points = 200,
-    bool $is_flow = false
+    bool $is_flow = false,
+    ?array $bands = null
 ): string {
     $n = count($times);
     if ($n === 0) {
@@ -288,11 +333,13 @@ function generate_svg_plot(
         'margins'  => ['ml' => $ml, 'mr' => $mr, 'mt' => $mt, 'mb' => $mb, 'w' => $width, 'h' => $height],
     ]);
 
+    $bands_svg = _bands_svg($bands, (float)$y_min, (float)$y_max, $ml, $mt, $pw, $ph);
+
     return <<<SVG
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 $width $height" width="$width" height="$height" data-series="$series_attr">
 <text x="{$ml}" y="18" font-size="13" font-weight="bold" fill="#333">$esc_title</text>
 <text x="12" y="{$mt}" font-size="10" fill="#666" transform="rotate(-90,12,{$mt})" text-anchor="end">$esc_ylabel</text>
-$grid
+$bands_svg$grid
 <rect x="$ml" y="$mt" width="$pw" height="$ph" fill="none" stroke="#ccc" stroke-width="0.5"/>
 <polyline fill="none" stroke="#2060A0" stroke-width="1.5" stroke-linejoin="round" points="$points_str"/>
 </svg>
@@ -319,7 +366,8 @@ function generate_rating_dual_plot(
     string $primary_label,
     int $width = 800,
     int $height = 350,
-    int $target_points = 200
+    int $target_points = 200,
+    ?array $bands = null
 ): string {
     $n = count($flow_times);
     if ($n === 0) return _empty_svg($title, $width, $height);
@@ -426,12 +474,14 @@ function generate_rating_dual_plot(
         'margins'        => ['ml' => $ml, 'mr' => $mr, 'mt' => $mt, 'mb' => $mb, 'w' => $width, 'h' => $height],
     ]);
 
+    $bands_svg = _bands_svg($bands, (float)$fy_min, (float)$fy_max, $ml, $mt, $pw, $ph);
+
     return <<<SVG
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 $width $height" width="$width" height="$height" data-series="$series_attr">
 <text x="{$ml}" y="18" font-size="13" font-weight="bold" fill="#333">$esc_title</text>
 <text x="12" y="{$mt}" font-size="11" fill="#2060A0" transform="rotate(-90,12,{$mt})" text-anchor="end">$esc_flow_label</text>
 <text x="{$gauge_label_x}" y="{$mt}" font-size="11" fill="#C04020" transform="rotate(90,{$gauge_label_x},{$mt})" text-anchor="end">Gage Height (Ft)</text>
-$grid
+$bands_svg$grid
 $right_grid
 $x_labels
 <rect x="$ml" y="$mt" width="$pw" height="$ph" fill="none" stroke="#ccc" stroke-width="0.5"/>

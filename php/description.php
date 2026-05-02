@@ -184,7 +184,7 @@ if ($gauge) {
         $latest_ts,
         [['label' => 'Data inspector', 'url' => "/data.php?id=$id"]]
     );
-    gp_render_plots($db, (int)$gauge['id'], $name, $since, $until, $latest_ts, $is_default_view);
+    gp_render_plots($db, (int)$gauge['id'], $name, $since, $until, $latest_ts, $is_default_view, $class_range ?: null);
 }
 
 // --- Description fields ---

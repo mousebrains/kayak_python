@@ -74,11 +74,40 @@ function _gp_fetch_series(PDO $db, int $gauge_id, string $type, string $since, ?
 }
 
 /** Emit one single-axis plot div, or nothing if the series has <2 points. */
-function _gp_render_single_plot(array $times, array $values, string $name, string $y_label, bool $is_flow): void {
+function _gp_render_single_plot(array $times, array $values, string $name, string $y_label, bool $is_flow, ?array $bands = null): void {
     if (count($times) < 2) return;
     $title = htmlspecialchars($name) . " — $y_label";
-    $svg = generate_svg_plot($times, $values, $title, $y_label, 800, 350, 200, $is_flow);
+    $svg = generate_svg_plot($times, $values, $title, $y_label, 800, 350, 200, $is_flow, $bands);
     echo '<div class="plot-container">' . $svg . '</div>';
+}
+
+/**
+ * Project a reach class_range row onto a plot's y-axis.
+ *
+ * Returns ['low' => ?float, 'high' => ?float] in $axis_type units, or null if
+ * the row is empty / a bound's data_type can't be converted (e.g. gauge bound
+ * but no rating lookup is available for a flow plot).
+ */
+function _gp_bands_for_axis(?array $class_range, string $axis_type, ?array $rating_lookup = null): ?array {
+    if ($class_range === null) return null;
+    $axis_is_flow = ($axis_type === 'flow' || $axis_type === 'inflow');
+
+    $project = function ($v, ?string $dt) use ($axis_is_flow, $rating_lookup): ?float {
+        if ($v === null) return null;
+        $v = (float)$v;
+        $dt = $dt ?: 'flow';
+        $bound_is_flow = ($dt === 'flow' || $dt === 'inflow');
+        if ($bound_is_flow === $axis_is_flow) return $v;
+        if ($rating_lookup === null) return null;
+        return $axis_is_flow
+            ? rate_gauge_to_flow($rating_lookup, $v)
+            : rate_flow_to_gauge($rating_lookup, $v);
+    };
+
+    $lo = $project($class_range['low'] ?? null,  $class_range['low_data_type']  ?? null);
+    $hi = $project($class_range['high'] ?? null, $class_range['high_data_type'] ?? null);
+    if ($lo === null && $hi === null) return null;
+    return ['low' => $lo, 'high' => $hi];
 }
 
 /**
@@ -164,7 +193,8 @@ function gp_render_plots(
     string $since,
     ?string $until,
     int $latest_ts,
-    bool $is_default_view
+    bool $is_default_view,
+    ?array $class_range = null
 ): void {
     $has_flow   = _gp_has_obs($db, $gauge_id, 'flow',        $since, $until);
     $has_inflow = _gp_has_obs($db, $gauge_id, 'inflow',      $since, $until);
@@ -191,20 +221,25 @@ function gp_render_plots(
         [$ft, $fv] = _gp_fetch_series($db, $gauge_id, $primary_type, $since, $until);
         if ($lookup !== null && count($ft) >= 2) {
             $title = htmlspecialchars($title_name) . " — $primary_label / Gage Height";
+            $flow_bands = _gp_bands_for_axis($class_range, $primary_type, $lookup);
             echo '<div class="plot-container">'
-               . generate_rating_dual_plot($ft, $fv, $lookup, $title, $primary_label)
+               . generate_rating_dual_plot($ft, $fv, $lookup, $title, $primary_label, 800, 350, 200, $flow_bands)
                . '</div>';
         } else {
-            _gp_render_single_plot($ft, $fv, $title_name, $primary_label, $primary_type === 'flow');
+            $flow_bands = _gp_bands_for_axis($class_range, $primary_type);
+            _gp_render_single_plot($ft, $fv, $title_name, $primary_label, $primary_type === 'flow', $flow_bands);
             [$gt, $gv] = _gp_fetch_series($db, $gauge_id, 'gauge', $since, $until);
-            _gp_render_single_plot($gt, $gv, $title_name, 'Gage Height (Ft)', false);
+            $gauge_bands = _gp_bands_for_axis($class_range, 'gauge');
+            _gp_render_single_plot($gt, $gv, $title_name, 'Gage Height (Ft)', false, $gauge_bands);
         }
     } elseif ($primary_type !== null) {
         [$ft, $fv] = _gp_fetch_series($db, $gauge_id, $primary_type, $since, $until);
-        _gp_render_single_plot($ft, $fv, $title_name, $primary_label, $primary_type === 'flow');
+        $flow_bands = _gp_bands_for_axis($class_range, $primary_type);
+        _gp_render_single_plot($ft, $fv, $title_name, $primary_label, $primary_type === 'flow', $flow_bands);
     } elseif ($has_gauge) {
         [$gt, $gv] = _gp_fetch_series($db, $gauge_id, 'gauge', $since, $until);
-        _gp_render_single_plot($gt, $gv, $title_name, 'Gage Height (Ft)', false);
+        $gauge_bands = _gp_bands_for_axis($class_range, 'gauge');
+        _gp_render_single_plot($gt, $gv, $title_name, 'Gage Height (Ft)', false, $gauge_bands);
     }
 
     if ($has_temp) {
