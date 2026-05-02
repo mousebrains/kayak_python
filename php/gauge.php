@@ -184,7 +184,7 @@ if ($gauge['elevation'] !== null) {
     $fields['Elevation'] = number_format((float)$gauge['elevation'], 0) . ' ft';
 }
 if ($gauge['drainage_area'] !== null) {
-    $fields['Drainage Area'] = number_format((float)$gauge['drainage_area'], 1) . ' sq mi';
+    $fields['Drainage Area'] = number_format((float)$gauge['drainage_area'], 0) . ' sq mi';
 }
 if ($gauge['bank_full'] !== null) {
     $fields['Bank Full'] = number_format((float)$gauge['bank_full'], 2);
@@ -261,7 +261,8 @@ if ($readings) {
         $time_iso = $r['observed_at'] ? date('Y-m-d\TH:i:s\Z', strtotime($r['observed_at'])) : '';
         $time_display = $r['observed_at'] ? date('m/d H:i', strtotime($r['observed_at'])) : 'N/A';
         $time_html = $time_iso ? "<time datetime=\"$time_iso\">$time_display</time>" : 'N/A';
-        $delta = $r['delta_per_hour'] !== null ? number_format((float)$r['delta_per_hour'], 2) : '';
+        $delta_dec = ($r['data_type'] === 'flow' || $r['data_type'] === 'inflow') ? 0 : 2;
+        $delta = $r['delta_per_hour'] !== null ? number_format((float)$r['delta_per_hour'], $delta_dec) : '';
         $status = '';
         if ($r['delta_per_hour'] !== null) {
             $dph = (float)$r['delta_per_hour'];
