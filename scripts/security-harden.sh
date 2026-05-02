@@ -23,7 +23,9 @@ fi
 # edit.php used to read EDIT_PASSWORD for HTTP Basic Auth; it now gates
 # maintainer access on the ed_sess editor-session cookie. No password
 # snippet is authored here. If /etc/nginx/snippets/edit-password.conf
-# exists from an older install, `deploy/migrate-secrets.sh` removes it.
+# exists from an older install, remove it manually:
+#   sudo rm /etc/nginx/snippets/edit-password.conf
+#   sudo nginx -t && sudo systemctl reload nginx
 
 # --- 2. Add PHP rate limit zone (if not already present) ---
 if ! grep -q 'zone=php' /etc/nginx/conf.d/ratelimit.conf 2>/dev/null; then

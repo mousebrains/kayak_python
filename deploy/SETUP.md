@@ -290,7 +290,7 @@ The nginx config assumes:
 - Document root: `/home/pat/public_html` (symlink → `/home/pat/kayak/public_html`)
 - Database: `/home/pat/DB/kayak.db` (passed to PHP via `fastcgi_param SQLITE_PATH`)
 - Cert path: `/etc/letsencrypt/live/levels.mousebrains.com/`
-- Snippets: `/etc/nginx/snippets/security-headers.conf`, `security-headers-hcaptcha.conf`
+- Snippets: `/etc/nginx/snippets/security-headers.conf`, `security-headers-turnstile.conf`
 - Rate-limit zones: `/etc/nginx/conf.d/ratelimit.conf` (see `deploy/nginx-ratelimit.conf`)
 
 Edit `deploy/levels` to match actual paths if they differ.
@@ -305,31 +305,29 @@ env[SQLITE_PATH] = /home/tpw/kayak/kayak.db
 
 Alternatively, the nginx config passes `SQLITE_PATH` via `fastcgi_param`, so this step is optional.
 
-### Secrets (HCAPTCHA_SECRET)
+### Secrets (TURNSTILE_SECRET)
 
-Keep the hCaptcha site-verify secret out of nginx config files (those are
-world-readable). Store it in a restricted env file and expose it only to
-PHP-FPM workers.
+Keep the Cloudflare Turnstile site-verify secret out of nginx config files
+(those are world-readable). Store it in a restricted env file and expose
+it only to PHP-FPM workers.
 
-All of the work below is packaged in `deploy/migrate-secrets.sh`:
+All of the work below is packaged in `deploy/install-secrets.sh`:
 
 ```bash
 # First run — installs /etc/kayak/secrets.env from the template and exits so
-# you can edit it. The value is empty at this point; migrate-secrets.sh will
-# refuse to proceed until HCAPTCHA_SECRET is set.
-sudo deploy/migrate-secrets.sh
+# you can edit it. The value is empty at this point; install-secrets.sh will
+# refuse to proceed until TURNSTILE_SECRET is set.
+sudo deploy/install-secrets.sh
 
-# Fill in the real hCaptcha site secret.
+# Fill in the real Turnstile secret (dash.cloudflare.com → Turnstile → site → Settings).
 sudo -e /etc/kayak/secrets.env
 
-# Second run — installs the PHP-FPM pool overlay + systemd drop-in, strips
-# HCAPTCHA_SECRET lines from nginx, removes the now-obsolete
-# edit-password.conf snippet (legacy /edit.php Basic-Auth plumbing),
+# Second run — installs the PHP-FPM pool overlay + systemd drop-in,
 # validates nginx, restarts php-fpm, reloads nginx.
-sudo deploy/migrate-secrets.sh
+sudo deploy/install-secrets.sh
 ```
 
-PHP's `_hcaptcha_env()` helper prefers `getenv()` over `$_SERVER[]`, so once
+PHP's `_turnstile_env()` helper prefers `getenv()` over `$_SERVER[]`, so once
 PHP-FPM has the value in its environment the application code keeps working
 without change.
 
@@ -339,8 +337,13 @@ maintainer access on the `ed_sess` editor-session cookie (same pattern as
 `edit-password.conf` snippet are no longer used.
 
 If you're migrating an existing deployment that previously had
-`HCAPTCHA_SECRET` in nginx (`t2-12.log`-style exposure), **rotate the value**
+`HCAPTCHA_SECRET` (or any captcha secret) in nginx, **rotate the value**
 before installing `/etc/kayak/secrets.env` — treat the old one as disclosed.
+
+Captcha provider history: this site originally used hCaptcha (the secret
+key was `HCAPTCHA_SECRET`). It switched to Cloudflare Turnstile on
+2026-05-01 — Turnstile is invisible by default (no puzzle), single CSP
+origin, and free with no usage caps.
 
 ## 8. Systemd timers (pipeline + decimate)
 

@@ -84,8 +84,8 @@ echo "=== CSP security-headers snippets (with report-uri) ==="
 mkdir -p /etc/nginx/snippets
 backup_replace /etc/nginx/snippets/security-headers.conf \
                "$REPO/conf/security-headers.conf"
-backup_replace /etc/nginx/snippets/security-headers-hcaptcha.conf \
-               "$REPO/conf/security-headers-hcaptcha.conf"
+backup_replace /etc/nginx/snippets/security-headers-turnstile.conf \
+               "$REPO/conf/security-headers-turnstile.conf"
 
 echo
 echo "=== logrotate for the CSP log ==="

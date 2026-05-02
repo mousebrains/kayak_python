@@ -70,7 +70,7 @@ rollback() {
 echo "=== nginx security-headers snippets ==="
 mkdir -p /etc/nginx/snippets
 backup_replace /etc/nginx/snippets/security-headers.conf "$REPO/conf/security-headers.conf"
-backup_replace /etc/nginx/snippets/security-headers-hcaptcha.conf "$REPO/conf/security-headers-hcaptcha.conf"
+backup_replace /etc/nginx/snippets/security-headers-turnstile.conf "$REPO/conf/security-headers-turnstile.conf"
 
 echo
 echo "=== nginx rate-limit zones ==="
@@ -79,8 +79,8 @@ backup_replace /etc/nginx/conf.d/ratelimit.conf "$REPO/deploy/nginx-ratelimit.co
 echo
 echo "=== nginx editor-feature env map ==="
 # Do NOT overwrite an existing editor-env.conf: the operator edits it to
-# flip the feature flag and set hCaptcha keys, and those customizations
-# must survive a re-run of this script.
+# flip the feature flag and set the Turnstile site key, and those
+# customizations must survive a re-run of this script.
 if [[ -e /etc/nginx/conf.d/editor-env.conf ]]; then
     echo "  /etc/nginx/conf.d/editor-env.conf already present — leaving it alone."
     echo "  (to reset to the repo defaults, remove the file and re-run)"
@@ -160,9 +160,11 @@ cat <<'EOF'
      /etc/nginx/conf.d/editor-env.conf and set:
 
        map $host $editor_feature     { default "1"; }
-       map $host $hcaptcha_site_key  { default "<your hcaptcha site key>"; }
-       map $host $hcaptcha_secret    { default "<your hcaptcha secret>"; }
+       map $host $turnstile_site_key { default "<your turnstile site key>"; }
        map $host $mail_from          { default "noreply@levels.wkcc.org"; }
+
+     The Turnstile *secret* lives in /etc/kayak/secrets.env (mode 0600
+     root:www-data) — never in nginx config. See deploy/install-secrets.sh.
 
      then:  sudo nginx -t && sudo systemctl reload nginx
 

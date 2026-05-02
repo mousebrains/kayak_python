@@ -24,7 +24,7 @@ a { color: #2060A0; }
 <body>
 <main>
 <h1><?= $title ?></h1>
-<p class="updated">Last updated: April 19, 2026</p>
+<p class="updated">Last updated: May 1, 2026</p>
 
 <p>This website (<strong>levels.wkcc.org</strong>) is operated by the
 <a href="https://wkcc.org">Willamette Kayak and Canoe Club</a> (WKCC) to provide
@@ -57,10 +57,10 @@ real-time river level, flow, and gauge data for paddlers in the Pacific Northwes
 <p>Login links are emailed via our server's outgoing mail, which relays through
 Google's mail infrastructure. See
 <a href="https://policies.google.com/privacy">Google's privacy policy</a>
-for details on that step. Sign-in and contact forms may present an
-<a href="https://www.hcaptcha.com/privacy">hCaptcha</a> challenge to deter
-automated abuse; hCaptcha sees your IP address and browser details when
-the challenge is solved.</p>
+for details on that step. Sign-in and contact forms use
+<a href="https://www.cloudflare.com/privacypolicy/">Cloudflare Turnstile</a>
+to deter automated abuse. Turnstile is typically invisible (no puzzle
+challenge); when active it sees your IP address and browser details.</p>
 
 <h2>How We Use Server Logs</h2>
 <p>Access logs are used solely for:</p>

@@ -11,7 +11,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/mail.php';
-require_once __DIR__ . '/includes/hcaptcha.php';
+require_once __DIR__ . '/includes/turnstile.php';
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
 
@@ -38,8 +38,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = normalize_email((string)($_POST['email'] ?? ''));
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $error = 'Please enter a valid email address.';
-    } elseif (!hcaptcha_verify((string)($_POST['h-captcha-response'] ?? ''),
-                               (string)($_SERVER['REMOTE_ADDR'] ?? ''))) {
+    } elseif (!turnstile_verify((string)($_POST['cf-turnstile-response'] ?? ''),
+                                (string)($_SERVER['REMOTE_ADDR'] ?? ''))) {
         $error = 'Captcha verification failed. Please try again.';
     } else {
         try {
@@ -71,7 +71,7 @@ $csrf = htmlspecialchars(csrf_token());
 $next_attr = htmlspecialchars($next);
 
 header('Cache-Control: no-store');
-include_header('Sign in', '', 'Sign in to WKCC River Levels.', hcaptcha_script_tag());
+include_header('Sign in', '', 'Sign in to WKCC River Levels.', turnstile_script_tag());
 ?>
 <h2>Sign in</h2>
 
@@ -90,7 +90,7 @@ include_header('Sign in', '', 'Sign in to WKCC River Levels.', hcaptcha_script_t
   <label for="email">Email address</label>
   <input type="email" id="email" name="email" required autocomplete="email"
          value="<?= htmlspecialchars((string)($_POST['email'] ?? '')) ?>">
-  <?= hcaptcha_widget() ?>
+  <?= turnstile_widget() ?>
   <button type="submit" style="margin-top:.75rem">Email me a login link</button>
 </form>
 

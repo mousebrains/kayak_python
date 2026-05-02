@@ -3,16 +3,16 @@ declare(strict_types=1);
 /**
  * Anonymous contact form — emails the maintainer.
  *
- * GET  /contact.php      Show form (hCaptcha + subject + body + reply-to).
+ * GET  /contact.php      Show form (Turnstile + subject + body + reply-to).
  * POST /contact.php      Validate + send email.
  *
- * No account required. hCaptcha is the only bot deterrent; if it isn't
- * configured the page still works (captcha bypassed, see hcaptcha.php).
+ * No account required. Turnstile is the only bot deterrent; if it isn't
+ * configured the page still works (captcha bypassed, see turnstile.php).
  */
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/mail.php';
-require_once __DIR__ . '/includes/hcaptcha.php';
+require_once __DIR__ . '/includes/turnstile.php';
 require_once __DIR__ . '/includes/sanity.php';
 require_once __DIR__ . '/includes/source_url.php';
 require_once __DIR__ . '/includes/header.php';
@@ -49,8 +49,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
         foreach (sanity_errors($issues) as $i) $errors[] = $i['message'];
 
-        if (!hcaptcha_verify(
-            (string)($_POST['h-captcha-response'] ?? ''),
+        if (!turnstile_verify(
+            (string)($_POST['cf-turnstile-response'] ?? ''),
             (string)($_SERVER['REMOTE_ADDR'] ?? '')
         )) {
             $errors[] = 'Captcha verification failed. Please try again.';
@@ -103,7 +103,7 @@ $source_url = $_SERVER['REQUEST_METHOD'] === 'POST'
     ? sanitize_source_url((string)($_POST['source_url'] ?? ''))
     : source_url_from_referrer('/contact.php');
 header('Cache-Control: no-store');
-include_header('Contact the maintainer', '', 'Send a message to the site maintainer.', hcaptcha_script_tag());
+include_header('Contact the maintainer', '', 'Send a message to the site maintainer.', turnstile_script_tag());
 ?>
 <h2>Contact the maintainer</h2>
 <p style="font-size:.85rem;color:var(--c-text-muted)">
@@ -140,7 +140,7 @@ include_header('Contact the maintainer', '', 'Send a message to the site maintai
     <label for="body">Message</label>
     <textarea id="body" name="body" style="height:10em" required><?= htmlspecialchars((string)($_POST['body'] ?? '')) ?></textarea>
 
-    <?= hcaptcha_widget() ?>
+    <?= turnstile_widget() ?>
 
     <button type="submit" style="margin-top:.75rem">Send message</button>
   </form>

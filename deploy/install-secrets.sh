@@ -1,17 +1,25 @@
 #!/usr/bin/env bash
-# migrate-secrets.sh — move HCAPTCHA_SECRET off nginx fastcgi_param into
-# /etc/kayak/secrets.env (mode 0600 root:www-data), exposed to PHP via a
-# PHP-FPM pool env[] overlay + systemd drop-in. Also cleans up the now-
-# obsolete /etc/nginx/snippets/edit-password.conf and the site-file
-# include that referenced it — edit.php moved to editor-cookie auth, so
-# EDIT_PASSWORD is no longer read anywhere.
+# install-secrets.sh — install the PHP-FPM secrets infrastructure for the
+# kayak app: /etc/kayak/secrets.env (mode 0600 root:www-data), the kayak
+# pool overlay, and the systemd drop-in that wires the env file into the
+# php-fpm master.
 #
 # Idempotent: safe to re-run. Won't overwrite an existing secrets.env.
 #
+# Run on a fresh host (or after re-imaging) to bring the secrets-handling
+# infrastructure up. After the first run it installs the secrets.env
+# template and exits — edit /etc/kayak/secrets.env, then re-run.
+#
 # Usage:
-#   sudo deploy/migrate-secrets.sh
+#   sudo deploy/install-secrets.sh
 #
 # Run from the repo root. Must be root (invoke via sudo).
+#
+# History: this was originally migrate-secrets.sh, a one-shot migration
+# that moved HCAPTCHA_SECRET off nginx fastcgi_param. The migration is
+# done; the install part remains useful for fresh deploys. The captcha
+# provider switched from hCaptcha to Cloudflare Turnstile on 2026-05-01;
+# the only key in secrets.env today is TURNSTILE_SECRET.
 
 set -euo pipefail
 
@@ -29,9 +37,6 @@ FPM_UNIT="php${PHP_VER}-fpm.service"
 FPM_POOL_DIR="/etc/php/${PHP_VER}/fpm/pool.d"
 FPM_DROPIN_DIR="/etc/systemd/system/${FPM_UNIT}.d"
 
-NGINX_SITE="/etc/nginx/sites-available/levels"
-NGINX_ENV="/etc/nginx/conf.d/editor-env.conf"
-NGINX_EDIT_PWD_SNIPPET="/etc/nginx/snippets/edit-password.conf"
 SECRETS_FILE="/etc/kayak/secrets.env"
 
 say() { printf '• %s\n' "$*"; }
@@ -54,8 +59,8 @@ else
 fi
 
 # Sanity: required value present (non-empty) in the secrets file.
-if [[ -z "$(grep -E '^HCAPTCHA_SECRET=' "$SECRETS_FILE" | head -1 | cut -d= -f2-)" ]]; then
-    echo "error: $SECRETS_FILE is missing a value for HCAPTCHA_SECRET" >&2
+if [[ -z "$(grep -E '^TURNSTILE_SECRET=' "$SECRETS_FILE" | head -1 | cut -d= -f2-)" ]]; then
+    echo "error: $SECRETS_FILE is missing a value for TURNSTILE_SECRET" >&2
     echo "edit it with: sudo -e $SECRETS_FILE" >&2
     exit 3
 fi
@@ -75,32 +80,7 @@ say "reloading systemd"
 systemctl daemon-reload
 
 # ---------------------------------------------------------------------------
-# 3. Strip secret lines from nginx site config.
-# ---------------------------------------------------------------------------
-
-if [[ -f "$NGINX_SITE" ]]; then
-    say "removing HCAPTCHA_SECRET fastcgi_param lines from $NGINX_SITE"
-    sed -i '/fastcgi_param HCAPTCHA_SECRET/d' "$NGINX_SITE"
-
-    say "removing edit-password.conf include from $NGINX_SITE"
-    sed -i '/include .*edit-password\.conf/d' "$NGINX_SITE"
-else
-    say "nginx site file not found at $NGINX_SITE — skipping (adjust path if deployed elsewhere)"
-fi
-
-if [[ -f "$NGINX_ENV" ]]; then
-    say "commenting map \$hcaptcha_secret in $NGINX_ENV"
-    # Only comment if it's not already commented (idempotence).
-    sed -i -E 's|^([[:space:]]*map[[:space:]]+\$host[[:space:]]+\$hcaptcha_secret)|# \1|' "$NGINX_ENV"
-fi
-
-if [[ -f "$NGINX_EDIT_PWD_SNIPPET" ]]; then
-    say "removing obsolete $NGINX_EDIT_PWD_SNIPPET (values now in $SECRETS_FILE)"
-    rm -f "$NGINX_EDIT_PWD_SNIPPET"
-fi
-
-# ---------------------------------------------------------------------------
-# 4. Validate nginx + reload services.
+# 3. Validate nginx + reload services.
 # ---------------------------------------------------------------------------
 
 say "validating nginx config"
@@ -113,16 +93,16 @@ say "reloading nginx"
 systemctl reload nginx
 
 # ---------------------------------------------------------------------------
-# 5. Post-flight check.
+# 4. Post-flight check.
 # ---------------------------------------------------------------------------
 
-say "post-flight: scanning nginx -T for any remaining plaintext HCAPTCHA_SECRET"
-if nginx -T 2>/dev/null | grep -Ei 'HCAPTCHA_SECRET[[:space:]]+[^$]' | grep -v '^#'; then
+say "post-flight: scanning nginx -T for any remaining plaintext captcha secret"
+if nginx -T 2>/dev/null | grep -Ei '(HCAPTCHA|TURNSTILE)_SECRET[[:space:]]+[^$]' | grep -v '^#'; then
     echo "warning: nginx still references the secret directly — inspect above" >&2
     exit 4
 fi
 
 echo ""
-echo "✓ migration complete."
+echo "✓ install complete."
 echo "  secrets live only in $SECRETS_FILE (mode 0600 root:www-data)"
 echo "  $FPM_UNIT and nginx reloaded"

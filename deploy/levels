@@ -5,6 +5,9 @@
 # cleanly. Delta vs. deploy/levels today: no fastcgi_param HCAPTCHA_SECRET
 # (moved to PHP-FPM pool env) and no edit-password.conf include (edit.php
 # now uses ed_sess cookie auth after Phase 6 of the 2026-04-22 plan).
+# 2026-05-01: hCaptcha replaced with Cloudflare Turnstile — fastcgi_param
+# TURNSTILE_SITE_KEY + security-headers-turnstile.conf snippet; secret in
+# /etc/kayak/secrets.env (TURNSTILE_SECRET) via the PHP-FPM pool overlay.
 
 # Redirect HTTP → HTTPS
 server {
@@ -159,7 +162,7 @@ server {
         # Pass environment to PHP
         fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
         fastcgi_param EDITOR_FEATURE $editor_feature;
-        fastcgi_param HCAPTCHA_SITE_KEY $hcaptcha_site_key;
+        fastcgi_param TURNSTILE_SITE_KEY $turnstile_site_key;
         fastcgi_param MAIL_FROM $mail_from;
         fastcgi_param SITE_URL $site_url;
 
@@ -186,7 +189,7 @@ server {
     }
 
     # Auth endpoints — stricter rate limit (zone=auth, 3/min), no cache.
-    # /login.php uses the hCaptcha-enabled CSP variant so the widget can load.
+    # /login.php uses the Turnstile-enabled CSP variant so the widget can load.
     location = /login.php { limit_req zone=auth burst=2 nodelay;
         try_files $uri =404;
         fastcgi_pass unix:/run/php/php-fpm.sock;
@@ -194,11 +197,11 @@ server {
         include fastcgi_params;
         fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
         fastcgi_param EDITOR_FEATURE $editor_feature;
-        fastcgi_param HCAPTCHA_SITE_KEY $hcaptcha_site_key;
+        fastcgi_param TURNSTILE_SITE_KEY $turnstile_site_key;
         fastcgi_param MAIL_FROM $mail_from;
         fastcgi_param SITE_URL $site_url;
         add_header Cache-Control "no-store";
-        include /etc/nginx/snippets/security-headers-hcaptcha.conf;
+        include /etc/nginx/snippets/security-headers-turnstile.conf;
     }
     location = /auth.php { limit_req zone=auth burst=2 nodelay;
         try_files $uri =404;
@@ -256,7 +259,7 @@ server {
         add_header Cache-Control "no-store";
         include /etc/nginx/snippets/security-headers.conf;
     }
-    # Anonymous contact form — hCaptcha-gated, auth rate limit, hcaptcha CSP
+    # Anonymous contact form — Turnstile-gated, auth rate limit, Turnstile CSP
     location = /contact.php { limit_req zone=auth burst=2 nodelay;
         try_files $uri =404;
         fastcgi_pass unix:/run/php/php-fpm.sock;
@@ -264,11 +267,11 @@ server {
         include fastcgi_params;
         fastcgi_param SQLITE_PATH /home/pat/DB/kayak.db;
         fastcgi_param EDITOR_FEATURE $editor_feature;
-        fastcgi_param HCAPTCHA_SITE_KEY $hcaptcha_site_key;
+        fastcgi_param TURNSTILE_SITE_KEY $turnstile_site_key;
         fastcgi_param MAIL_FROM $mail_from;
         fastcgi_param SITE_URL $site_url;
         add_header Cache-Control "no-store";
-        include /etc/nginx/snippets/security-headers-hcaptcha.conf;
+        include /etc/nginx/snippets/security-headers-turnstile.conf;
     }
     location = /review.php { limit_req zone=php burst=5 nodelay;
         try_files $uri =404;
