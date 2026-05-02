@@ -110,8 +110,11 @@ $sources_stmt->execute([$id]);
 $sources = $sources_stmt->fetchAll();
 
 // --- Associated reaches ---
+// Pull class names from reach_class (the canonical source) rather than the
+// rarely-populated reach.difficulties column.
 $reaches_stmt = $db->prepare(
-    'SELECT r.id, COALESCE(NULLIF(r.display_name, \'\'), r.name) AS name, r.river, r.difficulties, r.length, r.basin
+    'SELECT r.id, COALESCE(NULLIF(r.display_name, \'\'), r.name) AS name, r.river, r.length, r.basin,
+            (SELECT GROUP_CONCAT(rc.name, \', \') FROM reach_class rc WHERE rc.reach_id = r.id) AS classes
      FROM reach r WHERE r.gauge_id = ? ORDER BY r.sort_name'
 );
 $reaches_stmt->execute([$id]);
@@ -293,7 +296,7 @@ if ($gauge['latitude'] !== null && $gauge['longitude'] !== null) {
 // Associated sources
 if ($sources) {
     echo '<h3 style="margin-top:1rem">Associated Sources</h3>';
-    echo '<table class="desc-table">';
+    echo '<table class="readings-table">';
     echo '<tr><th>ID</th><th>Name</th><th>Agency</th><th>Observations</th><th>Latest</th></tr>';
     foreach ($sources as $s) {
         $sname = htmlspecialchars($s['name']);
@@ -310,15 +313,15 @@ if ($sources) {
 // Associated reaches
 if ($reaches) {
     echo '<h3 style="margin-top:1rem">Associated Reaches</h3>';
-    echo '<table class="desc-table">';
+    echo '<table class="readings-table">';
     echo '<tr><th>Name</th><th>River</th><th>Class</th><th>Length</th><th>Watershed</th></tr>';
     foreach ($reaches as $r) {
         $rname = htmlspecialchars($r['name']);
         $river = htmlspecialchars($r['river'] ?? '');
-        $diff = htmlspecialchars($r['difficulties'] ?? '');
+        $classes = htmlspecialchars($r['classes'] ?? '');
         $len = $r['length'] !== null ? number_format((float)$r['length'], 1) . ' mi' : '';
         $basin = htmlspecialchars($r['basin'] ?? '');
-        echo "<tr><td><a href=\"/description.php?id={$r['id']}\">$rname</a></td><td>$river</td><td>$diff</td><td>$len</td><td>$basin</td></tr>\n";
+        echo "<tr><td><a href=\"/description.php?id={$r['id']}\">$rname</a></td><td>$river</td><td>$classes</td><td>$len</td><td>$basin</td></tr>\n";
     }
     echo '</table>';
 } else {
