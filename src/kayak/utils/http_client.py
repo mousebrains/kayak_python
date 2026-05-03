@@ -17,6 +17,31 @@ from kayak.config import FETCH_TIMEOUT, FETCH_USER_AGENT
 logger = logging.getLogger(__name__)
 
 
+# Module-level pooled Session. A typical ``levels fetch`` run hits ~50 URLs
+# across a handful of hosts; without pooling each call burns a fresh TLS
+# handshake. requests.Session keeps a per-host connection pool
+# (HTTPAdapter default pool_connections=10, pool_maxsize=10) so the second
+# call to a host reuses the existing connection.
+_session: requests.Session | None = None
+
+
+def _get_session() -> requests.Session:
+    """Return the module-level pooled Session, creating it on first call."""
+    global _session
+    if _session is None:
+        _session = requests.Session()
+        _session.headers["User-Agent"] = FETCH_USER_AGENT
+    return _session
+
+
+def reset_session() -> None:
+    """Close the pooled session and drop the reference (test isolation)."""
+    global _session
+    if _session is not None:
+        _session.close()
+        _session = None
+
+
 # Hosts whose TLS chain or cipher suite can't be validated with a stock Debian
 # CA bundle. Every entry here is a MITM risk — only add hosts we've confirmed
 # need relaxed TLS *and* where the payload is non-sensitive public data (river
@@ -167,10 +192,11 @@ def fetch(url: str, timeout: int | None = None) -> FetchResult:
 
     verify = not _is_insecure_host(url)
 
+    session = _get_session()
     last_result: FetchResult | None = None
     for attempt in range(_MAX_RETRIES):
         try:
-            response = requests.get(
+            response = session.get(
                 url,
                 timeout=timeout,
                 headers={"User-Agent": FETCH_USER_AGENT},
