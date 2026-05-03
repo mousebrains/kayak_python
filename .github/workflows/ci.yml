@@ -102,6 +102,12 @@ jobs:
   secret-scan:
     name: gitleaks
     runs-on: ubuntu-latest
+    # gitleaks-action@v2 calls GET /pulls/N/commits to enumerate the PR
+    # range, which needs pull-requests: read. The workflow's default token
+    # gets only contents: read on pull_request events, so the call 403'd.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v5
         with:
