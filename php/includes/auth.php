@@ -336,12 +336,16 @@ function consume_magic_link(string $tok): ?array {
 }
 
 /**
- * Validate a post-login redirect target. Only allow same-origin paths
- * (starting with / and not //).
+ * Validate a post-login redirect target. Only allow same-origin paths.
+ *
+ * Rejects:
+ *   - protocol-relative `//host` (browsers send the user off-site)
+ *   - `/\host` — per the WHATWG URL spec, browsers normalize `\` to `/`
+ *     in special-scheme URLs, so a leading `/\` becomes `//`.
  */
 function safe_next_url(?string $next): string {
     if ($next === null || $next === '') return '/';
-    if (!preg_match('#^/[^/]#', $next)) return '/';
+    if (!preg_match('#^/[^/\\\\]#', $next)) return '/';
     return $next;
 }
 

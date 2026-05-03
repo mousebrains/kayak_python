@@ -40,6 +40,15 @@ final class SanityTest extends TestCase
         $this->assertSame('/', safe_next_url('//evil.example/pwn'));
     }
 
+    public function testBackslashSecondCharRejected(): void
+    {
+        // Per the WHATWG URL spec, browsers normalize `\` to `/` in
+        // special-scheme URLs, so `/\evil.example/` is rendered as
+        // `//evil.example/` and redirects cross-origin.
+        $this->assertSame('/', safe_next_url('/\\evil.example/'));
+        $this->assertSame('/', safe_next_url('/\\\\evil.example/'));
+    }
+
     public function testAbsoluteHttpsRejected(): void
     {
         $this->assertSame('/', safe_next_url('https://evil.example/'));
