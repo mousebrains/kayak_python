@@ -9,7 +9,7 @@ Generate GPS traces for river reaches using NHDPlus High Resolution network data
 bash scripts/extract_trace_data.sh
 
 # Trace a reach
-python3 scripts/trace_reach.py \
+levels trace \
     --putin 42.694599,-116.400002 \
     --takeout 42.237221,-116.523888 \
     --name "Battle Creek"

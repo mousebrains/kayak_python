@@ -6,8 +6,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEST=/etc/systemd/system
-UNITS=(kayak-pipeline.service kayak-pipeline.timer kayak-decimate.service kayak-decimate.timer kayak-backup.service kayak-backup.timer kayak-notify-failure@.service kayak-heartbeat.service kayak-heartbeat.timer kayak-healthcheck.service kayak-healthcheck.timer)
-TIMERS=(kayak-pipeline.timer kayak-decimate.timer kayak-backup.timer kayak-heartbeat.timer kayak-healthcheck.timer)
+UNITS=(kayak-pipeline.service kayak-pipeline.timer kayak-decimate.service kayak-decimate.timer kayak-backup.service kayak-backup.timer kayak-notify-failure@.service kayak-heartbeat.service kayak-heartbeat.timer kayak-healthcheck.service kayak-healthcheck.timer kayak-audit-gauges.service kayak-audit-gauges.timer)
+TIMERS=(kayak-pipeline.timer kayak-decimate.timer kayak-backup.timer kayak-heartbeat.timer kayak-healthcheck.timer kayak-audit-gauges.timer)
 
 if [[ $EUID -ne 0 ]]; then
     echo "Error: must run as root (use sudo)" >&2
