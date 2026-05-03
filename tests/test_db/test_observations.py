@@ -1,24 +1,20 @@
-"""Tests for data_db observation storage."""
+"""Tests for observation storage and per-source/gauge cache helpers."""
 
 from datetime import UTC, datetime, timedelta
 
-from kayak.db.data_db import (
-    get_all_latest,
+from kayak.db.cache import get_all_latest, get_latest, update_latest, update_latest_gauge
+from kayak.db.gauges import get_gauge_by_name
+from kayak.db.models import DataType, FetchUrl, Gauge, GaugeSource, Rating, Source
+from kayak.db.observations import (
     get_bulk_observations,
-    get_gauge_by_name,
-    get_latest,
-    get_negative_flow_source_ids,
     get_observations,
     get_rating_table,
-    get_source_by_name,
     merge_sources,
     put_rating_table,
     store_observation,
     store_observations,
-    update_latest,
-    update_latest_gauge,
 )
-from kayak.db.models import DataType, FetchUrl, Gauge, GaugeSource, Rating, Source
+from kayak.db.sources import get_negative_flow_source_ids, get_source_by_name
 
 
 def _make_source(session, name="src1"):

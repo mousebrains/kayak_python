@@ -4,8 +4,8 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import text
 
-from kayak.db.data_db import store_observations
 from kayak.db.models import DataType, FetchUrl, Source
+from kayak.db.observations import store_observations
 
 
 def _make_source(session, name="src1"):

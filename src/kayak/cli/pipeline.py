@@ -38,7 +38,7 @@ def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -
 
 def _update_gauge_cache(args: argparse.Namespace) -> None:
     """Recompute gauge-level latest observation cache."""
-    from kayak.db.data_db import update_all_latest_gauges
+    from kayak.db.cache import update_all_latest_gauges
     from kayak.db.engine import get_session
 
     session = get_session()

@@ -16,7 +16,7 @@ import logging
 
 from sqlalchemy import text
 
-from kayak.db.data_db import update_all_latest_gauges, update_latest
+from kayak.db.cache import update_all_latest_gauges, update_latest
 from kayak.db.engine import get_engine, get_session
 from kayak.db.models import DataType
 

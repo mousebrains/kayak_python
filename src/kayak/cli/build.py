@@ -28,15 +28,11 @@ from sqlalchemy.orm import Session
 
 from kayak.config import BASE_DIR
 from kayak.config_data import load_builder_columns
-from kayak.db.data_db import get_all_latest_gauges, get_bulk_gauge_observations
+from kayak.db.cache import get_all_latest_gauges
 from kayak.db.engine import get_session
-from kayak.db.info_db import (
-    all_state_names,
-    classify_level,
-    get_calculated_gauge_ids,
-    reaches_query,
-)
+from kayak.db.gauges import get_bulk_gauge_observations, get_calculated_gauge_ids
 from kayak.db.models import DataType, Gauge, HucName, LatestGaugeObservation, Observation, Reach
+from kayak.db.reaches import all_state_names, classify_level, reaches_query
 from kayak.utils.class_tiers import parse_class_tiers
 from kayak.utils.lttb import downsample, running_median
 from kayak.utils.simplify import parse_geom, simplify

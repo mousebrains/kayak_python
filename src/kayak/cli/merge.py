@@ -9,10 +9,11 @@ import logging
 
 from sqlalchemy import select
 
-from kayak.db.data_db import merge_sources, update_all_latest_gauges, update_latest
+from kayak.db.cache import update_all_latest_gauges, update_latest
 from kayak.db.engine import get_session
-from kayak.db.info_db import get_source_ids_for_gauge
+from kayak.db.gauges import get_source_ids_for_gauge
 from kayak.db.models import DataType, Gauge
+from kayak.db.observations import merge_sources
 
 logger = logging.getLogger(__name__)
 
