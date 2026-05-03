@@ -8,23 +8,23 @@ Falls back to raw HUC4 GDB ZIPs in Trace-cache/NHD/hr/ (slow, full scan).
 Pre-extract with: bash scripts/extract_trace_data.sh
 
 Usage:
-    python scripts/trace_reach.py --putin LAT,LON --takeout LAT,LON [options]
+    levels trace --putin LAT,LON --takeout LAT,LON [options]
 
 Examples:
     # Battle Creek, Idaho (60.5 mi per AW)
-    python scripts/trace_reach.py \\
+    levels trace \\
         --putin 42.694599,-116.400002 \\
         --takeout 42.237221,-116.523888 \\
         --name "Battle Creek"
 
     # Output CSV only (no map)
-    python scripts/trace_reach.py \\
+    levels trace \\
         --putin 42.694599,-116.400002 \\
         --takeout 42.237221,-116.523888 \\
         --csv-only
 
     # Specify HUC4 directly (skips auto-detection)
-    python scripts/trace_reach.py \\
+    levels trace \\
         --putin 42.694599,-116.400002 \\
         --takeout 42.237221,-116.523888 \\
         --huc4 1705
