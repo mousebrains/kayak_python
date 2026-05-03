@@ -129,74 +129,78 @@ class TestFetchResultWriteFile:
 
 
 class TestFetch:
-    @patch("kayak.utils.http_client.requests.get")
-    def test_fetch_success(self, mock_get):
+    @pytest.fixture(autouse=True)
+    def mock_session(self):
+        """Patch the module-level Session factory with a MagicMock.
+
+        Tests assert against ``mock_session.get`` instead of patching
+        ``requests.get`` directly. This matches the production pattern
+        where every fetch goes through one pooled Session.
+        """
+        sess = MagicMock()
+        with patch("kayak.utils.http_client._get_session", return_value=sess):
+            yield sess
+
+    def test_fetch_success(self, mock_session):
         mock_resp = MagicMock(spec=requests.Response)
         mock_resp.status_code = 200
         mock_resp.text = "ok"
-        mock_get.return_value = mock_resp
+        mock_session.get.return_value = mock_resp
 
         result = fetch("http://example.com/data")
         assert result.ok is True
         assert result.url == "http://example.com/data"
 
-    @patch("kayak.utils.http_client.requests.get")
-    def test_fetch_verifies_tls_by_default(self, mock_get):
+    def test_fetch_verifies_tls_by_default(self, mock_session):
         mock_resp = MagicMock(spec=requests.Response)
         mock_resp.status_code = 200
-        mock_get.return_value = mock_resp
+        mock_session.get.return_value = mock_resp
         fetch("https://example.com/data")
-        _, kwargs = mock_get.call_args
+        _, kwargs = mock_session.get.call_args
         assert kwargs["verify"] is True
 
-    @patch("kayak.utils.http_client.requests.get")
-    def test_fetch_skips_verify_for_insecure_host(self, mock_get):
+    def test_fetch_skips_verify_for_insecure_host(self, mock_session):
         mock_resp = MagicMock(spec=requests.Response)
         mock_resp.status_code = 200
-        mock_get.return_value = mock_resp
+        mock_session.get.return_value = mock_resp
         fetch("https://www.nwd-wc.usace.army.mil/foo")
-        _, kwargs = mock_get.call_args
+        _, kwargs = mock_session.get.call_args
         assert kwargs["verify"] is False
 
-    @patch("kayak.utils.http_client.requests.get")
-    def test_fetch_passes_user_agent(self, mock_get):
+    def test_fetch_passes_user_agent(self, mock_session):
         mock_resp = MagicMock(spec=requests.Response)
         mock_resp.status_code = 200
-        mock_get.return_value = mock_resp
+        mock_session.get.return_value = mock_resp
         fetch("http://example.com/data")
-        _, kwargs = mock_get.call_args
+        _, kwargs = mock_session.get.call_args
         assert "User-Agent" in kwargs["headers"]
 
     @patch("kayak.utils.http_client.time.sleep")
-    @patch("kayak.utils.http_client.requests.get")
-    def test_fetch_exception_returns_error_result(self, mock_get, mock_sleep):
-        mock_get.side_effect = requests.ConnectionError("refused")
+    def test_fetch_exception_returns_error_result(self, mock_sleep, mock_session):
+        mock_session.get.side_effect = requests.ConnectionError("refused")
         result = fetch("http://example.com/data")
         assert result.ok is False
         assert result.error is not None
 
-    @patch("kayak.utils.http_client.requests.get")
-    def test_fetch_custom_timeout(self, mock_get):
+    def test_fetch_custom_timeout(self, mock_session):
         mock_resp = MagicMock(spec=requests.Response)
         mock_resp.status_code = 200
-        mock_get.return_value = mock_resp
+        mock_session.get.return_value = mock_resp
         fetch("http://example.com/data", timeout=10)
-        _, kwargs = mock_get.call_args
+        _, kwargs = mock_session.get.call_args
         assert kwargs["timeout"] == 10
 
-    @patch("kayak.utils.http_client.requests.get")
-    def test_fetch_disables_redirects(self, mock_get):
+    def test_fetch_disables_redirects(self, mock_session):
         """Sync fetch must not follow redirects, else a 3xx could bypass
         _validate_url (the redirect target wouldn't be re-validated)."""
         mock_resp = MagicMock(spec=requests.Response)
         mock_resp.status_code = 200
-        mock_get.return_value = mock_resp
+        mock_session.get.return_value = mock_resp
         fetch("http://example.com/data")
-        _, kwargs = mock_get.call_args
+        _, kwargs = mock_session.get.call_args
         assert kwargs["allow_redirects"] is False
 
-    @patch("kayak.utils.http_client.requests.get")
-    def test_fetch_rejects_ssrf_url(self, mock_get):
+    def test_fetch_rejects_ssrf_url(self, mock_session):
         """fetch() returns an error FetchResult (no HTTP call) when the URL
         resolves to an internal IP."""
         with patch(
@@ -207,7 +211,49 @@ class TestFetch:
         assert result.ok is False
         assert result.error is not None
         assert "blocked IP" in result.error
-        mock_get.assert_not_called()
+        mock_session.get.assert_not_called()
+
+
+class TestSessionPooling:
+    """Two fetches go through the same pooled Session (one TLS handshake)."""
+
+    def teardown_method(self) -> None:
+        from kayak.utils.http_client import reset_session
+
+        reset_session()
+
+    def test_get_session_is_singleton(self):
+        from kayak.utils.http_client import _get_session
+
+        s1 = _get_session()
+        s2 = _get_session()
+        assert s1 is s2
+
+    def test_reset_session_creates_a_new_one(self):
+        from kayak.utils.http_client import _get_session, reset_session
+
+        s1 = _get_session()
+        reset_session()
+        s2 = _get_session()
+        assert s1 is not s2
+
+    def test_user_agent_set_on_session(self):
+        from kayak.config import FETCH_USER_AGENT
+        from kayak.utils.http_client import _get_session
+
+        sess = _get_session()
+        assert sess.headers.get("User-Agent") == FETCH_USER_AGENT
+
+    def test_two_fetches_share_session(self):
+        """Both calls route through the same Session instance."""
+        sess_mock = MagicMock()
+        mock_resp = MagicMock(spec=requests.Response)
+        mock_resp.status_code = 200
+        sess_mock.get.return_value = mock_resp
+        with patch("kayak.utils.http_client._get_session", return_value=sess_mock):
+            fetch("http://example.com/a")
+            fetch("http://example.com/b")
+        assert sess_mock.get.call_count == 2
 
 
 # ---------------------------------------------------------------------------
