@@ -208,6 +208,10 @@ class GaugeSource(Base):
         ForeignKey("source.id", ondelete="CASCADE"), primary_key=True
     )
 
+    # The composite PK indexes (gauge_id, source_id) which serves
+    # "given a gauge, find its sources" but not the reverse direction.
+    __table_args__ = (Index("ix_gauge_source_source_id", "source_id"),)
+
 
 # ---------------------------------------------------------------------------
 # fetch_url
@@ -403,6 +407,8 @@ class LatestGaugeObservation(Base):
     # relationships
     gauge: Mapped[Gauge] = relationship()
 
+    __table_args__ = (Index("ix_latest_gauge_observation_source_id", "source_id"),)
+
 
 # ---------------------------------------------------------------------------
 # reach
@@ -550,6 +556,7 @@ class ReachClass(Base):
             "low IS NULL OR high IS NULL OR low <= high",
             name="ck_reach_class_low_le_high",
         ),
+        Index("ix_reach_class_reach_id", "reach_id"),
     )
 
 
@@ -610,6 +617,10 @@ class ReachGuidebook(Base):
     page: Mapped[str | None] = mapped_column(Text)
     run: Mapped[str | None] = mapped_column(Text)
     url: Mapped[str | None] = mapped_column(Text)
+
+    # Mirror of ix_reach_state_state_id pattern: composite PK indexes
+    # (reach_id, guidebook_id), so the reverse direction needs its own.
+    __table_args__ = (Index("ix_reach_guidebook_guidebook_id", "guidebook_id"),)
 
 
 # ---------------------------------------------------------------------------
