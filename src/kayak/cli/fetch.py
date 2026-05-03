@@ -280,9 +280,12 @@ def fetch(args: argparse.Namespace) -> None:
                 logger.error("Parse/data error for %s: %s", w.url, e)
                 continue
             except Exception:
+                # Don't let a single bad URL kill the rest of the batch —
+                # log with traceback and move on. KeyboardInterrupt /
+                # SystemExit (BaseException) still propagate.
                 session.rollback()
                 logger.exception("Unexpected error for %s", w.url)
-                raise
+                continue
 
         if args.dry_run:
             session.rollback()
