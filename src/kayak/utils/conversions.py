@@ -6,28 +6,41 @@ from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
-# Common timezone abbreviations to UTC offsets (hours)
+# Timezone abbreviations → UTC offset in hours.
+#
+# USGS RDB feeds publish ``tz_cd`` as one of these abbreviations. Hawaii and
+# American Samoa never observe DST, so HST==HAST and SST has no daylight
+# pair. Atlantic (Puerto Rico, USVI), Chamorro (Guam, CNMI) and Wake/Samoa
+# are rare but appear on a handful of USGS sites.
+#
+# Unknown abbreviations are treated as a parse failure by ``parse_datetime``
+# (returns ``None``) so the row is dropped — UTC-stamping a naive local
+# timestamp would silently shift the observation by hours.
 TIMEZONE_OFFSETS: dict[str, int] = {
-    "EST": -5,
-    "EDT": -4,
-    "CST": -6,
-    "CDT": -5,
-    "MST": -7,
-    "MDT": -6,
-    "PST": -8,
-    "PDT": -7,
-    "AKST": -9,
-    "AKDT": -8,
-    "HST": -10,
-    "UTC": 0,
-    "GMT": 0,
-    "Z": 0,
-    # USBR_Special zone codes
-    "P": 0,  # UTC (Pacific in USBR context but data is UTC)
-    "M": -7,  # MST
-    "C": -6,  # CST
-    "E": -5,  # EST
-}
+    # CONUS
+    "EST": -5, "EDT": -4,
+    "CST": -6, "CDT": -5,
+    "MST": -7, "MDT": -6,
+    "PST": -8, "PDT": -7,
+    # Alaska
+    "AKST": -9, "AKDT": -8,
+    # Hawaii-Aleutian (Hawaii does not observe DST; Aleutians do)
+    "HST": -10, "HAST": -10, "HADT": -9,
+    # Atlantic - Puerto Rico, USVI (no DST), and the unused-but-published
+    # daylight pair.
+    "AST": -4, "ADT": -3,
+    # Pacific territories - none of these observe DST
+    "SST": -11,                # American Samoa
+    "CHST": 10,                # Guam, CNMI - Chamorro Standard
+    "WAKT": 12,                # Wake Island
+    # UTC / GMT synonyms
+    "UTC": 0, "GMT": 0, "Z": 0,
+    # USBR_Special zone codes (single-letter)
+    "P": 0,    # UTC (Pacific in USBR context but data is UTC)
+    "M": -7,   # MST
+    "C": -6,   # CST
+    "E": -5,   # EST
+}  # fmt: skip
 
 
 def celsius_to_fahrenheit(c: float) -> float:
@@ -133,14 +146,16 @@ def parse_datetime(
     if tz_name:
         tz_name = tz_name.strip().upper()
         offset_hours = TIMEZONE_OFFSETS.get(tz_name)
-        if offset_hours is not None:
-            from datetime import timedelta
+        if offset_hours is None:
+            # Unknown abbreviation — refuse to guess. Stamping UTC on a naive
+            # local datetime silently shifts the observation by hours, which
+            # is worse than dropping the row.
+            logger.error("Unknown timezone abbreviation '%s' — dropping row", tz_name)
+            return None
+        from datetime import timedelta
 
-            # Convert from local time to UTC
-            dt = dt.replace(tzinfo=UTC) - timedelta(hours=offset_hours)
-        else:
-            logger.warning("Unknown timezone '%s', falling back to UTC", tz_name)
-            dt = dt.replace(tzinfo=UTC)
+        # Convert from local time to UTC
+        dt = dt.replace(tzinfo=UTC) - timedelta(hours=offset_hours)
     elif assume_naive:
         # Caller will apply per-station TZ later (see BaseParser.dump_to_db).
         pass

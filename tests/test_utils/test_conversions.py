@@ -156,17 +156,53 @@ class TestParseDatetime:
         expected = datetime(2024, 6, 15, 18, 0, 0, tzinfo=UTC)
         assert result == expected
 
-    def test_unknown_timezone_treated_as_utc(self):
-        result = parse_datetime("2024-06-15 10:00:00", tz_name="BOGUS")
-        expected = datetime(2024, 6, 15, 10, 0, 0, tzinfo=UTC)
-        assert result == expected
+    def test_unknown_timezone_returns_none(self):
+        # Refuse to guess — stamping UTC on a naive local datetime silently
+        # shifts the observation by hours, which is worse than dropping it.
+        assert parse_datetime("2024-06-15 10:00:00", tz_name="BOGUS") is None
 
-    def test_unknown_timezone_logs_warning(self, caplog):
+    def test_unknown_timezone_logs_error(self, caplog):
         import logging
 
-        with caplog.at_level(logging.WARNING, logger="kayak.utils.conversions"):
+        with caplog.at_level(logging.ERROR, logger="kayak.utils.conversions"):
             parse_datetime("2024-06-15 10:00:00", tz_name="BOGUS")
-        assert "Unknown timezone 'BOGUS'" in caplog.text
+        assert "BOGUS" in caplog.text
+
+    def test_hawaii_aleutian_standard(self):
+        # HAST is UTC-10, same offset as HST.
+        assert parse_datetime("2024-06-15 00:00:00", tz_name="HAST") == datetime(
+            2024, 6, 15, 10, 0, 0, tzinfo=UTC
+        )
+
+    def test_hawaii_aleutian_daylight(self):
+        # HADT is UTC-9 (Aleutians observe DST; Hawaii proper does not).
+        assert parse_datetime("2024-06-15 00:00:00", tz_name="HADT") == datetime(
+            2024, 6, 15, 9, 0, 0, tzinfo=UTC
+        )
+
+    def test_atlantic_standard(self):
+        # AST is UTC-4 — Puerto Rico, USVI.
+        assert parse_datetime("2024-06-15 00:00:00", tz_name="AST") == datetime(
+            2024, 6, 15, 4, 0, 0, tzinfo=UTC
+        )
+
+    def test_samoa_standard(self):
+        # SST is UTC-11 — American Samoa, never DST.
+        assert parse_datetime("2024-06-15 00:00:00", tz_name="SST") == datetime(
+            2024, 6, 15, 11, 0, 0, tzinfo=UTC
+        )
+
+    def test_chamorro_standard(self):
+        # CHST is UTC+10 — Guam, CNMI.
+        assert parse_datetime("2024-06-15 10:00:00", tz_name="CHST") == datetime(
+            2024, 6, 15, 0, 0, 0, tzinfo=UTC
+        )
+
+    def test_lowercase_tz_accepted(self):
+        # tz_cd in some feeds arrives lowercased.
+        assert parse_datetime("2024-06-15 10:00:00", tz_name="pst") == datetime(
+            2024, 6, 15, 18, 0, 0, tzinfo=UTC
+        )
 
     def test_assume_naive_returns_naive_datetime(self):
         result = parse_datetime("2024-06-15 10:30:00", assume_naive=True)
