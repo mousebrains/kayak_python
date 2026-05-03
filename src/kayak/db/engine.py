@@ -24,12 +24,15 @@ def get_engine(url: str | None = None) -> Engine:
 
     When ``url`` is supplied, the prior engine (if any) is disposed before the
     new one is built — otherwise every ``get_engine(url=…)`` call would orphan
-    its connection pool.
+    its connection pool. The cached session factory is also invalidated so the
+    next ``get_session_factory()`` call binds to the new engine instead of the
+    disposed one.
     """
-    global _engine
+    global _engine, _session_factory
     if _engine is None or url is not None:
         if _engine is not None and url is not None:
             _engine.dispose()
+            _session_factory = None
         db_url = url or DATABASE_URL
         connect_args = {}
         if db_url.startswith("sqlite"):
@@ -41,7 +44,11 @@ def get_engine(url: str | None = None) -> Engine:
 
 
 def get_session_factory(url: str | None = None) -> sessionmaker[Session]:
-    """Return a sessionmaker bound to the engine."""
+    """Return a sessionmaker bound to the current engine.
+
+    Invariant: the returned factory is always bound to the engine that
+    ``get_engine()`` would currently return — never to a disposed engine.
+    """
     global _session_factory
     if _session_factory is None or url is not None:
         _session_factory = sessionmaker(bind=get_engine(url))

@@ -44,6 +44,30 @@ class TestGetEngine:
             assert e1 is not e2
             spy.assert_called_once()
 
+    def test_url_override_invalidates_session_factory(self):
+        """Replacing the engine via get_engine(url=...) must drop the cached
+        session factory so a subsequent get_session_factory() rebuilds it
+        against the new engine.
+
+        Regression: previously the factory was only rebuilt when
+        get_session_factory() itself was called with a url. If a caller went
+        through get_engine() directly, the old factory stayed bound to the
+        now-disposed engine — sessions created from it would fail or, worse,
+        write to a stale connection.
+        """
+        # Prime both caches
+        get_engine("sqlite:///:memory:")
+        f1 = get_session_factory()
+
+        # Swap the engine via get_engine() directly
+        e2 = get_engine("sqlite:///:memory:")
+
+        # A subsequent get_session_factory() with no url must NOT return f1.
+        # It should rebuild against e2.
+        f2 = get_session_factory()
+        assert f2 is not f1
+        assert f2.kw["bind"] is e2
+
 
 class TestSQLitePragmas:
     def teardown_method(self) -> None:
