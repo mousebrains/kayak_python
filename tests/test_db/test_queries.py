@@ -1,18 +1,9 @@
-"""Tests for kayak.db.info_db query helpers."""
+"""Tests for reach / gauge / source query helpers."""
 
-from kayak.db.info_db import (
-    all_state_names,
-    all_states,
-    classify_level,
-    display_name,
+from kayak.db.gauges import (
     get_all_primary_source_ids,
-    get_calculated_source_ids,
-    get_gauge_for_reach,
     get_primary_source_id,
-    get_reach,
-    get_reach_by_name,
     get_source_ids_for_gauge,
-    reaches_query,
 )
 from kayak.db.models import (
     CalcExpression,
@@ -26,6 +17,17 @@ from kayak.db.models import (
     Source,
     State,
 )
+from kayak.db.reaches import (
+    all_state_names,
+    all_states,
+    classify_level,
+    display_name,
+    get_gauge_for_reach,
+    get_reach,
+    get_reach_by_name,
+    reaches_query,
+)
+from kayak.db.sources import get_calculated_source_ids
 
 # ---------------------------------------------------------------------------
 # all_states / all_state_names

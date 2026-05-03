@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from kayak.cli.calc_rating import calc_rating
-from kayak.db.data_db import get_latest, get_observations, store_observation
+from kayak.db.cache import get_latest
 from kayak.db.models import (
     DataType,
     Gauge,
@@ -14,6 +14,7 @@ from kayak.db.models import (
     RatingData,
     Source,
 )
+from kayak.db.observations import get_observations, store_observation
 
 
 def _noop(*a, **kw):

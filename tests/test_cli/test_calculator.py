@@ -7,8 +7,9 @@ from unittest.mock import patch
 import pytest
 
 from kayak.cli.calculator import _safe_eval, calculator
-from kayak.db.data_db import get_latest, store_observation, update_latest, update_latest_gauge
+from kayak.db.cache import get_latest, update_latest, update_latest_gauge
 from kayak.db.models import CalcExpression, DataType, Gauge, GaugeSource, Source
+from kayak.db.observations import store_observation
 
 
 def _noop(*a, **kw):

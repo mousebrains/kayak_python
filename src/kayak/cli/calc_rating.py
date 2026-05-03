@@ -10,17 +10,12 @@ import logging
 
 from sqlalchemy import select
 
-from kayak.db.data_db import (
-    get_negative_flow_source_ids,
-    get_observations,
-    get_rating_table,
-    store_observation,
-    update_latest,
-    update_latest_gauge,
-)
+from kayak.db.cache import update_latest, update_latest_gauge
 from kayak.db.engine import get_session
-from kayak.db.info_db import get_source_ids_for_gauge
+from kayak.db.gauges import get_source_ids_for_gauge
 from kayak.db.models import DataType, Gauge
+from kayak.db.observations import get_observations, get_rating_table, store_observation
+from kayak.db.sources import get_negative_flow_source_ids
 from kayak.utils.conversions import interpolate_rating
 
 logger = logging.getLogger(__name__)

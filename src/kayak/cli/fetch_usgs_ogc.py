@@ -15,14 +15,11 @@ import requests
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from kayak.db.data_db import (
-    get_negative_flow_source_ids,
-    store_observations,
-    update_latest,
-    update_latest_gauge,
-)
+from kayak.db.cache import update_latest, update_latest_gauge
 from kayak.db.engine import get_session
 from kayak.db.models import DataType, Gauge, GaugeSource, Source
+from kayak.db.observations import store_observations
+from kayak.db.sources import get_negative_flow_source_ids
 
 logger = logging.getLogger(__name__)
 

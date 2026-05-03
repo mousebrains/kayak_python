@@ -5,8 +5,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from kayak.cli.merge import merge
-from kayak.db.data_db import get_latest, get_observations, store_observation
+from kayak.db.cache import get_latest
 from kayak.db.models import DataType, Gauge, GaugeSource, Source
+from kayak.db.observations import get_observations, store_observation
 
 
 def _noop(*a, **kw):
