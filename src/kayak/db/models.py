@@ -357,8 +357,12 @@ class LatestObservation(Base):
 
     __tablename__ = "latest_observation"
 
+    # CASCADE matches latest_gauge_observation.gauge_id and the cache-rebuild
+    # semantic — if a source goes away the cache row is rebuilt from
+    # observations on the next pipeline tick. RESTRICT was inconsistent with
+    # the gauge cache and forced manual fk-violation cleanup.
     source_id: Mapped[int] = mapped_column(
-        ForeignKey("source.id", ondelete="RESTRICT"), primary_key=True
+        ForeignKey("source.id", ondelete="CASCADE"), primary_key=True
     )
     data_type: Mapped[DataType] = mapped_column(primary_key=True)
     observed_at: Mapped[datetime] = mapped_column(nullable=False)
@@ -418,7 +422,11 @@ class Reach(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     updated_at: Mapped[datetime | None] = mapped_column()
     gauge_id: Mapped[int | None] = mapped_column(ForeignKey("gauge.id", ondelete="SET NULL"))
-    name: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    # Uniqueness is enforced by the partial index ix_reach_name_unique below
+    # so multiple NULL-name reaches don't collide. SQLite's column-level
+    # UNIQUE treats NULLs as distinct anyway, but stating it as a partial
+    # index makes the intent explicit.
+    name: Mapped[str | None] = mapped_column(String(64), nullable=True)
     display_name: Mapped[str | None] = mapped_column(Text)
     sort_name: Mapped[str | None] = mapped_column(String(256))
     nature: Mapped[str | None] = mapped_column(Text)
@@ -461,7 +469,15 @@ class Reach(Base):
         secondary="reach_guidebook", back_populates="reaches"
     )
 
-    __table_args__ = (Index("ix_reach_sort_name", "sort_name"),)
+    __table_args__ = (
+        Index("ix_reach_sort_name", "sort_name"),
+        Index(
+            "ix_reach_name_unique",
+            "name",
+            unique=True,
+            sqlite_where=text("name IS NOT NULL"),
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
