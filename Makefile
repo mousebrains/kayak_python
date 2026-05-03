@@ -1,4 +1,4 @@
-.PHONY: lint format typecheck test coverage check pipeline build clean \
+.PHONY: lint format typecheck test test-all coverage check pipeline build clean \
        lint-php lint-js lint-css lint-shell lint-all
 
 VENV ?= .venv
@@ -16,11 +16,14 @@ format:  ## Auto-format Python code
 typecheck:  ## Run type checker
 	$(VENV)/bin/mypy src/
 
-test:  ## Run tests
+test:  ## Run fast tests (skips @pytest.mark.slow)
 	$(VENV)/bin/pytest -q
 
+test-all:  ## Run every test including slow ones (matches CI)
+	$(VENV)/bin/pytest -m '' -q
+
 coverage:  ## Run tests with coverage report
-	$(VENV)/bin/pytest --cov=kayak --cov-report=term-missing -q
+	$(VENV)/bin/pytest -m '' --cov=kayak --cov-report=term-missing -q
 
 lint-php:  ## Syntax-check PHP files
 	@for f in php/*.php php/includes/*.php; do php -l "$$f" || exit 1; done
