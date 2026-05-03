@@ -7,6 +7,10 @@ asserts the generated ``index.html`` contains the seeded reach.
 
 Catches regressions that individual-stage tests miss: schema / model / parser
 drift, cache-update ordering, build HTML changes.
+
+Marked ``slow`` and ``integration`` because the build step shells out to
+``setfacl`` which isn't available on macOS dev machines. Run locally with
+``pytest -m slow`` or in CI which uses the default selection (everything).
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from sqlalchemy import create_engine, event
 
 from kayak.cli.pipeline import pipeline
@@ -113,6 +118,8 @@ def _seed(db_url: str) -> None:
         s.commit()
 
 
+@pytest.mark.slow
+@pytest.mark.integration
 def test_pipeline_fetch_through_build_smoke(tmp_path: Path) -> None:
     """Full pipeline: fetch canned RDB → build → rendered reach name in index.html."""
     db_path = tmp_path / "kayak.db"

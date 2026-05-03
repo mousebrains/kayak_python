@@ -41,9 +41,11 @@ packages = ["src/kayak"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-ra --strict-markers"
+# Skip slow tests by default. CI overrides with ``--override-ini='addopts='``
+# (see .github/workflows/ci.yml) so the integration test still runs there.
+addopts = "-ra --strict-markers -m 'not slow'"
 markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "slow: marks tests as slow (run with '-m slow' or '--override-ini=addopts=')",
     "integration: marks integration tests",
 ]
 
