@@ -2,12 +2,11 @@
 
 from datetime import timedelta
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 from sqlalchemy.orm import Session
 
 from kayak.db.models import (
     DataType,
-    Gauge,
     GaugeSource,
     LatestGaugeObservation,
     LatestObservation,
@@ -230,17 +229,87 @@ def update_latest_gauge(
         )
 
 
+_BULK_REBUILD_GAUGE_CACHE_SQL = """
+WITH ranked AS (
+    SELECT
+        gs.gauge_id        AS gauge_id,
+        o.data_type        AS data_type,
+        o.source_id        AS source_id,
+        o.observed_at      AS observed_at,
+        o.value            AS value,
+        ROW_NUMBER() OVER (
+            PARTITION BY gs.gauge_id, o.data_type
+            ORDER BY o.observed_at DESC, o.source_id DESC
+        ) AS rn
+    FROM observation o
+    JOIN gauge_source gs ON gs.source_id = o.source_id
+),
+latest_pick AS (
+    SELECT gauge_id, data_type, source_id, observed_at, value
+    FROM ranked
+    WHERE rn = 1
+),
+prev_ranked AS (
+    SELECT
+        gs.gauge_id   AS gauge_id,
+        o.data_type   AS data_type,
+        o.observed_at AS observed_at,
+        o.value       AS value,
+        ROW_NUMBER() OVER (
+            PARTITION BY gs.gauge_id, o.data_type
+            ORDER BY o.observed_at DESC, o.source_id DESC
+        ) AS rn
+    FROM observation o
+    JOIN gauge_source gs ON gs.source_id = o.source_id
+    JOIN latest_pick lp
+        ON lp.gauge_id = gs.gauge_id
+       AND lp.data_type = o.data_type
+       AND o.observed_at <= datetime(lp.observed_at, '-6 hours')
+),
+prev_pick AS (
+    SELECT gauge_id, data_type, observed_at, value
+    FROM prev_ranked
+    WHERE rn = 1
+)
+INSERT INTO latest_gauge_observation
+    (gauge_id, data_type, observed_at, value,
+     prev_observed_at, prev_value, delta_per_hour, source_id)
+SELECT
+    lp.gauge_id,
+    lp.data_type,
+    lp.observed_at,
+    lp.value,
+    pp.observed_at,
+    pp.value,
+    CASE
+        WHEN pp.observed_at IS NULL THEN NULL
+        WHEN (julianday(lp.observed_at) - julianday(pp.observed_at)) * 24 = 0 THEN NULL
+        ELSE (lp.value - pp.value)
+             / ((julianday(lp.observed_at) - julianday(pp.observed_at)) * 24)
+    END,
+    lp.source_id
+FROM latest_pick lp
+LEFT JOIN prev_pick pp
+    ON pp.gauge_id = lp.gauge_id AND pp.data_type = lp.data_type
+"""
+
+
 def update_all_latest_gauges(session: Session) -> None:
-    """Recompute latest_gauge_observation for all gauges and data types."""
-    gauge_ids = list(
-        session.scalars(
-            select(Gauge.id).where(Gauge.id.in_(select(GaugeSource.gauge_id).distinct()))
-        )
-    )
-    types = [DataType.flow, DataType.inflow, DataType.gauge, DataType.temperature]
-    for gauge_id in gauge_ids:
-        for dtype in types:
-            update_latest_gauge(session, gauge_id, dtype)
+    """Recompute latest_gauge_observation for every gauge in one bulk SQL.
+
+    Wipes the cache table inside the same transaction and rebuilds it from
+    ``observation`` joined to ``gauge_source`` using window functions.
+    Equivalent row-for-row to looping ``update_latest_gauge`` over every
+    (gauge_id, data_type) pair, but ~3 SQL statements total instead of
+    ~5*4*N for N gauges with sources. Verified by
+    ``test_bulk_matches_per_gauge_loop``.
+
+    Tiebreaker on identical ``observed_at`` is ``source_id DESC`` —
+    deterministic across runs and matches the per-gauge implementation
+    when its underlying SQLite ordering matches.
+    """
+    session.execute(delete(LatestGaugeObservation))
+    session.execute(text(_BULK_REBUILD_GAUGE_CACHE_SQL))
     session.commit()
 
 
