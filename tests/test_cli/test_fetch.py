@@ -289,3 +289,86 @@ def test_fetch_uses_async_fetch_many():
 
     # Phase 3: dry_run → rollback, not commit
     phase3_session.commit.assert_not_called()
+
+
+def test_fetch_continues_after_unexpected_parser_error():
+    """A parser raising an unexpected exception (not Value/Key/LookupError)
+    must NOT skip remaining URLs in the batch — the loop logs the traceback
+    and moves on. Regression for the prior `except Exception: raise` that
+    killed the entire run on a single transient failure."""
+    import argparse
+
+    from kayak.cli.fetch import fetch as fetch_cmd
+    from kayak.utils.http_client import FetchResult
+
+    args = argparse.Namespace(
+        dry_run=False,
+        input_dir=None,
+        single_url=None,
+        parser_type=None,
+        parser_filter=None,
+        url_filter=None,
+        url_prefix="",
+        output_dir=None,
+        show_name=False,
+        fetch_only=False,
+        ignore_constraints=True,
+        concurrency=4,
+    )
+
+    sources = [
+        {"url": "https://example.com/bad", "parser": "p_bad", "hours": ""},
+        {"url": "https://example.com/good", "parser": "p_good", "hours": ""},
+    ]
+
+    def _make_result(url):
+        r = FetchResult(url=url)
+        r.error = None
+        r._response = mock.MagicMock()
+        r._response.status_code = 200
+        r._response.text = "data"
+        return r
+
+    async def mock_async_fetch(urls, **_kw):
+        return {url: _make_result(url) for url in urls}
+
+    parsed_urls: list[str] = []
+
+    class _GoodParser:
+        def __init__(self, **kw):
+            self.url = kw["url"]
+
+        def parse(self, _text):
+            parsed_urls.append(self.url)
+            return 1
+
+    class _BadParser:
+        def __init__(self, **kw):
+            self.url = kw["url"]
+
+        def parse(self, _text):
+            parsed_urls.append(self.url)
+            raise RuntimeError("simulated parser bug")
+
+    def fake_get_parser_class(name):
+        return _BadParser if name == "p_bad" else _GoodParser
+
+    phase1_session = mock.MagicMock()
+    phase3_session = mock.MagicMock()
+    sessions = iter([phase1_session, phase3_session])
+    with (
+        mock.patch("kayak.cli.fetch.load_sources", return_value=sources),
+        mock.patch("kayak.cli.fetch.ensure_all_loaded"),
+        mock.patch("kayak.cli.fetch.sync_sources"),
+        mock.patch("kayak.cli.fetch.get_session", side_effect=lambda: next(sessions)),
+        mock.patch("kayak.utils.http_client.async_fetch_many", mock_async_fetch),
+        mock.patch("kayak.cli.fetch.get_parser_class", side_effect=fake_get_parser_class),
+    ):
+        fetch_cmd(args)
+
+    # Both URLs must be tried — bad URL's exception must not skip the good one
+    assert "https://example.com/bad" in parsed_urls, "bad URL never reached parser"
+    assert "https://example.com/good" in parsed_urls, "good URL was skipped after bad URL raised"
+    # Bad URL rolled back; good URL committed (commit-per-URL pattern)
+    phase3_session.rollback.assert_called()
+    phase3_session.commit.assert_called()
