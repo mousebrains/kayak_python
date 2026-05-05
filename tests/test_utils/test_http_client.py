@@ -452,6 +452,51 @@ class TestAsyncFetchMany:
         # Two distinct hosts → two semaphores created
         assert len(semaphores_created) == 2
 
+    def test_budget_cancels_slow_urls(self):
+        """A slow URL is cancelled when the batch budget runs out, but the
+        fast URL still returns a real result and the batch as a whole exits
+        promptly instead of hanging on the slow one."""
+        urls = ["http://fast.com/ok", "http://slow.com/hang"]
+
+        class _SlowResponse(_FakeAsyncResponse):
+            async def __aenter__(self):
+                # Sleep longer than the budget — simulates a hung connect or
+                # a server that never replies.
+                await asyncio.sleep(5)
+                return self
+
+        slow_session = _FakeSession(
+            {
+                "http://fast.com/ok": _FakeAsyncResponse(200, "fast-body"),
+                "http://slow.com/hang": _SlowResponse(200, "would-be-slow"),
+            }
+        )
+
+        with (
+            patch("kayak.utils.http_client.aiohttp.TCPConnector"),
+            patch("kayak.utils.http_client.aiohttp.ClientSession", return_value=slow_session),
+        ):
+            results = asyncio.run(async_fetch_many(urls, timeout=10, budget=1))
+
+        assert results["http://fast.com/ok"].ok is True
+        assert results["http://fast.com/ok"].text == "fast-body"
+        assert results["http://slow.com/hang"].ok is False
+        assert results["http://slow.com/hang"].error == "batch budget exceeded"
+
+    def test_budget_zero_disables(self):
+        """budget=0 / None means no wall-clock cap — slow URLs still finish."""
+        urls = ["http://normal.com/ok"]
+
+        fake_session = _FakeSession({"http://normal.com/ok": _FakeAsyncResponse(200, "body")})
+
+        with (
+            patch("kayak.utils.http_client.aiohttp.TCPConnector"),
+            patch("kayak.utils.http_client.aiohttp.ClientSession", return_value=fake_session),
+        ):
+            results = asyncio.run(async_fetch_many(urls, timeout=10, budget=0))
+
+        assert results["http://normal.com/ok"].ok is True
+
     def test_retry_on_503(self):
         """async_fetch_many retries on 503 status codes."""
         urls = ["http://retry.com/page"]

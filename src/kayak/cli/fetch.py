@@ -14,6 +14,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from kayak.cli.init_db import sync_sources
+from kayak.config import FETCH_BUDGET
 from kayak.config_data import load_sources
 from kayak.db.engine import get_session
 from kayak.db.models import FetchUrl, Source
@@ -75,6 +76,15 @@ def addArgs_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("-U", "--single-url", default=None, help="Fetch a single URL")
     parser.add_argument(
         "--concurrency", type=int, default=8, help="Max concurrent requests per host (default: 8)"
+    )
+    parser.add_argument(
+        "--budget",
+        type=int,
+        default=FETCH_BUDGET,
+        help=(
+            "Wall-clock budget for the whole fetch batch in seconds "
+            f"(default: {FETCH_BUDGET}; 0 disables)"
+        ),
     )
 
 
@@ -215,6 +225,7 @@ def fetch(args: argparse.Namespace) -> None:
             async_fetch_many(
                 urls,
                 concurrency_per_host=args.concurrency,
+                budget=getattr(args, "budget", FETCH_BUDGET) or None,
             )
         )
         content_map = {}

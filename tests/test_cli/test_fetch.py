@@ -273,7 +273,7 @@ def test_fetch_uses_async_fetch_many():
     fake_result._response.status_code = 200
     fake_result._response.text = "test-data"
 
-    async def mock_async_fetch(urls, concurrency_per_host=8, timeout=None):
+    async def mock_async_fetch(urls, concurrency_per_host=8, timeout=None, budget=None):
         return {url: fake_result for url in urls}
 
     phase1_session = mock.MagicMock()

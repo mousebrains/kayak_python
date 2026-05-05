@@ -246,11 +246,17 @@ async def _async_fetch_one(
     semaphore: asyncio.Semaphore,
     timeout: int,
     insecure_ctx: ssl.SSLContext,
+    deadline: float | None = None,
 ) -> FetchResult:
     """Fetch a single URL with retry logic under a per-host semaphore.
 
     aiohttp defaults to `allow_redirects=False` on `session.get`, so a 3xx
     is surfaced without validator bypass.
+
+    If ``deadline`` is set (a ``time.monotonic()`` timestamp), each request
+    is capped at the remaining budget and retries are skipped once the
+    deadline has passed — so a single hung host can't burn through the
+    whole batch's wall-clock budget.
     """
     try:
         _validate_url(url)
@@ -264,12 +270,19 @@ async def _async_fetch_one(
 
     last_result: FetchResult | None = None
     for attempt in range(_MAX_RETRIES):
+        if deadline is not None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return last_result or FetchResult(url=url, error="batch budget exceeded")
+            req_timeout = min(timeout, max(int(remaining), 1))
+        else:
+            req_timeout = timeout
         try:
             async with (
                 semaphore,
                 session.get(
                     url,
-                    timeout=aiohttp.ClientTimeout(total=timeout),
+                    timeout=aiohttp.ClientTimeout(total=req_timeout),
                     ssl=ssl_arg,
                 ) as resp,
             ):
@@ -287,6 +300,9 @@ async def _async_fetch_one(
                     attempt + 1,
                     _MAX_RETRIES,
                 )
+                if deadline is not None and time.monotonic() + wait >= deadline:
+                    mock_resp = _SimpleResponse(status, body, headers)
+                    return FetchResult(url=url, response=mock_resp)  # type: ignore[arg-type]
                 await asyncio.sleep(wait)
                 # Build a lightweight mock response for FetchResult
                 mock_resp = _SimpleResponse(status, body, headers)
@@ -305,6 +321,8 @@ async def _async_fetch_one(
                     _MAX_RETRIES,
                     e,
                 )
+                if deadline is not None and time.monotonic() + wait >= deadline:
+                    return FetchResult(url=url, error=str(e))
                 await asyncio.sleep(wait)
                 last_result = FetchResult(url=url, error=str(e))
                 continue
@@ -328,11 +346,17 @@ async def async_fetch_many(
     urls: list[str],
     concurrency_per_host: int = 8,
     timeout: int | None = None,
+    budget: int | None = None,
 ) -> dict[str, FetchResult]:
     """Fetch multiple URLs concurrently with per-host concurrency limits.
 
     Groups URLs by hostname and creates one semaphore per host to avoid
     overwhelming any single server. Returns a dict mapping URL → FetchResult.
+
+    ``budget`` (seconds) caps the total wall-clock for the batch. Anything
+    still pending when the budget runs out is cancelled and surfaces as a
+    ``"batch budget exceeded"`` error. ``None`` disables the budget; pass
+    ``0`` to disable explicitly.
     """
     if timeout is None:
         timeout = FETCH_TIMEOUT
@@ -342,6 +366,8 @@ async def async_fetch_many(
         lambda: asyncio.Semaphore(concurrency_per_host)
     )
 
+    deadline = time.monotonic() + budget if budget else None
+
     # Default connector verifies TLS; individual requests to known-bad hosts
     # override with `ssl=insecure_ctx` in _async_fetch_one().
     insecure_ctx = _insecure_ssl_context()
@@ -350,11 +376,38 @@ async def async_fetch_many(
         connector=connector,
         headers={"User-Agent": FETCH_USER_AGENT},
     ) as session:
-        tasks = []
+        url_to_task: dict[str, asyncio.Task[FetchResult]] = {}
         for url in urls:
             host = urlparse(url).hostname or ""
             sem = host_semaphores[host]
-            tasks.append(_async_fetch_one(url, session, sem, timeout, insecure_ctx))
-        results = await asyncio.gather(*tasks)
+            url_to_task[url] = asyncio.create_task(
+                _async_fetch_one(url, session, sem, timeout, insecure_ctx, deadline)
+            )
 
-    return dict(zip(urls, results, strict=True))
+        if deadline is None:
+            await asyncio.gather(*url_to_task.values(), return_exceptions=True)
+        else:
+            wait_for = max(0.0, deadline - time.monotonic())
+            _done, pending = await asyncio.wait(url_to_task.values(), timeout=wait_for)
+            if pending:
+                logger.warning(
+                    "Fetch batch budget exhausted; cancelling %d in-flight request(s)",
+                    len(pending),
+                )
+                for task in pending:
+                    task.cancel()
+                # Drain cancellations so aiohttp can clean up sockets cleanly.
+                await asyncio.gather(*pending, return_exceptions=True)
+
+        results: dict[str, FetchResult] = {}
+        for url, task in url_to_task.items():
+            if task.cancelled():
+                results[url] = FetchResult(url=url, error="batch budget exceeded")
+                continue
+            try:
+                results[url] = task.result()
+            except Exception as e:
+                logger.error("Task failed for %s: %s", url, e)
+                results[url] = FetchResult(url=url, error=str(e))
+
+    return results

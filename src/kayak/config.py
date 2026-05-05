@@ -24,6 +24,11 @@ DATABASE_URL = os.environ.get(
 
 # Data pipeline
 FETCH_TIMEOUT = int(os.environ.get("FETCH_TIMEOUT", "300"))
+# Wall-clock budget for the fetch batch as a whole. URLs still in flight
+# when the budget runs out are cancelled and surface as deadline-exceeded
+# errors so the pipeline can move on to build/etc. instead of being killed
+# by systemd's TimeoutStartSec.
+FETCH_BUDGET = int(os.environ.get("FETCH_BUDGET", "240"))
 FETCH_USER_AGENT = os.environ.get("FETCH_USER_AGENT", "kayak/1.0")
 
 # Output
