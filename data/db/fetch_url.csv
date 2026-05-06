@@ -72,11 +72,6 @@ id,url,parser,hours,is_active
 71,https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_STG_FM.TXT,wa.gov,,1
 72,https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_DSG_FM.TXT,wa.gov,,1
 73,https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_WTM_FM.TXT,wa.gov,,1
-74,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=ca&period=P1D&parameterCd=00060,00065,00010",usgs,,0
-75,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=id&period=P1D&parameterCd=00060,00065,00010",usgs,,0
-76,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=nv&period=P1D&parameterCd=00060,00065,00010",usgs,,0
-77,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=or&period=P1D&parameterCd=00060,00065,00010",usgs,,0
-78,"https://waterservices.usgs.gov/nwis/iv/?format=rdb&stateCd=wa&period=P1D&parameterCd=00060,00065,00010",usgs,,0
 79,"https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22FAL.Flow-Out.Inst.0.0.Best%22,%22FAL.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d",usace.cda,,1
 80,https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=APLO3&pe=QI,nwrfc.textplot,,1
 81,https://api.water.noaa.gov/nwps/v1/gauges/BRBO3/stageflow/observed,nwps,,0
