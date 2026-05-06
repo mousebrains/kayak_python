@@ -228,14 +228,19 @@ def decimate(args: argparse.Namespace) -> None:
         for source_id in source_ids:
             src_params = {**params, "source_id": source_id}
 
-            result1 = session.execute(text(_HOURLY_SQL), src_params)
-            hourly = result1.rowcount  # type: ignore[attr-defined]
+            # SQLAlchemy reports rowcount=-1 for DELETE..WHERE..IN(SELECT FROM cte)
+            # on SQLite, so query SQLite's changes() directly after each DELETE.
+            # changes() returns the row count of the most recent DML on this
+            # connection, and Session.execute keeps us on the same connection
+            # within a transaction.
+            session.execute(text(_HOURLY_SQL), src_params)
+            hourly = session.execute(text("SELECT changes()")).scalar() or 0
 
-            result2 = session.execute(
+            session.execute(
                 text(_6HOURLY_SQL),
                 {"archive_cutoff": params["archive_cutoff"], "source_id": source_id},
             )
-            sixhourly = result2.rowcount  # type: ignore[attr-defined]
+            sixhourly = session.execute(text("SELECT changes()")).scalar() or 0
 
             if hourly > 0 or sixhourly > 0:
                 # Rebuild the latest_observation rows for this source before

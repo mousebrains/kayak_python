@@ -222,12 +222,15 @@ def _bootstrap_engine_for_cli(tmp_path):
     return engine, db_path
 
 
-def test_decimate_cli_end_to_end(tmp_path):
+def test_decimate_cli_end_to_end(tmp_path, capsys):
     """Exercise decimate() against a real sqlite file.
 
     Seeds a source + FetchUrl + ~30 observations spanning recent /
     medium-term / archive ranges, runs decimate(), and asserts the
     medium-term rows get thinned to ~1 per hour while recent rows survive.
+    Also asserts the printed delete count tracks the actual deletion —
+    SQLAlchemy's result.rowcount returns -1 for DELETE..WHERE..IN(cte)
+    on SQLite, so this guards against regressing into a quiet 0-count.
     """
     from argparse import Namespace
 
@@ -294,6 +297,12 @@ def test_decimate_cli_end_to_end(tmp_path):
             assert total_after < total_before
             assert total_after <= 12
             assert total_after >= 8
+
+            # Printed counts must match actual deletions (regression guard).
+            actual_deleted = total_before - total_after
+            out = capsys.readouterr().out
+            assert f"Done — {actual_deleted:,} total rows deleted" in out, out
+            assert "Hourly: 0 rows deleted" not in out, out
         finally:
             s.close()
     finally:
