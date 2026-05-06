@@ -15,6 +15,8 @@ than active use. Each filename links back to the file's git history —
 | `backfill_gauge_state.py` | 2026-04-25 | Backfill for migration 0010 (added `gauge.state`). Tier 1: `usgs_site.state_cd` from the gauges metadata cache; tier 2: distinct state of any linked reach. New gauges get `state` at write time. |
 | `recompute_midpoints.py` | 2026-04-20 | One-shot recompute of `reach.latitude` / `reach.longitude` as the arc-length midpoint of `reach.geom` (vs. the old straight-line midpoint of put-in/take-out). Subsequent geom updates compute the midpoint at write time. |
 | `install-editor-feature.sh` | 2026-04-12 | Phase 1 sudo install steps for the editor / login feature (nginx zones, PHP-FPM pool, secrets dir). Subsumed by `hardening/install.sh` and the per-deploy nginx snippets under `deploy/`. |
+| `split_usgs_sources.py` | 2026-05-05 | Gave every gauge with a `usgs_id` a dedicated USGS source named with the digit station ID (RENAME for 8 already-USGS sources, INSERT for 69 NWS-only gauges). Stops `fetch-usgs-ogc` from dumping USGS observations into NWS source rows where `_build_site_map` would otherwise fall back. |
+| `backfill_usgs_nwis.py` | 2026-05-05 | Companion to `split_usgs_sources.py` — pulled 90 days of NWIS IV history for the freshly-split USGS sources so the new series had continuity from day one. 155 of 166 gauges returned data; 11 stations are inactive in NWIS. |
 
 ## Running one again
 
