@@ -63,7 +63,7 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 62,14164900,,,"Hayden Br, at Springfield",44.0712365207472,-122.964527254659,14164900,,,,,,14164900,,400.0,1140.0,170900040706,0,Mckenzie,"Mckenzie at Hayden Br, at Springfield",mckenzie|9|009600|001140,OR
 63,McKenzie_Walterville_merge,,,Walterville,44.0698492269484,-122.771187401123,14163900,,,,MCZO3,,14163900,,600.0,1081.0,170900040706,0,McKenzie,McKenzie at Walterville,mckenzie|9|009400|001081,OR
 64,SF_McKenzie_Cougar_merge,,,Cougar Dam,44.0470670436432,-122.217824536089,14159200,SFCO,,,SFCO3,,14159200,23,1709.51,160.0,170900040307,0,South Fork McKenzie,South Fork McKenzie at Cougar Dam,mckenzie|0south|008290|000160,OR
-65,Clear_Lake_outlet,,,Trail Bridge Dam,44.3609545058304,-121.995617217441,14158500,TRBO,,,TRBO3,,14158500,24,3015.32,92.4,170900040202,0,McKenzie,McKenzie at Trail Bridge Dam,mckenzie|9|006985|000092,OR
+65,Clear_Lake_outlet,,,Clear Lake Outlet,44.3609545058304,-121.995617217441,14158500,TRBO,,,TRBO3,,14158500,24,3015.32,92.4,170900040202,0,McKenzie,McKenzie at Clear Lake Outlet,mckenzie|9|006985|000092,OR
 66,McKenzie_Leeburg_merge,,,Leaburg Dam,44.1237380356862,-122.627571535187,14163150,MZLO,,,MKLO3,,14163150,,710.0,1030.0,170900040703,0,McKenzie,McKenzie at Leaburg Dam,mckenzie|9|009290|001030,OR
 67,14091500,,,Grandview,44.6262275,-121.4839433,14091500,,,,,,14091500,,1974.36,316.0,170703011003,0,Metolius,Metolius at Grandview,metolius|9|008026|000316,OR
 68,MF_Willamette_below_NF_merge,,,Oakridge,43.8012351684092,-122.56088788998,14148000,OAKO,,,OAKO3,,14148000,25,935.0,924.0,170900010701,0,Middle Fork Willamette,Middle Fork Willamette at Oakridge,willamette|0middle|009065|000924,OR
@@ -175,7 +175,7 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 174,Fall_Creek_Inflow,,,Fall Creek above Winberry (FALO3 inflow - 14150800 Winberry),43.972015,-122.65907,,,,,,,,,837.6,,170900010904,0,Fall Creek,Fall Creek at Fall Creek above Winberry (FALO3 inflow - 14150800 Winberry),fall creek|9|009162|999999,OR
 175,WLAO3,,,Willamina,45.047222,-123.502778,WLAO3,,,WLAO3,WLAO3,,,,242.1,,170900080404,0,South Yamhill,South Yamhill at Willamina,yamhill|0south|009758|999999,OR
 176,SF_McKenzie_near_Rainbow,,,Rainbow,44.136,-122.2484,14159500,,,,,,14159500,,1236.0,208.0,170900040308,0,South Fork Mckenzie,South Fork Mckenzie at Rainbow,mckenzie|0south|008764|000208,OR
-177,McKenzie_above_South_Fork,,,South Fork,44.1664,-122.2558,CMRO3,CMRO3,,,CMRO3,,,,1160.0,,170900040502,0,McKenzie,McKenzie at South Fork,mckenzie|9|008840|999999,OR
+177,McKenzie_Rainbow,,,Rainbow,44.1664,-122.2558,CMRO3,CMRO3,,,CMRO3,,,,1160.0,,170900040502,0,McKenzie,McKenzie at Rainbow,mckenzie|9|008840|999999,OR
 178,SALMON RIVER AB EAST FORK NR CLAYTON ID,,,East Fork nr Clayton,44.266642,-114.326758,,SAEI,,,SAEI1,,13297380,,5326.2,1200.0,170602010906,0,Salmon,Salmon at East Fork nr Clayton,salmon|9|004674|001200,ID
 179,SALMON RIVER NR SHOUP ID,,,Shoup,45.3225,-114.44,,,,,,,13307000,,3157.6,6239.0,170602031302,0,Salmon,Salmon at Shoup,salmon|9|006842|006239,ID
 180,EFSF_Stibnite,,,Stibnite,44.905722,-115.3295,,SFSI,,,SFSI1,,13311000,,6466.0,19.3,170602080201,0,East Fork South Fork Salmon,East Fork South Fork Salmon at Stibnite,salmon|0east|003534|000019,ID
@@ -184,3 +184,4 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 183,14128500,,,Carson,45.7267469824777,-121.794774605898,,WCNW,,,WCNW1,,14128500,,112.6,225.0,170701051008,0,Wind,Wind at Carson,wind|9|009887|000225,WA
 184,28B080,,,Washougal,45.5835856510001,-122.34569456,,WASW,,,WASW1,,,,51.9,,170800010606,0,Washougal,Washougal at Washougal,washougal|9|009948|999999,WA
 185,CORVALLIS_merge,,,Corvallis,44.566361,-123.256806,,,,,CORO3,,14171600,,180.0,4420.0,170900030609,0,Willamette,Willamette at Corvallis,willamette|9|009820|004420,OR
+186,14158850,,,blw Trail Bridge Dam,44.2679001,-122.0497826,,,,,,,14158850,,1980.0,184.0,170900040206,0,McKenzie,McKenzie blw Trail Bridge Dam,mckenzie|9|008020|000184,OR
