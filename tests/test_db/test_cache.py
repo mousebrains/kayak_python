@@ -104,7 +104,9 @@ def _seed_multi_gauge_observations(session) -> None:
     session.add(fu)
     session.flush()
 
-    base = datetime(2026, 4, 23, 12, 0, tzinfo=UTC)
+    # Anchor to "now" so the seed stays inside update_all_latest_gauges's
+    # 30-day rebuild window regardless of when the suite runs.
+    base = datetime.now(UTC).replace(microsecond=0) - timedelta(hours=1)
 
     for gi in range(3):
         gauge = Gauge(name=f"g{gi}", usgs_id=f"100000{gi}")

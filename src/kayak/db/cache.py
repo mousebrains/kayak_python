@@ -1,6 +1,6 @@
 """Latest-observation cache — both source-level and gauge-level rollups."""
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete, select, text
 from sqlalchemy.orm import Session
@@ -15,6 +15,16 @@ from kayak.db.models import (
 
 DELTA_LOOKBACK_WINDOW = timedelta(hours=6)
 """How far back to look for a previous observation when computing delta_per_hour."""
+
+GAUGE_CACHE_REBUILD_WINDOW = timedelta(days=30)
+"""How far back update_all_latest_gauges scans observations.
+
+The bulk rebuild only needs the most recent observation per (gauge, data_type)
+plus one ≥6h prior to compute delta. Scanning beyond a few days is wasted work
+that materialises millions of rows in temp B-trees during the window function.
+30 days comfortably covers gauges that go silent for a few weeks (NWRFC scrape
+flakiness, USBR seasonal projects) while keeping the scan well below the full
+multi-month observation history."""
 
 
 # ---------------------------------------------------------------------------
@@ -243,6 +253,7 @@ WITH ranked AS (
         ) AS rn
     FROM observation o
     JOIN gauge_source gs ON gs.source_id = o.source_id
+    WHERE o.observed_at >= :since
 ),
 latest_pick AS (
     SELECT gauge_id, data_type, source_id, observed_at, value
@@ -265,6 +276,7 @@ prev_ranked AS (
         ON lp.gauge_id = gs.gauge_id
        AND lp.data_type = o.data_type
        AND o.observed_at <= datetime(lp.observed_at, '-6 hours')
+    WHERE o.observed_at >= :since
 ),
 prev_pick AS (
     SELECT gauge_id, data_type, observed_at, value
@@ -294,22 +306,30 @@ LEFT JOIN prev_pick pp
 """
 
 
-def update_all_latest_gauges(session: Session) -> None:
+def update_all_latest_gauges(session: Session, since: datetime | None = None) -> None:
     """Recompute latest_gauge_observation for every gauge in one bulk SQL.
 
     Wipes the cache table inside the same transaction and rebuilds it from
     ``observation`` joined to ``gauge_source`` using window functions.
     Equivalent row-for-row to looping ``update_latest_gauge`` over every
-    (gauge_id, data_type) pair, but ~3 SQL statements total instead of
-    ~5*4*N for N gauges with sources. Verified by
-    ``test_bulk_matches_per_gauge_loop``.
+    (gauge_id, data_type) pair *for observations newer than ``since``*, but
+    ~3 SQL statements total instead of ~5*4*N for N gauges with sources.
+    Verified by ``test_bulk_matches_per_gauge_loop``.
+
+    ``since`` defaults to ``now - GAUGE_CACHE_REBUILD_WINDOW`` (30 days).
+    Older observations are excluded from the window function so the scan
+    stays bounded as the observation history grows. Gauges silent longer
+    than ``since`` get no cache row — the display layer treats that as
+    "no recent data", which is the right outcome for a stale gauge.
 
     Tiebreaker on identical ``observed_at`` is ``source_id DESC`` —
     deterministic across runs and matches the per-gauge implementation
     when its underlying SQLite ordering matches.
     """
+    if since is None:
+        since = datetime.now(UTC) - GAUGE_CACHE_REBUILD_WINDOW
     session.execute(delete(LatestGaugeObservation))
-    session.execute(text(_BULK_REBUILD_GAUGE_CACHE_SQL))
+    session.execute(text(_BULK_REBUILD_GAUGE_CACHE_SQL), {"since": since})
     session.commit()
 
 
