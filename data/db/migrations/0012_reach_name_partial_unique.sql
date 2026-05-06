@@ -1,3 +1,4 @@
+-- @no_transaction
 -- Migration 0012: drop reach.UNIQUE(name), replace with partial unique index
 --
 -- ``UNIQUE (name)`` on a nullable column is a SQLite footgun: NULLs are
@@ -5,12 +6,20 @@
 -- unnamed rows (today: 34/389). The intent is "if name is set it must be
 -- unique" — exactly what a partial unique index expresses.
 --
--- SQLite has no ALTER TABLE DROP CONSTRAINT, so a table rebuild is
--- required. Other tables (reach_state, reach_class, reach_guidebook) FK to
--- reach.id with ON DELETE CASCADE; the rebuild is safe inside a single
--- transaction with foreign_keys=ON because (a) DROP TABLE does not fire
--- cascades, and (b) we re-create the table with the same id values, so
--- references resolve again at COMMIT.
+-- SQLite has no ALTER TABLE DROP CONSTRAINT, so a table rebuild is required.
+-- Other tables (reach_state, reach_class, reach_guidebook) FK to reach.id
+-- with ON DELETE CASCADE. We MUST disable foreign_keys for the rebuild:
+-- with foreign_keys=ON, DROP TABLE performs an implicit DELETE FROM first
+-- (per https://sqlite.org/lang_droptable.html), which fires the cascades
+-- and wipes every child row. The "12-step" rebuild recipe from
+-- https://sqlite.org/lang_altertable.html#otheralter requires foreign_keys
+-- to be OFF, but ``PRAGMA foreign_keys`` is silently ignored mid-transaction
+-- (https://sqlite.org/pragma.html#pragma_foreign_keys), so the runner must
+-- execute this file outside its usual ``engine.begin()`` wrapper. The
+-- ``@no_transaction`` marker on line 1 tells the runner to do exactly that.
+
+PRAGMA foreign_keys = OFF;
+BEGIN;
 
 CREATE TABLE reach_new (
     id INTEGER NOT NULL,
@@ -70,3 +79,7 @@ ALTER TABLE reach_new RENAME TO reach;
 
 CREATE INDEX ix_reach_sort_name ON reach (sort_name);
 CREATE UNIQUE INDEX ix_reach_name_unique ON reach (name) WHERE name IS NOT NULL;
+
+PRAGMA foreign_key_check;
+COMMIT;
+PRAGMA foreign_keys = ON;

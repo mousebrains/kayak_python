@@ -73,6 +73,50 @@ def test_stamp_records_without_running(tmp_path: Path, engine: object) -> None:
         assert migrate_mod.apply_pending() == []
 
 
+def test_no_transaction_marker_disables_fk_cascade(tmp_path: Path, engine: object) -> None:
+    """A migration tagged ``@no_transaction`` runs in autocommit so its
+    ``PRAGMA foreign_keys=OFF`` actually takes effect. Without the marker the
+    PRAGMA is silently ignored mid-transaction and ``DROP TABLE parent`` fires
+    ON DELETE CASCADE on every child row. The marker is the fix for the
+    incident that wiped reach_state/reach_class/reach_guidebook on 2026-05-03.
+    """
+    migrations_dir = tmp_path / "migrations"
+    migrations_dir.mkdir()
+    (migrations_dir / "0001_setup.sql").write_text(
+        "CREATE TABLE parent (id INTEGER PRIMARY KEY);\n"
+        "CREATE TABLE child (pid INTEGER, "
+        "FOREIGN KEY(pid) REFERENCES parent(id) ON DELETE CASCADE);\n"
+        "INSERT INTO parent VALUES (1),(2),(3);\n"
+        "INSERT INTO child  VALUES (1),(2),(3);\n"
+    )
+    (migrations_dir / "0002_rebuild_parent.sql").write_text(
+        "-- @no_transaction\n"
+        "PRAGMA foreign_keys = OFF;\n"
+        "BEGIN;\n"
+        "CREATE TABLE parent_new (id INTEGER PRIMARY KEY, note TEXT);\n"
+        "INSERT INTO parent_new (id) SELECT id FROM parent;\n"
+        "DROP TABLE parent;\n"
+        "ALTER TABLE parent_new RENAME TO parent;\n"
+        "COMMIT;\n"
+        "PRAGMA foreign_keys = ON;\n"
+    )
+
+    with (
+        patch("kayak.cli.migrate.MIGRATIONS_DIR", migrations_dir),
+        patch("kayak.cli.migrate.get_engine", return_value=engine),
+    ):
+        ran = migrate_mod.apply_pending()
+        assert ran == ["0001", "0002"]
+
+    with engine.begin() as conn:
+        # Child rows must survive — the cascade would have wiped them if the
+        # PRAGMA was ignored.
+        assert conn.execute(text("SELECT COUNT(*) FROM child")).scalar() == 3
+        # Parent rebuild produced the new column.
+        cols = {r[1] for r in conn.execute(text("PRAGMA table_info(parent)")).all()}
+        assert "note" in cols
+
+
 def test_0003_does_not_recreate_reach_level(engine: object) -> None:
     """After the 0003 edit, replaying real migration 0003 must not recreate
     the dropped `reach_level` table.

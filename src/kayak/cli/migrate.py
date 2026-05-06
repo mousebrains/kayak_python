@@ -124,15 +124,59 @@ def apply_pending() -> list[str]:
     for m in pending:
         logger.info("Applying migration %s", m.name)
         now = datetime.now(UTC).isoformat(timespec="seconds")
-        with engine.begin() as conn:
-            for stmt in _split_statements(m.sql):
-                conn.execute(text(stmt))
-            conn.execute(
-                text("INSERT INTO schema_migrations (version, applied_at) VALUES (:v, :a)"),
-                {"v": m.version, "a": now},
-            )
+        sql = m.sql
+        statements = _split_statements(sql)
+        if _wants_no_transaction(sql):
+            # Migration manages its own transaction(s) — needed for ops like
+            # PRAGMA foreign_keys=OFF that SQLite silently ignores inside a
+            # surrounding transaction. Run each statement in autocommit, then
+            # record the version in a separate transaction.
+            raw = engine.raw_connection()
+            try:
+                cur = raw.cursor()
+                # Drop SQLAlchemy's BEGIN; we want true autocommit so PRAGMAs
+                # take effect and the migration's own BEGIN/COMMIT pair runs.
+                raw.isolation_level = None  # type: ignore[attr-defined]
+                for stmt in statements:
+                    cur.execute(stmt)
+                cur.close()
+                raw.commit()
+            finally:
+                raw.close()
+            with engine.begin() as conn:
+                conn.execute(
+                    text("INSERT INTO schema_migrations (version, applied_at) VALUES (:v, :a)"),
+                    {"v": m.version, "a": now},
+                )
+        else:
+            with engine.begin() as conn:
+                for stmt in statements:
+                    conn.execute(text(stmt))
+                conn.execute(
+                    text("INSERT INTO schema_migrations (version, applied_at) VALUES (:v, :a)"),
+                    {"v": m.version, "a": now},
+                )
         ran.append(m.version)
     return ran
+
+
+def _wants_no_transaction(sql: str) -> bool:
+    """True if the migration opts out of the runner's wrapping transaction.
+
+    Marker is the literal token ``@no_transaction`` anywhere in the leading
+    SQL comment block. Used by table-rebuild migrations that need
+    ``PRAGMA foreign_keys=OFF`` to take effect (PRAGMA is silently ignored
+    mid-transaction in SQLite).
+    """
+    for line in sql.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if not stripped.startswith("--"):
+            return False
+        if "@no_transaction" in stripped:
+            return True
+    return False
 
 
 def _split_statements(sql: str) -> list[str]:
