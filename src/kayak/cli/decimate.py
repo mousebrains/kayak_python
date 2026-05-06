@@ -1,14 +1,16 @@
 """Decimate (thin) old observations to reduce database size.
 
 Strategy:
-- Recent (< recent_days): keep ALL observations
-- Medium-term (recent_days to archive_days): thin to 1 per hour
-- Long-term (> archive_days): thin to 1 per 6 hours
+- Recent (< recent_days, default 30): keep ALL observations
+- Medium-term (recent_days to archive_days, default 30-365): thin to 1 per hour
+- Long-term (> archive_days, default 365): thin to 1 per 6 hours
 
 Within each time bucket, the observation closest to the bucket midpoint is kept.
 
 Deletions are batched by source_id so the database write lock is held only
-briefly per batch, allowing concurrent readers and writers.
+briefly per batch, allowing concurrent readers and writers. VACUUM runs by
+default after deletion to reclaim freed pages on disk; pass --no-vacuum to
+skip the rewrite (which briefly locks the DB).
 """
 
 import argparse
@@ -116,8 +118,8 @@ def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -
     parser.add_argument(
         "--recent-days",
         type=int,
-        default=90,
-        help="Keep all observations within this many days (default: 90)",
+        default=30,
+        help="Keep all observations within this many days (default: 30)",
     )
     parser.add_argument(
         "--archive-days",
@@ -132,20 +134,22 @@ def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -
         help="Show counts only, do not delete",
     )
     parser.add_argument(
-        "--vacuum",
-        action="store_true",
-        help="Run VACUUM after deletion to reclaim space",
+        "--no-vacuum",
+        action="store_false",
+        dest="vacuum",
+        help="Skip VACUUM after deletion (default: VACUUM runs to reclaim space)",
     )
+    parser.set_defaults(vacuum=True)
 
 
 def decimate(args: argparse.Namespace) -> None:
     """Thin old observations."""
     from datetime import UTC, datetime, timedelta
 
-    recent_days = getattr(args, "recent_days", 90)
+    recent_days = getattr(args, "recent_days", 30)
     archive_days = getattr(args, "archive_days", 365)
     dry_run = getattr(args, "dry_run", False)
-    do_vacuum = getattr(args, "vacuum", False)
+    do_vacuum = getattr(args, "vacuum", True)
 
     now = datetime.now(UTC)
     medium_cutoff = now - timedelta(days=recent_days)
