@@ -100,7 +100,7 @@ def _seed_multi_gauge_observations(session) -> None:
     """
     from kayak.db.models import FetchUrl, Gauge, GaugeSource, Source
 
-    fu = FetchUrl(url="https://example.com/seed", parser="usgs", is_active=True)
+    fu = FetchUrl(url="https://example.com/seed", parser="nwps", is_active=True)
     session.add(fu)
     session.flush()
 

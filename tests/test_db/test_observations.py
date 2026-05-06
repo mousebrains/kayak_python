@@ -19,7 +19,7 @@ from kayak.db.sources import get_negative_flow_source_ids, get_source_by_name
 
 def _make_source(session, name="src1"):
     """Helper to create a Source with FetchUrl."""
-    fu = FetchUrl(url=f"https://example.com/{name}", parser="usgs", is_active=True)
+    fu = FetchUrl(url=f"https://example.com/{name}", parser="nwps", is_active=True)
     session.add(fu)
     session.flush()
     src = Source(name=name, fetch_url_id=fu.id)

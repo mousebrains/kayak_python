@@ -53,7 +53,7 @@ def session(engine):
 @pytest.fixture()
 def sample_source(session) -> Source:
     """Create a Source with a FetchUrl for testing."""
-    fetch_url = FetchUrl(url="https://example.com/data", parser="usgs", is_active=True)
+    fetch_url = FetchUrl(url="https://example.com/data", parser="nwps", is_active=True)
     session.add(fetch_url)
     session.flush()
 

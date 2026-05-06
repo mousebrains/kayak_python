@@ -9,15 +9,15 @@ from kayak.parsers.registry import (
 
 
 class TestEnsureAllLoaded:
-    def test_usgs_in_registry_after_load(self):
-        """After ensure_all_loaded, 'usgs' should be in the registry."""
+    def test_nwps_in_registry_after_load(self):
+        """After ensure_all_loaded, 'nwps' should be in the registry."""
         ensure_all_loaded()
-        assert "usgs" in _REGISTRY
+        assert "nwps" in _REGISTRY
 
-    def test_get_parser_class_usgs(self):
-        """get_parser_class('usgs') should return a class."""
+    def test_get_parser_class_nwps(self):
+        """get_parser_class('nwps') should return a class."""
         ensure_all_loaded()
-        cls = get_parser_class("usgs")
+        cls = get_parser_class("nwps")
         assert cls is not None
         assert hasattr(cls, "parse")
 
@@ -38,7 +38,6 @@ class TestEnsureAllLoaded:
         ensure_all_loaded()
         names = get_parser_names()
         for expected in (
-            "usgs",
             "usbr",
             "nwrfc.xml",
             "nwrfc.textplot",

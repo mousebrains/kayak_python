@@ -10,7 +10,7 @@ from kayak.db.observations import store_observations
 
 def _make_source(session, name="src1"):
     """Helper to create a Source with FetchUrl."""
-    fu = FetchUrl(url=f"https://example.com/{name}", parser="usgs", is_active=True)
+    fu = FetchUrl(url=f"https://example.com/{name}", parser="nwps", is_active=True)
     session.add(fu)
     session.flush()
     src = Source(name=name, fetch_url_id=fu.id)
@@ -240,7 +240,7 @@ def test_decimate_cli_end_to_end(tmp_path):
     try:
         s = get_session()
         try:
-            fu = FetchUrl(url="https://example.com/e2e", parser="usgs", is_active=True)
+            fu = FetchUrl(url="https://example.com/e2e", parser="nwps", is_active=True)
             s.add(fu)
             s.flush()
             src = Source(name="e2e_src", fetch_url_id=fu.id)
@@ -312,7 +312,7 @@ def test_decimate_cli_dry_run(tmp_path):
     try:
         s = get_session()
         try:
-            fu = FetchUrl(url="https://example.com/dryrun", parser="usgs", is_active=True)
+            fu = FetchUrl(url="https://example.com/dryrun", parser="nwps", is_active=True)
             s.add(fu)
             s.flush()
             src = Source(name="dryrun_src", fetch_url_id=fu.id)
@@ -360,7 +360,7 @@ def test_decimate_cli_nothing_to_do(tmp_path):
     try:
         s = get_session()
         try:
-            fu = FetchUrl(url="https://example.com/quiet", parser="usgs", is_active=True)
+            fu = FetchUrl(url="https://example.com/quiet", parser="nwps", is_active=True)
             s.add(fu)
             s.flush()
             src = Source(name="quiet_src", fetch_url_id=fu.id)

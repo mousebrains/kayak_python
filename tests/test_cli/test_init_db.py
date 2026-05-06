@@ -41,7 +41,7 @@ def test_sync_sources_adds_records(session):
     from kayak.cli.init_db import sync_sources
 
     fake_sources = [
-        {"url": "https://example.com/usgs1", "parser": "usgs", "hours": ""},
+        {"url": "https://example.com/usgs1", "parser": "nwps", "hours": ""},
         {"url": "https://example.com/noaa1", "parser": "noaa", "hours": "6,12"},
     ]
     with mock.patch("kayak.cli.init_db.load_sources", return_value=fake_sources):
@@ -58,7 +58,7 @@ def test_sync_sources_updates_existing(session):
 
     # First sync
     sources_v1 = [
-        {"url": "https://example.com/src", "parser": "usgs", "hours": ""},
+        {"url": "https://example.com/src", "parser": "nwps", "hours": ""},
     ]
     with mock.patch("kayak.cli.init_db.load_sources", return_value=sources_v1):
         sync_sources(session)
@@ -83,11 +83,11 @@ def test_sync_sources_returns_new_count(session):
     from kayak.cli.init_db import sync_sources
 
     # Pre-populate one record
-    session.add(FetchUrl(url="https://example.com/pre", parser="usgs", is_active=True))
+    session.add(FetchUrl(url="https://example.com/pre", parser="nwps", is_active=True))
     session.flush()
 
     fake_sources = [
-        {"url": "https://example.com/pre", "parser": "usgs", "hours": ""},
+        {"url": "https://example.com/pre", "parser": "nwps", "hours": ""},
         {"url": "https://example.com/new", "parser": "noaa", "hours": ""},
     ]
     with mock.patch("kayak.cli.init_db.load_sources", return_value=fake_sources):
@@ -173,7 +173,7 @@ def test_sync_sources_missing_stations_key_works(session):
     from kayak.cli.init_db import sync_sources
 
     fake_sources = [
-        {"url": "https://example.com/nostations", "parser": "usgs", "hours": ""},
+        {"url": "https://example.com/nostations", "parser": "nwps", "hours": ""},
     ]
     with mock.patch("kayak.cli.init_db.load_sources", return_value=fake_sources):
         count = sync_sources(session)
@@ -192,13 +192,13 @@ def test_sync_sources_deactivates_missing_urls(session):
     from kayak.cli.init_db import sync_sources
 
     # Seed a stale active FetchUrl not in the YAML, plus one the YAML covers.
-    session.add(FetchUrl(url="https://example.com/retired", parser="usgs", is_active=True))
-    session.add(FetchUrl(url="https://example.com/kept", parser="usgs", is_active=True))
+    session.add(FetchUrl(url="https://example.com/retired", parser="nwps", is_active=True))
+    session.add(FetchUrl(url="https://example.com/kept", parser="nwps", is_active=True))
     session.flush()
 
     fake_sources = [
-        {"url": "https://example.com/kept", "parser": "usgs", "hours": ""},
-        {"url": "https://example.com/fresh", "parser": "usgs", "hours": ""},
+        {"url": "https://example.com/kept", "parser": "nwps", "hours": ""},
+        {"url": "https://example.com/fresh", "parser": "nwps", "hours": ""},
     ]
     with mock.patch("kayak.cli.init_db.load_sources", return_value=fake_sources):
         sync_sources(session)

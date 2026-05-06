@@ -44,7 +44,7 @@ def test_gauge_unique_name(session):
 
 
 def test_create_source_with_fetch_url(session):
-    fu = FetchUrl(url="https://example.com", parser="usgs", is_active=True)
+    fu = FetchUrl(url="https://example.com", parser="nwps", is_active=True)
     session.add(fu)
     session.flush()
 
@@ -173,7 +173,7 @@ def test_reach_class(session, sample_reach):
 
 
 def test_rating_and_data(session):
-    rating = Rating(url="https://example.com/rating", parser="usgs")
+    rating = Rating(url="https://example.com/rating", parser="nwps")
     session.add(rating)
     session.flush()
 

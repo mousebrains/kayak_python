@@ -23,7 +23,7 @@ from kayak.db.models import (
 
 def _make_usgs_source(session, usgs_id="14306500", name=None):
     """Create a Source linked to a Gauge with a usgs_id."""
-    fetch_url = FetchUrl(url=f"https://example.com/{usgs_id}", parser="usgs", is_active=True)
+    fetch_url = FetchUrl(url=f"https://example.com/{usgs_id}", parser="nwps", is_active=True)
     session.add(fetch_url)
     session.flush()
 

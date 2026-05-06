@@ -23,7 +23,7 @@ def _noop(*a, **kw):
 
 def _make_gauge_with_rating(session):
     """Create a gauge with a rating table and linked source. Returns IDs."""
-    rating = Rating(url="https://example.com/rating", parser="usgs")
+    rating = Rating(url="https://example.com/rating", parser="nwps")
     session.add(rating)
     session.flush()
 

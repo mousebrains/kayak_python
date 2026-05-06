@@ -16,8 +16,8 @@ def register(name: str) -> Callable[[type[BaseParser]], type[BaseParser]]:
 
     Usage::
 
-        @register("usgs")
-        class USGSParser(BaseParser):
+        @register("nwps")
+        class NWPSParser(BaseParser):
             ...
     """
 
@@ -50,6 +50,5 @@ def ensure_all_loaded() -> None:
         nwrfc_xml,
         usace_cda,
         usbr,
-        usgs,
         wa_gov,
     )

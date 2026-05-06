@@ -1,7 +1,7 @@
 """End-to-end integration test for the pipeline CLI.
 
 Unlike ``test_pipeline.py`` (which mocks every stage to verify wiring), this
-test seeds a real SQLite DB, feeds the fetch step a canned USGS RDB response
+test seeds a real SQLite DB, feeds the fetch step a canned NWPS JSON response
 via ``input_dir``, then runs fetch → calc-rating → calculator → build and
 asserts the generated ``index.html`` contains the seeded reach.
 
@@ -38,24 +38,29 @@ from kayak.db.models import (
 )
 
 
-def _build_rdb() -> str:
-    """Minimal USGS RDB fixture with two rows timestamped near "now".
+def _build_nwps_json() -> str:
+    """Minimal NWPS stageflow/observed fixture with two rows near "now".
 
     The build step filters reaches whose latest observation is older than
     DATA_EXPIRY_THRESHOLD (7 days), so the timestamps must be recent for the
     seeded reach to appear in index.html. Generated relative to ``now`` so the
-    test stays stable as wall-clock time advances.
+    test stays stable as wall-clock time advances. ``secondaryUnits`` is
+    ``cfs`` (not ``kcfs``) so the parser stores the values verbatim.
     """
+    import json
+
     now = datetime.now(UTC).replace(microsecond=0, second=0)
-    t1 = (now - timedelta(hours=2)).strftime("%Y-%m-%d %H:%M")
-    t2 = (now - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M")
-    return (
-        "# USGS RDB fixture\n"
-        "#\n"
-        "agency_cd\tsite_no\tdatetime\ttz_cd\t12345_00060\t12345_00060_cd\n"
-        "5s\t15s\t20d\t6s\t14n\t10s\n"
-        f"USGS\t12345678\t{t1}\tUTC\t500.0\tP\n"
-        f"USGS\t12345678\t{t2}\tUTC\t525.0\tP\n"
+    t1 = (now - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    t2 = (now - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return json.dumps(
+        {
+            "primaryUnits": "ft",
+            "secondaryUnits": "cfs",
+            "data": [
+                {"validTime": t1, "primary": 4.20, "secondary": 500.0},
+                {"validTime": t2, "primary": 4.30, "secondary": 525.0},
+            ],
+        }
     )
 
 
@@ -77,15 +82,23 @@ def _seed(db_url: str) -> None:
         s.add(State(name="Oregon", abbreviation="OR"))
         s.flush()
 
-        fetch_url = FetchUrl(url="test://usgs", parser="usgs", is_active=True)
+        # The NWPS parser extracts the station LID from the URL via the
+        # ``/gauges/{LID}/`` segment, then looks the LID up in the
+        # fetch_url's source_map. URL, source.name, and gauge.nws_id all
+        # have to agree on TESTLID for the observation to land.
+        fetch_url = FetchUrl(
+            url="test://gauges/TESTLID/stageflow/observed",
+            parser="nwps",
+            is_active=True,
+        )
         s.add(fetch_url)
         s.flush()
 
-        source = Source(name="12345678", agency="USGS", fetch_url_id=fetch_url.id)
+        source = Source(name="TESTLID", agency="NWS", fetch_url_id=fetch_url.id)
         s.add(source)
         s.flush()
 
-        gauge = Gauge(name="test_gauge", usgs_id="12345678")
+        gauge = Gauge(name="test_gauge", nws_id="TESTLID")
         s.add(gauge)
         s.flush()
         s.add(GaugeSource(gauge_id=gauge.id, source_id=source.id))
@@ -121,18 +134,19 @@ def _seed(db_url: str) -> None:
 @pytest.mark.slow
 @pytest.mark.integration
 def test_pipeline_fetch_through_build_smoke(tmp_path: Path) -> None:
-    """Full pipeline: fetch canned RDB → build → rendered reach name in index.html."""
+    """Full pipeline: fetch canned NWPS JSON → build → rendered reach name in index.html."""
     db_path = tmp_path / "kayak.db"
     db_url = f"sqlite:///{db_path}"
     _seed(db_url)
 
-    # Fetch reads from input_dir when args.input_dir is set; the file path is
-    # resolved as ``input_dir / raw_url.lstrip('/')``. For the url
-    # ``test://usgs`` the path becomes ``input_dir/test:/usgs``.
+    # Fetch reads from input_dir when args.input_dir is set; the file path
+    # is resolved as ``input_dir / raw_url.lstrip('/')``. For the url
+    # ``test://gauges/TESTLID/stageflow/observed`` the path becomes
+    # ``input_dir/test:/gauges/TESTLID/stageflow/observed``.
     input_dir = tmp_path / "input"
-    rdb_path = input_dir / "test:" / "usgs"
-    rdb_path.parent.mkdir(parents=True)
-    rdb_path.write_text(_build_rdb())
+    json_path = input_dir / "test:" / "gauges" / "TESTLID" / "stageflow" / "observed"
+    json_path.parent.mkdir(parents=True)
+    json_path.write_text(_build_nwps_json())
 
     output_dir = tmp_path / "out"
 
@@ -162,7 +176,9 @@ def test_pipeline_fetch_through_build_smoke(tmp_path: Path) -> None:
 
     # One-entry source list matching our test FetchUrl so fetch() doesn't
     # iterate all 100+ sources from the real data/sources.yaml.
-    yaml_sources = [{"url": "test://usgs", "parser": "usgs", "hours": ""}]
+    yaml_sources = [
+        {"url": "test://gauges/TESTLID/stageflow/observed", "parser": "nwps", "hours": ""},
+    ]
 
     # OUTPUT_DIR override routes build()'s path lookup onto our tmp dir.
     # Stub fetch-usgs-ogc to avoid hitting the real USGS OGC endpoint.
