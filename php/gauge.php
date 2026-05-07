@@ -120,6 +120,24 @@ $reaches_stmt = $db->prepare(
 $reaches_stmt->execute([$id]);
 $reaches = $reaches_stmt->fetchAll();
 
+// Per-reach low/high thresholds for classifying the gauge's current readings
+// against each reach's runnable range. Pulled in one shot to avoid N+1.
+$reach_class_thresholds = [];
+if ($reaches) {
+    $reach_ids = array_map(static fn($r) => (int)$r['id'], $reaches);
+    $ph = implode(',', array_fill(0, count($reach_ids), '?'));
+    $thr_stmt = $db->prepare(
+        "SELECT reach_id, low, high, low_data_type, high_data_type
+         FROM reach_class
+         WHERE reach_id IN ($ph) AND (low IS NOT NULL OR high IS NOT NULL)
+         ORDER BY id"
+    );
+    $thr_stmt->execute($reach_ids);
+    foreach ($thr_stmt->fetchAll() as $row) {
+        $reach_class_thresholds[(int)$row['reach_id']][] = $row;
+    }
+}
+
 // Prefer the normalized display_name populated by
 // scripts/seed_gauge_display.py; fall back to the internal canonical
 // `name` when the row predates the seeder (e.g. a freshly inserted gauge).
@@ -152,58 +170,7 @@ echo '<button type="submit">Go</button>';
 echo '</form>';
 echo '</div>';
 
-// Gauge details
 echo '<h2>' . htmlspecialchars($gauge_display) . '</h2>';
-echo '<table class="desc-table">';
-
-$fields = [
-    'ID' => $gauge['id'],
-    'Name' => $gauge['name'],
-    'River' => $gauge['river'],
-    'Location' => $gauge['location'],
-    'Station ID' => $gauge['station_id'],
-    'USGS ID' => $gauge['usgs_id'],
-    'CBTT ID' => $gauge['cbtt_id'],
-    'GEOS ID' => $gauge['geos_id'],
-    'NWS ID' => $gauge['nws_id'],
-    'NWSLI ID' => $gauge['nwsli_id'] ? '<a href="https://www.nwrfc.noaa.gov/river/station/flowplot/flowplot.cgi?lid=' . urlencode($gauge['nwsli_id']) . '" target="_blank" rel="noopener">' . htmlspecialchars($gauge['nwsli_id']) . '</a>' : null,
-    'SNOTEL ID' => $gauge['snotel_id'],
-];
-
-// Coordinates with Google Maps link
-$lat = $gauge['latitude'];
-$lon = $gauge['longitude'];
-if ($lat !== null && $lon !== null) {
-    $lat_f = number_format((float)$lat, 6, '.', '');
-    $lon_f = number_format((float)$lon, 6, '.', '');
-    $maps_url = "https://www.google.com/maps?q={$lat_f},{$lon_f}";
-    $fields['Coordinates'] = "<a href=\"" . htmlspecialchars($maps_url) . "\" target=\"_blank\" rel=\"noopener\">{$lat_f}, {$lon_f}</a>";
-}
-
-if ($gauge['elevation'] !== null) {
-    $fields['Elevation'] = number_format((float)$gauge['elevation'], 0) . ' ft';
-}
-if ($gauge['drainage_area'] !== null) {
-    $fields['Drainage Area'] = number_format((float)$gauge['drainage_area'], 0) . ' sq mi';
-}
-if ($gauge['bank_full'] !== null) {
-    $fields['Bank Full'] = number_format((float)$gauge['bank_full'], 2);
-}
-if ($gauge['flood_stage'] !== null) {
-    $fields['Flood Stage'] = number_format((float)$gauge['flood_stage'], 2);
-}
-
-foreach ($fields as $label => $value) {
-    if ($value === null || trim((string)$value) === '') continue;
-    if ($label === 'Coordinates' || $label === 'NWSLI ID') {
-        echo "<tr><td>$label</td><td>$value</td></tr>\n";
-    } else {
-        $esc = htmlspecialchars((string)$value);
-        echo "<tr><td>$label</td><td>$esc</td></tr>\n";
-    }
-}
-
-echo '</table>';
 
 // --- Current readings + stale banner ---
 $readings_stmt = $db->prepare(
@@ -212,6 +179,14 @@ $readings_stmt = $db->prepare(
 );
 $readings_stmt->execute([(int)$gauge['id']]);
 $readings = $readings_stmt->fetchAll();
+
+// dtype → numeric value map for downstream classification of associated reaches.
+$readings_by_dtype = [];
+foreach ($readings as $r) {
+    if ($r['value'] !== null) {
+        $readings_by_dtype[(string)$r['data_type']] = (float)$r['value'];
+    }
+}
 
 if ($readings) {
     $latest_ts_all = 0;
@@ -294,6 +269,58 @@ if ($gauge['latitude'] !== null && $gauge['longitude'] !== null) {
     $has_map = gm_render_map(['Gauge' => "$glat,$glon"]);
 }
 
+// --- Gauge details (moved below the map so the flow info is the page lead) ---
+echo '<table class="desc-table">';
+
+$fields = [
+    'ID' => $gauge['id'],
+    'Name' => $gauge['name'],
+    'River' => $gauge['river'],
+    'Location' => $gauge['location'],
+    'Station ID' => $gauge['station_id'],
+    'USGS ID' => $gauge['usgs_id'],
+    'CBTT ID' => $gauge['cbtt_id'],
+    'GEOS ID' => $gauge['geos_id'],
+    'NWS ID' => $gauge['nws_id'],
+    'NWSLI ID' => $gauge['nwsli_id'] ? '<a href="https://www.nwrfc.noaa.gov/river/station/flowplot/flowplot.cgi?lid=' . urlencode($gauge['nwsli_id']) . '" target="_blank" rel="noopener">' . htmlspecialchars($gauge['nwsli_id']) . '</a>' : null,
+    'SNOTEL ID' => $gauge['snotel_id'],
+];
+
+// Coordinates with Google Maps link
+$lat = $gauge['latitude'];
+$lon = $gauge['longitude'];
+if ($lat !== null && $lon !== null) {
+    $lat_f = number_format((float)$lat, 6, '.', '');
+    $lon_f = number_format((float)$lon, 6, '.', '');
+    $maps_url = "https://www.google.com/maps?q={$lat_f},{$lon_f}";
+    $fields['Coordinates'] = "<a href=\"" . htmlspecialchars($maps_url) . "\" target=\"_blank\" rel=\"noopener\">{$lat_f}, {$lon_f}</a>";
+}
+
+if ($gauge['elevation'] !== null) {
+    $fields['Elevation'] = number_format((float)$gauge['elevation'], 0) . ' ft';
+}
+if ($gauge['drainage_area'] !== null) {
+    $fields['Drainage Area'] = number_format((float)$gauge['drainage_area'], 0) . ' sq mi';
+}
+if ($gauge['bank_full'] !== null) {
+    $fields['Bank Full'] = number_format((float)$gauge['bank_full'], 2);
+}
+if ($gauge['flood_stage'] !== null) {
+    $fields['Flood Stage'] = number_format((float)$gauge['flood_stage'], 2);
+}
+
+foreach ($fields as $label => $value) {
+    if ($value === null || trim((string)$value) === '') continue;
+    if ($label === 'Coordinates' || $label === 'NWSLI ID') {
+        echo "<tr><td>$label</td><td>$value</td></tr>\n";
+    } else {
+        $esc = htmlspecialchars((string)$value);
+        echo "<tr><td>$label</td><td>$esc</td></tr>\n";
+    }
+}
+
+echo '</table>';
+
 // Associated sources
 if ($sources) {
     echo '<h3 style="margin-top:1rem">Associated Sources</h3>';
@@ -311,18 +338,46 @@ if ($sources) {
     echo '<p style="margin-top:1rem;color:#666">No associated sources.</p>';
 }
 
+// Mirrors db/reaches.py::classify_level + the priority order in
+// build.py::_get_row_data — try (flow, gauge, inflow-as-flow) and pick the
+// first dtype with both a reading on this gauge and a class threshold whose
+// data_type matches. Returns 'low' | 'okay' | 'high' | 'unknown'.
+$classify_reach_status = static function (array $thresholds, array $readings_by_dtype): string {
+    $candidates = [['flow', 'flow'], ['gauge', 'gauge'], ['inflow', 'flow']];
+    foreach ($candidates as [$reading_dt, $classify_dt]) {
+        if (!isset($readings_by_dtype[$reading_dt])) continue;
+        $v = $readings_by_dtype[$reading_dt];
+        foreach ($thresholds as $rc) {
+            if ($rc['low'] === null && $rc['high'] === null) continue;
+            if (!empty($rc['low_data_type']) && $rc['low_data_type'] !== $classify_dt) continue;
+            if (!empty($rc['high_data_type']) && $rc['high_data_type'] !== $classify_dt) continue;
+            if ($rc['low'] !== null && $v < (float)$rc['low']) return 'low';
+            if ($rc['high'] !== null && $v > (float)$rc['high']) return 'high';
+            return 'okay';
+        }
+    }
+    return 'unknown';
+};
+
 // Associated reaches
 if ($reaches) {
     echo '<h3 style="margin-top:1rem">Associated Reaches</h3>';
     echo '<table class="readings-table">';
-    echo '<tr><th>Name</th><th>River</th><th>Class</th><th>Length</th><th>Watershed</th></tr>';
+    echo '<tr><th>Name</th><th>River</th><th>Class</th><th>Length</th><th>Watershed</th><th>Status</th></tr>';
     foreach ($reaches as $r) {
         $rname = htmlspecialchars($r['name']);
         $river = htmlspecialchars($r['river'] ?? '');
         $classes = htmlspecialchars($r['classes'] ?? '');
         $len = $r['length'] !== null ? number_format((float)$r['length'], 1) . ' mi' : '';
         $basin = htmlspecialchars($r['basin'] ?? '');
-        echo "<tr><td><a href=\"/description.php?id={$r['id']}\">$rname</a></td><td>$river</td><td>$classes</td><td>$len</td><td>$basin</td></tr>\n";
+        $status = $classify_reach_status(
+            $reach_class_thresholds[(int)$r['id']] ?? [],
+            $readings_by_dtype
+        );
+        $status_html = $status === 'unknown'
+            ? '<span style="color:var(--c-text-muted)">unknown</span>'
+            : '<span class="level-' . $status . '">' . $status . '</span>';
+        echo "<tr><td><a href=\"/description.php?id={$r['id']}\">$rname</a></td><td>$river</td><td>$classes</td><td>$len</td><td>$basin</td><td>$status_html</td></tr>\n";
     }
     echo '</table>';
 } else {
