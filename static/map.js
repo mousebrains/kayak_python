@@ -18,6 +18,41 @@ var DEFAULT_ZOOM=7;
 
 function esc(s){var d=document.createElement('div');d.textContent=s==null?'':s;return d.innerHTML;}
 
+// reaches-state.json was once {id: "status"}; it's now {id: {s, t, v, u, d, ts}}.
+// Tolerate both during the cache-overlap window where an old map.js may meet
+// new state JSON or vice versa.
+function readEntry(state,id){
+  var v=state[id];
+  if(typeof v==='string')return {s:v};
+  return v||{s:'unknown'};
+}
+
+function fmtValue(v,t,u){
+  if(t==='flow')return Math.round(v).toLocaleString()+' '+u;
+  return Number(v).toFixed(1)+' '+u;
+}
+
+// Match description.php's "stable" threshold (|d| < 0.5) regardless of data
+// type. Below that, render no trend at all rather than a misleading arrow.
+function fmtDelta(d,t,u){
+  if(d==null||Math.abs(d)<0.5)return '';
+  var arrow=d>0?'↑':'↓';
+  var mag=t==='flow'
+    ? Math.abs(Math.round(d)).toLocaleString()
+    : Math.abs(d).toFixed(1);
+  return arrow+' '+mag+' '+u+'/hr';
+}
+
+function fmtAge(ms){
+  if(ms<0)return '';
+  if(ms<60000)return 'just now';
+  if(ms<3600000)return Math.round(ms/60000)+' min ago';
+  if(ms<86400000)return Math.round(ms/3600000)+' hr ago';
+  return Math.round(ms/86400000)+' days ago';
+}
+
+var STALE_MS=24*3600*1000;
+
 function parseHash(){
   var out={s:null,c:null};
   var h=(location.hash||'').replace(/^#/,'');
@@ -63,6 +98,11 @@ map.getPane('reach-casings').style.zIndex='400';
 map.getPane('reach-casings').style.pointerEvents='none';
 map.createPane('reaches');
 map.getPane('reaches').style.zIndex='410';
+// Fat invisible polylines on top pane so finger taps register within ~18px
+// of a thin reach line. Without this, reaches at base zoom (z≈7 over a
+// state) draw at ~4px and are nearly impossible to hit on a phone.
+map.createPane('reach-hits');
+map.getPane('reach-hits').style.zIndex='420';
 
 function fail(msg){
   map.setView(DEFAULT_VIEW,DEFAULT_ZOOM);
@@ -94,37 +134,83 @@ function renderMap(geom,state){
   var HOVER_LINE={weight:7,opacity:1.0};
   var REST_CASING={color:'#1a1a1a',weight:5,opacity:0.5,lineJoin:'round',lineCap:'round',interactive:false,pane:'reach-casings'};
   var HOVER_CASING={weight:9};
+  var HIT_LINE={weight:18,opacity:0,interactive:true,pane:'reach-hits',lineCap:'round',lineJoin:'round'};
+  var HIT_POINT={radius:14,opacity:0,fillOpacity:0,interactive:true,pane:'reach-hits'};
 
   var layersById={};
   L.geoJSON(geom,{
     pane:'reaches',
     style:function(f){
-      var s=state[f.properties.id]||'unknown';
+      var s=readEntry(state,f.properties.id).s||'unknown';
       return {color:COLORS[s]||COLORS.unknown,weight:REST_LINE.weight,opacity:REST_LINE.opacity,lineJoin:'round',lineCap:'round'};
     },
     pointToLayer:function(f,ll){
-      var s=state[f.properties.id]||'unknown';
+      var s=readEntry(state,f.properties.id).s||'unknown';
       return L.circleMarker(ll,{radius:6,fillColor:COLORS[s]||COLORS.unknown,color:'#333',weight:1,fillOpacity:0.8,pane:'reaches'});
     },
     onEachFeature:function(f,layer){
       var p=f.properties;
-      var s=state[p.id]||'unknown';
-      var badge='<span style="color:'+(COLORS[s]||COLORS.unknown)+'">&#9679;</span> '+esc(s);
-      layer.bindPopup('<b><a href="/description.php?id='+parseInt(p.id,10)+'">'+esc(p.name)+'</a></b><br>'+badge);
+      var entry=readEntry(state,p.id);
+      var s=entry.s||'unknown';
+      var tiers=p.tiers||['?'];
+      var classDisplay=tiers.join(' · ');
+      // Popup HTML is built lazily via a Leaflet popup-content function
+      // so the "X hr ago" text reflects the moment the user opens it,
+      // not the page-load time. Closes over p+entry; entry is the
+      // snapshot captured at fetch time, which is what we want — the
+      // value doesn't update without a refresh either.
+      function buildPopup(){
+        var dotColor=COLORS[s]||COLORS.unknown;
+        var html=
+          '<a class="reach-popup" href="/description.php?id='+parseInt(p.id,10)+'">'+
+            '<div class="rp-name">'+esc(p.name)+'</div>';
+        var ageStr='';
+        if('v' in entry){
+          var val=fmtValue(entry.v,entry.t,entry.u);
+          var delta=fmtDelta(entry.d,entry.t,entry.u);
+          var ageMs=entry.ts?(Date.now()-Date.parse(entry.ts)):-1;
+          ageStr=ageMs>=0?fmtAge(ageMs):'';
+          var stale=ageMs>STALE_MS;
+          html+='<div class="rp-reading'+(stale?' rp-stale':'')+'">';
+          html+=esc(val);
+          if(delta)html+=' <span class="rp-trend">'+esc(delta)+'</span>';
+          html+='</div>';
+        }
+        html+='<div class="rp-footer">';
+        if(ageStr)html+='<span class="rp-time">'+esc(ageStr)+'</span>';
+        html+='<span class="rp-status-text"><span class="rp-dot" style="color:'+dotColor+'">&#9679;</span> '+esc(s)+'</span>';
+        if(classDisplay)html+='<span class="rp-tiers">'+esc(classDisplay)+'</span>';
+        html+='</div></a>';
+        return html;
+      }
+
       layersById[p.id]=layer;
       layer._mfStatus=s;
-      layer._mfTiers=p.tiers||['?'];
+      layer._mfTiers=tiers;
       // Halo casing in its own pane below 'reaches' — no need to reorder
       // on hover, which is what was breaking mouseout.
       layer._mfCasing=typeof layer.getLatLngs==='function'
         ? L.polyline(layer.getLatLngs(),REST_CASING)
         : null;
-      layer.on('mouseover',function(){
+      // Fat invisible hit shape on top pane: catches taps anywhere within
+      // ~18px of a thin reach line and forwards style updates to the
+      // visible layer below.
+      var hit=null;
+      if(typeof layer.getLatLngs==='function'){
+        hit=L.polyline(layer.getLatLngs(),HIT_LINE);
+      }else if(typeof layer.getLatLng==='function'){
+        hit=L.circleMarker(layer.getLatLng(),HIT_POINT);
+      }
+      layer._mfHit=hit;
+
+      var target=hit||layer;
+      target.bindPopup(buildPopup);
+      target.on('mouseover',function(){
         layer.setStyle(HOVER_LINE);
         if(layer._mfCasing)layer._mfCasing.setStyle(HOVER_CASING);
-        layer.bringToFront();
+        if(typeof layer.bringToFront==='function')layer.bringToFront();
       });
-      layer.on('mouseout',function(){
+      target.on('mouseout',function(){
         layer.setStyle(REST_LINE);
         if(layer._mfCasing)layer._mfCasing.setStyle({weight:REST_CASING.weight});
       });
@@ -151,6 +237,7 @@ function renderMap(geom,state){
         // Casing first so it renders beneath the colored line (last-added wins in SVG).
         if(l._mfCasing)group.addLayer(l._mfCasing);
         group.addLayer(l);
+        if(l._mfHit)group.addLayer(l._mfHit);
         visible.push(l);
       }
     }

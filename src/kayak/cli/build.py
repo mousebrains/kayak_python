@@ -892,20 +892,63 @@ def _build_reaches_static(
     return json.dumps({"type": "FeatureCollection", "features": features}, separators=(",", ":"))
 
 
+_POPUP_PRIMARY_ORDER: tuple[tuple[DataType, str, str], ...] = (
+    (DataType.flow, "flow", "cfs"),
+    (DataType.inflow, "flow", "cfs"),
+    (DataType.gauge, "gage", "ft"),
+)
+
+
 def _build_reaches_state(
     reaches: list[Reach],
     calculated_gauge_ids: set[int],
     all_latest: dict[tuple[int, DataType], LatestGaugeObservation],
 ) -> str:
-    """Flat ``{reach_id: status}`` map — the bit that changes every build."""
-    out: dict[str, str] = {}
+    """Per-reach popup data — the bit that changes every build.
+
+    Per-reach entry keys (all but ``s`` optional):
+      s   status: low|okay|high|unknown
+      t   primary data-type label: "flow" or "gage"
+      v   primary numeric value (int for flow, 2-dp float for gage)
+      u   unit short form: "cfs" or "ft"
+      d   delta_per_hour (omitted when null)
+      ts  observed_at as UTC ISO ending in "Z"
+
+    Temperature is intentionally skipped; popup priority is flow > inflow
+    (rendered as flow) > gage. Status comes from ``_get_row_data`` so it
+    matches the listing pages even when the level threshold lives on a
+    different data type than the displayed value.
+    """
+    out: dict[str, dict] = {}
     for reach in reaches:
         # Only emit reaches whose geometry also makes it into the static
         # file; otherwise the client would carry state it cannot paint.
         if _reach_geometry(reach, GEOJSON_SIMPLIFY_EPSILON) is None:
             continue
         row = _get_row_data(reach, calculated_gauge_ids, all_latest)
-        out[str(reach.id)] = row.get("status", "unknown")
+        entry: dict = {"s": row.get("status", "unknown")}
+
+        gauge = reach.gauge
+        if gauge is not None:
+            for dtype, label, unit in _POPUP_PRIMARY_ORDER:
+                cand = all_latest.get((gauge.id, dtype))
+                if cand is None or cand.value is None:
+                    continue
+                entry["t"] = label
+                if label == "flow":
+                    entry["v"] = round(float(cand.value))
+                else:
+                    entry["v"] = round(float(cand.value), 2)
+                entry["u"] = unit
+                if cand.delta_per_hour is not None:
+                    entry["d"] = round(float(cand.delta_per_hour), 2)
+                if cand.observed_at is not None:
+                    obs = cand.observed_at
+                    obs = obs.replace(tzinfo=UTC) if obs.tzinfo is None else obs.astimezone(UTC)
+                    entry["ts"] = obs.isoformat().replace("+00:00", "Z")
+                break
+
+        out[str(reach.id)] = entry
     return json.dumps(out, separators=(",", ":"))
 
 
@@ -1132,6 +1175,22 @@ main {{padding:0;max-width:none;}}
   .map-filter.is-open{{display:block}}
   .map-filter label{{min-height:44px}}
 }}
+/* Whole-popup link: zero leaflet's default content margin and move the
+   spacing into the anchor's padding instead, so every visible pixel of
+   the popup body is inside the <a> and tappable. */
+.leaflet-popup-content{{margin:0}}
+.reach-popup{{display:block;color:var(--c-text);text-decoration:none;padding:13px 20px;border-radius:12px;cursor:pointer}}
+.reach-popup:hover{{background:var(--c-hover)}}
+.reach-popup:focus-visible{{outline:2px solid var(--c-link);outline-offset:-2px;background:var(--c-hover)}}
+.reach-popup .rp-name{{font-weight:700;font-size:.95rem;line-height:1.3}}
+.reach-popup .rp-reading{{font-size:.85rem;margin-top:3px}}
+.reach-popup .rp-trend{{color:var(--c-text-muted)}}
+.reach-popup .rp-stale{{opacity:.55}}
+.reach-popup .rp-footer{{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:.85rem;margin-top:3px}}
+.reach-popup .rp-time{{color:var(--c-text-muted)}}
+.reach-popup .rp-status-text{{text-transform:capitalize}}
+.reach-popup .rp-tiers{{color:var(--c-text-muted)}}
+.reach-popup .rp-dot{{font-size:1em;line-height:1}}
 </style>
 </head>
 <body>
