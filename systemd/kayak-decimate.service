@@ -8,7 +8,7 @@ Type=oneshot
 User=pat
 WorkingDirectory=/home/pat/kayak
 EnvironmentFile=/home/pat/.config/kayak/.env
-ExecStart=/home/pat/.venv/bin/levels decimate --vacuum
+ExecStart=/home/pat/.venv/bin/levels decimate
 TimeoutStartSec=600
 Nice=15
 
