@@ -82,7 +82,7 @@ def test_static_file_shape_and_tiers(session) -> None:
     assert fb["properties"]["state"] == ""
 
 
-def test_state_file_is_flat_id_to_status(session) -> None:
+def test_state_file_emits_status_only_when_no_gauge(session) -> None:
     a = _mk_reach(
         session,
         10,
@@ -101,7 +101,8 @@ def test_state_file_is_flat_id_to_status(session) -> None:
     raw = _build_reaches_state([a, b], set(), {})
     doc = json.loads(raw)
 
-    assert doc == {"10": "unknown", "11": "unknown"}
+    # Reaches with no gauge get a bare status entry — no v/u/d/ts.
+    assert doc == {"10": {"s": "unknown"}, "11": {"s": "unknown"}}
 
 
 def test_reach_without_geometry_is_skipped(session) -> None:
