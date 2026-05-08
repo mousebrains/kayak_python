@@ -18,9 +18,11 @@ declare(strict_types=1);
  * @param array<string,string> $points       Label → "lat,lon" (e.g. 'Gauge' => '44.56,-123.25').
  * @param ?string              $geom         Decorative track "lon lat,lon lat,..." or null.
  * @param string               $track_color  CSS colour for both $geom and $reach_tracks.
- * @param array<int,array{id:int,name:string,geom:string}> $reach_tracks
+ * @param array<int,array{id:int,name:string,geom:string,location?:string,classes?:string,status?:string}> $reach_tracks
  *               Optional list of clickable reach tracks (LineString geoms
  *               only — Point reaches should be skipped by the caller).
+ *               location/classes/status are popup-only metadata; status
+ *               drives the polyline colour ('low'|'okay'|'high'|'unknown').
  * @return bool  True if a map was emitted. Caller uses this to decide whether
  *               to enqueue leaflet.js + feature-map.js at end of body.
  */
@@ -55,7 +57,7 @@ function gm_render_map(
 
     $rt_payload = [];
     foreach ($reach_tracks as $rt) {
-        $coords = $parse_geom((string)($rt['geom'] ?? ''));
+        $coords = $parse_geom($rt['geom']);
         if (count($coords) >= 2) {
             $rt_payload[] = [
                 'id' => (int)$rt['id'],
