@@ -1581,7 +1581,13 @@ def _build_gauges_table(rows: list[dict[str, Any]]) -> tuple[str, list[str]]:
         lines.append(f'  <td class="td-date" data-label="Date">{date_cell}</td>')
 
         flow_val = row.get("flow")
-        flow_cell = f"{flow_val:,.0f}" if isinstance(flow_val, int | float) else ""
+        gage_val = row.get("gage")
+        if isinstance(flow_val, int | float):
+            flow_cell = f"{flow_val:,.0f}"
+        elif isinstance(gage_val, int | float):
+            flow_cell = f"{gage_val:,.1f}&prime;"
+        else:
+            flow_cell = ""
         lines.append(f'  <td class="td-flow" data-label="Flow">{flow_cell}</td>')
 
         lines.append(
