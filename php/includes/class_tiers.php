@@ -15,10 +15,13 @@ function parse_class_tiers(?string $s): array {
     $found   = [];
     if (preg_match_all(
             '/\b(V|IV|III|II|I)(?:\s*[-\x{2013}]\s*(V|IV|III|II|I))?\b/u',
-            $cleaned, $matches, PREG_SET_ORDER)) {
+            $cleaned, $matches, PREG_SET_ORDER | PREG_UNMATCHED_AS_NULL)) {
         foreach ($matches as $hit) {
             $lo = $roman[$hit[1]];
-            $hi = isset($hit[2]) && $hit[2] !== '' ? $roman[$hit[2]] : $lo;
+            // With PREG_UNMATCHED_AS_NULL the optional group is null when
+            // the range half didn't match (instead of '' under the default
+            // flag), so isset() is the only guard we need.
+            $hi = isset($hit[2]) ? $roman[$hit[2]] : $lo;
             if ($hi < $lo) [$lo, $hi] = [$hi, $lo];
             for ($v = $lo; $v <= $hi; $v++) $found[$v] = true;
         }

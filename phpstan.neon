@@ -3,30 +3,10 @@ parameters:
     paths:
         - php
     excludePaths:
-        - tests
-        - vendor
+        # tests/ and vendor/ aren't always present in fresh checkouts
+        # (e.g. before composer install runs). Mark them optional so
+        # PHPStan 2.x doesn't bail on a missing path.
+        - tests (?)
+        - vendor (?)
     # PHP 8.4 target — matches composer.json.
     phpVersion: 80400
-    ignoreErrors:
-        # description.php builds $station_urls conditionally from gauge
-        # fields, then iterates it with an NWRFC fallback for NWS-agency
-        # sources. PHPStan narrows $key to 'USGS' because it can't prove
-        # that 'NWRFC' is reachable without deeper inter-procedural
-        # analysis of how gauges are loaded. The fallback is load-bearing
-        # — don't drop it to satisfy the narrowing; mute the warnings
-        # instead. (Required from PHPStan 1.12.21+; older versions did
-        # not raise these errors so the patterns appeared stale.)
-        -
-            message: '#Result of && is always false\.#'
-            path: php/description.php
-        -
-            message: '#Strict comparison using === between \*NEVER\* and .NWRFC. will always evaluate to false\.#'
-            path: php/description.php
-        -
-            message: '#If condition is always false\.#'
-            path: php/description.php
-        # reportUnmatchedIgnoredErrors=false so the same neon works on
-        # PHPStan 1.12.20 (where the errors above don't fire) and 1.12.21+
-        # (where they do). Without this, older versions fail CI on
-        # "Ignored error pattern was not matched".
-    reportUnmatchedIgnoredErrors: false

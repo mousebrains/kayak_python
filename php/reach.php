@@ -541,13 +541,14 @@ if ($flow_levels) {
     $cells = [];
     foreach (['low', 'okay', 'high'] as $lvl) {
         $parts = [];
-        if (isset($by_level[$lvl])) {
-            $fl = $by_level[$lvl];
-            foreach (['low', 'high'] as $bound) {
-                if ($fl[$bound] !== null) {
-                    $unit = $fl[$bound . '_data_type'] === 'flow' ? ' CFS' : ' ft';
-                    $parts[] = number_format((float)$fl[$bound], $fl[$bound . '_data_type'] === 'flow' ? 0 : 1) . $unit;
-                }
+        // $by_level always carries every key of $flow_levels, which is
+        // either empty (we don't enter this block) or exactly the three
+        // levels by construction.
+        $fl = $by_level[$lvl];
+        foreach (['low', 'high'] as $bound) {
+            if ($fl[$bound] !== null) {
+                $unit = $fl[$bound . '_data_type'] === 'flow' ? ' CFS' : ' ft';
+                $parts[] = number_format((float)$fl[$bound], $fl[$bound . '_data_type'] === 'flow' ? 0 : 1) . $unit;
             }
         }
         $cells[] = '<td style="text-align:center">' . implode(' – ', $parts) . '</td>';
