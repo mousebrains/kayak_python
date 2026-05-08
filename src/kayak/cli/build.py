@@ -1364,10 +1364,35 @@ def _river_from_gauge_name(name: str) -> str:
     return name
 
 
+def _gauge_status_from_reaches(
+    reaches: list[Reach],
+    calculated_gauge_ids: set[int],
+    all_latest: dict[tuple[int, DataType], LatestGaugeObservation],
+) -> tuple[str | None, dict[str, int]]:
+    """Roll up the per-reach status of a gauge's associated reaches into one
+    "anything runnable?" verdict for the gauge listing.
+
+    Rule: 'okay' if any reach is currently okay; otherwise the more common
+    of 'low'/'high' (ties go to 'low'). Returns (None, counts) when no
+    associated reach has a defined status — caller emits no data-status.
+    """
+    counts = {"low": 0, "okay": 0, "high": 0}
+    for r in reaches:
+        s = _get_row_data(r, calculated_gauge_ids, all_latest).get("status")
+        if s in counts:
+            counts[s] += 1
+    if counts["okay"]:
+        return "okay", counts
+    if counts["low"] == 0 and counts["high"] == 0:
+        return None, counts
+    return ("low" if counts["low"] >= counts["high"] else "high"), counts
+
+
 def _collect_gauge_rows(
     session: Session,
     all_latest: dict[tuple[int, DataType], LatestGaugeObservation],
     metadata: dict[str, dict[str, str]],
+    calculated_gauge_ids: set[int] | None = None,
 ) -> list[dict[str, Any]]:
     """Build one row per gauge with at least one current observation.
 
@@ -1378,6 +1403,7 @@ def _collect_gauge_rows(
     gauge_ids_with_data = {gid for gid, _ in all_latest}
     if not gauge_ids_with_data:
         return []
+    calc_ids = calculated_gauge_ids or set()
 
     gauges = list(session.scalars(select(Gauge).where(Gauge.id.in_(gauge_ids_with_data))))
     reach_rows = list(session.scalars(select(Reach).where(Reach.gauge_id.in_(gauge_ids_with_data))))
@@ -1459,6 +1485,13 @@ def _collect_gauge_rows(
         row["has_huc"] = bool(row["huc8"])
         row["drainage_area"] = float(g.drainage_area) if g.drainage_area is not None else None
         row["elevation"] = float(g.elevation) if g.elevation is not None else None
+
+        # "Anything runnable?" rollup of associated-reach statuses.
+        status, status_counts = _gauge_status_from_reaches(reaches, calc_ids, all_latest)
+        if status is not None:
+            row["status"] = status
+        row["status_counts"] = status_counts
+
         rows.append(row)
 
     # sort_name encodes the full row order (basin → fork rank → elevation
@@ -1474,6 +1507,7 @@ def _build_gauges_table(rows: list[dict[str, Any]]) -> tuple[str, list[str]]:
     lines: list[str] = []
     lines.append('<table class="levels">')
     lines.append("<thead><tr>")
+    lines.append('  <th scope="col">Status</th>')
     lines.append('  <th scope="col">River</th>')
     lines.append('  <th scope="col">Location</th>')
     lines.append('  <th scope="col">Date</th>')
@@ -1514,9 +1548,22 @@ def _build_gauges_table(rows: list[dict[str, Any]]) -> tuple[str, list[str]]:
             if state and huc8
             else ""
         )
+        # data-status drives the colored leading bullet on the phone card
+        # layout, and lets future filter pills key off it.
+        status_word = row.get("status")
+        status_attr = f' data-status="{status_word}"' if status_word else ""
         lines.append(
-            f'<tr{letter_id} class="clickable-row{stale}" data-href="/gauge.php?id={gid}"{attrs}>'
+            f'<tr{letter_id} class="clickable-row{stale}" data-href="/gauge.php?id={gid}"{attrs}{status_attr}>'
         )
+
+        if status_word:
+            counts = row.get("status_counts") or {}
+            count_summary = ", ".join(f"{n} {lvl}" for lvl, n in counts.items() if n)
+            title = f' title="{count_summary}"' if count_summary else ""
+            status_cell = f'<span class="level-{status_word}"{title}>{status_word}</span>'
+        else:
+            status_cell = ""
+        lines.append(f'  <td class="td-status" data-label="Status">{status_cell}</td>')
 
         lines.append(
             f'  <td class="td-name" data-label="River">'
