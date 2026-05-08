@@ -42,6 +42,40 @@ header nav.site-nav-right{margin-left:auto}
 .site-nav-id{color:rgba(255,255,255,.75);font-size:.75rem;padding:6px 8px;display:inline-flex;align-items:center;min-height:44px;max-width:14em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media(max-width:768px){header nav.site-nav-right{display:none}}
 
+/* Phone: header collapses to two rows.
+     Row 1: h1 (natural width) + state-nav (flex-grows, scrolls horizontally).
+     Row 2: letter-nav (forced via flex-basis:100%, also scrolls).
+   Each anchor keeps its 44×44 tap target; user swipes to reach items
+   off the right edge. The right-side mask fades the last ~14px as a
+   subtle "more →" hint without adding chrome. */
+@media(max-width:767px){
+  header > h1{flex-shrink:0}
+  /* State nav (and any other non-letter nav) shares row 1 with h1. */
+  header > nav:not(.letter-nav){
+    flex:1 1 0;
+    min-width:0;       /* required for the flex item to actually overflow */
+  }
+  /* Letter nav onto its own row via 100% basis, no margin-left:auto. */
+  header > .letter-nav{
+    flex-basis:100%;
+    margin-left:0;
+  }
+  header > nav,
+  header > .letter-nav{
+    flex-wrap:nowrap;
+    overflow-x:auto;
+    overflow-y:hidden;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+    -webkit-mask-image:linear-gradient(to right,#000 calc(100% - 14px),transparent);
+            mask-image:linear-gradient(to right,#000 calc(100% - 14px),transparent);
+  }
+  header > nav::-webkit-scrollbar,
+  header > .letter-nav::-webkit-scrollbar{display:none}
+  header > nav > a,
+  header > .letter-nav > a{flex-shrink:0}
+}
+
 /* Letter navigation */
 .letter-nav{display:flex;flex-wrap:wrap;gap:2px;margin-left:auto}
 .letter-nav a{display:inline-flex;align-items:center;justify-content:center;min-width:2em;min-height:44px;padding:4px;text-align:center;font-size:.75rem;font-weight:600;color:rgba(255,255,255,.85);border-radius:3px;text-decoration:none}
@@ -173,6 +207,7 @@ tr.stale td{color:var(--c-text-faint);font-style:italic}
    columns (date, flow, gage, temp) off the screen edge. Full text
    remains on the description page. */
 @media(min-width:640px) and (max-width:1023px){
+  table.levels thead{display:none}
   table.levels .secondary{display:none}
   /* Keep the gauges.html sparkline column even at landscape phone widths;
      it carries the at-a-glance trend that the flow value alone hides. */
