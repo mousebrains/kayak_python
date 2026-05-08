@@ -40,7 +40,7 @@ real-time river level, flow, and gauge data for paddlers in the Pacific Northwes
       If you sign in to propose edits or leave a comment, we set two cookies:
       <code>ed_sess</code> (a random value identifying your login session, valid for
       seven days) and <code>ed_csrf</code> (a form-submission security token). Both are
-      HttpOnly, SameSite=Lax, and marked Secure on HTTPS. They are used only for
+      HttpOnly, SameSite=Strict, and marked Secure on HTTPS. They are used only for
       authentication and form security — not for tracking.</li>
   <li><strong>Contributor email address:</strong> If you sign in, we store your email
       address so we can send you the one-time login link, notify you when the maintainer

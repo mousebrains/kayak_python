@@ -5,7 +5,7 @@ declare(strict_types=1);
  *
  * Cookies:
  *   ed_sess  Random 32-byte hex value; only sha256(value) stored server-side.
- *            7-day flat expiry. HttpOnly, Secure on HTTPS, SameSite=Lax, Path=/.
+ *            7-day flat expiry. HttpOnly, Secure on HTTPS, SameSite=Strict, Path=/.
  *   ed_csrf  Random 32-byte hex value. Double-submit CSRF token. Same flags.
  *
  * Maintainer sessions reuse the same ed_sess cookie; role is determined by
@@ -63,7 +63,7 @@ function _cookie_params(int $lifetime_seconds): array {
         'path'     => '/',
         'secure'   => !empty($_SERVER['HTTPS']),
         'httponly' => true,
-        'samesite' => 'Lax',
+        'samesite' => 'Strict',
     ];
 }
 
