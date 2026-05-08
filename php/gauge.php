@@ -113,7 +113,7 @@ $sources = $sources_stmt->fetchAll();
 // Pull class names from reach_class (the canonical source) rather than the
 // rarely-populated reach.difficulties column.
 $reaches_stmt = $db->prepare(
-    'SELECT r.id, COALESCE(NULLIF(r.display_name, \'\'), r.name) AS name, r.river, r.length, r.basin,
+    'SELECT r.id, COALESCE(NULLIF(r.display_name, \'\'), r.name) AS name, r.river, r.length, r.basin, r.geom, r.description,
             (SELECT GROUP_CONCAT(rc.name, \', \') FROM reach_class rc WHERE rc.reach_id = r.id) AS classes
      FROM reach r WHERE r.gauge_id = ? ORDER BY r.sort_name'
 );
@@ -186,6 +186,36 @@ foreach ($readings as $r) {
     if ($r['value'] !== null) {
         $readings_by_dtype[(string)$r['data_type']] = (float)$r['value'];
     }
+}
+
+// Mirrors db/reaches.py::classify_level + the priority order in
+// build.py::_get_row_data — try (flow, gauge, inflow-as-flow) and pick the
+// first dtype with both a reading on this gauge and a class threshold whose
+// data_type matches. Returns 'low' | 'okay' | 'high' | 'unknown'.
+$classify_reach_status = static function (array $thresholds, array $readings_by_dtype): string {
+    $candidates = [['flow', 'flow'], ['gauge', 'gauge'], ['inflow', 'flow']];
+    foreach ($candidates as [$reading_dt, $classify_dt]) {
+        if (!isset($readings_by_dtype[$reading_dt])) continue;
+        $v = $readings_by_dtype[$reading_dt];
+        foreach ($thresholds as $rc) {
+            if ($rc['low'] === null && $rc['high'] === null) continue;
+            if (!empty($rc['low_data_type']) && $rc['low_data_type'] !== $classify_dt) continue;
+            if (!empty($rc['high_data_type']) && $rc['high_data_type'] !== $classify_dt) continue;
+            if ($rc['low'] !== null && $v < (float)$rc['low']) return 'low';
+            if ($rc['high'] !== null && $v > (float)$rc['high']) return 'high';
+            return 'okay';
+        }
+    }
+    return 'unknown';
+};
+
+// Pre-compute one status per associated reach so the map and table agree.
+$reach_status_by_id = [];
+foreach ($reaches as $r) {
+    $reach_status_by_id[(int)$r['id']] = $classify_reach_status(
+        $reach_class_thresholds[(int)$r['id']] ?? [],
+        $readings_by_dtype
+    );
 }
 
 if ($readings) {
@@ -262,11 +292,29 @@ if ($readings) {
     gp_render_plots($db, (int)$gauge['id'], $gauge_display, $since, $until, $latest_ts, $is_default_view);
 }
 
-// --- Map (single marker at the gauge coordinates) ---
+// --- Map (gauge marker + clickable polylines for each associated reach) ---
+$reach_tracks_for_map = [];
+foreach ($reaches as $r) {
+    // Only LineString geoms become tracks; single-point reaches are
+    // omitted (they'd render as a 1-vertex degenerate line).
+    if (!empty($r['geom']) && strpos((string)$r['geom'], ',') !== false) {
+        $reach_tracks_for_map[] = [
+            'id' => (int)$r['id'],
+            'name' => (string)$r['name'],
+            'location' => (string)($r['description'] ?? ''),
+            'classes' => (string)($r['classes'] ?? ''),
+            'status' => $reach_status_by_id[(int)$r['id']] ?? 'unknown',
+            'geom' => (string)$r['geom'],
+        ];
+    }
+}
 if ($gauge['latitude'] !== null && $gauge['longitude'] !== null) {
     $glat = number_format((float)$gauge['latitude'], 5, '.', '');
     $glon = number_format((float)$gauge['longitude'], 5, '.', '');
-    $has_map = gm_render_map(['Gauge' => "$glat,$glon"]);
+    $has_map = gm_render_map(['Gauge' => "$glat,$glon"], null, '#2196F3', $reach_tracks_for_map);
+} elseif ($reach_tracks_for_map) {
+    // No gauge coordinates but we still have reach geometry to show.
+    $has_map = gm_render_map([], null, '#2196F3', $reach_tracks_for_map);
 }
 
 // --- Gauge details (moved below the map so the flow info is the page lead) ---
@@ -338,27 +386,6 @@ if ($sources) {
     echo '<p style="margin-top:1rem;color:#666">No associated sources.</p>';
 }
 
-// Mirrors db/reaches.py::classify_level + the priority order in
-// build.py::_get_row_data — try (flow, gauge, inflow-as-flow) and pick the
-// first dtype with both a reading on this gauge and a class threshold whose
-// data_type matches. Returns 'low' | 'okay' | 'high' | 'unknown'.
-$classify_reach_status = static function (array $thresholds, array $readings_by_dtype): string {
-    $candidates = [['flow', 'flow'], ['gauge', 'gauge'], ['inflow', 'flow']];
-    foreach ($candidates as [$reading_dt, $classify_dt]) {
-        if (!isset($readings_by_dtype[$reading_dt])) continue;
-        $v = $readings_by_dtype[$reading_dt];
-        foreach ($thresholds as $rc) {
-            if ($rc['low'] === null && $rc['high'] === null) continue;
-            if (!empty($rc['low_data_type']) && $rc['low_data_type'] !== $classify_dt) continue;
-            if (!empty($rc['high_data_type']) && $rc['high_data_type'] !== $classify_dt) continue;
-            if ($rc['low'] !== null && $v < (float)$rc['low']) return 'low';
-            if ($rc['high'] !== null && $v > (float)$rc['high']) return 'high';
-            return 'okay';
-        }
-    }
-    return 'unknown';
-};
-
 // Associated reaches
 if ($reaches) {
     echo '<h3 style="margin-top:1rem">Associated Reaches</h3>';
@@ -370,10 +397,7 @@ if ($reaches) {
         $classes = htmlspecialchars($r['classes'] ?? '');
         $len = $r['length'] !== null ? number_format((float)$r['length'], 1) . ' mi' : '';
         $basin = htmlspecialchars($r['basin'] ?? '');
-        $status = $classify_reach_status(
-            $reach_class_thresholds[(int)$r['id']] ?? [],
-            $readings_by_dtype
-        );
+        $status = $reach_status_by_id[(int)$r['id']] ?? 'unknown';
         $status_html = $status === 'unknown'
             ? '<span style="color:var(--c-text-muted)">unknown</span>'
             : '<span class="level-' . $status . '">' . $status . '</span>';
