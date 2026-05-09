@@ -9,7 +9,7 @@ User=pat
 WorkingDirectory=/home/pat/kayak
 EnvironmentFile=/home/pat/.config/kayak/.env
 ExecStart=/home/pat/.venv/bin/levels pipeline
-TimeoutStartSec=300
+TimeoutStartSec=400
 Nice=10
 
 # Sandboxing. /home/pat is needed in ReadWritePaths because build.py swaps
