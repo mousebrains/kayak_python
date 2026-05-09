@@ -22,7 +22,10 @@ from __future__ import annotations
 
 import argparse
 import math
+import os
+import shutil
 import sqlite3
+import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -199,26 +202,126 @@ def check_data_status(kayak, days=7):
         (cutoff_str, cutoff_str),
     ).fetchall()
 
-    # Gauges linked to reaches with no recent data at all
+    # Reach-linked gauges where NEITHER flow NOR gauge data has been recent
+    # on ANY of the gauge's linked sources. Aggregating before the staleness
+    # filter (HAVING, not WHERE) avoids the per-source-row trap where a single
+    # flow-less source flagged the whole gauge despite a sibling source serving
+    # data fine.
     stale = kayak.execute(
         """
         SELECT g.id, g.name, g.usgs_id,
                r.id AS reach_id, r.display_name AS reach_name,
-               lo.observed_at, lo.data_type
+               MAX(lo.observed_at) AS last_obs,
+               'flow_or_gauge' AS data_type
         FROM reach r
         JOIN gauge g ON r.gauge_id = g.id
         JOIN gauge_source gs ON gs.gauge_id = g.id
         JOIN source s ON gs.source_id = s.id
         LEFT JOIN latest_observation lo ON lo.source_id = s.id
-            AND lo.data_type = 'flow'
+            AND lo.data_type IN ('flow', 'gauge')
         WHERE r.no_show = 0
-          AND (lo.observed_at IS NULL OR lo.observed_at < ?)
-        GROUP BY g.id
+        GROUP BY g.id, r.id, g.name, g.usgs_id, r.display_name
+        HAVING MAX(lo.observed_at) IS NULL OR MAX(lo.observed_at) < ?
     """,
         (cutoff_str,),
     ).fetchall()
 
     return stopped, started, stale
+
+
+def _send_email_digest(
+    addr: str,
+    days: int,
+    stopped: list,
+    started: list,
+    stale: list,
+    usgs_candidates: list,
+    nwps_candidates: list,
+) -> None:
+    """Mail a digest to addr. Always sends; subject conveys urgency.
+
+    Failures are logged to stderr but do not raise — a broken mail pipeline
+    should not turn a successful audit into a unit failure (which would
+    trigger OnFailure= and email a different alert).
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    candidate_count = len(usgs_candidates) + len(nwps_candidates)
+    findings = bool(stopped or started or stale or candidate_count)
+
+    if findings:
+        parts = []
+        if stopped:
+            parts.append(f"{len(stopped)} stopped")
+        if started:
+            parts.append(f"{len(started)} started")
+        if candidate_count:
+            parts.append(f"{candidate_count} candidates")
+        if stale:
+            parts.append(f"{len(stale)} stale reaches")
+        subject = f"Kayak audit {today}: " + ", ".join(parts)
+    else:
+        subject = f"Kayak audit {today}: clean"
+
+    lines = [f"=== Kayak gauge audit — {days}-day window — {today} ===", ""]
+
+    if stopped:
+        lines.append(
+            f"STOPPED FEEDS ({len(stopped)}) — gauges with data {days}d ago but none since"
+        )
+        for _gid, gname, usgs_id, last_obs, _count in stopped:
+            lines.append(f"  • {gname} (USGS {usgs_id or 'N/A'}) — last obs {last_obs}")
+        lines.append("")
+
+    if stale:
+        lines.append(
+            f"STALE REACH GAUGES ({len(stale)}) — reaches whose linked gauge has no flow or gauge data in last {days}d"
+        )
+        for _gid, gname, _usgs_id, _rid, rname, last_obs, _dtype in stale:
+            lo = last_obs or "never"
+            lines.append(f"  • {rname or '<unnamed>'} — gauge {gname} — last obs {lo}")
+        lines.append("")
+
+    if started:
+        lines.append(
+            f"STARTED FEEDS ({len(started)}) — gauges with new flow data after a quiet window"
+        )
+        for _gid, gname, usgs_id, first_obs, count in started:
+            lines.append(
+                f"  • {gname} (USGS {usgs_id or 'N/A'}) — first obs {first_obs} ({count} new)"
+            )
+        lines.append("")
+
+    if candidate_count:
+        lines.append(f"NEW CANDIDATES near existing reaches ({candidate_count})")
+        combined = [("USGS", *c) for c in usgs_candidates] + [("NWPS", *c) for c in nwps_candidates]
+        combined.sort(key=lambda x: x[1])
+        for kind, dist, gid, gname, _rid, rlabel, has_gauge in combined[:30]:
+            tail = "  [reach already gauged]" if has_gauge == "yes" else ""
+            lines.append(f'  • {kind} {gid}: {gname} — {dist:.1f} mi from reach "{rlabel}"{tail}')
+        if len(combined) > 30:
+            lines.append(f"  ... and {len(combined) - 30} more (full list in journal)")
+        lines.append("")
+
+    if not findings:
+        lines.append("No findings in any category. All quiet.")
+        lines.append("")
+
+    body = "\n".join(lines)
+
+    if shutil.which("mail") is None:
+        print("WARNING: 'mail' not on PATH; skipping audit email", file=sys.stderr)
+        return
+
+    try:
+        subprocess.run(
+            ["mail", "-s", subject, addr],
+            input=body.encode("utf-8"),
+            check=True,
+            timeout=30,
+        )
+        print(f"Emailed audit digest to {addr}: {subject}")
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+        print(f"WARNING: failed to send audit email: {e}", file=sys.stderr)
 
 
 def main():
@@ -245,6 +348,12 @@ def main():
         type=str,
         default=str(KAYAK_DB),
         help=f"Path to kayak database (default: {KAYAK_DB})",
+    )
+    parser.add_argument(
+        "--email",
+        type=str,
+        default=os.environ.get("KAYAK_AUDIT_EMAIL"),
+        help="Email digest to this address (or set KAYAK_AUDIT_EMAIL). Always sends if set.",
     )
     args = parser.parse_args()
 
@@ -317,17 +426,28 @@ def main():
         print("  None")
 
     print("\n" + "=" * 60)
-    print(f"Reach gauges with NO flow data in last {args.days} days")
+    print(f"Reach gauges with NO flow OR gauge data in last {args.days} days")
     print("=" * 60)
     if stale:
         for _gid, gname, _usgs_id, _rid, rname, last_obs, _dtype in stale:
             lo = last_obs or "never"
-            print(f"  {rname or '':<30} gauge={gname:<25} last flow: {lo}")
+            print(f"  {rname or '':<30} gauge={gname:<25} last obs: {lo}")
     else:
         print("  None")
 
     cache.close()
     kayak.close()
+
+    if args.email:
+        _send_email_digest(
+            args.email,
+            args.days,
+            stopped,
+            started,
+            stale,
+            usgs_candidates,
+            nwps_candidates,
+        )
 
     print("\n" + "=" * 60)
     print("Audit complete")
