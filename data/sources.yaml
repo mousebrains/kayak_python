@@ -78,6 +78,20 @@ nwps:
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/BEAO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/BRTO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/WFHO3/stageflow/observed"
+    # Idaho Salmon basin — NWRFC forecast points (USACE-piped) paired with USGS for outage redundancy.
+    - url: "https://api.water.noaa.gov/nwps/v1/gauges/SRYI1/stageflow/observed"
+    - url: "https://api.water.noaa.gov/nwps/v1/gauges/MIDI1/stageflow/observed"
+    - url: "https://api.water.noaa.gov/nwps/v1/gauges/KRSI1/stageflow/observed"
+    - url: "https://api.water.noaa.gov/nwps/v1/gauges/JOHI1/stageflow/observed"
+    - url: "https://api.water.noaa.gov/nwps/v1/gauges/RIGI1/stageflow/observed"
+    - url: "https://api.water.noaa.gov/nwps/v1/gauges/WHBI1/stageflow/observed"
+    # Selway / Lochsa / SF Clearwater (Idaho) — match USGS 13336500 / 13337000 / 13338500.
+    - url: "https://api.water.noaa.gov/nwps/v1/gauges/SELI1/stageflow/observed"
+    - url: "https://api.water.noaa.gov/nwps/v1/gauges/LOCI1/stageflow/observed"
+    - url: "https://api.water.noaa.gov/nwps/v1/gauges/STII1/stageflow/observed"
+    # Klickitat (Washington) — PITW1 ↔ USGS 14113000, KLCW1 ↔ USGS 14107000.
+    - url: "https://api.water.noaa.gov/nwps/v1/gauges/PITW1/stageflow/observed"
+    - url: "https://api.water.noaa.gov/nwps/v1/gauges/KLCW1/stageflow/observed"
 
 nwrfc.xml:
   urls:
@@ -88,23 +102,6 @@ nwrfc.xml:
     # LOPO3 (Lookout Point Dam) — retired 2026-04-17: no USGS equivalent, no reach needs it
     # WNFO3 (Wiley Creek) — matches USGS 14187000 digit-for-digit (2026-04-17); outage redundancy
     - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WNFO3&pe=HG&dtype=b&numdays=1"
-    # Idaho Salmon basin — NWRFC forecast points paired with USGS feed for outage redundancy.
-    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SRYI1&pe=HG&dtype=b&numdays=1"
-    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=MIDI1&pe=HG&dtype=b&numdays=1"
-    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=KRSI1&pe=HG&dtype=b&numdays=1"
-    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=JOHI1&pe=HG&dtype=b&numdays=1"
-    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=RIGI1&pe=HG&dtype=b&numdays=1"
-    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=WHBI1&pe=HG&dtype=b&numdays=1"
-    # Selway (Idaho) — SELI1 matches USGS 13336500 digit-for-digit; outage redundancy
-    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=SELI1&pe=HG&dtype=b&numdays=1"
-    # Lochsa (Idaho) — LOCI1 matches USGS 13337000 digit-for-digit; outage redundancy
-    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LOCI1&pe=HG&dtype=b&numdays=1"
-    # SF Clearwater (Idaho) — STII1 matches USGS 13338500 Stites; outage redundancy
-    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=STII1&pe=HG&dtype=b&numdays=1"
-    # Klickitat (Washington) — PITW1 matches USGS 14113000 near Pitt; outage redundancy
-    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=PITW1&pe=HG&dtype=b&numdays=1"
-    # Klickitat (Washington) — KLCW1 matches USGS 14107000 abv West Fork nr Glenwood
-    - url: "https://www.nwrfc.noaa.gov/xml/xml.cgi?id=KLCW1&pe=HG&dtype=b&numdays=1"
 
 nwrfc.textplot:
   urls:
