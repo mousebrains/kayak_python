@@ -302,13 +302,14 @@ def test_build_page_omits_filter_script_when_no_bar() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _gauge_row(state: str, huc: str) -> dict:
+def _gauge_row(state: str, huc: str, status: str | None = None) -> dict:
     """Mimic the relevant subset of _collect_gauge_rows output."""
     return {
         "state": state,
         "huc6": huc[:6] if huc else "",
         "huc8": huc[:8] if huc else "",
         "has_huc": bool(huc and len(huc) >= 8),
+        "status": status,
     }
 
 
@@ -334,8 +335,37 @@ def test_build_gauges_filter_bar_is_self_contained() -> None:
     assert 'value="17090004" checked>Mckenzie' in html
     assert 'value="17080001" checked>Lower Columbia-Sandy' in html
     assert "(no HUC)" not in html
-    assert 'data-group="status"' not in html
+    # Class tier never applies on the gauges page.
     assert 'data-group="tier"' not in html
+    # Status pills appear because every gauge row carries data-status (rolled
+    # up from reaches; "unknown" when no associated reach has thresholds).
+    assert 'data-group="status"' in html
+    assert 'value="unknown" checked' in html
+
+
+def test_build_gauges_filter_bar_emits_status_pills_in_canonical_order() -> None:
+    rows = [
+        _gauge_row("Oregon", "170900110403", status="okay"),
+        _gauge_row("Oregon", "170900040501", status="high"),
+        _gauge_row("Oregon", "170800010101", status="low"),
+    ]
+    html = _build_gauges_filter_bar(
+        rows,
+        huc6_names={"170900": "Willamette", "170800": "Lower Columbia"},
+        huc8_names={
+            "17090011": "Clackamas",
+            "17090004": "Mckenzie",
+            "17080001": "Lower Columbia-Sandy",
+        },
+    )
+    assert 'data-group="status"' in html
+    # low/okay/high pills present in canonical order; no "unknown" pill since
+    # every row has a real status.
+    low_pos = html.find('value="low"')
+    okay_pos = html.find('value="okay"')
+    high_pos = html.find('value="high"')
+    assert -1 < low_pos < okay_pos < high_pos
+    assert 'value="unknown"' not in html
 
 
 def test_build_gauges_filter_bar_renders_no_huc_for_orphan_gauge() -> None:

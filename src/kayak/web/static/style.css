@@ -35,7 +35,7 @@ header{background:var(--c-primary);color:#fff;padding:.5rem 1rem;display:flex;al
 header h1{font-size:1.1rem;white-space:nowrap}
 header h1 a{color:#fff;text-decoration:none}
 header nav{display:flex;flex-wrap:wrap;gap:.3rem}
-header nav a{color:rgba(255,255,255,.85);font-size:.8rem;padding:6px 10px;border-radius:3px;min-height:44px;display:inline-flex;align-items:center;text-decoration:none}
+header nav a{color:rgba(255,255,255,.85);font-size:.8rem;padding:6px 10px;border-radius:3px;min-height:44px;display:inline-flex;align-items:center;text-align:center;line-height:1.15;text-decoration:none}
 header nav a:hover{background:rgba(255,255,255,.15);text-decoration:none}
 header nav a.active{background:rgba(255,255,255,.9);color:var(--c-primary)}
 header nav.site-nav-right{margin-left:auto}

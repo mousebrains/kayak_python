@@ -18,7 +18,7 @@ $reach = get_reach_or_404($id);
 $name = $reach['display_name'] ?: $reach['name'];
 
 header('Cache-Control: max-age=60');
-include_header("$name - Data");
+include_header("$name - Data", '', '', '', ['picker_kind' => 'gauge']);
 
 echo '<h2>' . htmlspecialchars($name) . '</h2>';
 

@@ -41,7 +41,7 @@ if ($q !== null && $q !== '') {
     }
 
     header('Cache-Control: no-cache');
-    include_header('Gauge Search');
+    include_header('Gauge Search', '', '', '', ['picker_kind' => 'gauge']);
     echo '<h2>Gauge Search</h2>';
 
     if (!$results) {
@@ -68,7 +68,7 @@ if (!$id) {
     $row = $db->query('SELECT id FROM gauge ORDER BY id ASC LIMIT 1')->fetch();
     if (!$row) {
         header('Cache-Control: no-cache');
-        include_header('Gauges');
+        include_header('Gauges', '', '', '', ['picker_kind' => 'gauge']);
         echo '<p>No gauges in database.</p>';
         include_footer();
         exit;

@@ -957,7 +957,12 @@ def _editor_feature_on() -> bool:
     return v in ("1", "true", "yes")
 
 
-def _build_nav(states: list[str], active_state: str = "", active_page: str = "") -> str:
+def _build_nav(
+    states: list[str],
+    active_state: str = "",
+    active_page: str = "",
+    picker_kind: str = "reach",
+) -> str:
     """Build abbreviation-based nav bar; each state links to its {State}.html page.
 
     The all-reaches levels table lives at /index.html and is reached via the
@@ -966,7 +971,10 @@ def _build_nav(states: list[str], active_state: str = "", active_page: str = "")
     Dreamflows, agency dashboards).
 
     active_page highlights a non-state link ("map" or "gauges") so the user
-    has a visual anchor on the corresponding page.
+    has a visual anchor on the corresponding page. picker_kind picks which
+    of /picker.php (reach) or /gauge_picker.php (gauge) the single "Picker"
+    link points at — the page's own context decides, so reach-y pages get
+    the reach picker and gauge-y pages get the gauge picker.
     """
     links: list[str] = []
     map_cls = ' class="active"' if active_page == "map" else ""
@@ -979,8 +987,11 @@ def _build_nav(states: list[str], active_state: str = "", active_page: str = "")
         abbrev = _STATE_ABBREVS.get(s, s)
         cls = ' class="active"' if s == active_state else ""
         links.append(f'<a href="/{s}.html"{cls}>{abbrev}</a>')
-    links.append('<a href="/picker.php">Picker</a>')
-    links.append('<a href="https://www.windy.com/?44.0,-120.5,7">OR Weather</a>')
+    if picker_kind == "gauge":
+        links.append('<a href="/gauge_picker.php">Gauge<br>Picker</a>')
+    else:
+        links.append('<a href="/picker.php">Reach<br>Picker</a>')
+    links.append('<a href="https://www.windy.com/?44.0,-120.5,7">Oregon<br>Weather</a>')
     return "\n    ".join(links)
 
 
@@ -1035,9 +1046,15 @@ def _build_page(
     letters: list[str] | None = None,
     filter_bar_html: str = "",
     active_page: str = "",
+    picker_kind: str = "reach",
 ) -> str:
     """Wrap the table HTML in a complete HTML document linking to external CSS."""
-    nav_html = _build_nav(states, active_state=current_state, active_page=active_page)
+    nav_html = _build_nav(
+        states,
+        active_state=current_state,
+        active_page=active_page,
+        picker_kind=picker_kind,
+    )
     letter_nav_html = _build_letter_nav(letters) if letters else ""
     now_utc = datetime.now(UTC)
     now_iso = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -1539,21 +1556,25 @@ def _build_gauges_table(rows: list[dict[str, Any]]) -> tuple[str, list[str]]:
         huc8 = row["huc8"]
 
         stale = " stale" if row.get("stale") else ""
-        # Emit filter attrs only when every group's value is populated. A
-        # partial set would match the filters.js selector `tr[data-state],...`
-        # but then fail match() in any group whose attr is empty, hiding the
-        # row permanently. All-or-nothing keeps orphan gauges visible.
-        attrs = (
-            f' data-state="{html_mod.escape(state)}" data-huc8="{html_mod.escape(huc8)}"'
-            if state and huc8
-            else ""
-        )
-        # data-status drives the colored leading bullet on the phone card
-        # layout, and lets future filter pills key off it.
+        # Emit filter attrs only when state+huc8 are both populated. A partial
+        # set would match the filters.js selector `tr[data-state],...` but
+        # then fail match() in any group whose attr is empty, hiding the row
+        # permanently. All-or-nothing keeps orphan gauges visible. data-status
+        # rides along on the same condition so unrolled-up gauges (status word
+        # is None) still match the "unknown" pill, while pure orphans stay
+        # out of the filter set entirely.
         status_word = row.get("status")
-        status_attr = f' data-status="{status_word}"' if status_word else ""
+        if state and huc8:
+            status_for_attr = status_word or "unknown"
+            attrs = (
+                f' data-state="{html_mod.escape(state)}"'
+                f' data-huc8="{html_mod.escape(huc8)}"'
+                f' data-status="{status_for_attr}"'
+            )
+        else:
+            attrs = ""
         lines.append(
-            f'<tr{letter_id} class="clickable-row{stale}" data-href="/gauge.php?id={gid}"{attrs}{status_attr}>'
+            f'<tr{letter_id} class="clickable-row{stale}" data-href="/gauge.php?id={gid}"{attrs}>'
         )
 
         if status_word:
@@ -1613,14 +1634,17 @@ def _build_gauges_filter_bar(
     huc6_names: dict[str, str],
     huc8_names: dict[str, str],
 ) -> str:
-    """Filter bar for gauges page: State + Watershed (status/tier don't apply).
+    """Filter bar for gauges page: State + Watershed + Status (no class tier).
 
-    Reads ``state``/``huc6``/``huc8``/``has_huc`` directly from each row — the
-    gauges page no longer derives filter values from linked reaches.
+    Reads ``state``/``huc6``/``huc8``/``has_huc``/``status`` directly from
+    each row. Status comes from the rolled-up reach statuses — gauges with
+    no associated reach (or no flow thresholds) carry no data-status, which
+    filters.js treats as the empty value, so we expose an "unknown" pill.
     """
     states: set[str] = set()
     huc6_to_huc8s: dict[str, set[tuple[str, str]]] = {}
     has_no_huc = False
+    statuses: set[str] = set()
     for r in rows:
         if r["state"]:
             states.add(r["state"])
@@ -1630,6 +1654,11 @@ def _build_gauges_filter_bar(
             )
         else:
             has_no_huc = True
+        # Only filterable rows (state + huc8 present) carry data-status, so
+        # only those should contribute pill values. Otherwise the "unknown"
+        # pill could appear without anything for it to match.
+        if r["state"] and r["has_huc"]:
+            statuses.add(r.get("status") or "unknown")
     huc6_groups = [
         {
             "huc6": huc6,
@@ -1644,7 +1673,7 @@ def _build_gauges_filter_bar(
         "state": sorted(states),
         "huc6_groups": huc6_groups,
         "has_no_huc": has_no_huc,
-        "status": [],
+        "status": [s for s in ("low", "okay", "high", "unknown") if s in statuses],
         "tier": [],
     }
     return _build_filter_bar(filter_data, is_all_page=True)
@@ -1680,6 +1709,7 @@ def _write_gauges_page(
         letters=letters,
         filter_bar_html=filter_bar_html,
         active_page="gauges",
+        picker_kind="gauge",
     )
     _atomic_write(output_dir / "gauges.html", page_html)
 

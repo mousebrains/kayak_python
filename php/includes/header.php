@@ -44,18 +44,39 @@ function css_head_block(): string {
     return $block;
 }
 
-/** Render the nav bar as an HTML string. */
+/** Render the nav bar as an HTML string.
+ *
+ * The single "Picker" link points at /picker.php on reach-context pages and
+ * /gauge_picker.php on gauge-context pages. Choice is driven by
+ * $context['type'] (already used for the Comment redirect): 'gauge' /
+ * 'source' → gauge picker, everything else → reach picker. Pages that mean
+ * to override (e.g. picker.php and gauge_picker.php themselves) can pass
+ * 'picker_kind' explicitly.
+ */
 function render_nav(string $active, array $context): string {
-    $picker_cls   = $active === 'picker'   ? ' class="active"' : '';
-    $map_cls      = $active === 'map'      ? ' class="active"' : '';
-    $comment_cls  = $active === 'comment'  ? ' class="active"' : '';
+    $picker_cls  = $active === 'picker'  ? ' class="active"' : '';
+    $map_cls     = $active === 'map'     ? ' class="active"' : '';
+    $comment_cls = $active === 'comment' ? ' class="active"' : '';
+
+    $kind = $context['picker_kind'] ?? null;
+    if ($kind === null) {
+        $type = $context['type'] ?? '';
+        $kind = ($type === 'gauge' || $type === 'source') ? 'gauge' : 'reach';
+    }
+    if ($kind === 'gauge') {
+        $picker_url   = '/gauge_picker.php';
+        $picker_label = 'Gauge<br>Picker';
+    } else {
+        $picker_url   = '/picker.php';
+        $picker_label = 'Reach<br>Picker';
+    }
 
     $feature = editor_feature_enabled();
     $ed      = $feature ? current_editor() : null;
     $maint   = $feature && is_maintainer($ed);
 
     $left = '<nav class="site-nav" aria-label="Site navigation">'
-          . '<a href="/picker.php"' . $picker_cls . '>Picker</a>'
+          . '<a href="' . $picker_url . '"' . $picker_cls . '>' . $picker_label . '</a>'
           . '<a href="/map.html"' . $map_cls . '>Map</a>';
 
     // Maintainers still get a prominent Edit shortcut on reach pages.

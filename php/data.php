@@ -48,7 +48,7 @@ if ($reach['gauge_id']) {
 
 if (!$source_ids) {
     header('Cache-Control: no-cache');
-    include_header("$name - Data");
+    include_header("$name - Data", '', '', '', ['picker_kind' => 'gauge']);
     echo '<h2>' . htmlspecialchars($name) . ' — Data Inspector</h2>';
     echo '<p>No sources linked to this reach.</p>';
     echo '<p><a href="/description.php?id=' . $id . '">Back to description</a></p>';
@@ -103,7 +103,7 @@ $type_labels = [
 ];
 
 header('Cache-Control: no-cache');
-include_header($name . ' - Data');
+include_header($name . ' - Data', '', '', '', ['picker_kind' => 'gauge']);
 
 echo '<h2>' . htmlspecialchars($name) . ' — Data Inspector</h2>';
 

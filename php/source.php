@@ -32,7 +32,7 @@ if ($q !== null && $q !== '') {
     }
 
     header('Cache-Control: no-cache');
-    include_header('Source Search');
+    include_header('Source Search', '', '', '', ['picker_kind' => 'gauge']);
     echo '<h2>Source Search</h2>';
 
     if (!$results) {
@@ -59,7 +59,7 @@ if (!$id) {
     $row = $db->query('SELECT id FROM source ORDER BY id ASC LIMIT 1')->fetch();
     if (!$row) {
         header('Cache-Control: no-cache');
-        include_header('Sources');
+        include_header('Sources', '', '', '', ['picker_kind' => 'gauge']);
         echo '<p>No sources in database.</p>';
         include_footer();
         exit;
