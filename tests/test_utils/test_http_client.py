@@ -452,6 +452,37 @@ class TestAsyncFetchMany:
         # Two distinct hosts → two semaphores created
         assert len(semaphores_created) == 2
 
+    def test_host_concurrency_override(self):
+        """Hosts in _HOST_CONCURRENCY_OVERRIDES get their override limit; other
+        hosts in the same batch keep concurrency_per_host."""
+        urls = [
+            "http://override.example/1",
+            "http://normal.example/1",
+        ]
+
+        sem_limits: list[int] = []
+        original_semaphore = asyncio.Semaphore
+
+        def tracking_semaphore(n):
+            sem_limits.append(n)
+            return original_semaphore(n)
+
+        fake_session = _FakeSession()
+
+        with (
+            patch(
+                "kayak.utils.http_client._HOST_CONCURRENCY_OVERRIDES",
+                {"override.example": 2},
+            ),
+            patch("kayak.utils.http_client.aiohttp.TCPConnector"),
+            patch("kayak.utils.http_client.aiohttp.ClientSession", return_value=fake_session),
+            patch("kayak.utils.http_client.asyncio.Semaphore", tracking_semaphore),
+        ):
+            results = asyncio.run(async_fetch_many(urls, concurrency_per_host=8, timeout=10))
+
+        assert len(results) == 2
+        assert sorted(sem_limits) == [2, 8]
+
     def test_budget_cancels_slow_urls(self):
         """A slow URL is cancelled when the batch budget runs out, but the
         fast URL still returns a real result and the batch as a whole exits

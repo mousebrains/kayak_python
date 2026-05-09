@@ -6,7 +6,6 @@ import logging
 import socket
 import ssl
 import time
-from collections import defaultdict
 from urllib.parse import urlparse
 
 import aiohttp
@@ -168,6 +167,12 @@ class FetchResult:
 
 _RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 _MAX_RETRIES = 3
+
+# Hosts that rate-limit aggressively when many requests arrive at once.
+# nwrfc.noaa.gov returns HTTP 429 when ~8 requests land in the same second.
+_HOST_CONCURRENCY_OVERRIDES: dict[str, int] = {
+    "nwrfc.noaa.gov": 2,
+}
 
 
 def fetch(url: str, timeout: int | None = None) -> FetchResult:
@@ -361,10 +366,18 @@ async def async_fetch_many(
     if timeout is None:
         timeout = FETCH_TIMEOUT
 
-    # Group URLs by hostname and create per-host semaphores
-    host_semaphores: dict[str, asyncio.Semaphore] = defaultdict(
-        lambda: asyncio.Semaphore(concurrency_per_host)
-    )
+    # Group URLs by hostname and create per-host semaphores. Hosts in
+    # _HOST_CONCURRENCY_OVERRIDES use their override; everything else uses
+    # concurrency_per_host.
+    host_semaphores: dict[str, asyncio.Semaphore] = {}
+
+    def _sem_for(host: str) -> asyncio.Semaphore:
+        sem = host_semaphores.get(host)
+        if sem is None:
+            limit = _HOST_CONCURRENCY_OVERRIDES.get(host, concurrency_per_host)
+            sem = asyncio.Semaphore(limit)
+            host_semaphores[host] = sem
+        return sem
 
     deadline = time.monotonic() + budget if budget else None
 
@@ -379,7 +392,7 @@ async def async_fetch_many(
         url_to_task: dict[str, asyncio.Task[FetchResult]] = {}
         for url in urls:
             host = urlparse(url).hostname or ""
-            sem = host_semaphores[host]
+            sem = _sem_for(host)
             url_to_task[url] = asyncio.create_task(
                 _async_fetch_one(url, session, sem, timeout, insecure_ctx, deadline)
             )
