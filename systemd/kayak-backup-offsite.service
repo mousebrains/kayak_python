@@ -1,25 +1,26 @@
 [Unit]
-Description=Kayak SQLite database backup
+Description=Upload latest kayak backup to Google Drive (encrypted)
+After=network-online.target
+Wants=network-online.target
 OnFailure=kayak-notify-failure@%n.service
-OnSuccess=kayak-backup-offsite.service
 
 [Service]
 Type=oneshot
 User=pat
 WorkingDirectory=/home/pat/kayak
 EnvironmentFile=/home/pat/.config/kayak/.env
-ExecStart=/home/pat/kayak/systemd/kayak-backup.sh
+ExecStart=/home/pat/kayak/systemd/kayak-backup-offsite.sh
 Nice=15
+TimeoutStartSec=30min
 
-# Sandboxing. Backup only runs sqlite3 + gzip locally — no network needed.
+# Sandboxing. Needs network for rclone → googleapis.com; otherwise mirrors
+# kayak-backup.service. R/W on rclone config (token refresh) and cache.
 NoNewPrivileges=yes
 PrivateTmp=yes
 PrivateDevices=yes
-PrivateNetwork=yes
-IPAddressDeny=any
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/home/pat/DB /home/pat/kayak/backups /home/pat/.config
+ReadWritePaths=/home/pat/.config/rclone -/home/pat/.cache
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes
@@ -28,7 +29,7 @@ ProtectClock=yes
 ProtectHostname=yes
 ProtectProc=invisible
 ProcSubset=pid
-RestrictAddressFamilies=AF_UNIX
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 RestrictNamespaces=yes
 RestrictRealtime=yes
 RestrictSUIDSGID=yes
