@@ -294,7 +294,7 @@ if ($q_trimmed !== '' || $st !== '') {
         }
 
         if ($map_reaches) {
-            $leaflet_css = file_get_contents(__DIR__ . '/static/leaflet.css');
+            $leaflet_css = file_get_contents($_SERVER['DOCUMENT_ROOT'] . '/static/leaflet.css');
             echo '<style>' . $leaflet_css . '</style>';
             $map_json = htmlspecialchars(json_encode($map_reaches), ENT_QUOTES, 'UTF-8');
             $colors_json = htmlspecialchars(json_encode($colors), ENT_QUOTES, 'UTF-8');
@@ -626,7 +626,7 @@ if ($map_points || $reach['geom']) {
         }
     }
 
-    $leaflet_css = file_get_contents(__DIR__ . '/static/leaflet.css');
+    $leaflet_css = file_get_contents($_SERVER['DOCUMENT_ROOT'] . '/static/leaflet.css');
     echo '<style>' . $leaflet_css . '</style>';
     $pts_json = htmlspecialchars(json_encode($map_points), ENT_QUOTES, 'UTF-8');
     echo '<div id="reach-map" style="height:400px;margin-top:1rem;border:1px solid #ccc" data-points="' . $pts_json . '"';

@@ -13,6 +13,9 @@ require_once __DIR__ . '/includes/lttb.php';
 
 header('Content-Type: application/json');
 header('Cache-Control: max-age=300');
+// Public read-only API: river-level data is non-sensitive and we want
+// kayakers' apps and integrations (river forecasting, club sites) to
+// pull it freely. The wildcard is intentional.
 header('Access-Control-Allow-Origin: *');
 
 $id     = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);

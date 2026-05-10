@@ -1907,8 +1907,17 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
 
 
 def _set_acls(directory: Path) -> None:
-    """Set POSIX ACLs so www-data can read the deployed directory."""
+    """Set POSIX ACLs so www-data can read the deployed directory.
+
+    No-op on systems without setfacl (e.g. macOS dev workstations) — the
+    ACLs are a Linux-prod concern and macOS just isn't going to have a
+    www-data user anyway.
+    """
     import subprocess
+
+    if shutil.which("setfacl") is None:
+        logger.debug("setfacl not on PATH — skipping ACL apply on %s", directory)
+        return
 
     subprocess.run(
         ["setfacl", "-R", "-m", "u:www-data:rX", str(directory)],

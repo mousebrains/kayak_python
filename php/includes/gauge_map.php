@@ -76,9 +76,10 @@ function gm_render_map(
     $color_attr  = htmlspecialchars($track_color, ENT_QUOTES, 'UTF-8');
     $rt_attr     = htmlspecialchars($rt_json, ENT_QUOTES, 'UTF-8');
 
-    // leaflet.css sits at <docroot>/static/leaflet.css. __DIR__ here is
-    // <docroot>/includes so we hop up one level.
-    $css_path = __DIR__ . '/../static/leaflet.css';
+    // leaflet.css lives at <docroot>/static/leaflet.css. __DIR__ resolves
+    // to the PHP source path (kayak/php/includes), not the doc root, so
+    // resolve via $_SERVER['DOCUMENT_ROOT'] which nginx sets per fastcgi.
+    $css_path = $_SERVER['DOCUMENT_ROOT'] . '/static/leaflet.css';
     $leaflet_css = @file_get_contents($css_path);
     if ($leaflet_css !== false) {
         echo '<style>' . $leaflet_css . '</style>';
