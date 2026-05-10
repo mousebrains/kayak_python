@@ -182,6 +182,85 @@ HTTP-01 (since `levels.wkcc.org` now resolves to this host), but DNS-01 remains
 available as a fallback if HTTP-01 ever breaks — without re-involving
 ClubExpress.
 
+### Phase 4 — T+3 cleanup (after DNS has fully propagated)
+
+By T+3 (≈ 2026-05-23) the `levels.wkcc.org` A→CNAME flip from Phase 3 has
+reached every cache that respects TTL, and we can verify the renewal path
+works end-to-end before forgetting about it.
+
+1.  **Confirm DNS propagation is complete.**
+
+    ```bash
+    for r in 1.1.1.1 8.8.8.8 9.9.9.9 208.67.222.222; do
+        echo "@$r:"; dig +short @"$r" levels.wkcc.org A levels.wkcc.org CNAME
+    done
+    # Expect: CNAME levels.mousebrains.com. → A 5.78.185.66 from every resolver.
+    ```
+
+2.  **Delete the three temporary `_acme-challenge` TXT records** in the
+    Cloudflare zone `mousebrains.com` (added in Phase 2):
+    - `_acme-challenge.levels`
+    - `_acme-challenge.levels-test.wkcc.org`
+    - `_acme-challenge.levels.wkcc.org`
+
+    The two **CNAMEs** at ClubExpress stay in place permanently; only the
+    TXT values from Phase 2 are removed.
+
+3.  **Restore the renewal config to HTTP-01.** Phase 2 runs `certbot
+    --expand --manual --preferred-challenges dns`, which writes
+    `authenticator = manual` into the renewal config and would prompt
+    interactively at every renewal. Now that `levels.wkcc.org` resolves
+    here, switch back to nginx HTTP-01:
+
+    ```bash
+    sudo certbot certonly --force-renewal \
+      --cert-name levels.mousebrains.com \
+      --nginx \
+      -d levels.mousebrains.com -d levels-test.wkcc.org -d levels.wkcc.org
+    ```
+
+    This reissues the same 3-SAN cert via HTTP-01 and rewrites the renewal
+    config to `authenticator=nginx`. Verify:
+
+    ```bash
+    grep authenticator /etc/letsencrypt/renewal/levels.mousebrains.com.conf
+    # expect: authenticator = nginx
+    ```
+
+4.  **Dry-run the renewal.**
+
+    ```bash
+    sudo certbot renew --dry-run
+    # expect: "Congratulations, all simulated renewals succeeded"
+    ```
+
+5.  **Restore the `levels.wkcc.org` TTL** at ClubExpress (if you lowered
+    it for the cutover) back to its previous value, e.g. 3600s.
+
+6.  **Confirm traffic to `levels.wkcc.org` lands on this host.**
+
+    ```bash
+    curl -sI https://levels.wkcc.org/ | head -5
+    # expect: HTTP/2 200 from this nginx; check x-frame-options /
+    #         strict-transport-security headers match the other names.
+
+    openssl s_client -connect levels.wkcc.org:443 -servername levels.wkcc.org \
+        </dev/null 2>/dev/null | openssl x509 -noout -subject -issuer
+    # expect: subject CN=levels.mousebrains.com, issuer Let's Encrypt
+    ```
+
+7.  **Update the access-log analyzer** if it filters by hostname —
+    `levels.wkcc.org` is now a primary, not just an alias.
+
+8.  **Optional: prune unused mousebrains.com DNS records** — the
+    `_acme-challenge.levels.wkcc.org.mousebrains.com` and sibling **target**
+    names from Phase 1 stay (they're the CNAME targets); the **TXT values**
+    underneath them from Phase 2 are what gets deleted.
+
+If any of 1–6 fails, the rollback in Phase 3 still applies (revert the
+A-record CNAME at ClubExpress); the temporary TXTs and renewal config are
+forward-compatible and don't block a rollback.
+
 ## Pre-flight checks before Phase 2
 
 Things to confirm before running certbot, since `--manual` interacts with the
