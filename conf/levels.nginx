@@ -178,9 +178,12 @@ server {
         include /etc/nginx/snippets/security-headers.conf;
     }
 
-    # Auth endpoints — stricter rate limit (zone=auth, 3/min), no cache.
+    # Auth endpoints — three independent zones so e.g. contact spam can't
+    # lock out logins: login (3/min, tight — each request emails a magic
+    # link), auth (10/min, relaxed — token consumption is brute-safe),
+    # contact (10/min, anonymous, gated by Turnstile + honeypot).
     # /login.php uses the Turnstile-enabled CSP variant so the widget can load.
-    location = /login.php { limit_req zone=auth burst=2 nodelay;
+    location = /login.php { limit_req zone=login burst=2 nodelay;
         try_files $uri =404;
         fastcgi_pass unix:/run/php/php-fpm.sock;
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
@@ -193,7 +196,7 @@ server {
         add_header Cache-Control "no-store";
         include /etc/nginx/snippets/security-headers-turnstile.conf;
     }
-    location = /auth.php { limit_req zone=auth burst=2 nodelay;
+    location = /auth.php { limit_req zone=auth burst=4 nodelay;
         try_files $uri =404;
         fastcgi_pass unix:/run/php/php-fpm.sock;
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
@@ -203,7 +206,7 @@ server {
         add_header Cache-Control "no-store";
         include /etc/nginx/snippets/security-headers.conf;
     }
-    location = /logout.php { limit_req zone=auth burst=2 nodelay;
+    location = /logout.php { limit_req zone=auth burst=4 nodelay;
         try_files $uri =404;
         fastcgi_pass unix:/run/php/php-fpm.sock;
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
@@ -250,7 +253,7 @@ server {
         include /etc/nginx/snippets/security-headers.conf;
     }
     # Anonymous contact form — Turnstile-gated, auth rate limit, Turnstile CSP
-    location = /contact.php { limit_req zone=auth burst=2 nodelay;
+    location = /contact.php { limit_req zone=contact burst=4 nodelay;
         try_files $uri =404;
         fastcgi_pass unix:/run/php/php-fpm.sock;
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
