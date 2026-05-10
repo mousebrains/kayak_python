@@ -140,7 +140,10 @@ class Gauge(Base):
     sources: Mapped[list[Source]] = relationship(secondary="gauge_source", back_populates="gauges")
     reaches: Mapped[list[Reach]] = relationship(back_populates="gauge")
 
-    __table_args__ = (Index("ix_gauge_usgs_id", "usgs_id"),)
+    __table_args__ = (
+        Index("ix_gauge_usgs_id", "usgs_id"),
+        Index("ix_gauge_rating_id", "rating_id"),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -188,7 +191,11 @@ class Source(Base):
     observations: Mapped[list[Observation]] = relationship(back_populates="source")
     latest_observations: Mapped[list[LatestObservation]] = relationship(back_populates="source")
 
-    __table_args__ = (Index("ix_source_name", "name"),)
+    __table_args__ = (
+        Index("ix_source_name", "name"),
+        Index("ix_source_fetch_url_id", "fetch_url_id"),
+        Index("ix_source_calc_expression_id", "calc_expression_id"),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -483,6 +490,7 @@ class Reach(Base):
             unique=True,
             sqlite_where=text("name IS NOT NULL"),
         ),
+        Index("ix_reach_gauge_id", "gauge_id"),
     )
 
 
@@ -651,7 +659,10 @@ class Editor(Base):
     reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("editor.id", ondelete="SET NULL"))
     last_login_at: Mapped[datetime | None] = mapped_column()
 
-    __table_args__ = (Index("ix_editor_status", "status"),)
+    __table_args__ = (
+        Index("ix_editor_status", "status"),
+        Index("ix_editor_reviewed_by", "reviewed_by"),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -781,6 +792,7 @@ class ChangeRequest(Base):
         Index("ix_change_request_status", "status"),
         Index("ix_change_request_target", "target_type", "target_id"),
         Index("ix_change_request_editor_id", "editor_id"),
+        Index("ix_change_request_reviewed_by", "reviewed_by"),
     )
 
 
@@ -847,6 +859,7 @@ class EditHistory(Base):
     __table_args__ = (
         Index("ix_edit_history_target", "target_type", "target_id"),
         Index("ix_edit_history_changed_at", "changed_at"),
+        Index("ix_edit_history_cr_id", "change_request_id"),
     )
 
 
