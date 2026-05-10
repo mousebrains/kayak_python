@@ -229,6 +229,29 @@ def check_data_status(kayak, days=7):
     return stopped, started, stale
 
 
+def _group_stale_by_gauge(stale: list) -> list:
+    """Fold the per-(reach,gauge) stale list into one entry per gauge.
+
+    The check_data_status query returns one row per (gauge, reach) pair, so a
+    gauge that drives multiple reaches appears multiple times. last_obs is
+    gauge-level (same value for every row of a given gauge), so the fold is
+    lossless. Output is sorted by gauge name for stable presentation.
+
+    Returns: [(gid, gname, usgs_id, last_obs, [(rid, rname), ...]), ...]
+    """
+    by_gid: dict = {}
+    for gid, gname, usgs_id, rid, rname, last_obs, _dtype in stale:
+        if gid not in by_gid:
+            by_gid[gid] = [gname, usgs_id, last_obs, []]
+        by_gid[gid][3].append((rid, rname or "<unnamed>"))
+    result = [
+        (gid, gname, usgs_id, last_obs, sorted(reaches))
+        for gid, (gname, usgs_id, last_obs, reaches) in by_gid.items()
+    ]
+    result.sort(key=lambda r: (r[1] or "", r[0]))
+    return result
+
+
 def _send_email_digest(
     addr: str,
     days: int,
@@ -257,7 +280,8 @@ def _send_email_digest(
         if candidate_count:
             parts.append(f"{candidate_count} candidates")
         if stale:
-            parts.append(f"{len(stale)} stale reaches")
+            n_stale_gauges = len({row[0] for row in stale})
+            parts.append(f"{n_stale_gauges} stale gauges")
         subject = f"Kayak audit {today}: " + ", ".join(parts)
     else:
         subject = f"Kayak audit {today}: clean"
@@ -273,12 +297,18 @@ def _send_email_digest(
         lines.append("")
 
     if stale:
+        grouped = _group_stale_by_gauge(stale)
+        n_reaches = sum(len(r[4]) for r in grouped)
         lines.append(
-            f"STALE REACH GAUGES ({len(stale)}) — reaches whose linked gauge has no flow or gauge data in last {days}d"
+            f"STALE GAUGES ({len(grouped)}, {n_reaches} reaches affected) — "
+            f"gauges with no flow or gauge data in last {days}d"
         )
-        for _gid, gname, _usgs_id, _rid, rname, last_obs, _dtype in stale:
+        for _gid, gname, usgs_id, last_obs, reaches in grouped:
             lo = last_obs or "never"
-            lines.append(f"  • {rname or '<unnamed>'} — gauge {gname} — last obs {lo}")
+            reaches_s = ", ".join(f"{rname} [r={rid}]" for rid, rname in reaches)
+            lines.append(
+                f"  • {gname} (USGS {usgs_id or 'N/A'}) — last obs {lo} — affects: {reaches_s}"
+            )
         lines.append("")
 
     if started:
@@ -426,12 +456,15 @@ def main():
         print("  None")
 
     print("\n" + "=" * 60)
-    print(f"Reach gauges with NO flow OR gauge data in last {args.days} days")
+    print(f"Stale gauges with NO flow OR gauge data in last {args.days} days")
     print("=" * 60)
     if stale:
-        for _gid, gname, _usgs_id, _rid, rname, last_obs, _dtype in stale:
+        grouped = _group_stale_by_gauge(stale)
+        for _gid, gname, usgs_id, last_obs, reaches in grouped:
             lo = last_obs or "never"
-            print(f"  {rname or '':<30} gauge={gname:<25} last obs: {lo}")
+            reaches_s = ", ".join(f"{rname} [r={rid}]" for rid, rname in reaches)
+            print(f"  {gname:<35} (USGS {usgs_id or 'N/A':<12}) last: {lo}")
+            print(f"    affects: {reaches_s}")
     else:
         print("  None")
 
