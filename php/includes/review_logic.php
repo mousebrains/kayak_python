@@ -147,8 +147,13 @@ function review_approve(PDO $db, array $cr, array $applied, int $maint_id, strin
         $db->commit();
     } catch (Throwable $e) {
         $db->rollBack();
+        // Log the full message server-side; never echo it to the response.
+        // The raw PDOException text leaks schema details (column names, FK
+        // constraints) and stack-frame paths. Maintainers see the detail
+        // in the journal; the user sees a generic confirmation that the
+        // attempt failed.
         error_log('review_approve: ' . $e->getMessage());
-        return ['ok' => false, 'err' => 'apply failed: ' . $e->getMessage()];
+        return ['ok' => false, 'err' => 'apply failed (see server log for details)'];
     }
     return ['ok' => true];
 }

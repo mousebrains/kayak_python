@@ -4,6 +4,7 @@ declare(strict_types=1);
  * About page — history and design philosophy of the site.
  */
 $title = "About";
+header('Cache-Control: public, max-age=300');
 ?>
 <!DOCTYPE html>
 <html lang="en">

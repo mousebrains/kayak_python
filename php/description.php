@@ -86,7 +86,11 @@ if ($class_range) {
     ];
 }
 
-header('Cache-Control: max-age=300');
+// `private` so intermediary CDNs/proxies don't cache responses that
+// embed the logged-in editor's email in the nav (header.php renders
+// it in a title= attribute). The 5-minute TTL still benefits the
+// individual user's browser cache.
+header('Cache-Control: private, max-age=300');
 $preconnects = '<link rel="preconnect" href="https://a.tile.opentopomap.org">'
     . '<link rel="preconnect" href="https://b.tile.opentopomap.org">'
     . '<link rel="preconnect" href="https://c.tile.opentopomap.org">';

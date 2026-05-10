@@ -4,6 +4,7 @@ declare(strict_types=1);
  * Privacy Policy page.
  */
 $title = "Privacy Policy";
+header('Cache-Control: public, max-age=300');
 ?>
 <!DOCTYPE html>
 <html lang="en">

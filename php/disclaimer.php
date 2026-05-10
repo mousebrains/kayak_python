@@ -4,6 +4,7 @@ declare(strict_types=1);
  * Disclaimer / use-at-your-own-risk page.
  */
 $title = "Disclaimer";
+header('Cache-Control: public, max-age=300');
 ?>
 <!DOCTYPE html>
 <html lang="en">

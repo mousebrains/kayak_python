@@ -150,7 +150,12 @@ server {
         include /etc/nginx/snippets/security-headers.conf;
     }
 
-    # PHP endpoints via php-fpm
+    # PHP endpoints via php-fpm.
+    # NOTE: Cache-Control is left to each PHP file to set explicitly via
+    # header() — blanket add_header here would duplicate alongside the
+    # per-page value and produce conflicting directives (e.g. public from
+    # nginx + private from description.php). Every entry point in php/
+    # sets its own; see the audit comment in php/about.php style.
     location ~ \.php$ {
         limit_req zone=php burst=20 nodelay;
         try_files $uri =404;
@@ -166,8 +171,6 @@ server {
         fastcgi_param MAIL_FROM $mail_from;
         fastcgi_param SITE_URL $site_url;
 
-        # Cache PHP responses (5 min for reads, no cache for edits)
-        add_header Cache-Control "public, max-age=300";
         include /etc/nginx/snippets/security-headers.conf;
     }
 
