@@ -13,6 +13,7 @@ from kayak.cli.build import (
     _build_page,
     _build_sparkline,
     _build_text,
+    _csv_safe,
     _get_row_data,
     _levels_key,
     _select_sparkline_series,
@@ -815,3 +816,18 @@ class TestAtomicWrite:
         _atomic_write(path, "content")
         mode = stat.S_IMODE(path.stat().st_mode)
         assert mode == 0o644
+
+
+def test_csv_safe_passes_normal_strings():
+    assert _csv_safe("Sandy River") == "Sandy River"
+    assert _csv_safe("") == ""
+    assert _csv_safe("OK") == "OK"
+
+
+def test_csv_safe_escapes_formula_prefix():
+    assert _csv_safe("=foo") == "'=foo"
+    assert _csv_safe("+1") == "'+1"
+    assert _csv_safe("-rname") == "'-rname"
+    assert _csv_safe("@name") == "'@name"
+    assert _csv_safe("\tinjected") == "'\tinjected"
+    assert _csv_safe("\rinjected") == "'\rinjected"

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import itertools
 import logging
+import math
 import statistics
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
@@ -42,6 +43,18 @@ def store_observation(
         except ValueError:
             logger.error("Unknown data type: %s", data_type)
             return False
+
+    if not math.isfinite(value):
+        # Government feeds occasionally publish sentinel values (-999999) that
+        # arithmetic turns into Inf/NaN. Drop silently at INFO so the
+        # downstream cache + merge median can't be poisoned.
+        logger.info(
+            "Rejecting non-finite value %r for source_id=%d data_type=%s",
+            value,
+            source_id,
+            data_type,
+        )
+        return False
 
     when = when.replace(microsecond=0)
     now = datetime.now(UTC)

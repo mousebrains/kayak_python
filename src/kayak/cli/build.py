@@ -389,8 +389,23 @@ def _build_sparkline(
 
 
 # ---------------------------------------------------------------------------
-# CSV / Text builders (unchanged logic)
+# CSV / Text builders
 # ---------------------------------------------------------------------------
+
+_CSV_FORMULA_PREFIX = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_safe(value: str) -> str:
+    """Prefix `'` if the string would be interpreted as a formula by Excel/
+    Sheets/Numbers. RFC 4180 doesn't require this; it is a defense against
+    ``levels.csv`` becoming an attack surface.
+
+    Only string columns route through this; numeric values are emitted via
+    format strings in ``_build_csv`` and never reach here.
+    """
+    if value and value.startswith(_CSV_FORMULA_PREFIX):
+        return "'" + value
+    return value
 
 
 def _build_csv(
@@ -413,10 +428,12 @@ def _build_csv(
                 continue
             val = row.get(col["field"], "")
             if isinstance(val, float):
-                val = f"{val:.1f}"
+                formatted = f"{val:.1f}"
             elif isinstance(val, datetime):
-                val = val.strftime("%Y-%m-%d %H:%M")
-            values.append(str(val))
+                formatted = val.strftime("%Y-%m-%d %H:%M")
+            else:
+                formatted = _csv_safe(str(val))
+            values.append(formatted)
         writer.writerow(values)
     return output.getvalue()
 

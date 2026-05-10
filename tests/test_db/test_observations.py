@@ -1,5 +1,6 @@
 """Tests for observation storage and per-source/gauge cache helpers."""
 
+import math
 from datetime import UTC, datetime, timedelta
 
 from kayak.db.cache import get_all_latest, get_latest, update_latest, update_latest_gauge
@@ -49,6 +50,24 @@ def test_reject_negative_flow(session):
     src = _make_source(session)
     now = datetime.now(UTC)
     assert not store_observation(session, src.id, DataType.flow, now, -10.0)
+
+
+def test_reject_nan_value(session):
+    src = _make_source(session)
+    now = datetime.now(UTC)
+    assert not store_observation(session, src.id, DataType.flow, now, math.nan)
+
+
+def test_reject_pos_inf_value(session):
+    src = _make_source(session)
+    now = datetime.now(UTC)
+    assert not store_observation(session, src.id, DataType.flow, now, math.inf)
+
+
+def test_reject_neg_inf_value(session):
+    src = _make_source(session)
+    now = datetime.now(UTC)
+    assert not store_observation(session, src.id, DataType.flow, now, -math.inf)
 
 
 def test_negative_gauge_ok(session):
