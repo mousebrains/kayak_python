@@ -1455,6 +1455,7 @@ def _collect_gauge_rows(
             "location": location,
             "display_name": display_name,
             "sort_name": sort_name,
+            "is_estimated": g.id in calc_ids,
         }
 
         for dtype_name, dtype in [
@@ -1586,9 +1587,10 @@ def _build_gauges_table(rows: list[dict[str, Any]]) -> tuple[str, list[str]]:
             status_cell = ""
         lines.append(f'  <td class="td-status" data-label="Status">{status_cell}</td>')
 
+        est = '<span class="est"> (est)</span>' if row.get("is_estimated") else ""
         lines.append(
             f'  <td class="td-name" data-label="River">'
-            f'<a href="/gauge.php?id={gid}">{html_mod.escape(river)}</a></td>'
+            f'<a href="/gauge.php?id={gid}">{html_mod.escape(river)}{est}</a></td>'
         )
         lines.append(f'  <td data-label="Location">{html_mod.escape(location)}</td>')
 
@@ -1688,7 +1690,9 @@ def _write_gauges_page(
 ) -> None:
     """Render gauges.html and ensure sparklines.json covers every shown gauge."""
     metadata = _load_station_metadata()
-    rows = _collect_gauge_rows(session, all_latest, metadata)
+    gauge_ids_with_data = list({gid for gid, _ in all_latest})
+    calc_ids = get_calculated_gauge_ids(session, gauge_ids_with_data)
+    rows = _collect_gauge_rows(session, all_latest, metadata, calc_ids)
     logger.info("Building gauges.html: %d gauges", len(rows))
     print(f"Building gauges.html: {len(rows)} gauges")
 
