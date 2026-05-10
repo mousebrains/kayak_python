@@ -3,6 +3,7 @@ Description=Run kayak decimate daily
 
 [Timer]
 OnCalendar=02:32
+RandomizedDelaySec=300
 Persistent=true
 
 [Install]

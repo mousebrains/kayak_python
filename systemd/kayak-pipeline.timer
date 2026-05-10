@@ -3,6 +3,7 @@ Description=Run kayak pipeline hourly
 
 [Timer]
 OnCalendar=*:12
+RandomizedDelaySec=300
 Persistent=true
 
 [Install]

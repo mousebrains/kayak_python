@@ -5,6 +5,7 @@ Description=Run kayak healthcheck hourly
 # Run 45 minutes past each hour — gives the pipeline at :12 time to finish
 # writing the freshest observation before we check for staleness.
 OnCalendar=*:45
+RandomizedDelaySec=300
 Persistent=true
 
 [Install]
