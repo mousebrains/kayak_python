@@ -23,6 +23,16 @@ function mail_from(): string {
     return "noreply@$host";
 }
 
+/**
+ * Reply-To address. Distinct from From so DMARC/DKIM align with the From
+ * domain (Gmail) while users see a polished reply address on the wkcc.org
+ * domain. Override via env MAIL_REPLY_TO if needed.
+ */
+function mail_reply_to(): string {
+    $r = _mail_env('MAIL_REPLY_TO');
+    return $r !== '' ? $r : 'noreply@levels.wkcc.org';
+}
+
 function mail_dump_dir(): ?string {
     $dir = _mail_env('MAIL_DUMP_DIR');
     return $dir !== '' ? $dir : null;
@@ -49,7 +59,7 @@ function send_email(string $to, string $subject, string $body, array $extra_head
     $from = mail_from();
     $default_headers = [
         'From'                      => $from,
-        'Reply-To'                  => $from,
+        'Reply-To'                  => mail_reply_to(),
         'MIME-Version'              => '1.0',
         'Content-Type'              => 'text/plain; charset=UTF-8',
         'Content-Transfer-Encoding' => '8bit',
