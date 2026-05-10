@@ -12,6 +12,10 @@ require_once __DIR__ . '/includes/validate.php';
 $id   = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 $type = filter_input(INPUT_GET, 'type', FILTER_SANITIZE_SPECIAL_CHARS) ?: 'flow';
 $days = filter_input(INPUT_GET, 'days', FILTER_VALIDATE_INT) ?: 10;
+// Clamp to 1 year. Plotting decades of observations is never the user's
+// actual intent; capping defends against a hostile or accidentally-broken
+// bookmark pinning a PHP-FPM worker through derive_rating_lookup's joins.
+$days = max(1, min($days, 366));
 $embed = filter_input(INPUT_GET, 'embed', FILTER_VALIDATE_INT);
 $start_date = validate_date(filter_input(INPUT_GET, 'start', FILTER_SANITIZE_SPECIAL_CHARS));
 $end_date = validate_date(filter_input(INPUT_GET, 'end', FILTER_SANITIZE_SPECIAL_CHARS));
@@ -39,13 +43,21 @@ $gauge_id = $reach['gauge_id'];
 $is_flow = in_array($type, ['flow', 'inflow', 'outflow']);
 
 if ($start_date && $end_date) {
-    $since = date('Y-m-d 00:00:00', strtotime($start_date));
-    $until = date('Y-m-d 23:59:59', strtotime($end_date));
+    $start_ts = strtotime($start_date);
+    $end_ts   = strtotime($end_date);
+    // Clamp window to 1 year — same rationale as the $days cap above.
+    if ($end_ts - $start_ts > 366 * 86400) {
+        $start_ts = $end_ts - 366 * 86400;
+        $start_date = date('Y-m-d', $start_ts);
+    }
+    $since = date('Y-m-d 00:00:00', $start_ts);
+    $until = date('Y-m-d 23:59:59', $end_ts);
     $stmt = $db->prepare(
         'SELECT o.observed_at, o.value FROM observation o
          JOIN gauge_source gs ON o.source_id = gs.source_id
          WHERE gs.gauge_id = ? AND o.data_type = ? AND o.observed_at >= ? AND o.observed_at <= ?
-         ORDER BY o.observed_at'
+         ORDER BY o.observed_at
+         LIMIT 100000'
     );
     $stmt->execute([$gauge_id, $type, $since, $until]);
 } else {
@@ -54,7 +66,8 @@ if ($start_date && $end_date) {
         'SELECT o.observed_at, o.value FROM observation o
          JOIN gauge_source gs ON o.source_id = gs.source_id
          WHERE gs.gauge_id = ? AND o.data_type = ? AND o.observed_at >= ?
-         ORDER BY o.observed_at'
+         ORDER BY o.observed_at
+         LIMIT 100000'
     );
     $stmt->execute([$gauge_id, $type, $since]);
 }

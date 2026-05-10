@@ -50,7 +50,8 @@ if ($q_trimmed !== '' || $st !== '') {
              WHERE (r.display_name LIKE ? OR r.name LIKE ? OR r.river LIKE ?)
                AND s.abbreviation = ?
                AND r.no_show = ?
-             ORDER BY r.sort_name'
+             ORDER BY r.sort_name
+             LIMIT 200'
         );
         $stmt->execute([$pat, $pat, $pat, $st, $hidden]);
     } elseif ($q !== '') {
@@ -63,11 +64,15 @@ if ($q_trimmed !== '' || $st !== '') {
              FROM reach r
              WHERE (r.display_name LIKE ? OR r.name LIKE ? OR r.river LIKE ?)
                AND r.no_show = ?
-             ORDER BY r.sort_name'
+             ORDER BY r.sort_name
+             LIMIT 200'
         );
         $stmt->execute([$pat, $pat, $pat, $hidden]);
     } else {
-        // State filter only, no text search
+        // State filter only, no text search.
+        // Higher cap than the text-search variants because a state listing
+        // is the user's expected "all reaches in OR" page; large states
+        // (Oregon, California) can legitimately exceed 200.
         $stmt = $db->prepare(
             'SELECT r.id, COALESCE(NULLIF(r.display_name, \'\'), r.name) AS name, r.river,
                     r.description, r.gauge_id, r.latitude_start, r.longitude_start,
@@ -78,7 +83,8 @@ if ($q_trimmed !== '' || $st !== '') {
              JOIN state s ON s.id = rs.state_id
              WHERE s.abbreviation = ?
                AND r.no_show = ?
-             ORDER BY r.sort_name'
+             ORDER BY r.sort_name
+             LIMIT 1000'
         );
         $stmt->execute([$st, $hidden]);
     }

@@ -29,7 +29,8 @@ if ($q !== null && $q !== '') {
          WHERE name LIKE ? OR location LIKE ? OR station_id LIKE ?
             OR usgs_id LIKE ? OR cbtt_id LIKE ? OR geos_id LIKE ?
             OR nws_id LIKE ? OR nwsli_id LIKE ? OR snotel_id LIKE ?
-         ORDER BY id'
+         ORDER BY id
+         LIMIT 200'
     );
     $pat = "%$q%";
     $stmt->execute([$pat, $pat, $pat, $pat, $pat, $pat, $pat, $pat, $pat]);

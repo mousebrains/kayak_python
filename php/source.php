@@ -20,7 +20,8 @@ if ($q !== null && $q !== '') {
     $stmt = $db->prepare(
         'SELECT id, name, agency FROM source
          WHERE name LIKE ? OR agency LIKE ?
-         ORDER BY id'
+         ORDER BY id
+         LIMIT 200'
     );
     $pat = "%$q%";
     $stmt->execute([$pat, $pat]);
