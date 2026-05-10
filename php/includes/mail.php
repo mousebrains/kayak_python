@@ -41,6 +41,11 @@ function send_email(string $to, string $subject, string $body, array $extra_head
         error_log("send_email: refused invalid recipient: $to");
         return false;
     }
+    // Strip CR/LF from subject before it reaches mail()/syslog/file dump.
+    // PHP's mail() does not reliably sanitize the subject across versions,
+    // and callers may pass DB-sourced strings (reach names, contact
+    // subjects) that we must not let escape into header context.
+    $subject = preg_replace('/[\r\n]+/', ' ', $subject);
     $from = mail_from();
     $default_headers = [
         'From'                      => $from,
