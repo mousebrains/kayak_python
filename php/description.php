@@ -379,6 +379,15 @@ if ($gauge) {
             } elseif ($src['calc_expr']) {
                 // Link gauge references like "nP::S_Santiam_Cascadia_merge::flow"
                 // The middle token is a gauge name; find a reach that uses it.
+                //
+                // Escape FIRST, then run the regex on the escaped string.
+                // preg_replace_callback returns unmatched portions of the
+                // input verbatim — without pre-escaping, any HTML
+                // metacharacters between matches (or in malformed input)
+                // would land on the page unescaped. \w+ matches word
+                // characters only, which htmlspecialchars leaves untouched,
+                // so the regex still locks onto the same substrings.
+                $expr_safe = htmlspecialchars($src['calc_expr']);
                 $expr_html = preg_replace_callback(
                     '/(\w+)::(\w+)::(\w+)/',
                     function ($m) use ($db) {
@@ -392,14 +401,16 @@ if ($gauge) {
                         );
                         $stmt->execute([$gauge_name]);
                         $r = $stmt->fetch();
-                        $full = htmlspecialchars($m[0]);
+                        // $m[0..3] are matched against the pre-escaped
+                        // input; \w+ subsegments don't contain HTML
+                        // metacharacters, so they're safe to embed.
                         if ($r) {
                             $display = htmlspecialchars($r['display_name'] ?: $gauge_name);
-                            return "<a href=\"/description.php?id={$r['id']}\" title=\"$full\">$display</a>::{$m[3]}";
+                            return "<a href=\"/description.php?id={$r['id']}\" title=\"{$m[0]}\">$display</a>::{$m[3]}";
                         }
-                        return $full;
+                        return $m[0];
                     },
-                    $src['calc_expr']
+                    $expr_safe
                 );
                 echo "<tr><td>$label</td><td>Calculated: $expr_html</td></tr>\n";
             } else {
