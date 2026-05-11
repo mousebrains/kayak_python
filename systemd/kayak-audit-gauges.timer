@@ -1,8 +1,11 @@
 [Unit]
-Description=Audit gauge metadata every 2 months
+Description=Audit gauge metadata twice a month (1st + 15th)
 
 [Timer]
-OnCalendar=*-01,03,05,07,09,11-15 03:00
+# Bi-weekly: 1st and 15th of every month at 03:00 (jittered up to +1h).
+# 14-day gaps match the audit script's --days 14 window, so every
+# stop/start event in flow data falls inside exactly one fire's window.
+OnCalendar=*-*-01,15 03:00
 RandomizedDelaySec=3600
 Persistent=true
 
