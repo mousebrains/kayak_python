@@ -448,7 +448,92 @@ sudo cp deploy/sshd_config.d/hardening.conf /etc/ssh/sshd_config.d/hardening.con
 sudo sshd -t && sudo systemctl reload ssh
 ```
 
-## 13. Cloud backup (future — Hetzner Storage Box)
+## 13. nftables firewall
+
+`deploy/nftables.conf` is the live `/etc/nftables.conf`: drop-by-default
+input policy, accept established/related, allow ICMP, rate-limit new SSH
+to 3/min/IP (3:50:10 burst), accept HTTP/HTTPS, log+drop everything else.
+Forward chain dropped (the box isn't a router). The fail2ban-managed
+`f2b-table` adds dynamic ban sets that reject early in the input path.
+
+```bash
+sudo cp deploy/nftables.conf /etc/nftables.conf
+sudo systemctl enable --now nftables
+sudo nft list ruleset | head -40   # smoke check
+```
+
+## 14. sysctl kernel hardening
+
+`deploy/sysctl.d/` carries four drop-ins for `/etc/sysctl.d/`:
+
+| File | Purpose |
+|---|---|
+| `90-hardening.conf` | Reverse path filter, no ICMP redirects, syncookies on, martian logging |
+| `90-swap.conf` | `vm.swappiness=10` (paired with the swap file in §15) |
+| `92-local-hardening.conf` | `kernel.unprivileged_userns_clone=0`, eBPF disabled, kexec_load disabled |
+| `99-hardening.conf` | `kernel.kptr_restrict=1` (block /proc kernel pointer leaks) |
+
+```bash
+sudo cp deploy/sysctl.d/*.conf /etc/sysctl.d/
+sudo sysctl --system   # reload all and print effective values
+```
+
+## 15. Swap file
+
+Hetzner CPX11 ships with 1.9 GB RAM and no swap. The pipeline peaks at
+~600 MB and `levels decimate` VACUUM can hit ~1 GB; the right
+absorption is a 4 GB swap file + `vm.swappiness=10` so the kernel
+prefers evicting file cache over anonymous pages.
+
+```bash
+sudo fallocate -l 4G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+# swappiness is set by deploy/sysctl.d/90-swap.conf in §14
+free -h    # confirm: Swap 4.0Gi
+```
+
+## 16. Unattended security upgrades
+
+Debian's `unattended-upgrades` package handles security updates. The
+local override at `deploy/apt.conf.d/50unattended-upgrades-local` adds
+auto-reboot at 04:00 if an update needs one (which is *before* the
+03:15 weekly backup window starts; pick a different time if that ever
+shifts).
+
+```bash
+sudo apt-get install -y unattended-upgrades apt-listchanges
+sudo cp deploy/apt.conf.d/50unattended-upgrades-local \
+    /etc/apt/apt.conf.d/50unattended-upgrades-local
+sudo unattended-upgrade --dry-run -v | tail -10   # smoke check
+```
+
+## 17. Outgoing mail (msmtp + Gmail relay)
+
+The box has no local MTA. Outbound alerts (heartbeat, audit digests,
+contact form, magic-link emails) flow through msmtp to Gmail's SMTP.
+
+1. Create a Google account app password at <https://myaccount.google.com/apppasswords>.
+2. Install msmtp and aliases:
+
+   ```bash
+   sudo apt-get install -y msmtp msmtp-mta
+   sudo cp deploy/msmtprc.example /etc/msmtprc
+   sudo sed -i 's/APP_PASSWORD_HERE/your-16-char-app-password/' /etc/msmtprc
+   sudo chown root:msmtp /etc/msmtprc
+   sudo chmod 640 /etc/msmtprc
+   sudo cp deploy/msmtp-aliases /etc/msmtp-aliases
+   ```
+
+3. Smoke-test:
+
+   ```bash
+   echo "test" | msmtp --debug pat.kayak@gmail.com 2>&1 | tail -20
+   ```
+
+## 18. Cloud backup (future — Hetzner Storage Box)
 
 The local backup retains 4 weekly copies on the VPS. For off-site redundancy,
 add a Hetzner Storage Box (BX11: 1 TB, ~3.80 EUR/month). Transfers stay

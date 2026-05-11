@@ -10,6 +10,8 @@ obj
 !deploy/fail2ban/jail.d/
 !deploy/fail2ban/filter.d/
 !deploy/sshd_config.d/
+!deploy/sysctl.d/
+!deploy/apt.conf.d/
 tpw.master.2*
 tkw.*
 tpw.*
