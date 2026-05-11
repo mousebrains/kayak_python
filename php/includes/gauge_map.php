@@ -79,9 +79,17 @@ function gm_render_map(
     // leaflet.css lives at <docroot>/static/leaflet.css. __DIR__ resolves
     // to the PHP source path (kayak/php/includes), not the doc root, so
     // resolve via $_SERVER['DOCUMENT_ROOT'] which nginx sets per fastcgi.
-    $css_path = $_SERVER['DOCUMENT_ROOT'] . '/static/leaflet.css';
-    $leaflet_css = @file_get_contents($css_path);
-    if ($leaflet_css !== false) {
+    //
+    // Cached in a static so subsequent requests served by the same FPM
+    // worker skip the ~15KB disk read. Empty string is the cached-miss
+    // sentinel (distinguishable from null = unprimed).
+    static $leaflet_css = null;
+    if ($leaflet_css === null) {
+        $css_path = $_SERVER['DOCUMENT_ROOT'] . '/static/leaflet.css';
+        $contents = @file_get_contents($css_path);
+        $leaflet_css = $contents !== false ? $contents : '';
+    }
+    if ($leaflet_css !== '') {
         echo '<style>' . $leaflet_css . '</style>';
     }
     // Popup styles for clickable reach tracks (gauge page). Mirrors the

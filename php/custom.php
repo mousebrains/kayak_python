@@ -123,20 +123,28 @@ if ($gauge_ids) {
         $gauge_sources[(int)$row['gauge_id']] = (int)$row['source_id'];
     }
 
-    // Fetch sparkline data per source, sampled to ~60 points (every 48min over 48h)
+    // Fetch sparkline data for all sources in ONE query, then group by source_id.
+    // Was N+1 (1 query per gauge); now O(1) queries regardless of gauge count.
+    $source_ids = array_values($gauge_sources);
+    $sph = implode(',', array_fill(0, count($source_ids), '?'));
     $spark_stmt = $db->prepare(
-        "SELECT value, observed_at FROM observation
-         WHERE source_id = ? AND data_type = 'flow'
+        "SELECT source_id, value, observed_at FROM observation
+         WHERE source_id IN ($sph) AND data_type = 'flow'
            AND observed_at >= datetime('now', '-48 hours')
-         ORDER BY observed_at"
+         ORDER BY source_id, observed_at"
     );
+    $spark_stmt->execute($source_ids);
+    $by_source = [];
+    foreach ($spark_stmt->fetchAll() as $row) {
+        $by_source[(int)$row['source_id']][] = [
+            'ts' => strtotime($row['observed_at']),
+            'v' => (float)$row['value'],
+        ];
+    }
+
     foreach ($gauge_sources as $gid => $sid) {
-        $spark_stmt->execute([$sid]);
-        $all = [];
-        while ($row = $spark_stmt->fetch()) {
-            $all[] = ['ts' => strtotime($row['observed_at']), 'v' => (float)$row['value']];
-        }
-        // Downsample to ~60 points
+        $all = $by_source[$sid] ?? [];
+        // Downsample to ~60 points (every 48min over 48h)
         $n = count($all);
         if ($n > 60) {
             $step = $n / 60;
