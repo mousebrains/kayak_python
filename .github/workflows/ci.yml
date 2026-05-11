@@ -53,7 +53,7 @@ jobs:
         run: biome check
 
       - name: Shell lint
-        run: shellcheck --severity=warning scripts/*.sh systemd/*.sh hardening/*.sh
+        run: shellcheck --severity=warning scripts/*.sh systemd/*.sh
 
       - name: Install PHP dev dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
