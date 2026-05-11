@@ -165,7 +165,12 @@ def check_data_status(kayak, days=7):
     cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M:%S")
     week_ago = (datetime.now(UTC) - timedelta(days=days * 2)).strftime("%Y-%m-%d %H:%M:%S")
 
-    # Gauges that had data before the window but nothing in the last N days
+    # Gauges that had flow obs in the past 2*N day window but nothing since
+    # cutoff. The WHERE only filters out obs older than 2*N days so that
+    # HAVING max < cutoff truthfully reflects "no data since cutoff" — the
+    # earlier version filtered the WHERE clause to < cutoff as well, which
+    # made HAVING trivially true and listed every gauge with any obs in the
+    # window regardless of newer data.
     stopped = kayak.execute(
         """
         SELECT g.id, g.name, g.usgs_id,
@@ -177,14 +182,16 @@ def check_data_status(kayak, days=7):
         JOIN observation o ON o.source_id = s.id
         WHERE o.data_type = 'flow'
           AND o.observed_at > ?
-          AND o.observed_at < ?
         GROUP BY g.id
         HAVING max(o.observed_at) < ?
     """,
-        (week_ago, cutoff_str, cutoff_str),
+        (week_ago, cutoff_str),
     ).fetchall()
 
-    # Gauges that have data in the last N days but not in the week before
+    # Gauges with flow obs since cutoff but none in the prior N-day window.
+    # WHERE looks back 2*N days so the HAVING min > cutoff actually rules
+    # out a sibling source carrying pre-cutoff data; the prior `> cutoff`
+    # filter made the HAVING trivially true.
     started = kayak.execute(
         """
         SELECT g.id, g.name, g.usgs_id,
@@ -199,7 +206,7 @@ def check_data_status(kayak, days=7):
         GROUP BY g.id
         HAVING min(o.observed_at) > ?
     """,
-        (cutoff_str, cutoff_str),
+        (week_ago, cutoff_str),
     ).fetchall()
 
     # Reach-linked gauges where NEITHER flow NOR gauge data has been recent
