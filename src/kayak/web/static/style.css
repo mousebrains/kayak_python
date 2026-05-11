@@ -111,6 +111,13 @@ table.levels td.td-name a{display:block;padding:10px 8px;margin:-10px -8px}
 .level-okay,table.levels a.level-okay,table.levels a.level-okay:visited{color:var(--c-okay)}
 .level-high,table.levels a.level-high,table.levels a.level-high:visited{color:var(--c-high)}
 
+/* Trend indicators — rendered inline on description.php / gauge.php / custom.php
+   ("Currently 500 cfs, rising at 50 cfs/hr"). Color is informative not
+   value-judging: rising = green, falling = orange, stable = muted. */
+.rising{color:var(--c-okay);font-weight:600}
+.falling{color:var(--c-high);font-weight:600}
+.stable{color:var(--c-text-muted)}
+
 /* Clickable rows */
 tr.clickable-row{cursor:pointer}
 
