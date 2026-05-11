@@ -8,10 +8,10 @@
  * Filter state is persisted in the URL hash so filtered views are shareable.
  */
 (function(){
-// Material 500 palette. The Material 600/700 set that lived here from
-// 3b9dd5f through ed0c566 was paired with a dark halo casing; without
-// the casing those darker shades read as muddy, so we're back to the
-// pre-3b9dd5f tones.
+// Material 500 palette. Paired with a low-opacity dark halo casing
+// (REST_CASING below) — the halo gives the yellow and green tones
+// enough contrast to read against the pale topo basemap, while the
+// 0.3 casing opacity keeps the color edges from being washed out.
 var COLORS={low:'#e8a735',okay:'#4caf50',high:'#e53935',unknown:'#2196F3'};
 var STATUSES=['low','okay','high','unknown'];
 var CLASS_TIERS=['I','II','III','IV','V','?'];
@@ -118,12 +118,14 @@ function renderMap(geom,state){
   var sSet=new Set(initial.s===null?STATUSES:initial.s);
   var cSet=new Set(initial.c===null?CLASS_TIERS:initial.c);
 
-  // Opaque colored line — no casing. The dark halo casing from 3b9dd5f
-  // tinted line edges via anti-aliasing and visually dimmed the colors
-  // even at low halo opacity; restoring the pre-casing look gets the
-  // Material 500 tones reading at full strength on every basemap.
+  // Dark halo casing (drawn beneath the colored line) gives the yellow
+  // (low) and green (okay) lines enough contrast to read against the
+  // pale tans and greens of the topo basemap. Opacity 0.3 — heavier
+  // than that visibly dims the Material 500 tones at line edges.
   var REST_LINE={weight:4,opacity:1.0};
   var HOVER_LINE={weight:7,opacity:1.0};
+  var REST_CASING={color:'#1a1a1a',weight:5,opacity:0.3,lineJoin:'round',lineCap:'round',interactive:false};
+  var HOVER_CASING={weight:9};
   var HIT_LINE={weight:18,opacity:0,interactive:true,lineCap:'round',lineJoin:'round'};
   var HIT_POINT={radius:14,opacity:0,fillOpacity:0,interactive:true};
 
@@ -176,6 +178,11 @@ function renderMap(geom,state){
       layersById[p.id]=layer;
       layer._mfStatus=s;
       layer._mfTiers=tiers;
+      // Halo casing rendered beneath the colored line via add-order in
+      // refilter() (all casings first, then all lines, then all hits).
+      layer._mfCasing=typeof layer.getLatLngs==='function'
+        ? L.polyline(layer.getLatLngs(),REST_CASING)
+        : null;
       // Fat invisible hit shape added last (renders on top): catches taps
       // anywhere within ~18px of a thin reach line and forwards style
       // updates to the visible colored layer below.
@@ -189,8 +196,14 @@ function renderMap(geom,state){
 
       var target=hit||layer;
       target.bindPopup(buildPopup);
-      target.on('mouseover',function(){layer.setStyle(HOVER_LINE);});
-      target.on('mouseout',function(){layer.setStyle(REST_LINE);});
+      target.on('mouseover',function(){
+        layer.setStyle(HOVER_LINE);
+        if(layer._mfCasing)layer._mfCasing.setStyle(HOVER_CASING);
+      });
+      target.on('mouseout',function(){
+        layer.setStyle(REST_LINE);
+        if(layer._mfCasing)layer._mfCasing.setStyle({weight:REST_CASING.weight});
+      });
     },
   });
 
@@ -211,10 +224,12 @@ function renderMap(geom,state){
     for(var id in layersById){
       if(matches(layersById[id]))visible.push(layersById[id]);
     }
-    // Two passes: colored lines first, then all hit shapes on top, so a
-    // tap on any line registers on the fat invisible hit polyline rather
-    // than the thin visible one underneath.
-    for(var i=0;i<visible.length;i++)group.addLayer(visible[i]);
+    // Three passes so all casings render beneath all colored lines:
+    // interleaving (casing,line,casing,line,...) makes a later reach's
+    // dark casing draw on top of an earlier reach's colored line wherever
+    // they overlap, which at state-wide zoom turns the whole web dark.
+    for(var i=0;i<visible.length;i++)if(visible[i]._mfCasing)group.addLayer(visible[i]._mfCasing);
+    for(i=0;i<visible.length;i++)group.addLayer(visible[i]);
     for(i=0;i<visible.length;i++)if(visible[i]._mfHit)group.addLayer(visible[i]._mfHit);
     if(countEl)countEl.textContent=visible.length+' reach'+(visible.length===1?'':'es');
     if(firstPaint){
