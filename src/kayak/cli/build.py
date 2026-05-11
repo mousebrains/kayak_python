@@ -26,7 +26,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from kayak.config import BASE_DIR
+from kayak.config import BASE_DIR, SITE_URL
 from kayak.config_data import load_builder_columns
 from kayak.db.cache import get_all_latest_gauges
 from kayak.db.engine import get_session
@@ -71,6 +71,27 @@ assert math.ceil(-math.log10(GEOJSON_SIMPLIFY_EPSILON)) + 1 <= GEOJSON_COORD_PRE
 
 # Branding
 BRAND_COLOR = "#1b5591"
+BRAND_COLOR_DARK = "#0d3057"
+
+
+def _og_meta(title: str, desc: str, path: str = "") -> str:
+    """OpenGraph + Twitter card meta block. `path` is site-relative ("/Oregon.html"); empty omits og:url + canonical."""
+    site = SITE_URL.rstrip("/")
+    image = f"{site}/static/icon-192.png"
+    canonical = f'<link rel="canonical" href="{site}{path}">\n' if path else ""
+    og_url = f'<meta property="og:url" content="{site}{path}">\n' if path else ""
+    return (
+        f"{canonical}"
+        f'<meta property="og:type" content="website">\n'
+        f'<meta property="og:site_name" content="WKCC River Levels">\n'
+        f'<meta property="og:title" content="{title}">\n'
+        f'<meta property="og:description" content="{desc}">\n'
+        f"{og_url}"
+        f'<meta property="og:image" content="{image}">\n'
+        f'<meta name="twitter:card" content="summary">\n'
+        f'<meta name="twitter:title" content="{title}">\n'
+        f'<meta name="twitter:description" content="{desc}">'
+    )
 
 
 def _atomic_write(path: Path, content: str) -> None:
@@ -1064,6 +1085,7 @@ def _build_page(
     filter_bar_html: str = "",
     active_page: str = "",
     picker_kind: str = "reach",
+    path: str = "",
 ) -> str:
     """Wrap the table HTML in a complete HTML document linking to external CSS."""
     nav_html = _build_nav(
@@ -1079,7 +1101,7 @@ def _build_page(
 
     desc = (
         f"Real-time river levels, flow, and gage data for {current_state} from USGS, NOAA, USACE, and other agencies."
-        if current_state != "All States"
+        if current_state and current_state != "All States"
         else "Real-time river levels, flow, and gage data from USGS, NOAA, USACE, and other government agencies."
     )
 
@@ -1096,7 +1118,9 @@ def _build_page(
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{title}</title>
 <meta name="description" content="{desc}">
-<meta name="theme-color" content="{BRAND_COLOR}">
+{_og_meta(title, desc, path)}
+<meta name="theme-color" content="{BRAND_COLOR}" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="{BRAND_COLOR_DARK}" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="/static/favicon.ico">
 <link rel="manifest" href="/static/manifest.json">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
@@ -1152,7 +1176,9 @@ def _build_placeholder_page(css_link: str, states: list[str], state: str) -> str
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{state} River Levels</title>
 <meta name="description" content="Real-time river levels, flow, and gage data for {state} from USGS, NOAA, USACE, and other agencies.">
-<meta name="theme-color" content="{BRAND_COLOR}">
+{_og_meta(f"{state} River Levels", f"Real-time river levels, flow, and gage data for {state} from USGS, NOAA, USACE, and other agencies.", f"/{state}.html")}
+<meta name="theme-color" content="{BRAND_COLOR}" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="{BRAND_COLOR_DARK}" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="/static/favicon.ico">
 <link rel="manifest" href="/static/manifest.json">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
@@ -1191,7 +1217,9 @@ def _build_map_page(css_link: str, states: list[str], geom_url: str, state_url: 
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>River Map</title>
 <meta name="description" content="Interactive map of river reaches with real-time flow and level data.">
-<meta name="theme-color" content="{BRAND_COLOR}">
+{_og_meta("River Map", "Interactive map of river reaches with real-time flow and level data.", "/map.html")}
+<meta name="theme-color" content="{BRAND_COLOR}" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="{BRAND_COLOR_DARK}" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="/static/favicon.ico">
 <link rel="manifest" href="/static/manifest.json">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
@@ -1737,6 +1765,7 @@ def _write_gauges_page(
         filter_bar_html=filter_bar_html,
         active_page="gauges",
         picker_kind="gauge",
+        path="/gauges.html",
     )
     _atomic_write(output_dir / "gauges.html", page_html)
 
@@ -1908,8 +1937,57 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
             if state in states:
                 links_page = _build_placeholder_page(css_link, states, state)
                 _atomic_write(output_dir / f"{state}.html", links_page)
+
+        _emit_sitemap(output_dir, states, index_reaches, session)
     finally:
         session.close()
+
+
+def _emit_sitemap(
+    output_dir: Path,
+    states: list[str],
+    reaches: list[Reach],
+    session: Session,
+) -> None:
+    """Emit a sitemap.xml covering every public landing URL.
+
+    Includes the index, each state's letter page, the gauges/map listings,
+    the static prose pages, every visible reach's description page, and
+    every gauge.php detail page. Dynamic search and account endpoints are
+    deliberately omitted (already Disallow'd in robots.txt).
+    """
+    site = SITE_URL.rstrip("/")
+    urls: list[tuple[str, str, str]] = []  # (loc, changefreq, priority)
+
+    urls.append((f"{site}/", "hourly", "1.0"))
+    urls.append((f"{site}/gauges.html", "hourly", "0.8"))
+    urls.append((f"{site}/map.html", "daily", "0.8"))
+    urls.append((f"{site}/custom_gauges.php", "daily", "0.6"))
+    for state in states:
+        urls.append((f"{site}/{state}.html", "hourly", "0.9"))
+    urls.append((f"{site}/about.php", "monthly", "0.4"))
+    urls.append((f"{site}/disclaimer.php", "monthly", "0.4"))
+    urls.append((f"{site}/privacy.php", "monthly", "0.4"))
+    urls.append((f"{site}/contact.php", "monthly", "0.4"))
+
+    for r in reaches:
+        urls.append((f"{site}/description.php?id={r.id}", "hourly", "0.7"))
+
+    for gid in session.scalars(select(Gauge.id).order_by(Gauge.id)).all():
+        urls.append((f"{site}/gauge.php?id={gid}", "hourly", "0.6"))
+
+    lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ]
+    for loc, freq, pri in urls:
+        lines.append(
+            f"  <url><loc>{loc}</loc>"
+            f"<changefreq>{freq}</changefreq>"
+            f"<priority>{pri}</priority></url>"
+        )
+    lines.append("</urlset>")
+    _atomic_write(output_dir / "sitemap.xml", "\n".join(lines) + "\n")
 
 
 def _set_acls(directory: Path) -> None:
@@ -2081,6 +2159,7 @@ def _build_and_write(
         title,
         letters=letters,
         filter_bar_html=filter_bar_html,
+        path=f"/{filename}",
     )
     _atomic_write(output_dir / filename, page_html)
 

@@ -24,4 +24,11 @@ Disallow: /propose.php
 Disallow: /comment.php
 Disallow: /contact.php
 Disallow: /review.php
+Disallow: /api.php
+Disallow: /latest.php
+Disallow: /data.php
+Disallow: /plot.php
+Disallow: /csp-report.php
 Allow: /
+
+Sitemap: https://levels.wkcc.org/sitemap.xml

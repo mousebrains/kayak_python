@@ -111,6 +111,10 @@ function include_header(
         ? htmlspecialchars($description)
         : 'Real-time river levels, flow, and gage data from USGS, NOAA, USACE, and other government agencies.';
     $nav = render_nav($active, $context);
+    $scheme = ($_SERVER['HTTPS'] ?? '') ? 'https' : 'http';
+    $host   = (string)($_SERVER['HTTP_HOST'] ?? 'levels.wkcc.org');
+    $path   = strtok((string)($_SERVER['REQUEST_URI'] ?? '/'), '?');
+    $url    = htmlspecialchars($scheme . '://' . $host . $path);
     echo <<<HTML
 <!DOCTYPE html>
 <html lang="en">
@@ -119,8 +123,19 @@ function include_header(
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>$esc_title</title>
 <meta name="description" content="$esc_desc">
+<link rel="canonical" href="$url">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="WKCC River Levels">
+<meta property="og:title" content="$esc_title">
+<meta property="og:description" content="$esc_desc">
+<meta property="og:url" content="$url">
+<meta property="og:image" content="$scheme://$host/static/icon-192.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="$esc_title">
+<meta name="twitter:description" content="$esc_desc">
 <link rel="manifest" href="/static/manifest.json">
-<meta name="theme-color" content="#1b5591">
+<meta name="theme-color" content="#1b5591" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d3057" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="/static/favicon.ico">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
 $extra_head
