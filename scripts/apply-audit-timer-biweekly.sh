@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Apply the bi-weekly kayak-audit-gauges.timer schedule to live systemd.
 #
-# Bumps the audit cadence from "every other month on the 15th" to "1st
-# and 15th of every month at 03:00" — 26 runs/year. The 14-day gaps
-# match the audit script's --days 14 window, eliminating the coverage
-# hole the bi-monthly schedule left.
+# Bumps the audit cadence from "every other month on the 15th" to
+# "every 14 days after the last activation" — 26 runs/year. The 14-day
+# gap matches the audit script's --days 14 window, eliminating the
+# coverage hole the bi-monthly schedule left.
 #
 # Usage:
 #   sudo bash scripts/apply-audit-timer-biweekly.sh
@@ -46,7 +46,8 @@ systemctl restart kayak-audit-gauges.timer
 echo "timer restarted"
 
 echo ""
-echo "=== new schedule (next 4 fires) ==="
+echo "=== new schedule (next fire) ==="
+# OnUnitActiveSec isn't a calendar expression, so list-timers is the
+# authoritative view — it shows the actual next firing computed from
+# the last activation timestamp.
 systemctl list-timers kayak-audit-gauges.timer --all
-echo ""
-systemd-analyze calendar '*-*-01,15 03:00' --iterations 4 | grep -E 'Next elapse|Iteration'

@@ -1,11 +1,16 @@
 [Unit]
-Description=Audit gauge metadata twice a month (1st + 15th)
+Description=Audit gauge metadata every 14 days
 
 [Timer]
-# Bi-weekly: 1st and 15th of every month at 03:00 (jittered up to +1h).
-# 14-day gaps match the audit script's --days 14 window, so every
-# stop/start event in flow data falls inside exactly one fire's window.
-OnCalendar=*-*-01,15 03:00
+# True bi-weekly: 14 days after the last activation. OnCalendar can't
+# express "exactly every 14 days" because the calendar doesn't divide
+# evenly — *-*-01,15 looks bi-weekly but the 15->1 gap is 16-17 days
+# in months longer than February. OnUnitActiveSec sidesteps that by
+# anchoring to the previous fire's timestamp, so gaps are always 14d.
+# OnBootSec=1h kicks the cycle off on a fresh install (or after a long
+# downtime) when there is no prior activation to count from.
+OnBootSec=1h
+OnUnitActiveSec=14d
 RandomizedDelaySec=3600
 Persistent=true
 
