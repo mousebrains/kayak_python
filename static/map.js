@@ -122,12 +122,14 @@ function renderMap(geom,state){
   var cSet=new Set(initial.c===null?CLASS_TIERS:initial.c);
 
   // Dark halo casing 2px wider than the colored line — that 1px-per-side
-  // halo is what gives the orange and green lines a real outline against
-  // pale topo and busy satellite. Opacity 0.4 because the halo is thinner
-  // than weight alone suggests once anti-aliasing is accounted for.
+  // halo is what gives the colored lines a real outline against busy
+  // basemaps. Pure black at 0.5 opacity: needed to keep the orange
+  // (low) line distinguishable from the brown/tan elevation shading
+  // on OpenTopoMap. Greens/reds/blues over-shot fine on lighter casing,
+  // so this is tuned to the worst-case orange-on-brown combination.
   var REST_LINE={weight:4,opacity:1.0};
   var HOVER_LINE={weight:7,opacity:1.0};
-  var REST_CASING={color:'#1a1a1a',weight:6,opacity:0.4,lineJoin:'round',lineCap:'round',interactive:false};
+  var REST_CASING={color:'#000',weight:6,opacity:0.5,lineJoin:'round',lineCap:'round',interactive:false};
   var HOVER_CASING={weight:10};
   var HIT_LINE={weight:18,opacity:0,interactive:true,lineCap:'round',lineJoin:'round'};
   var HIT_POINT={radius:14,opacity:0,fillOpacity:0,interactive:true};
