@@ -8,9 +8,11 @@
  * Filter state is persisted in the URL hash so filtered views are shareable.
  */
 (function(){
-// Saturated tones so the colored line reads against the dark halo casing
-// without looking muddy. Shades roughly tuned to Material 600/700.
-var COLORS={low:'#ef6c00',okay:'#1b8a00',high:'#c62828',unknown:'#1565c0'};
+// Original Material 500 palette — brighter than the 600/700 shades that
+// were used briefly to balance against a heavier halo casing. Now that
+// the casing opacity is lighter (0.3), these bright tones read crisply
+// on every basemap without being washed out by the halo.
+var COLORS={low:'#e8a735',okay:'#4caf50',high:'#e53935',unknown:'#2196F3'};
 var STATUSES=['low','okay','high','unknown'];
 var CLASS_TIERS=['I','II','III','IV','V','?'];
 var DEFAULT_VIEW=[44.0,-120.5];
@@ -123,7 +125,7 @@ function renderMap(geom,state){
   // pale tones in topo, hiding the colored stripe.
   var REST_LINE={weight:4,opacity:1.0};
   var HOVER_LINE={weight:7,opacity:1.0};
-  var REST_CASING={color:'#1a1a1a',weight:5,opacity:0.5,lineJoin:'round',lineCap:'round',interactive:false};
+  var REST_CASING={color:'#1a1a1a',weight:5,opacity:0.3,lineJoin:'round',lineCap:'round',interactive:false};
   var HOVER_CASING={weight:9};
   var HIT_LINE={weight:18,opacity:0,interactive:true,lineCap:'round',lineJoin:'round'};
   var HIT_POINT={radius:14,opacity:0,fillOpacity:0,interactive:true};
