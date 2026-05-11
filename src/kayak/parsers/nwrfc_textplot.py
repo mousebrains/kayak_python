@@ -1,12 +1,19 @@
-"""NWRFC textPlot parser for observed inflow/discharge data.
+"""NWRFC textPlot parser for observed inflow/discharge/stage data.
 
 Endpoint: https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id={LID}&pe={PE}
 
-Returns an HTML table with observed data in columns 1-2 (datetime, value)
-and forecast data in columns 3-4. Only observed data is stored.
+Returns an HTML table whose left half is observed data and right half
+is forecast. Only observed data is stored. The number of value columns
+per side depends on the station and ``pe`` (Physical Element) query:
 
-The data type (flow vs inflow) is determined from the column header
-("Discharge" -> flow, "Inflow" -> inflow).
+* ``pe=QI`` (inflow) / ``pe=QR`` (river discharge) — 1 value column.
+* ``pe=HG`` on a gage-only station — 1 value column (Stage).
+* ``pe=HG`` on a rated station — 2 value columns (Stage + Discharge),
+  which we emit as gauge + flow for the same timestamp.
+
+The schema is inferred from the column-header row at the top of the
+table; pages without a recognisable header fall back to a 1-column
+flow/inflow heuristic (covers truncated/error bodies and test fixtures).
 """
 
 import logging
@@ -21,57 +28,54 @@ from kayak.utils.conversions import parse_datetime, safe_float
 logger = logging.getLogger(__name__)
 
 
+_LABEL_TO_DTYPE = {
+    "stage": DataType.gauge,
+    "discharge": DataType.flow,
+    "inflow": DataType.inflow,
+}
+
+
 @register("nwrfc.textplot")
 class NWRFCTextPlotParser(BaseParser):
     """NW River Forecast Center HTML table parser.
 
     Parses observed-data HTML tables from the NWRFC textPlot endpoint.
-    Extracts flow (cfs/kcfs) or gage height (ft) from table rows. Uses
-    regex to match table cells rather than line-by-line processing.
+    Reads the column-header row to decide which DataType each value cell
+    represents, then walks each data row capturing the leading observed
+    columns. Forecast columns sit later in the row and aren't anchored
+    to ``<tr>``, so they're naturally skipped.
     """
 
     name = "nwrfc.textplot"
 
     def parse(self, text: str) -> int:
-        """Parse HTML table from NWRFC textPlot endpoint."""
         self._db_updates = 0
         self._obs_buffer = []
 
         station = self._extract_station(self.url)
-
-        # Determine data type from header row
-        data_type = DataType.flow
         header_lower = text.lower()
-        if ">inflow<" in header_lower:
-            data_type = DataType.inflow
 
-        # Timestamps in the table are Pacific local time; the header says
-        # "Date/Time (PDT)" in summer and "(PST)" in winter. Pick up whichever
-        # the page advertises and convert to UTC.
         tz = "PDT" if "(pdt)" in header_lower else "PST" if "(pst)" in header_lower else None
-
         now = datetime.now(UTC)
 
-        # Extract table rows: each <tr> has 4 <td> cells
-        # Columns 1-2 are observed (datetime, value)
-        for m in re.finditer(
-            r"<tr>\s*"
-            r"<td[^>]*>\s*([\d]{4}-[\d]{2}-[\d]{2}\s+[\d]{2}:[\d]{2})\s*</td>\s*"
-            r"<td[^>]*>\s*([\d.]+)\s*</td>",
-            text,
-        ):
-            time_str = m.group(1).strip()
-            val_str = m.group(2).strip()
+        value_dtypes = self._infer_value_columns(text)
 
-            when = parse_datetime(time_str, tz_name=tz)
+        # Build the row regex: datetime + N value cells (one <td> each).
+        value_re = r"\s*<td[^>]*>\s*([\d.]+)\s*</td>" * len(value_dtypes)
+        pattern = (
+            r"<tr>\s*"
+            r"<td[^>]*>\s*([\d]{4}-[\d]{2}-[\d]{2}\s+[\d]{2}:[\d]{2})\s*</td>" + value_re
+        )
+
+        for m in re.finditer(pattern, text):
+            when = parse_datetime(m.group(1).strip(), tz_name=tz)
             if when is None or when > now:
                 continue
-
-            val = safe_float(val_str)
-            if val is None or val < 0:
-                continue
-
-            self.dump_to_db(station, data_type, when, val)
+            for i, dt in enumerate(value_dtypes):
+                val = safe_float(m.group(i + 2))
+                if val is None or val < 0:
+                    continue
+                self.dump_to_db(station, dt, when, val)
 
         self._flush_buffer()
 
@@ -82,6 +86,47 @@ class NWRFCTextPlotParser(BaseParser):
 
     def parse_line(self, line: str) -> bool:
         return True
+
+    @staticmethod
+    def _infer_value_columns(text: str) -> list[DataType]:
+        """Pick a DataType for each observed value column.
+
+        Real NWRFC pages carry one header row like::
+
+            <tr><td>Date/Time (PDT)</td><td>Stage</td><td>Discharge</td>
+                <td>Date/Time (PDT)</td><td>Stage</td><td>Discharge</td></tr>
+
+        The observed columns are everything up to the *second* Date/Time
+        cell (which begins the forecast half). If no such header is
+        present — truncated body, error page, or the simplified shape
+        used in unit tests — fall back to a 1-column schema and infer
+        flow vs. inflow from the surrounding text.
+        """
+        m = re.search(
+            r"<tr>\s*<td[^>]*>\s*Date/Time[^<]*</td>"
+            r"((?:\s*<td[^>]*>[^<]*</td>)+)\s*</tr>",
+            text,
+            re.IGNORECASE,
+        )
+        if m is not None:
+            cells = re.findall(r"<td[^>]*>([^<]*)</td>", m.group(1))
+            forecast_split = next(
+                (i for i, c in enumerate(cells) if "date/time" in c.lower()),
+                len(cells),
+            )
+            dtypes: list[DataType] = []
+            for c in cells[:forecast_split]:
+                dt = _LABEL_TO_DTYPE.get(c.strip().lower())
+                if dt is None:
+                    dtypes = []
+                    break
+                dtypes.append(dt)
+            if dtypes:
+                return dtypes
+
+        if ">inflow<" in text.lower():
+            return [DataType.inflow]
+        return [DataType.flow]
 
     @staticmethod
     def _extract_station(url: str) -> str:

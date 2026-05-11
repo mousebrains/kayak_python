@@ -58,6 +58,34 @@ TEXTPLOT_NEGATIVE = """\
 </table></body></html>
 """
 
+# pe=HG response from a rated NWRFC station: observed columns carry both
+# Stage (ft) and Discharge (cfs), forecast half mirrors that layout.
+# Captured live from EUGO3 (WILLAMETTE--AT EUGENE) on 2026-05-11.
+TEXTPLOT_HG_STAGE_DISCHARGE = """\
+<html><body><table>
+<tr><td colspan="3" align="left">Observed</td><td colspan="3" align="left">Forecast/Trend</td></tr>
+<tr><td>Date/Time (PDT)</td><td>Stage</td><td>Discharge</td>
+    <td>Date/Time (PDT)</td><td>Stage</td><td>Discharge</td></tr>
+<tr><td>2024-06-15 15:45</td><td>10.03</td><td>2807</td>
+    <td>2024-06-15 17:00</td><td>10.01</td><td>2774</td></tr>
+<tr><td>2024-06-15 15:30</td><td>10.04</td><td>2824</td>
+    <td>2024-06-15 23:00</td><td>10.01</td><td>2774</td></tr>
+</table></body></html>
+"""
+
+# pe=HG on a gage-only NWRFC station: only Stage appears in the observed
+# half. Captured live from OCUO3 (Willamette Upper Falls) on 2026-05-11.
+TEXTPLOT_HG_STAGE_ONLY = """\
+<html><body><table>
+<tr><td>Date/Time (PDT)</td><td>Stage</td>
+    <td>Date/Time (PDT)</td><td>Stage</td></tr>
+<tr><td>2024-06-15 15:30</td><td>54.08</td>
+    <td>2024-06-15 17:00</td><td>54.06</td></tr>
+<tr><td>2024-06-15 15:15</td><td>54.08</td>
+    <td>2024-06-15 23:00</td><td>54.06</td></tr>
+</table></body></html>
+"""
+
 
 def _make_source(session, name="nwrfc_textplot_test"):
     fu = FetchUrl(
@@ -167,3 +195,39 @@ class TestNWRFCTextPlotEdgeCases:
             "2024-06-15 12:00         3.45     "
         )
         assert parser.parse(truncated) == 0
+
+
+class TestNWRFCTextPlotHG:
+    def test_hg_stage_and_discharge_emits_both(self, session):
+        """pe=HG on a rated station yields paired gauge + flow values."""
+        src = _make_source(session, name="hg_pair")
+        parser = NWRFCTextPlotParser(
+            url="https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=EUGO3&pe=HG",
+            session=session,
+            source_id=src.id,
+        )
+        count = parser.parse(TEXTPLOT_HG_STAGE_DISCHARGE)
+        assert count == 4  # 2 rows * (gauge + flow)
+        obs = session.query(Observation).filter_by(source_id=src.id).all()
+        gauge_vals = sorted(o.value for o in obs if o.data_type == DataType.gauge)
+        flow_vals = sorted(o.value for o in obs if o.data_type == DataType.flow)
+        assert gauge_vals == [10.03, 10.04]
+        assert flow_vals == [2807.0, 2824.0]
+        # Sanity: every row contributed both data types at the same timestamp.
+        gauge_times = {o.observed_at for o in obs if o.data_type == DataType.gauge}
+        flow_times = {o.observed_at for o in obs if o.data_type == DataType.flow}
+        assert gauge_times == flow_times
+
+    def test_hg_stage_only_emits_gauge(self, session):
+        """pe=HG on a gage-only station yields gauge values, not flow."""
+        src = _make_source(session, name="hg_stage_only")
+        parser = NWRFCTextPlotParser(
+            url="https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=OCUO3&pe=HG",
+            session=session,
+            source_id=src.id,
+        )
+        count = parser.parse(TEXTPLOT_HG_STAGE_ONLY)
+        assert count == 2
+        obs = session.query(Observation).filter_by(source_id=src.id).all()
+        assert all(o.data_type == DataType.gauge for o in obs)
+        assert sorted(o.value for o in obs) == [54.08, 54.08]
