@@ -7,6 +7,7 @@ styling, state navigation links, and inline SVG sparklines.
 
 import argparse
 import csv
+import filecmp
 import hashlib
 import html as html_mod
 import io
@@ -2023,11 +2024,15 @@ def _deploy_staging_to_live(staging: Path, live: Path) -> set[Path]:
 
     For each file under ``staging``:
       1. Ensure the matching parent dir in ``live`` exists.
-      2. ``shutil.copy2`` to ``<live>/<rel>.new`` — preserves mode + xattrs
-         (Linux ACLs live in xattrs, so ``u:www-data:rX`` carries over from
-         a staging tree that was run through ``_set_acls``).
-      3. ``os.replace`` the temp file over the final name — atomic rename(2)
-         on the same filesystem.
+      2. If a same-content file already exists at the destination, leave
+         it alone — preserving the live file's mtime keeps PHP cache-bust
+         URLs (filemtime-derived ``?v=…``) stable across rebuilds when
+         only metadata churned upstream.
+      3. Otherwise ``shutil.copy2`` to ``<live>/<rel>.new`` — preserves
+         mode + xattrs (Linux ACLs live in xattrs, so ``u:www-data:rX``
+         carries over from a staging tree run through ``_set_acls``).
+      4. ``os.replace`` the temp file over the final name — atomic
+         rename(2) on the same filesystem.
 
     Returns the set of relative paths installed, for the orphan sweep.
 
@@ -2043,11 +2048,13 @@ def _deploy_staging_to_live(staging: Path, live: Path) -> set[Path]:
             continue
         rel = src.relative_to(staging)
         dst = live / rel
+        kept.add(rel)
+        if dst.exists() and not dst.is_symlink() and filecmp.cmp(src, dst, shallow=False):
+            continue
         dst.parent.mkdir(parents=True, exist_ok=True)
         tmp = dst.with_name(dst.name + ".new")
         shutil.copy2(src, tmp)
         os.replace(tmp, dst)
-        kept.add(rel)
     return kept
 
 
