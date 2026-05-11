@@ -1,0 +1,43 @@
+:root{
+  --col-low:#ff9800;
+  --col-okay:#00c853;
+  --col-high:#e53935;
+  --col-unknown:#2196f3;
+}
+
+html,body{margin:0;padding:0;height:100%;}
+body{font-family:system-ui,-apple-system,sans-serif;background:#1a1a1a;color:#e8e8e8;display:flex;flex-direction:column;min-height:100vh;}
+
+header{padding:.6rem 1rem;background:#111;border-bottom:1px solid #333;flex:0 0 auto;}
+header h1{margin:0 0 .2rem;font-size:1rem;font-weight:600;}
+header p{margin:0 0 .45rem;font-size:.78rem;color:#bbb;max-width:80ch;}
+
+.bar{display:flex;gap:1.5rem;align-items:center;flex-wrap:wrap;}
+
+.controls{display:flex;gap:.95rem;align-items:center;flex-wrap:wrap;margin:0;}
+.controls label{display:flex;align-items:center;gap:.4rem;font-size:.78rem;color:#ddd;}
+.controls label > span{color:#9aa;letter-spacing:.02em;text-transform:uppercase;font-size:.7rem;}
+.controls label.check > span{text-transform:none;letter-spacing:0;color:#ddd;font-size:.78rem;}
+.controls select,
+.controls input[type=range]{background:#1e1e1e;color:#eee;border:1px solid #444;border-radius:3px;font:inherit;font-size:.78rem;padding:.15rem .35rem;}
+.controls input[type=range]{padding:0;width:5.5rem;}
+.controls input[type=checkbox]{accent-color:#76ff03;margin:0;}
+.controls output{font-variant-numeric:tabular-nums;color:#eee;min-width:1ch;text-align:right;}
+
+.legend{display:flex;flex-wrap:wrap;gap:.9rem;font-size:.78rem;}
+.lg{display:inline-flex;align-items:center;gap:.35rem;color:#ddd;}
+.lg::before{content:'';display:inline-block;width:18px;height:4px;border-radius:2px;background:var(--c);box-shadow:0 0 0 1px rgba(0,0,0,.5);}
+.lg-low{--c:var(--col-low);}
+.lg-okay{--c:var(--col-okay);}
+.lg-high{--c:var(--col-high);}
+.lg-unknown{--c:var(--col-unknown);}
+
+main{flex:1 1 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem;padding:.4rem;box-sizing:border-box;min-height:0;}
+.map-cell{display:flex;flex-direction:column;min-height:0;min-width:0;}
+.map-cell h2{margin:0 0 .25rem;font-size:.82rem;font-weight:600;color:#ddd;text-align:center;letter-spacing:.02em;text-transform:uppercase;}
+.map{flex:1 1 auto;min-height:0;border:1px solid #333;border-radius:3px;background:#000;}
+
+@media(max-width:900px){
+  main{grid-template-columns:1fr;height:auto;}
+  .map-cell{min-height:60vh;}
+}

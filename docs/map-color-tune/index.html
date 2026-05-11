@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trace Color Comparison</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/static/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body
+  data-geom-url="/static/reaches-geom.json"
+  data-state-url="/static/reaches-state.json">
+<header>
+  <h1>Trace Color Comparison</h1>
+  <p>Same reaches rendered on three base maps. Pan or zoom any panel and the others follow. Hover sync, dashed status, zoom-aware weight, and per-basemap casing are all toggleable. Settings round-trip through the URL hash.</p>
+  <div class="bar">
+    <form id="controls" class="controls">
+      <label>
+        <span>Palette</span>
+        <select name="palette" id="palette">
+          <option value="current">Current</option>
+          <option value="v2">v2 — chartreuse okay</option>
+          <option value="v3">v3 — true red, more cyan</option>
+          <option value="bold">Bold — magenta unknown</option>
+        </select>
+      </label>
+      <label>
+        <span>Line weight</span>
+        <input type="range" name="weight" id="weight" min="3" max="7" step="1" value="4">
+        <output id="weight-out">4</output>
+      </label>
+      <label>
+        <span>Casing</span>
+        <select name="casing" id="casing">
+          <option value="none">None</option>
+          <option value="light" selected>Light (current)</option>
+          <option value="strong">Strong dark</option>
+          <option value="double">Double (text-stroke)</option>
+        </select>
+      </label>
+      <label>
+        <span>Dashed</span>
+        <select name="dashed" id="dashed">
+          <option value="none">None</option>
+          <option value="low">Low</option>
+          <option value="okay">Okay</option>
+          <option value="high">High</option>
+          <option value="unknown">Unknown</option>
+        </select>
+      </label>
+      <label class="check">
+        <input type="checkbox" name="hover" id="hover">
+        <span>Hover sync</span>
+      </label>
+      <label class="check">
+        <input type="checkbox" name="zoomAware" id="zoomAware">
+        <span>Zoom-aware weight</span>
+      </label>
+      <label class="check">
+        <input type="checkbox" name="hideOsmCasing" id="hideOsmCasing">
+        <span>Hide casing on OSM</span>
+      </label>
+    </form>
+    <div class="legend">
+      <span class="lg lg-low">Low</span>
+      <span class="lg lg-okay">Okay</span>
+      <span class="lg lg-high">High</span>
+      <span class="lg lg-unknown">Unknown</span>
+    </div>
+  </div>
+</header>
+<main>
+  <section class="map-cell">
+    <h2>OpenTopoMap</h2>
+    <div id="map-topo" class="map" data-base="topo"></div>
+  </section>
+  <section class="map-cell">
+    <h2>OpenStreetMap</h2>
+    <div id="map-street" class="map" data-base="street"></div>
+  </section>
+  <section class="map-cell">
+    <h2>Esri Satellite</h2>
+    <div id="map-sat" class="map" data-base="sat"></div>
+  </section>
+</main>
+<script src="/static/leaflet.js" defer></script>
+<script src="map3.js" defer></script>
+</body>
+</html>
