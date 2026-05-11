@@ -1,16 +1,13 @@
 [Unit]
-Description=Audit gauge metadata every 14 days
+Description=Audit gauge metadata twice a month (2nd + 17th)
 
 [Timer]
-# True bi-weekly: 14 days after the last activation. OnCalendar can't
-# express "exactly every 14 days" because the calendar doesn't divide
-# evenly — *-*-01,15 looks bi-weekly but the 15->1 gap is 16-17 days
-# in months longer than February. OnUnitActiveSec sidesteps that by
-# anchoring to the previous fire's timestamp, so gaps are always 14d.
-# OnBootSec=1h kicks the cycle off on a fresh install (or after a long
-# downtime) when there is no prior activation to count from.
-OnBootSec=1h
-OnUnitActiveSec=14d
+# OnCalendar gives stable 03:00 fire times. Gaps alternate ~15 days
+# (2->17) and 13-16 days (17->2 of next month, varies by month length).
+# The matching service uses --days 16 so the audit's lookback window
+# always meets or exceeds the max calendar gap — every stop/start event
+# is caught by at least one fire, with overlap in shorter-gap months.
+OnCalendar=*-*-02,17 03:00
 RandomizedDelaySec=3600
 Persistent=true
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Apply the bi-weekly kayak-audit-gauges.timer schedule to live systemd.
+# Apply the bi-weekly kayak-audit-gauges schedule to live systemd.
 #
-# Bumps the audit cadence from "every other month on the 15th" to
-# "every 14 days after the last activation" — 26 runs/year. The 14-day
-# gap matches the audit script's --days 14 window, eliminating the
-# coverage hole the bi-monthly schedule left.
+# Updates both the .timer (OnCalendar=*-*-02,17 03:00) and the .service
+# (--days 16) so the audit's lookback window always meets or exceeds
+# the max calendar gap (16 days after 31-day months); events near a
+# boundary are flagged at two consecutive fires.
 #
 # Usage:
 #   sudo bash scripts/apply-audit-timer-biweekly.sh
@@ -13,41 +13,52 @@
 
 set -euo pipefail
 
-REPO_UNIT="/home/pat/kayak/systemd/kayak-audit-gauges.timer"
-LIVE_UNIT="/etc/systemd/system/kayak-audit-gauges.timer"
+REPO_DIR="/home/pat/kayak/systemd"
+LIVE_DIR="/etc/systemd/system"
+UNITS=(kayak-audit-gauges.timer kayak-audit-gauges.service)
 
-if [[ ! -r "$REPO_UNIT" ]]; then
-    echo "ERROR: $REPO_UNIT not readable" >&2
-    exit 1
-fi
+for unit in "${UNITS[@]}"; do
+    if [[ ! -r "$REPO_DIR/$unit" ]]; then
+        echo "ERROR: $REPO_DIR/$unit not readable" >&2
+        exit 1
+    fi
+done
 
-echo "=== diff (repo - live) ==="
-if diff "$REPO_UNIT" "$LIVE_UNIT"; then
-    echo "(no diff — nothing to apply, exiting)"
+any_diff=0
+for unit in "${UNITS[@]}"; do
+    echo "=== diff (repo - live) for $unit ==="
+    if diff "$REPO_DIR/$unit" "$LIVE_DIR/$unit"; then
+        echo "(no diff)"
+    else
+        any_diff=1
+    fi
+    echo ""
+done
+
+if [[ $any_diff -eq 0 ]]; then
+    echo "Nothing to apply, exiting."
     exit 0
 fi
-echo ""
 
-read -r -p "Apply the diff above to $LIVE_UNIT and reload systemd? [y/N] " ans
+read -r -p "Apply the diff(s) above to $LIVE_DIR and reload systemd? [y/N] " ans
 if [[ "$ans" != "y" && "$ans" != "Y" ]]; then
     echo "aborted"
     exit 1
 fi
 
-cp "$REPO_UNIT" "$LIVE_UNIT"
-echo "copied → $LIVE_UNIT"
+for unit in "${UNITS[@]}"; do
+    cp "$REPO_DIR/$unit" "$LIVE_DIR/$unit"
+    echo "copied → $LIVE_DIR/$unit"
+done
 
 systemctl daemon-reload
 echo "systemd reloaded"
 
-# Restarting the timer makes systemd recompute the next-firing time
-# against the new OnCalendar without disabling/re-enabling.
 systemctl restart kayak-audit-gauges.timer
 echo "timer restarted"
 
 echo ""
-echo "=== new schedule (next fire) ==="
-# OnUnitActiveSec isn't a calendar expression, so list-timers is the
-# authoritative view — it shows the actual next firing computed from
-# the last activation timestamp.
+echo "=== new schedule ==="
 systemctl list-timers kayak-audit-gauges.timer --all
+echo ""
+systemd-analyze calendar '*-*-02,17 03:00' --iterations 4 | grep -E 'Next elapse|Iteration'
