@@ -34,6 +34,17 @@ class TestSafeEval:
     def test_power(self):
         assert _safe_eval("2 ** 3") == 8.0
 
+    def test_power_within_bounds(self):
+        # Real river-flow exponents (square root for stage-discharge curves).
+        assert _safe_eval("100 ** 0.5") == 10.0
+        assert _safe_eval("16 ** -0.5") == 0.25
+
+    def test_power_exponent_out_of_bounds(self):
+        with pytest.raises(ValueError, match="Exponent out of bounds"):
+            _safe_eval("2 ** 100")
+        with pytest.raises(ValueError, match="Exponent out of bounds"):
+            _safe_eval("10 ** -100")
+
     def test_unary_neg(self):
         assert _safe_eval("-5 + 10") == 5.0
 

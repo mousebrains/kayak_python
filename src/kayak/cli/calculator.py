@@ -9,7 +9,6 @@ import ast
 import logging
 import math
 import operator
-import re
 from collections.abc import Callable
 
 from sqlalchemy import select
@@ -69,7 +68,14 @@ def _safe_eval(expr: str, values: dict[str, float] | None = None) -> float:
             bin_fn = _BINOPS.get(type(node.op))
             if bin_fn is None:
                 raise ValueError(f"Unsupported operator: {type(node.op).__name__}")
-            return bin_fn(_eval(node.left), _eval(node.right))
+            left = _eval(node.left)
+            right = _eval(node.right)
+            if isinstance(node.op, ast.Pow) and not (-32.0 <= right <= 32.0):
+                # Real river-flow rating exponents live in [0.5, 3]; capping at
+                # +/- 32 is generous for legitimate use and prevents a hostile
+                # or typo'd expression from forcing huge intermediate values.
+                raise ValueError(f"Exponent out of bounds: {right}")
+            return bin_fn(left, right)
         if isinstance(node, ast.UnaryOp):
             unary_fn = _UNARYOPS.get(type(node.op))
             if unary_fn is None:
@@ -128,11 +134,23 @@ def calculator(args: argparse.Namespace) -> None:
             if not ce or not ce.time_expression:
                 return []
             own_gauge = gauge_id_to_name.get(source_to_gauge.get(source.id, -1), "")
-            return [
-                ref_name
-                for _, ref_name, _ in re.findall(r"(\w+)::(\w+)::(\w+)", ce.time_expression)
-                if ref_name in calc_gauge_names and ref_name != own_gauge
-            ]
+            # Parse the same way the evaluator does (see below): split on
+            # whitespace, then on '::'. Accept both 3-part "key::gauge::type"
+            # and 2-part "gauge::type" refs. The previous regex caught only
+            # the 3-part form, which silently dropped 2-part deps from the
+            # topo-sort and could let a calc evaluate before its inputs.
+            deps: list[str] = []
+            for ref in ce.time_expression.split():
+                parts = ref.split("::")
+                if len(parts) == 3:
+                    ref_name = parts[1]  # key::gauge::type
+                elif len(parts) == 2:
+                    ref_name = parts[0]  # gauge::type
+                else:
+                    continue
+                if ref_name in calc_gauge_names and ref_name != own_gauge:
+                    deps.append(ref_name)
+            return deps
 
         # Simple topo sort: sources with no calc deps first, then dependents
         sorted_sources: list[Source] = []
