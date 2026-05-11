@@ -74,6 +74,16 @@ server {
         return 444;
     }
 
+    # Legacy URL redirects: pre-2026 levels.wkcc.org used /?P=<State>.html,
+    # /?D=<id>, /?f=<id>, /?g=<id>, /?t=<id>, and /?d. The new site uses
+    # different paths and IDs with no clean translation, so bounce all of
+    # these to the site root. Browsers preserve any #A<id> fragment across
+    # the redirect; the new site doesn't define those anchors so they're
+    # silently ignored. 301 (permanent) so search engines/bookmarks update.
+    if ($request_uri ~ "^/\?(P|D|f|g|t|d)(=|&|$)") {
+        return 301 $scheme://$host/;
+    }
+
     # Block dotfiles (.git, .env, .htaccess, etc.)
     location ~ /\. {
         deny all;
@@ -142,7 +152,9 @@ server {
     # PHP endpoints via php-fpm.
     # NOTE: Cache-Control is left to each PHP file to set explicitly via
     # header() — blanket add_header here would duplicate alongside the
-    # per-page value and produce conflicting directives.
+    # per-page value and produce conflicting directives (e.g. public from
+    # nginx + private from description.php). Every entry point in php/
+    # sets its own; see the audit comment in php/about.php style.
     location ~ \.php$ {
         limit_req zone=php burst=20 nodelay;
         try_files $uri =404;
