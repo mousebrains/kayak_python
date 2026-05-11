@@ -487,8 +487,9 @@ if (editor_feature_enabled()) {
 echo '</nav>';
 
 if ($has_map) {
+    $fm_mtime = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/feature-map.js') ?: 1;
     echo '<script src="/static/leaflet.js" defer></script>';
-    echo '<script src="/static/feature-map.js" defer></script>';
+    echo '<script src="/static/feature-map.js?v=' . $fm_mtime . '" defer></script>';
 }
 
 include_footer();

@@ -57,7 +57,7 @@ if(track){
 // hit polyline so finger taps register reliably on touch devices.
 // Mirrors the styling and hover behaviour of the main /map.html.
 if(reachTracks.length){
-  var COLORS={low:'#ef6c00',okay:'#1b8a00',high:'#c62828',unknown:'#1565c0'};
+  var COLORS={low:'#ff6d00',okay:'#76ff03',high:'#ff1744',unknown:'#00b0ff'};
   var REST_LINE={weight:4,opacity:1.0};
   var HOVER_LINE={weight:7,opacity:1.0};
   var REST_CASING={color:'#1a1a1a',weight:5,opacity:0.5,lineJoin:'round',lineCap:'round',interactive:false};
