@@ -166,15 +166,29 @@ def init_db(args: argparse.Namespace) -> None:
     print("Creating tables...")
     Base.metadata.create_all(engine)
 
-    # Fresh DBs start at the head of the migration series — metadata.create_all
-    # already produced the target schema, so every known migration is
-    # effectively already applied. Stamping them prevents re-run on next
-    # `levels migrate`.
-    from kayak.cli.migrate import stamp_all_known
+    # Stamping rule: only on a TRULY FRESH DB.
+    #
+    # On a fresh DB, metadata.create_all produced the target schema, so every
+    # known migration is effectively already applied and should be stamped
+    # to prevent re-run on next `levels migrate`.
+    #
+    # On an EXISTING DB (e.g. someone re-runs init-db on the live host), the
+    # previous behavior blanket-stamped *every* discovered migration — including
+    # ones that hadn't actually been applied yet. The next `levels migrate`
+    # would then silently skip them. Now we check schema_migrations: if it
+    # has any prior rows, this isn't a fresh init and we defer to `migrate`.
+    from kayak.cli.migrate import applied_versions, stamp_all_known
 
-    stamped = stamp_all_known()
-    if stamped:
-        print(f"Stamped {stamped} migration(s) as applied.")
+    prior = applied_versions()
+    if prior:
+        print(
+            f"DB already tracks {len(prior)} applied migration(s); "
+            f"skipping init-db stamp. Run `levels migrate` to apply pending."
+        )
+    else:
+        stamped = stamp_all_known()
+        if stamped:
+            print(f"Stamped {stamped} migration(s) as applied.")
 
     if not args.no_seed:
         from kayak.db.engine import get_session

@@ -1,8 +1,11 @@
 """Tests for kayak.cli.init_db seed and sync helpers."""
 
+from argparse import Namespace
 from unittest import mock
+from unittest.mock import patch
 
 import pytest
+from sqlalchemy import text
 
 from kayak.db.models import FetchUrl, Source, State
 
@@ -210,3 +213,28 @@ def test_sync_sources_deactivates_missing_urls(session):
     assert retired.is_active is False, "URL removed from YAML should deactivate"
     assert kept.is_active is True, "URL present in YAML should stay active"
     assert fresh.is_active is True, "new URL is inserted with is_active=True"
+
+
+def test_init_db_skips_stamping_on_existing_db(engine, capsys):
+    """init-db on a DB that already tracks any migration must not
+    blanket-stamp the rest. The prior behavior would silently mark
+    unapplied migrations as applied, making `levels migrate` skip them.
+    """
+    from kayak.cli.init_db import init_db
+    from kayak.cli.migrate import _ensure_tracking_table, stamp
+
+    with patch("kayak.cli.migrate.get_engine", return_value=engine):
+        _ensure_tracking_table()
+        stamp("0001")
+
+    args = Namespace(drop=False, no_seed=True)
+    with (
+        patch("kayak.cli.init_db.get_engine", return_value=engine),
+        patch("kayak.cli.migrate.get_engine", return_value=engine),
+    ):
+        init_db(args)
+
+    with engine.connect() as conn:
+        versions = {r[0] for r in conn.execute(text("SELECT version FROM schema_migrations")).all()}
+    assert versions == {"0001"}, "init-db must not stamp anything beyond the existing 0001"
+    assert "already tracks" in capsys.readouterr().out
