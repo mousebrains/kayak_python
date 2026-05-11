@@ -89,20 +89,11 @@ var sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_
 street.addTo(map);
 L.control.layers({Topo:topo,Street:street,Satellite:sat}).addTo(map);
 
-// Two panes so casings always render beneath colored reaches regardless of
-// add order. Without this, calling bringToFront on the casing during hover
-// breaks the mouseout event, leaving the hover state stuck on. Casings pane
-// has pointerEvents:none so mouse hits go straight through to the reach.
-map.createPane('reach-casings');
-map.getPane('reach-casings').style.zIndex='400';
-map.getPane('reach-casings').style.pointerEvents='none';
-map.createPane('reaches');
-map.getPane('reaches').style.zIndex='410';
-// Fat invisible polylines on top pane so finger taps register within ~18px
-// of a thin reach line. Without this, reaches at base zoom (z≈7 over a
-// state) draw at ~4px and are nearly impossible to hit on a phone.
-map.createPane('reach-hits');
-map.getPane('reach-hits').style.zIndex='420';
+// Z-ordering (casing < reach < hit-shape) is enforced by the add order in
+// refilter(): casing first, colored line second, fat invisible hit shape
+// last. Using the default overlayPane keeps everything in one SVG —
+// iPhone Safari silently dropped overlays when they were split across
+// three custom panes (iPad Safari sends a desktop UA and tolerated it).
 
 function fail(msg){
   map.setView(DEFAULT_VIEW,DEFAULT_ZOOM);
@@ -132,21 +123,20 @@ function renderMap(geom,state){
   // pale tones in topo, hiding the colored stripe.
   var REST_LINE={weight:4,opacity:1.0};
   var HOVER_LINE={weight:7,opacity:1.0};
-  var REST_CASING={color:'#1a1a1a',weight:5,opacity:0.5,lineJoin:'round',lineCap:'round',interactive:false,pane:'reach-casings'};
+  var REST_CASING={color:'#1a1a1a',weight:5,opacity:0.5,lineJoin:'round',lineCap:'round',interactive:false};
   var HOVER_CASING={weight:9};
-  var HIT_LINE={weight:18,opacity:0,interactive:true,pane:'reach-hits',lineCap:'round',lineJoin:'round'};
-  var HIT_POINT={radius:14,opacity:0,fillOpacity:0,interactive:true,pane:'reach-hits'};
+  var HIT_LINE={weight:18,opacity:0,interactive:true,lineCap:'round',lineJoin:'round'};
+  var HIT_POINT={radius:14,opacity:0,fillOpacity:0,interactive:true};
 
   var layersById={};
   L.geoJSON(geom,{
-    pane:'reaches',
     style:function(f){
       var s=readEntry(state,f.properties.id).s||'unknown';
       return {color:COLORS[s]||COLORS.unknown,weight:REST_LINE.weight,opacity:REST_LINE.opacity,lineJoin:'round',lineCap:'round'};
     },
     pointToLayer:function(f,ll){
       var s=readEntry(state,f.properties.id).s||'unknown';
-      return L.circleMarker(ll,{radius:6,fillColor:COLORS[s]||COLORS.unknown,color:'#333',weight:1,fillOpacity:0.8,pane:'reaches'});
+      return L.circleMarker(ll,{radius:6,fillColor:COLORS[s]||COLORS.unknown,color:'#333',weight:1,fillOpacity:0.8});
     },
     onEachFeature:function(f,layer){
       var p=f.properties;
@@ -187,14 +177,15 @@ function renderMap(geom,state){
       layersById[p.id]=layer;
       layer._mfStatus=s;
       layer._mfTiers=tiers;
-      // Halo casing in its own pane below 'reaches' — no need to reorder
-      // on hover, which is what was breaking mouseout.
+      // Halo casing rendered beneath the colored line via add-order in
+      // refilter() (casing → line → hit). No bringToFront on hover — that
+      // moved the colored line above the hit shape, killing mouseout.
       layer._mfCasing=typeof layer.getLatLngs==='function'
         ? L.polyline(layer.getLatLngs(),REST_CASING)
         : null;
-      // Fat invisible hit shape on top pane: catches taps anywhere within
-      // ~18px of a thin reach line and forwards style updates to the
-      // visible layer below.
+      // Fat invisible hit shape added last (renders on top): catches taps
+      // anywhere within ~18px of a thin reach line and forwards style
+      // updates to the visible layer below.
       var hit=null;
       if(typeof layer.getLatLngs==='function'){
         hit=L.polyline(layer.getLatLngs(),HIT_LINE);
@@ -208,7 +199,6 @@ function renderMap(geom,state){
       target.on('mouseover',function(){
         layer.setStyle(HOVER_LINE);
         if(layer._mfCasing)layer._mfCasing.setStyle(HOVER_CASING);
-        if(typeof layer.bringToFront==='function')layer.bringToFront();
       });
       target.on('mouseout',function(){
         layer.setStyle(REST_LINE);
