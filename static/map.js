@@ -8,11 +8,14 @@
  * Filter state is persisted in the URL hash so filtered views are shareable.
  */
 (function(){
-// Material 500 palette. Paired with a low-opacity dark halo casing
-// (REST_CASING below) — the halo gives the yellow and green tones
-// enough contrast to read against the pale topo basemap, while the
-// 0.3 casing opacity keeps the color edges from being washed out.
-var COLORS={low:'#e8a735',okay:'#4caf50',high:'#e53935',unknown:'#2196F3'};
+// Tuned for visibility across topo + satellite + street basemaps:
+//   low   #ff9800 — true Material orange (amber #e8a735 blended into
+//                   topo's tans and satellite's soil tones).
+//   okay  #00c853 — vivid green A700 (Material green 500 #4caf50 read
+//                   as a muted forest tone over green vegetation).
+//   high  #e53935 — Material red 500, no change.
+//   unkn  #2196f3 — Material blue 500, no change.
+var COLORS={low:'#ff9800',okay:'#00c853',high:'#e53935',unknown:'#2196f3'};
 var STATUSES=['low','okay','high','unknown'];
 var CLASS_TIERS=['I','II','III','IV','V','?'];
 var DEFAULT_VIEW=[44.0,-120.5];
@@ -118,14 +121,14 @@ function renderMap(geom,state){
   var sSet=new Set(initial.s===null?STATUSES:initial.s);
   var cSet=new Set(initial.c===null?CLASS_TIERS:initial.c);
 
-  // Dark halo casing (drawn beneath the colored line) gives the yellow
-  // (low) and green (okay) lines enough contrast to read against the
-  // pale tans and greens of the topo basemap. Opacity 0.3 — heavier
-  // than that visibly dims the Material 500 tones at line edges.
+  // Dark halo casing 2px wider than the colored line — that 1px-per-side
+  // halo is what gives the orange and green lines a real outline against
+  // pale topo and busy satellite. Opacity 0.4 because the halo is thinner
+  // than weight alone suggests once anti-aliasing is accounted for.
   var REST_LINE={weight:4,opacity:1.0};
   var HOVER_LINE={weight:7,opacity:1.0};
-  var REST_CASING={color:'#1a1a1a',weight:5,opacity:0.3,lineJoin:'round',lineCap:'round',interactive:false};
-  var HOVER_CASING={weight:9};
+  var REST_CASING={color:'#1a1a1a',weight:6,opacity:0.4,lineJoin:'round',lineCap:'round',interactive:false};
+  var HOVER_CASING={weight:10};
   var HIT_LINE={weight:18,opacity:0,interactive:true,lineCap:'round',lineJoin:'round'};
   var HIT_POINT={radius:14,opacity:0,fillOpacity:0,interactive:true};
 
