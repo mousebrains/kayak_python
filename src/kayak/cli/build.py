@@ -225,8 +225,11 @@ _CSS_PATH = _STATIC_DIR / "style.css"
 _JS_PATH = _STATIC_DIR / "levels.js"
 _FILTERS_JS_PATH = _STATIC_DIR / "filters.js"
 
+_MAP_JS_PATH = BASE_DIR / "static" / "map.js"
+
 _LEVELS_JS_VERSION = int(_JS_PATH.stat().st_mtime)
 _FILTERS_JS_VERSION = int(_FILTERS_JS_PATH.stat().st_mtime)
+_MAP_JS_VERSION = int(_MAP_JS_PATH.stat().st_mtime)
 _LEVELS_JS = f'<script src="/static/levels.js?v={_LEVELS_JS_VERSION}" defer></script>'
 
 
@@ -1276,7 +1279,7 @@ main {{padding:0;max-width:none;}}
 </main>
 {_build_footer_html()}
 <script src="/static/leaflet.js" defer></script>
-<script src="/static/map.js" defer></script>
+<script src="/static/map.js?v={_MAP_JS_VERSION}" defer></script>
 </body>
 </html>"""
 
