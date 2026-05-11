@@ -8,10 +8,10 @@
  * Filter state is persisted in the URL hash so filtered views are shareable.
  */
 (function(){
-// Original Material 500 palette — brighter than the 600/700 shades that
-// were used briefly to balance against a heavier halo casing. Now that
-// the casing opacity is lighter (0.3), these bright tones read crisply
-// on every basemap without being washed out by the halo.
+// Material 500 palette. The Material 600/700 set that lived here from
+// 3b9dd5f through ed0c566 was paired with a dark halo casing; without
+// the casing those darker shades read as muddy, so we're back to the
+// pre-3b9dd5f tones.
 var COLORS={low:'#e8a735',okay:'#4caf50',high:'#e53935',unknown:'#2196F3'};
 var STATUSES=['low','okay','high','unknown'];
 var CLASS_TIERS=['I','II','III','IV','V','?'];
@@ -91,11 +91,9 @@ var sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_
 street.addTo(map);
 L.control.layers({Topo:topo,Street:street,Satellite:sat}).addTo(map);
 
-// Z-ordering (casing < reach < hit-shape) is enforced by the add order in
-// refilter(): casing first, colored line second, fat invisible hit shape
-// last. Using the default overlayPane keeps everything in one SVG —
+// All overlays render into the default overlayPane in a single SVG.
 // iPhone Safari silently dropped overlays when they were split across
-// three custom panes (iPad Safari sends a desktop UA and tolerated it).
+// custom panes (iPad sends a desktop UA and tolerated it).
 
 function fail(msg){
   map.setView(DEFAULT_VIEW,DEFAULT_ZOOM);
@@ -120,13 +118,12 @@ function renderMap(geom,state){
   var sSet=new Set(initial.s===null?STATUSES:initial.s);
   var cSet=new Set(initial.c===null?CLASS_TIERS:initial.c);
 
-  // Color line opaque + bolder; dark casing acts as a 1px outline for contrast.
-  // Dark (not white) casing because white blends with street tiles and the
-  // pale tones in topo, hiding the colored stripe.
+  // Opaque colored line — no casing. The dark halo casing from 3b9dd5f
+  // tinted line edges via anti-aliasing and visually dimmed the colors
+  // even at low halo opacity; restoring the pre-casing look gets the
+  // Material 500 tones reading at full strength on every basemap.
   var REST_LINE={weight:4,opacity:1.0};
   var HOVER_LINE={weight:7,opacity:1.0};
-  var REST_CASING={color:'#1a1a1a',weight:5,opacity:0.3,lineJoin:'round',lineCap:'round',interactive:false};
-  var HOVER_CASING={weight:9};
   var HIT_LINE={weight:18,opacity:0,interactive:true,lineCap:'round',lineJoin:'round'};
   var HIT_POINT={radius:14,opacity:0,fillOpacity:0,interactive:true};
 
@@ -179,15 +176,9 @@ function renderMap(geom,state){
       layersById[p.id]=layer;
       layer._mfStatus=s;
       layer._mfTiers=tiers;
-      // Halo casing rendered beneath the colored line via add-order in
-      // refilter() (casing → line → hit). No bringToFront on hover — that
-      // moved the colored line above the hit shape, killing mouseout.
-      layer._mfCasing=typeof layer.getLatLngs==='function'
-        ? L.polyline(layer.getLatLngs(),REST_CASING)
-        : null;
       // Fat invisible hit shape added last (renders on top): catches taps
       // anywhere within ~18px of a thin reach line and forwards style
-      // updates to the visible layer below.
+      // updates to the visible colored layer below.
       var hit=null;
       if(typeof layer.getLatLngs==='function'){
         hit=L.polyline(layer.getLatLngs(),HIT_LINE);
@@ -198,14 +189,8 @@ function renderMap(geom,state){
 
       var target=hit||layer;
       target.bindPopup(buildPopup);
-      target.on('mouseover',function(){
-        layer.setStyle(HOVER_LINE);
-        if(layer._mfCasing)layer._mfCasing.setStyle(HOVER_CASING);
-      });
-      target.on('mouseout',function(){
-        layer.setStyle(REST_LINE);
-        if(layer._mfCasing)layer._mfCasing.setStyle({weight:REST_CASING.weight});
-      });
+      target.on('mouseover',function(){layer.setStyle(HOVER_LINE);});
+      target.on('mouseout',function(){layer.setStyle(REST_LINE);});
     },
   });
 
@@ -226,12 +211,10 @@ function renderMap(geom,state){
     for(var id in layersById){
       if(matches(layersById[id]))visible.push(layersById[id]);
     }
-    // Three passes so all casings render beneath all colored lines:
-    // interleaving (casing,line,casing,line,...) makes a later reach's
-    // dark casing draw on top of an earlier reach's colored line wherever
-    // they overlap, which at state-wide zoom turns the whole web dark.
-    for(var i=0;i<visible.length;i++)if(visible[i]._mfCasing)group.addLayer(visible[i]._mfCasing);
-    for(i=0;i<visible.length;i++)group.addLayer(visible[i]);
+    // Two passes: colored lines first, then all hit shapes on top, so a
+    // tap on any line registers on the fat invisible hit polyline rather
+    // than the thin visible one underneath.
+    for(var i=0;i<visible.length;i++)group.addLayer(visible[i]);
     for(i=0;i<visible.length;i++)if(visible[i]._mfHit)group.addLayer(visible[i]._mfHit);
     if(countEl)countEl.textContent=visible.length+' reach'+(visible.length===1?'':'es');
     if(firstPaint){
