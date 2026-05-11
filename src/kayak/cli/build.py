@@ -1098,6 +1098,8 @@ def _build_page(
 <meta name="description" content="{desc}">
 <meta name="theme-color" content="{BRAND_COLOR}">
 <link rel="icon" href="/static/favicon.ico">
+<link rel="manifest" href="/static/manifest.json">
+<link rel="apple-touch-icon" href="/static/icon-180.png">
 {css_link}
 </head>
 <body>
@@ -1152,6 +1154,8 @@ def _build_placeholder_page(css_link: str, states: list[str], state: str) -> str
 <meta name="description" content="Real-time river levels, flow, and gage data for {state} from USGS, NOAA, USACE, and other agencies.">
 <meta name="theme-color" content="{BRAND_COLOR}">
 <link rel="icon" href="/static/favicon.ico">
+<link rel="manifest" href="/static/manifest.json">
+<link rel="apple-touch-icon" href="/static/icon-180.png">
 {css_link}
 </head>
 <body>
@@ -1189,6 +1193,8 @@ def _build_map_page(css_link: str, states: list[str], geom_url: str, state_url: 
 <meta name="description" content="Interactive map of river reaches with real-time flow and level data.">
 <meta name="theme-color" content="{BRAND_COLOR}">
 <link rel="icon" href="/static/favicon.ico">
+<link rel="manifest" href="/static/manifest.json">
+<link rel="apple-touch-icon" href="/static/icon-180.png">
 <link rel="stylesheet" href="/static/leaflet.css">
 {css_link}
 <style>
