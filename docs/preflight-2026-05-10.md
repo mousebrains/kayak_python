@@ -87,22 +87,24 @@ or an outstanding action.
 
 ### Cutover-day-and-after
 
-1. **CAA record on `wkcc.org` pinning to letsencrypt.org**, before
-   the SAN expansion. ClubExpress DNS panel. Belt-and-suspenders.
-
-   ```
-   wkcc.org.   CAA   0 issue "letsencrypt.org"
-   wkcc.org.   CAA   0 iodef  "mailto:pat.kayak@gmail.com"
-   ```
-
-2. **Cert SAN expansion** — after ClubExpress publishes the CNAME
+1. **Cert SAN expansion** — after ClubExpress publishes the CNAME
    `levels.wkcc.org` → `levels.mousebrains.com`. Use the DNS-01
    path from `DNS.CHANGEOVER.md` so the SSL handshake race is dodged.
 
-3. **`$site_url` flip in `nginx-editor-env.conf`** at T0+3 (or
+2. **`$site_url` flip in `nginx-editor-env.conf`** at T0+3 (or
    whenever the new CNAME has propagated and traffic is on
    `levels.wkcc.org` for real). The file already documents the flip
    in its header.
+
+### Investigated and dropped
+
+- **CAA pin on `wkcc.org`.** Not applicable in the cutover architecture:
+  `levels.wkcc.org` becomes a CNAME to `levels.mousebrains.com`, and
+  RFC 1034 forbids any other RR type alongside a CNAME — so CAA can't
+  live at that name. Pinning at the `wkcc.org` apex would constrain
+  `www.wkcc.org`'s own (non-Let's-Encrypt) issuer. The protection
+  already lives where it matters: `mousebrains.com` apex CAA pins to
+  LE/DigiCert/Google/ssl.com, covering the cert's primary CN.
 
 ### Cosmetic / can-defer-past-cutover
 
