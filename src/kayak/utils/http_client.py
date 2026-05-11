@@ -168,11 +168,14 @@ class FetchResult:
 _RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 _MAX_RETRIES = 3
 
+
 # Hosts that rate-limit aggressively when many requests arrive at once.
-# nwrfc.noaa.gov returns HTTP 429 when ~8 requests land in the same second.
-_HOST_CONCURRENCY_OVERRIDES: dict[str, int] = {
-    "nwrfc.noaa.gov": 2,
-}
+# Tuning lives in data/http_concurrency.yaml; the loader is cached so the
+# file is read once per process.
+def _host_concurrency_overrides() -> dict[str, int]:
+    from kayak.config_data import load_http_concurrency_overrides
+
+    return load_http_concurrency_overrides()
 
 
 def fetch(url: str, timeout: int | None = None) -> FetchResult:
@@ -366,15 +369,16 @@ async def async_fetch_many(
     if timeout is None:
         timeout = FETCH_TIMEOUT
 
-    # Group URLs by hostname and create per-host semaphores. Hosts in
-    # _HOST_CONCURRENCY_OVERRIDES use their override; everything else uses
+    # Group URLs by hostname and create per-host semaphores. Hosts listed in
+    # data/http_concurrency.yaml use their override; everything else uses
     # concurrency_per_host.
     host_semaphores: dict[str, asyncio.Semaphore] = {}
+    overrides = _host_concurrency_overrides()
 
     def _sem_for(host: str) -> asyncio.Semaphore:
         sem = host_semaphores.get(host)
         if sem is None:
-            limit = _HOST_CONCURRENCY_OVERRIDES.get(host, concurrency_per_host)
+            limit = overrides.get(host, concurrency_per_host)
             sem = asyncio.Semaphore(limit)
             host_semaphores[host] = sem
         return sem

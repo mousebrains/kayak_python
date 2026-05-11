@@ -141,3 +141,29 @@ class TestNWRFCTextPlotEdgeCases:
         )
         count = parser.parse(TEXTPLOT_NEGATIVE)
         assert count == 0
+
+    def test_html_error_page(self, session):
+        """Cloudflare-style HTML 502 page must not crash the text parser."""
+        src = _make_source(session, name="html_err")
+        parser = NWRFCTextPlotParser(
+            url="https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=ERRW&pe=QR",
+            session=session,
+            source_id=src.id,
+        )
+        html = "<!doctype html><html><body><h1>502 Bad Gateway</h1></body></html>"
+        assert parser.parse(html) == 0
+
+    def test_truncated_body(self, session):
+        """A body truncated mid-row must not crash the parser."""
+        src = _make_source(session, name="trunc")
+        parser = NWRFCTextPlotParser(
+            url="https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=CUTW&pe=QR",
+            session=session,
+            source_id=src.id,
+        )
+        truncated = (
+            "TEXT PLOT FOR CUTW (Cut River)\n"
+            "Date/Time             Stage (ft)  Flow (cfs)\n"
+            "2024-06-15 12:00         3.45     "
+        )
+        assert parser.parse(truncated) == 0

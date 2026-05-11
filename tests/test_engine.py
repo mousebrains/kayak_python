@@ -86,6 +86,22 @@ class TestSQLitePragmas:
             # In-memory databases may report 'memory' instead of 'wal'
             assert mode in ("wal", "memory")
 
+    def test_mmap_size_configured(self, tmp_path):
+        # PRAGMA mmap_size only takes effect on file-backed databases —
+        # in-memory DBs report 0 regardless of the requested size.
+        db_path = tmp_path / "mmap.db"
+        engine = get_engine(f"sqlite:///{db_path}")
+        with engine.connect() as conn:
+            mmap = conn.execute(text("PRAGMA mmap_size")).scalar()
+            assert mmap == 134217728
+
+    def test_cache_size_configured(self):
+        engine = get_engine("sqlite:///:memory:")
+        with engine.connect() as conn:
+            cache = conn.execute(text("PRAGMA cache_size")).scalar()
+            # Negative cache_size is in KB, positive in pages.
+            assert cache == -16000
+
 
 class TestGetSession:
     def teardown_method(self) -> None:

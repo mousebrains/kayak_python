@@ -185,3 +185,23 @@ class TestUSACECDAEdgeCases:
         count = parser.parse(CDA_BASIC)
         assert count == 2
         assert session.query(Observation).count() == 0
+
+    def test_html_error_page(self, session):
+        """Cloudflare-style HTML error page must not crash the JSON parser."""
+        src = _make_source(session)
+        parser = USACECDAParser(url=CDA_URL, session=session, source_id=src.id)
+        html = "<!doctype html><html><body><h1>504 Gateway Timeout</h1></body></html>"
+        assert parser.parse(html) == 0
+
+    def test_nan_inf_values_rejected(self, session):
+        """NaN/Infinity in a numeric position must be rejected by the value guard."""
+        src = _make_source(session)
+        parser = USACECDAParser(url=CDA_URL, session=session, source_id=src.id)
+        bad = (
+            '{"GPR":{"name":"Green Peter Reservoir","timeseries":{'
+            '"GPR.Flow-Out.Inst.0.0.Best":{"parameter":"Flow-Out","units":"cfs",'
+            '"values":[["2024-06-15T12:00:00",NaN,0],'
+            '["2024-06-15T13:00:00",Infinity,0]]}}}}'
+        )
+        parser.parse(bad)
+        assert session.query(Observation).count() == 0

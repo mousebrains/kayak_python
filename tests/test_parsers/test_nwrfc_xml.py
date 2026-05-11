@@ -139,3 +139,22 @@ class TestNWRFCEdgeCases:
         count = parser.parse(NWRFC_FUTURE)
         # Future datetime causes when=None, so stage/discharge are skipped
         assert count == 0
+
+    def test_html_error_page(self, session):
+        """Server-returned HTML error page (502/503) must not crash the parser."""
+        src = _make_source(session)
+        parser = NWRFCXMLParser(url="https://example.com/nwrfc", session=session, source_id=src.id)
+        html = "<!doctype html><html><body><h1>503 Service Unavailable</h1></body></html>"
+        assert parser.parse(html) == 0
+
+    def test_truncated_xml(self, session):
+        """A truncated XML body must not crash the parser."""
+        src = _make_source(session)
+        parser = NWRFCXMLParser(url="https://example.com/nwrfc", session=session, source_id=src.id)
+        truncated = (
+            '<?xml version="1.0"?>\n<forecast>\n  <SiteData id="CUTW">\n'
+            "    <observedData>\n"
+            "      <dataDateTime>2024-06-15T12:00:00</dataDateTime>\n"
+            '      <stage units="feet">3.45'
+        )
+        assert parser.parse(truncated) == 0

@@ -453,7 +453,7 @@ class TestAsyncFetchMany:
         assert len(semaphores_created) == 2
 
     def test_host_concurrency_override(self):
-        """Hosts in _HOST_CONCURRENCY_OVERRIDES get their override limit; other
+        """Hosts in the loaded overrides get their override limit; other
         hosts in the same batch keep concurrency_per_host."""
         urls = [
             "http://override.example/1",
@@ -471,8 +471,8 @@ class TestAsyncFetchMany:
 
         with (
             patch(
-                "kayak.utils.http_client._HOST_CONCURRENCY_OVERRIDES",
-                {"override.example": 2},
+                "kayak.utils.http_client._host_concurrency_overrides",
+                return_value={"override.example": 2},
             ),
             patch("kayak.utils.http_client.aiohttp.TCPConnector"),
             patch("kayak.utils.http_client.aiohttp.ClientSession", return_value=fake_session),

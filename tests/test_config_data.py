@@ -8,6 +8,7 @@ from kayak.config_data import (
     _load_yaml,
     load_builder_columns,
     load_description_fields,
+    load_http_concurrency_overrides,
     load_sources,
 )
 
@@ -60,6 +61,28 @@ class TestLoadDescriptionFields:
     def test_cached_returns_same_object(self):
         a = load_description_fields()
         b = load_description_fields()
+        assert a is b
+
+
+class TestLoadHttpConcurrencyOverrides:
+    def test_returns_dict_with_int_values(self):
+        result = load_http_concurrency_overrides()
+        assert isinstance(result, dict)
+        for host, limit in result.items():
+            assert isinstance(host, str)
+            assert isinstance(limit, int)
+            assert limit >= 1
+
+    def test_contains_known_host(self):
+        result = load_http_concurrency_overrides()
+        # nwrfc.noaa.gov is the live override; if someone removes it from
+        # the YAML, this test fails loudly so the change is intentional.
+        assert "nwrfc.noaa.gov" in result
+        assert result["nwrfc.noaa.gov"] == 2
+
+    def test_cached_returns_same_object(self):
+        a = load_http_concurrency_overrides()
+        b = load_http_concurrency_overrides()
         assert a is b
 
 

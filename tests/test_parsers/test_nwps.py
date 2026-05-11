@@ -201,3 +201,42 @@ class TestNWPSEdgeCases:
         )
         assert len(flows) == 1
         assert flows[0].value == 500.0  # No conversion
+
+
+class TestNWPSMalformed:
+    """Edge cases that exercise garbage-in robustness — feeds occasionally
+    return Cloudflare error pages, half-written JSON, or non-finite floats
+    when an upstream sensor glitches. None of these should crash the parser
+    or pollute the DB."""
+
+    def test_html_error_page(self, session):
+        """An upstream HTML error page (e.g. 502 from a CDN) is not JSON."""
+        src = _make_source(session)
+        parser = NWPSParser(url=NWPS_URL, session=session, source_id=src.id)
+        html = (
+            "<!doctype html><html><body><h1>502 Bad Gateway</h1><p>nginx/1.18.0</p></body></html>"
+        )
+        assert parser.parse(html) == 0
+
+    def test_truncated_json(self, session):
+        """Connection dropped mid-stream produces a truncated body."""
+        src = _make_source(session)
+        parser = NWPSParser(url=NWPS_URL, session=session, source_id=src.id)
+        truncated = '{"primaryName":"Stage","primaryUnits":"ft","data":[{"validT'
+        assert parser.parse(truncated) == 0
+
+    def test_nan_inf_values_rejected(self, session):
+        """JSON allows NaN/Infinity via Python's parser; observation guard
+        must reject them rather than storing into the DB."""
+        src = _make_source(session)
+        parser = NWPSParser(url=NWPS_URL, session=session, source_id=src.id)
+        # Note: stdlib json.loads accepts NaN/Infinity by default
+        bad = (
+            '{"primaryName":"Stage","primaryUnits":"ft",'
+            '"secondaryName":"Flow","secondaryUnits":"cfs",'
+            '"data":[{"validTime":"' + _recent(1) + '",'
+            '"primary":NaN,"secondary":Infinity}]}'
+        )
+        parser.parse(bad)
+        obs = session.query(Observation).filter_by(source_id=src.id).all()
+        assert len(obs) == 0

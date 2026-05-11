@@ -1,0 +1,11 @@
+# Per-host concurrent-request caps for outbound fetches.
+#
+# Hosts not listed use the default `concurrency_per_host` setting in
+# kayak.utils.http_client. Add hosts here that rate-limit aggressively
+# (HTTP 429) when several requests land in the same second. Lower
+# numbers are safer; 1 means strictly serial.
+overrides:
+  # nwrfc.noaa.gov returns HTTP 429 when ~8 requests land in the same
+  # second. Even small bursts (4–6 concurrent) trip it. Holding to 2
+  # has been stable for over a year.
+  nwrfc.noaa.gov: 2

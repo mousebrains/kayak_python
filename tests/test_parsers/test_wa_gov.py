@@ -144,3 +144,20 @@ class TestWaGovEdgeCases:
         src = _make_source(session)
         parser = WaGovParser(url="https://example.com/wa", session=session, source_id=src.id)
         assert parser.parse("") == 0
+
+    def test_html_error_page(self, session):
+        """Server-returned HTML error page must not crash the line parser."""
+        src = _make_source(session)
+        parser = WaGovParser(url="https://example.com/wa", session=session, source_id=src.id)
+        html = (
+            "<!doctype html><html><body><h1>502 Bad Gateway</h1>"
+            "<p>The proxy server failed to respond.</p></body></html>"
+        )
+        assert parser.parse(html) == 0
+
+    def test_garbage_lines_skipped(self, session):
+        """Random non-data lines must be skipped, not crashed on."""
+        src = _make_source(session)
+        parser = WaGovParser(url="https://example.com/wa", session=session, source_id=src.id)
+        garbage = "Some Header Line\ngarbage,without,enough,fields\n,,,,\n*** TRUNCATED ***\n"
+        assert parser.parse(garbage) == 0

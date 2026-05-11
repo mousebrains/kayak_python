@@ -133,6 +133,17 @@ def store_observations(
             continue
 
         value = row["value"]
+        if not math.isfinite(value):
+            # Government feeds occasionally publish sentinel values (-999999)
+            # that arithmetic turns into Inf/NaN. Drop silently at INFO so the
+            # downstream cache + merge median can't be poisoned.
+            logger.info(
+                "Rejecting non-finite value %r for source_id=%d data_type=%s",
+                value,
+                row["source_id"],
+                data_type,
+            )
+            continue
         if (
             data_type == DataType.flow
             and value < 0

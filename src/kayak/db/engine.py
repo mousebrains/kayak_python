@@ -10,12 +10,22 @@ _session_factory: sessionmaker[Session] | None = None
 
 
 def _set_sqlite_pragma(dbapi_conn: object, _connection_record: object) -> None:
-    """Set SQLite PRAGMAs on each new connection."""
+    """Set SQLite PRAGMAs on each new connection.
+
+    mmap_size + cache_size are sized for the 4 GB Hetzner CPX21:
+      - mmap_size=128MB: virtual memory only (OS pages in what's touched),
+        comfortably covers a ~150 MB DB plus indexes without RSS pressure.
+      - cache_size=-16000 (16 MB): page cache per connection. Pipeline runs
+        ~5-10 short-lived sessions concurrently, so worst-case RSS from this
+        is ~160 MB — safe on a 4 GB box.
+    """
     cursor = dbapi_conn.cursor()  # type: ignore[attr-defined]
     cursor.execute("PRAGMA journal_mode=WAL")
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.execute("PRAGMA busy_timeout=30000")
     cursor.execute("PRAGMA synchronous=NORMAL")
+    cursor.execute("PRAGMA mmap_size=134217728")
+    cursor.execute("PRAGMA cache_size=-16000")
     cursor.close()
 
 

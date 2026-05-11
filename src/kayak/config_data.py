@@ -77,3 +77,15 @@ def load_description_fields() -> list[dict[str, Any]]:
     data = _load_yaml("descriptions.yaml")
     result: list[dict[str, Any]] = data.get("fields", [])
     return result
+
+
+@lru_cache(maxsize=1)
+def load_http_concurrency_overrides() -> dict[str, int]:
+    """Load per-host concurrency caps from data/http_concurrency.yaml.
+
+    Returns a dict of {hostname: int}. Empty if the file is missing the
+    ``overrides:`` key. Hosts not listed use the http_client default.
+    """
+    data = _load_yaml("http_concurrency.yaml")
+    raw = data.get("overrides", {}) or {}
+    return {str(host): int(limit) for host, limit in raw.items()}
