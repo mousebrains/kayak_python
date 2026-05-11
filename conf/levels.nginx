@@ -97,6 +97,19 @@ server {
         return 404;
     }
 
+    # Browsers auto-request /favicon.ico even when the page links
+    # /static/favicon.ico via <link rel="icon">. Serve the same file from
+    # the root path rather than letting the request fall through to the
+    # generic / location and 404. access_log + log_not_found off to keep
+    # crawler favicon-probe noise out of the log.
+    location = /favicon.ico {
+        alias /home/pat/public_html/static/favicon.ico;
+        access_log off;
+        log_not_found off;
+        expires 365d;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
     # Static assets — long cache, immutable content (content-hashed where
     # mutable, e.g. style-<hash>.css; legacy unhashed assets still benefit
     # from a long max-age via periodic CSS-hash / JS-version URL churn).
