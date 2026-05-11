@@ -430,7 +430,22 @@ Jails:
 Inspect a jail's bans: `sudo fail2ban-client status nginx-editor-auth`.
 Unban an IP: `sudo fail2ban-client set <jail> unbanip <addr>`.
 
-## 12. Cloud backup (future — Hetzner Storage Box)
+## 12. SSH hardening
+
+`deploy/sshd_config.d/hardening.conf` is the live `/etc/ssh/sshd_config.d/hardening.conf`:
+key-only auth, AllowUsers pat, ed25519-only host + client keys, AEAD ciphers,
+modern + post-quantum kex, IPv4-only (so fail2ban's IPv4 jails see everything).
+`MaxStartups 5:50:30` allows up to five concurrent unauthenticated handshakes
+before nginx-style 50% drop kicks in (hard cap at 30) — loose enough to allow
+multi-session work and forwarded channels, tight enough to resist scanner
+floods (with fail2ban already on `sshd`).
+
+```bash
+sudo cp deploy/sshd_config.d/hardening.conf /etc/ssh/sshd_config.d/hardening.conf
+sudo sshd -t && sudo systemctl reload ssh
+```
+
+## 13. Cloud backup (future — Hetzner Storage Box)
 
 The local backup retains 4 weekly copies on the VPS. For off-site redundancy,
 add a Hetzner Storage Box (BX11: 1 TB, ~3.80 EUR/month). Transfers stay
