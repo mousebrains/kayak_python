@@ -7,6 +7,8 @@ legacy
 obj
 *.o
 *.d
+!deploy/fail2ban/jail.d/
+!deploy/fail2ban/filter.d/
 tpw.master.2*
 tkw.*
 tpw.*

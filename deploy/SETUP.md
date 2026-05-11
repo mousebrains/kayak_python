@@ -394,7 +394,43 @@ add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" alway
 
 Then reload: `sudo nginx -t && sudo systemctl reload nginx`
 
-## 11. Cloud backup (future — Hetzner Storage Box)
+## 11. Fail2ban
+
+`deploy/fail2ban/` mirrors the live `/etc/fail2ban/` layout. The defaults
+ban after 5 failed logins in 10 minutes, escalate ban duration on repeat
+offenders (up to a week), and run extra jails targeting credential-harvest
+scanners and bare-IP probes against the default server block.
+
+```bash
+sudo apt-get install -y fail2ban
+sudo cp deploy/fail2ban/jail.local                              /etc/fail2ban/jail.local
+sudo cp deploy/fail2ban/jail.d/kayak-edit.conf                  /etc/fail2ban/jail.d/
+sudo cp deploy/fail2ban/jail.d/kayak-editor-auth.conf           /etc/fail2ban/jail.d/
+sudo cp deploy/fail2ban/filter.d/nginx-edit-auth.conf           /etc/fail2ban/filter.d/
+sudo cp deploy/fail2ban/filter.d/nginx-editor-auth.conf         /etc/fail2ban/filter.d/
+sudo cp deploy/fail2ban/filter.d/nginx-malicious.conf           /etc/fail2ban/filter.d/
+sudo cp deploy/fail2ban/filter.d/nginx-default-block.conf       /etc/fail2ban/filter.d/
+sudo systemctl enable --now fail2ban
+sudo fail2ban-client status   # should list every jail above as active
+```
+
+Jails:
+
+| Jail | Triggers on | Source log |
+|---|---|---|
+| `sshd` | failed SSH logins | journald |
+| `nginx-http-auth` | nginx 401s (basic-auth) | `kayak-error.log` |
+| `nginx-botsearch` | known bot paths | `kayak-access.log` |
+| `nginx-limit-req` | rate-limit zone violations | `kayak-error.log` |
+| `nginx-malicious` | `.env`, `.git`, `wp-config.php`, etc. | `access.log` + `kayak-access.log` |
+| `nginx-default-block` | any hit on the bare-IP default vhost | `blocked-access.log` |
+| `nginx-edit-auth` | 401 on `/edit.php` | `kayak-access.log` |
+| `nginx-editor-auth` | 4xx / 429 on `/login.php` + `/auth.php`, plus POST `/login.php` (each submit costs one magic-link email) | `kayak-access.log` |
+
+Inspect a jail's bans: `sudo fail2ban-client status nginx-editor-auth`.
+Unban an IP: `sudo fail2ban-client set <jail> unbanip <addr>`.
+
+## 12. Cloud backup (future — Hetzner Storage Box)
 
 The local backup retains 4 weekly copies on the VPS. For off-site redundancy,
 add a Hetzner Storage Box (BX11: 1 TB, ~3.80 EUR/month). Transfers stay

@@ -1,0 +1,43 @@
+# /etc/fail2ban/jail.local
+# Hardened defaults + nginx jails
+
+[DEFAULT]
+bantime = 1h
+bantime.increment = true
+bantime.maxtime = 1w
+findtime = 10m
+maxretry = 5
+
+[sshd]
+enabled = true
+maxretry = 3
+
+[nginx-http-auth]
+enabled = true
+logpath = /var/log/nginx/kayak-error.log
+
+[nginx-botsearch]
+enabled = true
+maxretry = 2
+logpath = /var/log/nginx/kayak-access.log
+
+[nginx-limit-req]
+enabled = true
+logpath = /var/log/nginx/kayak-error.log
+
+[nginx-malicious]
+enabled = true
+filter = nginx-malicious
+maxretry = 1
+findtime = 1d
+bantime = 1w
+logpath = /var/log/nginx/access.log
+          /var/log/nginx/kayak-access.log
+
+[nginx-default-block]
+enabled = true
+filter = nginx-default-block
+maxretry = 2
+findtime = 1d
+bantime = 1d
+logpath = /var/log/nginx/blocked-access.log
