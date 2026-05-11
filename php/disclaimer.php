@@ -3,29 +3,18 @@ declare(strict_types=1);
 /**
  * Disclaimer / use-at-your-own-risk page.
  */
-$title = "Disclaimer";
+require_once __DIR__ . '/includes/header.php';
+require_once __DIR__ . '/includes/footer.php';
+
 header('Cache-Control: public, max-age=300');
+include_header(
+    'Disclaimer — WKCC River Levels',
+    '',
+    'Use-at-your-own-risk notice for the WKCC River Levels site. Paddling is inherently dangerous; you are responsible for your own safety.'
+);
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title><?= $title ?> — WKCC River Levels</title>
-<meta name="description" content="Use-at-your-own-risk notice for the WKCC River Levels site. Paddling is inherently dangerous; you are responsible for your own safety.">
-<style>
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-       max-width: 48em; margin: 2em auto; padding: 0 1em; line-height: 1.6; color: #222; }
-h1 { font-size: 1.5em; border-bottom: 1px solid #ccc; padding-bottom: .3em; }
-h2 { font-size: 1.15em; margin-top: 1.5em; }
-a { color: #2060A0; }
-.updated { color: #666; font-size: .9em; }
-.warn { background: #fff4e0; border-left: 4px solid #c06000; padding: .75em 1em; margin: 1em 0; }
-</style>
-</head>
-<body>
-<main>
-<h1><?= $title ?></h1>
+<div class="prose">
+<h2>Disclaimer</h2>
 <p class="updated">Last updated: April 22, 2026</p>
 
 <div class="warn">
@@ -36,7 +25,7 @@ not the responsibility of this website, its operators, contributors, or the
 Willamette Kayak and Canoe Club.</p>
 </div>
 
-<h2>Information Is Provided "As Is"</h2>
+<h3>Information Is Provided "As Is"</h3>
 <p>This site aggregates river level, flow, gauge, and temperature data from
 public government sources (USGS, NOAA, USACE, USBR, state agencies, and
 others) and publishes reach descriptions contributed by volunteer paddlers.
@@ -53,7 +42,7 @@ outdated, or wrong</strong>. Rivers change — log jams form, rapids wash out,
 dams spill, weather shifts, landowners revoke access — and the site may not
 reflect current reality.</p>
 
-<h2>You Are Responsible for Your Own Safety</h2>
+<h3>You Are Responsible for Your Own Safety</h3>
 <p>Before you get on the water, it is <strong>your responsibility</strong> to:</p>
 <ul>
   <li>Verify river levels, weather, and hazards through multiple independent
@@ -72,7 +61,7 @@ reflect current reality.</p>
 guidebook description, or trip report on this site overrides your
 on-the-water judgment.</p>
 
-<h2>No Liability</h2>
+<h3>No Liability</h3>
 <p>To the fullest extent permitted by law, the operators, maintainers, and
 contributors of this website, and the Willamette Kayak and Canoe Club, its
 officers, directors, members, and volunteers, <strong>disclaim all liability</strong>
@@ -86,17 +75,14 @@ risk.</p>
 whether or not the operators have been advised of the possibility of such
 damages.</p>
 
-<h2>Third-Party Data and Links</h2>
+<h3>Third-Party Data and Links</h3>
 <p>We do not control the government data feeds this site aggregates, nor
 any third-party sites linked from our pages. Their accuracy, availability,
 and policies are their own.</p>
 
-<h2>Changes to This Disclaimer</h2>
+<h3>Changes to This Disclaimer</h3>
 <p>This disclaimer may be updated from time to time. The revised version
 will be posted on this page with a new date. Your continued use of the site
 constitutes acceptance of the current version.</p>
-
-<p style="margin-top: 2em;"><a href="/">← Back to river levels</a></p>
-</main>
-</body>
-</html>
+</div>
+<?php include_footer(); ?>

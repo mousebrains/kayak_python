@@ -3,32 +3,21 @@ declare(strict_types=1);
 /**
  * About page — history and design philosophy of the site.
  */
-$title = "About";
+require_once __DIR__ . '/includes/header.php';
+require_once __DIR__ . '/includes/footer.php';
+
 header('Cache-Control: public, max-age=300');
+include_header(
+    'About — WKCC River Levels',
+    '',
+    'How the WKCC River Levels site came to be — a three-decade project to make real-time river data available to paddlers.'
+);
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title><?= $title ?> — WKCC River Levels</title>
-<meta name="description" content="How the WKCC River Levels site came to be — a three-decade project to make real-time river data available to paddlers.">
-<style>
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-       max-width: 48em; margin: 2em auto; padding: 0 1em; line-height: 1.6; color: #222; }
-h1 { font-size: 1.5em; border-bottom: 1px solid #ccc; padding-bottom: .3em; }
-h2 { font-size: 1.15em; margin-top: 1.5em; }
-a { color: #2060A0; }
-.updated { color: #666; font-size: .9em; }
-.support { background: #eef6fb; border-left: 4px solid #2060A0; padding: .75em 1em; margin: 1.5em 0; }
-</style>
-</head>
-<body>
-<main>
-<h1><?= $title ?></h1>
+<div class="prose">
+<h2>About</h2>
 <p class="updated">Last updated: April 23, 2026</p>
 
-<h2>Origins</h2>
+<h3>Origins</h3>
 <p>It started with a single paddling trip.</p>
 
 <p>In the 1994&ndash;95 season, Pat Welch ran the North Fork Middle Fork
@@ -42,7 +31,7 @@ in.</p>
 
 <p>That conversation was the seed.</p>
 
-<h2>From a CSV to a website</h2>
+<h3>From a CSV to a website</h3>
 <p>Jim was an editor of the third edition of the Willamette Kayak and
 Canoe Club's <em>Soggy Sneakers</em>, the club's guide to whitewater in
 Oregon. He had already done the work of cataloguing runs &mdash; put-ins,
@@ -59,7 +48,7 @@ you could finally check the night before.</p>
 Pat's research computer. Rough edges everywhere, but it solved the
 problem.</p>
 
-<h2>Growth and rewrites</h2>
+<h3>Growth and rewrites</h3>
 <p>Over the years the scope crept outward. More rivers. More states.
 More agencies &mdash; NOAA, USGS, USBR, and state water resource
 departments &mdash; joined the USACE feeds the site started with. At
@@ -78,7 +67,7 @@ modular fetch pipeline that speaks each agency's formats, and a static
 HTML build for the levels pages layered over PHP for the interactive
 pieces. It looks, finally, like a modern web application.</p>
 
-<h2>Design philosophy: thin pipes</h2>
+<h3>Design philosophy: thin pipes</h3>
 <p>One goal has never changed, and it has gotten more important with
 time, not less: <strong>thin pipes</strong>.</p>
 
@@ -93,15 +82,12 @@ the moment you most need to check it.</p>
 work over a slow connection?</em> If the answer is no, it doesn't ship.</p>
 
 <div class="support">
-<h2 style="margin-top:0">Supporting this site</h2>
+<h3>Supporting this site</h3>
 <p>For decades this site has been supported by the
 <a href="https://wkcc.org">Willamette Kayak and Canoe Club</a> (WKCC).
 If you find it useful and want to help keep it going, please consider
 joining or contributing to the club.</p>
 <p>Pat's time on this project is entirely voluntary.</p>
 </div>
-
-<p style="margin-top: 2em;"><a href="/">&larr; Back to river levels</a></p>
-</main>
-</body>
-</html>
+</div>
+<?php include_footer(); ?>

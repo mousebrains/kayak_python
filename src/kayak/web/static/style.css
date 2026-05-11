@@ -404,6 +404,17 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   }
 }
 
+/* Long-form prose pages (About, Disclaimer, Privacy, etc.) */
+.prose{max-width:48em;margin:1em auto;padding:0 1em;line-height:1.6}
+.prose h2{font-size:1.5em;border-bottom:1px solid var(--c-border);padding-bottom:.3em;margin-top:.5em}
+.prose h3{font-size:1.15em;margin-top:1.5em;margin-bottom:.4em}
+.prose p,.prose ul{margin-bottom:.75em}
+.prose ul{padding-left:1.5em}
+.prose .updated{color:var(--c-text-faint);font-size:.9em;margin-bottom:1em}
+.prose .support{background:var(--c-primary-light);border-left:4px solid var(--c-primary);padding:.75em 1em;margin:1.5em 0}
+.prose .support h3{margin-top:0}
+.prose .warn{background:#fff4e0;border-left:4px solid #c06000;padding:.75em 1em;margin:1em 0}
+
 /* Print */
 @media print{
   header,.letter-nav,footer,.picker-actions{display:none}
