@@ -9,6 +9,7 @@ obj
 *.d
 !deploy/fail2ban/jail.d/
 !deploy/fail2ban/filter.d/
+!deploy/sshd_config.d/
 tpw.master.2*
 tkw.*
 tpw.*
