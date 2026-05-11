@@ -310,6 +310,26 @@ function issue_magic_link(string $email, ?string $next_url = null): array {
  * Consume a magic-link token. On success returns [editor_id, next_url]
  * and marks the token used. On failure returns null.
  */
+/**
+ * Check whether a magic-link token is currently valid (exists, unused,
+ * unexpired) WITHOUT consuming it. Used by auth.php's GET handler to
+ * decide between rendering the interstitial form vs. the expired page.
+ * Email-scanner URL prefetch (Outlook Defender, Proofpoint, etc.) only
+ * hits GET, so this read is a no-op for them — the token stays unused
+ * until the actual user POSTs the form.
+ */
+function peek_magic_link(string $tok): bool {
+    if ($tok === '' || !ctype_xdigit($tok) || strlen($tok) !== 64) return false;
+    $hash = hash_token($tok);
+    $db = get_db();
+    $stmt = $db->prepare(
+        "SELECT 1 FROM editor_magic_link
+         WHERE token_hash = ? AND used_at IS NULL AND expires_at > datetime('now')"
+    );
+    $stmt->execute([$hash]);
+    return $stmt->fetchColumn() !== false;
+}
+
 function consume_magic_link(string $tok): ?array {
     if ($tok === '' || !ctype_xdigit($tok) || strlen($tok) !== 64) return null;
     $hash = hash_token($tok);
