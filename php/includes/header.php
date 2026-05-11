@@ -33,7 +33,7 @@ function css_head_block(): string {
         $hash = trim((string)file_get_contents($hash_path));
         if ($hash !== '' && is_readable("$doc_root/static/style-$hash.css")) {
             $block = '<link rel="stylesheet" href="/static/style-'
-                   . htmlspecialchars($hash, ENT_QUOTES) . '.css">';
+                   . htmlspecialchars($hash) . '.css">';
             return $block;
         }
     }

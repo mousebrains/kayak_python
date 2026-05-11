@@ -296,9 +296,9 @@ if ($q_trimmed !== '' || $st !== '') {
         if ($map_reaches) {
             $leaflet_css = file_get_contents($_SERVER['DOCUMENT_ROOT'] . '/static/leaflet.css');
             echo '<style>' . $leaflet_css . '</style>';
-            $map_json = htmlspecialchars(json_encode($map_reaches), ENT_QUOTES, 'UTF-8');
-            $colors_json = htmlspecialchars(json_encode($colors), ENT_QUOTES, 'UTF-8');
-            $gauges_json = htmlspecialchars(json_encode($map_gauges), ENT_QUOTES, 'UTF-8');
+            $map_json = htmlspecialchars(json_encode($map_reaches));
+            $colors_json = htmlspecialchars(json_encode($colors));
+            $gauges_json = htmlspecialchars(json_encode($map_gauges));
             echo '<div id="search-map" style="height:65vh;min-height:480px;margin-top:1rem;border:1px solid #ccc" data-reaches="' . $map_json . '" data-colors="' . $colors_json . '" data-gauges="' . $gauges_json . '"></div>';
             $has_map = true;
             $map_scripts = '<script src="/static/leaflet.js" defer></script><script src="/static/search-map.js" defer></script>';
@@ -433,7 +433,7 @@ echo '<label for="st" class="sr-only">State</label>';
 echo '<select name="st" id="st"><option value="">All states</option>';
 foreach ($all_states as $s) {
     $sel = ($st === $s) ? ' selected' : '';
-    $esc = htmlspecialchars($s, ENT_QUOTES);
+    $esc = htmlspecialchars($s);
     echo "<option value=\"$esc\"$sel>$esc</option>";
 }
 echo '</select>';
@@ -628,10 +628,10 @@ if ($map_points || $reach['geom']) {
 
     $leaflet_css = file_get_contents($_SERVER['DOCUMENT_ROOT'] . '/static/leaflet.css');
     echo '<style>' . $leaflet_css . '</style>';
-    $pts_json = htmlspecialchars(json_encode($map_points), ENT_QUOTES, 'UTF-8');
+    $pts_json = htmlspecialchars(json_encode($map_points));
     echo '<div id="reach-map" style="height:400px;margin-top:1rem;border:1px solid #ccc" data-points="' . $pts_json . '"';
     if ($track) {
-        $track_json = htmlspecialchars(json_encode($track), ENT_QUOTES, 'UTF-8');
+        $track_json = htmlspecialchars(json_encode($track));
         echo ' data-track="' . $track_json . '"';
     }
     echo '></div>';

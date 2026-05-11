@@ -71,10 +71,10 @@ function gm_render_map(
     }
     $rt_json = $rt_payload ? (string)json_encode($rt_payload) : '[]';
 
-    $points_attr = htmlspecialchars((string)json_encode($points), ENT_QUOTES, 'UTF-8');
-    $track_attr  = htmlspecialchars($track_json, ENT_QUOTES, 'UTF-8');
-    $color_attr  = htmlspecialchars($track_color, ENT_QUOTES, 'UTF-8');
-    $rt_attr     = htmlspecialchars($rt_json, ENT_QUOTES, 'UTF-8');
+    $points_attr = htmlspecialchars((string)json_encode($points));
+    $track_attr  = htmlspecialchars($track_json);
+    $color_attr  = htmlspecialchars($track_color);
+    $rt_attr     = htmlspecialchars($rt_json);
 
     // leaflet.css lives at <docroot>/static/leaflet.css. __DIR__ resolves
     // to the PHP source path (kayak/php/includes), not the doc root, so

@@ -305,7 +305,7 @@ $fg_toggle = '<span class="fg-toggle">'
     $time_html = '';
     $ts = $s['flow_time'] ?? $s['gage_time'] ?? $s['temp_time'] ?? null;
     if ($ts) {
-        $iso = date('Y-m-d\TH:i:s\Z', strtotime($ts));
+        $iso = gmdate('Y-m-d\TH:i:s\Z', strtotime($ts));
         $display = date('m/d H:i', strtotime($ts));
         $time_html = "<time datetime=\"$iso\">$display</time>";
     }

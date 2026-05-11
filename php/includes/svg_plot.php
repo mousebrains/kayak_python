@@ -21,7 +21,7 @@ function _split_y_label(string $y_label): array {
 function _series_data_attr(array $series): string {
     $json = json_encode($series, JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION);
     if ($json === false) return '';
-    return htmlspecialchars($json, ENT_QUOTES, 'UTF-8');
+    return htmlspecialchars($json);
 }
 
 /**

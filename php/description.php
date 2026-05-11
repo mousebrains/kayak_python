@@ -156,7 +156,7 @@ if ($readings) {
             } else {
                 $val = number_format($raw, 1) . " $unit";
             }
-            $time_iso = $r['observed_at'] ? date('Y-m-d\TH:i:s\Z', strtotime($r['observed_at'])) : '';
+            $time_iso = $r['observed_at'] ? gmdate('Y-m-d\TH:i:s\Z', strtotime($r['observed_at'])) : '';
             $time_display = $r['observed_at'] ? date('m/d H:i', strtotime($r['observed_at'])) : 'N/A';
             $time_html = $time_iso ? "<time datetime=\"$time_iso\">$time_display</time>" : 'N/A';
             $delta_dec = ($r['data_type'] === 'flow' || $r['data_type'] === 'inflow') ? 0 : 2;
