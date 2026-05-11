@@ -8,14 +8,18 @@
  * Filter state is persisted in the URL hash so filtered views are shareable.
  */
 (function(){
-// Tuned for visibility across topo + satellite + street basemaps:
-//   low   #ff9800 — true Material orange (amber #e8a735 blended into
-//                   topo's tans and satellite's soil tones).
-//   okay  #00c853 — vivid green A700 (Material green 500 #4caf50 read
-//                   as a muted forest tone over green vegetation).
-//   high  #e53935 — Material red 500, no change.
-//   unkn  #2196f3 — Material blue 500, no change.
-var COLORS={low:'#ff9800',okay:'#00c853',high:'#e53935',unknown:'#2196f3'};
+// Tuned 2026-05 against topo + satellite + street basemaps:
+//   low   #ff6d00 — Material orange A700, deeper than #ff9800 so it
+//                   separates from topo's tan terrain that washed out
+//                   lighter oranges.
+//   okay  #76ff03 — Material light-green A400 (chartreuse); sits
+//                   outside the forest-green band where the prior
+//                   #00c853 blended on topo and satellite.
+//   high  #ff1744 — Material red A400, hotter than #e53935 to pop on
+//                   satellite without losing the "danger" reading.
+//   unkn  #00b0ff — Material light-blue A400, cyan-shifted to stay
+//                   distinct from satellite's blue-grey water tones.
+var COLORS={low:'#ff6d00',okay:'#76ff03',high:'#ff1744',unknown:'#00b0ff'};
 var STATUSES=['low','okay','high','unknown'];
 var CLASS_TIERS=['I','II','III','IV','V','?'];
 var DEFAULT_VIEW=[44.0,-120.5];
@@ -121,18 +125,33 @@ function renderMap(geom,state){
   var sSet=new Set(initial.s===null?STATUSES:initial.s);
   var cSet=new Set(initial.c===null?CLASS_TIERS:initial.c);
 
-  // Dark halo casing 2px wider than the colored line — that 1px-per-side
-  // halo is what gives the colored lines a real outline against busy
-  // basemaps. Pure black at 0.5 opacity: needed to keep the orange
-  // (low) line distinguishable from the brown/tan elevation shading
-  // on OpenTopoMap. Greens/reds/blues over-shot fine on lighter casing,
-  // so this is tuned to the worst-case orange-on-brown combination.
-  var REST_LINE={weight:4,opacity:1.0};
-  var HOVER_LINE={weight:7,opacity:1.0};
-  var REST_CASING={color:'#000',weight:6,opacity:0.5,lineJoin:'round',lineCap:'round',interactive:false};
-  var HOVER_CASING={weight:10};
+  // Dark halo casing 2px wider than the colored line at 0.75 opacity.
+  // Denser than the prior 0.5 because the line itself dropped from 4 to
+  // 3 px — a thinner colored line over a darker halo keeps every status
+  // readable across topo's tan terrain and satellite's mixed forest +
+  // soil cover. recomputeWeights() below scales both line and casing as
+  // the user zooms in, mutating the shared objects so subsequent
+  // setStyle calls (mouseover/mouseout) pick up the current zoom.
+  var BASE_WEIGHT=3;
+  var REST_LINE={weight:BASE_WEIGHT,opacity:1.0};
+  var HOVER_LINE={weight:BASE_WEIGHT+3,opacity:1.0};
+  var REST_CASING={color:'#000',weight:BASE_WEIGHT+2,opacity:0.75,lineJoin:'round',lineCap:'round',interactive:false};
+  var HOVER_CASING={weight:BASE_WEIGHT+5};
   var HIT_LINE={weight:18,opacity:0,interactive:true,lineCap:'round',lineJoin:'round'};
   var HIT_POINT={radius:14,opacity:0,fillOpacity:0,interactive:true};
+
+  function recomputeWeights(){
+    var z=map.getZoom();
+    if(z==null)z=DEFAULT_ZOOM;
+    var w=BASE_WEIGHT;
+    if(z>=11)w=BASE_WEIGHT+2;
+    else if(z>=9)w=BASE_WEIGHT+1;
+    REST_LINE.weight=w;
+    HOVER_LINE.weight=w+3;
+    REST_CASING.weight=w+2;
+    HOVER_CASING.weight=w+5;
+  }
+  recomputeWeights();
 
   var layersById={};
   L.geoJSON(geom,{
@@ -202,14 +221,34 @@ function renderMap(geom,state){
       var target=hit||layer;
       target.bindPopup(buildPopup);
       target.on('mouseover',function(){
+        layer._mfHovered=true;
         layer.setStyle(HOVER_LINE);
         if(layer._mfCasing)layer._mfCasing.setStyle(HOVER_CASING);
       });
       target.on('mouseout',function(){
+        layer._mfHovered=false;
         layer.setStyle(REST_LINE);
         if(layer._mfCasing)layer._mfCasing.setStyle({weight:REST_CASING.weight});
       });
     },
+  });
+
+  // Zoom-aware weight: bump the line + casing as the user zooms in so a
+  // single reach reads at detail-zoom without making state-wide views
+  // feel cluttered. Restyle in-place rather than rebuilding the group;
+  // _mfHovered keeps a hovered reach at the bumped (hover) weight even
+  // when zoom changes mid-hover.
+  map.on('zoomend',function(){
+    recomputeWeights();
+    for(var id in layersById){
+      var lyr=layersById[id];
+      if(typeof lyr.setStyle!=='function')continue;
+      var hov=lyr._mfHovered;
+      lyr.setStyle({weight:hov?HOVER_LINE.weight:REST_LINE.weight});
+      if(lyr._mfCasing){
+        lyr._mfCasing.setStyle({weight:hov?HOVER_CASING.weight:REST_CASING.weight});
+      }
+    }
   });
 
   var group=L.layerGroup().addTo(map);
@@ -245,6 +284,18 @@ function renderMap(geom,state){
         map.setView(DEFAULT_VIEW,DEFAULT_ZOOM);
       }
     }
+    // bringToFront must run *after* fitBounds. On the very first refilter
+    // the map isn't yet "loaded" (no view set), so each map.addLayer call
+    // defers the layer's onAdd until the 'load' event — which only fires
+    // inside fitBounds. The deferred onAdds then run in stamp-ID order,
+    // and L.geoJSON stamped every line layer during construction (IDs
+    // 1..N), so the lines get their SVG paths appended *before* the
+    // casings and hits. That leaves casings rendered on top of lines and
+    // makes chartreuse + 0.75-black blend to ~rgb(30,64,1) — exactly the
+    // forest-green look. Running bringToFront after fitBounds guarantees
+    // the paths exist before we re-append them in the right z-order.
+    for(i=0;i<visible.length;i++)visible[i].bringToFront();
+    for(i=0;i<visible.length;i++)if(visible[i]._mfHit)visible[i]._mfHit.bringToFront();
     writeHash(sSet,cSet);
   }
 
