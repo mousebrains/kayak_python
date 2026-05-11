@@ -77,7 +77,7 @@ BRAND_COLOR_DARK = "#0d3057"
 def _og_meta(title: str, desc: str, path: str = "") -> str:
     """OpenGraph + Twitter card meta block. `path` is site-relative ("/Oregon.html"); empty omits og:url + canonical."""
     site = SITE_URL.rstrip("/")
-    image = f"{site}/static/icon-192.png"
+    image = f"{site}/static/og-image.png"
     canonical = f'<link rel="canonical" href="{site}{path}">\n' if path else ""
     og_url = f'<meta property="og:url" content="{site}{path}">\n' if path else ""
     return (
@@ -88,7 +88,9 @@ def _og_meta(title: str, desc: str, path: str = "") -> str:
         f'<meta property="og:description" content="{desc}">\n'
         f"{og_url}"
         f'<meta property="og:image" content="{image}">\n'
-        f'<meta name="twitter:card" content="summary">\n'
+        f'<meta property="og:image:width" content="1200">\n'
+        f'<meta property="og:image:height" content="630">\n'
+        f'<meta name="twitter:card" content="summary_large_image">\n'
         f'<meta name="twitter:title" content="{title}">\n'
         f'<meta name="twitter:description" content="{desc}">'
     )

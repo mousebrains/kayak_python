@@ -129,8 +129,10 @@ function include_header(
 <meta property="og:title" content="$esc_title">
 <meta property="og:description" content="$esc_desc">
 <meta property="og:url" content="$url">
-<meta property="og:image" content="$scheme://$host/static/icon-192.png">
-<meta name="twitter:card" content="summary">
+<meta property="og:image" content="$scheme://$host/static/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="$esc_title">
 <meta name="twitter:description" content="$esc_desc">
 <link rel="manifest" href="/static/manifest.json">
