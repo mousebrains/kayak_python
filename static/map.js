@@ -222,15 +222,15 @@ function renderMap(geom,state){
     group.clearLayers();
     var visible=[];
     for(var id in layersById){
-      var l=layersById[id];
-      if(matches(l)){
-        // Casing first so it renders beneath the colored line (last-added wins in SVG).
-        if(l._mfCasing)group.addLayer(l._mfCasing);
-        group.addLayer(l);
-        if(l._mfHit)group.addLayer(l._mfHit);
-        visible.push(l);
-      }
+      if(matches(layersById[id]))visible.push(layersById[id]);
     }
+    // Three passes so all casings render beneath all colored lines:
+    // interleaving (casing,line,casing,line,...) makes a later reach's
+    // dark casing draw on top of an earlier reach's colored line wherever
+    // they overlap, which at state-wide zoom turns the whole web dark.
+    for(var i=0;i<visible.length;i++)if(visible[i]._mfCasing)group.addLayer(visible[i]._mfCasing);
+    for(i=0;i<visible.length;i++)group.addLayer(visible[i]);
+    for(i=0;i<visible.length;i++)if(visible[i]._mfHit)group.addLayer(visible[i]._mfHit);
     if(countEl)countEl.textContent=visible.length+' reach'+(visible.length===1?'':'es');
     if(firstPaint){
       firstPaint=false;
