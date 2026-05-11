@@ -70,7 +70,9 @@ nwps:
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/WSLO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/WTLO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/WASW1/stageflow/observed"
-    - url: "https://api.water.noaa.gov/nwps/v1/gauges/EUGO3/stageflow/observed"
+    # EUGO3 — USGS 14158050 stopped publishing flow 2026-04-20; NWPS only
+    # carries Stage now. NWRFC textPlot pe=HG (in nwrfc.textplot block) gets
+    # both Stage and computed Discharge from the local rating curve.
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/LGNO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/GOSO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/LONO3/stageflow/observed"
@@ -108,6 +110,10 @@ nwrfc.textplot:
     - url: "https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=APLO3&pe=QI"
     # FALO3 inflow — feeds the Fall_Creek_Inflow gauge used by upstream reaches
     - url: "https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=FALO3&pe=QI"
+    # EUGO3 — pe=HG returns paired Stage + computed Discharge, which the
+    # parser splits into gauge + flow. Restores observed flow for the
+    # EUGENE_merge gauge after USGS 14158050 dropped flow on 2026-04-20.
+    - url: "https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=EUGO3&pe=HG"
 
 # Replaced by fetch-usgs-ogc which only fetches gauges already in the DB.
 # The bulk state fetches below created thousands of unlinked source records.
