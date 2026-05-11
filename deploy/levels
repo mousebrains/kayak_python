@@ -30,12 +30,11 @@ server {
     include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
 
-    # OCSP stapling — cache the CA's revocation status so clients don't have to
-    # fetch it themselves on the TLS handshake.
-    ssl_stapling on;
-    ssl_stapling_verify on;
-    resolver 1.1.1.1 8.8.8.8 valid=300s;
-    resolver_timeout 5s;
+    # OCSP stapling intentionally NOT enabled: Let's Encrypt's ISRG/E7 certs
+    # no longer include an OCSP responder URL (CA/B Forum baseline 2024+), so
+    # `ssl_stapling on;` only produces a warning at every reload and never
+    # actually staples. CT logs and OCSP-must-staple aren't required for our
+    # threat model.
 
     # SAN must cover all three before nginx reload — see the redirect block above.
     server_name levels.mousebrains.com levels-test.wkcc.org levels.wkcc.org;

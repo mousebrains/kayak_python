@@ -11,6 +11,11 @@ maxretry = 5
 [sshd]
 enabled = true
 maxretry = 3
+# `aggressive` adds the ddos sub-filter so we catch the "Timeout before
+# authentication" / "Did not receive identification string" flood
+# patterns the default normal mode misses. srclimit_penalise in sshd
+# slows them down, fail2ban bans them.
+mode = aggressive
 
 [nginx-http-auth]
 enabled = true

@@ -35,6 +35,10 @@ FETCH_USER_AGENT = os.environ.get("FETCH_USER_AGENT", "kayak/1.0")
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", str(BASE_DIR / "public_html"))
 
 # Maintainer
-MAINTAINER_EMAIL = "pat.kayak@gmail.com"
-MAINTAINER_NAME = "Pat Welch"
+# Env override mirrors php/includes/auth.php::maintainer_emails(), which
+# already reads MAINTAINER_EMAIL first. Without this both layers reach the
+# same address only by coincidence — set MAINTAINER_EMAIL in the systemd
+# unit's Environment= or /etc/kayak/secrets.env to override.
+MAINTAINER_EMAIL = os.environ.get("MAINTAINER_EMAIL", "pat.kayak@gmail.com")
+MAINTAINER_NAME = os.environ.get("MAINTAINER_NAME", "Pat Welch")
 SITE_URL = os.environ.get("SITE_URL", "https://levels.wkcc.org")

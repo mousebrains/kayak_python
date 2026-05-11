@@ -142,11 +142,11 @@ sudo netfilter-persistent save
 
 #### Create the application user
 
-The default user is `debian`. Create the `tpw` user before proceeding:
+The default user is `debian`. Create the `pat` user before proceeding:
 
 ```bash
-sudo adduser tpw
-sudo -u tpw mkdir -p /home/tpw/.ssh
+sudo adduser pat
+sudo -u pat mkdir -p /home/pat/.ssh
 ```
 
 Then continue with **section 1** below — the setup is identical to Hetzner
@@ -186,20 +186,20 @@ sudo ln -sf /run/php/php8.4-fpm.sock /run/php/php-fpm.sock
 ## 2. Application user and code
 
 ```bash
-# Clone as the tpw user
-sudo -u tpw git clone git@github.com:mousebrains/kayak_python.git /home/tpw/kayak
+# Clone as the pat user
+sudo -u pat git clone git@github.com:mousebrains/kayak_python.git /home/pat/kayak
 
-cd /home/tpw/kayak
+cd /home/pat/kayak
 python3 -m venv .venv
 .venv/bin/pip install -e .
 ```
 
 ## 3. Environment file
 
-Create `/home/tpw/kayak/.env`:
+Create `/home/pat/kayak/.env`:
 
 ```bash
-SQLITE_PATH=/home/tpw/kayak/kayak.db
+SQLITE_PATH=/home/pat/kayak/kayak.db
 EDITOR_FEATURE=1
 ```
 
@@ -211,7 +211,7 @@ cookie — sign in via `/login.php` with an email that has been promoted to
 ## 4. Initialize the database
 
 ```bash
-cd /home/tpw/kayak
+cd /home/pat/kayak
 .venv/bin/levels init-db
 .venv/bin/levels pipeline    # first run — fetches data and generates HTML
 ```
@@ -291,7 +291,7 @@ The nginx config assumes:
 - Database: `/home/pat/DB/kayak.db` (passed to PHP via `fastcgi_param SQLITE_PATH`)
 - Cert path: `/etc/letsencrypt/live/levels.mousebrains.com/`
 - Snippets: `/etc/nginx/snippets/security-headers.conf`, `security-headers-turnstile.conf`
-- Rate-limit zones: `/etc/nginx/conf.d/ratelimit.conf` (see `deploy/nginx-ratelimit.conf`)
+- Rate-limit zones: `/etc/nginx/conf.d/ratelimit.conf` (see `deploy/ratelimit.conf`)
 
 Edit `deploy/levels` to match actual paths if they differ.
 
@@ -300,7 +300,7 @@ Edit `deploy/levels` to match actual paths if they differ.
 Edit the PHP-FPM pool to pass the database path. In `/etc/php/*/fpm/pool.d/www.conf`, add:
 
 ```ini
-env[SQLITE_PATH] = /home/tpw/kayak/kayak.db
+env[SQLITE_PATH] = /home/pat/kayak/kayak.db
 ```
 
 Alternatively, the nginx config passes `SQLITE_PATH` via `fastcgi_param`, so this step is optional.
@@ -345,24 +345,27 @@ key was `HCAPTCHA_SECRET`). It switched to Cloudflare Turnstile on
 2026-05-01 — Turnstile is invisible by default (no puzzle), single CSP
 origin, and free with no usage caps.
 
-## 8. Systemd timers (pipeline + decimate)
+## 8. Systemd timers
 
 ```bash
-sudo /home/tpw/kayak/systemd/install.service.sh
+sudo /home/pat/kayak/systemd/install.service.sh
 ```
 
-This copies the service/timer units to `/etc/systemd/system/`, enables and starts the timers.
+This copies the service/timer units to `/etc/systemd/system/`, enables and starts the timers. The `kayak-backup-offsite.service` is chained from `kayak-backup.service` via `OnSuccess=` and does not need its own timer.
 
 Verify:
 
 ```bash
-systemctl list-timers kayak-*
+systemctl list-timers 'kayak-*' --all
 ```
 
-Expected schedule:
+Expected schedule (six timers, jittered via `RandomizedDelaySec=300`):
 - **kayak-pipeline.timer** — every hour at `:12` (fetches data, builds HTML)
-- **kayak-decimate.timer** — daily at 02:32 (thins old observations)
-- **kayak-backup.timer** — weekly Sunday at 03:15 (SQLite backup with 4-copy retention)
+- **kayak-healthcheck.timer** — every hour at `:45` (data-freshness check)
+- **kayak-decimate.timer** — daily at 02:32 (thins old observations, VACUUM)
+- **kayak-backup.timer** — weekly Sunday at 03:15 (SQLite snapshot + 4-copy retention; off-site upload chains via `OnSuccess=`)
+- **kayak-heartbeat.timer** — weekly Sunday at 06:00 (mail-path liveness)
+- **kayak-audit-gauges.timer** — every 2 months (gauge-metadata sanity, emails maintainer digest)
 
 ## 9. Verify
 
@@ -458,17 +461,17 @@ within the Hetzner network — no egress fees.
 
 2. Enable SSH support in the Storage Box settings panel (disabled by default).
 
-3. Set up SSH key auth from the VPS (the backup runs as user `tpw`):
+3. Set up SSH key auth from the VPS (the backup runs as user `pat`):
 
    ```bash
-   # Generate a key if tpw doesn't have one
-   sudo -u tpw ssh-keygen -t ed25519 -C "kayak-backup" -f /home/tpw/.ssh/id_storagebox
+   # Generate a key if pat doesn't have one
+   sudo -u pat ssh-keygen -t ed25519 -C "kayak-backup" -f /home/pat/.ssh/id_storagebox
 
    # Install the key on the Storage Box (port 23 for SSH)
-   ssh-copy-id -p 23 -i /home/tpw/.ssh/id_storagebox.pub u123456@u123456.your-storagebox.de
+   ssh-copy-id -p 23 -i /home/pat/.ssh/id_storagebox.pub u123456@u123456.your-storagebox.de
 
    # Create the backup directory
-   ssh -p 23 -i /home/tpw/.ssh/id_storagebox u123456@u123456.your-storagebox.de mkdir -p backups
+   ssh -p 23 -i /home/pat/.ssh/id_storagebox u123456@u123456.your-storagebox.de mkdir -p backups
    ```
 
 4. Add the rsync step to `systemd/kayak-backup.sh`, after the local backup
@@ -477,15 +480,15 @@ within the Hetzner network — no egress fees.
    ```bash
    # Off-site copy to Hetzner Storage Box
    STORAGEBOX="u123456@u123456.your-storagebox.de"
-   SSH_KEY="/home/tpw/.ssh/id_storagebox"
+   SSH_KEY="/home/pat/.ssh/id_storagebox"
    rsync -az -e "ssh -p 23 -i $SSH_KEY" "$DEST" "$STORAGEBOX:backups/"
    ```
 
 5. Test manually:
 
    ```bash
-   sudo -u tpw /home/tpw/kayak/systemd/kayak-backup.sh
-   ssh -p 23 -i /home/tpw/.ssh/id_storagebox u123456@u123456.your-storagebox.de ls -lh backups/
+   sudo -u pat /home/pat/kayak/systemd/kayak-backup.sh
+   ssh -p 23 -i /home/pat/.ssh/id_storagebox u123456@u123456.your-storagebox.de ls -lh backups/
    ```
 
 ### Storage Box retention
@@ -576,9 +579,9 @@ ls /run/php/php*-fpm.sock
 Update `fastcgi_pass` in `deploy/levels` to match.
 
 **Pipeline fails with permission errors:**
-The systemd services run as user `tpw`. Ensure the kayak directory and database are owned by that user:
+The systemd services run as user `pat`. Ensure the kayak directory and database are owned by that user:
 ```bash
-sudo chown -R tpw:tpw /home/tpw/kayak
+sudo chown -R pat:pat /home/pat/kayak
 ```
 
 **Certbot renewal fails:**
