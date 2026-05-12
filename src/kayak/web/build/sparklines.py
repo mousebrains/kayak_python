@@ -1,8 +1,4 @@
-"""Sparkline SVG generation for the levels page.
-
-Moved here from kayak/cli/build.py in Phase 2 of the build.py split
-(docs/PLAN_build_split.md).
-"""
+"""Sparkline SVG generation for the levels page."""
 
 from datetime import UTC, datetime, timedelta
 

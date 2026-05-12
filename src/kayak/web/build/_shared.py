@@ -1,9 +1,8 @@
 """Shared constants and small helpers for the kayak.web.build package.
 
-Moved here from kayak/cli/build.py in Phase 1 of the build.py split
-(docs/PLAN_build_split.md). Top-level state evaluated at import time
-(file mtimes for cache-busting; state-name dictionaries) lives in one
-place so every consumer sees the same values.
+Top-level state evaluated at import time (file mtimes for cache-busting;
+state-name dictionaries) lives in one place so every consumer sees the
+same values.
 """
 
 import logging

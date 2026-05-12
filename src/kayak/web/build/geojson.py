@@ -1,8 +1,4 @@
-"""GeoJSON generation for the reach map.
-
-Moved here from kayak/cli/build.py in Phase 6 of the build.py split
-(docs/PLAN_build_split.md).
-"""
+"""GeoJSON generation for the reach map."""
 
 import json
 import math

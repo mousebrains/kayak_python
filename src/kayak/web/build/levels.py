@@ -1,8 +1,4 @@
-"""Per-state levels table: row data, filter bar, HTML table.
-
-Moved here from kayak/cli/build.py in Phase 4 of the build.py split
-(docs/PLAN_build_split.md).
-"""
+"""Per-state levels table: row data, filter bar, HTML table."""
 
 import html as html_mod
 from datetime import UTC, datetime

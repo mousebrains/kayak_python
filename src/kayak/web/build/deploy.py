@@ -1,9 +1,8 @@
 """Build-pipeline orchestrator and per-file rename-deploy.
 
-Moved here from kayak/cli/build.py in Phase 8 of the build.py split
-(docs/PLAN_build_split.md). Owns the ``levels build`` CLI entry point,
-the staging→live rename-replace deploy, and the per-state build/write
-pipeline that ties every other module in this package together.
+Owns the ``levels build`` CLI entry point, the staging→live rename-
+replace deploy, and the per-state build/write pipeline that ties every
+other module in this package together.
 """
 
 import argparse

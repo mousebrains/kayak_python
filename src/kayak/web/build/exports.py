@@ -1,8 +1,4 @@
-"""CSV and fixed-width text exports of the levels table.
-
-Moved here from kayak/cli/build.py in Phase 5 of the build.py split
-(docs/PLAN_build_split.md).
-"""
+"""CSV and fixed-width text exports of the levels table."""
 
 import csv
 import io

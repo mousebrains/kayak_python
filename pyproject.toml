@@ -71,10 +71,8 @@ select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF", "C901"]
 ignore = ["E501", "SIM108"]
 
 [tool.ruff.lint.per-file-ignores]
-# C901 grandfathered everywhere except kayak.web.build (refactored in Phase 9
-# of the build.py split — docs/PLAN_build_split.md). New complexity offenders
-# in web/build will block CI; the legacy hotspots elsewhere are deferred to
-# follow-up cleanup PRs.
+# C901 grandfathered outside kayak.web.build — new complexity in web/build
+# blocks CI; legacy hotspots elsewhere are deferred to per-area cleanup.
 "src/kayak/cli/*" = ["C901"]
 "src/kayak/parsers/*" = ["C901"]
 "src/kayak/tracing/*" = ["C901"]

@@ -1,8 +1,4 @@
-"""HTML page-shell helpers: nav, footer, letter-nav, page wrappers.
-
-Moved here from kayak/cli/build.py in Phase 3 of the build.py split
-(docs/PLAN_build_split.md).
-"""
+"""HTML page-shell helpers: nav, footer, letter-nav, page wrappers."""
 
 import html as html_mod
 from datetime import UTC, datetime

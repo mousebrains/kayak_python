@@ -1,8 +1,4 @@
-"""Gauges page — supplemental all-gauges listing.
-
-Moved here from kayak/cli/build.py in Phase 7 of the build.py split
-(docs/PLAN_build_split.md).
-"""
+"""Gauges page — supplemental all-gauges listing."""
 
 import html as html_mod
 import json
