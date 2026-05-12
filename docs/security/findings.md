@@ -20,16 +20,13 @@
 
 #### F-2 — Magic-link token captured in nginx access log
 
-- **Status:** 🔴 Open
+- **Status:** 🟢 Closed (Tier 6 fix; deploy/kayak-log-format.conf).
 - **Threats:** T-S1, T-I4
 - **Severity:** Medium impact, High likelihood for someone with log access (anyone with read on `/var/log/nginx/`)
-- **Description:** `/auth.php?t=<64-hex-token>` is the magic-link consumption URL. nginx access log captures full `$request` (`deploy/levels:329`), so the token lands in `/var/log/nginx/kayak-access.log`. Single-use + 30-min expiry mitigate: a leaked log token is dead within minutes of legitimate consumption, and unconsumed tokens have a 30-min exposure window.
-- **Repro:** `tail /var/log/nginx/kayak-access.log` shortly after a login → see `/auth.php?t=<token>` in the request column.
-- **Remediation options:**
-  - Redact `t=` param in the log format: in `deploy/kayak-log-format.conf`, set `$clean_request` via `map` directive that rewrites `/auth.php?t=…` to `/auth.php?t=REDACTED`.
-  - OR change `auth.php` to accept the token via POST (form auto-submit interstitial), which keeps it out of GET URLs entirely. The existing GET/POST split (peek vs consume) already half-does this; pushing all token traffic to POST closes the gap.
-  - OR shorten log retention aggressively (1-2 days).
-- **Plan tier:** Tier 1.1 (audit-and-decide).
+- **Description:** `/auth.php?t=<64-hex-token>` is the magic-link consumption URL. nginx access log was capturing the full `$request`, so the token landed in `/var/log/nginx/kayak-access.log`. Single-use + 30-min expiry mitigate the impact, but the right fix is to keep the token out of the log entirely.
+- **Resolution:** Added two `map` directives in `deploy/kayak-log-format.conf` that produce `$loggable_uri` (from `$request_uri`) and `$loggable_referer` (from `$http_referer`) with any `?t=<32-128 hex>` or `&t=<32-128 hex>` segment rewritten to `t=REDACTED`. The `log_format kayak_timed` line then uses `$request_method $loggable_uri $server_protocol` instead of `$request` and `$loggable_referer` instead of `$http_referer`. Match is intentionally broad — any current or future endpoint that takes a hex `t=` query param is automatically redacted. F-14's `Referrer-Policy: no-referrer` on auth.php already prevents the post-consume browser-side Referer leak; this is defense-in-depth.
+- **Verification:** After deploy + nginx reload, complete a login. `tail /var/log/nginx/kayak-access.log` should show `/auth.php?t=REDACTED` (not the actual token) in both the request column and the Referer column.
+- **Plan tier:** Tier 1.1 (audit-and-decide); Tier 6 (apply).
 
 #### F-4 — `edit_history` has no tamper-resistance
 
@@ -208,9 +205,9 @@ This section holds two kinds of items: (a) findings downgraded to Low after audi
 
 | Status | Count | IDs |
 |---|---|---|
-| 🔴 Open | 8 | F-2, F-3, F-8, F-9, F-10, F-11, F-12, F-13 |
+| 🔴 Open | 7 | F-3, F-8, F-9, F-10, F-11, F-12, F-13 |
 | 🟡 In progress | 0 | — |
-| 🟢 Closed | 4 | F-1, F-14, F-15, F-16 (Tier 6) |
+| 🟢 Closed | 5 | F-1, F-2, F-14, F-15, F-16 (Tier 6) |
 | ⚪ Accepted | 4 | F-4 (per D-T2.4), F-5 (per D-T1.3), F-6 (Phase 3.1 — documented convention adequate), F-7 (Phase 2.3 — confirmed safe) |
 | 🔵 Deferred | 0 | — |
 
