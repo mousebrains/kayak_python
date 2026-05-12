@@ -4,6 +4,7 @@
 >
 > **Iter log:**
 > - iter 1 (2026-05-12): 5 findings — Playwright's `webServer` block can't read env vars set in `globalSetup` (timing race); replaced with manual server lifecycle inside `globalSetup` mirroring `IntegrationTestCase.php`. `levels init-db` needs both `SQLITE_PATH` AND `DATABASE_URL` env vars, not just one. Phase 2 runtime budget phrasing clarified (≤30 s is total step time, not delta). Added `actions/upload-artifact` for `playwright-report/` on CI failure. Cross-check ref bumped + line-citations added.
+> - iter 2 (2026-05-12, this revision): 4 findings — Phase 1's `php -S -t public_html` serves the repo's tracked PHP symlinks, but Phase 3's `/Oregon.html` test needs `levels build` output that's not in the repo. Made the build step explicit in Phase 3's globalSetup expansion. Added `OUTPUT_DIR=<tmpdir>` isolation to globalSetup so the test build never clobbers the dev box's actual build output (whether default or per `PLAN_dev_env_followups.md` Phase 3 convention). Phase 3 risks: added Playwright `navigationTimeout` note re Leaflet tile-load timing.
 >
 > Dates absolute. References `file:line` against current `main`.
 
@@ -104,6 +105,7 @@ Goal: working Playwright harness on a dev box. CI integration deferred to Phase 
      ```
      Both env vars are required — `kayak.config` reads `DATABASE_URL` for SQLAlchemy; PHP reads `SQLITE_PATH` from `fastcgi_param` (here from the process env). One without the other → schema seeded only partially OR the PHP server can't open the DB.
    - Spawns `php -S 127.0.0.1:<port> -t public_html` via `spawn()`, with `SQLITE_PATH` + `EDITOR_FEATURE` etc. in its env. Uses a fixed port (e.g. `8000`) — Playwright can't probe a port-0 binding because there's no PHPUnit-style stderr-reading layer in the runner; fixed-port on isolated CI runners is reliable. If 8000 is occupied on a dev box, override via `KAYAK_TEST_PORT` env var.
+   - For Phase 1: serves directly from the repo's `public_html/` (the 24 tracked `120000`-mode symlinks resolve to `php/*.php`; CI clones include the symlinks). No `levels build` needed yet — the drill test hits `/reach.php?st=OR` which is a tracked symlink. Phase 3 changes this (see below).
    - Polls the port (`net.createConnection`) for up to 5 s until it accepts.
    - Stores `{ serverPid, tmpDir, dbPath }` on `process.env.KAYAK_TEST_*` for the teardown to find. Sets `process.env.KAYAK_TEST_BASE_URL = http://127.0.0.1:8000` for the tests to read via `baseURL`.
 5. **`tests/js/global-teardown.ts`** — stops the PHP server (`process.kill(serverPid, 'SIGTERM')` with a short timeout then `SIGKILL` fallback) + `rm -rf tmpDir`. Always runs on clean exit; crashed runs leak the server process + tmpdir on purpose so the operator can inspect.
@@ -194,6 +196,26 @@ Goal: CI gate. The plan deliberately doesn't expand test coverage yet — get on
 
 Goal: cover the remaining JS-heavy pages with smoke tests. Each test follows the same shape as Phase 1's drill — `page.goto`, expect `status === 200`, expect no `pageerror`/console-errors, optionally assert a key DOM element renders.
 
+**Setup expansion (one extra step in `global-setup.ts` before the server spawn):** the per-state HTML test (`/Oregon.html`) needs build output; the static-build paths aren't tracked. Add a `levels build` invocation that targets a tmp dir so the test never clobbers the dev box's actual build output:
+
+```ts
+const buildOutput = path.join(tmpDir, 'public_html');
+execFileSync('levels', ['build'], {
+  env: {
+    ...process.env,
+    SQLITE_PATH: dbPath,
+    DATABASE_URL: `sqlite:///${dbPath}`,
+    OUTPUT_DIR: buildOutput,    // isolates from dev box's normal target
+    EDITOR_FEATURE: '0',
+  },
+  stdio: 'pipe',
+});
+```
+
+Then switch the `php -S` invocation from `-t public_html` to `-t ${buildOutput}`. The build copies tracked PHP files + builds state HTML + writes `static/style-<hash>.css` etc. into `$buildOutput`, giving the tests a self-contained docroot that mirrors production layout. Cost: `levels build` runs in ~6 s on hardware comparable to GitHub runners — acceptable startup cost.
+
+This OUTPUT_DIR isolation aligns with `PLAN_dev_env_followups.md` Phase 3's convention (the dev box sets `OUTPUT_DIR` outside the repo); the test does the same thing for a tmp dir.
+
 **Tests to add to `tests/js/smoke.spec.ts`:**
 
 | Test | URL | JS exercised | Assertion notes |
@@ -218,7 +240,8 @@ The detail-view pages (`/description.php?id=<n>`, `/gauge.php?id=<n>`) need DB r
 - One drill per added test (mirroring Phase 1's pattern): break the assertion, confirm clear failure, restore, confirm green. Document the drill in the commit message.
 
 **Risk:**
-- Per-state HTML page (`/Oregon.html`) requires `levels build` to have run in global-setup, otherwise the file doesn't exist. The build runs in ~6 s on hardware comparable to GitHub runners; acceptable startup cost. Mitigation: cache the built output across CI runs if it ever becomes too slow.
+- Per-state HTML page (`/Oregon.html`) requires `levels build` to have run in global-setup — Phase 3's setup-expansion step (above) adds it. Build runs in ~6 s; acceptable startup cost. Mitigation if it ever grows: cache the built output across CI runs by hashing the inputs (`pyproject.toml` + `data/sources.yaml` + `src/kayak/web/build/**`).
+- **Playwright navigation timeout vs Leaflet tile fetches.** Default `navigationTimeout` is 30 s. `page.goto` resolves on the `'load'` event, which fires *before* Leaflet's tile layers finish fetching from OpenTopoMap/OSM. Tests must NOT `await page.waitForLoadState('networkidle')` — that path waits for tiles and will flake against slow upstream CDNs. The drill spec's `goto` + DOM assertions are tile-independent. Document this constraint as a comment at the top of `smoke.spec.ts` so future contributors don't add tile-blocking waits.
 - `gauge_picker.php` XHR call may fail noisily against an empty DB. Option: use `page.route()` to stub the response, or seed a minimal gauge. Tracking as a constraint, not a blocker.
 - Per-test `page.on('pageerror')` listener attached at test start; assertions run after `page.goto` awaits load. Race-window concern: an error fired during pre-load could be missed. Playwright's `page.goto` is synchronous-await; the listener attaches before navigation. Safe.
 
