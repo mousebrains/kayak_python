@@ -31,7 +31,7 @@ Top-level constants (lines 48–137, 224–234, 422, 505–519, 1293–1306) and
 ```
 src/kayak/web/build/
 ├── __init__.py        # empty
-├── _shared.py         # BRAND_*, PRIMARY_STATE, _STATE_ABBREVS, _ABBR_TO_STATE,
+├── _shared.py         # BRAND_*, _STATE_ABBREVS, _ABBR_TO_STATE,
 │                      # _NAV_STATES, DATA_*_THRESHOLD, _STATIC_DIR + JS path
 │                      # constants, _atomic_write, _og_meta, _load_css,
 │                      # _css_link_tag, _editor_feature_on

@@ -42,19 +42,16 @@ from kayak.utils.simplify import parse_geom, simplify
 # them here so the un-moved code in this file (and external consumers that
 # patch `kayak.cli.build.<name>`) keep resolving the same objects. These
 # re-exports go away when Phase 8 replaces this file with the slim shim.
-from kayak.web.build._shared import (  # noqa: F401
+from kayak.web.build._shared import (
     _ABBR_TO_STATE,
     _CSS_PATH,
     _FILTERS_JS_PATH,
     _FILTERS_JS_VERSION,
     _JS_PATH,
     _LEVELS_JS,
-    _LEVELS_JS_VERSION,
-    _MAP_JS_PATH,
     _MAP_JS_VERSION,
     _NAV_STATES,
     _STATE_ABBREVS,
-    _STATIC_DIR,
     BRAND_COLOR,
     BRAND_COLOR_DARK,
     DATA_EXPIRY_THRESHOLD,
