@@ -55,18 +55,6 @@ parameters:
 			path: php/data.php
 
 		-
-			message: '#^Offset ''NWRFC''\|''USGS'' might not exist on array\{\}\|array\{USGS\?\: array\{label\: non\-falsy\-string, url\: non\-falsy\-string\}, NWRFC\?\: array\{label\: non\-falsy\-string, url\: non\-falsy\-string\}\}\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: php/description.php
-
-		-
-			message: '#^Parameter \#1 \$input of function validate_date expects string\|null, string\|false\|null given\.$#'
-			identifier: argument.type
-			count: 2
-			path: php/description.php
-
-		-
 			message: '#^Cannot call method fetch\(\) on PDOStatement\|false\.$#'
 			identifier: method.nonObject
 			count: 1
@@ -179,6 +167,24 @@ parameters:
 			identifier: missingType.iterableValue
 			count: 1
 			path: php/includes/class_tiers.php
+
+		-
+			message: '#^Function _load_current_readings\(\) should return list\<array\<string, mixed\>\> but returns array\.$#'
+			identifier: return.type
+			count: 1
+			path: php/includes/description_detail.php
+
+		-
+			message: '#^Function _load_description_navigation\(\) should return array\{prev\: array\<string, mixed\>\|false, next\: array\<string, mixed\>\|false, position\: int\|string, total\: int\|string\} but returns array\{prev\: mixed, next\: mixed, position\: int\|string\|false\|null, total\: int\|string\|false\|null\}\.$#'
+			identifier: return.type
+			count: 1
+			path: php/includes/description_detail.php
+
+		-
+			message: '#^Offset ''NWRFC''\|''USGS'' might not exist on array\{\}\|array\{USGS\?\: array\{label\: non\-falsy\-string, url\: non\-falsy\-string\}, NWRFC\?\: array\{label\: non\-falsy\-string, url\: non\-falsy\-string\}\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: php/includes/description_detail.php
 
 		-
 			message: '#^Function _gp_bands_for_axis\(\) has parameter \$class_range with no value type specified in iterable type array\.$#'
