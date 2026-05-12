@@ -67,6 +67,16 @@ abstract class IntegrationTestCase extends TestCase
         }
         self::$dbPath = $dbPath;
 
+        // Allow subclasses to seed additional rows on top of init-db's
+        // reference data (states, fetch_urls, sources). Connects via a
+        // throwaway PDO; the test server connects independently.
+        $seedPdo = new PDO('sqlite:' . $dbPath);
+        $seedPdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $seedPdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+        $seedPdo->exec('PRAGMA foreign_keys=ON');
+        static::seedDatabase($seedPdo);
+        $seedPdo = null;
+
         // 2. Spawn `php -S 127.0.0.1:0 -t <docroot>` with the env vars PHP
         // normally gets from nginx fastcgi_param plus the test SQLITE_PATH.
         $docroot = $repoRoot . '/public_html';
@@ -198,6 +208,19 @@ abstract class IntegrationTestCase extends TestCase
                 'response body missing expected substring',
             );
         }
+    }
+
+    /**
+     * Subclass hook to seed rows after `levels init-db` runs.
+     *
+     * Override in subclasses to insert reach/gauge/observation/etc. test
+     * data via the provided PDO. Default is a no-op so subclasses that
+     * only need the schema-plus-reference-data baseline don't need to
+     * override anything. Runs once per test class (in setUpBeforeClass).
+     */
+    protected static function seedDatabase(PDO $db): void
+    {
+        // no-op by default
     }
 
     /** Locate the `levels` CLI. Prefers the prod venv, then a local .venv, then PATH. */
