@@ -147,3 +147,71 @@ def test_latest_observation_updated(session):
     latest = get_latest(session, source_id, DataType.flow)
     assert latest is not None
     assert latest.value == 500.0
+
+
+def test_both_exist_uses_pre_loop_time_sets(session):
+    """Pre-Phase-3 pin: in the both-exist branch, newly-stored rows must
+    NOT feed back into the in-loop time set.
+
+    Set up: gauge at t1 only, flow at t2 only. After calc_rating both
+    columns should each have exactly two rows, with identical timestamps
+    — neither more (no recursive re-derivation: the gauge row written at
+    t2 must not trigger a fresh flow derivation at t2) nor fewer (no
+    skipped fill).
+
+    The Phase 3 refactor collapses the 3-way if/elif/else into two parallel
+    "fill missing" calls. The pre-loop snapshot of `{observed_at}` times is
+    the invariant that keeps this safe. Regression: if the time-set were
+    re-computed AFTER each fill call, the second call would observe the
+    rows just written by the first.
+    """
+    _, source_id, _ = _make_gauge_with_rating(session)
+
+    now = datetime.now(UTC)
+    t1 = now - timedelta(hours=3)
+    t2 = now - timedelta(hours=2)
+
+    store_observation(session, source_id, DataType.gauge, t1, 5.0)
+    store_observation(session, source_id, DataType.flow, t2, 500.0)
+    session.flush()
+
+    _run_calc_rating(session)
+
+    gauge_times = {o.observed_at for o in get_observations(session, source_id, DataType.gauge)}
+    flow_times = {o.observed_at for o in get_observations(session, source_id, DataType.flow)}
+
+    # Exactly 2 rows per column — no re-derivation past the original two
+    # input timestamps.
+    assert len(gauge_times) == 2
+    assert len(flow_times) == 2
+    # Both columns end up with identical timestamps (each side cross-filled
+    # the missing one). Microsecond storage differs between input and DB
+    # round-trip, so compare the two stored sets to each other rather than
+    # to the input t1/t2 directly.
+    assert gauge_times == flow_times
+
+
+def test_zero_flow_value_not_stored(session):
+    """Pre-Phase-3 pin: the `val > 0` guard on flow output must not be
+    dropped by the refactor.
+
+    Set up: gauge at 0.0 ft, no flow rows. `interpolate_rating(feet_to_cfs,
+    0.0)` returns 0.0 (table entry (0.0, 0.0)). The current calc_rating.py
+    guards `val > 0` before storing a flow row (lines 96 and 129 — only on
+    flow output, not gauge). Without that guard, a flow row at value=0.0
+    would land and pollute the latest cache with a zero reading.
+
+    The Phase 3 refactor collapses the only-gauge and both-exist branches
+    into a single `_fill_flow_from_gauge` helper. That helper must preserve
+    the `val > 0` filter; this test fails if it doesn't.
+    """
+    _, source_id, _ = _make_gauge_with_rating(session)
+
+    now = datetime.now(UTC)
+    store_observation(session, source_id, DataType.gauge, now - timedelta(hours=1), 0.0)
+    session.flush()
+
+    _run_calc_rating(session)
+
+    flow_obs = get_observations(session, source_id, DataType.flow)
+    assert len(flow_obs) == 0
