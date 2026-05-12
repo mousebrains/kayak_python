@@ -46,3 +46,44 @@ For each of the 10 editor-pipeline endpoints, what's the expected behavior at ea
 
 - ✅ Authorization matrix documented; all 6 audit tests pass (1 with a non-finding note about response-code semantics).
 - No new findings; existing F-7/F-8/F-13 carry forward to 2.3.
+
+## Phase 2.2 — IDOR sweep
+
+**Verdict:** ✅ (no findings)
+
+### ID-taking endpoints in scope
+
+| Endpoint | GET param | POST param | Scope of read/write |
+|---|---|---|---|
+| `/account.php` | — | — | session-owner only (`$ed['id']` from `current_editor()`) |
+| `/admin.php` | — | `id`, `ids[]` | maintainer-required; can act on any non-maintainer editor row (by design) |
+| `/comment.php` | — | — | INSERT only; `editor_id` = current editor; `target_type='site'`, `target_id=NULL` |
+| `/edit.php` | `id`, `type` | `reach_id`, `gauge_id`, `target_type` | maintainer-required; can edit any reach/gauge row (by design); `$type` whitelisted to `['reach','gauge']`; `$id` unified via `?:` chain |
+| `/propose.php` | `type`, `id` | `target_type`, `target_id` | editor-required; existing-proposal lookup is scoped `WHERE editor_id = ? AND target_type = 'reach' AND target_id = ?` (per `php/propose.php:81-86`); INSERT/UPDATE uses `$ed['id']` for editor_id |
+| `/review.php` | `id`, `status` | `id`, `action` | maintainer-required; can read/write any change_request (by design) |
+
+Out of scope for this tier (public-facing reads, no editor scope): `description.php`, `gauge.php`, `api.php`, `latest.php`, `plot.php`, `reach.php`, `picker.php`, `gauge_picker.php`, `custom.php`, `custom_gauges.php`, `data.php`. Their model is "any reach/gauge is public" — documented here so future audits don't re-flag.
+
+### Audit tests
+
+| # | Test | Verdict | Evidence |
+|---|---|---|---|
+| 2.2.1 | `propose.php` GET — can an editor see another editor's pending proposal? | ✅ | Pre-populated form is loaded via the existing-proposal SELECT (`php/propose.php:81-86`), scoped by `editor_id = ?` from `current_editor()`. If editor X queries `?id=42` (a reach), they see their own pending proposal for reach 42, or no pre-population. They cannot see editor Y's proposal for the same reach. |
+| 2.2.2 | `propose.php` POST — can an editor write a proposal as a different editor? | ✅ | INSERT (`php/propose.php:241`) uses `$ed['id']` from `current_editor()` for `editor_id`. The POST `target_id` is the reach id (public). No path lets editor X set `editor_id=Y`. |
+| 2.2.3 | `edit.php` GET/POST id-mismatch — can attacker write to a row they didn't view? | ✅ | The handler reads `$id` from GET `?id` or POST `reach_id`/`gauge_id` (priority chain via `?:`). The POST id is used for the UPDATE; an attacker who changes the POST id is editing a different row than they viewed on GET — but maintainers can edit any row anyway. No privilege escalation. |
+| 2.2.4 | `edit.php` `$type` whitelist | ✅ | `php/edit.php:30-33`: `if (!in_array($type, ['reach', 'gauge'], true)) { http_response_code(400); exit('Unsupported edit target type'); }`. No way to pass `$type='editor'` or similar. |
+| 2.2.5 | `review.php` proposal access scope | ✅ | `SELECT * FROM change_request WHERE id = ?` (`php/review.php:38`). Maintainer is REQUIRED (line 19), so unrestricted access is the intended model. List view (line 274-277) joins editor for display; status filter is enum-validated. |
+| 2.2.6 | `admin.php` editor-target scope | ✅ | All 8 POST actions take an `id` (or `ids[]`) representing the target editor. Maintainer-required (line 17). The `ban` action additionally guards `status != 'maintainer'` (line 84) — compromised maintainer cannot demote another maintainer via web. |
+| 2.2.7 | Cross-target type confusion (e.g., POST `target_type='gauge'` on propose.php) | ✅ | `propose.php`'s GET is hardcoded `type='reach'` (the file's `$type = 'reach'` near top); POST INSERT hardcodes `target_type='reach'`. Type confusion would require post-fact code changes; not a current vector. |
+
+### Notes
+
+- **All write paths use `$ed['id']` from `current_editor()` for editor scoping.** No POST-body editor_id is ever read. This is a strong, consistent pattern.
+- **All read paths to editor-owned data are filtered by `editor_id`** (existing-proposal lookup in propose.php is the only such read).
+- **Maintainer endpoints intentionally have global read/write scope.** The "IDOR" framing collapses to "is the maintainer check present and correct?" — already answered in Phase 2.1.
+- **`change_request_attachment`** is not yet wired (no upload endpoint), so its IDOR posture is N/A for now. When the upload endpoint lands, an IDOR audit should re-check: can editor X read editor Y's attachment via `id` enumeration?
+
+### Phase 2.2 closeout
+
+- ✅ Authorization model is clean — no IDOR vectors found.
+- All ID-taking editor-pipeline endpoints either scope by `current_editor()['id']` (editor-owned data) or require maintainer (global scope, by design).
