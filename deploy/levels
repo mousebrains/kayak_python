@@ -45,6 +45,13 @@ server {
 
     # Security headers (server-level — apply when no location overrides)
     include /etc/nginx/snippets/security-headers.conf;
+    # F-1: HSTS. 2-year max-age + includeSubDomains. SSL has been operational
+    # since site cutover, so the "uncomment when SSL working" caveat in the
+    # earlier deploy/SETUP.md no longer applies. If you later add the same
+    # directive to /etc/nginx/snippets/security-headers.conf, this line can
+    # be removed — duplicate add_header at server scope is benign but noisy.
+    # `preload` qualifier is OFF pending hstspreload.org submission decision.
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
 
     # Document root — where build output + PHP symlinks live
     root /home/pat/public_html;

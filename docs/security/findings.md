@@ -100,10 +100,11 @@
 
 #### F-1 — HSTS not enabled
 
-- **Status:** 🔴 Open
+- **Status:** 🟢 Closed (Tier 6 fix; deploy/levels server block + SETUP.md § 10).
 - **Threats:** Adjacent to T-S3 (cookie-theft via MITM on first HTTP)
-- **Description:** `deploy/SETUP.md:395` shows the intended header (`Strict-Transport-Security "max-age=63072000; includeSubDomains"`) marked "uncomment when SSL working." Not present in `deploy/levels`. Prod-side `sudo nginx -T | grep Strict-Transport-Security` would confirm whether a snippet on the host overrides this.
-- **Remediation:** Add the directive in `deploy/levels` and a nginx snippet on the host (`/etc/nginx/snippets/security-headers.conf`). Add `preload` qualifier and submit to hstspreload.org if going long-term.
+- **Description:** `deploy/SETUP.md:395` showed the intended header (`Strict-Transport-Security "max-age=63072000; includeSubDomains"`) marked "uncomment when SSL working." It was not present in `deploy/levels`.
+- **Resolution:** Added `add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;` at server scope in `deploy/levels` (right after the security-headers snippet include). SETUP.md § 10 updated to verify with `curl -sI` and to clarify the snippet-vs-server-scope trade-off. `preload` qualifier intentionally OFF — that's a one-way commitment best left to a future explicit decision.
+- **Verification:** After deploying, `curl -sI https://levels.wkcc.org/ | grep -i strict-transport` should show the header.
 - **Plan tier:** Tier 1.2 (session audit) / Tier 6 (apply).
 
 #### F-3 — Email-alias normalization
@@ -166,14 +167,12 @@ This section holds two kinds of items: (a) findings downgraded to Low after audi
 
 #### F-14 — Magic-link token leaks via Referer to subsequent requests
 
-- **Status:** 🔴 Open
+- **Status:** 🟢 Closed (Tier 6 fix; php/auth.php).
 - **Threats:** T-S1, T-I4
 - **Severity:** Medium impact (same vector as F-2), low-Medium likelihood (Referer-leak is universal for URLs-with-secrets).
-- **Description:** After POST-consume of the magic-link, browser follows the 302 redirect. The Referer header on the follow-up request is the previous URL — `/auth.php?t=TOKEN&next=…`. Subsequent same-origin asset requests (`/static/leaflet.js`, `/static/style*.css`, etc.) also carry this Referer until the user navigates away. nginx log format captures `$http_referer` (`deploy/kayak-log-format.conf`), so the token is captured a SECOND time across all post-consume requests, even if F-2's `$request`-side redaction is in place.
-- **Repro:** `tail /var/log/nginx/kayak-access.log` after a login; look at the Referer column on the requests immediately after the POST-consume. Expect `/auth.php?t=<token>&next=…` in each Referer.
-- **Remediation:** Add `header('Referrer-Policy: no-referrer')` to `php/auth.php` (the response that initiates the navigation away). Ideally also to `set_editor_session()`'s caller context so the policy survives the redirect chain.
-  - Why `no-referrer` (not `same-origin` or `strict-origin`): `same-origin` still sends the full Referer to same-origin requests (the exact bad case here). `strict-origin` trims to origin only — adequate but slightly weaker than `no-referrer` for the immediate-post-consume window.
-  - Marginal alternative: add `<meta name="referrer" content="no-referrer">` to the auth.php HTML. Header is preferred (covers non-HTML responses like the 302).
+- **Description:** After POST-consume of the magic-link, browser follows the 302 redirect. The Referer header on the follow-up request is the previous URL — `/auth.php?t=TOKEN&next=…`. Subsequent same-origin asset requests also carry this Referer until the user navigates away. nginx log format captures `$http_referer` (`deploy/kayak-log-format.conf`), so the token would be captured a SECOND time across all post-consume requests, even if F-2's `$request`-side redaction is in place.
+- **Resolution:** Added `header('Referrer-Policy: no-referrer');` to `php/auth.php` immediately after the existing `header('Cache-Control: no-store');`. Applies to both GET (interstitial render) and POST (consume + 302). Browser respects the header on the redirect chain, so subsequent same-origin asset requests carry no Referer for the auth.php-originated navigation.
+- **Verification:** After deploy, complete a login, then `tail /var/log/nginx/kayak-access.log`; the requests immediately following the auth.php POST should show `-` in the Referer column.
 - **Plan tier:** Tier 1.1 (this finding). Effort: ~15min.
 
 #### F-15 — No automated regression test for logout → session-replay → 401
@@ -190,27 +189,21 @@ This section holds two kinds of items: (a) findings downgraded to Low after audi
 
 #### F-16 — Privacy policy "Your Rights" section contradicts the rest of the page
 
-- **Status:** 🔴 Open
+- **Status:** 🟢 Closed (Tier 6 fix; php/privacy.php).
 - **Threats:** Not a code-side threat; trust/policy correctness.
-- **Severity:** Low (user-trust-facing). The page reads as self-contradicting and signals carelessness on a page whose primary purpose is to project care.
-- **Description:** `php/privacy.php:87-90` ("Your Rights" section) reads: *"Because we collect only server access logs and no personal data, there is generally no personal data to access, correct, or delete."* This contradicts the upper "Data We Collect" section (lines 24-45) which lists contributor email addresses, proposed edits, comments, and cookies. The page was likely written before the editor pipeline existed and the "Your Rights" section was not refreshed when editor + change_request + edit_history landed.
-- **Repro:** Read `php/privacy.php`; compare "Data We Collect" against "Your Rights."
-- **Remediation:** Rewrite the "Your Rights" section to accurately describe:
-  - Deletion path: contact the club; operator-handled per D-T4.1.
-  - Export path: contact the club; operator-handled per D-T4.2.
-  - Audit-trail retention: indefinite (per D-T4.3a), but PII linkage is severed at deletion.
-  - Cookie expiry: 7 days for `ed_sess` (per D-T4.3c); session row purged 90 days post-expiry.
-  - Bump "Last updated" to refresh date.
-  - Add HTML comment `<!-- Annual review trigger: next review 2027-05-12 -->`.
+- **Severity:** Low (user-trust-facing). The page read as self-contradicting and signaled carelessness on a page whose primary purpose is to project care.
+- **Description:** `php/privacy.php` "Your Rights" section read: *"Because we collect only server access logs and no personal data, there is generally no personal data to access, correct, or delete."* This contradicted the upper "Data We Collect" section which lists contributor email addresses, proposed edits, comments, and cookies. The page was likely written before the editor pipeline existed and the "Your Rights" section was not refreshed when editor + change_request + edit_history landed.
+- **Resolution:** Rewrote the "Your Rights" section to accurately describe deletion (D-T4.1), export (D-T4.2), audit-trail retention (D-T4.3a), and cookie lifecycle (D-T4.3c). Bumped "Last updated" to 2026-05-12. Added HTML comment `<!-- Annual review trigger: next review 2027-05-12 -->` above the prose block.
+- **Verification:** Visit `/privacy.php` after deploy; confirm the new section text and updated date are visible.
 - **Plan tier:** Tier 4.4 (this finding). Implementation in Tier 6. Effort: ~20 min.
 
 ## Findings by status
 
 | Status | Count | IDs |
 |---|---|---|
-| 🔴 Open | 12 | F-1, F-2, F-3, F-8, F-9, F-10, F-11, F-12, F-13, F-14, F-15, F-16 |
+| 🔴 Open | 9 | F-2, F-3, F-8, F-9, F-10, F-11, F-12, F-13, F-15 |
 | 🟡 In progress | 0 | — |
-| 🟢 Closed | 0 | — |
+| 🟢 Closed | 3 | F-1, F-14, F-16 (Tier 6) |
 | ⚪ Accepted | 4 | F-4 (per D-T2.4), F-5 (per D-T1.3), F-6 (Phase 3.1 — documented convention adequate), F-7 (Phase 2.3 — confirmed safe) |
 | 🔵 Deferred | 0 | — |
 

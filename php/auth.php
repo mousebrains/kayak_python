@@ -19,6 +19,11 @@ require_once __DIR__ . '/includes/footer.php';
 
 require_editor_feature();
 header('Cache-Control: no-store');
+// F-14: the URL contains the magic-link token in ?t=. Without this header,
+// the post-redirect navigation and any same-origin asset requests would
+// echo the full URL in Referer, capturing the token a second time in the
+// nginx access log even after F-2 redaction lands.
+header('Referrer-Policy: no-referrer');
 
 function _render_expired(): void {
     http_response_code(400);

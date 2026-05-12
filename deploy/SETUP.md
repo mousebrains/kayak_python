@@ -387,15 +387,19 @@ curl -sI -H "Accept-Encoding: gzip" https://levels.mousebrains.com/Oregon.html |
 journalctl -u kayak-pipeline.service --since "1 hour ago" --no-pager
 ```
 
-## 10. Enable HSTS
+## 10. HSTS
 
-Once SSL is confirmed working, uncomment the HSTS header in `deploy/levels`:
+HSTS is already enabled at the server level in `deploy/levels` (the directive immediately follows the `include /etc/nginx/snippets/security-headers.conf;` line). After deploying a fresh `deploy/levels`, verify:
 
-```nginx
-add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+curl -sI https://levels.wkcc.org/ | grep -i strict-transport
+# Expect: strict-transport-security: max-age=63072000; includeSubDomains
 ```
 
-Then reload: `sudo nginx -t && sudo systemctl reload nginx`
+`preload` is intentionally OFF — submitting to hstspreload.org is a one-way commitment; revisit only after the operator has run with `preload` locally for a few months and is confident in maintaining HSTS forever.
+
+If you also add `Strict-Transport-Security` to `/etc/nginx/snippets/security-headers.conf` for completeness, remove the per-server directive from `deploy/levels` to avoid duplicate headers in responses that fall through to server scope (browsers accept duplicates; just noisy).
 
 ## 11. Fail2ban
 

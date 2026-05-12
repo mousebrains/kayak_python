@@ -13,9 +13,10 @@ include_header(
     'Privacy policy for the WKCC River Levels site — what data we collect and how we use it.'
 );
 ?>
+<!-- Annual review trigger: next review 2027-05-12 -->
 <div class="prose">
 <h2>Privacy Policy</h2>
-<p class="updated">Last updated: May 1, 2026</p>
+<p class="updated">Last updated: May 12, 2026</p>
 
 <p>This website (<strong>levels.wkcc.org</strong>) is operated by the
 <a href="https://wkcc.org">Willamette Kayak and Canoe Club</a> (WKCC) to provide
@@ -84,9 +85,29 @@ agencies. This is publicly available data; no personal information is involved.<
 including children under 13.</p>
 
 <h3>Your Rights</h3>
-<p>Because we collect only server access logs and no personal data, there is generally
-no personal data to access, correct, or delete. If you have questions or concerns about
-your data, please contact the
+<p>You can ask us to:</p>
+<ul>
+  <li><strong>Delete your account and associated data.</strong> Email
+      <a href="https://wkcc.org">the club</a> with the email address you registered.
+      We will delete your editor record, any login sessions, pending magic-link tokens,
+      and proposed edits/comments. The historical audit trail (which fields were changed
+      on which reach, and when) is retained for site-integrity purposes, but the link
+      back to your identity is severed.</li>
+  <li><strong>Export your contributions.</strong> Email the club with the same address;
+      we will send you a JSON copy of your editor record, your proposed edits, and the
+      portion of the audit trail attributed to you.</li>
+  <li><strong>Update your display name</strong> from your account page after signing in.</li>
+</ul>
+<p>Cookies and short-lived data we retain on a schedule:</p>
+<ul>
+  <li>Login session cookie (<code>ed_sess</code>): 7 days. The corresponding server-side
+      session record is deleted approximately 90 days after expiry.</li>
+  <li>One-time login link tokens (<code>editor_magic_link</code>): 30-minute validity;
+      records are deleted approximately 90 days after expiry.</li>
+  <li>Audit trail of edits made to site content: retained indefinitely; identity link
+      is broken when you request account deletion (see above).</li>
+</ul>
+<p>If you have other questions or concerns about your data, please contact the
 <a href="https://wkcc.org">Willamette Kayak and Canoe Club</a>.</p>
 
 <h3>Changes to This Policy</h3>
