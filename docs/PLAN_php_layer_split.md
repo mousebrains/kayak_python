@@ -175,14 +175,31 @@ Same template as Tier 2, applied to `description.php`. Smaller file (495 lines v
 Reuses the existing `get_reach_or_404($id)` from `php/includes/db.php:50` for 404 handling — extracted helpers should follow this naming convention for any new fail-fast lookups.
 
 1. **Phase 3.1 — Baseline tests (✓ `48f6ac3`).** Six integration tests cover description.php: `/description.php` (400 missing id), `?id=not-an-int` (400 invalid id), `?id=<gauged>` (full render with readings table, "Data Sources" section, Put-in/Take-out, footer link), `?id=<no-gauge>` (no-gauge edge — asserts NO readings table / NO Data Sources / NO Put-in), `?id=<gauged>&start=...&end=...` (still 200 with no obs in window), `?id=<gauged>&start=garbage` (`validate_date` returns null; entry-point accepts and skips filter).
-2. **Phase 3.2 — Cluster analysis (this commit).** See [Phase 3.2 — Current shape of `description.php`](#phase-32--current-shape-of-descriptionphp) below. Single extraction target (`description_detail.php`) — single-mode entry point means no mode-dispatch boundary inside the file; the "split" is one fat helper with sub-helpers (analogous to `reach_detail.php` but without a `reach_search.php` sibling).
-3. **Phase 3.3 — Extract `description_detail.php`.** Move lines 24–495 behind `handle_description_detail($db, $id, $start_date, $end_date, $hidden): void` with private helpers for navigation load, related-data load (gauge + states + classes + flow_levels derivation + readings), and the 7 render sub-functions (header+nav, readings table, date form + plots, fields table + map, data sources, guidebooks, footer + scripts).
-4. **Phase 3.4 — Final cleanup.** description.php should land under 100 lines: arg parse, 400-on-missing-id, dispatch. Remove from `phpstan-baseline.neon`. Note in the plan doc the three sub-cluster overlaps with `reach_detail.php` (navigation, flow-levels derivation, guidebooks render) as candidates for a later shared-helpers DRY pass — not bundled with this tier to keep the extraction's behavior change footprint at zero.
+2. **Phase 3.2 — Cluster analysis (✓ `63c79cf`).** See [Phase 3.2 — Current shape of `description.php`](#phase-32--current-shape-of-descriptionphp) below. Single extraction target (`description_detail.php`) — single-mode entry point means no mode-dispatch boundary inside the file; the "split" is one fat helper with sub-helpers (analogous to `reach_detail.php` but without a `reach_search.php` sibling).
+3. **Phase 3.3 — Extract `description_detail.php` (✓ `f591616`).** Moved lines 24–495 behind `handle_description_detail($db, $id, $start_date, $end_date, $hidden): void` with eleven private helpers. Arg-parse tightening at the boundary cleared description.php's 2 baseline entries (same effect as reach.php in Phase 2.4). description.php shrinks 495 → 31 lines.
+4. **Phase 3.4 — Final cleanup (✓ this commit).** Mostly closed out by 3.3's arg-parse tightening: description.php is at 31 lines (well under the < 100 target) with zero baseline entries. Plan-doc update marks Tier 3 done and records the three shared-helper candidates with `reach_detail.php` as a deferred follow-up.
 
-**Verification gate (end of Tier 3):**
-- `description.php` < 200 lines (target: < 100)
-- `php -l description.php`, PHPStan, php-cs-fixer all green
-- All six Description integration tests still pass
+**Verification gate (end of Tier 3):** all met as of `f591616`.
+- ✓ `description.php` at 31 lines (target < 100; was 495 pre-tier)
+- ✓ `php -l description.php`, PHPStan level 7 (zero baseline entries for description.php), php-cs-fixer all green
+- ✓ All six Description integration tests pass on each phase commit (`f591616`); CI green
+- ✗ Side-by-side HTML diff against staging not run — same caveat as Tier 2; the 6 integration tests' substring assertions are the substitute
+
+**Tier 3 outcome — file shape after split:**
+
+| File | Lines | Role |
+|---|---|---|
+| `php/description.php` | 31 | Orchestration: requires, arg parse (with is_string-narrowing for validate_date), 400-on-missing-id, single dispatch |
+| `php/includes/description_detail.php` | 745 | `handle_description_detail` + 11 private helpers (4 load / 7 render) |
+
+PHPStan baseline net movement: 123 → 123 over Tier 3 (description.php's 2 entries cleared by arg-parse tightening; description_detail.php absorbed 2 of those plus 1 new PDO-mixed-return entry = 3 entries, balancing the ledger).
+
+**Deferred — shared-helpers DRY pass with `reach_detail.php`:** Three sub-clusters now exist in both files with near-identical bodies. Not bundled with Tier 3 to keep the extraction's behavior-change footprint at zero. Candidate consolidation:
+- `_load_reach_navigation` (reach_detail) ≡ `_load_description_navigation` (description) — identical 4-query body, differs only in URL prefix the renderer uses (`/reach.php` vs `/description.php`). Promotion path: move to `db.php` as `get_reach_navigation_context($db, $reach, $id, $hidden)` returning the same shape; callers pass the prefix to their respective renderers.
+- `_derive_reach_flow_levels` (reach_detail, fetches the row inline) vs `_derive_description_flow_levels` (description, accepts the row as a parameter). Same band-derivation logic. Promotion path: a single `derive_flow_levels(?array $class_range)` in a new `reach_common.php`; reach_detail loses its inner fetch, performs the fetch at its `_load_reach_related` boundary instead (matches description's pattern).
+- Guidebooks render: `_render_reach_guidebooks($reach, $guidebooks)` (reach_detail) vs `_render_description_guidebooks($db, $reach, $id)` (description). Body is the same; surrounding button bar differs (description has Edit/Suggest-edit; reach_detail has Description/Data inspector links). Promotion path: parameterize the surrounding context; or just leave them separate since the body is small (~35 lines).
+
+Either bundle with Tier 5 (or a dedicated Tier 4.5) or accept as standing duplication — the maintenance burden today is "update in two places when guidebook schema changes" which has happened zero times in the last 3 months per `git log php/`.
 
 #### Phase 3.2 — Current shape of `description.php`
 
