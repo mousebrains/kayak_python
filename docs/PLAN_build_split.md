@@ -126,8 +126,9 @@ Phases 1–8 are pure code motion: zero HTML output change, zero behavior change
 Run before and after each phase. Generated HTML must be byte-identical for phases 1–8, *modulo two time-driven exceptions documented below*.
 
 ```bash
-# 1. Lint + types stay clean
+# 1. Lint + format + types stay clean
 ruff check src/ tests/
+ruff format --check src/ tests/   # CI runs this too — `make lint` does not
 mypy src/
 
 # 2. Tests still pass
