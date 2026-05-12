@@ -5,7 +5,8 @@
 > **Iter log:**
 > - iter 1 (2026-05-12): 5 findings — Playwright's `webServer` block can't read env vars set in `globalSetup` (timing race); replaced with manual server lifecycle inside `globalSetup` mirroring `IntegrationTestCase.php`. `levels init-db` needs both `SQLITE_PATH` AND `DATABASE_URL` env vars, not just one. Phase 2 runtime budget phrasing clarified (≤30 s is total step time, not delta). Added `actions/upload-artifact` for `playwright-report/` on CI failure. Cross-check ref bumped + line-citations added.
 > - iter 2 (2026-05-12): 4 findings — Phase 1's `php -S -t public_html` serves the repo's tracked PHP symlinks, but Phase 3's `/Oregon.html` test needs `levels build` output that's not in the repo. Made the build step explicit in Phase 3's globalSetup expansion. Added `OUTPUT_DIR=<tmpdir>` isolation to globalSetup so the test build never clobbers the dev box's actual build output (whether default or per `PLAN_dev_env_followups.md` Phase 3 convention). Phase 3 risks: added Playwright `navigationTimeout` note re Leaflet tile-load timing.
-> - iter 3 (2026-05-12, this revision): 5 findings — `/custom.php` and `/custom_gauges.php` return HTTP 302 when called without `?ids=` (early redirect at `custom.php:19`); a smoke test asserting 200 would fail. Dropped from Phase 3's coverage; either page would need seeded reach IDs to exercise. Made "smoke = page-load only, no interactions" explicit in Phase 3 scope (resolves the gauge_picker XHR open question). Documented `--with-deps` no-sudo fallback (Phase 1 verification gate on no-sudo dev hosts like `levels` uses plain `npx playwright install chromium`). Confirmed `Oregon` is a seeded state per `init_db.py:29`. Cross-check ref bumped to `d3d6857`.
+> - iter 3 (2026-05-12): 5 findings — `/custom.php` and `/custom_gauges.php` return HTTP 302 when called without `?ids=` (early redirect at `custom.php:19`); a smoke test asserting 200 would fail. Dropped from Phase 3's coverage; either page would need seeded reach IDs to exercise. Made "smoke = page-load only, no interactions" explicit in Phase 3 scope (resolves the gauge_picker XHR open question). Documented `--with-deps` no-sudo fallback (Phase 1 verification gate on no-sudo dev hosts like `levels` uses plain `npx playwright install chromium`). Confirmed `Oregon` is a seeded state per `init_db.py:29`. Cross-check ref bumped to `d3d6857`.
+> - iter 4 (2026-05-12, this revision): 4 findings — Playwright's `baseURL` is evaluated at config load (before `globalSetup` runs); `process.env.KAYAK_TEST_BASE_URL` set in `globalSetup` would arrive too late. Replaced the env-var hand-off with a hardcoded `baseURL: 'http://127.0.0.1:8000'` in `playwright.config.ts` (port 8000 is the canonical test port; dev-box conflicts are rare and trivially resolvable). globalSetup no longer needs to export `KAYAK_TEST_BASE_URL`. Phase 3's test-table dropped from 6 to 4 entries after iter 3's `/custom.php`+`/custom_gauges.php` removals; End State updated from "7 smoke tests" to "5 total" (1 in Phase 1 + 4 in Phase 3). Cross-check ref bumped to `5a00969`.
 >
 > Dates absolute. References `file:line` against current `main`.
 
@@ -86,7 +87,7 @@ Goal: working Playwright harness on a dev box. CI integration deferred to Phase 
    - `workers: 1` (`php -S` is single-threaded; serial execution avoids races)
    - `globalSetup: './tests/js/global-setup.ts'` (init-db's a tmp SQLite **and** spawns + waits for the PHP server)
    - `globalTeardown: './tests/js/global-teardown.ts'` (stops the PHP server + cleans the tmp dir)
-   - `use: { viewport: { width: 1280, height: 720 }, baseURL: process.env.KAYAK_TEST_BASE_URL }` — `headless: true` is the default in CI; explicit only if needed
+   - `use: { viewport: { width: 1280, height: 720 }, baseURL: 'http://127.0.0.1:8000' }` — hardcoded (not env-driven) because Playwright loads the config *before* `globalSetup` runs, so any env var set in `globalSetup` wouldn't be visible to `baseURL`. The port matches what `globalSetup` binds. `headless: true` is the default in CI; explicit only if needed.
    - `reporter: [['list'], ['html', { open: 'never' }]]`
    - Browser binary: `chromium` only (cheapest; covers the vast majority of real-user traffic; Firefox + WebKit deferred)
    - **No `webServer` block.** Playwright's `webServer` config launches the command before any test code runs — *before* `globalSetup` exports env vars. That means the spawned `php -S` can't see the `SQLITE_PATH` written by `globalSetup`. The clean answer (mirroring `tests/php/IntegrationTestCase.php`'s pattern) is to own the server lifecycle inside `globalSetup`/`globalTeardown` and export `process.env.KAYAK_TEST_BASE_URL` for the tests to consume via `baseURL`.
@@ -108,7 +109,7 @@ Goal: working Playwright harness on a dev box. CI integration deferred to Phase 
    - Spawns `php -S 127.0.0.1:<port> -t public_html` via `spawn()`, with `SQLITE_PATH` + `EDITOR_FEATURE` etc. in its env. Uses a fixed port (e.g. `8000`) — Playwright can't probe a port-0 binding because there's no PHPUnit-style stderr-reading layer in the runner; fixed-port on isolated CI runners is reliable. If 8000 is occupied on a dev box, override via `KAYAK_TEST_PORT` env var.
    - For Phase 1: serves directly from the repo's `public_html/` (the 24 tracked `120000`-mode symlinks resolve to `php/*.php`; CI clones include the symlinks). No `levels build` needed yet — the drill test hits `/reach.php?st=OR` which is a tracked symlink. Phase 3 changes this (see below).
    - Polls the port (`net.createConnection`) for up to 5 s until it accepts.
-   - Stores `{ serverPid, tmpDir, dbPath }` on `process.env.KAYAK_TEST_*` for the teardown to find. Sets `process.env.KAYAK_TEST_BASE_URL = http://127.0.0.1:8000` for the tests to read via `baseURL`.
+   - Stores `{ serverPid, tmpDir, dbPath }` on `process.env.KAYAK_TEST_*` for the teardown to find. No `KAYAK_TEST_BASE_URL` export needed — `playwright.config.ts` hardcodes the baseURL (see §3) because env-var hand-off doesn't work across the config-load → globalSetup boundary.
 5. **`tests/js/global-teardown.ts`** — stops the PHP server (`process.kill(serverPid, 'SIGTERM')` with a short timeout then `SIGKILL` fallback) + `rm -rf tmpDir`. Always runs on clean exit; crashed runs leak the server process + tmpdir on purpose so the operator can inspect.
 6. **`tests/js/smoke.spec.ts`** — single drill test:
    ```typescript
@@ -315,7 +316,7 @@ After all 3 phases:
 - `playwright.config.ts` + `tests/js/global-setup.ts` + `tests/js/global-teardown.ts` + `tests/js/smoke.spec.ts` committed.
 - `.gitignore` excludes `node_modules/`, `playwright-report/`, `test-results/`, `tests/js/.cache/`.
 - `.github/workflows/ci.yml` `lint-misc` job includes a Node-22 setup, Playwright-browser cache, and a `JS smoke tests` step.
-- 7 smoke tests in `tests/js/smoke.spec.ts`, all green.
+- 5 smoke tests in `tests/js/smoke.spec.ts` (1 from Phase 1 + 4 from Phase 3), all green.
 - CI total runtime delta ≤ 30 s amortized after first-run cache primes.
 - Manual operator runbook addition (if any) tracked separately as a `docs/operations.md` line; the plan itself doesn't touch operator-facing docs.
 
