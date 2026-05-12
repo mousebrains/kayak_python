@@ -95,15 +95,25 @@ Each tier is several phases; **review gate between tiers**, not between phases. 
 
 1. **Phase 2.1 — Baseline tests (✓ `e778053`).** Six integration tests cover all reach.php modes: `?q=<single-match>` (302 auto-redirect), `?q=<multi-match>` (results table), `?st=OR` (state filter), `?` (default-fallback to first reach), `?id=<gauged-reach>` (detail with map + linked gauge), `?id=<no-gauge-reach>` (detail no-gauge edge). Each asserts HTTP 200 (or 302), mode-appropriate substrings, and that no PHP-side `Content-Security-Policy` header was set (nginx owns it in prod; `php -S` won't see it). These are the gate every subsequent phase must keep green.
 2. **Phase 2.2 — Cluster analysis (this commit).** See [Phase 2.2 — Current shape of `reach.php`](#phase-22--current-shape-of-reachphp) below. Two cluster extractions emerged (`reach_search`, `reach_detail`) — fewer than the plan's "3–4" guess because what looked like three top-level branches (search / list / detail) is really two: search-and-state-filter share the same code path; the default-fallback is a 14-line bridge into detail.
-3. **Phase 2.3 — Extract `reach_search.php`.** Move lines 36–313 (the `if ($q_trimmed !== '' || $st !== '')` block) behind `handle_search_mode($db, $q, $st, $hidden, $compact_css): never`. Private helpers for query construction, latest-reading aggregation, class/guidebook aggregation, and render. Tests + PHPStan + cs-fixer must stay green.
-4. **Phase 2.4 — Extract `reach_detail.php`.** Move lines 330–649 (load + render) behind `handle_reach_detail($db, $id, $hidden, $q, $st, $compact_css): void` with sub-helpers for navigation, details table, sub-tables (class ranges / flow levels / guidebooks / linked gauge), and map. The 320-line extracted region sits at the boundary of "one cluster" vs "data + render split" — if a future change makes it unwieldy, fold a split into Phase 2.5; otherwise leave it.
-5. **Phase 2.5 — Final cleanup.** `reach.php` should land under 100 lines: `require_once` for the two extracted includes + db, parse `$_GET`, default-fallback inline, dispatch via the two `handle_*` functions. Remove `reach.php` from `phpstan-baseline.neon` (Tier 1 added it) and regenerate the baseline.
+3. **Phase 2.3 — Extract `reach_search.php` (✓ `dc15a19`).** Moved lines 36–313 (the `if ($q_trimmed !== '' || $st !== '')` block) behind `handle_search_mode($db, $q, $st, $hidden, $compact_css): never` with six private helpers (query construction, reading aggregation, class/guidebook aggregation, results table render, map render, plus map-payload + gauge-collection helpers). `REACH_SEARCH_MAP_COLORS` lives at module scope (was a per-call array) — comment notes the mirror in `/static/search-map.js`. reach.php shrinks 649 → 377 lines.
+4. **Phase 2.4 — Extract `reach_detail.php` (✓ `b5dd770`).** Moved lines 58–377 (load + render after default-fallback) behind `handle_reach_detail($db, $id, $hidden, $q, $st, $compact_css): void` with ten helpers (3 load + `_derive_reach_flow_levels` + 6 render). Arg-parse in reach.php tightened at the boundary (`is_string` checks) — knock-on effect cleared reach.php's remaining 6 baseline entries. Inline `http_response_code(404); exit('Reach not found')` preserved verbatim per the zero-behavior-change rule — switching to `get_reach_or_404` for the richer HTML 404 page is a deferred follow-up. reach.php shrinks 377 → 56 lines.
+5. **Phase 2.5 — Final cleanup (✓ this commit).** Mostly closed out by 2.4's arg-parse tightening: reach.php is at 56 lines (target was < 100) with zero baseline entries. Plan-doc update marking Tier 2 done; verification-gate status recorded below. No additional code motion.
 
-**Verification gate (end of Tier 2):**
-- `reach.php` < 200 lines (target: < 100 — orchestration only)
-- `php -l reach.php`, PHPStan, php-cs-fixer all green
-- All six baseline integration tests still pass
-- A side-by-side diff of representative HTML responses (curl the staging vhost pre-tier and post-tier) shows nothing user-visible changed
+**Verification gate (end of Tier 2):** all met as of `b5dd770`.
+- ✓ `reach.php` at 56 lines (target < 100; was 649 pre-tier)
+- ✓ `php -l reach.php`, PHPStan level 7 (zero baseline entries for reach.php), php-cs-fixer all green
+- ✓ All six baseline integration tests pass on each phase commit (`dc15a19`, `b5dd770`); CI green
+- ✗ Side-by-side HTML diff against staging not run — integration tests' substring assertions substituted. Acceptable because: (a) the 6 tests cover all three modes + the no-gauge edge with mode-discriminating substrings; (b) the extraction was pure code motion (per-phase commit messages document the zero-behavior-change rule); (c) the codebase doesn't have a staging vhost. If a regression surfaces later, the gap is documented.
+
+**Tier 2 outcome — file shape after split:**
+
+| File | Lines | Role |
+|---|---|---|
+| `php/reach.php` | 56 | Orchestration: requires, arg parse, mode dispatch, default-fallback inline |
+| `php/includes/reach_search.php` | 436 | `handle_search_mode` + 6 private helpers, `REACH_SEARCH_MAP_COLORS` |
+| `php/includes/reach_detail.php` | 570 | `handle_reach_detail` + 10 private helpers (3 load / 6 render / map) |
+
+PHPStan baseline net movement: 123 → 124 → 123 over Tiers 2.3/2.4 (+1 from a more-specific docblock in 2.3, -1 from the arg-parse cleanup in 2.4).
 
 #### Phase 2.2 — Current shape of `reach.php`
 

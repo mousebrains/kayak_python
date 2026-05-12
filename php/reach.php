@@ -3,7 +3,16 @@ declare(strict_types=1);
 /**
  * Reach browser — view reach details with navigation.
  *
- * Usage: /reach.php?id=<reach_id> or /reach.php?q=<search>
+ * Usage:
+ *   /reach.php?id=<reach_id>     detail mode
+ *   /reach.php?q=<search-term>   search mode (single match auto-redirects)
+ *   /reach.php?st=<state>        state-filter mode (combines with ?q=)
+ *   /reach.php                   default to first reach by sort_name
+ *   /reach.php?hidden=1          show no_show=1 reaches in any of the above
+ *
+ * Mode-dispatch only; logic lives in:
+ *   includes/reach_search.php  → handle_search_mode (?q= / ?st=)
+ *   includes/reach_detail.php  → handle_reach_detail (?id= / default)
  */
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/header.php';
