@@ -356,15 +356,19 @@ Per-file phase shape: baseline tests → cluster analysis (in commit messages, n
 
 | File | Pre | Post | Phases | Status |
 |---|---:|---:|---|---|
-| `gauge.php`        | 432 | 52  | 5.G.1 `d46f5e2` / 5.G.2 `5ac3a57` / 5.G.3 `ad79589` / 5.G.4 this commit | ✓ Done — `gauge_search.php` (92) + `gauge_detail.php` (608) |
-| `propose.php`      | 430 | —   | not started — has POST + CSRF | pending |
+| `gauge.php`        | 432 | 52  | 5.G.1 `d46f5e2` / 5.G.2 `5ac3a57` / 5.G.3 `ad79589` / 5.G.4 `1042cc3` (+ review fixup `e72d9ca` + CI fix `998976d`) | ✓ Done — `gauge_search.php` (92) + `gauge_detail.php` (608) |
+| `propose.php`      | 430 | 32  | 5.P.1 `fc4f2cc` / 5.P.2 `abe0e70` / 5.P.3 this commit | ✓ Done — `propose_handler.php` (573); editor-session test infra added in 5.P.1 |
 | `custom.php`       | 363 | —   | not started | pending |
 | `custom_gauges.php`| 325 | —   | not started | pending |
-| `review.php`       | 318 | —   | not started — has POST + CSRF | pending |
+| `review.php`       | 318 | —   | not started — has POST + CSRF (reuses editor-session infra from 5.P.1) | pending |
 | `includes/gauge_plots.php` | 386 | — | not started — helper split | pending |
 | `includes/auth.php`        | 407 | — | not started — helper split, last (load-bearing) | pending |
 
-Tier 5 outcome to date: 1 of 7 files done. Per-file gates (php -l + PHPStan + cs-fixer + integration tests green) met on each commit; CI green.
+Tier 5 outcome to date: 2 of 7 files done. Per-file gates (php -l + PHPStan + cs-fixer + integration tests green) met on each commit; CI green.
+
+**5.P infrastructure callout:** Phase 5.P.1 added `seedEditorSession()` + `testDb()` helpers to `IntegrationTestCase` — production-format ed_sess + ed_csrf tokens that test code passes through `request()`'s `$cookies` arg (and as the `csrf_token` form field for POSTs). Unlocks review.php and any future edit.php coverage without per-test boilerplate.
+
+**5.G/5.P CI lesson:** PHP's global function namespace makes `_`-prefix-by-convention insufficient for file-locality. Two extraction phases introduced helpers with colliding names (`_render_date_form_and_plots` in description_detail.php + gauge_detail.php; `_prefill` in propose.php + my draft propose_handler.php). PHPStan's file-load-order determinism made the collision flag CI but pass locally — caught in `998976d`. Future helper extractions must name file-private helpers with the file's prefix (`_render_<file>_*`, `_load_<file>_*`, etc.), not bare `_*`.
 
 **Cross-plan note:** `auth.php` is also covered by the editor security review (`PLAN_editor_security_review.md`). If a security finding lands while this tier is in flight, fix it first — splitting on top of a known security gap risks shipping the gap into more files.
 
