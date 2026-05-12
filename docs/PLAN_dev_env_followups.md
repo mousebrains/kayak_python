@@ -1,9 +1,10 @@
 # Plan — Dev-environment follow-ups
 
-> **Cross-check:** plan drafted 2026-05-12 against `main` at `9446e51`; iter 1 re-verified against `main` at `21c9e1a`. The four `docs/security/*.md` commits between those refs don't touch this plan's inputs (`biome.json`, `Makefile`, `php/includes/header.php`, `deploy/*`, `src/kayak/config.py`, `.env.example`). A reviewer on a default-config dev machine (`OUTPUT_DIR` unset → defaults to `BASE_DIR/public_html` per `src/kayak/config.py:35`) will see additional symptoms; the fixes themselves are env-independent.
+> **Cross-check:** plan drafted 2026-05-12 against `main` at `9446e51`; iter 1 re-verified against `21c9e1a`; iter 2 re-verified against `b141f79`. Inputs (`biome.json`, `Makefile`, `php/includes/header.php`, `php/includes/gauge_map.php`, `deploy/SETUP.md`, `src/kayak/config.py`, `src/kayak/web/build/deploy.py`, `.env.example`) unchanged across both ranges; the only commits in range touch `docs/security/*.md` and this plan itself. A reviewer on a default-config dev machine (`OUTPUT_DIR` unset → defaults to `BASE_DIR/public_html` per `src/kayak/config.py:35`) will see additional symptoms; the fixes themselves are env-independent.
 >
 > **Iter log:**
-> - iter 1 (2026-05-12, this revision): structural pivot — Phase 3 changes from "drop the symlinks" / "extend the symlinks" to "tell dev boxes to use a non-repo `OUTPUT_DIR`" (per user input). The old A/B/C alternatives kept as an appendix. Smaller fixes: cross-check ref bump, count corrections, end-state phrasing, `.env.example` callout.
+> - iter 1 (2026-05-12): structural pivot — Phase 3 changes from "drop the symlinks" / "extend the symlinks" to "tell dev boxes to use a non-repo `OUTPUT_DIR`" (per user input). Old A/B/C alternatives kept as an appendix. Smaller fixes: cross-check ref bump, count corrections, end-state phrasing, `.env.example` callout.
+> - iter 2 (2026-05-12, this revision): 6 findings — Phase 3 cleanup script made safe for `public_html/includes` directory→symlink replacement; Phase 2 verification gate split into before/after-fix scenarios per layout; redundant Phase 2 risk text deduplicated; `.env.example` diff now uses a concrete commented example value; out-of-scope adds an nginx-dev ACL note; iter log + cross-check ref updated.
 >
 > Dates absolute. Citations `file:line` against current `main`.
 
@@ -70,6 +71,8 @@ Three small edits + one local-only cleanup. Commits to `main`; pre-commit + CI v
 - `git status` shows only the intended diff (one biome.json edit + two Makefile lines + .gitignore additions).
 - On a machine with standalone tools: `make lint-css`, `make lint-shell`, `make lint-all` all run to completion. (Not testable on `levels` until biome/shellcheck CLIs are installed; tracked separately.)
 
+**Risk:** the `rm php/style.css` step (§5) is local-only and per-host: an unrelated dev box may not have the file, in which case the `rm` is a no-op. Commits don't touch the file (already in `.gitignore:41`).
+
 ## Phase 2 — PHP doc-root fix (1 commit, ~10 minutes)
 
 One narrow edit to `css_head_block()` so symlinked-dev-server views (`php -S -t public_html`) render the styled nav. After Phase 3, the canonical dev workflow uses a non-repo `OUTPUT_DIR` and doesn't trigger the bug — but the fix is still worth landing because:
@@ -133,9 +136,12 @@ function css_head_block(): string {
 The `?? (__DIR__ . '/..')` fallback covers CLI invocations (where `$_SERVER['DOCUMENT_ROOT']` is unset) — currently a non-case since this function is never reached from CLI, but the fallback costs nothing and keeps the function defensible if a CLI tool ever needs to render a page.
 
 **Verification gate:**
-- Live host: `levels build && curl -s https://levels.mousebrains.com/description.php?id=1 | grep '<link rel="stylesheet"'` — expect the hashed `style-<hash>.css` reference unchanged from pre-fix behavior (live `$_SERVER['DOCUMENT_ROOT']` is `/home/pat/public_html`; the hashed sidecar exists there).
-- Dev host with default `OUTPUT_DIR` (the legacy mode this fix protects): assumes a prior `levels build` populated `public_html/static/style.css.hash` and `public_html/static/style-<hash>.css` in the repo. Then `php -S localhost:8000 -t public_html` → load `http://localhost:8000/description.php?id=1` → page renders **with** styled nav bar (pre-fix: empty `<style></style>`). `$_SERVER['DOCUMENT_ROOT']` is `/home/pat/kayak/public_html` (PHP built-in server uses the `-t` argument; realpath'd).
-- Dev host with Phase 3's `OUTPUT_DIR=public_html_dev`: `levels build && php -S localhost:8000 -t /path/to/public_html_dev` already works without this fix (the dev target is a real directory, no symlinks). Useful as a regression check that the fix didn't break the working path.
+
+| Layout | Before fix | After fix |
+|---|---|---|
+| Live (`OUTPUT_DIR=/home/pat/public_html`, served by nginx + FPM) | `<link rel="stylesheet" href="/static/style-<hash>.css">` rendered — `__DIR__/..` resolves to `/home/pat/public_html`, hashed sidecar present, hash branch taken | Same — `$_SERVER['DOCUMENT_ROOT']` is `/home/pat/public_html`, same hash branch taken, indistinguishable output. Verified via `curl -s https://levels.mousebrains.com/description.php?id=1 \| grep '<link rel="stylesheet"'`. |
+| Dev with default `OUTPUT_DIR` (build wrote to repo's `public_html/`), served by `php -S localhost:8000 -t public_html` | Empty `<style></style>` block — `__DIR__/..` realpath-resolves through the `public_html/includes` symlink to `/home/pat/kayak/php`, where neither `static/style.css.hash` nor `style.css` exist (or `php/style.css` falls through to a stale inline blob if the Phase 1 leftover hasn't been deleted) | Styled nav renders — `$_SERVER['DOCUMENT_ROOT']` is the realpath of `-t public_html` (`/home/pat/kayak/public_html`), hashed sidecar present at `public_html/static/style.css.hash`, hash branch taken. |
+| Dev with Phase 3's `OUTPUT_DIR=$HOME/public_html_dev`, served by `php -S … -t $OUTPUT_DIR` | Styled nav renders (the dev target is a real directory with no symlinks — `__DIR__/..` works fine pre-fix) | Same — regression check that the fix didn't break the working path. |
 
 **Risk:** the `?? (__DIR__ . '/..')` fallback inverts priority — pre-fix code always used `__DIR__/..`; post-fix uses `DOCUMENT_ROOT` first. The only environments where `DOCUMENT_ROOT` is empty/missing are PHP-CLI and badly-configured FPM. On `levels` the FPM config sets it; verified by the existing `gauge_map.php` site working correctly. If a future FPM pool drops it, both this function and the 12 sibling `$_SERVER['DOCUMENT_ROOT']` users would break the same way — surfacing immediately via the curl smoke test.
 
@@ -161,18 +167,29 @@ This is "dev does what prod does, just at a different path." Zero repo code chan
    +#   OUTPUT_DIR=/home/<user>/public_html_dev
    +# Then: levels build && php -S localhost:8000 -t /home/<user>/public_html_dev
    +#
-   +# Production sets this to the live nginx docroot (see deploy/SETUP.md:633).
-   +# OUTPUT_DIR=
+   +# Production sets this to the live nginx docroot (see deploy/SETUP.md:633):
+   +#   OUTPUT_DIR=/home/pat/public_html
    ```
 2. **`CLAUDE.md` — Local Development Setup section** — add an entry to the path table (or a one-paragraph note adjacent to it) calling out the dev `OUTPUT_DIR` convention so a fresh `git clone` user finds it immediately. Suggested phrasing: "Dev workflow: set `OUTPUT_DIR=/home/<user>/public_html_dev` so `levels build` writes outside the repo (matches the production layout). Default behavior writes into the repo's `public_html/` and clobbers the dev symlinks; see `.env.example` for the full rationale."
 3. **Local-only cleanup on existing dev boxes (don't commit):** after adopting the new `OUTPUT_DIR`, restore the repo with:
    ```bash
-   git checkout public_html/*.php public_html/includes
-   # Plus rm any of the 6 untracked entry points that the previous default build dropped:
+   # 6 newer entry points that a default-config build wrote alongside the
+   # tracked symlinks — none of them are tracked, so just rm:
    rm -f public_html/csp-report.php public_html/custom_gauges.php \
          public_html/gauge_picker.php public_html/sw.js \
          public_html/sitemap.xml public_html/style.css
-   # Plus the static/ stragglers (Phase 1 §5):
+
+   # public_html/includes: tracked as a symlink, but a default-config build
+   # made it a real directory full of files. `git checkout` won't replace a
+   # populated directory with a symlink; rm -rf first.
+   rm -rf public_html/includes
+   git checkout public_html/includes
+
+   # 24 tracked PHP symlinks: `git checkout` cleanly replaces regular files
+   # with the symlink mode from the index.
+   git checkout public_html/*.php
+
+   # static/ stragglers (Phase 1 §5):
    rm -f static/levels.js static/filters.js static/sparklines.json \
          static/style-*.css static/style.css.hash
    ```
@@ -199,16 +216,17 @@ The new convention preserves the symlink hot-reload workflow (it still works aga
 
 ## Risks (overall)
 
-- **Phase 1 is low-risk but the `php/style.css` leftover deletion is local-only.** A different dev box may not have the file; the `rm` step is a no-op there. Commits don't touch the file (it's gitignored).
-- **Phase 2 `$_SERVER['DOCUMENT_ROOT']` precedent.** Already used 12 places — pattern is established and validated by the production curl. The new use shouldn't surprise the FPM config. Edge case: if someone runs the PHP CLI to call `css_head_block()` directly (e.g. for testing), they'd get the `__DIR__/..` fallback and the symlink ambiguity returns. Currently no such call site; fallback exists as a defensive measure.
+Phase 1 / Phase 2 risks are documented in their respective sections. Cross-cutting risks:
+
 - **Phase 3 relies on documentation discoverability.** A new contributor who never reads `.env.example` or `CLAUDE.md` reproduces the legacy problem. Not a hard-failure mode (build still works) but loses the cleanliness gain. Mitigation: `.env.example` is the standard fresh-clone reference; CLAUDE.md ranks high in attention for AI-assisted contributors.
+- **Phase ordering doesn't matter functionally but matters for verification.** Phase 1's lint-config fix is independent. Phase 2's PHP fix and Phase 3's `OUTPUT_DIR` convention both address the styled-nav gap from different angles, so verifying either requires the other's surface to be present (Phase 2 verification needs a dev that runs with default `OUTPUT_DIR` against the repo; Phase 3 verification needs the convention adopted). Land them in plan order; the verification gates compose.
 
 ## Out of scope
 
 - **Standalone `biome` / `shellcheck` install** — declined 2026-05-12; pre-commit + CI cover lint enforcement. Revisit if/when local `make lint-*` invocations become needed.
 - **`pre-commit autoupdate`** — separate hygiene task; current versions (biome 2.4.11, shellcheck 0.10.0.1) match CI which is what matters.
 - **Restructuring `_deploy_php_files` to be incremental** — out of scope; the current full-copy approach is fine for ~30 files and lets Phase 3's "build is mandatory if `OUTPUT_DIR` is set" workflow run in ~6s.
-- **`public_html` POSIX ACL audit** — the existing default ACLs (`/home/pat/public_html` rwx for `www-data` per CLAUDE.md) apply to the directory, not individual files. New dev paths (`public_html_dev`) don't need ACLs since `php -S` runs as the user.
+- **`public_html` POSIX ACL audit** — the existing default ACLs (`/home/pat/public_html` rwx for `www-data` per CLAUDE.md) apply to the directory, not individual files. New dev paths (`public_html_dev`) don't need ACLs **if served via `php -S`** (runs as the user). If a dev wants to test under nginx + FPM (closer to prod), the analogous ACL setup from CLAUDE.md applies to the new path — out of scope here; document it locally if/when the case comes up.
 - **Editor / contact / proposals security surface** — `docs/PLAN_editor_security_review.md` and `docs/PLAN_php_layer_split.md` cover that area; the four new `docs/security/*.md` artifacts at `21c9e1a` orthogonal to this plan.
 - **Enforcing `OUTPUT_DIR` is set on dev** — e.g. via a Makefile guard. Convention-only is sufficient; tooling enforcement is overkill for a one/two-person dev set.
 
