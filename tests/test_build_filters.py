@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 
-from kayak.cli.build import _build_gauges_filter_bar
 from kayak.db.models import Reach, ReachClass, State
+from kayak.web.build.gauges import _build_gauges_filter_bar
 from kayak.web.build.levels import _build_filter_bar, _collect_filter_data, _row_filter_attrs
 from kayak.web.build.shell import _build_page
 

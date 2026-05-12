@@ -34,9 +34,10 @@ import sqlite3
 import sys
 from pathlib import Path
 
-# Reuse build.py's parsers so we stay in lockstep with current behavior.
+# Reuse the build pipeline's station-name parsers so we stay in lockstep with
+# current behavior.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-from kayak.cli.build import (
+from kayak.web.build.gauges import (
     _parse_station_mixed,
     _parse_station_uppercase,
 )
