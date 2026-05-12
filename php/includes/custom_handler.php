@@ -24,7 +24,7 @@ require_once __DIR__ . '/footer.php';
 require_once __DIR__ . '/class_tiers.php';
 
 /** Status-pill metadata — label + swatch hex. Mirrors the inline arrays in the pre-extract file. */
-const CUSTOM_STATUS_META = [
+const CUSTOM_LEVELS_STATUS_META = [
     'low'     => ['label' => 'Low',     'swatch' => '#e8a735'],
     'okay'    => ['label' => 'Okay',    'swatch' => '#4caf50'],
     'high'    => ['label' => 'High',    'swatch' => '#e53935'],
@@ -334,7 +334,7 @@ function _render_custom_header(array $reaches, array $tiers_by_reach): void
     $basins_present = $filters['basins'];
     $statuses_sorted = $filters['statuses'];
     $tiers_sorted = $filters['tiers'];
-    $status_meta = CUSTOM_STATUS_META;
+    $status_meta = CUSTOM_LEVELS_STATUS_META;
     $fg_toggle = '<span class="fg-toggle">'
         . '<button type="button" data-all>All</button>'
         . '<button type="button" data-none>None</button>'
