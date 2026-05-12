@@ -113,7 +113,11 @@ final class PlotIntegrationTest extends IntegrationTestCase
         ]);
 
         $this->assertSame(200, $resp['status']);
-        $this->assertSame('image/svg+xml', $resp['headers']['content-type'] ?? '');
+        // Loose-match (mirrors testEmbedWrapsInHtml's content-type check):
+        // PHP-FPM may append "; charset=utf-8" if default_charset is set,
+        // and that wouldn't be a real regression — only the media-type prefix
+        // matters for browser/CDN handling.
+        $this->assertStringStartsWith('image/svg+xml', $resp['headers']['content-type'] ?? '');
         $this->assertResponseContains(
             $resp['body'],
             '<svg',
