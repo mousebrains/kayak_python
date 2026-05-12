@@ -10,8 +10,10 @@ import logging
 import math
 import operator
 from collections.abc import Callable
+from datetime import datetime
 
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from kayak.db.cache import get_latest_gauge, update_latest, update_latest_gauge
 from kayak.db.engine import get_session
@@ -45,17 +47,24 @@ def _safe_round(value: float, ndigits: float | None = None) -> float:
 _SAFE_FUNCS: dict[str, Callable[..., float]] = {"max": max, "min": min, "round": _safe_round}
 
 
-def _safe_eval(expr: str, values: dict[str, float] | None = None) -> float:
+def _safe_eval(expr: str, values: dict[str, float] | None = None) -> float:  # noqa: C901
     """Evaluate a simple arithmetic expression safely via AST.
 
     Supports: numeric constants, +, -, *, /, **, unary +/-, max(), min(), round().
     If `values` is given, bare names (e.g. `_v0`) resolve to floats from that dict;
     names not present raise ValueError. Any other construct raises ValueError.
+
+    C901 suppressed: _eval is an `ast.AST` visitor — each `isinstance(node, ast.X)`
+    is a leaf case with no shared logic. Extracting per-node helpers (_eval_constant,
+    _eval_binop, …) would inflate the call surface from one helper to seven, force
+    `lookup` (a closure variable) into every signature, and not actually reduce
+    total complexity — just move it under McCabe's threshold while making the
+    dispatch table harder to read. See docs/PLAN_c901_cleanup.md § Decisions baked in.
     """
     tree = ast.parse(expr, mode="eval")
     lookup = values or {}
 
-    def _eval(node: ast.AST) -> float:
+    def _eval(node: ast.AST) -> float:  # noqa: C901
         if isinstance(node, ast.Expression):
             return _eval(node.body)
         if isinstance(node, ast.Constant) and isinstance(node.value, int | float):
@@ -106,205 +115,31 @@ def calculator(args: argparse.Namespace) -> None:
 
     session = get_session()
     try:
-        # Find sources with calculation expressions
         calc_sources = list(
             session.scalars(select(Source).where(Source.calc_expression_id.isnot(None)))
         )
-
         print(f"Found {len(calc_sources)} calculated sources")
 
         neg_flow_sources = get_negative_flow_source_ids(session)
-
-        # Build gauge name -> gauge_id lookup
         name_to_gauge_id = {g.name: g.id for g in session.scalars(select(Gauge))}
-
-        # Build source_id -> gauge_id and gauge_id -> gauge_name reverse lookups
         source_to_gauge: dict[int, int] = {}
         for gs in session.scalars(select(GaugeSource)):
             source_to_gauge[gs.source_id] = gs.gauge_id
         gauge_id_to_name: dict[int, str] = {gid: name for name, gid in name_to_gauge_id.items()}
 
-        # Topological sort: calc sources that depend on other calcs run last
-        calc_gauge_names = {
-            gauge_id_to_name.get(source_to_gauge.get(s.id, -1), ""): s for s in calc_sources
-        }
-
-        def _get_deps(source: Source) -> list[str]:
-            ce = source.calc_expression
-            if not ce or not ce.time_expression:
-                return []
-            own_gauge = gauge_id_to_name.get(source_to_gauge.get(source.id, -1), "")
-            # Parse the same way the evaluator does (see below): split on
-            # whitespace, then on '::'. Accept both 3-part "key::gauge::type"
-            # and 2-part "gauge::type" refs. The previous regex caught only
-            # the 3-part form, which silently dropped 2-part deps from the
-            # topo-sort and could let a calc evaluate before its inputs.
-            deps: list[str] = []
-            for ref in ce.time_expression.split():
-                parts = ref.split("::")
-                if len(parts) == 3:
-                    ref_name = parts[1]  # key::gauge::type
-                elif len(parts) == 2:
-                    ref_name = parts[0]  # gauge::type
-                else:
-                    continue
-                if ref_name in calc_gauge_names and ref_name != own_gauge:
-                    deps.append(ref_name)
-            return deps
-
-        # Simple topo sort: sources with no calc deps first, then dependents
-        sorted_sources: list[Source] = []
-        remaining = list(calc_sources)
-        resolved: set[str] = set()
-        max_iterations = len(remaining) + 1
-        while remaining and max_iterations > 0:
-            max_iterations -= 1
-            progress = False
-            next_remaining = []
-            for source in remaining:
-                deps = _get_deps(source)
-                if all(d in resolved for d in deps):
-                    sorted_sources.append(source)
-                    src_gauge_name = gauge_id_to_name.get(source_to_gauge.get(source.id, -1), "")
-                    if src_gauge_name:
-                        resolved.add(src_gauge_name)
-                    progress = True
-                else:
-                    next_remaining.append(source)
-            remaining = next_remaining
-            if not progress:
-                circular_names = [
-                    gauge_id_to_name.get(source_to_gauge.get(s.id, -1), s.name) for s in remaining
-                ]
-                raise ValueError(
-                    "Circular dependency detected among calculated sources: "
-                    + ", ".join(circular_names)
-                )
-        calc_sources = sorted_sources
+        calc_sources = _topo_sort_calc_sources(calc_sources, source_to_gauge, gauge_id_to_name)
 
         for source in calc_sources:
             try:
-                calc_expr = source.calc_expression
-                if calc_expr is None:
-                    continue
-
-                expression = calc_expr.expression
-                time_expression = calc_expr.time_expression
-                data_type = calc_expr.data_type
-
-                logger.info(
-                    "Calculating %s: type=%s expr=%s",
-                    source.name,
-                    data_type.value,
-                    expression,
-                )
-
-                if not time_expression:
-                    logger.warning("No time_expression for source %s", source.name)
-                    continue
-
-                # Resolve all references to gauge-level latest values
-                # time_expression refs are "key::gauge_name::type" (3-part)
-                # or "gauge_name::type" (2-part)
-                values: dict[str, float] = {}
-                times = []
-                skip = False
-
-                for ref in time_expression.split():
-                    parts = ref.split("::")
-                    if len(parts) < 2:
-                        logger.error("Invalid ref format: %s", ref)
-                        skip = True
-                        break
-
-                    if len(parts) >= 3:
-                        ref_name = parts[1]
-                        ref_type_str = parts[2]
-                    else:
-                        ref_name = parts[0]
-                        ref_type_str = parts[1]
-
-                    ref_gauge_id = name_to_gauge_id.get(ref_name)
-                    if not ref_gauge_id:
-                        logger.error("No gauge for name %s", ref_name)
-                        skip = True
-                        break
-
-                    try:
-                        ref_dtype = DataType(ref_type_str)
-                    except ValueError:
-                        logger.error("Unknown type: %s", ref_type_str)
-                        skip = True
-                        break
-
-                    latest = get_latest_gauge(session, ref_gauge_id, ref_dtype)
-                    if latest is None or latest.value is None:
-                        logger.warning("No latest gauge value for %s/%s", ref_name, ref_type_str)
-                        skip = True
-                        break
-                    if not math.isfinite(latest.value):
-                        logger.warning(
-                            "Non-finite latest value for %s/%s: %r",
-                            ref_name,
-                            ref_type_str,
-                            latest.value,
-                        )
-                        skip = True
-                        break
-
-                    values[ref] = latest.value
-                    times.append(latest.observed_at)
-
-                if skip or not times:
-                    continue
-
-                # Use the earliest time from all references
-                when = min(times)
-
-                # Rewrite each ref to a placeholder identifier before AST parse.
-                # Refs contain "::" which isn't a valid Python identifier, so we
-                # replace them with "_v0", "_v1", ... and pass a lookup dict to
-                # _safe_eval. Replace longest refs first so a shorter ref can't
-                # corrupt a longer one via substring match.
-                expr = expression
-                placeholder_values: dict[str, float] = {}
-                for i, ref in enumerate(sorted(values, key=len, reverse=True)):
-                    placeholder = f"_v{i}"
-                    expr = expr.replace(ref, placeholder)
-                    placeholder_values[placeholder] = values[ref]
-
-                # Clean up SQL functions for Python eval
-                expr = expr.replace("greatest(", "max(")
-                expr = expr.replace("least(", "min(")
-
-                try:
-                    result = _safe_eval(expr, placeholder_values)
-                except (ValueError, SyntaxError) as e:
-                    logger.error("Error evaluating '%s': %s", expr, e)
-                    continue
-
-                result = float(result)
-                if source.id not in neg_flow_sources:
-                    result = max(0, result)
-
-                if store_observation(
+                _process_calc_source(
                     session,
-                    source.id,
-                    data_type,
-                    when,
-                    result,
-                    allow_negative_flow_sources=neg_flow_sources,
-                ):
-                    update_latest(session, source.id, data_type)
-                    # Also update gauge-level cache
-                    gauge_id = source_to_gauge.get(source.id)
-                    if gauge_id:
-                        update_latest_gauge(session, gauge_id, data_type)
-                    logger.debug("  = %.1f at %s", result, when)
-
-                # Commit after each source to release the write lock
+                    source,
+                    name_to_gauge_id=name_to_gauge_id,
+                    source_to_gauge=source_to_gauge,
+                    neg_flow_sources=neg_flow_sources,
+                )
+                # Commit after each source to release the SQLite writer lock.
                 session.commit()
-
             except Exception as e:
                 session.rollback()
                 logger.error("Error for %s: %s", source.name, e)
@@ -312,3 +147,235 @@ def calculator(args: argparse.Namespace) -> None:
         print("Calculations complete")
     finally:
         session.close()
+
+
+def _process_calc_source(
+    session: Session,
+    source: Source,
+    *,
+    name_to_gauge_id: dict[str, int],
+    source_to_gauge: dict[int, int],
+    neg_flow_sources: set[int],
+) -> None:
+    """Compute and store one calc source's value (per-iteration body)."""
+    calc_expr = source.calc_expression
+    if calc_expr is None:
+        return
+
+    expression = calc_expr.expression
+    time_expression = calc_expr.time_expression
+    data_type = calc_expr.data_type
+
+    logger.info(
+        "Calculating %s: type=%s expr=%s",
+        source.name,
+        data_type.value,
+        expression,
+    )
+
+    if not time_expression:
+        logger.warning("No time_expression for source %s", source.name)
+        return
+
+    resolved = _resolve_refs(session, time_expression, name_to_gauge_id)
+    if resolved is None:
+        return
+    values, when = resolved
+
+    expr, placeholder_values = _substitute_placeholders(expression, values)
+
+    try:
+        result = _safe_eval(expr, placeholder_values)
+    except (ValueError, SyntaxError) as e:
+        logger.error("Error evaluating '%s': %s", expr, e)
+        return
+
+    result = float(result)
+    if source.id not in neg_flow_sources:
+        result = max(0, result)
+
+    _store_calc_result(
+        session,
+        source,
+        data_type=data_type,
+        when=when,
+        result=result,
+        source_to_gauge=source_to_gauge,
+        neg_flow_sources=neg_flow_sources,
+    )
+
+
+def _get_calc_deps(
+    source: Source,
+    source_to_gauge: dict[int, int],
+    gauge_id_to_name: dict[int, str],
+    calc_gauge_names: dict[str, Source],
+) -> list[str]:
+    """Extract the calc-source gauge names this source depends on.
+
+    Parses the time_expression the same way _resolve_refs does: split on
+    whitespace, then on '::'. Accepts both 3-part "key::gauge::type" and
+    2-part "gauge::type" refs. A prior regex caught only the 3-part form,
+    which silently dropped 2-part deps from the topo-sort and could let
+    a calc evaluate before its inputs.
+    """
+    ce = source.calc_expression
+    if not ce or not ce.time_expression:
+        return []
+    own_gauge = gauge_id_to_name.get(source_to_gauge.get(source.id, -1), "")
+    deps: list[str] = []
+    for ref in ce.time_expression.split():
+        parts = ref.split("::")
+        if len(parts) == 3:
+            ref_name = parts[1]
+        elif len(parts) == 2:
+            ref_name = parts[0]
+        else:
+            continue
+        if ref_name in calc_gauge_names and ref_name != own_gauge:
+            deps.append(ref_name)
+    return deps
+
+
+def _topo_sort_calc_sources(
+    calc_sources: list[Source],
+    source_to_gauge: dict[int, int],
+    gauge_id_to_name: dict[int, str],
+) -> list[Source]:
+    """Order calc sources so each runs after its calc-deps. Raises on cycle."""
+    calc_gauge_names = {
+        gauge_id_to_name.get(source_to_gauge.get(s.id, -1), ""): s for s in calc_sources
+    }
+    sorted_sources: list[Source] = []
+    remaining = list(calc_sources)
+    resolved: set[str] = set()
+    max_iterations = len(remaining) + 1
+    while remaining and max_iterations > 0:
+        max_iterations -= 1
+        progress = False
+        next_remaining = []
+        for source in remaining:
+            deps = _get_calc_deps(source, source_to_gauge, gauge_id_to_name, calc_gauge_names)
+            if all(d in resolved for d in deps):
+                sorted_sources.append(source)
+                src_gauge_name = gauge_id_to_name.get(source_to_gauge.get(source.id, -1), "")
+                if src_gauge_name:
+                    resolved.add(src_gauge_name)
+                progress = True
+            else:
+                next_remaining.append(source)
+        remaining = next_remaining
+        if not progress:
+            circular_names = [
+                gauge_id_to_name.get(source_to_gauge.get(s.id, -1), s.name) for s in remaining
+            ]
+            raise ValueError(
+                "Circular dependency detected among calculated sources: "
+                + ", ".join(circular_names)
+            )
+    return sorted_sources
+
+
+def _resolve_refs(
+    session: Session,
+    time_expression: str,
+    name_to_gauge_id: dict[str, int],
+) -> tuple[dict[str, float], datetime] | None:
+    """Resolve every "[key::]gauge::type" ref to its latest gauge value.
+
+    Returns ``(ref_to_value, when)`` where `when` is the earliest
+    observed_at across all refs (the time at which the calc is stamped).
+    Returns None on any failure mode — caller treats as skip.
+    """
+    values: dict[str, float] = {}
+    times: list[datetime] = []
+    for ref in time_expression.split():
+        parts = ref.split("::")
+        if len(parts) < 2:
+            logger.error("Invalid ref format: %s", ref)
+            return None
+        if len(parts) >= 3:
+            ref_name = parts[1]
+            ref_type_str = parts[2]
+        else:
+            ref_name = parts[0]
+            ref_type_str = parts[1]
+
+        ref_gauge_id = name_to_gauge_id.get(ref_name)
+        if not ref_gauge_id:
+            logger.error("No gauge for name %s", ref_name)
+            return None
+
+        try:
+            ref_dtype = DataType(ref_type_str)
+        except ValueError:
+            logger.error("Unknown type: %s", ref_type_str)
+            return None
+
+        latest = get_latest_gauge(session, ref_gauge_id, ref_dtype)
+        if latest is None or latest.value is None:
+            logger.warning("No latest gauge value for %s/%s", ref_name, ref_type_str)
+            return None
+        if not math.isfinite(latest.value):
+            logger.warning(
+                "Non-finite latest value for %s/%s: %r",
+                ref_name,
+                ref_type_str,
+                latest.value,
+            )
+            return None
+
+        values[ref] = latest.value
+        times.append(latest.observed_at)
+
+    if not times:
+        return None
+    return values, min(times)
+
+
+def _substitute_placeholders(
+    expression: str, values: dict[str, float]
+) -> tuple[str, dict[str, float]]:
+    """Rewrite "[key::]gauge::type" refs to _v0, _v1, … placeholders.
+
+    Refs contain "::" which isn't a valid Python identifier; replace them
+    with `_v<n>` placeholders for AST-based evaluation. Longest-first
+    ordering avoids a shorter ref clobbering a substring of a longer one.
+    SQL function names `greatest()` / `least()` are also normalized to
+    `max()` / `min()` here so the safe-eval dispatch table can resolve them.
+    """
+    expr = expression
+    placeholder_values: dict[str, float] = {}
+    for i, ref in enumerate(sorted(values, key=len, reverse=True)):
+        placeholder = f"_v{i}"
+        expr = expr.replace(ref, placeholder)
+        placeholder_values[placeholder] = values[ref]
+    expr = expr.replace("greatest(", "max(")
+    expr = expr.replace("least(", "min(")
+    return expr, placeholder_values
+
+
+def _store_calc_result(
+    session: Session,
+    source: Source,
+    *,
+    data_type: DataType,
+    when: datetime,
+    result: float,
+    source_to_gauge: dict[int, int],
+    neg_flow_sources: set[int],
+) -> None:
+    """Store the calculated observation + refresh source/gauge latest caches."""
+    if store_observation(
+        session,
+        source.id,
+        data_type,
+        when,
+        result,
+        allow_negative_flow_sources=neg_flow_sources,
+    ):
+        update_latest(session, source.id, data_type)
+        gauge_id = source_to_gauge.get(source.id)
+        if gauge_id:
+            update_latest_gauge(session, gauge_id, data_type)
+        logger.debug("  = %.1f at %s", result, when)
