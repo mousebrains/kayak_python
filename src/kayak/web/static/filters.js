@@ -29,43 +29,43 @@
  */
 (function(){
   'use strict';
-  var HASH_KEYS = {state:'st', huc8:'b', status:'s', tier:'c'};
-  var DESKTOP_QUERY = '(min-width:641px)';
+  const HASH_KEYS = {state:'st', huc8:'b', status:'s', tier:'c'};
+  const DESKTOP_QUERY = '(min-width:641px)';
 
   function readHash(){
-    var out = {};
-    var h = (location.hash || '').replace(/^#/, '');
+    const out = {};
+    const h = (location.hash || '').replace(/^#/, '');
     if (!h) return out;
     h.split('&').forEach(function(kv){
-      var eq = kv.indexOf('=');
+      const eq = kv.indexOf('=');
       if (eq < 0) return;
-      var k = kv.slice(0, eq), v = kv.slice(eq + 1);
+      const k = kv.slice(0, eq), v = kv.slice(eq + 1);
       out[k] = v === '' ? [] : decodeURIComponent(v).split(',').filter(Boolean);
     });
     return out;
   }
 
   function writeHash(groups){
-    var parts = [];
+    const parts = [];
     groups.forEach(function(g){
-      var all = g.pills.length;
-      var checked = g.pills.filter(function(p){return p.input.checked}).length;
+      const all = g.pills.length;
+      const checked = g.pills.filter(function(p){return p.input.checked}).length;
       if (checked === all) return;
-      var vals = g.pills.filter(function(p){return p.input.checked}).map(function(p){return p.input.value});
+      const vals = g.pills.filter(function(p){return p.input.checked}).map(function(p){return p.input.value});
       parts.push(HASH_KEYS[g.key] + '=' + vals.map(encodeURIComponent).join(','));
     });
-    var newHash = parts.length ? ('#' + parts.join('&')) : '';
+    const newHash = parts.length ? ('#' + parts.join('&')) : '';
     if (newHash !== location.hash) {
       history.replaceState(null, '', location.pathname + location.search + newHash);
     }
   }
 
   function applyHash(groups){
-    var hash = readHash();
+    const hash = readHash();
     groups.forEach(function(g){
-      var key = HASH_KEYS[g.key];
+      const key = HASH_KEYS[g.key];
       if (!(key in hash)) return;
-      var want = new Set(hash[key]);
+      const want = new Set(hash[key]);
       g.pills.forEach(function(p){
         p.input.checked = want.has(p.input.value);
       });
@@ -73,15 +73,15 @@
   }
 
   function collectGroups(barEl){
-    var groups = [];
+    const groups = [];
     barEl.querySelectorAll('.filter-pills').forEach(function(container){
-      var key = container.dataset.group;
+      const key = container.dataset.group;
       if (!key) return;
       // Exclude HUC6 parent checkboxes — they're visual bulk-toggle handles,
       // not real filter pills (they have no `value`-bearing semantic).
-      var inputs = Array.from(container.querySelectorAll('input[type=checkbox]'))
+      const inputs = Array.from(container.querySelectorAll('input[type=checkbox]'))
         .filter(function(i){ return !i.hasAttribute('data-huc6'); });
-      var pills = inputs.map(function(input){
+      const pills = inputs.map(function(input){
         return {input: input, label: input.closest('label')};
       });
       groups.push({key: key, container: container, pills: pills,
@@ -97,17 +97,17 @@
    * Returns a `syncParents()` callback so callers (All/None, reset, applyHash)
    * can refresh all parent states after programmatically toggling children. */
   function wireHucHierarchy(barEl, ctx){
-    var parents = Array.from(barEl.querySelectorAll('input[type=checkbox][data-huc6]'));
-    var pairs = parents.map(function(parent){
-      var subgroup = parent.closest('details.filter-subgroup');
-      var children = subgroup
+    const parents = Array.from(barEl.querySelectorAll('input[type=checkbox][data-huc6]'));
+    const pairs = parents.map(function(parent){
+      const subgroup = parent.closest('details.filter-subgroup');
+      const children = subgroup
         ? Array.from(subgroup.querySelectorAll('.filter-pills-sub input[type=checkbox]'))
         : [];
       return {parent: parent, children: children};
     });
 
     function refreshParent(pair){
-      var checked = pair.children.filter(function(x){return x.checked}).length;
+      const checked = pair.children.filter(function(x){return x.checked}).length;
       pair.parent.checked = (checked === pair.children.length);
       pair.parent.indeterminate = (checked > 0 && checked < pair.children.length);
     }
@@ -128,13 +128,13 @@
   }
 
   function matches(row, groups){
-    for (var i = 0; i < groups.length; i++) {
-      var g = groups[i];
-      var raw = row.dataset[g.key] || '';
-      var values = g.splitCSV ? (raw ? raw.split(',') : ['?']) : [raw];
-      var anyChecked = false;
-      for (var j = 0; j < g.pills.length; j++) {
-        var p = g.pills[j];
+    for (let i = 0; i < groups.length; i++) {
+      const g = groups[i];
+      const raw = row.dataset[g.key] || '';
+      const values = g.splitCSV ? (raw ? raw.split(',') : ['?']) : [raw];
+      let anyChecked = false;
+      for (let j = 0; j < g.pills.length; j++) {
+        const p = g.pills[j];
         if (!p.input.checked) continue;
         if (values.indexOf(p.input.value) !== -1) { anyChecked = true; break; }
       }
@@ -144,9 +144,9 @@
   }
 
   function refilter(ctx){
-    var visible = 0;
+    let visible = 0;
     ctx.rows.forEach(function(row){
-      var show = matches(row, ctx.groups);
+      const show = matches(row, ctx.groups);
       if (show) { row.removeAttribute('hidden'); visible++; }
       else row.setAttribute('hidden', '');
     });
@@ -158,10 +158,10 @@
   }
 
   function injectNavToggle(bar){
-    var nav = document.querySelector('header nav');
+    const nav = document.querySelector('header nav');
     if (!nav) return;
     if (nav.querySelector('.filter-toggle-nav')) return;
-    var a = document.createElement('a');
+    const a = document.createElement('a');
     a.href = '#';
     a.textContent = 'Filter';
     a.className = 'filter-toggle-nav';
@@ -181,9 +181,9 @@
   }
 
   function wireAllNone(group, ctx, afterToggle){
-    var container = group.container;
+    const container = group.container;
     container.addEventListener('click', function(e){
-      var t = e.target;
+      const t = e.target;
       if (!(t instanceof HTMLElement)) return;
       if (t.matches('[data-all]')) {
         e.preventDefault();
@@ -200,17 +200,17 @@
   }
 
   function init(opts){
-    var bar = opts?.barContainer || document.getElementById('filter-bar');
+    const bar = opts?.barContainer || document.getElementById('filter-bar');
     if (!bar) return null;
-    var tbody = opts?.rowsContainer || document.querySelector('table.levels tbody');
+    const tbody = opts?.rowsContainer || document.querySelector('table.levels tbody');
     if (!tbody) return null;
 
-    var rows = Array.from(tbody.querySelectorAll('tr[data-state], tr[data-basin], tr[data-huc8], tr[data-status], tr[data-tier]'));
-    var groups = collectGroups(bar);
-    var countEl = bar.querySelector('.fb-count');
-    var resetBtn = bar.querySelector('.fb-reset');
+    const rows = Array.from(tbody.querySelectorAll('tr[data-state], tr[data-basin], tr[data-huc8], tr[data-status], tr[data-tier]'));
+    const groups = collectGroups(bar);
+    const countEl = bar.querySelector('.fb-count');
+    const resetBtn = bar.querySelector('.fb-reset');
 
-    var ctx = {
+    const ctx = {
       rows: rows,
       groups: groups,
       countEl: countEl,
@@ -219,7 +219,7 @@
 
     applyHash(groups);
 
-    var syncHucParents = wireHucHierarchy(bar, ctx);
+    const syncHucParents = wireHucHierarchy(bar, ctx);
     groups.forEach(function(g){
       g.container.addEventListener('change', function(e){
         if (e.target && e.target.type === 'checkbox') refilter(ctx);
@@ -245,7 +245,7 @@
 
     // Bar default-hidden; nav gets a "Filter" toggle. If the URL has
     // explicit filter state, auto-reveal so users see why rows are missing.
-    var hashHas = Object.keys(readHash()).length > 0;
+    const hashHas = Object.keys(readHash()).length > 0;
     if (hashHas) bar.hidden = false;
 
     injectNavToggle(bar);
