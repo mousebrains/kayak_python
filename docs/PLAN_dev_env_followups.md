@@ -5,7 +5,8 @@
 > **Iter log:**
 > - iter 1 (2026-05-12): structural pivot — Phase 3 changes from "drop the symlinks" / "extend the symlinks" to "tell dev boxes to use a non-repo `OUTPUT_DIR`" (per user input). Old A/B/C alternatives kept as an appendix. Smaller fixes: cross-check ref bump, count corrections, end-state phrasing, `.env.example` callout.
 > - iter 2 (2026-05-12): 6 findings — Phase 3 cleanup script made safe for `public_html/includes` directory→symlink replacement; Phase 2 verification gate split into before/after-fix scenarios per layout; redundant Phase 2 risk text deduplicated; `.env.example` diff now uses a concrete commented example value; out-of-scope adds an nginx-dev ACL note; iter log + cross-check ref updated.
-> - iter 3 (2026-05-12, this revision): 3 findings — Phase 1 now also drops the stale `.gitignore:41` `php/style.css` entry (user-flagged); confirmed via grep that no build code writes to `php/style.css` — `deploy.py:107` and `_shared.py:52` only touch `output_dir/style.css`. Phase 3 verification gate corrected: `OUTPUT_DIR` is read by python-dotenv via `kayak.config`, not by shell `source` of the env file (bare `KEY=VAL` lines aren't exported into the child process). Cross-check ref updated.
+> - iter 3 (2026-05-12): 3 findings — Phase 1 now also drops the stale `.gitignore:41` `php/style.css` entry (user-flagged); confirmed via grep that no build code writes to `php/style.css` — `deploy.py:107` and `_shared.py:52` only touch `output_dir/style.css`. Phase 3 verification gate corrected: `OUTPUT_DIR` is read by python-dotenv via `kayak.config`, not by shell `source` of the env file (bare `KEY=VAL` lines aren't exported into the child process). Cross-check ref updated.
+> - iter 4 (2026-05-12, this revision): 2 findings — End-state bullet about `php/style.css` "gitignored anyway" now contradicts iter 3 (gitignore entry is removed); rewritten to describe the post-fix invariant ("file gone AND gitignore entry gone"). Reproduce-section grep for `.gitignore` now also confirms the line removal.
 >
 > Dates absolute. Citations `file:line` against current `main`.
 
@@ -244,7 +245,7 @@ ls -la php/style.css                    # leftover stale CSS (expected on this h
 grep -n 'php/style.css' biome.json      # → line 15
 grep -n 'php/style.css\|hardening' Makefile
 ls deploy/*.sh                          # → deploy/install-secrets.sh
-grep -nE 'style.css|reaches-' .gitignore | head
+grep -nE 'style.css|reaches-' .gitignore | head    # → php/style.css at line 41 (to remove); reaches-* at 39-40 (keep)
 
 # Phase 2 inputs
 sed -n '27,55p' php/includes/header.php          # css_head_block()
@@ -270,8 +271,8 @@ After all 3 phases:
 
 - `biome.json` no longer references `php/style.css`. `biome check` runs over 11 files (10 JS + 1 CSS) cleanly, no `internalError/io`.
 - `Makefile lint-css` reads `biome check src/kayak/web/static/style.css`; `lint-shell` reads `shellcheck --severity=warning scripts/*.sh systemd/*.sh deploy/*.sh`; both run to completion where the standalone tools are installed.
-- `.gitignore` covers all stray build-artifact patterns in `static/`.
-- `php/style.css` no longer exists on disk (gitignored anyway; a one-time local `rm` deletes the leftover).
+- `.gitignore` covers stray `static/` build artifacts (5 new patterns); the stale `php/style.css` entry is removed (no build code references that path).
+- `php/style.css` no longer exists on disk (one-time local `rm`); no gitignore entry shielding it, so any reappearance surfaces in `git status` immediately.
 - `php/includes/header.php`'s `css_head_block()` uses `$_SERVER['DOCUMENT_ROOT']` with a `__DIR__/..` fallback; matches the existing pattern in `gauge_map.php`.
 - `.env.example` documents the dev `OUTPUT_DIR` convention explicitly (no more "default: public_html/ in repo" without the dev callout).
 - `CLAUDE.md` Local Development Setup section calls out the dev `OUTPUT_DIR` convention.
