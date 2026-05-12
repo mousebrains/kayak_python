@@ -347,7 +347,7 @@ function _render_reach_details_table(array $reach, array $states, array $classes
         'Notes' => $reach['notes'],
     ];
 
-    $html_fields = ['Put-in', 'Take-out', 'AW ID'];
+    $html_fields = ['Put-in', 'Take-out'];
     $autolink_fields = ['Description', 'Notes'];
     foreach ($fields as $label => $value) {
         if ($value === null || trim((string)$value) === '') {
