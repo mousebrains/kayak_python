@@ -17,10 +17,11 @@ Pre-existing issues uncovered during the JS cleanup work (PLAN_js_cleanup Phase 
 
 **Symptom:** Biome emits `internalError/io  × No such file or directory` for `php/style.css` but exits 0. CI's `biome check` is noisy but the gate doesn't fail. `Checked 1 file` instead of 2 in `make lint-css`.
 
-**Fix (one-line, both places):**
+**Fix (three places — all stale references to the same removed file):**
 
 - Remove `"php/style.css"` from `biome.json:files.includes`.
 - Change `Makefile lint-css` to `biome check src/kayak/web/static/style.css`.
+- Remove `php/style.css` from `.gitignore:41`. The entry was added in `a4e1e02` to shield a build-artifact path, but no current build code writes to `php/style.css` — `deploy.py:107` and `_shared.py:52` only target `output_dir/style.css`. With biome + Makefile fixed, the gitignore entry has no remaining purpose; removing it surfaces the on-disk leftover (if any) for cleanup. (Spotted post-iter-2 of `PLAN_dev_env_followups.md`.)
 
 ## 2. `hardening/*.sh` stale glob in `Makefile lint-shell`
 

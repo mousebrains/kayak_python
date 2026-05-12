@@ -1,10 +1,11 @@
 # Plan — Dev-environment follow-ups
 
-> **Cross-check:** plan drafted 2026-05-12 against `main` at `9446e51`; iter 1 re-verified against `21c9e1a`; iter 2 re-verified against `b141f79`. Inputs (`biome.json`, `Makefile`, `php/includes/header.php`, `php/includes/gauge_map.php`, `deploy/SETUP.md`, `src/kayak/config.py`, `src/kayak/web/build/deploy.py`, `.env.example`) unchanged across both ranges; the only commits in range touch `docs/security/*.md` and this plan itself. A reviewer on a default-config dev machine (`OUTPUT_DIR` unset → defaults to `BASE_DIR/public_html` per `src/kayak/config.py:35`) will see additional symptoms; the fixes themselves are env-independent.
+> **Cross-check:** plan drafted 2026-05-12 against `main` at `9446e51`; iter 1 re-verified against `21c9e1a`; iter 2 against `b141f79`; iter 3 against `2c5a4e4`. Inputs (`biome.json`, `Makefile`, `.gitignore`, `php/includes/header.php`, `php/includes/gauge_map.php`, `deploy/SETUP.md`, `src/kayak/config.py`, `src/kayak/web/build/deploy.py`, `src/kayak/web/build/_shared.py`, `.env.example`) unchanged across all ranges; the only commits in range touch `docs/security/*.md` and this plan itself. A reviewer on a default-config dev machine (`OUTPUT_DIR` unset → defaults to `BASE_DIR/public_html` per `src/kayak/config.py:35`) will see additional symptoms; the fixes themselves are env-independent.
 >
 > **Iter log:**
 > - iter 1 (2026-05-12): structural pivot — Phase 3 changes from "drop the symlinks" / "extend the symlinks" to "tell dev boxes to use a non-repo `OUTPUT_DIR`" (per user input). Old A/B/C alternatives kept as an appendix. Smaller fixes: cross-check ref bump, count corrections, end-state phrasing, `.env.example` callout.
-> - iter 2 (2026-05-12, this revision): 6 findings — Phase 3 cleanup script made safe for `public_html/includes` directory→symlink replacement; Phase 2 verification gate split into before/after-fix scenarios per layout; redundant Phase 2 risk text deduplicated; `.env.example` diff now uses a concrete commented example value; out-of-scope adds an nginx-dev ACL note; iter log + cross-check ref updated.
+> - iter 2 (2026-05-12): 6 findings — Phase 3 cleanup script made safe for `public_html/includes` directory→symlink replacement; Phase 2 verification gate split into before/after-fix scenarios per layout; redundant Phase 2 risk text deduplicated; `.env.example` diff now uses a concrete commented example value; out-of-scope adds an nginx-dev ACL note; iter log + cross-check ref updated.
+> - iter 3 (2026-05-12, this revision): 3 findings — Phase 1 now also drops the stale `.gitignore:41` `php/style.css` entry (user-flagged); confirmed via grep that no build code writes to `php/style.css` — `deploy.py:107` and `_shared.py:52` only touch `output_dir/style.css`. Phase 3 verification gate corrected: `OUTPUT_DIR` is read by python-dotenv via `kayak.config`, not by shell `source` of the env file (bare `KEY=VAL` lines aren't exported into the child process). Cross-check ref updated.
 >
 > Dates absolute. Citations `file:line` against current `main`.
 
@@ -55,16 +56,18 @@ Three small edits + one local-only cleanup. Commits to `main`; pre-commit + CI v
 1. **`biome.json:15`** — remove the `"php/style.css"` entry from `files.includes`. Resulting `lint-css` set is 1 CSS file (`src/kayak/web/static/style.css`); biome no longer emits `internalError/io`.
 2. **`Makefile:35` (`lint-css` target)** — change to `biome check src/kayak/web/static/style.css`. (Drop `php/style.css`.)
 3. **`Makefile:38` (`lint-shell` target)** — drop the `hardening/*.sh` glob. Add `deploy/*.sh` (1 file present: `deploy/install-secrets.sh`). Resulting target: `shellcheck --severity=warning scripts/*.sh systemd/*.sh deploy/*.sh`.
-4. **`.gitignore`** — add stray build-artifact patterns to forestall Issue 4's reappearance on any dev box that still uses default `OUTPUT_DIR`:
-   ```
-   static/levels.js
-   static/filters.js
-   static/sparklines.json
-   static/style-*.css
-   static/style.css.hash
-   ```
-   (`static/reaches-geom.json` / `static/reaches-state.json` already present at `.gitignore:39-40`.)
-5. **Local-only cleanup (don't commit):** on any host where `php/style.css` exists as a leftover, `rm php/style.css`. On `levels` this is a one-time `rm`; the file is already gitignored so removal is invisible to git. On a dev box that ran a default-config build before adopting Phase 3's convention, also `rm` any stragglers from §4's gitignore list.
+4. **`.gitignore`** —
+   - **Remove** the stale `php/style.css` entry at `.gitignore:41`. No build code writes to that path (verified: `deploy.py:107` and `_shared.py:52` only target `output_dir/style.css`); the entry has been masking the on-disk leftover from `a4e1e02` rather than gating any active artifact.
+   - **Add** stray build-artifact patterns to forestall Issue 4's reappearance on any dev box that still uses default `OUTPUT_DIR`:
+     ```
+     static/levels.js
+     static/filters.js
+     static/sparklines.json
+     static/style-*.css
+     static/style.css.hash
+     ```
+     (`static/reaches-geom.json` / `static/reaches-state.json` already present at `.gitignore:39-40`.)
+5. **Local-only cleanup (don't commit):** on any host where `php/style.css` exists as a leftover, `rm php/style.css`. After the §4 gitignore removal, the file is no longer shielded — `git status` will surface it on the next run if it's still on disk. Removing it pre-emptively keeps `git status` quiet. On a dev box that ran a default-config build before adopting Phase 3's convention, also `rm` any stragglers from §4's added gitignore patterns.
 
 **Verification gate:**
 - `pre-commit run --all-files` clean (biome + shellcheck both fire via pre-commit on this host — verified 2026-05-12).
@@ -195,9 +198,10 @@ This is "dev does what prod does, just at a different path." Zero repo code chan
    ```
 
 **Verification gate:**
-- A new shell session on a dev box (`unset OUTPUT_DIR; source ~/.config/kayak/.env`) shows `OUTPUT_DIR` populated with the non-repo path.
-- `levels build` writes to that path; `git status` is clean after the build.
-- `php -S localhost:8000 -t "$OUTPUT_DIR"` serves the styled site; styled nav bar renders (Phase 2's fix is exercised via `$_SERVER['DOCUMENT_ROOT'] = "$OUTPUT_DIR"`).
+- `OUTPUT_DIR` is read by `python-dotenv` via `kayak.config` (not by shell `source` — bare `KEY=VAL` lines wouldn't export to a child process anyway). To verify the env file picks up correctly: `/home/pat/.venv/bin/python -c 'from kayak import config; print(config.OUTPUT_DIR)'` should print the dev path.
+- `levels build` (no env-var prefix needed; config.py reads `~/.config/kayak/.env` automatically) writes to that path. Check: `ls -la "$OUTPUT_DIR/index.html"` after the build.
+- `git status` is clean after the build.
+- `php -S localhost:8000 -t /path/to/public_html_dev` serves the styled site; styled nav bar renders (Phase 2's fix is exercised via `$_SERVER['DOCUMENT_ROOT'] = "/path/to/public_html_dev"`).
 - Live host unchanged — its `~/.config/kayak/.env` already carries the equivalent setting.
 
 **Risk:**
