@@ -153,10 +153,11 @@ This tier is nearly all decision points — there's no "right answer" without ex
    - **None** (current). Defensible for a hobby site; weak if someone formally demands.
    - **`/privacy.html` + `/terms.html`** boilerplate. ~1 hour to draft; sets expectations; minimal commitment.
    - **Lawyer-reviewed**. Days of work + cost; appropriate if revenue or specific obligations.
-5. **Decision point — `security.txt`:**
-   - **Skip.** No published disclosure path.
-   - **Email-only.** `Contact: mailto:security@mousebrains.com` (or alias). Cheapest; sets expectations; you're committing to read that mailbox.
-   - **Email + PGP.** Add a public key + fingerprint. Marginally more secure for the discloser; modestly more work to set up.
+5. **Decision point — `security.txt`:** A published `security.txt` already exists at `static/security.txt` (RFC 9116 minimum: `Contact: mailto:pat.kayak@gmail.com`, `Expires: 2027-05-20T00:00:00Z`, `Preferred-Languages: en`), served via the nginx alias at `/.well-known/security.txt` per `deploy/levels`. Decision menu becomes:
+   - **Keep current** (Contact + Expires only). Defensible for a hobby site; commits you to read the gmail address.
+   - **Add `Encryption: <https://...key.asc>`** + post a PGP key. Marginally more secure for the discloser; modestly more work.
+   - **Add `Acknowledgments:` + `Policy:`** lines. Sets disclosure-process expectations explicitly. The `Policy:` URL would point to a page describing your IR cadence (Tier 5 decision).
+   - **Refresh `Expires:`** annually as part of the Tier 5 re-review cadence; current expiry is in ~1 year so this is the next maintenance trigger.
 
 **Verification gate (end of Tier 4):**
 - Each decision point has a written choice + rationale in `docs/security/decisions.md`
@@ -167,8 +168,8 @@ This tier is nearly all decision points — there's no "right answer" without ex
 **Goal:** Decide how vulnerabilities reach you, what you commit to doing about them, and how often the whole posture is re-checked.
 
 1. **Decision point — vulnerability disclosure path:**
-   - **`security.txt` only** (per Tier 4 decision). Anyone who finds a bug emails you.
-   - **GitHub Security Advisories.** Coordinated disclosure via GitHub. Free; assumes the codebase is open-source-ish.
+   - **`security.txt` only** (current — Tier 4.5 already in place). Anyone who finds a bug emails `pat.kayak@gmail.com`. Default; no action needed unless you want more.
+   - **GitHub Security Advisories** as a second channel. Coordinated disclosure via GitHub. Free; assumes the codebase is open-source-ish (this repo is mousebrains/kayak_python — already on GitHub). Add `Policy:` URL in security.txt pointing at your GHSA flow.
    - **HackerOne / Bugcrowd platform.** Formal reporting platform. Free tier exists; mostly overkill for a hobby site.
    - **Bug bounty.** $X per finding. Unnecessary at this scale; tempting only if you want serious researcher attention.
 2. **Decision point — incident response cadence:**
