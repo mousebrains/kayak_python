@@ -10,12 +10,10 @@ from kayak.cli.build import (
     _build_map_page,
     _build_nav,
     _build_page,
-    _build_sparkline,
     _build_text,
     _csv_safe,
     _get_row_data,
     _levels_key,
-    _select_sparkline_series,
 )
 from kayak.db.models import (
     DataType,
@@ -29,6 +27,7 @@ from kayak.db.models import (
     Source,
 )
 from kayak.web.build._shared import _atomic_write
+from kayak.web.build.sparklines import _build_sparkline, _select_sparkline_series
 
 COLS = [
     {
