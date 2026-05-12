@@ -242,6 +242,60 @@ abstract class IntegrationTestCase extends TestCase
         // no-op by default
     }
 
+    /**
+     * Open a fresh PDO connection to the test DB. For per-test setup
+     * outside the seedDatabase() baseline — e.g. seeding an editor
+     * session row before a request that needs auth.
+     */
+    protected static function testDb(): PDO
+    {
+        $pdo = new PDO('sqlite:' . self::$dbPath);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+        $pdo->exec('PRAGMA foreign_keys=ON');
+        return $pdo;
+    }
+
+    /**
+     * Seed an editor row + a 7-day editor_session row. Returns the raw
+     * session token (sha256 of which is stored server-side) plus a
+     * separately-generated CSRF token. Pass them through `request()`'s
+     * `$cookies` arg as `ed_sess` + `ed_csrf`, and for POSTs also
+     * include `csrf_token` in `$post` so `require_csrf()` matches.
+     *
+     * Matches the cookie format checked by `current_editor()` (64-char
+     * hex) and `require_csrf()` (double-submit). The CSRF cookie has
+     * no DB row — it's pure double-submit, the cookie itself is
+     * authoritative.
+     *
+     * @param  string $status  'pending'|'minimal'|'full'|'maintainer'|'banned'
+     * @return array{editor_id: int, session_token: string, csrf_token: string}
+     */
+    protected static function seedEditorSession(string $email, string $status = 'full'): array
+    {
+        $db = self::testDb();
+        $db->prepare(
+            "INSERT INTO editor (email, status, created_at) VALUES (?, ?, datetime('now'))"
+        )->execute([$email, $status]);
+        $editor_id = (int)$db->lastInsertId();
+
+        $session_token = bin2hex(random_bytes(32));
+        $hash = hash('sha256', $session_token);
+        $db->prepare(
+            "INSERT INTO editor_session
+                (editor_id, token_hash, expires_at, last_seen_at)
+             VALUES (?, ?, datetime('now', '+7 days'), datetime('now'))"
+        )->execute([$editor_id, $hash]);
+
+        $csrf_token = bin2hex(random_bytes(32));
+
+        return [
+            'editor_id' => $editor_id,
+            'session_token' => $session_token,
+            'csrf_token' => $csrf_token,
+        ];
+    }
+
     /** Locate the `levels` CLI. Prefers the prod venv, then a local .venv, then PATH. */
     private static function resolveVenvCommand(string $repoRoot): ?string
     {
