@@ -38,7 +38,7 @@ The following choices need real-world calibration and are NOT prescribed up fron
 - Incident response cadence: best-effort / 24h target / 4h target
 - Re-review cadence: annual / quarterly / on-major-change-only
 - Whether to publish a written privacy policy + terms of service
-- Whether maintainer-tier accounts get hardware 2FA, app TOTP, or magic-link only
+- Whether maintainer-tier accounts get magic-link only (current), Phase 1b WebAuthn wiring (schema ready), or app TOTP (separate work)
 - Log retention duration for `edit_history` and security events
 - Whether to offer self-serve account deletion vs manual operator-handled
 
@@ -71,7 +71,7 @@ Tier 0 is mandatory + not menu-driven (it produces the inventory the rest of the
 
 ### Tier 1 — Authentication review
 
-**Goal:** Confirm magic-link login, session management, and cookie attributes do what they're supposed to. No menu — these are mostly objective checks.
+**Goal:** Confirm magic-link login, session management, and cookie attributes do what they're supposed to. Five objective audit phases plus one decision point at the end (maintainer 2FA model).
 
 1. **Phase 1.1 — Magic-link audit.** **Current state confirmed:** 256-bit tokens via `random_bytes(32)`, stored as sha256 hash, 30-min expiry, single-use (`used_at` set in transaction), CSPRNG-backed. Tier 0.4 will already mark these ✓. **The new audit target:** **the magic-link token IS in the URL query string** (`/auth.php?t=<token>[&next=/path]`) and `$request` is logged by nginx (`deploy/kayak-log-format.conf` + `deploy/levels:329`), so tokens land in `/var/log/nginx/kayak-access.log`. Single-use + 30-min expiry mostly mitigates this (a leaked log token is dead within minutes of consumption), but consider: nginx-side request-URI redaction (`set $clean_request "/auth.php?t=REDACTED"` for matched URIs) and aggressive log rotation. Also confirm Referer leakage: clicking links inside the interstitial post-consumption shouldn't carry the token onward (the POST body should be the only place the token surfaces after the GET).
 2. **Phase 1.2 — Session audit.** **Current state confirmed:** `Secure` (when HTTPS) + `HttpOnly` + `SameSite=Strict` (per `_cookie_params()`); session-fixation mitigated (cookie value rotates on login via `set_editor_session()` which generates a fresh `random_bytes(32)`); logout invalidation IS server-side (sets `revoked_at`); 7-day flat absolute timeout, no idle timeout. Audit: confirm `revoked_at` is checked on every session lookup (the `current_editor()` query at line 137 includes `s.revoked_at IS NULL` per grep) and that no PHP code reads cookies after logout. Test: login; capture cookie; logout; replay cookie; expect 401.
@@ -85,9 +85,9 @@ Tier 0 is mandatory + not menu-driven (it produces the inventory the rest of the
 - Mitigation effort estimated for each finding
 
 **Decision point — maintainer 2FA model:**
-- **Magic-link only** (current). Cheapest, no UX friction, but compromised email = compromised account.
-- **TOTP via app** (Authy/Google Authenticator). Standard. Some user-data plumbing needed; QR setup flow.
-- **WebAuthn / hardware key**. Strongest. Requires a separate hardware purchase per maintainer; UX overhead.
+- **Magic-link only** (current). Cheapest, no UX friction, but compromised email = compromised account. Acceptable if the maintainer email is itself well-protected (its own 2FA, recent audits).
+- **Advance Phase 1b WebAuthn wiring** (passkeys via the existing `maintainer_credential` schema). The DB is ready; the work is JS challenge flow + 2-3 PHP endpoints (registration, assertion, list/revoke). No hardware purchase if the maintainer uses a phone or laptop's built-in passkey support; YubiKey adds defense-in-depth. Strongest option since the schema is already designed for it.
+- **TOTP via app** (Authy/Google Authenticator). Standard fallback. Would need a new DB column; QR setup flow. Less work than WebAuthn but also less protection (TOTP is phishable; WebAuthn isn't).
 
 ### Tier 2 — Authorization review
 
@@ -237,14 +237,33 @@ grep -A 8 "class Editor\|class EditorSession\|class EditorMagicLink\|class Maint
 # Existing security tests
 ls tests/php/
 
-# CSP / nginx surface for editor endpoints (per project_editor_feature memory)
+# Rate-limit zones (Phase 1.4)
+cat deploy/ratelimit.conf
+grep -n "limit_req zone" deploy/levels
+
+# CSP / nginx surface for editor endpoints (sudo only — snippets aren't in repo)
 sudo nginx -T 2>/dev/null | grep -B2 -A8 "/contact.php\|/edit.php\|/propose.php\|/review.php\|Turnstile\|Content-Security-Policy"
 
-# Turnstile and Turnstile integration locations
+# Turnstile integration locations
 grep -rn "turnstile\|Turnstile" php/ src/ 2>/dev/null
 
-# File-upload paths (Tier 3.3)
+# File-upload paths (Phase 3.3 — currently expected empty)
 grep -rn "move_uploaded_file\|\\\$_FILES" php/ 2>/dev/null
+
+# WebAuthn implementation status (Phase 1.3 — currently expected empty in php/)
+grep -rln "navigator.credentials\|publicKey\|webauthn" php/ src/ 2>/dev/null
+
+# nginx access-log captures full $request including magic-link tokens (Phase 1.1)
+cat deploy/kayak-log-format.conf
+
+# Cookie attribute helper (Phase 1.2)
+grep -A 10 "_cookie_params" php/includes/auth.php | head -15
+
+# Magic-link expiry constant (Phase 1.1)
+grep -B1 -A 3 "30 \* 60\|MAGIC_LINK_TTL" php/includes/auth.php
+
+# Application-side daily caps (Phase 0.1 inventory)
+grep -n "DAILY_CAP\|daily_cap\|TIER_DAILY" php/comment.php php/propose.php
 
 # Existing security docs (likely none)
 ls docs/security/ 2>/dev/null
