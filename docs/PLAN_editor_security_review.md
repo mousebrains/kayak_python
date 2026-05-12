@@ -74,7 +74,7 @@ Tier 0 is mandatory + not menu-driven (it produces the inventory the rest of the
 1. **Phase 1.1 — Magic-link audit.** Token generation entropy (CSPRNG?), token length, single-use enforcement, expiry window, replay prevention, link-leakage in mail headers / logs / Referer. Test: request a magic link; capture the token; use it; try to use it again; expect failure.
 2. **Phase 1.2 — Session audit.** Cookie attributes (`Secure`, `HttpOnly`, `SameSite=Lax` or `Strict`), session-id rotation on login, session-fixation protection, logout invalidation (server-side, not just cookie clear), idle/absolute timeout. Test: login; capture cookie; logout; replay cookie; expect 401.
 3. **Phase 1.3 — Maintainer credential audit.** Today: maintainers use magic-link auth, same as editors (status='maintainer' is the only distinguisher; gating happens via `is_maintainer()` / `require_maintainer()`). The `maintainer_credential` table is provisioned for WebAuthn but Phase 1b wiring (registration + assertion endpoints, JS challenge flow) is NOT done. Audit: (a) confirm magic-link → maintainer-promotion flow is the only access path, (b) assess whether the absence of a stronger second factor is acceptable given the impact (a maintainer-account compromise = arbitrary edits to all reaches + admin UI access), (c) decide whether to advance Phase 1b or formally accept the current posture.
-4. **Phase 1.4 — Brute-force / credential-stuffing posture.** Per-IP and per-account rate limits on login. Lockout policy. Turnstile on what endpoints. Per-IP magic-link request rate limit.
+4. **Phase 1.4 — Brute-force / credential-stuffing posture.** **Current state (preview, full audit in this phase):** nginx rate limits ARE in place via `deploy/ratelimit.conf` — `login:1m@3r/min`, `auth:1m@10r/min`, `edit:1m@5r/min`, `contact:1m@10r/min`, `php:10m@5r/sec`, `global:10m@20r/sec`. All zones key on `$binary_remote_addr` — **per-IP only, no per-account lockout**. Turnstile on `/login.php` and `/contact.php`. Audit: confirm zones are wired in `deploy/levels` for the correct locations; assess whether per-IP-only is sufficient (a botnet rotating IPs can grind past); decide whether to add per-account lockout (e.g. on the `editor` row). `editor_magic_link` rate limit is enforced application-side via `magic_link_under_throttle()` (per `tests/php/AuthTest.php`).
 5. **Phase 1.5 — Account-recovery flow.** Forgotten-magic-link handling. Email-changed handling. Account-takeover via email compromise: what's the blast radius?
 
 **Verification gate (end of Tier 1):**
@@ -92,9 +92,12 @@ Tier 0 is mandatory + not menu-driven (it produces the inventory the rest of the
 **Goal:** Confirm editors can't see or modify what they shouldn't; maintainers can't be impersonated by editors.
 
 1. **Phase 2.1 — Role enforcement audit.** Every endpoint that requires editor-or-maintainer status: is the check present? Is it consistent (helper function, not ad-hoc)? Test: hit each endpoint without auth, with editor cookie, with maintainer cookie; expect 401/200/200 respectively.
-2. **Phase 2.2 — IDOR sweep.** Every endpoint that takes an ID parameter (reach_id, change_request_id, attachment_id, etc.): does it verify the requester is allowed to access that specific row? Test: request your own object; record the URL; replay it from a different account; expect 403.
+2. **Phase 2.2 — IDOR sweep.** Inventory of ID-taking endpoints (from a plan-draft grep — re-verify in Phase 0.1):
+   - GET id: `api.php`, `description.php` (+ `hidden`), `gauge.php`, `latest.php`, `plot.php` (+ `days`, `embed`), `edit.php` (+ POST `reach_id`/`gauge_id`), `propose.php` (+ POST `target_id`)
+   - Watch for the GET vs POST param-name discrepancy in `edit.php` (`?id=` vs `reach_id=` body) and `propose.php` (`?id=` vs `target_id=` body) — IDOR audits often miss the POST body.
+   For each: does it verify the requester is allowed to access that specific row? Test: request your own object; record the URL; replay it from a different account; expect 403. For the read-only `description.php`/`gauge.php`/etc., "allowed" may mean "any reach is public" — document that as the deliberate model so future audits don't re-flag it.
 3. **Phase 2.3 — Privilege escalation paths.** Can an editor promote themselves to maintainer through any code path? Mass-assignment in update endpoints? File upload that writes to a privileged location? SQL injection that lets you insert into `maintainer_credential`?
-4. **Phase 2.4 — Audit trail integrity.** Can `edit_history` be modified post-hoc? Can entries be deleted? Is there a hash chain or external log?
+4. **Phase 2.4 — Audit trail integrity.** Per-row schema (`src/kayak/db/models.py:836`): `target_type`, `target_id`, `field`, `old_value`, `new_value`, `changed_at`, `changed_by` (`'maintainer:<id>'` or `'editor:<id>'`). **No hash chain, no previous_hash, no external sink** — current state. Anyone with DB write access (i.e. you, the operator, or anyone who breaches the maintainer cookie + admin endpoints + a separate path to write SQL directly) can `DELETE FROM edit_history WHERE id=N`. The "currently" answer to all three audit questions is "no protection beyond DB access controls." This sets up the Tier 2 decision point.
 
 **Verification gate (end of Tier 2):**
 - Authorization matrix documented (role × endpoint → expected response)
@@ -110,7 +113,7 @@ Tier 0 is mandatory + not menu-driven (it produces the inventory the rest of the
 
 **Goal:** Confirm XSS, SQLi, file-upload, and rate-limit controls hold.
 
-1. **Phase 3.1 — XSS sweep.** Every place user-supplied content reaches HTML output: is it escaped? `htmlspecialchars` with `ENT_QUOTES`? Or templated through something safer? Test: submit `<script>alert(1)</script>` everywhere accepting input; visit pages that render it; expect no execution.
+1. **Phase 3.1 — XSS sweep.** Files using `htmlspecialchars` (a quick proxy for "thinking about XSS"): account, auth, contact, custom_gauges, data, gauge, logout, plot, propose, review. Files NOT obviously using it but emitting HTML: **admin.php, comment.php, custom.php, description.php, edit.php, login.php, picker.php, reach.php** — these are the priority audit targets. Test: submit `<script>alert(1)</script>` everywhere accepting input; visit pages that render it; expect no execution. Confirm `htmlspecialchars` calls use `ENT_QUOTES | ENT_HTML5` for HTML5 attribute contexts.
 2. **Phase 3.2 — SQLi sweep.** Every PDO call: parameterized? No string concatenation? PHPStan should flag the obvious cases. Manual review for the rest.
 3. **Phase 3.3 — File-upload audit.** **Currently N/A — feature not yet wired.** The `change_request_attachment` table exists (`filename`, `content_type`, `size_bytes`, `sha256`, `storage_path`, `caption`) per the schema in `src/kayak/db/models.py:804`, with sha256-content-addressed storage under "a dedicated uploads root." But `grep -rn "move_uploaded_file|\$_FILES" php/` returns nothing — no PHP endpoint accepts uploads as of plan-draft date. **When the upload endpoint lands**, this phase activates: audit MIME validation, max-size enforcement, filename sanitization (`storage_path` based on sha256 should sidestep path traversal but verify), what nginx serves the uploads root with (no PHP execution; explicit `Content-Type`; `add_header Content-Disposition attachment` if user-uploaded), and whether the uploads root has the execute bit stripped from files.
 4. **Phase 3.4 — Rate limiting + abuse posture.** What's behind Turnstile (currently `/contact.php` per [project_editor_feature]). Should `propose.php`, `comment.php`, magic-link request be too? Rate limits at nginx layer? Application layer? Account-level vs IP-level?
@@ -140,9 +143,10 @@ This tier is nearly all decision points — there's no "right answer" without ex
    - **No export.** User has no way to retrieve their own data. Not a problem unless someone demands it.
    - **On-request export.** User emails you; you produce JSON/CSV. Manual.
    - **Self-serve export.** UI button → JSON download. Most work.
-3. **Decision point — `edit_history` retention:**
-   - **Indefinite** (current). Useful for audit; arguably-PII grows.
-   - **N years then anonymize the actor.** Edit content stays, "who" is dropped after some retention.
+3. **Decision point — retention of audit/PII tables:**
+   - **`edit_history`:** indefinite (current); or N years then anonymize the actor (`changed_by` column). Edit content stays; "who" is dropped after some retention.
+   - **`editor_magic_link.ip_issued`:** indefinite (current — IP captured per-issuance as IPv6-capable VARCHAR(45)); or auto-purge rows older than expiry + N days. The IP is useful for incident forensics but rarely beyond a few weeks.
+   - **`editor_session.ip` and `editor_session.user_agent`:** same question. Useful while session is live + a short tail; less so after expiry.
 4. **Decision point — privacy policy + terms:**
    - **None** (current). Defensible for a hobby site; weak if someone formally demands.
    - **`/privacy.html` + `/terms.html`** boilerplate. ~1 hour to draft; sets expectations; minimal commitment.
