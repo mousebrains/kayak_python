@@ -38,6 +38,10 @@ final class GaugeIntegrationTest extends IntegrationTestCase
 
     protected static function seedDatabase(PDO $db): void
     {
+        // Canonical names embed the gauge ID so search queries on the
+        // suffix (e.g. 'UNIQ_4001') are unique-by-construction — defends
+        // testSearchModeSingleMatchRedirects against a future test that
+        // accidentally seeds a second row with a colliding substring.
         // Gauge 1: full data — coords + USGS id + a source + a reading.
         $db->prepare(
             'INSERT INTO gauge
@@ -46,7 +50,7 @@ final class GaugeIntegrationTest extends IntegrationTestCase
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
         )->execute([
             self::GAUGE_WITH_DATA_ID,
-            'CLACKAMAS_TEST',
+            'CLACKAMAS_TEST_UNIQ_4001',
             self::GAUGE_WITH_DATA_NAME,
             'Estacada, OR',
             45.30, -122.35,
@@ -61,7 +65,7 @@ final class GaugeIntegrationTest extends IntegrationTestCase
             'INSERT INTO gauge (id, name, display_name) VALUES (?, ?, ?)'
         )->execute([
             self::GAUGE_NO_DATA_ID,
-            'EMPTY_GAUGE_TEST',
+            'EMPTY_GAUGE_TEST_UNIQ_4002',
             self::GAUGE_NO_DATA_NAME,
         ]);
 
@@ -142,8 +146,10 @@ final class GaugeIntegrationTest extends IntegrationTestCase
 
     public function testSearchModeSingleMatchRedirects(): void
     {
-        // Unique substring of one gauge name → single match → 302 redirect.
-        $resp = $this->request('/gauge.php', ['q' => 'CLACKAMAS_TEST']);
+        // 'UNIQ_4001' is in gauge 4001's canonical name only (the seed
+        // embeds the ID into the name for exactly this purpose) →
+        // single match → 302 redirect.
+        $resp = $this->request('/gauge.php', ['q' => 'UNIQ_4001']);
 
         $this->assertSame(302, $resp['status']);
         $this->assertSame(
@@ -155,17 +161,19 @@ final class GaugeIntegrationTest extends IntegrationTestCase
     public function testSearchModeMultiMatchRendersTable(): void
     {
         // 'TEST' is in both seeded gauges' canonical name → multi-match.
-        // Search SQL (gauge.php:27-34) selects/renders the `name` column,
-        // NOT `display_name`, so assert on the canonical names here
-        // (detail-mode tests below assert on display_name instead).
+        // Search SQL (gauge_search.php:_search_gauges) selects/renders
+        // the `name` column, NOT `display_name`, so assert on the
+        // canonical names here (detail-mode tests below assert on
+        // display_name instead). File:fn reference is more resilient
+        // to future line-motion than file:line.
         $resp = $this->request('/gauge.php', ['q' => 'TEST']);
 
         $this->assertSame(200, $resp['status']);
         $this->assertResponseContains(
             $resp['body'],
             'gauges matching',
-            'CLACKAMAS_TEST',
-            'EMPTY_GAUGE_TEST',
+            'CLACKAMAS_TEST_UNIQ_4001',
+            'EMPTY_GAUGE_TEST_UNIQ_4002',
             '</html>',
         );
         $this->assertNoBareInlineScript($resp['body']);
