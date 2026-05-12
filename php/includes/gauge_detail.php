@@ -68,7 +68,7 @@ function handle_gauge_detail(PDO $db, int $id, ?string $start_date, ?string $end
     _render_gauge_readings_table($readings);
 
     if ($readings) {
-        _render_date_form_and_plots($db, $gauge, $id, $gauge_display, $start_date, $end_date);
+        _render_gauge_date_form_and_plots($db, $gauge, $id, $gauge_display, $start_date, $end_date);
     }
 
     $has_map = _render_gauge_map($gauge, $related['reaches'], $reach_status_by_id);
@@ -407,7 +407,7 @@ function _render_gauge_readings_table(array $readings): void
  *
  * @param array<string, mixed> $gauge
  */
-function _render_date_form_and_plots(
+function _render_gauge_date_form_and_plots(
     PDO $db,
     array $gauge,
     int $id,

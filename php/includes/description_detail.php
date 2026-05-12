@@ -55,7 +55,7 @@ function handle_description_detail(
     _render_current_readings($readings);
 
     if ($related['gauge']) {
-        _render_date_form_and_plots(
+        _render_description_date_form_and_plots(
             $db,
             $related['gauge'],
             $id,
@@ -342,7 +342,7 @@ function _render_current_readings(array $readings): void
  * @param array<string, mixed>       $gauge
  * @param array<string, mixed>|false $class_range
  */
-function _render_date_form_and_plots(
+function _render_description_date_form_and_plots(
     PDO $db,
     array $gauge,
     int $id,

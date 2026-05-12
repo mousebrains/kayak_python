@@ -193,12 +193,6 @@ parameters:
 			path: php/includes/gauge_detail.php
 
 		-
-			message: '#^Function _render_date_form_and_plots invoked with 6 parameters, 7 required\.$#'
-			identifier: arguments.count
-			count: 1
-			path: php/includes/gauge_detail.php
-
-		-
 			message: '#^Function _gp_bands_for_axis\(\) has parameter \$class_range with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1
