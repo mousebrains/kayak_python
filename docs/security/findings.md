@@ -82,16 +82,23 @@
 
 #### F-8 — `UPDATE $table SET $sets` SQL string concat in edit.php + review_logic.php
 
-- **Status:** 🔴 Open
+- **Status:** ⚪ Accepted (Tier 6 disposition: code-smell tracked; safe in current usage; pair with PLAN_php_layer_split if/when activated).
 - **Threats:** T-T4, T-E2
 - **Severity:** Critical impact if a column or table name from user input ever lands in the concat; low likelihood with current callers.
 - **Description:** Two sites concat into `prepare()`:
   - `php/edit.php:117` — `prepare('UPDATE ' . $table . ' SET ' . implode(', ', $sets) . ' WHERE id = ?')`
   - `php/includes/review_logic.php:101` — same pattern
-  
+
   Both currently use whitelisted `$table` and `$sets` (the `$field = ?` strings have field names from the editable-field list). Safe in current usage; the pattern is a code smell — a future contributor could pass user-supplied keys.
-- **Remediation:** Refactor to a 2-element dispatch table (`reach` / `gauge`) with const column lists, and a helper that builds the `SET` clause from a const-whitelisted dict. Pair with F-7.
-- **Plan tier:** Tier 2.1 / Tier 2.3.
+- **Acceptance rationale:**
+  1. **Cross-file invariants verified safe.** Tier 2.3 audit (commit `cfa4e6a`) traced the call chain end-to-end: `$table` is restricted via `in_array($table, ['reach', 'gauge'])` whitelist at the entrypoint of edit.php; `$sets` items use `$field` from the const `$editable_fields` whitelist; in review_logic.php `$f` comes from `array_keys($payload['reach'])` whose keys are constrained at the proposer's tier-whitelist (verified in F-7 closure). No user-controlled key reaches the concat under any current code path.
+  2. **Refactor scope is non-trivial.** A clean fix is a 2-table dispatch + a builder helper (per F-7 / F-8 original remediation note). That refactor naturally belongs to `docs/PLAN_php_layer_split.md` rather than this security review's closeout. Doing it here would expand the security-review PR scope across the editor flow's hot path.
+  3. **Visible code marker prevents regression.** F-8 stays cited from tier3-audit.md Phase 3.2 (the `$where`/`$sql` variable construction sites table) so a future security-review iteration sees the same code-smell flag and can re-decide.
+- **Re-evaluation triggers:**
+  - PLAN_php_layer_split activates and touches edit.php / review_logic.php — bundle the refactor into that work.
+  - A new caller is added that constructs `$sets` or `$table` from a less-trusted source.
+  - Any future Tier 2.x re-audit finds drift in the invariants.
+- **Plan tier:** Tier 2.1 / Tier 2.3 audit; Tier 6 accept.
 
 ### Medium
 
@@ -106,18 +113,26 @@
 
 #### F-3 — Email-alias normalization
 
-- **Status:** 🔴 Open
+- **Status:** ⚪ Accepted (Tier 6 disposition: low-impact at hobby-club scale; documented re-eval triggers).
 - **Threats:** T-S6, T-D2
-- **Description:** `normalize_email()` in `php/includes/auth.php` is `strtolower(trim(...))`. Gmail's `Foo.Bar+test@gmail.com` and `foobar@gmail.com` resolve to *different* `editor` rows. An attacker spawns N alias accounts to: (1) bypass per-account daily caps; (2) dilute audit trail; (3) sock-puppet proposal volume.
-- **Remediation options:**
-  - Detect Gmail/Google Workspace domains; strip `.` from local-part; strip `+tag`. Other providers don't have the same alias semantics.
+- **Description:** `normalize_email()` in `php/includes/auth.php` is `strtolower(trim(...))`. Gmail's `Foo.Bar+test@gmail.com` and `foobar@gmail.com` resolve to *different* `editor` rows. An attacker could spawn N alias accounts to: (1) bypass per-account caps; (2) dilute audit trail; (3) sock-puppet proposal volume.
+- **Acceptance rationale:**
+  1. **Realized attack surface is low at this scale.** No per-account daily cap exists today — only magic-link rate limits (per-email + per-IP). Audit-trail dilution requires the alias accounts to actually contribute, which means the maintainer approves them; 5 accounts with `foo+1@`/`foo+2@`/etc. patterns would be visible during review and trivially banned. Sock-puppet proposal volume requires those proposals to be approved, again through the same maintainer gate.
+  2. **Privacy policy does not promise one-account-per-person.** No external trust contract is violated by alias accounts.
+  3. **Implementation cost vs. fix scope:** the cleanest fix (Gmail-specific strip-dots-and-plus) is ~10 minutes, but the wider question — "do we want one editor identity per human?" — is a product question, not a security question. Documenting the decision via this Accept entry preserves the option to flip later without locking it in now.
+- **Re-evaluation triggers:**
+  - Observed abuse: maintainer notices the same person registering with multiple Gmail aliases to game review or comment volume.
+  - Per-account daily cap is introduced (which would make the alias bypass a concrete capability vs. theoretical).
+  - Privacy policy or community charter starts asserting one-account-per-person.
+  - Site grows beyond hobby/club tier.
+- **Remediation options (if a trigger fires):**
+  - Detect Gmail / Google Workspace domains; strip `.` from local-part; strip `+tag`. Other providers don't have the same alias semantics.
   - OR enforce one-account-per-canonical-email globally with a more aggressive normalization.
-  - OR accept as low-impact (paddler audit isn't a high-stakes audit context).
-- **Plan tier:** Tier 1.5 (account-recovery audit) decision point.
+- **Plan tier:** Tier 1.5 (account-recovery audit) decision point; Tier 6 accept.
 
 #### F-13 — No self-approval prevention in review.php
 
-- **Status:** 🔴 Open (low priority — tied to multi-maintainer trigger)
+- **Status:** 🔵 Deferred (Tier 6 disposition: trigger-bound, second-maintainer scenario).
 - **Threats:** T-E6
 - **Severity:** Low impact at single-maintainer scale (moot — maintainer could direct-edit anyway); Medium impact at multi-maintainer scale.
 - **Description:** `review_approve()` in `php/includes/review_logic.php:61` takes `$cr, $applied, $maint_id` and does not check `$cr['editor_id'] !== $maint_id`. Realistic scenario: an editor with pending proposals gets promoted to maintainer; they can now approve their own pre-promotion proposals. (After promotion, `propose.php` routes them to `/edit.php`, so they cannot submit NEW proposals as maintainer.)
@@ -131,9 +146,10 @@ This section holds two kinds of items: (a) findings downgraded to Low after audi
 
 #### F-9 — Over-tier apply (review maintainer can write fields outside proposer's tier)
 
-- **Status:** 🔴 Open (refined; severity downgraded)
+- **Status:** 🔵 Deferred (Tier 6 disposition: trigger-bound, second-maintainer scenario — same family as F-13).
 - **Threats:** T-T6, T-E7
 - **Severity:** **Low** (downgraded from Medium after Phase 2.3 audit).
+- **Deferral trigger:** Second maintainer joins (same trigger as F-13 / D-T1.3 / D-T2.4 family). At single-maintainer scale, the maintainer can direct-edit anything anyway, so this is essentially moot; the audit-trail attribution is correct. At multi-maintainer scale, the reach_class slip becomes a "did maintainer A apply class changes proposer B didn't request" question — meaningful enough to fix at that point.
 - **Description:** Phase 2.3 audit refined the scope:
   - **Reach fields:** NOT vulnerable. `review.php:50-56` builds `$applied['reach']` from `array_keys($payload['reach'])` — keys are constrained to what the proposer submitted (which was tier-whitelisted). Maintainer cannot add `latitude_start` to the apply when the proposer only submitted `description`.
   - **reach_class:** Still vulnerable. `$applied['reach_class']` is built from POST `classes_present`/`classes`/`flow_low`/etc. (`php/review.php:58-74`), independent of `$payload`. Maintainer can add class changes the proposer didn't propose.
@@ -205,11 +221,11 @@ This section holds two kinds of items: (a) findings downgraded to Low after audi
 
 | Status | Count | IDs |
 |---|---|---|
-| 🔴 Open | 7 | F-3, F-8, F-9, F-10, F-11, F-12, F-13 |
+| 🔴 Open | 3 | F-10, F-11, F-12 (all prod-side confirms; cannot close from dev box) |
 | 🟡 In progress | 0 | — |
 | 🟢 Closed | 5 | F-1, F-2, F-14, F-15, F-16 (Tier 6) |
-| ⚪ Accepted | 4 | F-4 (per D-T2.4), F-5 (per D-T1.3), F-6 (Phase 3.1 — documented convention adequate), F-7 (Phase 2.3 — confirmed safe) |
-| 🔵 Deferred | 0 | — |
+| ⚪ Accepted | 6 | F-3 (Tier 6 — low-impact at hobby scale), F-4 (per D-T2.4), F-5 (per D-T1.3), F-6 (Phase 3.1 — documented convention adequate), F-7 (Phase 2.3 — confirmed safe), F-8 (Tier 6 — code-smell tracked, safe in current usage) |
+| 🔵 Deferred | 2 | F-9 (Tier 6 — multi-maintainer trigger), F-13 (Tier 6 — multi-maintainer trigger) |
 
 ## Per-tier work allocation
 

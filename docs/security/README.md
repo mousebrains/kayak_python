@@ -17,6 +17,8 @@ Security artifacts for the editor pipeline. Maintained per `docs/PLAN_editor_sec
 | [tier4-audit.md](tier4-audit.md) | Tier 4 (User-data obligations) audit log — account deletion, data export, retention, privacy/ToS, security.txt. | Per-decision during Tier 4; final closeout. |
 | [tier5-audit.md](tier5-audit.md) | Tier 5 (Disclosure + response) audit log — disclosure path, IR cadence, re-review cadence, restore-drill plan, drill log. | Per-decision during Tier 5; per-drill log append. |
 | [incident-response.md](incident-response.md) | Operator's IR runbook — pre-incident dependencies, discovery flows, triage matrix, containment options (C1-C5), credential rotation playbooks, user notification template, post-incident review template. | After every incident; whenever D-T5.3 triggers a re-review. |
+| [tier6-audit.md](tier6-audit.md) | Tier 6 (Hardening + closeout) audit log — per-finding disposition, per-decision implementation status, operator action list. | When the review actually closes (one-shot). |
+| [posture.md](posture.md) | Rolled-up end-of-review posture snapshot — controls inventory, accepted-findings triggers, operator's standing checklist. | Major change per D-T5.3, annual light-touch re-review, when a finding is filed/closed/dispositioned. |
 
 ## Reading order
 
@@ -45,7 +47,7 @@ For someone returning to update controls after a code change:
 | Tier 3 — Input/output handling | ✅ Complete (commits 749aa2c / 280edea / 8730c64 / 1d04462) | tier3-audit.md + decisions.md (D-T3.3 Deferred) + findings.md updates (F-6 accepted); plus polish per Tier 3 review |
 | Tier 4 — User-data obligations | ✅ Complete (commit c32195b) | tier4-audit.md + decisions.md (D-T4.1..5) + findings.md updates (F-16 new); 4 Tier 6 implementation items: 3 CLIs + privacy.php refresh |
 | Tier 5 — Disclosure + response | ✅ Complete (commit 843207c) | tier5-audit.md + incident-response.md (runbook) + decisions.md (D-T5.1..3); restore-drill plan documented (first execution pending operator). No new findings. |
-| Tier 6 — Hardening + closeout | ⏳ Pending | Apply findings + decisions; final posture doc |
+| Tier 6 — Hardening + closeout | ✅ Complete from dev-side (commits ff107e8 / f769d68 / e4b8fa6 / 5724a23 / this commit) | tier6-audit.md + posture.md. 5 findings Closed (F-1/2/14/15/16); 6 Accepted (F-3/4/5/6/7/8); 2 Deferred to second-maintainer trigger (F-9/13); 3 Open are operator prod-side confirms (F-10/11/12). 3 Tier 4 CLIs shipped (delete-editor / export-editor / editor-retention) + systemd timer. Operator action list in tier6-audit.md § 6.3. |
 
 ## Out of scope
 
