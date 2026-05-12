@@ -43,7 +43,7 @@
 
 #### F-5 — Maintainer authentication is magic-link only (no 2FA)
 
-- **Status:** 🔴 Open (pending Tier 1.3 decision; see `tier1-audit.md`)
+- **Status:** ⚪ Accepted (per D-T1.3, 2026-05-12; see `decisions.md`)
 - **Threats:** T-S2 (specifically for maintainer accounts)
 - **Severity:** **Medium** (downgraded from High after Phase 1.3 audit — see below).
 - **Description:** Maintainers use the same `/login.php` magic-link flow as editors. Email-account compromise = full maintainer-account takeover. The `maintainer_credential` schema is provisioned for WebAuthn but no PHP endpoints implement registration/assertion.
@@ -177,10 +177,10 @@ These are not gaps per se — they're verification steps that need prod-side acc
 
 | Status | Count | IDs |
 |---|---|---|
-| 🔴 Open | 15 | F-1 through F-15 |
+| 🔴 Open | 14 | F-1, F-2, F-3, F-4, F-6, F-7, F-8, F-9, F-10, F-11, F-12, F-13, F-14, F-15 |
 | 🟡 In progress | 0 | — |
 | 🟢 Closed | 0 | — |
-| ⚪ Accepted | 0 | — |
+| ⚪ Accepted | 1 | F-5 (per D-T1.3) |
 | 🔵 Deferred | 0 | — |
 
 ## Per-tier work allocation

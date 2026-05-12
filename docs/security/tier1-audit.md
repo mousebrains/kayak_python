@@ -215,3 +215,45 @@ None new. The 4 brute-force defense layers (`nginx limit_req`, fail2ban, Turnsti
 
 - ✅ 5 audit tests; 4 pass, 1 cross-listed existing finding (F-3); no new findings beyond design note D-1.
 - D-1 (self-serve email change) recorded for Tier 4 user-data discussion.
+
+## Tier 1 closeout
+
+### Audit summary
+
+| Phase | Verdict | Findings touched |
+|---|---|---|
+| 1.1 Magic-link | ⚠ | F-2 (existing, refined), **F-14 NEW** |
+| 1.2 Session | ✅ + informational gap | **F-15 NEW** (test coverage) |
+| 1.3 Maintainer credential | ✅ + decision | F-5 (reclassified High → Medium); **D-T1.3 decision recorded** |
+| 1.4 Brute-force posture | ✅ | none |
+| 1.5 Account recovery | ✅ | F-3 (existing); D-1 design note for Tier 4 |
+
+### New findings filed during Tier 1
+
+- **F-14** — Magic-link token leaks via Referer to subsequent requests. Effort: ~15min (add `Referrer-Policy: no-referrer` header to auth.php).
+- **F-15** — No automated test for logout → replay → 401. Effort: ~30min (extend bootstrap.php + new SessionRevocationTest.php).
+
+### Decisions made
+
+- **D-T1.3 Maintainer 2FA model** → Option A (magic-link only), with explicit re-evaluation triggers (second maintainer added, F-4 implemented, new privileged op added, incident). Recorded in `decisions.md`.
+
+### Tier 1 verification gate
+
+Per plan: "Each of the above tested with a written log of pass/fail/N/A; failures filed as findings; mitigation effort estimated for each finding."
+
+- ✅ 26 individual audit tests across 5 phases written with pass/partial/fail verdicts.
+- ✅ 2 new findings filed (F-14, F-15); 3 existing refined (F-2, F-3, F-5).
+- ✅ Mitigation effort estimated for each filed finding.
+- ✅ Decision point disposed (D-T1.3).
+
+### Looking ahead to Tier 2 (Authorization review)
+
+Tier 1 surfaced findings that are downstream of authorization:
+
+- **F-7** (mass-assignment whitelist in propose/review) — Tier 2.1 / 2.3 work.
+- **F-8** (`UPDATE $table SET $sets` concat code smell) — same.
+- **F-9** (over-tier apply) — Tier 2 decision point on audit-trail strength.
+- **F-13** (self-approval) — Tier 2.3 (privilege escalation paths).
+- **F-4** (edit_history tamper-resistance) — Tier 2 decision point.
+
+These should be the priority targets for Tier 2's 4 phases + decision point.
