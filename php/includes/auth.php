@@ -101,12 +101,16 @@ function set_editor_session(int $editor_id): string {
     return $tok;
 }
 
-/** Revoke the current session (if any) and clear the cookie. */
-function clear_editor_session(): void {
+/** Revoke the current session (if any) and clear the cookie.
+ *
+ * $db_override is for tests only; production calls pass nothing and use
+ * the global get_db() connection.
+ */
+function clear_editor_session(?PDO $db_override = null): void {
     $tok = $_COOKIE[EDITOR_SESSION_COOKIE] ?? '';
     if ($tok !== '') {
         $hash = hash_token($tok);
-        get_db()->prepare(
+        ($db_override ?? get_db())->prepare(
             'UPDATE editor_session SET revoked_at = datetime(\'now\') WHERE token_hash = ?'
         )->execute([$hash]);
     }
@@ -118,18 +122,24 @@ function clear_editor_session(): void {
  * Return the editor row (+ session id) for the current request, or null.
  *
  * Does NOT redirect; use require_editor() / require_maintainer() for that.
+ *
+ * $db_override is for tests only; when present the per-request memoization
+ * is bypassed so different sessions can be exercised within the same PHP
+ * process. Production callers pass nothing.
  */
-function current_editor(): ?array {
+function current_editor(?PDO $db_override = null): ?array {
     static $cached = false;
     static $editor = null;
-    if ($cached) return $editor;
-    $cached = true;
+    if ($db_override === null && $cached) return $editor;
 
     $tok = $_COOKIE[EDITOR_SESSION_COOKIE] ?? '';
-    if ($tok === '' || !ctype_xdigit($tok) || strlen($tok) !== 64) return $editor = null;
+    if ($tok === '' || !ctype_xdigit($tok) || strlen($tok) !== 64) {
+        if ($db_override === null) { $cached = true; $editor = null; }
+        return null;
+    }
 
     $hash = hash_token($tok);
-    $stmt = get_db()->prepare(
+    $stmt = ($db_override ?? get_db())->prepare(
         'SELECT e.*, s.id AS session_id, s.expires_at AS session_expires_at,
                 s.last_seen_at AS session_last_seen_at
          FROM editor_session s
@@ -141,7 +151,10 @@ function current_editor(): ?array {
     );
     $stmt->execute([$hash, 'banned']);
     $row = $stmt->fetch();
-    if (!$row) return $editor = null;
+    if (!$row) {
+        if ($db_override === null) { $cached = true; $editor = null; }
+        return null;
+    }
 
     // Throttle to ~60s and swallow SQLITE_BUSY. This runs on every page
     // load via render_nav(); without the throttle, service-worker prefetch
@@ -150,13 +163,14 @@ function current_editor(): ?array {
     $last_ts = (int)strtotime((string)($row['session_last_seen_at'] ?? '') . ' UTC');
     if ($last_ts < time() - 60) {
         try {
-            get_db()->prepare('UPDATE editor_session SET last_seen_at = datetime(\'now\') WHERE id = ?')
+            ($db_override ?? get_db())->prepare('UPDATE editor_session SET last_seen_at = datetime(\'now\') WHERE id = ?')
                 ->execute([$row['session_id']]);
         } catch (\PDOException $e) {
             error_log('editor_session last_seen_at update skipped: ' . $e->getMessage());
         }
     }
-    return $editor = $row;
+    if ($db_override === null) { $cached = true; $editor = $row; }
+    return $row;
 }
 
 function is_maintainer(?array $ed = null): bool {

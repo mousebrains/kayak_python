@@ -14,7 +14,7 @@ declare(strict_types=1);
  * `const` declarations under PHP 9).
  */
 
-/** Fresh in-memory SQLite PDO with a minimal editor/magic-link schema. */
+/** Fresh in-memory SQLite PDO with a minimal editor/magic-link/session schema. */
 function kayak_test_pdo(): PDO {
     $pdo = new PDO('sqlite::memory:');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
@@ -38,6 +38,17 @@ function kayak_test_pdo(): PDO {
             used_at DATETIME,
             ip_issued TEXT,
             next_url TEXT
+        );
+        CREATE TABLE editor_session (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            editor_id INTEGER NOT NULL REFERENCES editor(id) ON DELETE CASCADE,
+            token_hash TEXT UNIQUE NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at DATETIME NOT NULL,
+            last_seen_at DATETIME,
+            ip TEXT,
+            user_agent TEXT,
+            revoked_at DATETIME
         );
     ");
     return $pdo;

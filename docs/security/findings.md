@@ -177,14 +177,21 @@ This section holds two kinds of items: (a) findings downgraded to Low after audi
 
 #### F-15 — No automated regression test for logout → session-replay → 401
 
-- **Status:** 🔴 Open (test coverage, not vulnerability)
+- **Status:** 🟢 Closed (Tier 6 fix; tests/php/SessionRevocationTest.php + auth.php refactor).
 - **Threats:** T-S4 (indirectly — defends against regression of the revoked_at filter)
-- **Severity:** Low; informational. Static analysis confirms `current_editor()` filters `s.revoked_at IS NULL`, so logout immediately revokes the session token; replaying the cookie returns null and downstream `require_editor()` redirects to /login. No live vulnerability today.
-- **Description:** `tests/php/` has no test covering the login → capture-cookie → logout → replay → 401 flow. The bootstrap.php test harness doesn't even create the `editor_session` table (`kayak_test_pdo()` only seeds `editor` + `editor_magic_link`). A future refactor that drops the `revoked_at` SQL clause from `current_editor()` would not break any test.
-- **Repro:** `grep -nE "logout|revoke|revoked" tests/php/*.php` → no matches.
-- **Remediation options:**
-  - Extend `tests/php/bootstrap.php` `kayak_test_pdo()` to include the `editor_session` schema. Add a new `tests/php/SessionRevocationTest.php` with two cases: (a) `current_editor()` returns the editor when session is live; (b) returns null after `clear_editor_session()`. ~30 min.
-  - OR a once-only live manual test on staging, recorded in `tier1-audit.md`. ~5 min, no regression protection.
+- **Severity:** Low; informational.
+- **Description:** `tests/php/` had no test covering the login → logout → replay → 401 flow. The bootstrap.php harness didn't even create the `editor_session` table. A future refactor that dropped `revoked_at`, `expires_at`, or `status != 'banned'` filters from `current_editor()` would not have broken any test.
+- **Resolution:**
+  1. Refactored `current_editor()` and `clear_editor_session()` in `php/includes/auth.php` to accept an optional `?PDO $db_override` parameter (idiomatic with the existing AuthTest pattern). Production callers pass nothing → same behavior; tests inject an in-memory PDO. The per-request static cache is bypassed when an override is passed.
+  2. Extended `tests/php/bootstrap.php`'s `kayak_test_pdo()` to include the full `editor_session` schema.
+  3. Added `tests/php/SessionRevocationTest.php` with 6 cases:
+     - live session resolves to the editor;
+     - revoked session (via `clear_editor_session`) replays to null;
+     - expired session returns null;
+     - banned editor with live session returns null;
+     - missing cookie returns null;
+     - malformed cookie (non-hex) returns null without DB access.
+- **Verification:** `make test-php` (or `./vendor/bin/phpunit tests/php/SessionRevocationTest.php`) — exercises all 6 cases.
 - **Plan tier:** Tier 1.2 (this finding). Test addition is Tier 6 (apply findings).
 
 #### F-16 — Privacy policy "Your Rights" section contradicts the rest of the page
@@ -201,9 +208,9 @@ This section holds two kinds of items: (a) findings downgraded to Low after audi
 
 | Status | Count | IDs |
 |---|---|---|
-| 🔴 Open | 9 | F-2, F-3, F-8, F-9, F-10, F-11, F-12, F-13, F-15 |
+| 🔴 Open | 8 | F-2, F-3, F-8, F-9, F-10, F-11, F-12, F-13 |
 | 🟡 In progress | 0 | — |
-| 🟢 Closed | 3 | F-1, F-14, F-16 (Tier 6) |
+| 🟢 Closed | 4 | F-1, F-14, F-15, F-16 (Tier 6) |
 | ⚪ Accepted | 4 | F-4 (per D-T2.4), F-5 (per D-T1.3), F-6 (Phase 3.1 — documented convention adequate), F-7 (Phase 2.3 — confirmed safe) |
 | 🔵 Deferred | 0 | — |
 
