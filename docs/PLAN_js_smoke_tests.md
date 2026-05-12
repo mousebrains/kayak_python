@@ -1,8 +1,9 @@
 # Plan — JS smoke tests via Playwright in CI
 
-> **Cross-check:** plan drafted 2026-05-12 against `main` at `d3e7dce`. Inputs verified: `tests/php/IntegrationTestCase.php` (Tier 1.3 PHP scaffold), `.github/workflows/ci.yml` (`lint-misc` job structure), `pyproject.toml` (editable install pattern), `static/*.js` + `src/kayak/web/static/*.js` (10 hand-written JS files, all IIFE-style classic scripts). A second session should re-run §Reproduce before Phase 1 to confirm the file layout hasn't shifted.
+> **Cross-check:** plan drafted 2026-05-12 against `main` at `d3e7dce`; iter 1 re-verified against `8ad4a37` (the initial-draft commit). Inputs verified: `tests/php/IntegrationTestCase.php` (Tier 1.3 PHP scaffold; `resolveVenvCommand:204`), `.github/workflows/ci.yml` (`lint-misc:27`; `pip install -e .:70-71`), `pyproject.toml` (editable install pattern), `static/*.js` + `src/kayak/web/static/*.js` (10 hand-written JS files, all IIFE-style classic scripts).
 >
-> **Iter log:** (this draft is iter 0; iters logged here as they run.)
+> **Iter log:**
+> - iter 1 (2026-05-12): 5 findings — Playwright's `webServer` block can't read env vars set in `globalSetup` (timing race); replaced with manual server lifecycle inside `globalSetup` mirroring `IntegrationTestCase.php`. `levels init-db` needs both `SQLITE_PATH` AND `DATABASE_URL` env vars, not just one. Phase 2 runtime budget phrasing clarified (≤30 s is total step time, not delta). Added `actions/upload-artifact` for `playwright-report/` on CI failure. Cross-check ref bumped + line-citations added.
 >
 > Dates absolute. References `file:line` against current `main`.
 
@@ -81,17 +82,31 @@ Goal: working Playwright harness on a dev box. CI integration deferred to Phase 
 3. **`playwright.config.ts`** — Playwright config:
    - `testDir: 'tests/js'`
    - `workers: 1` (`php -S` is single-threaded; serial execution avoids races)
-   - `globalSetup: './tests/js/global-setup.ts'` (init-db's a tmp SQLite)
-   - `webServer: { command: 'php -S 127.0.0.1:0 -t public_html', port: 0, env: { SQLITE_PATH: '...', EDITOR_FEATURE: '0' } }` — Playwright's webServer block boots the PHP server before tests and tears it down after
-   - `use: { headless: true, viewport: { width: 1280, height: 720 }, baseURL: '...' }`
+   - `globalSetup: './tests/js/global-setup.ts'` (init-db's a tmp SQLite **and** spawns + waits for the PHP server)
+   - `globalTeardown: './tests/js/global-teardown.ts'` (stops the PHP server + cleans the tmp dir)
+   - `use: { viewport: { width: 1280, height: 720 }, baseURL: process.env.KAYAK_TEST_BASE_URL }` — `headless: true` is the default in CI; explicit only if needed
    - `reporter: [['list'], ['html', { open: 'never' }]]`
    - Browser binary: `chromium` only (cheapest; covers the vast majority of real-user traffic; Firefox + WebKit deferred)
+   - **No `webServer` block.** Playwright's `webServer` config launches the command before any test code runs — *before* `globalSetup` exports env vars. That means the spawned `php -S` can't see the `SQLITE_PATH` written by `globalSetup`. The clean answer (mirroring `tests/php/IntegrationTestCase.php`'s pattern) is to own the server lifecycle inside `globalSetup`/`globalTeardown` and export `process.env.KAYAK_TEST_BASE_URL` for the tests to consume via `baseURL`.
 4. **`tests/js/global-setup.ts`** — analog of `IntegrationTestCase::setUpBeforeClass`:
-   - Mints a tmp dir
-   - Runs `levels init-db` against `${tmpdir}/kayak.db` via `child_process.execFileSync` (`SQLITE_PATH=${tmpdir}/kayak.db levels init-db`)
-   - Exports the tmp path via environment variables for the webServer block to inherit
-   - Cleanup happens in `globalTeardown` (separate file, same shape) so a crashed test still leaves the tmp dir for forensics
-5. **`tests/js/global-teardown.ts`** — `rm -rf` the tmp dir from the global-setup. Only runs on clean exit; crashed runs leave the dir behind on purpose.
+   - Mints a tmp dir (e.g. `mkdtempSync(path.join(os.tmpdir(), 'kayak-js-'))`).
+   - Runs `levels init-db` via `child_process.execFileSync` with **both** env vars set:
+     ```ts
+     execFileSync('levels', ['init-db'], {
+       env: {
+         ...process.env,
+         SQLITE_PATH: dbPath,                            // read by PHP layer
+         DATABASE_URL: `sqlite:///${dbPath}`,           // read by Python layer
+         EDITOR_FEATURE: '0',
+       },
+       stdio: 'pipe',
+     });
+     ```
+     Both env vars are required — `kayak.config` reads `DATABASE_URL` for SQLAlchemy; PHP reads `SQLITE_PATH` from `fastcgi_param` (here from the process env). One without the other → schema seeded only partially OR the PHP server can't open the DB.
+   - Spawns `php -S 127.0.0.1:<port> -t public_html` via `spawn()`, with `SQLITE_PATH` + `EDITOR_FEATURE` etc. in its env. Uses a fixed port (e.g. `8000`) — Playwright can't probe a port-0 binding because there's no PHPUnit-style stderr-reading layer in the runner; fixed-port on isolated CI runners is reliable. If 8000 is occupied on a dev box, override via `KAYAK_TEST_PORT` env var.
+   - Polls the port (`net.createConnection`) for up to 5 s until it accepts.
+   - Stores `{ serverPid, tmpDir, dbPath }` on `process.env.KAYAK_TEST_*` for the teardown to find. Sets `process.env.KAYAK_TEST_BASE_URL = http://127.0.0.1:8000` for the tests to read via `baseURL`.
+5. **`tests/js/global-teardown.ts`** — stops the PHP server (`process.kill(serverPid, 'SIGTERM')` with a short timeout then `SIGKILL` fallback) + `rm -rf tmpDir`. Always runs on clean exit; crashed runs leak the server process + tmpdir on purpose so the operator can inspect.
 6. **`tests/js/smoke.spec.ts`** — single drill test:
    ```typescript
    import { test, expect } from '@playwright/test';
@@ -150,15 +165,24 @@ Goal: CI gate. The plan deliberately doesn't expand test coverage yet — get on
      run: npx playwright install --with-deps chromium
    - name: JS smoke tests
      run: npx playwright test
+   - name: Upload Playwright report (on failure)
+     if: failure()
+     uses: actions/upload-artifact@v4
+     with:
+       name: playwright-report
+       path: playwright-report/
+       retention-days: 14
    ```
    Order matters: Node + npm ci must precede playwright install (needs `@playwright/test` on disk); playwright install must precede the test run.
 2. **No other workflow changes needed.** The other jobs (`lint`, `typecheck`, `test`, `secret-scan`, `security-audit`) don't touch JS.
 
 **Verification gate:**
 - Push the commit to a branch; CI runs the new step.
-- The new step takes ~30-60 s on the first run (browser install), ~5-10 s on cached subsequent runs.
-- Job stays green; total `lint-misc` runtime delta is within budget (existing `lint-misc` was ~2 min; +30 s is acceptable).
-- Cache hit on the second run: confirm `actions/cache@v4` reports `cache-hit: true` for the playwright key.
+- First run cost: ~60-90 s (Node setup ~5 s + `npm ci` ~10 s + `playwright install --with-deps` ~45 s + tests ~10 s).
+- Cached runs (npm cache hit + Playwright browser cache hit): ~25-35 s total for the added steps.
+- Job stays green; the new `lint-misc` total runtime ≤ ~2 min 30 s (existing ~2 min + ~30 s cached delta). Below the 5-min envelope the workflow targets.
+- Cache hit on the second run: confirm `actions/cache@v4` reports `cache-hit: true` for the playwright key in the action log.
+- On test failure (intentional or not), the `playwright-report/` directory is uploaded as a workflow artifact for inspection without re-running.
 
 **Risk:**
 - Playwright browser binary ~150 MB. GitHub Actions cache limit is 10 GB total per repo; one cached browser fits comfortably.
