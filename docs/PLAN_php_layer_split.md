@@ -10,10 +10,14 @@ Goal: apply the same per-file-split discipline that just landed for `cli/build.p
 
 ## Constraints
 
-- **Live PHP-FPM lacks mbstring** ([reference_php_no_mbstring]). CI has it; production doesn't. All extracted code must use `strlen`/`substr`/`strtolower` rather than `mb_*`. Easy to forget when extracting; the gate must catch it.
-- **CSP enforced; no inline JS or event handlers** ([feedback_csp_no_inline]). Anything moved from inline `<script>` or `onclick=` must land in an external JS file under `static/`.
-- **PHP files are entry points, not modules.** Unlike `cli/build.py`, you can't replace `reach.php` with a 5-line shim — nginx routes URLs directly to it via FastCGI. The "split" is extract-helpers-and-include, not reduce-to-shim.
+- **Live PHP-FPM lacks mbstring** ([reference_php_no_mbstring]). CI has it; production doesn't. All extracted code must use `strlen`/`substr`/`strtolower` rather than `mb_*`. Current code is clean (`grep -rn "\bmb_" php/` returns nothing as of plan-draft date) — the gate is preventive against drift, not remedial.
+- **CSP enforced; no inline JS or event handlers** ([feedback_csp_no_inline]). Anything moved from inline `<script>` or `onclick=` must land in an external JS file under `static/`. Current code is clean (no inline `<script>` or `on*=` handlers in `php/` as of plan-draft date) — again, gate is preventive. Note: inline `<style>` blocks exist (e.g. `reach.php:17`'s compact-layout CSS); the CSP must permit them or those need extraction too.
+- **PHP files are entry points, not modules.** Unlike `cli/build.py`, you can't replace `reach.php` with a 5-line shim — nginx routes URLs directly to it via FastCGI. The "split" is extract-helpers-and-include, not reduce-to-shim. Entry points retain ~200–250 lines of orchestration after split, not ~150.
+- **The convention already exists.** `php/includes/` already holds 17 well-named helper modules (`auth.php`, `class_tiers.php`, `db.php`, `error.php`, `footer.php`, `gauge_map.php`, `gauge_plots.php`, `header.php`, `html.php`, `lttb.php`, `mail.php`, `review_logic.php`, `sanity.php`, `source_url.php`, `svg_plot.php`, `turnstile.php`, `validate.php`). This plan extends the same pattern; new extracts go alongside, not into a new directory.
+- **Two `auth.php` files exist.** `php/auth.php` (2.6KB, entry point — HTTP login/logout flow) and `php/includes/auth.php` (14KB, helper library — `current_editor()`, `csrf_token()`, `set_editor_session()`, `issue_magic_link()`, etc.). The plan's split work targets the helper, not the entry point.
 - **`db.php` is excluded from PHPStan source coverage** (per `phpunit.xml`) because it does side-effectful PDO init at load time. Extracted helpers should not replicate that pattern.
+- **Input convention is `filter_input()`, not `$_GET[]`.** `reach.php` uses `filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT)` — extracted helpers should accept already-validated values, not re-read superglobals. Auditing for direct `$_GET`/`$_POST` access in extracted code becomes part of the per-tier review.
+- **Style.css is cross-language coupled.** The Python build's `_deploy_php_files` (`src/kayak/web/build/deploy.py:107`) copies `src/kayak/web/static/style.css` to `public_html/style.css` because `php/header.php` reads it via `__DIR__/../style.css`. Any change to where header.php reads CSS from requires updating the Python deploy code in the same commit.
 - **Tooling already in place.** Composer + PHPStan ^2 (level 5) + PHPUnit ^11.5 + CI runs all three plus `php -l` syntax check. No Tier 0 setup needed; just raise the bar.
 - **Phased.** Tier-by-tier review like the build.py split.
 
@@ -21,10 +25,12 @@ Goal: apply the same per-file-split discipline that just landed for `cli/build.p
 
 - **Tooling-strict first.** Raise PHPStan from level 5 → at least 7 with per-file grandfathering for the unsplit files; add `friendsofphp/php-cs-fixer` as the analog of `ruff format`. These create the gate that the splits then satisfy.
 - **Per-file pattern, applied in size order:**
-  1. **reach.php** (28KB, no dedicated tests) — biggest payoff, biggest risk; gets the most care.
-  2. **description.php** (21KB) — same shape, smaller.
-  3. **svg_plot.php** (19KB) — already has `tests/php/SvgPlotTest.php` so the baseline gate is partly in place.
-  4. **Remaining >14KB files** (`propose.php`, `gauge.php`, `gauge_plots.php`, `review.php`, `custom.php`, `auth.php`) — not separately planned; the template from Tiers 2–4 gets applied to each in Tier 5.
+  1. **reach.php** (entry point, 649 lines, no dedicated tests) — biggest payoff, biggest risk; gets the most care.
+  2. **description.php** (entry point, 495 lines) — same shape, smaller.
+  3. **`php/includes/svg_plot.php`** (helper, 503 lines) — *not an entry point*; it's already an include. `tests/php/SvgPlotTest.php` provides partial baseline. Splitting it affects every consumer (see "Plot rendering is shared" note in Risks).
+  4. **Remaining big files** for Tier 5:
+     - Entry points: **`propose.php`** (430), **`gauge.php`** (432), **`custom.php`** (363), **`custom_gauges.php`** (325), **`review.php`** (318) — each gets the entry-point template (orchestration extraction).
+     - Includes: **`php/includes/auth.php`** (393), **`php/includes/gauge_plots.php`** (386) — each gets the helper-split template (sub-helper extraction). Different shape from the entry-point template; called out per-file in Tier 5.
 - **Per-file workflow inside each split tier:**
   1. Add a baseline integration test (`curl` against a representative URL → assert HTTP 200 + key substrings present). PHPStan-level static check should already pass.
   2. Cluster analysis (in this doc, like the `# Current shape` section of `PLAN_build_split.md`).
@@ -90,15 +96,25 @@ Each tier is several phases; **review gate between tiers**, not between phases. 
 
 Same template as Tier 2, applied to `description.php`. Smaller file, faster.
 
-### Tier 4 — svg_plot.php split
+### Tier 4 — `php/includes/svg_plot.php` split
 
-Same template, but: `svg_plot.php` already has `tests/php/SvgPlotTest.php` providing partial baseline coverage. Augment with golden-response tests for representative gauge pages that include the plot. Then extract clusters: SVG geometry math, styling/colors, rendering, axis/tick generation.
+`svg_plot.php` is an **include**, not an entry point — `description.php`, `plot.php`, `php/includes/gauge_plots.php`, and (transitively via gauge_plots) `gauge.php` all `require_once` it. The "split" here is sub-helper extraction, not orchestration extraction. The 503-line file becomes 2–4 smaller includes under `php/includes/`.
+
+`tests/php/SvgPlotTest.php` is the existing baseline. Augment with golden-response tests on the *consumer* entry points (`description.php?id=...`, `plot.php?...`, `gauge.php?...`) — these catch behavior drift in the consumers, not the helper directly.
+
+Likely cluster split: SVG geometry math (`svg_plot_geometry.php`), styling/colors (`svg_plot_styling.php`), axis/tick generation (`svg_plot_axes.php`), top-level render that assembles them (the surviving `svg_plot.php`, ~150 lines).
 
 ### Tier 5 — Apply template to remaining big files
 
-**Goal:** Same discipline applied to `propose.php`, `gauge.php`, `gauge_plots.php`, `review.php`, `custom.php`, `auth.php`. No separate sub-plan — each gets the Tier 2 template.
+**Goal:** Same discipline applied to the remaining six big files, in two shapes:
 
-Per-file phase shape: baseline tests → cluster analysis (in commit messages, not this doc) → extract clusters → cleanup. Order: largest first, but `auth.php` last because it's load-bearing for the editor feature and benefits from any patterns established earlier.
+**Entry-point template** (orchestration extraction, like Tiers 2/3): `propose.php` (430), `gauge.php` (432), `custom.php` (363), `custom_gauges.php` (325), `review.php` (318). Order: largest first.
+
+**Helper-split template** (sub-helper extraction, like Tier 4): `php/includes/auth.php` (393), `php/includes/gauge_plots.php` (386). For each: identify subdomains (auth.php splits into session, magic-link, csrf, throttle clusters; gauge_plots.php splits into multi-series-rendering, axis-handling, etc.). The existing convention (snake_case functions, no namespace, no class) carries forward.
+
+Per-file phase shape: baseline tests → cluster analysis (in commit messages, not this doc) → extract clusters → cleanup. Order: entry-points first (build experience with the template); then `gauge_plots.php`; then `auth.php` last because it's load-bearing for the editor feature and benefits from any patterns established earlier.
+
+**Cross-plan note:** `auth.php` is also covered by the editor security review (`PLAN_editor_security_review.md`). If a security finding lands while this tier is in flight, fix it first — splitting on top of a known security gap risks shipping the gap into more files.
 
 ### Tier 6 — PHPStan max + closeout
 
@@ -115,7 +131,9 @@ Per-file phase shape: baseline tests → cluster analysis (in commit messages, n
 - **Side-effectful loads.** `db.php` initializes PDO at load time. Any new include that does similar work at load (rather than via a function) breaks the test isolation pattern. Mitigation: PHPStan rule, or convention enforced by code review.
 - **Endpoint behavior drift.** Unlike `cli/build.py` (output is HTML files), PHP entry points have HTTP request semantics: query params, cookies, sessions, headers. A subtle change in request-parsing order can change `$_GET` precedence over `$_POST` — easy to miss. Mitigation: golden-response tests with multiple query patterns.
 - **Test flakiness from `php -S`.** Built-in test server can race with port reuse on quick CI re-runs. Mitigation: bind to port 0 and read the assigned port; or use a unix socket.
-- **Editor feature is load-bearing.** Splitting `auth.php` or `propose.php` while real users are editing risks user-visible failures. Tier 5 ordering puts these last; consider deploying to `levels-test.wkcc.org` first and waiting a week before promoting.
+- **Editor feature is load-bearing.** Splitting `php/includes/auth.php` or `propose.php` while real users are editing risks user-visible failures. Tier 5 ordering puts `auth.php` last; consider deploying to `levels-test.wkcc.org` first and waiting a week before promoting.
+- **Plot rendering is shared across consumers.** `svg_plot.php` is required by `description.php`, `plot.php`, `gauge_plots.php`, and (transitively) `gauge.php`. A signature change in svg_plot during Tier 4 ripples through all of them. The shared API surface needs to be enumerated *before* the first Tier 4 phase, not discovered mid-extraction. The Tier 4 baseline tests should hit at least one consumer of *each* call path.
+- **Cross-language deploy coupling.** `style.css` is copied at deploy time by Python (`src/kayak/web/build/deploy.py:107`). Any PHP-side change to where stylesheets are read from requires a paired Python-side change in the same commit; otherwise prod loses styling on next deploy. Same applies to `php/includes/header.php`'s assumptions about `__DIR__/../style.css`.
 
 ## Out of scope
 
@@ -130,22 +148,47 @@ Per-file phase shape: baseline tests → cluster analysis (in commit messages, n
 Read-only commands a second session should run before Tier 1 starts.
 
 ```bash
-# File inventory and sizes (the plan's "big files" claim)
-find php/ -name "*.php" -type f -printf '%s %p\n' | sort -nr | head -25
+# Prerequisite: composer install (vendor/ is gitignored)
+composer install --no-interaction --no-progress --prefer-dist
+
+# File inventory by line count (the plan's "big files" claim)
+wc -l php/*.php php/includes/*.php | sort -n | tail -20
+
+# Confirm php/auth.php (entry, ~80 lines) ≠ php/includes/auth.php (helper, ~400 lines)
+ls -la php/auth.php php/includes/auth.php
 
 # PHPStan + PHPUnit + cs-fixer state
 cat phpstan.neon
 cat phpunit.xml
 grep -E "phpstan|phpunit|php-cs-fixer" composer.json
 
-# Existing test coverage
+# Current PHPStan output at level 5 (baseline before Tier 1.1 raises it)
+vendor/bin/phpstan analyse --no-progress
+
+# Current PHPUnit pass count
+vendor/bin/phpunit --testdox 2>&1 | tail -20
+
+# Existing test coverage and naming convention
 ls tests/php/
-grep -l "reach.php\|description.php\|svg_plot.php" tests/php/*.php
+grep -l "reach.php\|description.php\|svg_plot.php" tests/php/*.php 2>/dev/null
 
 # CI hooks (Tier 1 changes need to slot in here)
 grep -A3 "PHPStan\|PHPUnit\|php-cs-fixer\|php -l" .github/workflows/ci.yml
 
-# mbstring and inline-script audit (Risks section)
-grep -rn "\bmb_" php/  # should be empty if production-safe today
-grep -rn "<script>\|onclick=" php/  # inline-script audit
+# Audit confirms current code is clean (drift gates are preventive)
+grep -rn "\bmb_" php/  # should be empty
+grep -rEn '<script>\b|on(click|change|submit|input|load|keyup|focus|blur)=' php/  # should be empty
+grep -rn "<style>" php/  # not blocked, but enumerated for CSP audit
+
+# Plot-rendering call graph (Tier 4 must enumerate consumers)
+grep -rln "svg_plot\.php" php/
+
+# Entry-point input convention (filter_input vs $_GET) — extracted code should follow this
+grep -rn "filter_input\|\$_GET\|\$_POST" php/reach.php | head
+
+# Cross-language coupling — Python deploy copies style.css and PHP files
+grep -n "style.css\|\.php" src/kayak/web/build/deploy.py | head
+
+# nginx URL → file mapping (run on the live host; needs sudo)
+sudo nginx -T 2>/dev/null | grep -B2 -A6 "\.php\|server_name" | head -60
 ```
