@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 
-from kayak.cli.build import _build_reaches_state, _build_reaches_static
 from kayak.db.models import Reach, ReachClass, State
+from kayak.web.build.geojson import _build_reaches_state, _build_reaches_static
 
 
 def _mk_reach(
