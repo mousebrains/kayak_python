@@ -9,6 +9,7 @@
 //                     linking to /description.php?id=<id>. Used on the
 //                     gauge page; omitted on reach pages.
 (function(){
+'use strict';
 function esc(s){var d=document.createElement('div');d.textContent=s==null?'':s;return d.innerHTML;}
 var el=document.getElementById('feature-map')||document.getElementById('reach-map');
 if(!el)return;

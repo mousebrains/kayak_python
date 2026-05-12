@@ -1,4 +1,5 @@
 (function(){
+'use strict';
 var el=document.getElementById('reach-map');
 if(!el)return;
 var pts=JSON.parse(el.dataset.points);

@@ -28,6 +28,7 @@
  *   - Rows that fail the predicate get the [hidden] attribute.
  */
 (function(){
+  'use strict';
   var HASH_KEYS = {state:'st', huc8:'b', status:'s', tier:'c'};
   var DESKTOP_QUERY = '(min-width:641px)';
 

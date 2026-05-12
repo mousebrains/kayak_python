@@ -1,3 +1,5 @@
+'use strict';
+
 // Track header height so sticky thead can sit flush below it
 (function(){
   var hdr=document.querySelector('header');

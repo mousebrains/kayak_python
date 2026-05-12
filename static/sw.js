@@ -1,5 +1,6 @@
 // Service Worker — network-first with cache fallback.
 // On 3G connections, stale data beats a blank screen.
+'use strict';
 
 const CACHE = 'kayak-v2';
 const TIMEOUT = 3000;

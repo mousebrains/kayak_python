@@ -8,6 +8,7 @@
  * Filter state is persisted in the URL hash so filtered views are shareable.
  */
 (function(){
+'use strict';
 // Tuned 2026-05 against topo + satellite + street basemaps:
 //   low   #ff6d00 — Material orange A700, deeper than #ff9800 so it
 //                   separates from topo's tan terrain that washed out

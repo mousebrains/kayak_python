@@ -1,4 +1,5 @@
 (function(){
+'use strict';
 var el=document.getElementById('search-map');
 if(!el)return;
 try{var reaches=JSON.parse(el.dataset.reaches);var colors=JSON.parse(el.dataset.colors)}

@@ -1,4 +1,5 @@
 (function() {
+  'use strict';
   const stateCache = new Map();         // state name -> [row, ...]
   const byId       = new Map();         // reach id  -> row (persists across state toggles)
   let selectedList = [];                // reach ids in display order

@@ -7,6 +7,7 @@
  *   - Result URL is /custom_gauges.php?ids=...
  */
 (function() {
+  'use strict';
   const stateCache = new Map();         // state name -> [row, ...]
   const byId       = new Map();         // gauge id  -> row (persists across state toggles)
   let selectedList = [];                // gauge ids in display order
