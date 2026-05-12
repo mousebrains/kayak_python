@@ -20,19 +20,19 @@
 //                   satellite without losing the "danger" reading.
 //   unkn  #00b0ff — Material light-blue A400, cyan-shifted to stay
 //                   distinct from satellite's blue-grey water tones.
-var COLORS={low:'#ff6d00',okay:'#76ff03',high:'#ff1744',unknown:'#00b0ff'};
-var STATUSES=['low','okay','high','unknown'];
-var CLASS_TIERS=['I','II','III','IV','V','?'];
-var DEFAULT_VIEW=[44.0,-120.5];
-var DEFAULT_ZOOM=7;
+const COLORS={low:'#ff6d00',okay:'#76ff03',high:'#ff1744',unknown:'#00b0ff'};
+const STATUSES=['low','okay','high','unknown'];
+const CLASS_TIERS=['I','II','III','IV','V','?'];
+const DEFAULT_VIEW=[44.0,-120.5];
+const DEFAULT_ZOOM=7;
 
-function esc(s){var d=document.createElement('div');d.textContent=s==null?'':s;return d.innerHTML;}
+function esc(s){const d=document.createElement('div');d.textContent=s==null?'':s;return d.innerHTML;}
 
 // reaches-state.json was once {id: "status"}; it's now {id: {s, t, v, u, d, ts}}.
 // Tolerate both during the cache-overlap window where an old map.js may meet
 // new state JSON or vice versa.
 function readEntry(state,id){
-  var v=state[id];
+  const v=state[id];
   if(typeof v==='string')return {s:v};
   return v||{s:'unknown'};
 }
@@ -46,8 +46,8 @@ function fmtValue(v,t,u){
 // type. Below that, render no trend at all rather than a misleading arrow.
 function fmtDelta(d,t,u){
   if(d==null||Math.abs(d)<0.5)return '';
-  var arrow=d>0?'↑':'↓';
-  var mag=t==='flow'
+  const arrow=d>0?'↑':'↓';
+  const mag=t==='flow'
     ? Math.abs(Math.round(d)).toLocaleString()
     : Math.abs(d).toFixed(1);
   return arrow+' '+mag+' '+u+'/hr';
@@ -61,16 +61,16 @@ function fmtAge(ms){
   return Math.round(ms/86400000)+' days ago';
 }
 
-var STALE_MS=24*3600*1000;
+const STALE_MS=24*3600*1000;
 
 function parseHash(){
-  var out={s:null,c:null};
-  var h=(location.hash||'').replace(/^#/,'');
+  const out={s:null,c:null};
+  const h=(location.hash||'').replace(/^#/,'');
   if(!h)return out;
   h.split('&').forEach(function(kv){
-    var eq=kv.indexOf('=');
+    const eq=kv.indexOf('=');
     if(eq<0)return;
-    var k=kv.slice(0,eq), v=kv.slice(eq+1);
+    const k=kv.slice(0,eq), v=kv.slice(eq+1);
     if(k==='s'||k==='c'){
       out[k]=v===''?[]:decodeURIComponent(v).split(',').filter(Boolean);
     }
@@ -79,23 +79,23 @@ function parseHash(){
 }
 
 function writeHash(sSet,cSet){
-  var parts=[];
+  const parts=[];
   if(sSet.size!==STATUSES.length)parts.push('s='+Array.from(sSet).join(','));
   if(cSet.size!==CLASS_TIERS.length)parts.push('c='+Array.from(cSet).join(','));
-  var hash=parts.length?('#'+parts.join('&')):'';
+  const hash=parts.length?('#'+parts.join('&')):'';
   if(hash!==location.hash){
     history.replaceState(null,'',location.pathname+location.search+hash);
   }
 }
 
-var mapEl=document.getElementById('map');
-var geomUrl=mapEl.dataset.geomUrl;
-var stateUrl=mapEl.dataset.stateUrl;
+const mapEl=document.getElementById('map');
+const geomUrl=mapEl.dataset.geomUrl;
+const stateUrl=mapEl.dataset.stateUrl;
 
-var map=L.map('map');
-var topo=L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,attribution:'OpenTopoMap'});
-var street=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'OpenStreetMap'});
-var sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,attribution:'Esri'});
+const map=L.map('map');
+const topo=L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,attribution:'OpenTopoMap'});
+const street=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'OpenStreetMap'});
+const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,attribution:'Esri'});
 street.addTo(map);
 L.control.layers({Topo:topo,Street:street,Satellite:sat}).addTo(map);
 
@@ -105,8 +105,8 @@ L.control.layers({Topo:topo,Street:street,Satellite:sat}).addTo(map);
 
 function fail(msg){
   map.setView(DEFAULT_VIEW,DEFAULT_ZOOM);
-  var ctl=L.control({position:'topright'});
-  ctl.onAdd=function(){var d=L.DomUtil.create('div','map-filter');d.innerHTML='<div class="mf-err">'+esc(msg)+'</div>';return d;};
+  const ctl=L.control({position:'topright'});
+  ctl.onAdd=function(){const d=L.DomUtil.create('div','map-filter');d.innerHTML='<div class="mf-err">'+esc(msg)+'</div>';return d;};
   ctl.addTo(map);
 }
 
@@ -114,7 +114,7 @@ Promise.all([
   fetch(geomUrl).then(function(r){if(!r.ok)throw new Error('geom '+r.status);return r.json();}),
   fetch(stateUrl).then(function(r){if(!r.ok)throw new Error('state '+r.status);return r.json();}),
 ]).then(function(res){
-  var geom=res[0], state=res[1];
+  const geom=res[0], state=res[1];
   renderMap(geom,state);
 }).catch(function(e){
   console.error('map data load failed:',e);
@@ -122,9 +122,9 @@ Promise.all([
 });
 
 function renderMap(geom,state){
-  var initial=parseHash();
-  var sSet=new Set(initial.s===null?STATUSES:initial.s);
-  var cSet=new Set(initial.c===null?CLASS_TIERS:initial.c);
+  const initial=parseHash();
+  const sSet=new Set(initial.s===null?STATUSES:initial.s);
+  const cSet=new Set(initial.c===null?CLASS_TIERS:initial.c);
 
   // Dark halo casing 2px wider than the colored line at 0.75 opacity.
   // Denser than the prior 0.5 because the line itself dropped from 4 to
@@ -133,18 +133,18 @@ function renderMap(geom,state){
   // soil cover. recomputeWeights() below scales both line and casing as
   // the user zooms in, mutating the shared objects so subsequent
   // setStyle calls (mouseover/mouseout) pick up the current zoom.
-  var BASE_WEIGHT=3;
-  var REST_LINE={weight:BASE_WEIGHT,opacity:1.0};
-  var HOVER_LINE={weight:BASE_WEIGHT+3,opacity:1.0};
-  var REST_CASING={color:'#000',weight:BASE_WEIGHT+2,opacity:0.75,lineJoin:'round',lineCap:'round',interactive:false};
-  var HOVER_CASING={weight:BASE_WEIGHT+5};
-  var HIT_LINE={weight:18,opacity:0,interactive:true,lineCap:'round',lineJoin:'round'};
-  var HIT_POINT={radius:14,opacity:0,fillOpacity:0,interactive:true};
+  const BASE_WEIGHT=3;
+  const REST_LINE={weight:BASE_WEIGHT,opacity:1.0};
+  const HOVER_LINE={weight:BASE_WEIGHT+3,opacity:1.0};
+  const REST_CASING={color:'#000',weight:BASE_WEIGHT+2,opacity:0.75,lineJoin:'round',lineCap:'round',interactive:false};
+  const HOVER_CASING={weight:BASE_WEIGHT+5};
+  const HIT_LINE={weight:18,opacity:0,interactive:true,lineCap:'round',lineJoin:'round'};
+  const HIT_POINT={radius:14,opacity:0,fillOpacity:0,interactive:true};
 
   function recomputeWeights(){
-    var z=map.getZoom();
+    let z=map.getZoom();
     if(z==null)z=DEFAULT_ZOOM;
-    var w=BASE_WEIGHT;
+    let w=BASE_WEIGHT;
     if(z>=11)w=BASE_WEIGHT+2;
     else if(z>=9)w=BASE_WEIGHT+1;
     REST_LINE.weight=w;
@@ -154,39 +154,39 @@ function renderMap(geom,state){
   }
   recomputeWeights();
 
-  var layersById={};
+  const layersById={};
   L.geoJSON(geom,{
     style:function(f){
-      var s=readEntry(state,f.properties.id).s||'unknown';
+      const s=readEntry(state,f.properties.id).s||'unknown';
       return {color:COLORS[s]||COLORS.unknown,weight:REST_LINE.weight,opacity:REST_LINE.opacity,lineJoin:'round',lineCap:'round'};
     },
     pointToLayer:function(f,ll){
-      var s=readEntry(state,f.properties.id).s||'unknown';
+      const s=readEntry(state,f.properties.id).s||'unknown';
       return L.circleMarker(ll,{radius:6,fillColor:COLORS[s]||COLORS.unknown,color:'#333',weight:1,fillOpacity:0.8});
     },
     onEachFeature:function(f,layer){
-      var p=f.properties;
-      var entry=readEntry(state,p.id);
-      var s=entry.s||'unknown';
-      var tiers=p.tiers||['?'];
-      var classDisplay=tiers.join(' · ');
+      const p=f.properties;
+      const entry=readEntry(state,p.id);
+      const s=entry.s||'unknown';
+      const tiers=p.tiers||['?'];
+      const classDisplay=tiers.join(' · ');
       // Popup HTML is built lazily via a Leaflet popup-content function
       // so the "X hr ago" text reflects the moment the user opens it,
       // not the page-load time. Closes over p+entry; entry is the
       // snapshot captured at fetch time, which is what we want — the
       // value doesn't update without a refresh either.
       function buildPopup(){
-        var dotColor=COLORS[s]||COLORS.unknown;
-        var html=
+        const dotColor=COLORS[s]||COLORS.unknown;
+        let html=
           '<a class="reach-popup" href="/description.php?id='+parseInt(p.id,10)+'">'+
             '<div class="rp-name">'+esc(p.name)+'</div>';
-        var ageStr='';
+        let ageStr='';
         if('v' in entry){
-          var val=fmtValue(entry.v,entry.t,entry.u);
-          var delta=fmtDelta(entry.d,entry.t,entry.u);
-          var ageMs=entry.ts?(Date.now()-Date.parse(entry.ts)):-1;
+          const val=fmtValue(entry.v,entry.t,entry.u);
+          const delta=fmtDelta(entry.d,entry.t,entry.u);
+          const ageMs=entry.ts?(Date.now()-Date.parse(entry.ts)):-1;
           ageStr=ageMs>=0?fmtAge(ageMs):'';
-          var stale=ageMs>STALE_MS;
+          const stale=ageMs>STALE_MS;
           html+='<div class="rp-reading'+(stale?' rp-stale':'')+'">';
           html+=esc(val);
           if(delta)html+=' <span class="rp-trend">'+esc(delta)+'</span>';
@@ -211,7 +211,7 @@ function renderMap(geom,state){
       // Fat invisible hit shape added last (renders on top): catches taps
       // anywhere within ~18px of a thin reach line and forwards style
       // updates to the visible colored layer below.
-      var hit=null;
+      let hit=null;
       if(typeof layer.getLatLngs==='function'){
         hit=L.polyline(layer.getLatLngs(),HIT_LINE);
       }else if(typeof layer.getLatLng==='function'){
@@ -219,7 +219,7 @@ function renderMap(geom,state){
       }
       layer._mfHit=hit;
 
-      var target=hit||layer;
+      const target=hit||layer;
       target.bindPopup(buildPopup);
       target.on('mouseover',function(){
         layer._mfHovered=true;
@@ -241,10 +241,10 @@ function renderMap(geom,state){
   // when zoom changes mid-hover.
   map.on('zoomend',function(){
     recomputeWeights();
-    for(var id in layersById){
-      var lyr=layersById[id];
+    for(const id in layersById){
+      const lyr=layersById[id];
       if(typeof lyr.setStyle!=='function')continue;
-      var hov=lyr._mfHovered;
+      const hov=lyr._mfHovered;
       lyr.setStyle({weight:hov?HOVER_LINE.weight:REST_LINE.weight});
       if(lyr._mfCasing){
         lyr._mfCasing.setStyle({weight:hov?HOVER_CASING.weight:REST_CASING.weight});
@@ -252,30 +252,30 @@ function renderMap(geom,state){
     }
   });
 
-  var group=L.layerGroup().addTo(map);
+  const group=L.layerGroup().addTo(map);
 
   function matches(layer){
     if(!sSet.has(layer._mfStatus))return false;
-    var tiers=layer._mfTiers;
-    for(var i=0;i<tiers.length;i++)if(cSet.has(tiers[i]))return true;
+    const tiers=layer._mfTiers;
+    for(let i=0;i<tiers.length;i++)if(cSet.has(tiers[i]))return true;
     return false;
   }
 
-  var countEl=null;
-  var firstPaint=true;
+  let countEl=null;
+  let firstPaint=true;
   function refilter(){
     group.clearLayers();
-    var visible=[];
-    for(var id in layersById){
+    const visible=[];
+    for(const id in layersById){
       if(matches(layersById[id]))visible.push(layersById[id]);
     }
     // Three passes so all casings render beneath all colored lines:
     // interleaving (casing,line,casing,line,...) makes a later reach's
     // dark casing draw on top of an earlier reach's colored line wherever
     // they overlap, which at state-wide zoom turns the whole web dark.
-    for(var i=0;i<visible.length;i++)if(visible[i]._mfCasing)group.addLayer(visible[i]._mfCasing);
-    for(i=0;i<visible.length;i++)group.addLayer(visible[i]);
-    for(i=0;i<visible.length;i++)if(visible[i]._mfHit)group.addLayer(visible[i]._mfHit);
+    for(let i=0;i<visible.length;i++)if(visible[i]._mfCasing)group.addLayer(visible[i]._mfCasing);
+    for(let i=0;i<visible.length;i++)group.addLayer(visible[i]);
+    for(let i=0;i<visible.length;i++)if(visible[i]._mfHit)group.addLayer(visible[i]._mfHit);
     if(countEl)countEl.textContent=visible.length+' reach'+(visible.length===1?'':'es');
     if(firstPaint){
       firstPaint=false;
@@ -295,8 +295,8 @@ function renderMap(geom,state){
     // makes chartreuse + 0.75-black blend to ~rgb(30,64,1) — exactly the
     // forest-green look. Running bringToFront after fitBounds guarantees
     // the paths exist before we re-append them in the right z-order.
-    for(i=0;i<visible.length;i++)visible[i].bringToFront();
-    for(i=0;i<visible.length;i++)if(visible[i]._mfHit)visible[i]._mfHit.bringToFront();
+    for(let i=0;i<visible.length;i++)visible[i].bringToFront();
+    for(let i=0;i<visible.length;i++)if(visible[i]._mfHit)visible[i]._mfHit.bringToFront();
     writeHash(sSet,cSet);
   }
 
@@ -305,39 +305,39 @@ function renderMap(geom,state){
 }
 
 function addFilterControl(sSet,cSet,onChange){
-  var ctl=L.control({position:'topright'});
-  var countEl;
+  const ctl=L.control({position:'topright'});
+  let countEl;
   ctl.onAdd=function(){
-    var wrap=L.DomUtil.create('div','');
-    var toggle=L.DomUtil.create('button','map-filter-toggle',wrap);
+    const wrap=L.DomUtil.create('div','');
+    const toggle=L.DomUtil.create('button','map-filter-toggle',wrap);
     toggle.type='button';
     toggle.textContent='Filters';
     toggle.setAttribute('aria-expanded','false');
 
-    var panel=L.DomUtil.create('div','map-filter',wrap);
+    const panel=L.DomUtil.create('div','map-filter',wrap);
     panel.setAttribute('role','region');
     panel.setAttribute('aria-label','Map filters');
 
-    var sFs=L.DomUtil.create('fieldset','',panel);
+    const sFs=L.DomUtil.create('fieldset','',panel);
     L.DomUtil.create('legend','',sFs).textContent='Status';
     STATUSES.forEach(function(s){
-      var lab=L.DomUtil.create('label','',sFs);
-      var cb=L.DomUtil.create('input','',lab);
+      const lab=L.DomUtil.create('label','',sFs);
+      const cb=L.DomUtil.create('input','',lab);
       cb.type='checkbox';cb.value=s;cb.checked=sSet.has(s);
       cb.addEventListener('change',function(){
         if(cb.checked)sSet.add(s);else sSet.delete(s);
         onChange();
       });
-      var sw=L.DomUtil.create('span','swatch',lab);
+      const sw=L.DomUtil.create('span','swatch',lab);
       sw.style.background=COLORS[s];
       lab.appendChild(document.createTextNode(s.charAt(0).toUpperCase()+s.slice(1)));
     });
 
-    var cFs=L.DomUtil.create('fieldset','',panel);
+    const cFs=L.DomUtil.create('fieldset','',panel);
     L.DomUtil.create('legend','',cFs).textContent='Class';
     CLASS_TIERS.forEach(function(t){
-      var lab=L.DomUtil.create('label','',cFs);
-      var cb=L.DomUtil.create('input','',lab);
+      const lab=L.DomUtil.create('label','',cFs);
+      const cb=L.DomUtil.create('input','',lab);
       cb.type='checkbox';cb.value=t;cb.checked=cSet.has(t);
       cb.addEventListener('change',function(){
         if(cb.checked)cSet.add(t);else cSet.delete(t);
@@ -350,7 +350,7 @@ function addFilterControl(sSet,cSet,onChange){
     countEl.setAttribute('aria-live','polite');
 
     toggle.addEventListener('click',function(){
-      var open=panel.classList.toggle('is-open');
+      const open=panel.classList.toggle('is-open');
       toggle.setAttribute('aria-expanded',open?'true':'false');
     });
 
