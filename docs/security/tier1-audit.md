@@ -185,3 +185,33 @@ None new. The 4 brute-force defense layers (`nginx limit_req`, fail2ban, Turnsti
 
 - ✅ All 4 audit tests pass. No new findings.
 - One open prod-confirm item (default-block log path).
+
+## Phase 1.5 — Account-recovery flow
+
+**Verdict:** ✅ (5 checks; 1 existing finding refined; 1 design note recorded for Tier 4)
+
+### Audit tests
+
+| # | Test | Verdict | Evidence |
+|---|---|---|---|
+| 1.5.1 | Magic-link resend cap is enforced | ✅ | `magic_link_under_throttle()` (`php/includes/auth.php`) caps at 5 per `editor.email` per rolling hour AND 20 per `ip_issued` per rolling hour, via `created_at > datetime('now', '-1 hour')`. Same-shape SELECT-COUNT per cap. |
+| 1.5.2 | Email-changed handling | ⊘ (intentional gap) | **No code path supports changing `editor.email`** (grep across `php/` and `src/`). Account email is set at signup and immutable via the web layer. Implicit policy: lose old email → create a new account with the new email → lose history attribution (FK preserves old rows). Filing as design note D-1 below; possible Tier 4 decision point. |
+| 1.5.3 | Account-takeover blast radius (editor) | ✅ | Editor email compromise allows: proposal/comment submission (tier-capped daily); reading own account page; bumping into the per-account rate limits. Damage is reversible by maintainer reject + ban. Impact: Medium and recoverable. |
+| 1.5.4 | Email normalization (Gmail aliases) | ⚠ **F-3** (existing) | `normalize_email()` is `strtolower(trim(...))` only. Doesn't strip Gmail dots or `+tags`. Already filed; Tier 1.5 decision deferred to Tier 4. |
+| 1.5.5 | `safe_next_url()` open-redirect adequacy | ✅ | Implementation rejects `^/[^/\\\\]` — i.e. requires a single `/` followed by a non-`/`-non-`\` first char. `SanityTest.php` covers 7 attack patterns: null, empty, valid path, `//evil.example/pwn`, `/\\evil.example/`, `/\\\\evil.example/`, absolute https, `javascript:`, missing-leading-slash. Browsers' WHATWG URL normalization (`\` → `/` in special schemes) is explicitly handled. **The plan asked about `/path/?redirect=https://...` — that's not a safe_next_url issue; safe_next_url accepts `/path/?redirect=...` because it's same-origin. The risk only materializes if downstream code does `header('Location: ' . $_GET['redirect'])` — a separate code-path concern, no such pattern found in `php/`.** |
+
+### Findings refinement
+
+- **F-3** (Gmail alias normalization) — confirmed; no change.
+
+### Design notes (potential Tier 4 decision points)
+
+- **D-1 (new): Self-serve email change.** Today there is no path to change `editor.email`. A real user who loses access to their email cannot recover the same account — they must create a new editor row with the new email, and previous proposals stay linked to the old (now-inaccessible) account. This is conservative (prevents impersonation by an attacker who briefly hijacks the email account) but inconvenient. Decision menu (Tier 4):
+  - **Accept current** (no email change). Operators handle on request via SQL.
+  - **Self-serve change with re-verification** (send magic-link to OLD email, then to NEW email; both must be consumed). Higher friction; protects against single-email compromise.
+  - **Operator-handled change.** Explicit ticket path; documented in `docs/operations.md`.
+
+### Phase 1.5 closeout
+
+- ✅ 5 audit tests; 4 pass, 1 cross-listed existing finding (F-3); no new findings beyond design note D-1.
+- D-1 (self-serve email change) recorded for Tier 4 user-data discussion.
