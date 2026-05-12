@@ -25,6 +25,10 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/db.php';
+// Back-require for the rare caller that includes auth_magic_link.php
+// directly (none today — login.php and /php/auth.php go through
+// includes/auth.php). PHP's require_once is idempotent, so the
+// apparent cycle with auth.php → auth_magic_link.php is safe.
 require_once __DIR__ . '/auth.php';
 
 /** Normalize an email address: trim, lowercase. */

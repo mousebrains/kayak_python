@@ -97,12 +97,11 @@ function _review_handle_post(PDO $db, ?int $cr_id, ?string $action, int $maint_i
 
         case 'reject':
             $note = trim((string)($_POST['reviewer_note'] ?? ''));
-            return review_reject($db, $cr, $note, $maint_id)
-                ? (function () use ($db, $cr, $note) {
-                    review_notify_editor($db, $cr, 'rejected', $note);
-                    return ['Rejected.', null];
-                })()
-                : [null, 'Already reviewed by another maintainer.'];
+            if (review_reject($db, $cr, $note, $maint_id)) {
+                review_notify_editor($db, $cr, 'rejected', $note);
+                return ['Rejected.', null];
+            }
+            return [null, 'Already reviewed by another maintainer.'];
 
         case 'reply':
             $note = trim((string)($_POST['reviewer_note'] ?? ''));
@@ -130,6 +129,7 @@ function _review_handle_post(PDO $db, ?int $cr_id, ?string $action, int $maint_i
             return [null, 'Already reviewed by another maintainer.'];
     }
 
+    // POST with no/unknown action — render the page with no flash.
     return [null, null];
 }
 

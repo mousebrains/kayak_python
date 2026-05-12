@@ -240,6 +240,117 @@ final class ReviewIntegrationTest extends IntegrationTestCase
         $this->assertStringContainsString('Out of scope for now', (string)$cr['reviewer_note']);
     }
 
+    public function testPostReplyKeepsPending(): void
+    {
+        $maint = self::seedEditorSession('reply-maint@example.com', 'maintainer');
+        $editor = self::seedEditorSession('reply-editor@example.com', 'full');
+        $cr_id = self::seedPendingCR($editor['editor_id']);
+        $cookies = [
+            'ed_sess' => $maint['session_token'],
+            'ed_csrf' => $maint['csrf_token'],
+        ];
+        $post = [
+            'csrf_token' => $maint['csrf_token'],
+            'id' => (string)$cr_id,
+            'action' => 'reply',
+            'reviewer_note' => 'Need more detail on the rapid description.',
+        ];
+
+        $resp = $this->request('/review.php', [], $cookies, 'POST', $post);
+
+        $this->assertSame(200, $resp['status']);
+        $this->assertStringContainsString('Reply sent', $resp['body']);
+
+        // Reply does not transition the CR — it stays 'pending'.
+        $db = self::testDb();
+        $cr = $db->query("SELECT status, reviewer_note FROM change_request WHERE id = $cr_id")->fetch();
+        $this->assertSame('pending', $cr['status']);
+        $this->assertStringContainsString('Need more detail', (string)$cr['reviewer_note']);
+    }
+
+    public function testPostReplyEmptyNoteShowsError(): void
+    {
+        // Empty-note short-circuit before review_send_reply runs — applies
+        // to both `reply` and `reply_and_close`.
+        $maint = self::seedEditorSession('empty-maint@example.com', 'maintainer');
+        $editor = self::seedEditorSession('empty-editor@example.com', 'full');
+        $cr_id = self::seedPendingCR($editor['editor_id']);
+        $cookies = [
+            'ed_sess' => $maint['session_token'],
+            'ed_csrf' => $maint['csrf_token'],
+        ];
+        $post = [
+            'csrf_token' => $maint['csrf_token'],
+            'id' => (string)$cr_id,
+            'action' => 'reply',
+            'reviewer_note' => '   ',  // whitespace only — trim() makes it empty
+        ];
+
+        $resp = $this->request('/review.php', [], $cookies, 'POST', $post);
+
+        $this->assertSame(200, $resp['status']);
+        $this->assertStringContainsString('Reply cannot be empty', $resp['body']);
+
+        $db = self::testDb();
+        $cr = $db->query("SELECT status, reviewer_note FROM change_request WHERE id = $cr_id")->fetch();
+        $this->assertSame('pending', $cr['status']);
+        $this->assertNull($cr['reviewer_note']);
+    }
+
+    public function testPostReplyAndCloseMarksResolved(): void
+    {
+        $maint = self::seedEditorSession('rac-maint@example.com', 'maintainer');
+        $editor = self::seedEditorSession('rac-editor@example.com', 'full');
+        $cr_id = self::seedPendingCR($editor['editor_id']);
+        $cookies = [
+            'ed_sess' => $maint['session_token'],
+            'ed_csrf' => $maint['csrf_token'],
+        ];
+        $post = [
+            'csrf_token' => $maint['csrf_token'],
+            'id' => (string)$cr_id,
+            'action' => 'reply_and_close',
+            'reviewer_note' => 'Tracked elsewhere — closing.',
+        ];
+
+        $resp = $this->request('/review.php', [], $cookies, 'POST', $post);
+
+        $this->assertSame(200, $resp['status']);
+        $this->assertStringContainsString('proposal marked resolved', $resp['body']);
+
+        $db = self::testDb();
+        $cr = $db->query("SELECT status, reviewer_note FROM change_request WHERE id = $cr_id")->fetch();
+        $this->assertSame('resolved', $cr['status']);
+        $this->assertStringContainsString('Tracked elsewhere', (string)$cr['reviewer_note']);
+    }
+
+    public function testPostResolveMarksResolved(): void
+    {
+        $maint = self::seedEditorSession('resolve-maint@example.com', 'maintainer');
+        $editor = self::seedEditorSession('resolve-editor@example.com', 'full');
+        $cr_id = self::seedPendingCR($editor['editor_id']);
+        $cookies = [
+            'ed_sess' => $maint['session_token'],
+            'ed_csrf' => $maint['csrf_token'],
+        ];
+        $post = [
+            'csrf_token' => $maint['csrf_token'],
+            'id' => (string)$cr_id,
+            'action' => 'resolve',
+            'reviewer_note' => 'Site comment — no action needed.',
+        ];
+
+        $resp = $this->request('/review.php', [], $cookies, 'POST', $post);
+
+        $this->assertSame(200, $resp['status']);
+        $this->assertStringContainsString('Marked resolved', $resp['body']);
+
+        $db = self::testDb();
+        $cr = $db->query("SELECT status, reviewer_note FROM change_request WHERE id = $cr_id")->fetch();
+        $this->assertSame('resolved', $cr['status']);
+        $this->assertStringContainsString('no action needed', (string)$cr['reviewer_note']);
+    }
+
     public function testPostOnAlreadyReviewedShowsFlashError(): void
     {
         // Seed a CR that's already 'rejected' — the controller should
