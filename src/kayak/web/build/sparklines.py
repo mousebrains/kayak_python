@@ -4,7 +4,6 @@ Moved here from kayak/cli/build.py in Phase 2 of the build.py split
 (docs/PLAN_build_split.md).
 """
 
-import logging
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
@@ -12,8 +11,6 @@ from sqlalchemy.orm import Session
 from kayak.db.gauges import get_bulk_gauge_observations
 from kayak.db.models import DataType, Observation, Reach
 from kayak.utils.lttb import downsample, running_median
-
-logger = logging.getLogger(__name__)
 
 # Sparkline rendering
 SPARKLINE_MEDIAN_WINDOW_SECS = 3 * 3600  # 3-hour running median window
