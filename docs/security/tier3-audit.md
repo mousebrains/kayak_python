@@ -48,3 +48,145 @@ The plan asks: *"submit `<script>alert(1)</script>` everywhere accepting input; 
 - ✅ XSS coverage clean across all editor-pipeline endpoints.
 - ⚪ F-6 reclassified from Open to Accepted (documented convention).
 - No new findings.
+
+## Phase 3.2 — SQLi sweep
+
+**Verdict:** ✅ (no findings; F-8 code-smell stays as documented refactor candidate)
+
+### Audit observations
+
+- **131 `prepare()` calls across `php/`.** All paired with `->execute([...])` parameter binding.
+- **Zero `->query()` or `->exec()` calls with SQL strings.** No raw queries that could carry user data.
+- **8 sites use string concatenation into the SQL.** All verified safe via static analysis:
+
+| Site | Pattern | Safety verdict |
+|---|---|---|
+| `php/custom.php:108` | `SELECT … FROM reach WHERE id IN ($placeholders)` | ✅ `$placeholders = implode(',', array_fill(0, count($ids), '?'))` — pure `?,?,?` string from `array_fill`; user data goes through `->execute($ids)` |
+| `php/custom.php:119` | `SELECT … FROM gauge_source WHERE gauge_id IN ($gph)` | ✅ same pattern: `$gph = implode(',', array_fill(0, count($gauge_ids), '?'))` |
+| `php/custom_gauges.php:157,163` | `WHERE level = 8/6 AND code IN ($hp/$hp6)` | ✅ same pattern |
+| `php/gauge_picker.php:129,135` | `WHERE level = 8/6 AND code IN ($hp/$hp6)` | ✅ same pattern |
+| `php/reach.php:131` | `SELECT reach_id, name FROM reach_class WHERE reach_id IN ($ph)` | ✅ same pattern (`$ph = implode(',', array_fill(...))`) |
+| `php/edit.php:117` | `UPDATE $table SET $sets WHERE id = ?` | ⚠ F-8 (already filed) — `$table ∈ {reach, gauge}` from in_array whitelist; `$sets` items are `"$field = ?"` where `$field` iterates `$editable_fields` whitelist. SAFE in current usage; code-smell tracked. |
+| `php/includes/review_logic.php:101` | `UPDATE reach SET $sets WHERE id = ?` | ⚠ F-8 — same pattern; `$sets` items use `$f` from `array_keys($payload['reach'])` (constrained at proposer's tier-whitelist, verified in Phase 2.3 cross-file trace). SAFE in current usage. |
+
+### `$where`/`$sql` variable construction sites
+
+- **`review.php:281`** — list query. `$where = $q_status === 'all' ? '' : 'WHERE cr.status = ?'`; `$q_status` value goes through `->execute($params)` placeholder, not concatenated into SQL. ✓
+- **`custom.php:70`, `custom_gauges.php:68`** — `$sql` is built from heredoc with `WHERE r.id IN ($placeholders)` interpolation; placeholders are `?,?,?` strings. ✓
+
+### Findings
+
+- **F-8** stays Open — code-smell refactor candidate. Not a SQLi finding in itself; the cross-file invariants currently make it safe.
+- **T-T4 / T-E2** (SQLi privilege escalation) confirmed not exploitable.
+
+### Phase 3.2 closeout
+
+- ✅ All 131 PDO `prepare()` calls properly parameterize user input.
+- ⚠ F-8 stays as documented refactor candidate (code-smell, not exploit).
+- No new findings.
+
+## Phase 3.3 — File-upload audit
+
+**Verdict:** ⊘ N/A — no upload endpoint exists.
+
+### State
+
+- `change_request_attachment` schema is provisioned (per `editor-surface.md`): columns `filename`, `content_type`, `size_bytes`, `sha256`, `storage_path`, `caption`.
+- `grep -rn "move_uploaded_file\|\$_FILES" php/` returns empty.
+- No nginx location block accepts multipart bodies for the editor pipeline.
+
+### When this phase activates
+
+When a PHP endpoint accepts file uploads (anywhere in the `php/` tree). The plan's checklist for that activation:
+
+1. MIME validation against an allowlist.
+2. Max-size enforcement (PHP-level + nginx `client_max_body_size`).
+3. Filename sanitization — the `storage_path` is sha256-content-addressed per schema, which sidesteps path-traversal by construction; verify the implementation honors this.
+4. nginx serving config for the uploads root: no PHP execution; explicit `Content-Type` header; `add_header Content-Disposition attachment` if appropriate.
+5. Uploads root has the execute bit stripped from regular files (defense against PHP-handler misconfiguration writing through to PHP-FPM).
+6. IDOR audit: can editor X read editor Y's attachment via `id` enumeration?
+7. Retention policy decision (D-T3.x; see plan §"Decision point — file-upload retention").
+
+### Findings
+
+None — N/A.
+
+### Phase 3.3 closeout
+
+- ⊘ N/A. Activates when the upload endpoint lands.
+- Document the trigger: any new PHP endpoint touching `$_FILES` or `move_uploaded_file()` requires re-opening this audit.
+
+## Phase 3.4 — Rate limiting + abuse posture
+
+**Verdict:** ✅ (cross-covered by Tier 1.4; one decision noted)
+
+### Audit observations
+
+Tier 1.4 already exhaustively audited the brute-force defense layers:
+- nginx `limit_req` per-IP (6 zones, all bound)
+- fail2ban jails (regex matches log format; logpaths line up with `deploy/levels`)
+- Cloudflare Turnstile (login + contact only)
+- Application-side `magic_link_under_throttle()` (5/email/hr, 20/IP/hr)
+- Daily caps (`comment.php` 5, `propose.php` 3/10/20 tier-gated)
+
+### Plan question: "Should `propose.php`, `comment.php`, magic-link request be behind Turnstile too?"
+
+Audit answer:
+
+| Endpoint | Current rate-defense | Should Turnstile be added? |
+|---|---|---|
+| `/login.php` | nginx login:3r/m + fail2ban + Turnstile + app-side throttle | already Turnstile-gated ✓ |
+| `/auth.php` | nginx auth:10r/m + 256-bit token (brute-force infeasible) | No — token is the security; Turnstile would add friction without defense gain |
+| `/propose.php` | nginx php:5r/s + require_editor + tier-gated daily cap | **No** — already require-editor-gated; an editor who's been admitted (status≥minimal) is partially trusted. Turnstile would add login-flow friction without addressing a current threat |
+| `/comment.php` | nginx php:5r/s + require_editor + daily cap 5 | **No** — same reasoning |
+| `/contact.php` | nginx contact:10r/m + Turnstile + honeypot | already Turnstile-gated ✓ |
+| `/edit.php` | nginx edit:5r/m + require_maintainer | No — maintainer auth is the security |
+| `/review.php` | nginx php:5r/s + require_maintainer | No |
+| `/admin.php` | nginx php:5r/s + require_maintainer | No |
+
+**Net:** Turnstile is correctly placed on the two unauthenticated POST endpoints (`/login.php` for magic-link issuance, `/contact.php` for spam). Adding it elsewhere would degrade UX for already-authenticated users without addressing a current threat.
+
+### Findings
+
+None.
+
+### Phase 3.4 closeout
+
+- ✅ Rate-limiting posture is appropriate for the threat model. No new findings.
+
+## Phase 3.5 — CSRF audit final stamp
+
+**Verdict:** ✅ (already verified 10/10 coverage; full audit completes)
+
+### Audit observations
+
+Tier 0 inventory + Tier 2.1 role-enforcement verified:
+- All 10 editor-pipeline POST handlers call `require_csrf()` at the top of the POST branch.
+- The check uses `hash_equals(cookie, submitted)` (constant-time compare) per `php/includes/auth.php:require_csrf`.
+- CSRF cookie is `ed_csrf`, 64-hex `random_bytes(32)`, set lazily by `csrf_token()` on first call, rotated by `set_editor_session()` on login (session-fixation defense).
+- Double-submit cookie pattern; no server-side CSRF token store.
+
+### CSRF coverage matrix
+
+| Endpoint | POST handler exists? | `require_csrf()` called? | Notes |
+|---|---|---|---|
+| `/account.php` | yes | ✅ `php/account.php:22` | display-name updates |
+| `/admin.php` | yes | ✅ `php/admin.php:24` | 8 actions all under one CSRF check |
+| `/auth.php` | yes | ✅ `php/auth.php:34` | magic-link consume |
+| `/comment.php` | yes | ✅ `php/comment.php:35` | site-comment submit |
+| `/contact.php` | yes | ✅ `php/contact.php:30` | contact form |
+| `/edit.php` | yes | ✅ `php/edit.php:83` | maintainer direct edit |
+| `/login.php` | yes | ✅ `php/login.php:36` | magic-link request |
+| `/logout.php` | yes | ✅ `php/logout.php:17` | logout |
+| `/propose.php` | yes | ✅ `php/propose.php:107` | proposal upsert |
+| `/review.php` | yes | ✅ `php/review.php:33` | review actions |
+
+**10/10 covered.** `csp-report.php` is the lone POST endpoint without CSRF — by design (CSP violation reports are sent by the browser without user interaction; no CSRF threat applies).
+
+### Findings
+
+None.
+
+### Phase 3.5 closeout
+
+- ✅ CSRF coverage matrix complete and verified.
