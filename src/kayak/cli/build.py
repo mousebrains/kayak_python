@@ -18,7 +18,6 @@ import os
 import re
 import shutil
 import sqlite3
-import tempfile
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -38,6 +37,35 @@ from kayak.utils.class_tiers import parse_class_tiers
 from kayak.utils.lttb import downsample, running_median
 from kayak.utils.simplify import parse_geom, simplify
 
+# Phase 1 of the build.py split (docs/PLAN_build_split.md): the constants
+# and small helpers below were moved to kayak.web.build._shared. Re-import
+# them here so the un-moved code in this file (and external consumers that
+# patch `kayak.cli.build.<name>`) keep resolving the same objects. These
+# re-exports go away when Phase 8 replaces this file with the slim shim.
+from kayak.web.build._shared import (  # noqa: F401
+    _ABBR_TO_STATE,
+    _CSS_PATH,
+    _FILTERS_JS_PATH,
+    _FILTERS_JS_VERSION,
+    _JS_PATH,
+    _LEVELS_JS,
+    _LEVELS_JS_VERSION,
+    _MAP_JS_PATH,
+    _MAP_JS_VERSION,
+    _NAV_STATES,
+    _STATE_ABBREVS,
+    _STATIC_DIR,
+    BRAND_COLOR,
+    BRAND_COLOR_DARK,
+    DATA_EXPIRY_THRESHOLD,
+    DATA_STALE_THRESHOLD,
+    _atomic_write,
+    _css_link_tag,
+    _editor_feature_on,
+    _load_css,
+    _og_meta,
+)
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -52,9 +80,6 @@ SPARKLINE_DEFAULT_HEIGHT = 20
 SPARKLINE_STROKE_WIDTH = "1.5"
 SPARKLINE_COLOR = "#1b5591"
 
-# Data freshness
-DATA_STALE_THRESHOLD = timedelta(hours=48)
-DATA_EXPIRY_THRESHOLD = timedelta(days=7)
 SPARKLINE_OBSERVATION_WINDOW = timedelta(hours=48)
 
 # Sparkline series-selection freshness: a series is considered "current" if
@@ -69,72 +94,6 @@ SPARKLINE_CURRENT_WINDOW = timedelta(hours=6)
 GEOJSON_SIMPLIFY_EPSILON = 0.0003
 GEOJSON_COORD_PRECISION = 5
 assert math.ceil(-math.log10(GEOJSON_SIMPLIFY_EPSILON)) + 1 <= GEOJSON_COORD_PRECISION
-
-# Branding
-BRAND_COLOR = "#1b5591"
-BRAND_COLOR_DARK = "#0d3057"
-
-
-def _og_meta(title: str, desc: str, path: str = "") -> str:
-    """OpenGraph + Twitter card meta block. `path` is site-relative ("/Oregon.html"); empty omits og:url + canonical."""
-    site = SITE_URL.rstrip("/")
-    image = f"{site}/static/og-image.png"
-    canonical = f'<link rel="canonical" href="{site}{path}">\n' if path else ""
-    og_url = f'<meta property="og:url" content="{site}{path}">\n' if path else ""
-    return (
-        f"{canonical}"
-        f'<meta property="og:type" content="website">\n'
-        f'<meta property="og:site_name" content="WKCC River Levels">\n'
-        f'<meta property="og:title" content="{title}">\n'
-        f'<meta property="og:description" content="{desc}">\n'
-        f"{og_url}"
-        f'<meta property="og:image" content="{image}">\n'
-        f'<meta property="og:image:width" content="1200">\n'
-        f'<meta property="og:image:height" content="630">\n'
-        f'<meta name="twitter:card" content="summary_large_image">\n'
-        f'<meta name="twitter:title" content="{title}">\n'
-        f'<meta name="twitter:description" content="{desc}">'
-    )
-
-
-def _atomic_write(path: Path, content: str) -> None:
-    """Write *content* to *path* atomically via temp file + rename."""
-    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
-    try:
-        os.write(fd, content.encode())
-        os.close(fd)
-        fd = -1
-        os.chmod(tmp, 0o644)
-        os.replace(tmp, path)
-    except BaseException:
-        if fd >= 0:
-            os.close(fd)
-        with suppress(OSError):
-            os.unlink(tmp)
-        raise
-
-
-PRIMARY_STATE = "Oregon"
-
-_STATE_ABBREVS = {
-    "Arizona": "AZ",
-    "California": "CA",
-    "Colorado": "CO",
-    "Idaho": "ID",
-    "Kansas": "KS",
-    "Montana": "MT",
-    "Nevada": "NV",
-    "New Mexico": "NM",
-    "Oregon": "OR",
-    "Utah": "UT",
-    "Washington": "WA",
-    "Wyoming": "WY",
-}
-
-_ABBR_TO_STATE = {v: k for k, v in _STATE_ABBREVS.items()}
-
-# States shown in the nav bar (Oregon + adjacent states)
-_NAV_STATES = {"Oregon", "Washington", "Idaho", "Nevada", "California"}
 
 # Links for adjacent state pages
 _STATE_LINKS: dict[str, list[tuple[str, str]]] = {
@@ -219,33 +178,6 @@ _STATE_LINKS: dict[str, list[tuple[str, str]]] = {
         ("California Weather — Windy", "https://www.windy.com/?37.2,-119.5,6"),
     ],
 }
-
-# CSS is read once from the source tree and inlined into every page.
-_STATIC_DIR = Path(__file__).resolve().parent.parent / "web" / "static"
-_CSS_PATH = _STATIC_DIR / "style.css"
-_JS_PATH = _STATIC_DIR / "levels.js"
-_FILTERS_JS_PATH = _STATIC_DIR / "filters.js"
-
-_MAP_JS_PATH = BASE_DIR / "static" / "map.js"
-
-_LEVELS_JS_VERSION = int(_JS_PATH.stat().st_mtime)
-_FILTERS_JS_VERSION = int(_FILTERS_JS_PATH.stat().st_mtime)
-_MAP_JS_VERSION = int(_MAP_JS_PATH.stat().st_mtime)
-_LEVELS_JS = f'<script src="/static/levels.js?v={_LEVELS_JS_VERSION}" defer></script>'
-
-
-def _load_css() -> str:
-    try:
-        return _CSS_PATH.read_text()
-    except FileNotFoundError:
-        logger.warning("style.css not found at %s", _CSS_PATH)
-        return ""
-
-
-def _css_link_tag(css_hash: str) -> str:
-    """Return the <link> tag that replaces per-page inline CSS."""
-    return f'<link rel="stylesheet" href="/static/style-{css_hash}.css">'
-
 
 def _get_builder_columns() -> list[dict]:
     cols = load_builder_columns()
@@ -994,11 +926,6 @@ def _build_reaches_state(
 
         out[str(reach.id)] = entry
     return json.dumps(out, separators=(",", ":"))
-
-
-def _editor_feature_on() -> bool:
-    v = os.environ.get("EDITOR_FEATURE", "").strip().lower()
-    return v in ("1", "true", "yes")
 
 
 def _build_nav(

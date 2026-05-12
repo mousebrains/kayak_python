@@ -4,7 +4,6 @@ from datetime import UTC, datetime, timedelta
 from unittest import mock
 
 from kayak.cli.build import (
-    _atomic_write,
     _build_csv,
     _build_html_table,
     _build_letter_nav,
@@ -29,6 +28,7 @@ from kayak.db.models import (
     ReachClass,
     Source,
 )
+from kayak.web.build._shared import _atomic_write
 
 COLS = [
     {

@@ -21,8 +21,8 @@ __pycache__/
 *.pyc
 *.pyo
 *.egg-info/
-dist/
-build/
+/dist/
+/build/
 .venv/
 *.db
 *.db-shm
