@@ -81,7 +81,7 @@ Nine commits. Tests + ruff + mypy must stay green between phases. Sparkline / CS
 9. **Phase 9 — refactor the cc>10 offenders inside their new homes.** Three functions:
    - `_get_row_data` (cc=16) → `levels.py`: extract per-cell formatters / per-data-type branches into helpers.
    - `_collect_gauge_rows` (cc=17) → `gauges.py`: extract status-classification and metadata-merge into helpers.
-   - `_deploy_source_files` (cc=11) → `deploy.py`: extract the four sequential copy blocks into `_deploy_static_assets`, `_deploy_php_files`, `_deploy_config_files`. Lowest-risk of the three — pure file-copy refactor with no data-shape change.
+   - `_deploy_source_files` (cc=11) → `deploy.py`: extract the five sequential copy blocks (static assets w/ `sw.js` routing; PHP files at root; PHP includes; CSS for PHP inlining; config files from `public_html/`) into three helpers — `_deploy_static_assets` (block 1), `_deploy_php_files` (blocks 2–4, all PHP-layer setup), `_deploy_config_files` (block 5). Lowest-risk of the three — pure file-copy refactor with no data-shape change.
 
    This is the only phase that should change behavior — and only at the function-extraction level, not the HTML output level. Enable `C901` in ruff (`pyproject.toml`).
 
