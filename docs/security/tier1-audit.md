@@ -159,3 +159,29 @@ Three documented options (decision menu from `docs/PLAN_editor_security_review.m
 - ✅ Audit (a) complete: no web path to maintainer promotion. Stronger control than plan anticipated.
 - ✅ Audit (b) complete: impact analysis written.
 - ⏳ Audit (c) decision: **PENDING — user to confirm Option A** (with Gmail 2FA precondition) or pick B/C.
+
+## Phase 1.4 — Brute-force / credential-stuffing posture
+
+**Verdict:** ✅ (4 checks pass; no new findings; per-account lockout deemed unnecessary)
+
+### Audit tests
+
+| # | Test | Verdict | Evidence |
+|---|---|---|---|
+| 1.4.1 | fail2ban filter regexes match the current nginx log format | ✅ | nginx log format (`deploy/kayak-log-format.conf`) starts with `$remote_addr - $remote_user [$time_local] "$request" $status …`. All 4 kayak filter regexes use `^<HOST> .* "(...)"` patterns that match the post-time-local portion. Verified per-filter:<br>• `nginx-edit-auth`: matches `^<HOST> .* "(?:GET\|POST) /edit\.php\b[^"]*" 401`. ✓<br>• `nginx-editor-auth`: matches `^<HOST> .* "(?:GET\|POST) /(?:login\|auth)\.php\b[^"]*" (?:40[0-9]\|429)` AND `^<HOST> .* "POST /login\.php\b[^"]*" 200` (catches drip-feed mailbombing). ✓<br>• `nginx-default-block`, `nginx-malicious`: per-pattern, all use compatible `^<HOST>` anchor. ✓ |
+| 1.4.2 | Jail logpaths match where nginx writes | ✅ | `kayak-edit.conf` → `/var/log/nginx/kayak-access.log` matches `deploy/levels:329`. `kayak-editor-auth.conf` → same. `jail.local`'s `nginx-http-auth`, `nginx-limit-req` → `/var/log/nginx/kayak-error.log` matches `deploy/levels:330`. `nginx-malicious` → both default `/var/log/nginx/access.log` AND `/var/log/nginx/kayak-access.log`. `nginx-default-block` → `/var/log/nginx/blocked-access.log` (presumed; needs prod-confirm — see open item below). |
+| 1.4.3 | Per-IP-only at nginx layer with botnet escalation path | ✅ | All `limit_req_zone` use `$binary_remote_addr`. A botnet rotating IPs gets per-IP throughput per IP, but: (a) nginx logs each limit-req trip to error log; (b) `nginx-limit-req` fail2ban jail bans IPs that trip the limit 5 times in 10 min; (c) `bantime.increment = true` (1h → 1d → 1w) makes repeat offenders progressively expensive. Adequate for the threat model. |
+| 1.4.4 | Per-account lockout — needed? | ✅ (decided NO) | The realistic per-account brute-force scenario is mailbombing (capped: 5/email/hr by `magic_link_under_throttle`) or token-guess (256-bit hex; computationally infeasible). Session-cookie brute force is moot — sessions are sha256-hashed in DB; guessing a valid cookie requires guessing 256 bits. Conclusion: per-account lockout adds no defense against the actual attack surface; reject the option. |
+
+### Findings
+
+None new. The 4 brute-force defense layers (`nginx limit_req`, fail2ban, Turnstile on login/contact, application-side `magic_link_under_throttle`) are coherent and complete.
+
+### Open prod-confirm
+
+- `nginx-default-block` jail expects log at `/var/log/nginx/blocked-access.log`. The default-IP server block in `deploy/levels` (if present) needs to write to that path; otherwise the jail watches a non-existent file. Tier 6 prod-confirm.
+
+### Phase 1.4 closeout
+
+- ✅ All 4 audit tests pass. No new findings.
+- One open prod-confirm item (default-block log path).
