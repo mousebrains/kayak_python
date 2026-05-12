@@ -360,11 +360,11 @@ Per-file phase shape: baseline tests → cluster analysis (in commit messages, n
 | `propose.php`      | 430 | 32  | 5.P.1 `fc4f2cc` / 5.P.2 `abe0e70` / 5.P.3 this commit | ✓ Done — `propose_handler.php` (573); editor-session test infra added in 5.P.1 |
 | `custom.php`       | 364 | 32  | 5.C.1 `4889227` (paired baseline) / 5.C.2 `c1b586c` | ✓ Done — `custom_handler.php` (511) |
 | `custom_gauges.php`| 325 | 32  | 5.C.1 `4889227` (paired baseline) / 5.C.3 `ee7a088` / 5.C.4 this commit | ✓ Done — `custom_gauges_handler.php` (460) |
-| `review.php`       | 318 | —   | not started — has POST + CSRF (reuses editor-session infra from 5.P.1) | pending |
+| `review.php`       | 318 | 28  | 5.R.1 `00641ac` / 5.R.2 `96856df` / 5.R.3 this commit | ✓ Done — `review_handler.php` (462); reused 5.P.1 editor-session infra |
 | `includes/gauge_plots.php` | 386 | — | not started — helper split | pending |
 | `includes/auth.php`        | 407 | — | not started — helper split, last (load-bearing) | pending |
 
-Tier 5 outcome to date: 4 of 7 files done. Per-file gates (php -l + PHPStan + cs-fixer + integration tests green) met on each commit; CI green.
+Tier 5 outcome to date: 5 of 7 files done. Per-file gates (php -l + PHPStan + cs-fixer + integration tests green) met on each commit; CI green.
 
 **5.P infrastructure callout:** Phase 5.P.1 added `seedEditorSession()` + `testDb()` helpers to `IntegrationTestCase` — production-format ed_sess + ed_csrf tokens that test code passes through `request()`'s `$cookies` arg (and as the `csrf_token` form field for POSTs). Unlocks review.php and any future edit.php coverage without per-test boilerplate.
 
@@ -373,6 +373,8 @@ Tier 5 outcome to date: 4 of 7 files done. Per-file gates (php -l + PHPStan + cs
 **5.C symlink callout:** Phase 5.C.1's missing-symlink audit found `custom_gauges.php`, `gauge_picker.php`, `csp-report.php` all lacked `public_html/` symlinks — three entry points that had been live in `php/` but unreachable through the built docroot. Bundled into 5.C.1's baseline-test commit. Future entry-point additions need a symlink check; consider folding into the Tier 6 closeout sweep as a CI assertion.
 
 **5.C paired extraction:** custom.php (5.C.2) and custom_gauges.php (5.C.3) are sister pages — same `?ids=CSV` shape, identical 200-cap, URL-order reorder — so they share a baseline-test commit and follow the same handler template. The two handlers stay separate (different SQL surface: reach-level status from class range vs gauge-level rollup across reaches; HUC8/HUC6 nested watershed filter only on gauges). Worth re-reading both if a future change to one might apply to the other.
+
+**5.R underscore boundary:** review.php uses two parallel function-naming conventions that the extraction had to keep apart. `review_*` (no leading underscore) are the public review_logic.php exports (`review_approve`, `review_reject`, `review_send_reply`, …) reused by other consumers. `_review_*` (leading underscore + file-prefix) are review_handler.php's file-private helpers (`_review_handle_post`, `_render_review_detail`, …). Same file, two conventions, but the underscore-vs-no-underscore is the unambiguous signal — every file-private helper is `_review_*`, every public review-logic helper is `review_*`. Future review-feature work must keep the boundary or risk shadowing.
 
 **Cross-plan note:** `auth.php` is also covered by the editor security review (`PLAN_editor_security_review.md`). If a security finding lands while this tier is in flight, fix it first — splitting on top of a known security gap risks shipping the gap into more files.
 
