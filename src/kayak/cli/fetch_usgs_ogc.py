@@ -122,6 +122,50 @@ def _fetch_page(url: str, api_key: str | None) -> dict | None:
     return None
 
 
+def _extract_observation_from_feature(
+    feature: dict,
+    site_map: dict[str, int],
+    data_type: DataType,
+    convert_fn: Callable[[float], float] | None,
+) -> dict[str, object] | None:
+    """Parse one OGC feature into an observation row, or None if unusable."""
+    from datetime import UTC, datetime
+
+    props = feature.get("properties", {})
+    mon_loc = props.get("monitoring_location_id", "")
+    usgs_id = mon_loc.replace("USGS-", "")
+    source_id = site_map.get(usgs_id)
+    if source_id is None:
+        return None
+
+    value = props.get("value")
+    timestamp = props.get("time")
+    if value is None or timestamp is None:
+        return None
+
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+    if convert_fn is not None:
+        value = convert_fn(value)
+
+    try:
+        when = datetime.fromisoformat(timestamp)
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=UTC)
+    except ValueError:
+        logger.debug("Bad timestamp: %s", timestamp)
+        return None
+
+    return {
+        "source_id": source_id,
+        "data_type": data_type,
+        "observed_at": when,
+        "value": value,
+    }
+
+
 def _fetch_continuous(
     site_map: dict[str, int], api_key: str | None, hours: int, batch_size: int
 ) -> list[dict[str, object]]:
@@ -130,8 +174,6 @@ def _fetch_continuous(
     Performs only network I/O — no database access.  Returns a list of
     observation dicts ready for store_observations().
     """
-    from datetime import UTC, datetime
-
     all_rows: list[dict[str, object]] = []
     site_ids = list(site_map.keys())
 
@@ -156,54 +198,19 @@ def _fetch_continuous(
                 f"&filter-lang=cql-text"
             )
 
-            page_num = 0
             next_url: str | None = url
             while next_url is not None:
-                page_num += 1
                 data = _fetch_page(next_url, api_key)
                 if data is None:
                     break
 
-                features = data.get("features", [])
-                for feature in features:
-                    props = feature.get("properties", {})
-                    mon_loc = props.get("monitoring_location_id", "")
-                    usgs_id = mon_loc.replace("USGS-", "")
-
-                    source_id = site_map.get(usgs_id)
-                    if source_id is None:
-                        continue
-
-                    value = props.get("value")
-                    timestamp = props.get("time")
-                    if value is None or timestamp is None:
-                        continue
-
-                    try:
-                        value = float(value)
-                    except (TypeError, ValueError):
-                        continue
-
-                    if convert_fn is not None:
-                        value = convert_fn(value)
-
-                    try:
-                        when = datetime.fromisoformat(timestamp)
-                        if when.tzinfo is None:
-                            when = when.replace(tzinfo=UTC)
-                    except ValueError:
-                        logger.debug("Bad timestamp: %s", timestamp)
-                        continue
-
-                    all_rows.append(
-                        {
-                            "source_id": source_id,
-                            "data_type": data_type,
-                            "observed_at": when,
-                            "value": value,
-                        }
+                for feature in data.get("features", []):
+                    row = _extract_observation_from_feature(
+                        feature, site_map, data_type, convert_fn
                     )
-                    param_count += 1
+                    if row is not None:
+                        all_rows.append(row)
+                        param_count += 1
 
                 # Follow pagination
                 next_url = None
@@ -265,23 +272,34 @@ def fetch_usgs_ogc(args: argparse.Namespace) -> None:
         stored = store_observations(session, all_rows, allow_negative_flow_sources=neg_flow_sources)
         updated_pairs = {(row["source_id"], row["data_type"]) for row in all_rows}
         print(f"Updating latest observations for {len(updated_pairs)} source/type pairs...")
-        # Build source→gauge reverse map
-        source_to_gauge: dict[int, int] = {}
-        for gs in session.scalars(select(GaugeSource)):
-            source_to_gauge[gs.source_id] = gs.gauge_id
-        for sid, dtype in updated_pairs:
-            if not isinstance(sid, int) or not isinstance(dtype, DataType):
-                logger.warning("Unexpected types: sid=%r dtype=%r, skipping", sid, dtype)
-                continue
-            update_latest(session, sid, dtype)
-        # Update gauge-level cache for affected gauges
-        gauge_pairs: set[tuple[int, DataType]] = set()
-        for sid, dtype in updated_pairs:
-            if isinstance(sid, int) and sid in source_to_gauge and isinstance(dtype, DataType):
-                gauge_pairs.add((source_to_gauge[sid], dtype))
-        for gid, dtype in gauge_pairs:
-            update_latest_gauge(session, gid, dtype)
+        _update_latest_and_gauge_cache(session, updated_pairs)
         session.commit()
         print(f"Committed {stored} observations to database")
     finally:
         session.close()
+
+
+def _update_latest_and_gauge_cache(
+    session: Session,
+    updated_pairs: set[tuple[object, object]],
+) -> None:
+    """Refresh source-level and gauge-level latest-observation caches.
+
+    `updated_pairs` keys come from `dict[str, object]` rows so the entries
+    are statically (object, object); the isinstance guards narrow them
+    safely for the update_latest / update_latest_gauge calls.
+    """
+    source_to_gauge: dict[int, int] = {}
+    for gs in session.scalars(select(GaugeSource)):
+        source_to_gauge[gs.source_id] = gs.gauge_id
+    for sid, dtype in updated_pairs:
+        if not isinstance(sid, int) or not isinstance(dtype, DataType):
+            logger.warning("Unexpected types: sid=%r dtype=%r, skipping", sid, dtype)
+            continue
+        update_latest(session, sid, dtype)
+    gauge_pairs: set[tuple[int, DataType]] = set()
+    for sid, dtype in updated_pairs:
+        if isinstance(sid, int) and sid in source_to_gauge and isinstance(dtype, DataType):
+            gauge_pairs.add((source_to_gauge[sid], dtype))
+    for gid, dtype in gauge_pairs:
+        update_latest_gauge(session, gid, dtype)
