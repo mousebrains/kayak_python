@@ -6,10 +6,6 @@ from unittest import mock
 from kayak.cli.build import (
     _build_csv,
     _build_html_table,
-    _build_letter_nav,
-    _build_map_page,
-    _build_nav,
-    _build_page,
     _build_text,
     _csv_safe,
     _get_row_data,
@@ -27,6 +23,7 @@ from kayak.db.models import (
     Source,
 )
 from kayak.web.build._shared import _atomic_write
+from kayak.web.build.shell import _build_letter_nav, _build_map_page, _build_nav, _build_page
 from kayak.web.build.sparklines import _build_sparkline, _select_sparkline_series
 
 COLS = [
