@@ -100,7 +100,9 @@ Each tier is several phases; **review gate between tiers**, not between phases. 
 
 ### Tier 3 — description.php split
 
-Same template as Tier 2, applied to `description.php`. Smaller file, faster.
+Same template as Tier 2, applied to `description.php`. Smaller file (495 lines vs reach.php's 649) but **denser cross-cluster dependencies**: 8 includes (db, header, footer, html, svg_plot, gauge_plots, gauge_map, validate) vs reach.php's 4. Single-mode entry point (`?id=N` only — 400 on missing); baseline tests are 2 (a class-2-with-gauge reach detail; a no-gauge reach detail) plus the 400 edge. Date filtering (`start`, `end`, `hidden` params) widens the parameter space; baseline tests should hit a date-windowed and an unwindowed call.
+
+Reuses the existing `get_reach_or_404($id)` from `php/includes/db.php:50` for 404 handling — extracted helpers should follow this naming convention for any new fail-fast lookups.
 
 ### Tier 4 — `php/includes/svg_plot.php` split
 
@@ -114,7 +116,7 @@ Likely cluster split: SVG geometry math (`svg_plot_geometry.php`), styling/color
 
 **Goal:** Same discipline applied to the remaining six big files, in two shapes:
 
-**Entry-point template** (orchestration extraction, like Tiers 2/3): `propose.php` (430), `gauge.php` (432), `custom.php` (363), `custom_gauges.php` (325), `review.php` (318). Order: largest first.
+**Entry-point template** (orchestration extraction, like Tiers 2/3): `propose.php` (430), `gauge.php` (432), `custom.php` (363), `custom_gauges.php` (325), `review.php` (318). Order: largest first. `gauge.php` follows the reach.php multi-mode pattern (`?id=` detail vs `?q=` search); baseline tests must cover both. `propose.php`, `edit.php`, `review.php` have POST handlers — baseline tests must include POST cases with valid CSRF tokens.
 
 **Helper-split template** (sub-helper extraction, like Tier 4): `php/includes/auth.php` (393), `php/includes/gauge_plots.php` (386). For each: identify subdomains (auth.php splits into session, magic-link, csrf, throttle clusters; gauge_plots.php splits into multi-series-rendering, axis-handling, etc.). The existing convention (snake_case functions, no namespace, no class) carries forward.
 
