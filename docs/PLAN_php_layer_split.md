@@ -93,16 +93,70 @@ Each tier is several phases; **review gate between tiers**, not between phases. 
 
 **Goal:** Reduce `reach.php` from a 28KB monolith to a thin entry point + 2–4 focused includes, no behavior change.
 
-1. **Phase 2.1 — Baseline tests.** Four integration golden-response tests covering the three `reach.php` modes plus the no-gauge edge: `?q=<search-term>` (search mode), `?` (list mode, no params), `?id=<class-2-reach>` (detail mode), `?id=<reach-with-no-gauge>` (detail edge). Each asserts: HTTP 200, response includes mode-appropriate substring, CSP header present (set by nginx; integration tests via `php -S` won't have it but should assert no PHP `header('Content-Security-Policy: ...')` was set). These are the gate every subsequent phase must keep green.
-2. **Phase 2.2 — Cluster analysis.** Reproduce here, in this doc, the `# Current shape` table from `PLAN_build_split.md` for `reach.php`. The file already has three obvious top-level branches (search / list / detail — all calling `include_header` + `include_footer`); these are natural cluster boundaries. Beyond mode-dispatch, expect: arg parsing, DB queries, HTML rendering. Note `reach.php` only includes 4 helpers (db, header, footer, html) — it's leaner than `description.php` (8 includes) so the cluster count is likely 3–4, not 5+.
-3. **Phase 2.3+ — One phase per cluster.** Extract the cluster to `php/includes/reach_<cluster>.php`. Update `reach.php` to `require_once` and call the extracted functions. Tests + PHPStan + cs-fixer + golden-response must stay green between phases. Trim any imports left behind (PHPStan with strict imports flags them; without it, a manual sweep).
-4. **Phase 2.N — Final cleanup.** `reach.php` should be ~150 lines: parse `$_GET`, optional auth, dispatch to extracted helpers, render. Remove from PHPStan grandfather list (Tier 1 added it).
+1. **Phase 2.1 — Baseline tests (✓ `e778053`).** Six integration tests cover all reach.php modes: `?q=<single-match>` (302 auto-redirect), `?q=<multi-match>` (results table), `?st=OR` (state filter), `?` (default-fallback to first reach), `?id=<gauged-reach>` (detail with map + linked gauge), `?id=<no-gauge-reach>` (detail no-gauge edge). Each asserts HTTP 200 (or 302), mode-appropriate substrings, and that no PHP-side `Content-Security-Policy` header was set (nginx owns it in prod; `php -S` won't see it). These are the gate every subsequent phase must keep green.
+2. **Phase 2.2 — Cluster analysis (this commit).** See [Phase 2.2 — Current shape of `reach.php`](#phase-22--current-shape-of-reachphp) below. Two cluster extractions emerged (`reach_search`, `reach_detail`) — fewer than the plan's "3–4" guess because what looked like three top-level branches (search / list / detail) is really two: search-and-state-filter share the same code path; the default-fallback is a 14-line bridge into detail.
+3. **Phase 2.3 — Extract `reach_search.php`.** Move lines 36–313 (the `if ($q_trimmed !== '' || $st !== '')` block) behind `handle_search_mode($db, $q, $st, $hidden, $compact_css): never`. Private helpers for query construction, latest-reading aggregation, class/guidebook aggregation, and render. Tests + PHPStan + cs-fixer must stay green.
+4. **Phase 2.4 — Extract `reach_detail.php`.** Move lines 330–649 (load + render) behind `handle_reach_detail($db, $id, $hidden, $q, $st, $compact_css): void` with sub-helpers for navigation, details table, sub-tables (class ranges / flow levels / guidebooks / linked gauge), and map. The 320-line extracted region sits at the boundary of "one cluster" vs "data + render split" — if a future change makes it unwieldy, fold a split into Phase 2.5; otherwise leave it.
+5. **Phase 2.5 — Final cleanup.** `reach.php` should land under 100 lines: `require_once` for the two extracted includes + db, parse `$_GET`, default-fallback inline, dispatch via the two `handle_*` functions. Remove `reach.php` from `phpstan-baseline.neon` (Tier 1 added it) and regenerate the baseline.
 
 **Verification gate (end of Tier 2):**
-- `reach.php` < 200 lines
+- `reach.php` < 200 lines (target: < 100 — orchestration only)
 - `php -l reach.php`, PHPStan, php-cs-fixer all green
-- Three baseline golden-response tests still pass
+- All six baseline integration tests still pass
 - A side-by-side diff of representative HTML responses (curl the staging vhost pre-tier and post-tier) shows nothing user-visible changed
+
+#### Phase 2.2 — Current shape of `reach.php`
+
+The file is **fully procedural** — 649 lines, zero `function` definitions, top-level code runs directly under nginx FastCGI. Five discernible top-level cluster regions dispatching off two query params (`?id` for detail, `?q`/`?st` for search/state-filter):
+
+| Cluster | Lines | What it does | Exits? |
+|---|---|---|---|
+| Setup / arg-parse | 1–34 | requires (db, header, footer, html), `$db = get_db()`, inline `$compact_css` style block (`<style>...</style>` — a CSS-only override for desktop utility layout), mutable `$has_map`/`$map_scripts`, parse `$id`/`$q`/`$st`/`$hidden` via `filter_input` | falls through |
+| Search / state-filter mode | 36–313 | If `?q=` or `?st=` is set: three SQL query variants (q+st, q-only, st-only), single-result auto-redirect, latest-flow aggregation across result reaches, class/guidebook aggregation, render header + table + map + footer | `exit` (lines 95, 312) |
+| Default fallback | 315–328 | If neither `?id` nor `?q`/`?st`: pick first reach by `sort_name` — empty-state render if DB has no reaches; otherwise sets `$id` and falls through to detail | `exit` (line 325) on empty-DB only |
+| Detail mode — data load | 330–405 | Load reach (404 if missing), prev/next nav queries, total count + position, gauge, states, classes, derive `$flow_levels` (low/okay/high bands from primary class range), guidebooks | falls through |
+| Detail mode — render | 407–649 | header + nav bar (prev/next + embedded search form + state-select + hidden toggle), details table (with coord → Google Maps links), class-ranges sub-table, flow-levels sub-table, guidebooks sub-table, linked-gauge sub-table, map div + leaflet scripts, footer | end of file |
+
+**Shared mutable state** inside the entry-point scope (relevant to extraction signatures):
+- `$db` — read by every cluster
+- `$compact_css` — read by both search render (line 188) and detail render (line 413); echoed once each
+- `$has_map`, `$map_scripts` — initialized empty at top; set inside whichever cluster renders a map; conditionally echoed at the end of that same cluster. **Internal to each cluster — does not leak.**
+- `$id`, `$q`, `$st`, `$hidden` — set by setup, read by every downstream cluster. The detail nav bar's embedded search form (line 431, 437) re-echoes `$q` and `$st` as input values; the hidden-toggle link (line 445) uses `$hidden`.
+
+**Cluster-extraction target shape:**
+
+```
+php/
+├── reach.php                  # < 100 lines: requires, arg parse, mode
+│                              #   dispatch, default-fallback inline
+└── includes/
+    ├── reach_search.php       # handle_search_mode(
+    │                          #   PDO $db, string $q, string $st,
+    │                          #   int $hidden, string $compact_css
+    │                          # ): never
+    │                          # Plus private helpers for: query, latest-
+    │                          # reading aggregation, class/guidebook
+    │                          # aggregation, render-table-and-map.
+    └── reach_detail.php       # handle_reach_detail(
+                               #   PDO $db, int $id, int $hidden,
+                               #   string $q, string $st, string $compact_css
+                               # ): void
+                               # Plus private helpers for: load_reach_with_nav,
+                               # derive_flow_levels, render_nav_bar,
+                               # render_details_table, render_class_ranges,
+                               # render_flow_levels, render_guidebooks,
+                               # render_linked_gauge, render_reach_map.
+```
+
+**Phase order rationale:** Search first (Phase 2.3), then detail (Phase 2.4). Search is the smaller, self-contained block (278 lines extracted, ends with `exit` — no cross-cluster state leakage). Detail is bigger and has more sub-helpers but no novel patterns; doing search first builds the helper-extraction template against the simpler block. After both extractions, `reach.php` keeps only the default-fallback bridge inline (14 lines) — extracting that to a helper would obscure the mode-dispatch logic for no benefit.
+
+**Non-obvious extraction risks specific to `reach.php`:**
+
+- **`$_SERVER['DOCUMENT_ROOT']` reads** at lines 297 (search map) and 629 (detail map) load `/static/leaflet.css` via `file_get_contents`. Under `php -S`, `DOCUMENT_ROOT` is the `-t` arg (the test docroot); under nginx FastCGI, it's the vhost's `root` directive. Both should resolve correctly without code change — keep using `$_SERVER['DOCUMENT_ROOT']` in the extracted helpers, do not switch to `__DIR__` (which would break under prod where `php/` is symlinked into docroot).
+- **`$gauge_ids` is referenced twice** in the search block (line 101 builds it; line 273 reuses it for the gauge-locations query). The aggregation and rendering helpers will need to share it — either return-then-pass or compute twice. Recommend compute-once and pass.
+- **Guidebook abbreviation map** at lines 146–155 (`$ss_edition`, `$gb_abbrev`) is hardcoded data; extract as a private `const`-like array in the helper file or keep inline in `_aggregate_classes_guides`. Don't move to a shared include — it's truly reach-search-specific.
+- **`$colors` palette** at line 237 is shared with `/static/search-map.js` (passed via `data-colors` JSON). Don't change the palette during extraction or the map markers won't match the table swatches.
+- **Detail-mode nav bar embeds `$all_states`** via `$db->query('SELECT abbreviation FROM state ORDER BY abbreviation')` at line 429. This is a fresh query inside the render path, not a value from the data-load cluster. Keep it inside the nav render helper; don't promote to data load.
 
 ### Tier 3 — description.php split
 
