@@ -56,8 +56,8 @@ The plan asks: *"submit `<script>alert(1)</script>` everywhere accepting input; 
 ### Audit observations
 
 - **131 `prepare()` calls across `php/`.** All paired with `->execute([...])` parameter binding.
-- **Zero `->query()` or `->exec()` calls with SQL strings.** No raw queries that could carry user data.
-- **8 sites use string concatenation into the SQL.** All verified safe via static analysis:
+- **`->query()` / `->exec()` calls exist (10+) but use static SQL only.** No user data flows into any `->query()` / `->exec()` argument (verified by grep + per-site read; static literals like `SELECT COUNT(*) FROM ...`, schema introspection, etc.).
+- **9 sites use string concatenation into the SQL.** All verified safe via static analysis:
 
 | Site | Pattern | Safety verdict |
 |---|---|---|
@@ -73,6 +73,7 @@ The plan asks: *"submit `<script>alert(1)</script>` everywhere accepting input; 
 
 - **`review.php:281`** — list query. `$where = $q_status === 'all' ? '' : 'WHERE cr.status = ?'`; `$q_status` value goes through `->execute($params)` placeholder, not concatenated into SQL. ✓
 - **`custom.php:70`, `custom_gauges.php:68`** — `$sql` is built from heredoc with `WHERE r.id IN ($placeholders)` interpolation; placeholders are `?,?,?` strings. ✓
+- **`gauge_picker.php:72`, `picker.php:64`, `custom_gauges.php:103`** — same heredoc + `IN ($placeholders)` pattern, prepared at those lines after construction earlier in each file (`gauge_picker.php:49-67`, `picker.php:29-60`, `custom_gauges.php:39-99` builds `$status_sql`). All three placeholder strings are derived from `array_fill(...)` over a server-side list (state abbrevs / state names / gauge IDs) — never from user-typed SQL. ✓
 
 ### Findings
 

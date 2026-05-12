@@ -14,6 +14,8 @@
 
 ## Findings by priority
 
+> Convention: sections are organized by **original triage** priority, not current severity. An Accepted item stays under its original section (F-4/F-5/F-6/F-7 under High) so the historical risk surface is visible at a glance. The one exception is F-9, whose severity was unconditionally downgraded after audit refinement (Medium → Low) — moved under Low. F-13 keeps its Medium bucket because severity is conditional (Low at single-maintainer scale, Medium when a second maintainer joins).
+
 ### High
 
 #### F-2 — Magic-link token captured in nginx access log
