@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from kayak.cli.init_db import sync_sources
 from kayak.config import FETCH_BUDGET
@@ -111,13 +112,19 @@ class _FetchWork:
 
 
 def fetch(args: argparse.Namespace) -> None:
-    """Fetch data from remote agencies, parse, and store in database."""
+    """Fetch data from remote agencies, parse, and store in database.
+
+    Phase-banner structure preserved: (1) prepare work items inside a
+    short read-only session; (2) network I/O with no session held;
+    (3) parse + store inside a short write session. Sessions are opened
+    in this function and passed to helpers — helpers never acquire
+    their own session.
+    """
 
     ensure_all_loaded()
 
     if args.dry_run:
         print("Dry run mode — no data will be stored")
-
     if args.input_dir:
         print(f"Reading from saved files in {args.input_dir}")
 
@@ -133,15 +140,7 @@ def fetch(args: argparse.Namespace) -> None:
         )
         return
 
-    # Load sources from YAML config
-    yaml_sources = load_sources()
-
-    # Apply filters
-    if args.parser_filter:
-        yaml_sources = [s for s in yaml_sources if s["parser"] == args.parser_filter]
-    if args.url_filter:
-        yaml_sources = [s for s in yaml_sources if args.url_filter in s["url"]]
-
+    yaml_sources = _filter_yaml_sources(load_sources(), args.parser_filter, args.url_filter)
     print(f"Found {len(yaml_sources)} URL sources to process")
 
     # --- Phase 1: Prepare work items (short read-only session) ---
@@ -150,161 +149,223 @@ def fetch(args: argparse.Namespace) -> None:
         # Sync YAML → fetch_url table so new/changed URLs are available
         sync_sources(session)
         session.commit()
+        work_items = _prepare_work_items(session, yaml_sources, args)
+    finally:
+        session.close()
 
-        work_items: list[_FetchWork] = []
-        for src_def in yaml_sources:
-            hours = src_def.get("hours", "")
-            if not args.ignore_constraints and not _hour_allowed(hours):
-                logger.debug("Skipping %s (hour constraint)", src_def["url"])
-                continue
+    # --- Phase 2: Fetch content (no DB session held) ---
+    content_map = _fetch_content(work_items, args)
 
-            url = args.url_prefix + src_def["url"]
-            parser_name = args.parser_type or src_def["parser"]
+    # --- Phase 3: Parse and store (short write session) ---
+    session = get_session()
+    try:
+        _parse_and_store(session, work_items, content_map, args)
+        if args.dry_run:
+            session.rollback()
+        else:
+            print("Committed to database")
+    finally:
+        session.close()
 
-            if args.show_name:
-                print(f"Processing {url} parser={parser_name}")
-            else:
-                logger.info("Processing %s parser=%s", url, parser_name)
 
-            if args.fetch_only:
-                work_items.append(
-                    _FetchWork(
-                        url=url,
-                        raw_url=src_def["url"],
-                        parser_name=parser_name,
-                        source_id=None,
-                    )
-                )
-                continue
+def _filter_yaml_sources(
+    yaml_sources: list[dict],
+    parser_filter: str | None,
+    url_filter: str | None,
+) -> list[dict]:
+    """Apply optional --parser-filter / --url-filter to the YAML source list."""
+    if parser_filter:
+        yaml_sources = [s for s in yaml_sources if s["parser"] == parser_filter]
+    if url_filter:
+        yaml_sources = [s for s in yaml_sources if url_filter in s["url"]]
+    return yaml_sources
 
-            parser_cls = get_parser_class(parser_name)
-            if parser_cls is None:
-                logger.error("Unknown parser '%s'", parser_name)
-                continue
 
-            fetch_url = session.execute(
-                select(FetchUrl).where(FetchUrl.url == src_def["url"])
-            ).scalar_one_or_none()
+def _build_fetch_work(
+    session: Session,
+    src_def: dict,
+    url: str,
+    parser_name: str,
+) -> _FetchWork:
+    """Resolve a YAML source row into a fully-populated _FetchWork.
 
-            source_id = None
-            source_map: dict[str, int] = {}
-            source_tz_map: dict[str, str] = {}
-            fetch_url_id = None
-            if fetch_url is not None:
-                fetch_url_id = fetch_url.id
-                sources = fetch_url.sources
-                source_map = {s.name: s.id for s in sources}
-                source_tz_map = {s.name: s.timezone for s in sources if s.timezone}
-                if len(sources) == 1:
-                    source_id = sources[0].id
+    Caller has already filtered by hour-allow + parser-known + fetch_only
+    short-circuit. This helper does the fetch_url lookup + source-map
+    flattening only.
+    """
+    fetch_url = session.execute(
+        select(FetchUrl).where(FetchUrl.url == src_def["url"])
+    ).scalar_one_or_none()
 
+    source_id = None
+    source_map: dict[str, int] = {}
+    source_tz_map: dict[str, str] = {}
+    fetch_url_id = None
+    if fetch_url is not None:
+        fetch_url_id = fetch_url.id
+        sources = fetch_url.sources
+        source_map = {s.name: s.id for s in sources}
+        source_tz_map = {s.name: s.timezone for s in sources if s.timezone}
+        if len(sources) == 1:
+            source_id = sources[0].id
+
+    return _FetchWork(
+        url=url,
+        raw_url=src_def["url"],
+        parser_name=parser_name,
+        source_id=source_id,
+        source_map=source_map,
+        source_tz_map=source_tz_map,
+        fetch_url_id=fetch_url_id,
+    )
+
+
+def _prepare_work_items(
+    session: Session,
+    yaml_sources: list[dict],
+    args: argparse.Namespace,
+) -> list[_FetchWork]:
+    """Build the list of fetch work items. Session is borrowed, not owned.
+
+    Both `fetch_only` short-circuit and `parser_cls` pre-flight are
+    intentional and stay here (so we don't carry a non-fetchable URL into
+    Phase 2's async layer, and so a typo'd parser_name surfaces before any
+    network I/O).
+    """
+    work_items: list[_FetchWork] = []
+    for src_def in yaml_sources:
+        hours = src_def.get("hours", "")
+        if not args.ignore_constraints and not _hour_allowed(hours):
+            logger.debug("Skipping %s (hour constraint)", src_def["url"])
+            continue
+
+        url = args.url_prefix + src_def["url"]
+        parser_name = args.parser_type or src_def["parser"]
+
+        if args.show_name:
+            print(f"Processing {url} parser={parser_name}")
+        else:
+            logger.info("Processing %s parser=%s", url, parser_name)
+
+        if args.fetch_only:
             work_items.append(
                 _FetchWork(
                     url=url,
                     raw_url=src_def["url"],
                     parser_name=parser_name,
-                    source_id=source_id,
-                    source_map=source_map,
-                    source_tz_map=source_tz_map,
-                    fetch_url_id=fetch_url_id,
+                    source_id=None,
                 )
             )
-    finally:
-        session.close()
+            continue
 
-    # --- Phase 2: Fetch content (no DB session held) ---
+        if get_parser_class(parser_name) is None:
+            logger.error("Unknown parser '%s'", parser_name)
+            continue
+
+        work_items.append(_build_fetch_work(session, src_def, url, parser_name))
+    return work_items
+
+
+def _fetch_content(
+    work_items: list[_FetchWork],
+    args: argparse.Namespace,
+) -> dict[str, str | None]:
+    """Phase 2: pull content for every work item. NO DB session is held."""
     if args.input_dir:
-        content_map: dict[str, str | None] = {}
-        for w in work_items:
-            content_map[w.url] = _get_content_from_file(w.raw_url, args.input_dir)
-    elif work_items:
-        from kayak.utils.http_client import async_fetch_many
+        return {w.url: _get_content_from_file(w.raw_url, args.input_dir) for w in work_items}
+    if not work_items:
+        return {}
 
-        urls = [w.url for w in work_items]
-        results = asyncio.run(
-            async_fetch_many(
-                urls,
-                concurrency_per_host=args.concurrency,
-                budget=getattr(args, "budget", FETCH_BUDGET) or None,
-            )
+    from kayak.utils.http_client import async_fetch_many
+
+    urls = [w.url for w in work_items]
+    results = asyncio.run(
+        async_fetch_many(
+            urls,
+            concurrency_per_host=args.concurrency,
+            budget=getattr(args, "budget", FETCH_BUDGET) or None,
         )
-        content_map = {}
-        for w in work_items:
-            result = results[w.url]
-            if not result.ok:
-                logger.error("Fetch error for %s: %s", w.url, result.error)
-                content_map[w.url] = None
-            elif result.status_code >= 400:
-                logger.error("HTTP %d for %s", result.status_code, w.url)
-                content_map[w.url] = None
-            else:
-                if args.output_dir:
-                    out_path = _safe_subpath(Path(args.output_dir), w.raw_url)
-                    result.write_file(str(out_path))
-                content_map[w.url] = result.text
-    else:
-        content_map = {}
-
-    # --- Phase 3: Parse and store (short write session) ---
-    session = get_session()
-    try:
-        for w in work_items:
-            text_content = content_map.get(w.url)
-            if text_content is None:
-                continue
-
-            if args.fetch_only:
-                continue
-
-            try:
-                parser_cls = get_parser_class(w.parser_name)
-                if parser_cls is None:
-                    continue
-
-                parser = parser_cls(
-                    url=w.url,
-                    session=session,
-                    source_id=w.source_id,
-                    source_map=w.source_map,
-                    source_tz_map=w.source_tz_map,
-                    dry_run=args.dry_run,
-                    fetch_url_id=w.fetch_url_id,
-                    agency=w.parser_name,
-                )
-                count = parser.parse(text_content)
-
-                if w.fetch_url_id and not args.dry_run and not args.input_dir:
-                    fetch_url = session.get(FetchUrl, w.fetch_url_id)
-                    if fetch_url:
-                        fetch_url.last_fetched_at = datetime.now(UTC)
-
-                logger.debug("  %d updates", count)
-
-                # Commit after each URL to release the SQLite writer lock
-                # between URLs; otherwise concurrent PHP readers can hit
-                # SQLITE_BUSY while the pipeline is running.
-                if not args.dry_run:
-                    session.commit()
-
-            except (ValueError, KeyError, LookupError) as e:
-                session.rollback()
-                logger.error("Parse/data error for %s: %s", w.url, e)
-                continue
-            except Exception:
-                # Don't let a single bad URL kill the rest of the batch —
-                # log with traceback and move on. KeyboardInterrupt /
-                # SystemExit (BaseException) still propagate.
-                session.rollback()
-                logger.exception("Unexpected error for %s", w.url)
-                continue
-
-        if args.dry_run:
-            session.rollback()
+    )
+    content_map: dict[str, str | None] = {}
+    for w in work_items:
+        result = results[w.url]
+        if not result.ok:
+            logger.error("Fetch error for %s: %s", w.url, result.error)
+            content_map[w.url] = None
+        elif result.status_code >= 400:
+            logger.error("HTTP %d for %s", result.status_code, w.url)
+            content_map[w.url] = None
         else:
-            print("Committed to database")
+            if args.output_dir:
+                out_path = _safe_subpath(Path(args.output_dir), w.raw_url)
+                result.write_file(str(out_path))
+            content_map[w.url] = result.text
+    return content_map
 
-    finally:
-        session.close()
+
+def _parse_and_store(
+    session: Session,
+    work_items: list[_FetchWork],
+    content_map: dict[str, str | None],
+    args: argparse.Namespace,
+) -> None:
+    """Phase 3: parse + store each fetched payload. Session is borrowed.
+
+    The per-URL commit inside the loop is the SQLite-writer-lock-release
+    pattern — it stays in this function (not hoisted). The two except
+    branches stay distinct: `logger.error` for expected parser/data
+    errors (already actionable); `logger.exception` (with traceback) for
+    anything else so an unexpected crash is debuggable.
+    """
+    for w in work_items:
+        text_content = content_map.get(w.url)
+        if text_content is None:
+            continue
+
+        if args.fetch_only:
+            continue
+
+        try:
+            parser_cls = get_parser_class(w.parser_name)
+            if parser_cls is None:
+                continue
+
+            parser = parser_cls(
+                url=w.url,
+                session=session,
+                source_id=w.source_id,
+                source_map=w.source_map,
+                source_tz_map=w.source_tz_map,
+                dry_run=args.dry_run,
+                fetch_url_id=w.fetch_url_id,
+                agency=w.parser_name,
+            )
+            count = parser.parse(text_content)
+
+            if w.fetch_url_id and not args.dry_run and not args.input_dir:
+                fetch_url = session.get(FetchUrl, w.fetch_url_id)
+                if fetch_url:
+                    fetch_url.last_fetched_at = datetime.now(UTC)
+
+            logger.debug("  %d updates", count)
+
+            # Commit after each URL to release the SQLite writer lock
+            # between URLs; otherwise concurrent PHP readers can hit
+            # SQLITE_BUSY while the pipeline is running.
+            if not args.dry_run:
+                session.commit()
+
+        except (ValueError, KeyError, LookupError) as e:
+            session.rollback()
+            logger.error("Parse/data error for %s: %s", w.url, e)
+            continue
+        except Exception:
+            # Don't let a single bad URL kill the rest of the batch —
+            # log with traceback and move on. KeyboardInterrupt /
+            # SystemExit (BaseException) still propagate.
+            session.rollback()
+            logger.exception("Unexpected error for %s", w.url)
+            continue
 
 
 def _get_content_from_file(raw_url: str, input_dir: str) -> str | None:
