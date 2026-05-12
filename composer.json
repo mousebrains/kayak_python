@@ -9,6 +9,7 @@
         "ext-pdo_sqlite": "*"
     },
     "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.95",
         "phpstan/phpstan": "^2",
         "phpunit/phpunit": "^11.5"
     },
@@ -19,6 +20,8 @@
     "scripts": {
         "test": "phpunit",
         "analyse": "phpstan analyse --memory-limit=1G",
-        "baseline": "phpstan analyse --memory-limit=1G --generate-baseline=phpstan-baseline.neon"
+        "baseline": "phpstan analyse --memory-limit=1G --generate-baseline=phpstan-baseline.neon",
+        "fix": "php-cs-fixer fix",
+        "fix-check": "php-cs-fixer fix --dry-run --diff"
     }
 }

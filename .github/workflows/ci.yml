@@ -70,6 +70,13 @@ jobs:
         # 128MB default.
         run: vendor/bin/phpstan analyse --no-progress --memory-limit=1G
 
+      - name: php-cs-fixer
+        # Format gate (analog of `ruff format --check`). Config lives in
+        # .php-cs-fixer.dist.php; PSR-12-derived ruleset that preserves
+        # the codebase's K&R braces and one-line if-returns. Per Phase
+        # 1.2 of docs/PLAN_php_layer_split.md.
+        run: vendor/bin/php-cs-fixer fix --dry-run --diff
+
   typecheck:
     runs-on: ubuntu-latest
     steps:

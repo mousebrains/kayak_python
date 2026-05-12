@@ -218,9 +218,9 @@ if ($cr_id) {
         echo '<h3>Classes and flow range (editable)</h3>';
         echo '<input type="hidden" name="classes_present" value="1">';
         $cur_names = $cur['reach_class']['names'] ?? [];
-        $cur_range = $cur['reach_class']['range'] ?? ['low'=>null,'high'=>null,'data_type'=>'flow'];
+        $cur_range = $cur['reach_class']['range'] ?? ['low'=>null, 'high'=>null, 'data_type'=>'flow'];
         $p_names = $payload['reach_class']['names'] ?? [];
-        $p_range = $payload['reach_class']['range'] ?? ['low'=>null,'high'=>null,'data_type'=>'flow'];
+        $p_range = $payload['reach_class']['range'] ?? ['low'=>null, 'high'=>null, 'data_type'=>'flow'];
         echo '<p>Current classes: <code>' . htmlspecialchars(implode(', ', $cur_names) ?: '(none)') . '</code></p>';
         $cur_range_str = ($cur_range['low'] ?? '-') . ' to ' . ($cur_range['high'] ?? '-')
                        . ' ' . ($cur_range['data_type'] ?? 'flow');

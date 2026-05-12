@@ -197,7 +197,7 @@ include_header('Admin — editors');
 </p>
 <?php endif ?>
 
-<?php // One tiny hidden form per editor row; per-row action buttons reference it via form="...". ?>
+<?php // One tiny hidden form per editor row; per-row action buttons reference it via form="...".?>
 <?php foreach ($editors as $e): ?>
   <form id="ed-<?= (int)$e['id'] ?>" method="POST" action="/admin.php" style="display:none">
     <input type="hidden" name="csrf_token" value="<?= $csrf ?>">

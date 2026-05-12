@@ -46,3 +46,15 @@ repos:
         language: system
         files: \.php$
         types: [file]
+      - id: php-cs-fixer
+        name: php-cs-fixer (format)
+        # Runs the project config (.php-cs-fixer.dist.php). Same gate CI
+        # uses; failing means the file would have been rewritten and needs
+        # a `vendor/bin/php-cs-fixer fix` before commit.
+        entry: vendor/bin/php-cs-fixer fix --dry-run --diff
+        language: system
+        files: ^php/.+\.php$
+        pass_filenames: false
+        # Skipped if vendor/ isn't present (fresh checkout). Operator runs
+        # `composer install` once.
+        stages: [pre-commit]
