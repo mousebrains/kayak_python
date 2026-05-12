@@ -147,11 +147,23 @@ These are not gaps per se — they're verification steps that need prod-side acc
 - **Threats:** T-D6
 - **Repro:** Read the prod PHP-FPM pool config: `cat /etc/php/*/fpm/pool.d/*.conf | grep -E 'request_terminate_timeout|pm.max_children|pm.start_servers'`. Expect `request_terminate_timeout` set to a non-zero value (e.g. 30s) to bound slow-loris workers.
 
+#### F-14 — Magic-link token leaks via Referer to subsequent requests
+
+- **Status:** 🔴 Open
+- **Threats:** T-S1, T-I4
+- **Severity:** Medium impact (same vector as F-2), low-Medium likelihood (Referer-leak is universal for URLs-with-secrets).
+- **Description:** After POST-consume of the magic-link, browser follows the 302 redirect. The Referer header on the follow-up request is the previous URL — `/auth.php?t=TOKEN&next=…`. Subsequent same-origin asset requests (`/static/leaflet.js`, `/static/style*.css`, etc.) also carry this Referer until the user navigates away. nginx log format captures `$http_referer` (`deploy/kayak-log-format.conf`), so the token is captured a SECOND time across all post-consume requests, even if F-2's `$request`-side redaction is in place.
+- **Repro:** `tail /var/log/nginx/kayak-access.log` after a login; look at the Referer column on the requests immediately after the POST-consume. Expect `/auth.php?t=<token>&next=…` in each Referer.
+- **Remediation:** Add `header('Referrer-Policy: no-referrer')` to `php/auth.php` (the response that initiates the navigation away). Ideally also to `set_editor_session()`'s caller context so the policy survives the redirect chain.
+  - Why `no-referrer` (not `same-origin` or `strict-origin`): `same-origin` still sends the full Referer to same-origin requests (the exact bad case here). `strict-origin` trims to origin only — adequate but slightly weaker than `no-referrer` for the immediate-post-consume window.
+  - Marginal alternative: add `<meta name="referrer" content="no-referrer">` to the auth.php HTML. Header is preferred (covers non-HTML responses like the 302).
+- **Plan tier:** Tier 1.1 (this finding). Effort: ~15min.
+
 ## Findings by status
 
 | Status | Count | IDs |
 |---|---|---|
-| 🔴 Open | 13 | F-1 through F-13 |
+| 🔴 Open | 14 | F-1 through F-14 |
 | 🟡 In progress | 0 | — |
 | 🟢 Closed | 0 | — |
 | ⚪ Accepted | 0 | — |
