@@ -269,15 +269,26 @@ Bundling these into a shared `reach_common.php` (or moving them up into `db.php`
 The plan's earlier sketch of a 4-way split (geometry / styling / axes / top-level) doesn't match the file's actual cluster boundaries. Of the 10 functions, only the 3 **rating** functions form a coherent extractable unit; the rest are tightly interwoven with the two `generate_*_plot` renderers. See [Phase 4.2 — Current shape of `svg_plot.php`](#phase-42--current-shape-of-svg_plotphp) below for the actual cluster table. Outcome: 2-file split (rating extracted; everything else stays).
 
 1. **Phase 4.1 — Baseline tests (✓ `e217ab5`).** Five integration tests cover plot.php (the simplest external consumer of `generate_svg_plot`): 400 on missing id, 400 on invalid type, 404 on non-gauge reach, 200 raw `image/svg+xml` for a gauged reach, 200 HTML wrapper on `?embed=1`. SvgPlotTest's 11 existing cases + DescriptionIntegrationTest's 6 cases already cover the helper directly and the transitive consumer path via gauge_plots.
-2. **Phase 4.2 — Cluster analysis (this commit).** See [Phase 4.2 — Current shape of `svg_plot.php`](#phase-42--current-shape-of-svg_plotphp) below.
-3. **Phase 4.3 — Extract `svg_plot_rating.php`.** Move `derive_rating_lookup`, `rate_gauge_to_flow`, `rate_flow_to_gauge` into a new file. `svg_plot.php` (the surviving file) `require_once`s it so internal uses of `rate_*_to_*` from `generate_rating_dual_plot` still resolve. External consumers (gauge_plots.php) see no signature change — function names stay global, just live in a different physical file. No consumer-side edit required.
-4. **Phase 4.4 — Final cleanup.** Plan-doc closeout marking Tier 4 done with line counts + outcome table.
+2. **Phase 4.2 — Cluster analysis (✓ `619122f`).** See [Phase 4.2 — Current shape of `svg_plot.php`](#phase-42--current-shape-of-svg_plotphp) below.
+3. **Phase 4.3 — Extract `svg_plot_rating.php` (✓ `5cd9b85`).** Moved `derive_rating_lookup`, `rate_gauge_to_flow`, `rate_flow_to_gauge` (147 lines) out of svg_plot.php. The surviving svg_plot.php require_once's the new file so generate_rating_dual_plot's internal `rate_*_to_*` calls still resolve. Consumer-side edits: zero — PHP's global function namespace means all existing callers (plot.php, gauge_plots.php, description_detail.php, SvgPlotTest) pick up the new physical home transparently. svg_plot.php shrinks 503 → 382 lines.
+4. **Phase 4.4 — Final cleanup (✓ this commit).** Plan-doc closeout. No additional code motion.
 
-**Verification gate (end of Tier 4):**
-- `svg_plot.php` < 400 lines (no hard < 200 line target — this is a helper, not an entry point shim)
-- `svg_plot_rating.php` exists with the 3 rating functions and nothing else
-- `php -l` on both, PHPStan, php-cs-fixer all green
-- All 11 SvgPlotTest cases + 5 PlotIntegrationTest + 6 DescriptionIntegrationTest cases pass
+**Verification gate (end of Tier 4):** all met as of `5cd9b85`.
+- ✓ `svg_plot.php` at 382 lines (was 503 pre-tier; no hard < 200 line target — this is a helper, not an entry-point shim)
+- ✓ `svg_plot_rating.php` at 147 lines with the 3 rating functions and nothing else
+- ✓ `php -l` on both, PHPStan level 7, php-cs-fixer all green
+- ✓ All 11 SvgPlotTest + 5 PlotIntegrationTest + 6 DescriptionIntegrationTest cases pass (full PHPUnit: 72/72)
+
+**Tier 4 outcome — file shape after split:**
+
+| File | Lines | Role |
+|---|---|---|
+| `php/includes/svg_plot.php` | 382 | Layout helpers (`_split_y_label`, `_series_data_attr`), axis math (`nice_axis`), bands (`_bands_svg`), plot renderers (`generate_svg_plot`, `generate_rating_dual_plot`, `_empty_svg`). Requires `svg_plot_rating.php` for the internal `rate_*_to_*` calls inside the dual-plot renderer. |
+| `php/includes/svg_plot_rating.php` | 147 | Three rating-curve functions: `derive_rating_lookup` (DB-bound), `rate_gauge_to_flow` (forward), `rate_flow_to_gauge` (inverse). No own includes. |
+
+PHPStan baseline net movement: 0 — extraction was pure code motion; no signatures changed; the 0 baseline entries for svg_plot.php stayed at 0, and svg_plot_rating.php came up clean. No new entries needed.
+
+**Deferred to cleanup tier:** further granularity (`nice_axis` and `_bands_svg` as their own files) would each produce a ~30–40-line file. Defer until either: (a) Tier 6 cleanup notices svg_plot.php is still unwieldy at 382 lines; (b) a Tier-5 entry-point extraction reveals a need for one of these helpers in isolation; (c) someone adds a third consumer of `nice_axis` outside the file. Until then, the file's internal cohesion (layout helpers + axis math + bands + renderers) is high enough that the size doesn't justify additional splits.
 
 #### Phase 4.2 — Current shape of `svg_plot.php`
 
