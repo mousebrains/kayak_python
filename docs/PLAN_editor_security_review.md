@@ -180,7 +180,7 @@ This tier is nearly all decision points — there's no "right answer" without ex
    - **On-major-change-only.** New auth flow / new privileged endpoint / new data type triggers a focused re-review.
    - **Annual.** Calendar entry; ~one week of work each year.
 4. **Phase 5.4 — Incident-response runbook.** `docs/security/incident-response.md`: discovered-during-business-hours flow vs out-of-hours; user notification template; Hetzner abuse contact; how to revoke all sessions; how to roll a leaked secret. Even at "best-effort" you need this written down.
-5. **Phase 5.5 — Backup-restore drill from a security angle.** The Tier 4.4 production-discipline drill restores from backup; this version assumes the live DB is *poisoned* (attacker-modified rows). Restore to a known-good earlier snapshot; identify what's lost; document.
+5. **Phase 5.5 — Backup-restore drill from a security angle.** The Tier 4.4 production-discipline drill restores from backup for *availability*; this version restores assuming the live DB is *poisoned* (attacker-modified rows). Existing infrastructure to leverage: `scripts/db_pull.sh` (pulls from prod), `docs/db_sync.md` (the documented pull/push procedure — note: per `[feedback_never_run_db_push]`, `db_push.sh` is dev-only; never run on the prod machine), `docs/offsite-backup.md` (rclone crypt → Drive). Drill: choose a date in the past; compute "what's lost between then and now" (count of `edit_history` rows, count of `change_request` rows); restore to a temp copy; verify the data integrity; document the gap. Do NOT swap into live without explicit confirmation per `[feedback_never_overwrite_db]`.
 
 **Verification gate (end of Tier 5):**
 - All Tier 5 decisions documented in `docs/security/decisions.md`
