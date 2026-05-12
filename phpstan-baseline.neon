@@ -43,18 +43,6 @@ parameters:
 			path: php/gauge_picker.php
 
 		-
-			message: '#^Function _cookie_params\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: php/includes/auth.php
-
-		-
-			message: '#^Function consume_magic_link\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: php/includes/auth.php
-
-		-
 			message: '#^Function csrf_token\(\) should return string but returns int\|string\.$#'
 			identifier: return.type
 			count: 1
@@ -68,18 +56,6 @@ parameters:
 
 		-
 			message: '#^Function is_maintainer\(\) has parameter \$ed with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: php/includes/auth.php
-
-		-
-			message: '#^Function issue_magic_link\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: php/includes/auth.php
-
-		-
-			message: '#^Function maintainer_emails\(\) return type has no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1
 			path: php/includes/auth.php
@@ -112,6 +88,12 @@ parameters:
 			message: '#^Parameter \#1 \$tok of function hash_token expects string, int\|string given\.$#'
 			identifier: argument.type
 			count: 1
+			path: php/includes/auth.php
+
+		-
+			message: '#^Parameter \#3 \$options of function setcookie expects array\{expires\?\: int, path\?\: string, domain\?\: string, secure\?\: bool, httponly\?\: bool, samesite\?\: ''Lax''\|''lax''\|''None''\|''none''\|''Strict''\|''strict''\}, array\{expires\: int, path\: string, secure\: bool, httponly\: bool, samesite\: string\} given\.$#'
+			identifier: argument.type
+			count: 4
 			path: php/includes/auth.php
 
 		-

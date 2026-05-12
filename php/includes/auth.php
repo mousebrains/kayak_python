@@ -1,7 +1,9 @@
 <?php
+
 declare(strict_types=1);
+
 /**
- * Editor auth helpers — magic-link sessions + CSRF.
+ * Editor auth helpers — sessions + CSRF + feature flag.
  *
  * Cookies:
  *   ed_sess  Random 32-byte hex value; only sha256(value) stored server-side.
@@ -10,6 +12,12 @@ declare(strict_types=1);
  *
  * Maintainer sessions reuse the same ed_sess cookie; role is determined by
  * the editor.status column, so one cookie type covers both user classes.
+ *
+ * Magic-link flow (issue_/peek_/consume_magic_link, normalize_email,
+ * safe_next_url) lives in auth_magic_link.php — included transitively
+ * at the bottom of this file, so consumers don't need a second
+ * require_once. Split out as part of Tier 5.A so the auth-core stays
+ * focused on session+CSRF.
  */
 
 require_once __DIR__ . '/db.php';
@@ -18,19 +26,24 @@ require_once __DIR__ . '/db.php';
 // Feature flag
 // ---------------------------------------------------------------------------
 
-function auth_env(string $name): string {
+function auth_env(string $name): string
+{
     $v = getenv($name);
-    if ($v === false || $v === '') $v = (string)($_SERVER[$name] ?? '');
+    if ($v === false || $v === '') {
+        $v = (string)($_SERVER[$name] ?? '');
+    }
     return $v;
 }
 
-function editor_feature_enabled(): bool {
+function editor_feature_enabled(): bool
+{
     $v = auth_env('EDITOR_FEATURE');
     return $v === '1' || strcasecmp($v, 'true') === 0;
 }
 
 /** Abort with 404 if the feature flag is not on. */
-function require_editor_feature(): void {
+function require_editor_feature(): void
+{
     if (!editor_feature_enabled()) {
         require_once __DIR__ . '/error.php';
         render_error_page(404, 'Not found', '<p>This page is not available.</p>');
@@ -41,11 +54,13 @@ function require_editor_feature(): void {
 // Token utilities
 // ---------------------------------------------------------------------------
 
-function generate_token(int $bytes = 32): string {
+function generate_token(int $bytes = 32): string
+{
     return bin2hex(random_bytes($bytes));
 }
 
-function hash_token(string $tok): string {
+function hash_token(string $tok): string
+{
     return hash('sha256', $tok);
 }
 
@@ -57,7 +72,11 @@ const EDITOR_SESSION_COOKIE = 'ed_sess';
 const EDITOR_SESSION_DAYS   = 7;
 const EDITOR_CSRF_COOKIE    = 'ed_csrf';
 
-function _cookie_params(int $lifetime_seconds): array {
+/**
+ * @return array{expires:int, path:string, secure:bool, httponly:bool, samesite:string}
+ */
+function _cookie_params(int $lifetime_seconds): array
+{
     return [
         'expires'  => $lifetime_seconds === 0 ? 0 : time() + $lifetime_seconds,
         'path'     => '/',
@@ -71,7 +90,8 @@ function _cookie_params(int $lifetime_seconds): array {
  * Create a session row for the given editor, set the cookie, return the
  * cookie value (hex token).
  */
-function set_editor_session(int $editor_id): string {
+function set_editor_session(int $editor_id): string
+{
     $tok = generate_token();
     $hash = hash_token($tok);
     $expires = gmdate('Y-m-d H:i:s', time() + EDITOR_SESSION_DAYS * 86400);
@@ -106,7 +126,8 @@ function set_editor_session(int $editor_id): string {
  * $db_override is for tests only; production calls pass nothing and use
  * the global get_db() connection.
  */
-function clear_editor_session(?PDO $db_override = null): void {
+function clear_editor_session(?PDO $db_override = null): void
+{
     $tok = $_COOKIE[EDITOR_SESSION_COOKIE] ?? '';
     if ($tok !== '') {
         $hash = hash_token($tok);
@@ -127,14 +148,20 @@ function clear_editor_session(?PDO $db_override = null): void {
  * is bypassed so different sessions can be exercised within the same PHP
  * process. Production callers pass nothing.
  */
-function current_editor(?PDO $db_override = null): ?array {
+function current_editor(?PDO $db_override = null): ?array
+{
     static $cached = false;
     static $editor = null;
-    if ($db_override === null && $cached) return $editor;
+    if ($db_override === null && $cached) {
+        return $editor;
+    }
 
     $tok = $_COOKIE[EDITOR_SESSION_COOKIE] ?? '';
     if ($tok === '' || !ctype_xdigit($tok) || strlen($tok) !== 64) {
-        if ($db_override === null) { $cached = true; $editor = null; }
+        if ($db_override === null) {
+            $cached = true;
+            $editor = null;
+        }
         return null;
     }
 
@@ -152,7 +179,10 @@ function current_editor(?PDO $db_override = null): ?array {
     $stmt->execute([$hash, 'banned']);
     $row = $stmt->fetch();
     if (!$row) {
-        if ($db_override === null) { $cached = true; $editor = null; }
+        if ($db_override === null) {
+            $cached = true;
+            $editor = null;
+        }
         return null;
     }
 
@@ -169,16 +199,21 @@ function current_editor(?PDO $db_override = null): ?array {
             error_log('editor_session last_seen_at update skipped: ' . $e->getMessage());
         }
     }
-    if ($db_override === null) { $cached = true; $editor = $row; }
+    if ($db_override === null) {
+        $cached = true;
+        $editor = $row;
+    }
     return $row;
 }
 
-function is_maintainer(?array $ed = null): bool {
+function is_maintainer(?array $ed = null): bool
+{
     $ed ??= current_editor();
     return $ed !== null && ($ed['status'] ?? '') === 'maintainer';
 }
 
-function require_editor(): array {
+function require_editor(): array
+{
     $ed = current_editor();
     if ($ed === null) {
         $next = rawurlencode($_SERVER['REQUEST_URI'] ?? '/');
@@ -188,7 +223,8 @@ function require_editor(): array {
     return $ed;
 }
 
-function require_maintainer(): array {
+function require_maintainer(): array
+{
     $ed = require_editor();
     if (!is_maintainer($ed)) {
         require_once __DIR__ . '/error.php';
@@ -208,7 +244,8 @@ function require_maintainer(): array {
 // CSRF — double-submit cookie pattern
 // ---------------------------------------------------------------------------
 
-function csrf_token(): string {
+function csrf_token(): string
+{
     $tok = $_COOKIE[EDITOR_CSRF_COOKIE] ?? '';
     if ($tok === '' || !ctype_xdigit($tok) || strlen($tok) !== 64) {
         $tok = generate_token();
@@ -218,7 +255,8 @@ function csrf_token(): string {
     return $tok;
 }
 
-function require_csrf(): void {
+function require_csrf(): void
+{
     $submitted = (string)($_POST['csrf_token'] ?? '');
     $cookie    = (string)($_COOKIE[EDITOR_CSRF_COOKIE] ?? '');
     if ($submitted === '' || $cookie === '' || !hash_equals($cookie, $submitted)) {
@@ -228,167 +266,18 @@ function require_csrf(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Magic-link flow
+// Maintainer notification routing
 // ---------------------------------------------------------------------------
-
-/** Normalize an email address: trim, lowercase. */
-function normalize_email(string $email): string {
-    return strtolower(trim($email));
-}
-
-/**
- * Cap on magic-link issuance per email and per IP within a rolling hour.
- * Returns true when the caller should proceed. Same silent response for
- * "over the cap" and "under the cap" keeps the login.php UX identical so
- * we don't leak whether the email exists.
- */
-function magic_link_under_throttle(PDO $db, string $email, string $ip): bool {
-    $email_cap = 5;    // magic links per email per hour
-    $ip_cap    = 20;   // magic links from one IP per hour (shared households)
-
-    if ($email !== '') {
-        $stmt = $db->prepare(
-            "SELECT COUNT(*) FROM editor_magic_link eml
-             JOIN editor e ON e.id = eml.editor_id
-             WHERE e.email = ? AND eml.created_at > datetime('now', '-1 hour')"
-        );
-        $stmt->execute([$email]);
-        if ((int)$stmt->fetchColumn() >= $email_cap) return false;
-    }
-    if ($ip !== '') {
-        $stmt = $db->prepare(
-            "SELECT COUNT(*) FROM editor_magic_link
-             WHERE ip_issued = ? AND created_at > datetime('now', '-1 hour')"
-        );
-        $stmt->execute([$ip]);
-        if ((int)$stmt->fetchColumn() >= $ip_cap) return false;
-    }
-    return true;
-}
-
-/**
- * Upsert an editor by email and issue a magic-link token. Returns the
- * raw token (to embed in a URL) and the editor id.
- *
- * New editors are created with status='pending'. Does not send email.
- */
-function issue_magic_link(string $email, ?string $next_url = null): array {
-    $email = normalize_email($email);
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        throw new RuntimeException('Invalid email');
-    }
-    $ip = (string)($_SERVER['REMOTE_ADDR'] ?? '');
-    $db = get_db();
-    // Rate-limit first — cheap read, returns the same outward response as
-    // a successful issuance so we don't leak which emails have been tried.
-    if (!magic_link_under_throttle($db, $email, $ip)) {
-        return ['editor_id' => 0, 'token' => '', 'banned' => true];
-    }
-    $db->beginTransaction();
-    try {
-        $stmt = $db->prepare('SELECT id, status FROM editor WHERE email = ?');
-        $stmt->execute([$email]);
-        $ed = $stmt->fetch();
-        if (!$ed) {
-            $db->prepare(
-                "INSERT INTO editor (email, status, created_at) VALUES (?, 'pending', datetime('now'))"
-            )->execute([$email]);
-            $editor_id = (int)$db->lastInsertId();
-        } else {
-            $editor_id = (int)$ed['id'];
-            if ($ed['status'] === 'banned') {
-                $db->commit();
-                return ['editor_id' => $editor_id, 'token' => '', 'banned' => true];
-            }
-        }
-
-        $tok = generate_token();
-        $hash = hash_token($tok);
-        $expires = gmdate('Y-m-d H:i:s', time() + 30 * 60);
-
-        $db->prepare(
-            "INSERT INTO editor_magic_link
-               (editor_id, token_hash, created_at, expires_at, ip_issued, next_url)
-             VALUES (?, ?, datetime('now'), ?, ?, ?)"
-        )->execute([$editor_id, $hash, $expires, $ip, $next_url]);
-
-        $db->commit();
-        return ['editor_id' => $editor_id, 'token' => $tok, 'banned' => false];
-    } catch (Throwable $e) {
-        $db->rollBack();
-        throw $e;
-    }
-}
-
-/**
- * Consume a magic-link token. On success returns [editor_id, next_url]
- * and marks the token used. On failure returns null.
- */
-/**
- * Check whether a magic-link token is currently valid (exists, unused,
- * unexpired) WITHOUT consuming it. Used by auth.php's GET handler to
- * decide between rendering the interstitial form vs. the expired page.
- * Email-scanner URL prefetch (Outlook Defender, Proofpoint, etc.) only
- * hits GET, so this read is a no-op for them — the token stays unused
- * until the actual user POSTs the form.
- */
-function peek_magic_link(string $tok): bool {
-    if ($tok === '' || !ctype_xdigit($tok) || strlen($tok) !== 64) return false;
-    $hash = hash_token($tok);
-    $db = get_db();
-    $stmt = $db->prepare(
-        "SELECT 1 FROM editor_magic_link
-         WHERE token_hash = ? AND used_at IS NULL AND expires_at > datetime('now')"
-    );
-    $stmt->execute([$hash]);
-    return $stmt->fetchColumn() !== false;
-}
-
-function consume_magic_link(string $tok): ?array {
-    if ($tok === '' || !ctype_xdigit($tok) || strlen($tok) !== 64) return null;
-    $hash = hash_token($tok);
-    $db = get_db();
-    $db->beginTransaction();
-    try {
-        $stmt = $db->prepare(
-            "SELECT id, editor_id, next_url FROM editor_magic_link
-             WHERE token_hash = ? AND used_at IS NULL AND expires_at > datetime('now')"
-        );
-        $stmt->execute([$hash]);
-        $row = $stmt->fetch();
-        if (!$row) { $db->commit(); return null; }
-
-        $db->prepare(
-            "UPDATE editor_magic_link SET used_at = datetime('now') WHERE id = ?"
-        )->execute([$row['id']]);
-        $db->commit();
-        return ['editor_id' => (int)$row['editor_id'], 'next_url' => $row['next_url']];
-    } catch (Throwable $e) {
-        $db->rollBack();
-        return null;
-    }
-}
-
-/**
- * Validate a post-login redirect target. Only allow same-origin paths.
- *
- * Rejects:
- *   - protocol-relative `//host` (browsers send the user off-site)
- *   - `/\host` — per the WHATWG URL spec, browsers normalize `\` to `/`
- *     in special-scheme URLs, so a leading `/\` becomes `//`.
- */
-function safe_next_url(?string $next): string {
-    if ($next === null || $next === '') return '/';
-    if (!preg_match('#^/[^/\\\\]#', $next)) return '/';
-    return $next;
-}
 
 /**
  * Return the email address(es) of the site maintainer(s) for notifications.
  * Priority: MAINTAINER_EMAIL env var, then all editor rows with
  * status='maintainer', then a hard-coded fallback.
+ *
+ * @return list<string>
  */
-function maintainer_emails(): array {
+function maintainer_emails(): array
+{
     $env = auth_env('MAINTAINER_EMAIL');
     if ($env !== '') {
         return array_values(array_filter(array_map('trim', explode(',', $env))));
@@ -399,9 +288,19 @@ function maintainer_emails(): array {
         );
         $stmt->execute();
         $rows = array_column($stmt->fetchAll(), 'email');
-        if ($rows) return $rows;
+        if ($rows) {
+            return $rows;
+        }
     } catch (Throwable) {
         // fall through
     }
     return ['pat.kayak@gmail.com'];
 }
+
+// ---------------------------------------------------------------------------
+// Magic-link flow — split out into auth_magic_link.php (Tier 5.A.1).
+// Required at the bottom so the magic-link file can `require auth.php` for
+// generate_token + hash_token without a load-order cycle.
+// ---------------------------------------------------------------------------
+
+require_once __DIR__ . '/auth_magic_link.php';
