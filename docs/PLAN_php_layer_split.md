@@ -170,9 +170,78 @@ php/
 
 ### Tier 3 — description.php split
 
-Same template as Tier 2, applied to `description.php`. Smaller file (495 lines vs reach.php's 649) but **denser cross-cluster dependencies**: 8 includes (db, header, footer, html, svg_plot, gauge_plots, gauge_map, validate) vs reach.php's 4. Single-mode entry point (`?id=N` only — 400 on missing); baseline tests are 2 (a class-2-with-gauge reach detail; a no-gauge reach detail) plus the 400 edge. Date filtering (`start`, `end`, `hidden` params) widens the parameter space; baseline tests should hit a date-windowed and an unwindowed call.
+Same template as Tier 2, applied to `description.php`. Smaller file (495 lines vs reach.php's 649) but **denser cross-cluster dependencies**: 8 includes (db, header, footer, html, svg_plot, gauge_plots, gauge_map, validate) vs reach.php's 4. Single-mode entry point (`?id=N` only — 400 on missing). Date filtering (`start`, `end`, `hidden` params) widens the parameter space.
 
 Reuses the existing `get_reach_or_404($id)` from `php/includes/db.php:50` for 404 handling — extracted helpers should follow this naming convention for any new fail-fast lookups.
+
+1. **Phase 3.1 — Baseline tests (✓ `48f6ac3`).** Six integration tests cover description.php: `/description.php` (400 missing id), `?id=not-an-int` (400 invalid id), `?id=<gauged>` (full render with readings table, "Data Sources" section, Put-in/Take-out, footer link), `?id=<no-gauge>` (no-gauge edge — asserts NO readings table / NO Data Sources / NO Put-in), `?id=<gauged>&start=...&end=...` (still 200 with no obs in window), `?id=<gauged>&start=garbage` (`validate_date` returns null; entry-point accepts and skips filter).
+2. **Phase 3.2 — Cluster analysis (this commit).** See [Phase 3.2 — Current shape of `description.php`](#phase-32--current-shape-of-descriptionphp) below. Single extraction target (`description_detail.php`) — single-mode entry point means no mode-dispatch boundary inside the file; the "split" is one fat helper with sub-helpers (analogous to `reach_detail.php` but without a `reach_search.php` sibling).
+3. **Phase 3.3 — Extract `description_detail.php`.** Move lines 24–495 behind `handle_description_detail($db, $id, $start_date, $end_date, $hidden): void` with private helpers for navigation load, related-data load (gauge + states + classes + flow_levels derivation + readings), and the 7 render sub-functions (header+nav, readings table, date form + plots, fields table + map, data sources, guidebooks, footer + scripts).
+4. **Phase 3.4 — Final cleanup.** description.php should land under 100 lines: arg parse, 400-on-missing-id, dispatch. Remove from `phpstan-baseline.neon`. Note in the plan doc the three sub-cluster overlaps with `reach_detail.php` (navigation, flow-levels derivation, guidebooks render) as candidates for a later shared-helpers DRY pass — not bundled with this tier to keep the extraction's behavior change footprint at zero.
+
+**Verification gate (end of Tier 3):**
+- `description.php` < 200 lines (target: < 100)
+- `php -l description.php`, PHPStan, php-cs-fixer all green
+- All six Description integration tests still pass
+
+#### Phase 3.2 — Current shape of `description.php`
+
+The file is **fully procedural** — 495 lines, zero `function` definitions, single-mode entry point (always detail). Ten discernible cluster regions, no mode-dispatch boundary inside:
+
+| Cluster | Lines | What it does | Calls into |
+|---|---|---|---|
+| Setup / arg-parse / 400 | 1–29 | 8 requires, parse `$id`/`$start_date`/`$end_date`/`$hidden`, 400 on missing id, `$db = get_db()`, `$reach = get_reach_or_404($id)` | `db`, `validate` |
+| Navigation | 31–45 | prev/next/total/position queries (same 4-query shape as reach_detail's nav load) | `db` |
+| Related data load | 47–87 | gauge, states, classes (one query each), derive `$flow_levels` from primary class range (same logic as reach_detail's `_derive_reach_flow_levels`) | `db` |
+| Header + nav bar render | 89–121 | `Cache-Control: private`, preconnects, `include_header` with editor-feature context, prev/next nav bar, `<h2>` title | `header` |
+| Current readings | 123–178 | `latest_gauge_observation` fetch + 5-col table render with stable/rising/falling status spans | `db` |
+| Date range + SVG plots | 180–192 | `gp_resolve_window` (in `gauge_plots.php`) + `gp_render_date_form` + `gp_render_plots` — wraps the inline plot rendering pipeline | `gauge_plots` |
+| Description fields + map | 194–314 | Assemble `$fields` table (Class, State, Watershed, …, optional `Low/Okay/High Flow` rows, coordinate-as-anchor fields), inline Leaflet map via `gm_render_map`, render table | `html`, `gauge_map` |
+| Data sources | 316–434 | `source` + `gauge_source` joined fetch; USGS/NWRFC station-page link inference by `agency` substring; calc-expression cross-ref autolinker (`preg_replace_callback` with embedded `prepare`/`fetch`) | `db` |
+| Guidebooks | 436–470 | reach_guidebook fetch + table render with AW link (matches reach_detail's guidebooks render but uses a different button bar in the footer) | `db` |
+| Footer nav + scripts | 472–495 | Button-bar nav (Back / Reach details / Edit-or-Suggest-edit by editor role), conditional Leaflet + feature-map script tags, `include_footer` | `auth` (transitive via `header`), `footer` |
+
+**Shared mutable state** inside the entry-point scope (relevant to extraction signatures):
+- `$db` — read by every cluster except header/render
+- `$has_map` — initialized at line 25; set by `gm_render_map` at line 294; conditionally echoes the leaflet+feature-map `<script>` tags at line 489. **Crosses cluster boundaries** — the data-sources cluster doesn't touch it, but it leaks across the fields/map cluster and the footer cluster
+- `$reach`, `$name`, `$gauge`, `$class_range`, `$flow_levels`, `$readings` — set by load clusters, read by multiple render clusters. The current-readings cluster's `$readings` feeds the flow-fields/map cluster's track-color logic (line 268)
+- `$id`, `$start_date`, `$end_date`, `$hidden` — set by setup; read by every downstream cluster
+
+**Cluster-extraction target shape:**
+
+```
+php/
+├── description.php            # < 100 lines: requires, arg parse, 400-on-missing,
+│                              #   dispatch to handle_description_detail()
+└── includes/
+    └── description_detail.php # handle_description_detail(
+                               #   PDO $db, int $id, ?string $start_date,
+                               #   ?string $end_date, int $hidden
+                               # ): void
+                               # Private helpers (~9):
+                               #   _load_description_navigation, _load_description_related,
+                               #   _load_current_readings, _compute_track_color,
+                               #   _render_description_nav_bar, _render_current_readings,
+                               #   _render_date_form_and_plots, _render_description_fields_and_map,
+                               #   _render_data_sources, _render_description_guidebooks,
+                               #   _render_description_footer
+```
+
+**Cross-file overlap with `reach_detail.php`** (deferred to a follow-up DRY pass, not Tier 3):
+- Navigation load: `_load_description_navigation` ≈ `_load_reach_navigation` (identical 4-query shape, differ only in URL prefix the renderer uses).
+- Flow-levels derivation: description's lines 67–87 = `reach_detail._derive_reach_flow_levels` verbatim.
+- Guidebooks: description renders almost the same table as `reach_detail._render_reach_guidebooks` but the surrounding button bar differs (description has Edit/Suggest-edit per editor role; reach_detail has Description/Data inspector links).
+
+Bundling these into a shared `reach_common.php` (or moving them up into `db.php` / a new `reach_navigation.php`) is a 4th-helper-extraction job. Not Tier 3 — Tier 3's gate is single-file extraction with zero behavior change. Note this in the Tier 3 closeout as a follow-up.
+
+**Non-obvious extraction risks specific to `description.php`:**
+
+- **`gp_render_plots` reads/writes nothing in the entry-point scope** — it's a pure render helper that takes its inputs as args. Safe to extract whole-cluster.
+- **`gm_render_map` returns a bool** (`$has_map = gm_render_map(...)` at line 294) and also emits its `<div>` to stdout. The bool drives the post-footer `<script>` tag emission. Extracted helpers need to preserve this contract — either return the bool through the call chain or have the fields-and-map helper handle script emission itself.
+- **`preg_replace_callback` at lines 395–417** uses a closure that captures `$db` and runs additional prepared queries inside the regex callback (gauge cross-ref lookup). Extracted helper needs to accept `$db` and re-form the closure with `use ($db)`.
+- **The flow-fields rendering uses both `$flow_levels` and `$readings`** (lines 268–288 in track-color computation). Extraction needs to keep these two pieces of state available to the fields-and-map helper.
+- **`Cache-Control: private` at line 93** (vs reach.php's `Cache-Control: no-cache`) — description renders the editor's email in the nav, so it's response-specific. Preserve this header — moving it to `include_header` would lose the per-page distinction.
+- **`htmlspecialchars` on calc-expression text** (line 394) happens BEFORE the `preg_replace_callback`. The comment on lines 390–393 documents why; preserve the order during extraction or the autolinker can leak HTML metacharacters between matches.
 
 ### Tier 4 — `php/includes/svg_plot.php` split
 
