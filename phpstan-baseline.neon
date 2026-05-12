@@ -328,6 +328,48 @@ parameters:
 			message: '#^Cannot access offset 0 on list\<string\>\|false\.$#'
 			identifier: offsetAccess.nonOffsetAccessible
 			count: 1
+			path: php/includes/reach_detail.php
+
+		-
+			message: '#^Cannot access offset 1 on list\<string\>\|false\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: php/includes/reach_detail.php
+
+		-
+			message: '#^Cannot call method fetchAll\(\) on PDOStatement\|false\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: php/includes/reach_detail.php
+
+		-
+			message: '#^Function _load_reach_navigation\(\) should return array\{prev\: array\<string, mixed\>\|false, next\: array\<string, mixed\>\|false, position\: int\|string, total\: int\|string\} but returns array\{prev\: mixed, next\: mixed, position\: int\|string\|false\|null, total\: int\|string\|false\|null\}\.$#'
+			identifier: return.type
+			count: 1
+			path: php/includes/reach_detail.php
+
+		-
+			message: '#^Function _load_reach_related\(\) should return array\{gauge\: array\<string, mixed\>\|null, states\: list\<string\>, classes\: list\<array\<string, mixed\>\>, flow_levels\: list\<array\<string, mixed\>\>, guidebooks\: list\<array\<string, mixed\>\>\} but returns array\{gauge\: mixed, states\: list, classes\: array, flow_levels\: list\<array\<string, mixed\>\>, guidebooks\: array\}\.$#'
+			identifier: return.type
+			count: 1
+			path: php/includes/reach_detail.php
+
+		-
+			message: '#^Parameter \#1 \$string of function htmlspecialchars expects string, string\|false given\.$#'
+			identifier: argument.type
+			count: 2
+			path: php/includes/reach_detail.php
+
+		-
+			message: '#^Parameter \#1 \$value of function count expects array\|Countable, list\<string\>\|false given\.$#'
+			identifier: argument.type
+			count: 1
+			path: php/includes/reach_detail.php
+
+		-
+			message: '#^Cannot access offset 0 on list\<string\>\|false\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
 			path: php/includes/reach_search.php
 
 		-
@@ -581,42 +623,6 @@ parameters:
 			identifier: missingType.iterableValue
 			count: 1
 			path: php/propose.php
-
-		-
-			message: '#^Cannot access offset 0 on list\<string\>\|false\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: php/reach.php
-
-		-
-			message: '#^Cannot access offset 1 on list\<string\>\|false\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: php/reach.php
-
-		-
-			message: '#^Cannot call method fetchAll\(\) on PDOStatement\|false\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: php/reach.php
-
-		-
-			message: '#^Parameter \#1 \$string of function htmlspecialchars expects string, string\|false given\.$#'
-			identifier: argument.type
-			count: 3
-			path: php/reach.php
-
-		-
-			message: '#^Parameter \#1 \$string of function trim expects string, string\|false given\.$#'
-			identifier: argument.type
-			count: 2
-			path: php/reach.php
-
-		-
-			message: '#^Parameter \#1 \$value of function count expects array\|Countable, list\<string\>\|false given\.$#'
-			identifier: argument.type
-			count: 1
-			path: php/reach.php
 
 		-
 			message: '#^Parameter \#1 \$string of function htmlspecialchars expects string, string\|false given\.$#'
