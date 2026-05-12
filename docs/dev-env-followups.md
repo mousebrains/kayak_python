@@ -2,6 +2,10 @@
 
 Pre-existing issues uncovered during the JS cleanup work (PLAN_js_cleanup Phase 1–3). All predate that work and were deferred per "we'll fix them later." Listed roughly in increasing scope.
 
+> **Symptoms depend on `OUTPUT_DIR`.** This document was written from a dev machine where `OUTPUT_DIR` is unset and defaults to `BASE_DIR/public_html` (`src/kayak/config.py:35`) — i.e., `levels build` writes back into the repo's `public_html/`, on top of the dev-convenience symlinks. On the live host (`levels`), `~/.config/kayak/.env` sets `OUTPUT_DIR=/home/pat/public_html` (a sibling outside the repo), so the build never touches the repo's tree.
+>
+> Consequences: issues 3, 4, and 5 below describe symptoms (empty `<style>` block, stray `static/` duplicates, `git status` typechanges after build) that only appear when the build target collides with the repo. On the live host these are silent — but the underlying inconsistencies (the symlinks, the missing entry-point coverage, the stale lint refs) are still present and still worth fixing. Issues 1 and 2 are environment-independent: they bite anyone who runs `make lint-css` or `make lint-shell`.
+
 ## 1. `php/style.css` stale ref in `biome.json` + `Makefile`
 
 **State:** Both files reference `php/style.css`, but the file doesn't exist on disk.
