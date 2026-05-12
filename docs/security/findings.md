@@ -115,6 +115,20 @@
   - OR accept as low-impact (paddler audit isn't a high-stakes audit context).
 - **Plan tier:** Tier 1.5 (account-recovery audit) decision point.
 
+#### F-13 — No self-approval prevention in review.php
+
+- **Status:** 🔴 Open (low priority — tied to multi-maintainer trigger)
+- **Threats:** T-E6
+- **Severity:** Low impact at single-maintainer scale (moot — maintainer could direct-edit anyway); Medium impact at multi-maintainer scale.
+- **Description:** `review_approve()` in `php/includes/review_logic.php:61` takes `$cr, $applied, $maint_id` and does not check `$cr['editor_id'] !== $maint_id`. Realistic scenario: an editor with pending proposals gets promoted to maintainer; they can now approve their own pre-promotion proposals. (After promotion, `propose.php` routes them to `/edit.php`, so they cannot submit NEW proposals as maintainer.)
+- **Phase 2.3 audit note:** at the current single-maintainer scale this is largely moot — the maintainer could direct-edit via `/edit.php` and achieve the same outcome. Becomes meaningful only when a second maintainer joins and you want to enforce "second pair of eyes."
+- **Remediation:** One line in `review_approve()`: `if ($cr['editor_id'] === $maint_id) return ['ok' => false, 'err' => 'Cannot approve own proposal'];` (or downgrade to a require-other-maintainer flow if there are multiple maintainers).
+- **Plan tier:** Tier 2.3 (this audit). Disposition: defer to multi-maintainer trigger (same trigger as F-5, D-T1.3).
+
+### Low / prod-side confirms
+
+This section holds two kinds of items: (a) findings downgraded to Low after audit refinement, and (b) verification steps that need prod-side access (the repo can't confirm them alone).
+
 #### F-9 — Over-tier apply (review maintainer can write fields outside proposer's tier)
 
 - **Status:** 🔴 Open (refined; severity downgraded)
@@ -129,20 +143,6 @@
   - OR add a UI flag on the review form: "I added these class changes" vs "proposer suggested these class changes" so the audit trail is explicit.
   - OR accept (current) — audit trail attribution is correct, just requires reading two columns to disambiguate.
 - **Plan tier:** Tier 2 decision point (audit trail strength).
-
-#### F-13 — No self-approval prevention in review.php
-
-- **Status:** 🔴 Open (low priority — tied to multi-maintainer trigger)
-- **Threats:** T-E6
-- **Severity:** Low impact at single-maintainer scale (moot — maintainer could direct-edit anyway); Medium impact at multi-maintainer scale.
-- **Description:** `review_approve()` in `php/includes/review_logic.php:61` takes `$cr, $applied, $maint_id` and does not check `$cr['editor_id'] !== $maint_id`. Realistic scenario: an editor with pending proposals gets promoted to maintainer; they can now approve their own pre-promotion proposals. (After promotion, `propose.php` routes them to `/edit.php`, so they cannot submit NEW proposals as maintainer.)
-- **Phase 2.3 audit note:** at the current single-maintainer scale this is largely moot — the maintainer could direct-edit via `/edit.php` and achieve the same outcome. Becomes meaningful only when a second maintainer joins and you want to enforce "second pair of eyes."
-- **Remediation:** One line in `review_approve()`: `if ($cr['editor_id'] === $maint_id) return ['ok' => false, 'err' => 'Cannot approve own proposal'];` (or downgrade to a require-other-maintainer flow if there are multiple maintainers).
-- **Plan tier:** Tier 2.3 (this audit). Disposition: defer to multi-maintainer trigger (same trigger as F-5, D-T1.3).
-
-### Low / prod-side confirms
-
-These are not gaps per se — they're verification steps that need prod-side access (the repo can't confirm them alone).
 
 #### F-10 — Confirm `display_errors=Off` and `expose_php=Off` in prod php.ini
 
