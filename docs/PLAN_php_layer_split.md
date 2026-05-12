@@ -24,7 +24,7 @@ Goal: apply the same per-file-split discipline that just landed for `cli/build.p
 
 ## Decisions baked in
 
-- **Tooling-strict first.** Raise PHPStan from level 5 → at least 7 with per-file grandfathering for the unsplit files; add `friendsofphp/php-cs-fixer` as the analog of `ruff format`. These create the gate that the splits then satisfy.
+- **Tooling-strict first.** Raise PHPStan from level 5 → at least 7 with per-file grandfathering (or `phpstan-baseline.neon`) for the unsplit files; add `friendsofphp/php-cs-fixer` as the analog of `ruff format`. These create the gate that the splits then satisfy. Realistic ceiling is level 8 given the PHPDoc/type-decl gap noted in Constraints — level 9 is aspirational.
 - **Per-file pattern, applied in size order:**
   1. **reach.php** (entry point, 649 lines, no dedicated tests) — biggest payoff, biggest risk; gets the most care.
   2. **description.php** (entry point, 495 lines) — same shape, smaller.
@@ -44,21 +44,27 @@ Goal: apply the same per-file-split discipline that just landed for `cli/build.p
 
 ```
 php/
-├── reach.php                # ~150 lines: parse args, query DB, render template
-├── description.php          # ~150 lines: same shape
-├── svg_plot.php             # ~150 lines: same shape
-├── propose.php / gauge.php / gauge_plots.php / review.php / custom.php / auth.php
-│                            # Tier 5: same template applied
+├── reach.php                # ~200-250 lines: arg parse, mode dispatch, render
+├── description.php          # ~200-250 lines: same shape (single mode)
+├── propose.php / gauge.php / custom.php / custom_gauges.php / review.php
+│                            # Tier 5 entry-point template
 └── includes/
-    ├── reach_query.php      # DB queries scoped to reach.php
-    ├── reach_render.php     # HTML rendering
-    ├── reach_plot.php       # Plot composition (calls into svg_plot)
-    ├── description_query.php / description_render.php / ...
-    ├── svg_plot_geometry.php / svg_plot_styling.php / svg_plot_render.php
-    └── (existing files: auth.php, db.php, header.php, mail.php, ...)
+    ├── reach_search.php     # search-mode helpers (avoid `reach_query` —
+    ├── reach_list.php       #   could clash with future shared query helpers)
+    ├── reach_detail.php
+    ├── description_<cluster>.php × 3-4
+    ├── svg_plot.php         # ~150 lines after Tier 4: top-level render only
+    ├── svg_plot_interpolation.php  # rate_gauge_to_flow / rate_flow_to_gauge
+    ├── svg_plot_geometry.php       # path-coord math
+    ├── svg_plot_axes.php           # tick generation
+    ├── auth.php             # split into smaller helpers in Tier 5 (sub-helper template)
+    ├── auth_session.php / auth_magic_link.php / auth_csrf.php / auth_throttle.php
+    ├── gauge_plots.php      # also split into sub-helpers in Tier 5
+    └── (existing files: db.php, header.php, footer.php, html.php,
+         mail.php, sanity.php, validate.php, etc. — unchanged)
 ```
 
-Roughly: each big entry-point spawns 2–4 focused includes named `<entrypoint>_<cluster>.php`. The naming makes the call graph obvious from `ls`.
+Naming convention: each new include uses `<entrypoint>_<cluster>.php` (entry-point splits) or `<helper>_<subcluster>.php` (helper splits). The naming makes the call graph obvious from `ls` and avoids collision with shared `<entity>_<aspect>` helpers that already live there.
 
 ## Migration tiers
 
@@ -129,7 +135,7 @@ Per-file phase shape: baseline tests → cluster analysis (in commit messages, n
 **Goal:** Final gate sweep.
 
 1. **Phase 6.1 — Empty the grandfather list.** Every file split in Tiers 2–5 should already be off the per-file ignore list. Confirm by deleting the list and running CI. Any file still flagging needs a brief follow-up extraction or a documented justification.
-2. **Phase 6.2 — Raise PHPStan to max.** Bump from the Tier-1 level to level 9. Address findings in a follow-up PR if more than 1–2 days of work; otherwise inline the fix.
+2. **Phase 6.2 — Raise PHPStan to max (or as high as the codebase tolerates).** Bump from the Tier-1 level toward level 9. Given the PHPDoc gap noted in Constraints, getting all the way to 9 may require adding native type declarations across `includes/*.php`. Realistic outcome: land at level 8 with a small grandfather list rather than level 9 with a giant one. Use `phpstan-baseline.neon` if the diff is too large for inline fixes.
 3. **Phase 6.3 — Update `CLAUDE.md`.** Document the new PHP discipline: PHPStan level, php-cs-fixer command, integration-test pattern. Pointer to `php/includes/` naming convention.
 
 ## Risks
@@ -149,7 +155,6 @@ Per-file phase shape: baseline tests → cluster analysis (in commit messages, n
 - **Existing `composer scripts` block is minimal.** `composer test` (phpunit) and `composer analyse` (phpstan) exist; no `composer fix` yet. Tier 1.2 should add `composer fix` (php-cs-fixer) and `composer fix-check` (`fix --dry-run`) so CI calls match local.
 - **Entry-point files are fully procedural.** `reach.php` has zero `function` definitions — top-level code runs directly. Extraction means *defining new helper functions from inlined cluster code*, not moving existing functions. Plan-wide implication: every Tier 2/3/5 phase's diff is +N lines (new function declarations) along with -N lines (extracted body), so the file shrinks but the helper grows by more than the extracted body — net codebase line count goes up slightly per phase. Same shape as Phase 9 of the build.py split.
 - **No `$_SESSION` use anywhere.** All session state goes through the editor_session cookie + DB tables; no PHP-builtin sessions. Plan doesn't need to worry about `session_start()` interactions in extracted code.
-- **CSP is per-location via snippet include (default vs Turnstile-relaxed).** `deploy/levels` includes `security-headers.conf` (default) or `security-headers-turnstile.conf` (relaxed for /login.php + /contact.php). Per-location `add_header` directives in `deploy/levels` itself control caching, not CSP. The split has no risk of weakening CSP unless an extracted helper does `header('Content-Security-Policy: ...')` (which the Tier 1.3 test catches).
 - **Existing test coverage map per big file:**
   - `svg_plot.php`: ✓ `tests/php/SvgPlotTest.php` (interpolation utilities only — SVG rendering itself is untested)
   - `reach.php`, `description.php`, `propose.php`, `gauge.php`, `gauge_plots.php`, `review.php`, `custom.php`, `custom_gauges.php`, `auth.php`: **no dedicated tests**. (Coincidental name matches in `SanityTest`, `ReviewApproveRaceTest`, `EditAuthTest` are about other concerns.)
