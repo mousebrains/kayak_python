@@ -40,48 +40,51 @@ class WaGovParser(BaseParser):
     def parse_line(self, line: str) -> bool:
         if not line.strip():
             return True
-
         parts = line.split()
         if len(parts) < 2:
             return True
 
         if self._state == 0:
-            if parts[0] == "DATE" and parts[1] == "TIME":
-                self._state = 1
-                self._data_type = DataType.flow
-                if len(parts) >= 3:
-                    type_hint = parts[2].lower()
-                    if type_hint.startswith("water"):
-                        self._data_type = DataType.temperature
-                    elif type_hint.startswith("stage"):
-                        self._data_type = DataType.gauge
-            else:
-                # Look for station name (format: STATIONID--description)
-                if "--" in parts[0]:
-                    self._station = parts[0].split("--")[0]
+            self._handle_header(parts)
             return True
-
         if self._state == 1:
             if parts[0].startswith("---"):
                 self._state = 2
             return True
-
         # State 2+: Data rows
         if parts[0] == "Quality":
             self._state = 0
             return True
+        self._emit_data_row(line, parts)
+        return True
 
+    def _handle_header(self, parts: list[str]) -> None:
+        """State-0 dispatch: pick up station header or `DATE TIME …` row."""
+        if parts[0] == "DATE" and parts[1] == "TIME":
+            self._state = 1
+            self._data_type = DataType.flow
+            if len(parts) >= 3:
+                type_hint = parts[2].lower()
+                if type_hint.startswith("water"):
+                    self._data_type = DataType.temperature
+                elif type_hint.startswith("stage"):
+                    self._data_type = DataType.gauge
+        elif "--" in parts[0]:
+            # Station header looks like "STATIONID--description"
+            self._station = parts[0].split("--")[0]
+
+    def _emit_data_row(self, line: str, parts: list[str]) -> None:
+        """State-2 body: emit one observation per data row when fully valid."""
         if not self._station or len(parts) <= 3:
-            return True
-
+            return
         if "No Data" in line:
-            return True
+            return
 
         # Last column is quality code; 0 means "no quality code available" in
-        # WA DOE data, treated as suspect.  Valid quality codes are 1-199.
+        # WA DOE data, treated as suspect. Valid quality codes are 1-199.
         quality = safe_float(parts[-1])
         if quality is None or quality <= 0 or quality >= 200:
-            return True
+            return
 
         # Timestamps are naive; source.timezone (seeded from sources.yaml
         # stations: block, typically "Etc/GMT+8" — PST year-round, no DST)
@@ -89,14 +92,13 @@ class WaGovParser(BaseParser):
         time_str = parts[0] + " " + parts[1]
         when = parse_datetime(time_str, assume_naive=True)
         if when is None:
-            return True
+            return
 
         val = safe_float(parts[2])
         if val is None or not math.isfinite(val):
-            return True
+            return
 
         if self._data_type == DataType.temperature:
             val = celsius_to_fahrenheit(val)
 
         self.dump_to_db(self._station, self._data_type, when, val)
-        return True

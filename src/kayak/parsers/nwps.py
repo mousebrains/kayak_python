@@ -66,19 +66,11 @@ class NWPSParser(BaseParser):
             if when is None or when > now:
                 continue
 
-            # Stage (primary)
-            if has_stage:
-                primary = entry.get("primary")
-                if primary is not None and primary not in _MISSING_VALUES:
-                    self.dump_to_db(station, DataType.gauge, when, float(primary))
-
-            # Flow (secondary)
-            if has_flow:
-                secondary = entry.get("secondary")
-                if secondary is not None and secondary not in _MISSING_VALUES:
-                    flow_cfs = kcfs_to_cfs(float(secondary)) if flow_is_kcfs else float(secondary)
-                    if flow_cfs >= 0:
-                        self.dump_to_db(station, DataType.flow, when, flow_cfs)
+            stage, flow = self._extract_stage_and_flow(entry, has_stage, has_flow, flow_is_kcfs)
+            if stage is not None:
+                self.dump_to_db(station, DataType.gauge, when, stage)
+            if flow is not None:
+                self.dump_to_db(station, DataType.flow, when, flow)
 
         self._flush_buffer()
 
@@ -89,6 +81,36 @@ class NWPSParser(BaseParser):
 
     def parse_line(self, line: str) -> bool:
         return True
+
+    @staticmethod
+    def _extract_stage_and_flow(
+        entry: dict,
+        has_stage: bool,
+        has_flow: bool,
+        flow_is_kcfs: bool,
+    ) -> tuple[float | None, float | None]:
+        """Extract (stage_ft, flow_cfs) from one NWPS entry.
+
+        Returns None for either component when the unit dispatch says it's
+        not present, the value is missing, or the value fails a unit
+        sanity check (negative flow). Conversion from kcfs to cfs happens
+        here so the caller only sees cfs.
+        """
+        stage: float | None = None
+        if has_stage:
+            primary = entry.get("primary")
+            if primary is not None and primary not in _MISSING_VALUES:
+                stage = float(primary)
+
+        flow: float | None = None
+        if has_flow:
+            secondary = entry.get("secondary")
+            if secondary is not None and secondary not in _MISSING_VALUES:
+                cfs = kcfs_to_cfs(float(secondary)) if flow_is_kcfs else float(secondary)
+                if cfs >= 0:
+                    flow = cfs
+
+        return stage, flow
 
     @staticmethod
     def _extract_station(url: str) -> str:

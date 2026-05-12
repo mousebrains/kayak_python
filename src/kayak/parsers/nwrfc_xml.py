@@ -16,6 +16,15 @@ from kayak.utils.conversions import parse_datetime, safe_float
 
 logger = logging.getLogger(__name__)
 
+# Tag → (data_type, units-attr-default, valid unit substrings, require non-negative).
+# Keeps the per-tag dispatch table-driven so adding/removing a tag is a one-row
+# change instead of an elif edit.
+_TAG_HANDLERS: dict[str, tuple[DataType, str, tuple[str, ...], bool]] = {
+    "stage": (DataType.gauge, "feet", ("feet", "ft"), False),
+    "discharge": (DataType.flow, "", ("cubic", "cfs"), False),
+    "inflow": (DataType.inflow, "", ("cubic", "cfs"), True),
+}
+
 
 @register("nwrfc.xml")
 class NWRFCXMLParser(BaseParser):
@@ -86,33 +95,51 @@ class NWRFCXMLParser(BaseParser):
 
     def _parse_observed(self, observed_elem: Any, station: str, now: datetime) -> None:
         """Parse observed data block."""
-        when = None
+        when: datetime | None = None
         for elem in observed_elem.iter():
             tag = self._local_tag(elem)
-            text = (elem.text or "").strip()
+            if tag == "dataDateTime":
+                text = (elem.text or "").strip()
+                if text:
+                    when = self._parse_when(text, now)
+                continue
+            if when is None:
+                continue
+            handler = _TAG_HANDLERS.get(tag)
+            if handler is not None:
+                self._emit_observation(station, when, elem, *handler)
 
-            if tag == "dataDateTime" and text:
-                when = parse_datetime(text)
-                if when and when > now:
-                    when = None
-            elif tag == "stage" and when and text:
-                units = elem.get("units", "feet")
-                if "feet" in units.lower() or "ft" in units.lower():
-                    val = safe_float(text)
-                    if val is not None and math.isfinite(val):
-                        self.dump_to_db(station, DataType.gauge, when, val)
-            elif tag == "discharge" and when and text:
-                units = elem.get("units", "")
-                if "cubic" in units.lower() or "cfs" in units.lower():
-                    val = safe_float(text)
-                    if val is not None and math.isfinite(val):
-                        self.dump_to_db(station, DataType.flow, when, val)
-            elif tag == "inflow" and when and text:
-                units = elem.get("units", "")
-                if "cubic" in units.lower() or "cfs" in units.lower():
-                    val = safe_float(text)
-                    if val is not None and math.isfinite(val) and val >= 0:
-                        self.dump_to_db(station, DataType.inflow, when, val)
+    @staticmethod
+    def _parse_when(text: str, now: datetime) -> datetime | None:
+        """Parse a dataDateTime payload; reject future timestamps."""
+        when = parse_datetime(text)
+        if when is not None and when > now:
+            return None
+        return when
+
+    def _emit_observation(
+        self,
+        station: str,
+        when: datetime,
+        elem: Any,
+        data_type: DataType,
+        units_default: str,
+        valid_unit_substrings: tuple[str, ...],
+        require_non_negative: bool,
+    ) -> None:
+        """Emit one observation if `elem` carries a finite, unit-compatible value."""
+        text = (elem.text or "").strip()
+        if not text:
+            return
+        units = elem.get("units", units_default).lower()
+        if not any(s in units for s in valid_unit_substrings):
+            return
+        val = safe_float(text)
+        if val is None or not math.isfinite(val):
+            return
+        if require_non_negative and val < 0:
+            return
+        self.dump_to_db(station, data_type, when, val)
 
     def parse_line(self, line: str) -> bool:
         return True

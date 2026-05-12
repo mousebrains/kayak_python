@@ -64,27 +64,7 @@ class USACECDAParser(BaseParser):
         now = datetime.now(UTC)
 
         for station, station_data in data.items():
-            timeseries = station_data.get("timeseries") or {}
-            for _ts_id, ts_info in timeseries.items():
-                parameter = ts_info.get("parameter", "")
-                data_type = _PARAM_MAP.get(parameter)
-                if data_type is None:
-                    logger.debug("Skipping unknown parameter %s", parameter)
-                    continue
-
-                for entry in ts_info.get("values") or []:
-                    if not isinstance(entry, list) or len(entry) < 2:
-                        continue
-
-                    timestamp_str, value = entry[0], entry[1]
-                    if value is None:
-                        continue
-
-                    when = parse_datetime(timestamp_str)
-                    if when is None or when > now:
-                        continue
-
-                    self.dump_to_db(station, data_type, when, float(value))
+            self._parse_station(station, station_data, now)
 
         self._flush_buffer()
 
@@ -92,6 +72,30 @@ class USACECDAParser(BaseParser):
             logger.warning("No database updates from %s parser(%s)", self.url, self.name)
 
         return self._db_updates
+
+    def _parse_station(self, station: str, station_data: dict, now: datetime) -> None:
+        """Walk one station's timeseries, dispatching each known parameter."""
+        timeseries = station_data.get("timeseries") or {}
+        for _ts_id, ts_info in timeseries.items():
+            parameter = ts_info.get("parameter", "")
+            data_type = _PARAM_MAP.get(parameter)
+            if data_type is None:
+                logger.debug("Skipping unknown parameter %s", parameter)
+                continue
+            for entry in ts_info.get("values") or []:
+                self._emit_entry(entry, station, data_type, now)
+
+    def _emit_entry(self, entry: object, station: str, data_type: DataType, now: datetime) -> None:
+        """Emit one observation from a [timestamp, value, quality] triple."""
+        if not isinstance(entry, list) or len(entry) < 2:
+            return
+        timestamp_str, value = entry[0], entry[1]
+        if value is None:
+            return
+        when = parse_datetime(timestamp_str)
+        if when is None or when > now:
+            return
+        self.dump_to_db(station, data_type, when, float(value))
 
     def parse_line(self, line: str) -> bool:
         return True

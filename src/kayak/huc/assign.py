@@ -29,7 +29,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from kayak.db.engine import get_session
-from kayak.db.models import HucName
+from kayak.db.models import HucName, Reach
 from kayak.db.reaches import (
     get_reach,
     iter_reaches_with_putin,
@@ -165,6 +165,64 @@ def _chunks(seq: list[dict], n: int) -> Iterable[list[dict]]:
         yield seq[i : i + n]
 
 
+def _assign_huc_to_reach(
+    session: Session,
+    reach: Reach,
+    tree: STRtree,
+    codes: list[str],
+    huc8_name_map: dict[str, str],
+    *,
+    dry_run: bool,
+    counts: dict[str, int],
+) -> None:
+    """Per-reach point-in-polygon lookup + conditional update; mutates `counts`."""
+    if reach.latitude_start is None or reach.longitude_start is None:
+        counts["no_coords"] += 1
+        return
+    huc = assign_one(tree, codes, float(reach.latitude_start), float(reach.longitude_start))
+    if huc is None:
+        counts["outside_coverage"] += 1
+        logger.warning(
+            "reach %d (%s) at (%.5f, %.5f) outside HUC12 coverage",
+            reach.id,
+            reach.name,
+            reach.latitude_start,
+            reach.longitude_start,
+        )
+        return
+
+    new_basin = huc8_name_map.get(huc[:8])
+    huc_changed = huc != reach.huc
+    basin_changed = new_basin is not None and new_basin != reach.basin
+
+    if not (huc_changed or basin_changed):
+        counts["unchanged"] += 1
+        return
+
+    counts["assigned"] += 1
+    if huc_changed:
+        counts["huc_changed"] += 1
+    if basin_changed:
+        counts["basin_changed"] += 1
+
+    if dry_run:
+        logger.info(
+            "[dry-run] reach %d huc %s -> %s, basin %r -> %r",
+            reach.id,
+            reach.huc,
+            huc,
+            reach.basin,
+            new_basin,
+        )
+    else:
+        set_reach_huc(
+            session,
+            reach.id,
+            huc,
+            basin=new_basin if basin_changed else None,
+        )
+
+
 def run(
     *,
     gpkg: str | Path = "Trace-cache/wbd.gpkg",
@@ -210,51 +268,15 @@ def run(
         for reach in reaches:
             if reach is None:
                 continue
-            if reach.latitude_start is None or reach.longitude_start is None:
-                counts["no_coords"] += 1
-                continue
-            huc = assign_one(tree, codes, float(reach.latitude_start), float(reach.longitude_start))
-            if huc is None:
-                counts["outside_coverage"] += 1
-                logger.warning(
-                    "reach %d (%s) at (%.5f, %.5f) outside HUC12 coverage",
-                    reach.id,
-                    reach.name,
-                    reach.latitude_start,
-                    reach.longitude_start,
-                )
-                continue
-
-            new_basin = huc8_name_map.get(huc[:8])
-            huc_changed = huc != reach.huc
-            basin_changed = new_basin is not None and new_basin != reach.basin
-
-            if not (huc_changed or basin_changed):
-                counts["unchanged"] += 1
-                continue
-
-            counts["assigned"] += 1
-            if huc_changed:
-                counts["huc_changed"] += 1
-            if basin_changed:
-                counts["basin_changed"] += 1
-
-            if dry_run:
-                logger.info(
-                    "[dry-run] reach %d huc %s -> %s, basin %r -> %r",
-                    reach.id,
-                    reach.huc,
-                    huc,
-                    reach.basin,
-                    new_basin,
-                )
-            else:
-                set_reach_huc(
-                    session,
-                    reach.id,
-                    huc,
-                    basin=new_basin if basin_changed else None,
-                )
+            _assign_huc_to_reach(
+                session,
+                reach,
+                tree,
+                codes,
+                huc8_name_map,
+                dry_run=dry_run,
+                counts=counts,
+            )
 
         if not dry_run:
             session.commit()

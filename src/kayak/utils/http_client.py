@@ -350,6 +350,44 @@ class _SimpleResponse:
         self.headers = headers
 
 
+async def _await_with_budget(
+    tasks: list[asyncio.Task[FetchResult]],
+    deadline: float | None,
+) -> None:
+    """Wait on `tasks`. With a deadline, cancel anything still pending past it."""
+    if deadline is None:
+        await asyncio.gather(*tasks, return_exceptions=True)
+        return
+    wait_for = max(0.0, deadline - time.monotonic())
+    _done, pending = await asyncio.wait(tasks, timeout=wait_for)
+    if pending:
+        logger.warning(
+            "Fetch batch budget exhausted; cancelling %d in-flight request(s)",
+            len(pending),
+        )
+        for task in pending:
+            task.cancel()
+        # Drain cancellations so aiohttp can clean up sockets cleanly.
+        await asyncio.gather(*pending, return_exceptions=True)
+
+
+def _collect_task_results(
+    url_to_task: dict[str, asyncio.Task[FetchResult]],
+) -> dict[str, FetchResult]:
+    """Materialise per-URL FetchResult, translating cancellations + exceptions."""
+    results: dict[str, FetchResult] = {}
+    for url, task in url_to_task.items():
+        if task.cancelled():
+            results[url] = FetchResult(url=url, error="batch budget exceeded")
+            continue
+        try:
+            results[url] = task.result()
+        except Exception as e:
+            logger.error("Task failed for %s: %s", url, e)
+            results[url] = FetchResult(url=url, error=str(e))
+    return results
+
+
 async def async_fetch_many(
     urls: list[str],
     concurrency_per_host: int = 8,
@@ -401,30 +439,7 @@ async def async_fetch_many(
                 _async_fetch_one(url, session, sem, timeout, insecure_ctx, deadline)
             )
 
-        if deadline is None:
-            await asyncio.gather(*url_to_task.values(), return_exceptions=True)
-        else:
-            wait_for = max(0.0, deadline - time.monotonic())
-            _done, pending = await asyncio.wait(url_to_task.values(), timeout=wait_for)
-            if pending:
-                logger.warning(
-                    "Fetch batch budget exhausted; cancelling %d in-flight request(s)",
-                    len(pending),
-                )
-                for task in pending:
-                    task.cancel()
-                # Drain cancellations so aiohttp can clean up sockets cleanly.
-                await asyncio.gather(*pending, return_exceptions=True)
-
-        results: dict[str, FetchResult] = {}
-        for url, task in url_to_task.items():
-            if task.cancelled():
-                results[url] = FetchResult(url=url, error="batch budget exceeded")
-                continue
-            try:
-                results[url] = task.result()
-            except Exception as e:
-                logger.error("Task failed for %s: %s", url, e)
-                results[url] = FetchResult(url=url, error=str(e))
+        await _await_with_budget(list(url_to_task.values()), deadline)
+        results = _collect_task_results(url_to_task)
 
     return results

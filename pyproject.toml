@@ -71,13 +71,11 @@ select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF", "C901"]
 ignore = ["E501", "SIM108"]
 
 [tool.ruff.lint.per-file-ignores]
-# C901 grandfathered outside kayak.web.build — new complexity in web/build
-# blocks CI; legacy hotspots elsewhere are deferred to per-area cleanup.
+# C901 is enforced across the tree; remaining grandfather entries are
+# retired tier-by-tier per docs/PLAN_c901_cleanup.md. cli/* still carries
+# the Phase 2/3 hits (calc_rating, calculator, fetch, fetch_usgs_ogc).
 "src/kayak/cli/*" = ["C901"]
-"src/kayak/parsers/*" = ["C901"]
 "src/kayak/tracing/*" = ["C901"]
-"src/kayak/huc/*" = ["C901"]
-"src/kayak/utils/*" = ["C901"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["kayak"]
