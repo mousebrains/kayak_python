@@ -42,9 +42,9 @@ For someone returning to update controls after a code change:
 | Tier 0 — Threat model + inventory | ✅ Complete (commits 86cfa9a / beaf58a / ae31719 / 21c9e1a) | editor-surface.md + threat-model.md + controls-map.md + findings.md + this README |
 | Tier 1 — Authentication review | ✅ Complete (commits 4e6d893 / c786d90 / 7f42ba0 / be64058 / b335f64 / aadb63c) | tier1-audit.md + decisions.md (D-T1.3) + findings.md updates (F-5 accepted; F-14, F-15 new) |
 | Tier 2 — Authorization review | ✅ Complete (commits e25ff12 / 192300c / cfa4e6a / 670212d) | tier2-audit.md + decisions.md (D-T2.4) + findings.md updates (F-4, F-7 accepted; F-9 downgraded) |
-| Tier 3 — Input/output handling | ✅ Complete (commits 0282cd3 / 1557135 / 8730c64) | tier3-audit.md + decisions.md (D-T3.3 Deferred) + findings.md updates (F-6 accepted) |
+| Tier 3 — Input/output handling | ✅ Complete (commits 749aa2c / 280edea / 8730c64 / 1d04462) | tier3-audit.md + decisions.md (D-T3.3 Deferred) + findings.md updates (F-6 accepted); plus polish per Tier 3 review |
 | Tier 4 — User-data obligations | ✅ Complete (commit c32195b) | tier4-audit.md + decisions.md (D-T4.1..5) + findings.md updates (F-16 new); 4 Tier 6 implementation items: 3 CLIs + privacy.php refresh |
-| Tier 5 — Disclosure + response | ✅ Complete (this commit) | tier5-audit.md + incident-response.md (runbook) + decisions.md (D-T5.1..3); restore-drill plan documented (first execution pending operator). No new findings. |
+| Tier 5 — Disclosure + response | ✅ Complete (commit 843207c) | tier5-audit.md + incident-response.md (runbook) + decisions.md (D-T5.1..3); restore-drill plan documented (first execution pending operator). No new findings. |
 | Tier 6 — Hardening + closeout | ⏳ Pending | Apply findings + decisions; final posture doc |
 
 ## Out of scope
