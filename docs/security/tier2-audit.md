@@ -124,3 +124,102 @@ Out of scope for this tier (public-facing reads, no editor scope): `description.
 - ⚠ F-8 remains as code-smell refactor candidate.
 - ⚠ F-9 downgraded to Low; reach_class apply is unconstrained but audit-trail-attributed.
 - ⚠ F-13 confirmed; tied to multi-maintainer trigger.
+
+## Phase 2.4 — Audit trail integrity
+
+**Verdict:** ⚠ F-4 confirmed (no tamper-resistance); decision point setup.
+
+### Audit observations
+
+| # | Check | Verdict | Evidence |
+|---|---|---|---|
+| 2.4.1 | `edit_history` schema includes a hash chain or `previous_hash` column? | ❌ | Per-row schema (`src/kayak/db/models.py:836`): `id, target_type, target_id, change_request_id, field, old_value, new_value, changed_at, changed_by`. No hash, no chain, no sequence anchor. |
+| 2.4.2 | Append-only constraint in DB (trigger / rule)? | ❌ | SQLite has no native append-only triggers. Could be approximated via `BEFORE DELETE/UPDATE` trigger that raises, but none exist. |
+| 2.4.3 | Out-of-band sink (file / external service / DB)? | ❌ | Repo-wide grep: no code writes audit rows to any sink other than the `edit_history` table. No `~/logs/edit_audit.log`, no S3 ship, no syslog. |
+| 2.4.4 | `change_request_id` linkage preserves attribution to proposal-vs-direct-edit? | ✅ | `edit_history.change_request_id` is NULL for direct maintainer edits via `/edit.php`, populated for approval-applied changes. Two paths trace cleanly. |
+| 2.4.5 | `changed_by` attribution is per-row and correctly identifies maintainer-vs-editor? | ✅ | `'maintainer:<id>'` written for review-approval + direct maintainer edits. `'editor:<id>'` reserved for future paths (no current path writes editor rows directly; editor changes ride through the change_request → approve flow). |
+
+### Current threat exposure
+
+Operator-level threat (assumed trusted; out of scope for this plan):
+- Operator runs `DELETE FROM edit_history WHERE id=N` → row gone, no evidence.
+- Operator runs `UPDATE edit_history SET new_value='different'` → silent rewrite.
+
+Realistic compromise scenarios:
+- Maintainer cookie compromise + admin endpoints. Maintainer accounts cannot directly write SQL — they go through `edit.php` / `review.php` which append (don't modify) edit_history rows. The compromised maintainer COULD approve backdoored proposals that write new rows to edit_history, but cannot delete or rewrite existing rows via web. Audit trail survives.
+- Shell compromise (separately tracked as out-of-scope here). At that point, ALL data on the host is tamperable.
+
+So the realistic compromise threat to edit_history is: **shell-level breach of the prod host**. The audit trail can't defend itself from the OS user it runs under without an out-of-band sink.
+
+### Decision menu (per plan)
+
+| Option | Effort | Protection | Cost |
+|---|---|---|---|
+| **A. None (current)** | $0 | DB-level access trusts the operator + system. Honest for a single-operator hobby site. | $0/mo |
+| **B. Append-only journal** | ~3-4 hr: PHP-side write to `~/logs/edit_audit.log` (operator-readable, php-fpm writable), file-mode constrained, no PHP code path to delete. | Partial — defeats a maintainer-cookie attacker AND a php-fpm-user attacker, but NOT a shell-level attacker (who can `rm`/`> file`). Detects post-hoc DB tampering by comparison. | $0/mo |
+| **C. External sink (S3-compatible append-only bucket)** | ~1 day: PHP-side ship-on-write to e.g. Backblaze B2 / Hetzner Object Storage / Cloudflare R2 with object-lock-equivalent (write-once-read-many policy). | Real — survives prod-host compromise. Detects post-hoc DB tampering by external comparison. | ~$0.10-1/mo at this row volume |
+
+### Recommendation
+
+**Defer to a concrete trigger**, similar to D-T1.3:
+
+- The current threat model is single-operator, hobby-grade, no compliance regime, ~1 incident per N years expected.
+- The realistic concern is **post-incident forensics** ("did someone tamper with reach descriptions during the compromise window?") rather than active-attack prevention.
+- For that specific use case, **the existing Hetzner storage-box backup + rclone offsite** (`docs/offsite-backup.md`) already provides a *daily-granularity* external snapshot of `edit_history`. Restoring a backup from before the incident and diffing the audit trail surfaces tampering. Not the same as cryptographic chain, but covers the realistic ask.
+
+### Triggers to re-evaluate
+
+- An incident occurs involving suspected `edit_history` tampering (or maintainer-account compromise).
+- A second maintainer joins (same trigger as F-5, F-13).
+- A compliance/audit requirement appears (unlikely for this site).
+- The site grows beyond "hobby/club" tier of trust (e.g., commercial liability for misleading data).
+
+### Phase 2.4 closeout
+
+- ⚠ F-4 confirmed: no in-DB tamper-resistance.
+- Decision options A/B/C laid out for D-T2.4 below.
+- Existing backup infrastructure (per `docs/offsite-backup.md`) provides a *partial* external integrity check via daily snapshots — not equivalent to a hash-chained journal but adequate for the realistic post-incident forensics use case.
+
+## Tier 2 closeout
+
+### Audit summary
+
+| Phase | Verdict | Findings touched |
+|---|---|---|
+| 2.1 Role enforcement | ✅ | none |
+| 2.2 IDOR sweep | ✅ | none |
+| 2.3 Privilege escalation | ✅ critical + 4 ⚠ refinements | F-7 (CLOSED Accepted), F-8 (stands), F-9 (downgraded), F-13 (confirmed) |
+| 2.4 Audit trail integrity | ⚠ | F-4 (CLOSED Accepted via D-T2.4) |
+
+### Decisions made during Tier 2
+
+- **D-T2.4** Audit trail tamper resistance → Option A (None) with re-evaluation triggers. Recorded in `decisions.md`.
+
+### Findings touched
+
+| Id | Before Tier 2 | After Tier 2 |
+|---|---|---|
+| F-4 | 🔴 Open | ⚪ Accepted (D-T2.4) |
+| F-7 | 🔴 Open | ⚪ Accepted (Phase 2.3: confirmed safe via cross-file invariant) |
+| F-8 | 🔴 Open | 🔴 Open (code-smell, not exploitable) |
+| F-9 | 🔴 Open (Medium) | 🔴 Open (Low; refined to apply only to reach_class) |
+| F-13 | 🔴 Open | 🔴 Open (tied to multi-maintainer trigger) |
+
+No new findings during Tier 2.
+
+### Tier 2 verification gate (per plan)
+
+- ✅ Authorization matrix documented (10 endpoints × 4 auth tiers).
+- ✅ Each row tested.
+- ✅ IDOR sweep produced no findings (Phase 2.2 verdict).
+- ✅ D-T2.4 decision recorded.
+
+### Looking ahead to Tier 3 (Input/output handling)
+
+Tier 1 + Tier 2 surfaced findings now ripe for Tier 3:
+
+- **F-6** htmlspecialchars ENT flags — Tier 3.1 XSS sweep.
+- **F-8** SQL-concat code-smell refactor — fits naturally in a Tier 3.2 SQLi sweep where the cluster gets revisited.
+- File-upload audit (Phase 3.3) — N/A until endpoint lands.
+
+Tier 3 has 5 phases + decision point on file-upload retention.

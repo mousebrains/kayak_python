@@ -31,7 +31,7 @@
 
 #### F-4 — `edit_history` has no tamper-resistance
 
-- **Status:** 🔴 Open
+- **Status:** ⚪ Accepted (per D-T2.4, 2026-05-12; see `decisions.md`)
 - **Threats:** T-T2, T-R2
 - **Severity:** High impact if exploited (silent rewrite of who-changed-what), low likelihood (requires SQL access).
 - **Description:** `edit_history` is plain CRUD. No `previous_hash`, no append-only journal, no external sink. Anyone with DB write access (the operator, or a maintainer who's compromised the operator's shell, or a leaked DB backup with write paths) can `DELETE`/`UPDATE` rows without trace.
@@ -187,10 +187,10 @@ These are not gaps per se — they're verification steps that need prod-side acc
 
 | Status | Count | IDs |
 |---|---|---|
-| 🔴 Open | 13 | F-1, F-2, F-3, F-4, F-6, F-8, F-9, F-10, F-11, F-12, F-13, F-14, F-15 |
+| 🔴 Open | 12 | F-1, F-2, F-3, F-6, F-8, F-9, F-10, F-11, F-12, F-13, F-14, F-15 |
 | 🟡 In progress | 0 | — |
 | 🟢 Closed | 0 | — |
-| ⚪ Accepted | 2 | F-5 (per D-T1.3), F-7 (Phase 2.3 — confirmed safe) |
+| ⚪ Accepted | 3 | F-5 (per D-T1.3), F-7 (Phase 2.3 — confirmed safe), F-4 (per D-T2.4) |
 | 🔵 Deferred | 0 | — |
 
 ## Per-tier work allocation

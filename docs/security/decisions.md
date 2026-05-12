@@ -37,12 +37,38 @@ Revisit this decision when ANY of the following happens:
 
 ---
 
-## (placeholder) D-T2.x — Audit trail tamper resistance
+## D-T2.4 — Audit trail tamper resistance
 
-To be filled when Tier 2 lands. Decision menu (from plan):
-- None (current; DB-level access trusts the operator)
-- Append-only journal (`~/logs/edit_audit.log`, no delete path)
-- External sink (S3-compatible bucket, append-only mode)
+- **Date:** 2026-05-12
+- **Decision:** **Option A** (None) with explicit re-evaluation triggers.
+- **Status:** Active
+- **Backing analysis:** [tier2-audit.md](tier2-audit.md) Phase 2.4.
+
+### Choice
+
+Do not add in-DB tamper-resistance to `edit_history`. Rely on:
+- Existing Hetzner storage-box backup + rclone offsite (per `docs/offsite-backup.md`) for *daily-granularity* external snapshots that enable post-incident forensics via diff.
+- Web-side controls (maintainer auth, no SQL injection) for active-attack prevention (already verified in Phases 2.1-2.3).
+- Per-row `changed_by` + `changed_at` for attribution within an honest scenario.
+
+### Rationale
+
+1. **Realistic threat is post-incident forensics**, not active prevention. The web layer cannot delete `edit_history` rows (no DELETE endpoint exists; verified via grep). Only shell-level breach of the prod host enables tampering, and at that point ALL system data is at risk — `edit_history` is not the long pole.
+2. **Backups already provide partial integrity.** A daily snapshot stored offsite is sufficient to detect post-hoc tampering for the hobby/club threat model. Not a cryptographic chain, but adequate.
+3. **Single-operator + no compliance regime.** No external mandate requires cryptographic audit; no audit framework reads `edit_history`.
+4. **Option B (append-only journal) doesn't defend against shell-level breach** — and shell-level breach is the realistic threat vector. Doesn't pass cost-benefit.
+5. **Option C (external sink) is real protection but introduces a hard external dependency** on every write path. Adds operational complexity disproportionate to current threat model.
+
+### Re-evaluation triggers
+
+Revisit when ANY of the following happens:
+
+- **Incident occurs** with suspected `edit_history` tampering, or maintainer-account compromise that gained DB write access.
+- **Second maintainer joins.** Same trigger as D-T1.3 / F-5 / F-13. Multi-maintainer setup increases insider-threat surface.
+- **Compliance / audit requirement appears.** Unlikely for hobby/club site.
+- **Scope grows beyond hobby/club tier.** E.g., commercial liability for misleading reach data; regulator interest in trip-report fidelity.
+
+---
 
 ## (placeholder) D-T3.x — File-upload retention
 
@@ -64,3 +90,4 @@ To be filled when Tier 5 lands.
 | Id | Topic | Decision | Date | Status |
 |---|---|---|---|---|
 | D-T1.3 | Maintainer 2FA model | Option A (magic-link only) with documented re-eval triggers | 2026-05-12 | Active |
+| D-T2.4 | Audit trail tamper resistance | Option A (None) — rely on backups + web-side controls; re-eval triggers documented | 2026-05-12 | Active |
