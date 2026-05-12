@@ -179,6 +179,7 @@ _STATE_LINKS: dict[str, list[tuple[str, str]]] = {
     ],
 }
 
+
 def _get_builder_columns() -> list[dict]:
     cols = load_builder_columns()
     return sorted(cols, key=lambda c: c["sort_key"])
