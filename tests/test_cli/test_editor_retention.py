@@ -58,10 +58,7 @@ def test_purges_old_session_rows(session, editor):
 
     _run(session, days=90)
 
-    remaining = {
-        row[0]
-        for row in session.execute(select(EditorSession.id)).all()
-    }
+    remaining = {row[0] for row in session.execute(select(EditorSession.id)).all()}
     assert old_id not in remaining
     assert new_id in remaining
 
@@ -74,10 +71,7 @@ def test_purges_old_magic_link_rows(session, editor):
 
     _run(session, days=90)
 
-    remaining = {
-        row[0]
-        for row in session.execute(select(EditorMagicLink.id)).all()
-    }
+    remaining = {row[0] for row in session.execute(select(EditorMagicLink.id)).all()}
     assert old_id not in remaining
     assert new_id in remaining
 
@@ -103,10 +97,7 @@ def test_custom_days_window(session, editor):
 
     _run(session, days=150)  # only delete things older than 150 days
 
-    remaining = {
-        row[0]
-        for row in session.execute(select(EditorSession.id)).all()
-    }
+    remaining = {row[0] for row in session.execute(select(EditorSession.id)).all()}
     # `a` (200d old) is purged; `b` (120d) and `c` (30d) survive.
     assert a.id not in remaining
     assert b.id in remaining

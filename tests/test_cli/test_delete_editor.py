@@ -83,10 +83,21 @@ def test_yes_deletes_cascade(session, editor):
     editor_id = editor.id
     _run(session, editor.email, yes=True)
 
-    assert session.execute(select(Editor).where(Editor.id == editor_id)).scalar_one_or_none() is None
-    assert session.execute(select(EditorSession).where(EditorSession.editor_id == editor_id)).all() == []
-    assert session.execute(select(EditorMagicLink).where(EditorMagicLink.editor_id == editor_id)).all() == []
-    assert session.execute(select(ChangeRequest).where(ChangeRequest.editor_id == editor_id)).all() == []
+    assert (
+        session.execute(select(Editor).where(Editor.id == editor_id)).scalar_one_or_none() is None
+    )
+    assert (
+        session.execute(select(EditorSession).where(EditorSession.editor_id == editor_id)).all()
+        == []
+    )
+    assert (
+        session.execute(select(EditorMagicLink).where(EditorMagicLink.editor_id == editor_id)).all()
+        == []
+    )
+    assert (
+        session.execute(select(ChangeRequest).where(ChangeRequest.editor_id == editor_id)).all()
+        == []
+    )
 
 
 def test_preserves_audit_trail_by_default(session, editor):

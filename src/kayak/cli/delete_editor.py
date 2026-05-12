@@ -87,7 +87,9 @@ def delete_editor(args: argparse.Namespace) -> None:
 
         # Tally what will be affected for the dry-run preview.
         n_sessions = session.execute(
-            select(func.count()).select_from(EditorSession).where(EditorSession.editor_id == editor_id)
+            select(func.count())
+            .select_from(EditorSession)
+            .where(EditorSession.editor_id == editor_id)
         ).scalar_one()
         n_magic_links = session.execute(
             select(func.count())

@@ -69,14 +69,10 @@ def editor_retention(args: argparse.Namespace) -> None:
             .where(EditorMagicLink.expires_at < cutoff)
         ).scalar_one()
         n_sessions = session.execute(
-            select(func.count())
-            .select_from(EditorSession)
-            .where(EditorSession.expires_at < cutoff)
+            select(func.count()).select_from(EditorSession).where(EditorSession.expires_at < cutoff)
         ).scalar_one()
 
-        logger.info(
-            "would delete: %d magic-link rows, %d session rows", n_links, n_sessions
-        )
+        logger.info("would delete: %d magic-link rows, %d session rows", n_links, n_sessions)
 
         if args.dry_run:
             print(
@@ -86,9 +82,7 @@ def editor_retention(args: argparse.Namespace) -> None:
             return
 
         if n_links:
-            session.execute(
-                delete(EditorMagicLink).where(EditorMagicLink.expires_at < cutoff)
-            )
+            session.execute(delete(EditorMagicLink).where(EditorMagicLink.expires_at < cutoff))
         if n_sessions:
             session.execute(delete(EditorSession).where(EditorSession.expires_at < cutoff))
         session.commit()

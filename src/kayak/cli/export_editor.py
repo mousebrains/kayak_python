@@ -77,11 +77,15 @@ def export_editor(args: argparse.Namespace) -> None:
             "last_login_at": ed.last_login_at,
         }
 
-        crs = session.execute(
-            select(ChangeRequest)
-            .where(ChangeRequest.editor_id == ed.id)
-            .order_by(ChangeRequest.submitted_at)
-        ).scalars().all()
+        crs = (
+            session.execute(
+                select(ChangeRequest)
+                .where(ChangeRequest.editor_id == ed.id)
+                .order_by(ChangeRequest.submitted_at)
+            )
+            .scalars()
+            .all()
+        )
         cr_payload = [
             {
                 "id": cr.id,
@@ -103,11 +107,15 @@ def export_editor(args: argparse.Namespace) -> None:
 
         editor_str = f"editor:{ed.id}"
         maint_str = f"maintainer:{ed.id}"
-        hist = session.execute(
-            select(EditHistory)
-            .where(EditHistory.changed_by.in_([editor_str, maint_str]))
-            .order_by(EditHistory.changed_at)
-        ).scalars().all()
+        hist = (
+            session.execute(
+                select(EditHistory)
+                .where(EditHistory.changed_by.in_([editor_str, maint_str]))
+                .order_by(EditHistory.changed_at)
+            )
+            .scalars()
+            .all()
+        )
         hist_payload = [
             {
                 "id": h.id,
