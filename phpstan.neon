@@ -1,5 +1,14 @@
+includes:
+    # Auto-generated grandfather list of pre-existing level-7 issues
+    # (mostly PDOStatement|false and string|false unguarded calls). Each
+    # PHP layer split in docs/PLAN_php_layer_split.md Tiers 2–5 should
+    # shrink this file. Regenerate with:
+    #   vendor/bin/phpstan analyse --no-progress --memory-limit=1G \
+    #       --generate-baseline=phpstan-baseline.neon php
+    - phpstan-baseline.neon
+
 parameters:
-    level: 5
+    level: 7
     paths:
         - php
     excludePaths:

@@ -1,0 +1,613 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Cannot call method fetchAll\(\) on PDOStatement\|false\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: php/admin.php
+
+		-
+			message: '#^Function build_sparkline\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/custom.php
+
+		-
+			message: '#^Parameter \#1 \$string of function htmlspecialchars expects string, int\|string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: php/custom.php
+
+		-
+			message: '#^Parameter \#1 \$string of function htmlspecialchars expects string, string\|false given\.$#'
+			identifier: argument.type
+			count: 1
+			path: php/custom.php
+
+		-
+			message: '#^Parameter \#2 \$string of function explode expects string, string\|false given\.$#'
+			identifier: argument.type
+			count: 1
+			path: php/custom.php
+
+		-
+			message: '#^Parameter \#1 \$string of function htmlspecialchars expects string, string\|false given\.$#'
+			identifier: argument.type
+			count: 1
+			path: php/custom_gauges.php
+
+		-
+			message: '#^Parameter \#2 \$string of function explode expects string, string\|false given\.$#'
+			identifier: argument.type
+			count: 1
+			path: php/custom_gauges.php
+
+		-
+			message: '#^Parameter \#1 \$input of function validate_date expects string\|null, string\|false\|null given\.$#'
+			identifier: argument.type
+			count: 2
+			path: php/data.php
+
+		-
+			message: '#^Parameter \#2 \$timestamp of function date expects int\|null, int\|false given\.$#'
+			identifier: argument.type
+			count: 2
+			path: php/data.php
+
+		-
+			message: '#^Offset ''NWRFC''\|''USGS'' might not exist on array\{\}\|array\{USGS\?\: array\{label\: non\-falsy\-string, url\: non\-falsy\-string\}, NWRFC\?\: array\{label\: non\-falsy\-string, url\: non\-falsy\-string\}\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: php/description.php
+
+		-
+			message: '#^Parameter \#1 \$input of function validate_date expects string\|null, string\|false\|null given\.$#'
+			identifier: argument.type
+			count: 2
+			path: php/description.php
+
+		-
+			message: '#^Cannot call method fetch\(\) on PDOStatement\|false\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: php/gauge.php
+
+		-
+			message: '#^Cannot call method fetchColumn\(\) on PDOStatement\|false\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: php/gauge.php
+
+		-
+			message: '#^Parameter \#1 \$input of function validate_date expects string\|null, string\|false\|null given\.$#'
+			identifier: argument.type
+			count: 2
+			path: php/gauge.php
+
+		-
+			message: '#^Parameter \#1 \$string of function trim expects string, string\|false given\.$#'
+			identifier: argument.type
+			count: 1
+			path: php/gauge.php
+
+		-
+			message: '#^Cannot call method fetchAll\(\) on PDOStatement\|false\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: php/gauge_picker.php
+
+		-
+			message: '#^Parameter \#2 \$string of function explode expects string, string\|false given\.$#'
+			identifier: argument.type
+			count: 1
+			path: php/gauge_picker.php
+
+		-
+			message: '#^Function _cookie_params\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/auth.php
+
+		-
+			message: '#^Function consume_magic_link\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/auth.php
+
+		-
+			message: '#^Function csrf_token\(\) should return string but returns int\|string\.$#'
+			identifier: return.type
+			count: 1
+			path: php/includes/auth.php
+
+		-
+			message: '#^Function current_editor\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/auth.php
+
+		-
+			message: '#^Function is_maintainer\(\) has parameter \$ed with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/auth.php
+
+		-
+			message: '#^Function issue_magic_link\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/auth.php
+
+		-
+			message: '#^Function maintainer_emails\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/auth.php
+
+		-
+			message: '#^Function require_editor\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/auth.php
+
+		-
+			message: '#^Function require_maintainer\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/auth.php
+
+		-
+			message: '#^Parameter \#1 \$length of function random_bytes expects int\<1, max\>, int given\.$#'
+			identifier: argument.type
+			count: 1
+			path: php/includes/auth.php
+
+		-
+			message: '#^Parameter \#1 \$string of function strlen expects string, int\|string given\.$#'
+			identifier: argument.type
+			count: 2
+			path: php/includes/auth.php
+
+		-
+			message: '#^Parameter \#1 \$tok of function hash_token expects string, int\|string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: php/includes/auth.php
+
+		-
+			message: '#^Function parse_class_tiers\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/class_tiers.php
+
+		-
+			message: '#^Function _gp_bands_for_axis\(\) has parameter \$class_range with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/gauge_plots.php
+
+		-
+			message: '#^Function _gp_bands_for_axis\(\) has parameter \$rating_lookup with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/gauge_plots.php
+
+		-
+			message: '#^Function _gp_bands_for_axis\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/gauge_plots.php
+
+		-
+			message: '#^Function _gp_cross_source_mean\(\) has parameter \$sources with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/gauge_plots.php
+
+		-
+			message: '#^Function _gp_cross_source_mean\(\) has parameter \$times with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/gauge_plots.php
+
+		-
+			message: '#^Function _gp_cross_source_mean\(\) has parameter \$values with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/gauge_plots.php
+
+		-
+			message: '#^Function _gp_cross_source_mean\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/gauge_plots.php
+
+		-
+			message: '#^Function _gp_despike_per_source\(\) has parameter \$sources with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/gauge_plots.php
+
+		-
+			message: '#^Function _gp_despike_per_source\(\) has parameter \$times with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/gauge_plots.php
+
+		-
+			message: '#^Function _gp_despike_per_source\(\) has parameter \$values with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/gauge_plots.php
+
+		-
+			message: '#^Function _gp_despike_per_source\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/gauge_plots.php
+
+		-
+			message: '#^Function _gp_fetch_series\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/gauge_plots.php
+
+		-
+			message: '#^Function _gp_lower_bound\(\) has parameter \$sorted with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/gauge_plots.php
+
+		-
+			message: '#^Function _gp_render_single_plot\(\) has parameter \$bands with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/gauge_plots.php
+
+		-
+			message: '#^Function _gp_render_single_plot\(\) has parameter \$times with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/gauge_plots.php
+
+		-
+			message: '#^Function _gp_render_single_plot\(\) has parameter \$values with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/gauge_plots.php
+
+		-
+			message: '#^Function gp_render_date_form\(\) has parameter \$extra_links with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/gauge_plots.php
+
+		-
+			message: '#^Function gp_render_plots\(\) has parameter \$class_range with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/gauge_plots.php
+
+		-
+			message: '#^Parameter \#2 \$timestamp of function date expects int\|null, int\|false given\.$#'
+			identifier: argument.type
+			count: 2
+			path: php/includes/gauge_plots.php
+
+		-
+			message: '#^Function include_header\(\) has parameter \$context with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/header.php
+
+		-
+			message: '#^Function render_nav\(\) has parameter \$context with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/header.php
+
+		-
+			message: '#^Function lttb_downsample\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/lttb.php
+
+		-
+			message: '#^Function lttb_downsample\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/lttb.php
+
+		-
+			message: '#^Function send_email\(\) has parameter \$extra_headers with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/mail.php
+
+		-
+			message: '#^Function review_approve\(\) has parameter \$applied with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/review_logic.php
+
+		-
+			message: '#^Function review_approve\(\) has parameter \$cr with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/review_logic.php
+
+		-
+			message: '#^Function review_approve\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/review_logic.php
+
+		-
+			message: '#^Function review_load_target_state\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/review_logic.php
+
+		-
+			message: '#^Function review_notify_editor\(\) has parameter \$cr with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/review_logic.php
+
+		-
+			message: '#^Function review_reject\(\) has parameter \$cr with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/review_logic.php
+
+		-
+			message: '#^Function review_reply_and_close\(\) has parameter \$cr with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/review_logic.php
+
+		-
+			message: '#^Function review_resolve\(\) has parameter \$cr with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/review_logic.php
+
+		-
+			message: '#^Function review_send_reply\(\) has parameter \$cr with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/review_logic.php
+
+		-
+			message: '#^Function check_class_string\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/sanity.php
+
+		-
+			message: '#^Function check_coords\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/sanity.php
+
+		-
+			message: '#^Function check_display_name\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/sanity.php
+
+		-
+			message: '#^Function check_flow_range\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/sanity.php
+
+		-
+			message: '#^Function check_putin_takeout\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/sanity.php
+
+		-
+			message: '#^Function check_text_length\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/sanity.php
+
+		-
+			message: '#^Function sanity_errors\(\) has parameter \$issues with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/sanity.php
+
+		-
+			message: '#^Function sanity_errors\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/sanity.php
+
+		-
+			message: '#^Function sanity_warnings\(\) has parameter \$issues with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/sanity.php
+
+		-
+			message: '#^Function sanity_warnings\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/sanity.php
+
+		-
+			message: '#^Function _bands_svg\(\) has parameter \$bands with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/svg_plot.php
+
+		-
+			message: '#^Function _series_data_attr\(\) has parameter \$series with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/svg_plot.php
+
+		-
+			message: '#^Function generate_rating_dual_plot\(\) has parameter \$bands with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/svg_plot.php
+
+		-
+			message: '#^Function generate_rating_dual_plot\(\) has parameter \$flow_times with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/svg_plot.php
+
+		-
+			message: '#^Function generate_rating_dual_plot\(\) has parameter \$flow_values with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/svg_plot.php
+
+		-
+			message: '#^Function generate_svg_plot\(\) has parameter \$bands with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/svg_plot.php
+
+		-
+			message: '#^Function generate_svg_plot\(\) has parameter \$times with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/svg_plot.php
+
+		-
+			message: '#^Function generate_svg_plot\(\) has parameter \$values with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/svg_plot.php
+
+		-
+			message: '#^Function nice_axis\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/includes/svg_plot.php
+
+		-
+			message: '#^Parameter \#1 \.\.\.\$arg1 of function max expects non\-empty\-array, list given\.$#'
+			identifier: argument.type
+			count: 2
+			path: php/includes/svg_plot.php
+
+		-
+			message: '#^Parameter \#1 \.\.\.\$arg1 of function min expects non\-empty\-array, list given\.$#'
+			identifier: argument.type
+			count: 2
+			path: php/includes/svg_plot.php
+
+		-
+			message: '#^Parameter \#1 \$json of function json_decode expects string, string\|true given\.$#'
+			identifier: argument.type
+			count: 1
+			path: php/includes/turnstile.php
+
+		-
+			message: '#^Cannot call method fetchAll\(\) on PDOStatement\|false\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: php/picker.php
+
+		-
+			message: '#^Parameter \#2 \$string of function explode expects string, string\|false given\.$#'
+			identifier: argument.type
+			count: 1
+			path: php/picker.php
+
+		-
+			message: '#^Parameter \#1 \$input of function validate_date expects string\|null, string\|false\|null given\.$#'
+			identifier: argument.type
+			count: 2
+			path: php/plot.php
+
+		-
+			message: '#^Parameter \#2 \$timestamp of function date expects int\|null, int\|false given\.$#'
+			identifier: argument.type
+			count: 2
+			path: php/plot.php
+
+		-
+			message: '#^Function _prefill\(\) has parameter \$existing with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/propose.php
+
+		-
+			message: '#^Function _prefill\(\) has parameter \$reach with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: php/propose.php
+
+		-
+			message: '#^Cannot access offset 0 on list\<string\>\|false\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: php/reach.php
+
+		-
+			message: '#^Cannot access offset 1 on list\<string\>\|false\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: php/reach.php
+
+		-
+			message: '#^Cannot call method fetchAll\(\) on PDOStatement\|false\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: php/reach.php
+
+		-
+			message: '#^Parameter \#1 \$string of function htmlspecialchars expects string, string\|false given\.$#'
+			identifier: argument.type
+			count: 6
+			path: php/reach.php
+
+		-
+			message: '#^Parameter \#1 \$string of function trim expects string, string\|false given\.$#'
+			identifier: argument.type
+			count: 2
+			path: php/reach.php
+
+		-
+			message: '#^Parameter \#1 \$value of function count expects array\|Countable, list\<string\>\|false given\.$#'
+			identifier: argument.type
+			count: 2
+			path: php/reach.php
+
+		-
+			message: '#^Possibly invalid array key type float\|int\|string\.$#'
+			identifier: offsetAccess.invalidOffset
+			count: 1
+			path: php/reach.php
+
+		-
+			message: '#^Parameter \#1 \$string of function htmlspecialchars expects string, string\|false given\.$#'
+			identifier: argument.type
+			count: 1
+			path: php/review.php
+
+		-
+			message: '#^Cannot call method fetch\(\) on PDOStatement\|false\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: php/source.php
+
+		-
+			message: '#^Cannot call method fetchColumn\(\) on PDOStatement\|false\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: php/source.php
+
+		-
+			message: '#^Parameter \#1 \$string of function trim expects string, string\|false given\.$#'
+			identifier: argument.type
+			count: 1
+			path: php/source.php

@@ -18,6 +18,7 @@
     },
     "scripts": {
         "test": "phpunit",
-        "analyse": "phpstan analyse"
+        "analyse": "phpstan analyse --memory-limit=1G",
+        "baseline": "phpstan analyse --memory-limit=1G --generate-baseline=phpstan-baseline.neon"
     }
 }

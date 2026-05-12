@@ -62,7 +62,13 @@ jobs:
         run: vendor/bin/phpunit
 
       - name: PHPStan
-        run: vendor/bin/phpstan analyse --no-progress
+        # Level 7 with phpstan-baseline.neon grandfathering the 123
+        # pre-existing issues. Per docs/PLAN_php_layer_split.md, the
+        # baseline shrinks tier-by-tier as files are split.
+        # --memory-limit bumped because TypeSpecifier on the larger
+        # entry-point files (reach.php / description.php) exceeds the
+        # 128MB default.
+        run: vendor/bin/phpstan analyse --no-progress --memory-limit=1G
 
   typecheck:
     runs-on: ubuntu-latest
