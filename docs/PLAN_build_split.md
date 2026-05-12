@@ -19,12 +19,12 @@ Top-level constants (lines 48–137, 224–234, 422, 505–519, 1293–1306) and
 | Cluster | Lines | Functions | Notes |
 |---|---|---|---|
 | Shell (nav/footer/page) | 999–1292 | `_editor_feature_on`, `_build_nav`, `_build_right_cluster`, `_build_footer_html`, `_build_letter_nav`, `_build_page`, `_build_placeholder_page`, `_build_map_page` | + `_og_meta`, `_load_css`, `_css_link_tag` (78–249) |
-| Levels table | 250–871 | `_get_builder_columns`, `_get_row_data` (cc=16), `_levels_key`, `_filter_visible_rows`, `_format_cell_value`, `_row_filter_attrs`, `_build_html_table`, `_collect_filter_data`, `_build_filter_bar` (128 lines) | Densest cluster |
+| Levels table | 250–331 + 522–871 | `_get_builder_columns`, `_get_row_data` (cc=16), `_levels_key`, `_filter_visible_rows`, `_format_cell_value`, `_row_filter_attrs`, `_build_html_table`, `_collect_filter_data`, `_build_filter_bar` (128 lines) | Two disjoint slices — sparklines (332–421) and exports (422–521) are interleaved between them. Densest cluster overall. Has **zero** outgoing calls to other clusters. |
 | Sparklines | 332–421 | `_select_sparkline_series`, `_sparkline_svg_from_records`, `_build_sparkline` | + `SPARKLINE_*` constants (48–63) |
 | Exports (CSV/text) | 422–521 | `_csv_safe`, `_build_csv`, `_build_text` | + `_CSV_FORMULA_PREFIX` |
 | GeoJSON | 872–998 | `_reach_geometry`, `_build_reaches_static`, `_build_reaches_state` | + `GEOJSON_*` (69–70) |
-| Gauges page | 1293–1799 | 11 functions incl. `_collect_gauge_rows` (cc=17, 115 lines), `_build_gauges_table` (111 lines), station-name parsers | Has its own constants block |
-| Deploy / CLI | 1800–2187 | `addArgs`, `build`, `_build_to_dir` (95 lines), `_build_and_write`, `_deploy_source_files` (cc=11), `_deploy_staging_to_live`, `_sweep_orphans`, `_emit_sitemap`, `_set_acls`, `_atomic_write` | CLI entry point |
+| Gauges page | 1293–1799 | 11 functions incl. `_collect_gauge_rows` (cc=17, 115 lines), `_build_gauges_table` (111 lines), `_build_gauges_filter_bar`, station-name parsers | Has its own constants block. **Calls into levels** (`_build_gauges_filter_bar` → `_build_filter_bar` at line 1738) and into shell (`_build_page` at line 1764). |
+| Deploy / CLI | 1800–2187 | `addArgs`, `build`, `_build_to_dir` (95 lines), `_build_and_write`, `_deploy_source_files` (cc=11), `_deploy_staging_to_live`, `_sweep_orphans`, `_emit_sitemap`, `_set_acls`, `_atomic_write` (defined at 100) | CLI entry point. `_atomic_write` is the only deploy-bucketed helper that lives outside the 1800-2187 range — it sits up front because levels/gauges/deploy all call it. |
 
 ## Target shape
 
@@ -50,13 +50,27 @@ src/kayak/web/build/
                        # _sweep_orphans, _emit_sitemap, _set_acls
 ```
 
-Dependency graph (acyclic):
+Dependency graph (acyclic), four tiers:
 
 ```
-_shared ← {sparklines, exports, geojson, shell}
-        ← {levels, gauges}       (consume shell + sparklines/exports/geojson)
-        ← deploy                 (orchestrator)
+_shared
+  ↑
+{sparklines, exports, geojson, shell, levels}   five sibling leaves —
+                                                 only outgoing edges are
+                                                 to _shared
+  ↑
+gauges                                           consumes shell (_build_page)
+                                                 and levels (_build_filter_bar)
+  ↑
+deploy                                           orchestrator — calls every
+                                                 cluster
 ```
+
+Key edge to note: `_build_gauges_filter_bar` (gauges, line 1738) calls
+`_build_filter_bar` (levels). This is why **levels must move before
+gauges** in the phase order below — otherwise the freshly-created
+`gauges.py` would have to reach back into `cli/build.py` for a symbol
+that's about to leave the file.
 
 `src/kayak/cli/build.py` becomes a permanent 2-line shim:
 
@@ -68,16 +82,22 @@ Keeps `kayak.cli.main`'s import sites unchanged.
 
 ## Migration phases
 
-Nine commits. Tests + ruff + mypy must stay green between phases. Sparkline / CSV / text / geojson modules go first because they are leaves with few internal callers, so the blast radius of each move is small.
+Nine commits. Tests + ruff + mypy must stay green between phases. Leaves of the dep graph go first (sparklines, exports, geojson, shell, levels — all five only depend on `_shared.py`), so the blast radius of each early move is small. Gauges follows because it consumes levels + shell; deploy comes last as the orchestrator.
 
-1. **Phase 1 — scaffolding.** Create `src/kayak/web/build/{__init__.py,_shared.py}`. Move the truly shared constants and three head-shell helpers (`_og_meta`, `_load_css`, `_css_link_tag`, `_atomic_write`, `_editor_feature_on`) into `_shared.py`. Re-import them in `cli/build.py` so all current call sites keep working. Tests untouched.
+1. **Phase 1 — scaffolding.** Create `src/kayak/web/build/{__init__.py,_shared.py}` (`src/kayak/web/__init__.py` already exists). Move the truly shared constants and three head-shell helpers (`_og_meta`, `_load_css`, `_css_link_tag`, `_atomic_write`, `_editor_feature_on`) into `_shared.py`. Re-import them in `cli/build.py` so all current call sites keep working. Tests untouched.
+
+   ⚠ When moving `_STATIC_DIR` (line 224) the path arithmetic must change. The current form `Path(__file__).resolve().parent.parent / "web" / "static"` assumes `__file__` is `src/kayak/cli/build.py`; from `src/kayak/web/build/_shared.py` it must become `Path(__file__).resolve().parent.parent / "static"` (drop the `"web"` segment, since `__file__.parent.parent` is now already inside `web/`). `_CSS_PATH`/`_JS_PATH`/`_FILTERS_JS_PATH` compose off `_STATIC_DIR` and inherit the fix transitively.
 2. **Phase 2 — sparklines.** Move `SPARKLINE_*` constants + 3 functions into `web/build/sparklines.py`. Re-import in `cli/build.py`.
 3. **Phase 3 — exports (CSV + text).** Same pattern.
 4. **Phase 4 — geojson.** Same pattern. Update `tests/test_build_geojson_split.py` imports to point at `kayak.web.build.geojson`. (3 test functions, 1 import.)
-5. **Phase 5 — shell.** Move nav/footer/page-shell helpers. No test imports to update.
-6. **Phase 6 — gauges page.** Move the 11-function gauges cluster + its 4 constants. The bulk of the gauges code is self-contained; the only callers in the rest of `build.py` are `_build_to_dir`/`_build_and_write` which go to `deploy.py` later.
-7. **Phase 7 — levels table.** Move the 9-function levels cluster. Update `tests/test_build_filters.py` imports (5 symbols) and `tests/test_cli/test_build.py`.
+5. **Phase 5 — shell.** Move nav/footer/page-shell helpers. `tests/test_build_filters.py` imports `_build_page` alongside its levels symbols — update that one import to `kayak.web.build.shell` here (the other 4 imports stay on `kayak.cli.build` via re-export until Phases 6/7).
+6. **Phase 6 — levels table.** Move the 9-function levels cluster. levels comes *before* gauges (swapped vs. the initial draft) because `_build_gauges_filter_bar` calls `_build_filter_bar`; moving levels first means gauges.py can import cleanly from `kayak.web.build.levels` in Phase 7 without a transient back-reference.
+   - Update `tests/test_build_filters.py` imports for `_build_filter_bar`, `_collect_filter_data`, `_row_filter_attrs` → `kayak.web.build.levels` (3 of its 5 imports; the 4th `_build_gauges_filter_bar` lands in Phase 7, the 5th `_build_page` already moved in Phase 5).
+   - Update `tests/test_cli/test_build.py` for the levels symbols it pulls (`_build_html_table` plus any other levels names in the multi-symbol import).
+   - **`mock.patch` paths** in `tests/test_cli/test_build.py` (lines 428, 441, 453, 462) target `"kayak.cli.build._get_row_data"`. `mock.patch` is sensitive to *where the name is looked up*, not where it's defined — after the move, the lookup happens inside `kayak.web.build.levels`, so all four patch strings must be retargeted to `"kayak.web.build.levels._get_row_data"`. Even with a re-export shim these would silently no-op against the wrong namespace.
+7. **Phase 7 — gauges page.** Move the 11-function gauges cluster + its 4 constants. gauges.py imports `_build_filter_bar` from `kayak.web.build.levels` (already moved) and `_build_page` from `kayak.web.build.shell`. Update `tests/test_build_filters.py` to point `_build_gauges_filter_bar` at `kayak.web.build.gauges` (the final outstanding import in that file).
 8. **Phase 8 — deploy.** Move `build`, `addArgs`, `_build_to_dir`, `_build_and_write`, `_deploy_*`, `_emit_sitemap`, `_set_acls`. Update `tests/test_build_deploy.py` imports (2 symbols + module alias). Replace `src/kayak/cli/build.py` with the 2-line re-export shim.
+   - **`build_mod.shutil` monkey-patch surgery.** `tests/test_build_deploy.py` does `import kayak.cli.build as build_mod` and then `build_mod.shutil.copy2` (line 216) and `mp.setattr(build_mod.shutil, "copy2", ...)` (line 226). The new shim imports only `addArgs` and `build`, so `shutil` is no longer an attribute of `kayak.cli.build`. Rewrite the alias as `import kayak.web.build.deploy as build_mod` so the `shutil` lookup hits the deploy module's namespace (where `shutil` is actually imported).
 9. **Phase 9 — refactor the cc>10 offenders inside their new homes.** Three functions:
    - `_get_row_data` (cc=16) → `levels.py`: extract per-cell formatters / per-data-type branches into helpers.
    - `_collect_gauge_rows` (cc=17) → `gauges.py`: extract status-classification and metadata-merge into helpers.
@@ -89,7 +109,7 @@ Phases 1–8 are pure code motion: zero HTML output change, zero behavior change
 
 ## Verification gate (every phase)
 
-Run before and after each phase. Generated HTML must be byte-identical for phases 1–8.
+Run before and after each phase. Generated HTML must be byte-identical for phases 1–8, *modulo two time-driven exceptions documented below*.
 
 ```bash
 # 1. Lint + types stay clean
@@ -99,19 +119,37 @@ mypy src/
 # 2. Tests still pass
 pytest -x
 
-# 3. Generated HTML is byte-identical (golden-file gate)
+# 3. Generated HTML is "byte-identical except for embedded build time"
 rm -rf /tmp/build-before /tmp/build-after
 levels build --output-dir /tmp/build-before    # before the phase's edit
 # ... apply the phase ...
 levels build --output-dir /tmp/build-after
-diff -r /tmp/build-before /tmp/build-after     # must be empty for phases 1–8
+diff -r -I 'now_iso\|now_display\|<time datetime=' /tmp/build-before /tmp/build-after
+# must be empty for phases 1–8 (after the -I filter)
 ```
 
-For Phase 9 only, the HTML diff is allowed to be non-empty *if* the diff is whitespace/formatting only and an obvious consequence of the extracted helpers (e.g. an indentation change). If real content differs, the refactor is broken — revert and rework.
+Why the filter is required: `_build_page` (line 1104-1106) embeds
+`datetime.now(UTC)` as `now_iso` and `now_display` into every generated
+page, and Phase 5+ moves that function unchanged into `shell.py`.
+Without the filter the back-to-back builds would diff on any minute
+boundary crossed. Secondarily, `_get_row_data` (line 319) and
+`_collect_gauge_rows` (line 1543) classify rows as stale/expired based
+on `datetime.now(UTC) - obs_time`; a row whose age crosses a 48h or 7d
+boundary between the two runs will reclassify even though no code
+changed. To eliminate that second source of drift, snapshot the live
+DB before Phase 1 and point `DATABASE_URL` at the snapshot for every
+gated build — or run the gate against a freshly-`pytest`-built fixture
+DB where the staleness boundaries are far from now.
+
+For Phase 9 only, additional whitespace/formatting diff is allowed if
+it's an obvious consequence of the extracted helpers (e.g. an
+indentation change). If real content differs, the refactor is broken
+— revert and rework.
 
 ## Risks
 
-- **Hidden cross-module state.** Five top-of-file constants (`_LEVELS_JS_VERSION`, `_FILTERS_JS_VERSION`, `_MAP_JS_VERSION`, `_LEVELS_JS`) are evaluated at import time via `stat().st_mtime`. They must stay in one place (probably `_shared.py`) and be imported, not re-evaluated, to avoid duplicate stat calls.
+- **Hidden cross-module state.** Three top-of-file constants (`_LEVELS_JS_VERSION`, `_FILTERS_JS_VERSION`, `_MAP_JS_VERSION`) are evaluated at import time via `stat().st_mtime`, and a fourth (`_LEVELS_JS`) is a derived f-string consuming `_LEVELS_JS_VERSION`. All four must live in one place (`_shared.py`) and be imported, not re-evaluated, to avoid duplicate stat calls and to keep the cache-busted URL stable across modules.
+- **In-src consumers of `kayak.cli.build`.** Beyond the test imports, `src/kayak/cli/main.py:44` calls `build.addArgs(subparsers)` and `src/kayak/cli/pipeline.py:18,66` imports `build` and dispatches `build.build`. The permanent shim re-exports both `addArgs` and `build`, so neither is at risk.
 - **`tests/test_cli/test_main.py:48`** does `from kayak.cli import build` — the permanent shim preserves this.
 - **PHP side reads no Python modules**, so the PHP layer is unaffected.
 - **Phase 9 (cc>10 refactor)** is the only phase that risks output diff. Done last so it can be reverted in isolation.
@@ -119,7 +157,7 @@ For Phase 9 only, the HTML diff is allowed to be non-empty *if* the diff is whit
 ## Out of scope
 
 - The `_build_filter_bar` 128-line function. It's complex but linear (build a `<select>` per filter type). After Phase 7 it can be split, but that's a follow-up — not part of this plan.
-- PHP file lengths (`reach.php` 649, `svg_plot.php` 503, `description.php` 495). Same anti-pattern but a separate problem.
+- PHP file lengths (`php/reach.php` 649, `php/includes/svg_plot.php` 503, `php/description.php` 495). Same anti-pattern but a separate problem.
 
 ## Reproduce
 
