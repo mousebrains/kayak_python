@@ -38,7 +38,11 @@ public_html/*.text
 static/reaches.geojson
 static/reaches-geom.json
 static/reaches-state.json
-php/style.css
+static/levels.js
+static/filters.js
+static/sparklines.json
+static/style-*.css
+static/style.css.hash
 
 # DB backups
 backups

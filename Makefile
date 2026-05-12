@@ -32,10 +32,10 @@ lint-js:  ## Lint JavaScript files
 	biome check static/ src/kayak/web/static/
 
 lint-css:  ## Lint CSS files
-	biome check php/style.css src/kayak/web/static/style.css
+	biome check src/kayak/web/static/style.css
 
 lint-shell:  ## Lint shell scripts
-	shellcheck --severity=warning scripts/*.sh systemd/*.sh hardening/*.sh
+	shellcheck --severity=warning scripts/*.sh systemd/*.sh deploy/*.sh
 
 lint-all: lint lint-php lint-js lint-css lint-shell  ## Run all linters
 

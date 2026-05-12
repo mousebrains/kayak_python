@@ -12,7 +12,6 @@
       "static/plot-hover.js",
       "src/kayak/web/static/levels.js",
       "src/kayak/web/static/filters.js",
-      "php/style.css",
       "src/kayak/web/static/style.css"
     ]
   },
