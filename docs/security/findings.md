@@ -159,11 +159,23 @@ These are not gaps per se — they're verification steps that need prod-side acc
   - Marginal alternative: add `<meta name="referrer" content="no-referrer">` to the auth.php HTML. Header is preferred (covers non-HTML responses like the 302).
 - **Plan tier:** Tier 1.1 (this finding). Effort: ~15min.
 
+#### F-15 — No automated regression test for logout → session-replay → 401
+
+- **Status:** 🔴 Open (test coverage, not vulnerability)
+- **Threats:** T-S4 (indirectly — defends against regression of the revoked_at filter)
+- **Severity:** Low; informational. Static analysis confirms `current_editor()` filters `s.revoked_at IS NULL`, so logout immediately revokes the session token; replaying the cookie returns null and downstream `require_editor()` redirects to /login. No live vulnerability today.
+- **Description:** `tests/php/` has no test covering the login → capture-cookie → logout → replay → 401 flow. The bootstrap.php test harness doesn't even create the `editor_session` table (`kayak_test_pdo()` only seeds `editor` + `editor_magic_link`). A future refactor that drops the `revoked_at` SQL clause from `current_editor()` would not break any test.
+- **Repro:** `grep -nE "logout|revoke|revoked" tests/php/*.php` → no matches.
+- **Remediation options:**
+  - Extend `tests/php/bootstrap.php` `kayak_test_pdo()` to include the `editor_session` schema. Add a new `tests/php/SessionRevocationTest.php` with two cases: (a) `current_editor()` returns the editor when session is live; (b) returns null after `clear_editor_session()`. ~30 min.
+  - OR a once-only live manual test on staging, recorded in `tier1-audit.md`. ~5 min, no regression protection.
+- **Plan tier:** Tier 1.2 (this finding). Test addition is Tier 6 (apply findings).
+
 ## Findings by status
 
 | Status | Count | IDs |
 |---|---|---|
-| 🔴 Open | 14 | F-1 through F-14 |
+| 🔴 Open | 15 | F-1 through F-15 |
 | 🟡 In progress | 0 | — |
 | 🟢 Closed | 0 | — |
 | ⚪ Accepted | 0 | — |

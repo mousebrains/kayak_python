@@ -48,3 +48,46 @@
 - ✅ Audit completed; tests written.
 - ⚠ Two open findings: F-2, F-14.
 - Mitigation effort estimated for each.
+
+## Phase 1.2 — Session audit
+
+**Verdict:** ✅ (9 pass, 1 informational gap → F-15)
+
+### Audit tests
+
+| # | Test | Verdict | Evidence |
+|---|---|---|---|
+| 1.2.1 | Cookie `HttpOnly` flag set | ✅ | `_cookie_params()` returns `'httponly' => true`. |
+| 1.2.2 | Cookie `SameSite=Strict` set | ✅ | `'samesite' => 'Strict'`. |
+| 1.2.3 | Cookie `Secure` flag set when HTTPS | ✅ | `'secure' => !empty($_SERVER['HTTPS'])`. Confirmed prod uses HTTPS (per `deploy/SETUP.md`). |
+| 1.2.4 | Session token rotates on login (session-fixation defense) | ✅ | `set_editor_session()` calls `generate_token()` → fresh `random_bytes(32)` for every login. Old pre-auth `ed_sess` (if any) replaced by setcookie. |
+| 1.2.5 | CSRF token rotates on session creation (privilege-escalation fixation defense) | ✅ | `set_editor_session()` generates a fresh CSRF token and overwrites `ed_csrf`. |
+| 1.2.6 | Logout invalidates server-side | ✅ | `clear_editor_session()` UPDATE `editor_session SET revoked_at = datetime('now') WHERE token_hash = ?`. Cookie also cleared client-side. |
+| 1.2.7 | `current_editor()` filters revoked sessions | ✅ | SQL clause `s.revoked_at IS NULL` in the session lookup. Revoked cookie cannot resurrect. |
+| 1.2.8 | `current_editor()` filters expired sessions | ✅ | SQL clause `s.expires_at > datetime('now')`. 7-day flat absolute timeout. |
+| 1.2.9 | `current_editor()` excludes banned editors | ✅ | SQL clause `e.status != 'banned'`. |
+| 1.2.10 | No code reads `EDITOR_SESSION_COOKIE` outside `auth.php` helpers | ✅ | grep across `php/` shows 4 reads, all in `php/includes/auth.php` (set, clear, current_editor). No bypass paths. |
+| 1.2.11 | Login → capture cookie → logout → replay → 401 | ⚠ **F-15** | Static analysis says this MUST hold (revoked_at filter + cookie clear). No automated test covers it in `tests/php/*.php` (grep for `logout|revoke|revoked` returns empty). Live integration test recommended once. |
+
+### Findings refinement
+
+- **F-15** (new): no automated regression test for logout-then-replay. Pure test-coverage gap, not a real vulnerability — the SQL filter already enforces this. Filing because the verification gate is "Each test pass/fail/N/A," and one of the plan's listed tests is uncovered.
+
+### Effort estimate
+
+| Finding | Mitigation | Effort |
+|---|---|---|
+| F-15 | Add a method to `tests/php/EditAuthTest.php` (or new `tests/php/SessionRevocationTest.php`): seed an editor + session row, fetch via `current_editor()` (expect editor), call `clear_editor_session()` with the seeded cookie, fetch again (expect null). | ~30 min: bootstrap.php needs `editor_session` table addition; test body ~30 lines. |
+| F-15 (alt — live test on staging) | One-time manual test using a real browser, recorded in this audit log | ~5 min, no code change. Acceptable for a hobby project; doesn't catch future regressions. |
+
+### Notes
+
+- **`current_editor()` request-scoped cache** (`static $cached = false; static $editor = null;`) is safe — per-request only. A logout occurring mid-request would not affect the in-flight cached result, but in-flight pages can't be logged out without browser-side intervention anyway.
+- **No idle timeout** — sessions live 7 days even if unused. This is a deliberate choice per the plan ("7-day flat absolute timeout, no idle timeout") trading off security for UX (long-tail mobile usage). Stolen-cookie blast radius is 7 days; would need re-issue cadence + IP-stickiness or shorter absolute timeout to reduce. Not filing as a finding — the plan accepts this.
+- **No per-session IP binding** (also deliberate — mobile/laptop roaming). Acceptable risk; documented.
+
+### Phase 1.2 closeout
+
+- ✅ Audit completed; all controls structurally sound.
+- ⚠ 1 informational gap: F-15 (test coverage, not vulnerability).
+- Static analysis confirms the plan's listed test (logout-replay-401) is enforced by the SQL filter; no live exploit demonstrated or expected.
