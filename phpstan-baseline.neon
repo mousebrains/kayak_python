@@ -73,12 +73,6 @@ parameters:
 			path: php/gauge.php
 
 		-
-			message: '#^Parameter \#1 \$string of function trim expects string, string\|false given\.$#'
-			identifier: argument.type
-			count: 1
-			path: php/gauge.php
-
-		-
 			message: '#^Cannot call method fetchAll\(\) on PDOStatement\|false\.$#'
 			identifier: method.nonObject
 			count: 2
@@ -299,6 +293,12 @@ parameters:
 			identifier: argument.type
 			count: 2
 			path: php/includes/gauge_plots.php
+
+		-
+			message: '#^Function _search_gauges\(\) should return list\<array\<string, mixed\>\> but returns array\.$#'
+			identifier: return.type
+			count: 1
+			path: php/includes/gauge_search.php
 
 		-
 			message: '#^Function include_header\(\) has parameter \$context with no value type specified in iterable type array\.$#'

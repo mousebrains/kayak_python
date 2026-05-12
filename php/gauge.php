@@ -12,6 +12,7 @@ require_once __DIR__ . '/includes/gauge_plots.php';
 require_once __DIR__ . '/includes/gauge_map.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/validate.php';
+require_once __DIR__ . '/includes/gauge_search.php';
 
 $db = get_db();
 
@@ -22,46 +23,9 @@ $end_date   = validate_date(filter_input(INPUT_GET, 'end',   FILTER_SANITIZE_SPE
 $has_map = false;
 
 // --- Search mode ---
-if ($q !== null && $q !== '') {
-    $q = trim($q);
-    $stmt = $db->prepare(
-        'SELECT id, name, location FROM gauge
-         WHERE name LIKE ? OR location LIKE ? OR station_id LIKE ?
-            OR usgs_id LIKE ? OR cbtt_id LIKE ? OR geos_id LIKE ?
-            OR nws_id LIKE ? OR nwsli_id LIKE ? OR snotel_id LIKE ?
-         ORDER BY id
-         LIMIT 200'
-    );
-    $pat = "%$q%";
-    $stmt->execute([$pat, $pat, $pat, $pat, $pat, $pat, $pat, $pat, $pat]);
-    $results = $stmt->fetchAll();
-
-    if (count($results) === 1) {
-        header('Location: /gauge.php?id=' . $results[0]['id']);
-        exit;
-    }
-
-    header('Cache-Control: no-cache');
-    include_header('Gauge Search', '', '', '', ['picker_kind' => 'gauge']);
-    echo '<h2>Gauge Search</h2>';
-
-    if (!$results) {
-        echo '<p>No gauges matching &ldquo;' . htmlspecialchars($q) . '&rdquo;.</p>';
-    } else {
-        echo '<p>' . count($results) . ' gauges matching &ldquo;' . htmlspecialchars($q) . '&rdquo;:</p>';
-        echo '<table class="desc-table">';
-        echo '<tr><th>ID</th><th>Name</th><th>Location</th></tr>';
-        foreach ($results as $r) {
-            $name = htmlspecialchars($r['name']);
-            $loc = htmlspecialchars($r['location'] ?? '');
-            echo "<tr><td>{$r['id']}</td><td><a href=\"/gauge.php?id={$r['id']}\">$name</a></td><td>$loc</td></tr>\n";
-        }
-        echo '</table>';
-    }
-
-    echo '<p style="margin-top:1rem"><a href="/gauge.php">Browse all gauges</a></p>';
-    include_footer();
-    exit;
+$q_trimmed = is_string($q) ? trim($q) : '';
+if ($q_trimmed !== '') {
+    handle_gauge_search($db, $q_trimmed);
 }
 
 // --- Default: show first gauge ---
