@@ -85,8 +85,8 @@
 
     var payload;
     try { payload = JSON.parse(svg.getAttribute('data-series')); }
-    catch (e) { return; }
-    if (!payload || !payload.points || payload.points.length < 2) return;
+    catch (_e) { return; }
+    if (!payload?.points || payload.points.length < 2) return;
 
     var pts = payload.points;
     var m = payload.margins;

@@ -199,9 +199,9 @@
   }
 
   function init(opts){
-    var bar = opts && opts.barContainer || document.getElementById('filter-bar');
+    var bar = opts?.barContainer || document.getElementById('filter-bar');
     if (!bar) return null;
-    var tbody = opts && opts.rowsContainer || document.querySelector('table.levels tbody');
+    var tbody = opts?.rowsContainer || document.querySelector('table.levels tbody');
     if (!tbody) return null;
 
     var rows = Array.from(tbody.querySelectorAll('tr[data-state], tr[data-basin], tr[data-huc8], tr[data-status], tr[data-tier]'));
@@ -213,7 +213,7 @@
       rows: rows,
       groups: groups,
       countEl: countEl,
-      onChange: opts && opts.onChange,
+      onChange: opts?.onChange,
     };
 
     applyHash(groups);
@@ -238,7 +238,7 @@
     }
 
     // Open every group on desktop (mobile users see compact summaries only).
-    if (window.matchMedia && window.matchMedia(DESKTOP_QUERY).matches) {
+    if (window.matchMedia?.(DESKTOP_QUERY).matches) {
       bar.querySelectorAll('details.filter-group').forEach(function(d){ d.open = true; });
     }
 

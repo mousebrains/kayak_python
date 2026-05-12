@@ -29,7 +29,7 @@ lint-php:  ## Syntax-check PHP files
 	@for f in php/*.php php/includes/*.php; do php -l "$$f" || exit 1; done
 
 lint-js:  ## Lint JavaScript files
-	biome check static/ public_html/no_show_review.js src/kayak/web/static/levels.js
+	biome check static/ src/kayak/web/static/
 
 lint-css:  ## Lint CSS files
 	biome check php/style.css src/kayak/web/static/style.css
