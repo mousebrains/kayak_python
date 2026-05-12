@@ -87,3 +87,40 @@ Out of scope for this tier (public-facing reads, no editor scope): `description.
 
 - ✅ Authorization model is clean — no IDOR vectors found.
 - All ID-taking editor-pipeline endpoints either scope by `current_editor()['id']` (editor-owned data) or require maintainer (global scope, by design).
+
+## Phase 2.3 — Privilege escalation paths
+
+**Verdict:** ✅ for the critical-bucket threats (T-T3/T-E1 mass-assignment, T-T4/T-E2 SQLi); ⚠ for F-7 (refined, partially closes) / F-8 (code smell stands) / F-9 (refined, near-false-positive) / F-13 (confirmed, low-impact for single-maintainer).
+
+### Audit tests
+
+| # | Test | Verdict | Evidence |
+|---|---|---|---|
+| 2.3.1 | Can editor promote self to `status='maintainer'` via mass-assignment? | ✅ | The only path to maintainer status is the CLI `levels seed-maintainer` (Phase 1.3). No web action sets that status. `account.php` whitelists `display_name` only. `admin.php` is maintainer-required and its actions cap at `status='full'`. No editor-side input flows into the `status` column. |
+| 2.3.2 | Can editor promote self via SQLi? | ✅ | All PDO usage in editor pipeline is parameterized. The two `UPDATE $table SET $sets` sites in `edit.php:117` and `review_logic.php:101` use whitelisted `$table` (`{reach,gauge}`) and whitelisted column names (verified via data-flow trace in 2.3.4 and 2.3.5 below). No user-controlled string lands in a `prepare()` directly. F-8 (code smell) remains tracked but is not an exploitable issue today. |
+| 2.3.3 | Mass-assignment via `account.php` (F-7 subaudit, account) | ✅ | `php/account.php:22-29` switch-case accepts only `action='set_display_name'`; reads only `display_name` from POST; max 128 chars; updates only the `display_name` column for the current editor's `id`. No path writes other columns. |
+| 2.3.4 | Mass-assignment via `propose.php` (F-7 subaudit, propose) | ✅ | Tier-gated field whitelist at `php/propose.php:51-56`: `$reach_fields = $allow_full ? array_merge($text_fields, $full_reach_fields) : $text_fields` where `$text_fields=['description','features']` and `$full_reach_fields=['display_name', 'latitude_start', …]`. The POST loop at line 121-135 uses `foreach ($reach_fields as $f)` — iterates ONLY the whitelist, regardless of what additional keys the POST body contains. Coordinates further validated for numeric type. No path writes outside the whitelist. **F-7 refined: propose.php confirmed safe.** |
+| 2.3.5 | Mass-assignment via `review.php` (F-7 subaudit, review) | ✅ | The maintainer's apply form constructs `$applied['reach']` via `foreach (array_keys($payload['reach']) as $f) { … }` (`php/review.php:50-56`). The KEY SET is constrained to what the proposer's `payload_json` already contains. The maintainer can OVERRIDE the value via POST `reach_<field>`, but cannot ADD keys not in the original payload. Since `payload_json` was tier-constrained at submission time (2.3.4 above), the maintainer cannot apply fields outside the proposer's tier scope **for reach fields**. **F-7 refined: review.php confirmed safe for reach fields.** |
+| 2.3.6 | Mass-assignment via `edit.php` (F-7 subaudit, edit) | ✅ | Already verified (Tier 0/1): `$editable_fields` whitelist; per-field comparison + UPDATE; numeric fields validated; empty submissions skipped. |
+| 2.3.7 | `UPDATE $table SET $sets` SQL-concat code smell (F-8) | ⚠ | Two sites: `edit.php:117`, `review_logic.php:101`. Both use whitelisted `$table` and whitelisted column names; safe in current usage. The pattern relies on cross-file invariants (proposer's tier whitelist → payload_json keys → applied keys → SQL column names). A future contributor adding a new write path could break the invariant. **F-8 not exploitable today; refactor candidate when payload-handling cluster gets touched.** |
+| 2.3.8 | Self-approval prevention (F-13) | ⚠ | `review_approve()` in `php/includes/review_logic.php:61` takes `$cr, $applied, $maint_id`. Does NOT check `$cr['editor_id'] !== $maint_id`. A maintainer with pre-promotion pending proposals can approve their own work. **Bypass of "second pair of eyes" review intent**. For the current single-maintainer posture, this is moot (the maintainer could also direct-edit via `/edit.php`, achieving the same outcome). Becomes meaningful when a second maintainer joins — same trigger as F-5. **F-13 confirmed; low impact at single-maintainer scale.** |
+| 2.3.9 | Over-tier apply (F-9) — reach fields | ✅ (near-false-positive) | Per 2.3.5: the apply key set is constrained to `array_keys($payload['reach'])`, which is constrained at submission to `$reach_fields` per the proposer's tier. **Reach-field over-tier apply is NOT possible.** F-9 partially refines: the original concern was based on the assumption that the maintainer could add keys; in fact the form template only renders keys the proposer included. |
+| 2.3.10 | Over-tier apply (F-9) — reach_class | ⚠ | `$applied['reach_class']` is built from POST `classes_present`/`classes`/`flow_low`/etc. (`php/review.php:58-74`), independent of `$payload`. The maintainer can ADD class changes even when the proposer didn't propose class edits. BUT: the change is recorded in `edit_history` with `changed_by='maintainer:<id>'` and `change_request_id` linkage. Audit trail is technically correct. The semantic concern (was this class change part of the original proposal?) survives but is recoverable from the audit trail. **F-9 refined: applies only to reach_class; mitigated by audit attribution.** |
+| 2.3.11 | File-upload privileged-path injection | ⊘ | No upload endpoint exists yet; `$_FILES` / `move_uploaded_file` grep returns nothing. Activates when Phase 1b file-upload wiring lands. |
+| 2.3.12 | SQL-injection into `maintainer_credential` | ⊘ | No PHP code writes to that table; only the (unwired) WebAuthn Phase 1b would. N/A. |
+| 2.3.13 | Cross-tenant escalation (write to another editor's row) | ✅ | Confirmed in Phase 2.2 (IDOR sweep) — all writes use `current_editor()['id']` for editor scoping. No POST-body `editor_id` path. |
+
+### Findings updates
+
+- **F-7** — REFINED to clarify the whitelist invariant is intact for both propose.php and review.php. Pattern is correct; code smell tracked separately (F-8). Downgrade from "needs confirmation" to "confirmed safe; no immediate action."
+- **F-8** — STANDS as code-smell refactor candidate; not exploitable.
+- **F-9** — REFINED: applies only to `reach_class` (not reach fields). Mitigated by audit-trail attribution. Downgrade from "Medium" to "Low" in `findings.md`.
+- **F-13** — CONFIRMED unhandled. Low impact at single-maintainer scale; same trigger as F-5 (revisit when adding a second maintainer).
+
+### Phase 2.3 closeout
+
+- ✅ All critical-bucket threats (T-T3, T-E1, T-T4, T-E2) confirmed safe.
+- ⚠ F-7 closes (refined to "confirmed safe").
+- ⚠ F-8 remains as code-smell refactor candidate.
+- ⚠ F-9 downgraded to Low; reach_class apply is unconstrained but audit-trail-attributed.
+- ⚠ F-13 confirmed; tied to multi-maintainer trigger.

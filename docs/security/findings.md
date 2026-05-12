@@ -66,12 +66,17 @@
 
 #### F-7 — Mass-assignment whitelist confirmation in propose/review
 
-- **Status:** 🔴 Open
+- **Status:** ⚪ Accepted (per Phase 2.3 audit — confirmed safe via cross-file invariant; refactor tracked in F-8)
 - **Threats:** T-T3, T-E1
-- **Severity:** Critical impact if a whitelist gap exists, low likelihood given the surrounding code.
-- **Description:** `account.php` and `edit.php` have clear whitelist patterns. `propose.php` is tier-gated but the per-tier field whitelist needs explicit verification. `review.php` constructs `$applied['reach']` from `$_POST` (via `review_logic.php`) — the keys must be whitelisted upstream of the `UPDATE $table SET ...` concat. Code is probably correct (only maintainers can hit review.php) but the pattern is fragile.
-- **Remediation:** Add a `$ALLOWED_REACH_FIELDS` / `$ALLOWED_GAUGE_FIELDS` const at the top of `propose.php` and `review_logic.php`; assert every applied key is in the const. Move the consts to `php/includes/auth.php` or a new `php/includes/schema.php` so they're share-able.
-- **Plan tier:** Tier 2.1 / Tier 2.3.
+- **Severity:** ~~Critical impact if a whitelist gap exists~~ — gap does not exist.
+- **Description:** Phase 2.3 audit traced the data flow:
+  - `propose.php:51-56` defines `$reach_fields` (tier-gated); the POST loop iterates ONLY this whitelist.
+  - `propose.php` stores the result in `change_request.payload_json`.
+  - `review.php:50-56` builds `$applied['reach']` from `array_keys($payload['reach'])` — KEY SET is constrained to what the proposer submitted, which was already tier-whitelisted.
+  - `review_logic.php:101` concats `$f = ?` where `$f` comes from this constrained key set.
+
+  Conclusion: the SQL concat in `review_logic.php:101` and `edit.php:117` IS safe given the upstream invariants. F-7 closes; the refactor recommendation moves under F-8 (which tracks the code-smell aspect separately).
+- **Plan tier:** Tier 2.3 (this audit). Refactor: see F-8.
 
 #### F-8 — `UPDATE $table SET $sets` SQL string concat in edit.php + review_logic.php
 
@@ -109,23 +114,28 @@
 
 #### F-9 — Over-tier apply (review maintainer can write fields outside proposer's tier)
 
-- **Status:** 🔴 Open
+- **Status:** 🔴 Open (refined; severity downgraded)
 - **Threats:** T-T6, T-E7
-- **Description:** `review.php` lets the maintainer edit `$applied['reach']` before approving. A tier-`minimal` proposer can only edit description+features in `propose.php`, but the maintainer can add lat/lon/classes to the applied payload. The `edit_history` rows record the change but attribute it to `maintainer:<id>`, not `editor:<id>` — so audit trail is technically correct. The concern is the proposer-history clarity: "did the proposer suggest those coordinates or did the maintainer?"
-- **Remediation options:**
-  - Add `applied_by` column to `change_request` separately from `reviewed_by` — N/A (same thing).
-  - Render a "maintainer-tweaked" annotation in `edit_history.new_value` whenever the value differs from the proposed payload.
-  - Restrict the review-form fields to the proposer's tier; force maintainer to direct-edit if more is needed.
-- **Plan tier:** Tier 2 decision point.
+- **Severity:** **Low** (downgraded from Medium after Phase 2.3 audit).
+- **Description:** Phase 2.3 audit refined the scope:
+  - **Reach fields:** NOT vulnerable. `review.php:50-56` builds `$applied['reach']` from `array_keys($payload['reach'])` — keys are constrained to what the proposer submitted (which was tier-whitelisted). Maintainer cannot add `latitude_start` to the apply when the proposer only submitted `description`.
+  - **reach_class:** Still vulnerable. `$applied['reach_class']` is built from POST `classes_present`/`classes`/`flow_low`/etc. (`php/review.php:58-74`), independent of `$payload`. Maintainer can add class changes the proposer didn't propose.
+  - Mitigation: the `edit_history` row records `changed_by='maintainer:<id>'` with `change_request_id` linkage. Audit trail is technically correct — "this class change was applied by maintainer X during review of proposal Y." A reader can determine the maintainer ADDED the class change (not in payload_json).
+- **Remediation options:** Same as before, but only for `reach_class`. The reach-fields concern resolves to non-issue.
+  - Restrict `reach_class` apply to "only if `$payload['reach_class']` was set" — i.e., honor the proposer's intent.
+  - OR add a UI flag on the review form: "I added these class changes" vs "proposer suggested these class changes" so the audit trail is explicit.
+  - OR accept (current) — audit trail attribution is correct, just requires reading two columns to disambiguate.
+- **Plan tier:** Tier 2 decision point (audit trail strength).
 
 #### F-13 — No self-approval prevention in review.php
 
-- **Status:** 🔴 Open
+- **Status:** 🔴 Open (low priority — tied to multi-maintainer trigger)
 - **Threats:** T-E6
-- **Severity:** Medium impact, very low likelihood.
-- **Description:** `review.php` doesn't check `change_request.editor_id !== $maint['id']`. The realistic scenario: an editor with pending proposals gets promoted to maintainer; they can now approve their own pre-promotion proposals. (After promotion, `propose.php` routes them to `/edit.php`, so they can't submit new proposals as a maintainer.)
-- **Remediation:** One line in `review_approve()`: assert `$cr['editor_id'] !== $maint_id` (or downgrade to a require-other-maintainer flow if there are multiple maintainers).
-- **Plan tier:** Tier 2.3 (privilege escalation paths).
+- **Severity:** Low impact at single-maintainer scale (moot — maintainer could direct-edit anyway); Medium impact at multi-maintainer scale.
+- **Description:** `review_approve()` in `php/includes/review_logic.php:61` takes `$cr, $applied, $maint_id` and does not check `$cr['editor_id'] !== $maint_id`. Realistic scenario: an editor with pending proposals gets promoted to maintainer; they can now approve their own pre-promotion proposals. (After promotion, `propose.php` routes them to `/edit.php`, so they cannot submit NEW proposals as maintainer.)
+- **Phase 2.3 audit note:** at the current single-maintainer scale this is largely moot — the maintainer could direct-edit via `/edit.php` and achieve the same outcome. Becomes meaningful only when a second maintainer joins and you want to enforce "second pair of eyes."
+- **Remediation:** One line in `review_approve()`: `if ($cr['editor_id'] === $maint_id) return ['ok' => false, 'err' => 'Cannot approve own proposal'];` (or downgrade to a require-other-maintainer flow if there are multiple maintainers).
+- **Plan tier:** Tier 2.3 (this audit). Disposition: defer to multi-maintainer trigger (same trigger as F-5, D-T1.3).
 
 ### Low / prod-side confirms
 
@@ -177,10 +187,10 @@ These are not gaps per se — they're verification steps that need prod-side acc
 
 | Status | Count | IDs |
 |---|---|---|
-| 🔴 Open | 14 | F-1, F-2, F-3, F-4, F-6, F-7, F-8, F-9, F-10, F-11, F-12, F-13, F-14, F-15 |
+| 🔴 Open | 13 | F-1, F-2, F-3, F-4, F-6, F-8, F-9, F-10, F-11, F-12, F-13, F-14, F-15 |
 | 🟡 In progress | 0 | — |
 | 🟢 Closed | 0 | — |
-| ⚪ Accepted | 1 | F-5 (per D-T1.3) |
+| ⚪ Accepted | 2 | F-5 (per D-T1.3), F-7 (Phase 2.3 — confirmed safe) |
 | 🔵 Deferred | 0 | — |
 
 ## Per-tier work allocation
