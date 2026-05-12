@@ -3,7 +3,6 @@
 from datetime import UTC, datetime, timedelta
 from unittest import mock
 
-from kayak.cli.build import _build_csv, _build_text, _csv_safe
 from kayak.db.models import (
     DataType,
     FetchUrl,
@@ -16,6 +15,7 @@ from kayak.db.models import (
     Source,
 )
 from kayak.web.build._shared import _atomic_write
+from kayak.web.build.exports import _build_csv, _build_text, _csv_safe
 from kayak.web.build.levels import _build_html_table, _get_row_data, _levels_key
 from kayak.web.build.shell import _build_letter_nav, _build_map_page, _build_nav, _build_page
 from kayak.web.build.sparklines import _build_sparkline, _select_sparkline_series
@@ -415,7 +415,7 @@ class TestSelectSparklineSeries:
 
 class TestBuildCSV:
     def test_empty_reaches(self, session):
-        with mock.patch("kayak.cli.build._get_row_data", return_value={}):
+        with mock.patch("kayak.web.build.exports._get_row_data", return_value={}):
             result = _build_csv([], COLS_SIMPLE, "", set(), {})
         lines = result.strip().splitlines()
         assert len(lines) == 1
@@ -428,7 +428,7 @@ class TestBuildCSV:
             {"display_name": "River 0", "flow": 1200.5},
             {"display_name": "River 1", "flow": 800.0},
         ]
-        with mock.patch("kayak.cli.build._get_row_data", side_effect=fake_rows):
+        with mock.patch("kayak.web.build.exports._get_row_data", side_effect=fake_rows):
             result = _build_csv(reaches, COLS_SIMPLE, "", set(), {})
         lines = result.strip().splitlines()
         assert len(lines) == 3
@@ -440,7 +440,7 @@ class TestBuildCSV:
         dt = datetime(2026, 4, 10, 14, 30, tzinfo=UTC)
         cols = [*COLS_SIMPLE, COLS[3]]  # Add time column
         fake_row = {"display_name": "Test", "flow": 100.0, "time": dt}
-        with mock.patch("kayak.cli.build._get_row_data", return_value=fake_row):
+        with mock.patch("kayak.web.build.exports._get_row_data", return_value=fake_row):
             result = _build_csv(reaches, cols, "", set(), {})
         assert "2026-04-10 14:30" in result
 
@@ -449,7 +449,7 @@ class TestBuildText:
     def test_fixed_width(self, session):
         reaches = _make_reaches(session, count=1)
         fake_row = {"display_name": "Deschutes", "flow": 1500.0}
-        with mock.patch("kayak.cli.build._get_row_data", return_value=fake_row):
+        with mock.patch("kayak.web.build.exports._get_row_data", return_value=fake_row):
             result = _build_text(reaches, COLS_SIMPLE, "", set(), {})
         lines = result.splitlines()
         assert len(lines) >= 3
@@ -460,7 +460,7 @@ class TestBuildText:
         reaches = _make_reaches(session, count=1)
         long_name = "A" * 100
         fake_row = {"display_name": long_name, "flow": 100.0}
-        with mock.patch("kayak.cli.build._get_row_data", return_value=fake_row):
+        with mock.patch("kayak.web.build.exports._get_row_data", return_value=fake_row):
             result = _build_text(reaches, COLS_SIMPLE, "", set(), {})
         data_line = result.splitlines()[2]
         # Name column is 30 chars wide — should be truncated
