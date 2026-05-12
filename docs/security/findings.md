@@ -43,15 +43,17 @@
 
 #### F-5 — Maintainer authentication is magic-link only (no 2FA)
 
-- **Status:** 🔴 Open
+- **Status:** 🔴 Open (pending Tier 1.3 decision; see `tier1-audit.md`)
 - **Threats:** T-S2 (specifically for maintainer accounts)
-- **Severity:** Critical impact, low likelihood (depends on email-account hardening).
+- **Severity:** **Medium** (downgraded from High after Phase 1.3 audit — see below).
 - **Description:** Maintainers use the same `/login.php` magic-link flow as editors. Email-account compromise = full maintainer-account takeover. The `maintainer_credential` schema is provisioned for WebAuthn but no PHP endpoints implement registration/assertion.
+- **Phase 1.3 audit refinement:** the threat model is materially better than initially scored because there is **no web path to maintainer promotion** — the only way to set `editor.status = 'maintainer'` is the CLI `levels seed-maintainer`. So a web-side maintainer takeover cannot create *additional* maintainer accounts; the compromise stays bounded to the one account whose email was compromised. The `admin.php:ban` action even guards `status != 'maintainer'`, so a compromised maintainer cannot demote other maintainers via web.
 - **Decision menu (Tier 1.3 decision point):**
-  - Accept current posture (magic-link only). Cheap; relies on maintainer email having its own 2FA.
-  - Advance Phase 1b: wire WebAuthn registration + assertion. ~2-3 PHP endpoints + JS challenge flow; schema ready.
-  - Add TOTP fallback. Less work than WebAuthn but phishable.
-- **Plan tier:** Tier 1.3.
+  - **A. Magic-link only (current).** Relies on maintainer's Gmail having strong 2FA. ~$0 cost. Recommended for the current single-maintainer posture.
+  - **B. Advance Phase 1b WebAuthn.** ~1-2 days. Phishing-resistant. Right answer if a second maintainer joins.
+  - **C. TOTP fallback.** ~1 day. Phishable; less work than WebAuthn but lower security. Dominated by B.
+- **Recommendation:** Option A, conditional on (1) maintainer's Gmail has 2FA enabled, (2) re-evaluate when adding a second maintainer, (3) re-evaluate if any audit-trail integrity work (F-4) happens (strong audit + weak auth is inconsistent).
+- **Plan tier:** Tier 1.3 (decision); Tier 6 if a future trigger demotes the answer to Option B.
 
 #### F-6 — `htmlspecialchars` calls don't specify ENT flags
 

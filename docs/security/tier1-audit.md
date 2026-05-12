@@ -91,3 +91,71 @@
 - ✅ Audit completed; all controls structurally sound.
 - ⚠ 1 informational gap: F-15 (test coverage, not vulnerability).
 - Static analysis confirms the plan's listed test (logout-replay-401) is enforced by the SQL filter; no live exploit demonstrated or expected.
+
+## Phase 1.3 — Maintainer credential audit + 2FA decision
+
+**Verdict:** ✅ (stronger than expected — there is NO web path to maintainer promotion; the only path is the CLI `levels seed-maintainer`). 2FA decision below.
+
+### Audit (a) — Is magic-link the only access path to maintainer status?
+
+Surveyed all `UPDATE editor SET status` calls in `php/`:
+
+| File:line | Action | Target status | Source status (guard) |
+|---|---|---|---|
+| `php/admin.php:35-39` | bulk_approve | `minimal` | `pending` only |
+| `php/admin.php:44-50` | promote | `full` | `pending` or `minimal` |
+| `php/admin.php:53-59` | approve_minimal | `minimal` | `pending` only |
+| `php/admin.php:62-68` | demote | `minimal` | `full` only |
+| `php/admin.php:71-78` | reset_pending | `pending` | `minimal` or `full` only |
+| `php/admin.php:80-90` | ban | `banned` | NOT `maintainer` |
+| `php/admin.php:93-99` | unban | `pending` | `banned` only |
+
+**No admin action sets `status = 'maintainer'`.** The ceiling via web is `'full'`. The ONLY path to `'maintainer'` status is the CLI command `levels seed-maintainer --email <email>` (registered in `src/kayak/cli/seed_maintainer.py`), which requires shell access on the prod box.
+
+**This is a stronger control than the plan anticipated.** Web-side compromise (even maintainer-account-takeover) cannot elevate a different account to maintainer. A maintainer takeover lets the attacker BAN other maintainers (`ban` action permits `'full' → 'banned'` but not `'maintainer' → 'banned'`; line 84 guards `status != 'maintainer'`) but cannot CREATE new maintainers via web.
+
+### Audit (b) — Impact of magic-link-only auth for existing maintainer accounts
+
+A maintainer-email compromise yields:
+
+- Full edit access to all reaches/gauges via `/edit.php` (write to `reach`/`gauge` tables + `edit_history`).
+- Admin UI access via `/admin.php` (promote/demote/ban non-maintainer editors; revoke sessions; bulk-edit display names).
+- Approve/reject/edit pending proposals via `/review.php` (write to `change_request` + `edit_history`).
+- Read all editor PII (emails) via `/admin.php`.
+- Bypass all rate limits / daily caps (the entire enforcement model is editor-status-gated).
+- Tamper `edit_history` indirectly by approving a backdoored proposal (limited — `applied_json` only writes back to live tables, doesn't delete rows; but F-4 says no protection against post-hoc rewrite via SQL access).
+
+Impact rating: **Critical** for the editor pipeline, but **bounded** — the attacker still cannot:
+
+- Create another maintainer account (CLI-only).
+- Read raw session tokens (only sha256 hashes in DB).
+- Access non-editor-pipeline parts of the system without shell access.
+
+### Audit (c) — 2FA decision
+
+Three documented options (decision menu from `docs/PLAN_editor_security_review.md` Tier 1.3):
+
+| Option | Cost | Strength | UX cost | Notes |
+|---|---|---|---|---|
+| **A. Magic-link only (current)** | $0 | Single factor; email-account is the de facto 2FA. | None | Relies on maintainer's email account having strong 2FA itself. Operator-managed gate (you control which emails are seeded as maintainer). |
+| **B. Advance Phase 1b WebAuthn** | ~2-3 PHP endpoints + JS challenge flow (registration, assertion, list, revoke). DB schema in place (`maintainer_credential`). | Phishing-resistant; device-bound credential. Modern browsers + iOS/Android support built-in passkeys. | First-time enrollment 30s; subsequent auth one tap on phone/laptop bio. | Strongest practical option. ~1-2 days of work. |
+| **C. TOTP via authenticator app** | New DB column (totp_secret); QR setup flow; verify endpoint. | Time-based code; phishable; replay-resistant only within ~30s window. | App install + 6-digit code on each login. | Less work than WebAuthn but lower security. |
+
+### Recommendation
+
+**Option A (magic-link only)** for the next 6-12 months, **conditional on:**
+1. The single maintainer (pat.kayak@gmail.com) confirms their Gmail account has 2FA enabled (TOTP or hardware key).
+2. Re-evaluate when a second maintainer is added (one-person operation simplifies threat model; multi-person operation increases attack surface).
+3. Re-evaluate if any audit-trail integrity work happens (F-4) — strong audit + weak auth is an inconsistent posture.
+
+**Rationale:** the seed-maintainer CLI control is unusually strong. The realistic remaining attack on the magic-link path requires (a) Gmail compromise AND (b) being targeted enough to know the maintainer email AND (c) acting within the 30-min link-expiry window. Probability is low for a hobby/club site. Option B is the right answer if a second maintainer joins; Option C is dominated by B (more work, less security).
+
+### Findings refinement
+
+- **F-5 confirmed**: the underlying gap (no second factor for maintainer) is real but lower-priority than initially scored, given the seed-maintainer CLI control. Re-classify from "High" to "Medium" in `findings.md` and add the condition above to the disposition.
+
+### Phase 1.3 closeout
+
+- ✅ Audit (a) complete: no web path to maintainer promotion. Stronger control than plan anticipated.
+- ✅ Audit (b) complete: impact analysis written.
+- ⏳ Audit (c) decision: **PENDING — user to confirm Option A** (with Gmail 2FA precondition) or pick B/C.
