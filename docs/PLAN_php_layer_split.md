@@ -262,11 +262,74 @@ Bundling these into a shared `reach_common.php` (or moving them up into `db.php`
 
 ### Tier 4 — `php/includes/svg_plot.php` split
 
-`svg_plot.php` is an **include**, not an entry point — `description.php`, `plot.php`, `php/includes/gauge_plots.php`, and (transitively via gauge_plots) `gauge.php` all `require_once` it. The "split" here is sub-helper extraction, not orchestration extraction. The 503-line file becomes 2–4 smaller includes under `php/includes/`.
+`svg_plot.php` is an **include**, not an entry point — `description.php`, `plot.php`, `php/includes/gauge_plots.php`, and (transitively via gauge_plots) `gauge.php` all `require_once` it. The "split" here is sub-helper extraction, not orchestration extraction. The 503-line file becomes a smaller include + `svg_plot_rating.php`.
 
-`tests/php/SvgPlotTest.php` is the existing baseline. Augment with golden-response tests on the *consumer* entry points (`description.php?id=...`, `plot.php?...`, `gauge.php?...`) — these catch behavior drift in the consumers, not the helper directly.
+`tests/php/SvgPlotTest.php` is the existing baseline (11 cases covering all 5 externally-called functions). Augment with consumer-side integration tests on the entry points that call it: `plot.php` (Phase 4.1) and `description.php` (already in `DescriptionIntegrationTest`).
 
-Likely cluster split: SVG geometry math (`svg_plot_geometry.php`), styling/colors (`svg_plot_styling.php`), axis/tick generation (`svg_plot_axes.php`), top-level render that assembles them (the surviving `svg_plot.php`, ~150 lines).
+The plan's earlier sketch of a 4-way split (geometry / styling / axes / top-level) doesn't match the file's actual cluster boundaries. Of the 10 functions, only the 3 **rating** functions form a coherent extractable unit; the rest are tightly interwoven with the two `generate_*_plot` renderers. See [Phase 4.2 — Current shape of `svg_plot.php`](#phase-42--current-shape-of-svg_plotphp) below for the actual cluster table. Outcome: 2-file split (rating extracted; everything else stays).
+
+1. **Phase 4.1 — Baseline tests (✓ `e217ab5`).** Five integration tests cover plot.php (the simplest external consumer of `generate_svg_plot`): 400 on missing id, 400 on invalid type, 404 on non-gauge reach, 200 raw `image/svg+xml` for a gauged reach, 200 HTML wrapper on `?embed=1`. SvgPlotTest's 11 existing cases + DescriptionIntegrationTest's 6 cases already cover the helper directly and the transitive consumer path via gauge_plots.
+2. **Phase 4.2 — Cluster analysis (this commit).** See [Phase 4.2 — Current shape of `svg_plot.php`](#phase-42--current-shape-of-svg_plotphp) below.
+3. **Phase 4.3 — Extract `svg_plot_rating.php`.** Move `derive_rating_lookup`, `rate_gauge_to_flow`, `rate_flow_to_gauge` into a new file. `svg_plot.php` (the surviving file) `require_once`s it so internal uses of `rate_*_to_*` from `generate_rating_dual_plot` still resolve. External consumers (gauge_plots.php) see no signature change — function names stay global, just live in a different physical file. No consumer-side edit required.
+4. **Phase 4.4 — Final cleanup.** Plan-doc closeout marking Tier 4 done with line counts + outcome table.
+
+**Verification gate (end of Tier 4):**
+- `svg_plot.php` < 400 lines (no hard < 200 line target — this is a helper, not an entry point shim)
+- `svg_plot_rating.php` exists with the 3 rating functions and nothing else
+- `php -l` on both, PHPStan, php-cs-fixer all green
+- All 11 SvgPlotTest cases + 5 PlotIntegrationTest + 6 DescriptionIntegrationTest cases pass
+
+#### Phase 4.2 — Current shape of `svg_plot.php`
+
+503 lines, 10 functions in 5 logical clusters. Public API surface (functions called by external consumers) is **5 functions**: `generate_svg_plot`, `generate_rating_dual_plot`, `derive_rating_lookup`, `rate_gauge_to_flow`, `rate_flow_to_gauge`. The other 5 (`_split_y_label`, `_series_data_attr`, `nice_axis`, `_bands_svg`, `_empty_svg`) are file-private (`_`-prefix; `nice_axis` lacks the prefix but no external consumer calls it).
+
+| Cluster | Lines | Functions | External use? | Notes |
+|---|---|---|---|---|
+| Layout helpers | 6–25 | `_split_y_label`, `_series_data_attr` | no | Used by both `generate_*_plot` to build the `data-series` JSON attribute and decompose Y-axis labels. |
+| Axis math | 27–63 | `nice_axis` | no (despite missing `_`) | Computes round Y-axis bounds + step for tick labels. Pure function; could be tested directly. |
+| **Rating curve** | **65–188** | **`derive_rating_lookup`, `rate_gauge_to_flow`, `rate_flow_to_gauge`** | **yes (gauge_plots.php)** | The only DB-bound code in the file (`derive_rating_lookup` takes a `PDO`). Bidirectional interpolation; covered by 6 SvgPlotTest cases. Extracts cleanly. |
+| Bands SVG | 190–231 | `_bands_svg` | no | Renders low/okay/high background rectangles. Called from both generators after the data range is computed. |
+| Plot renderers | 233–503 | `generate_svg_plot`, `generate_rating_dual_plot`, `_empty_svg` | yes (plot.php, gauge_plots.php) | The bulk of the file (~270 lines). Both generators do their own grid + axis + polyline math inline, intermixed with the cluster-A/B/D internals — there's no clean axis/styling/geometry boundary to extract along. |
+
+**Consumer call graph:**
+- `plot.php` → `generate_svg_plot` (only)
+- `gauge_plots.php` → all 5 external functions
+- `description_detail.php` → none directly; requires `svg_plot.php` only to make the helpers reachable transitively (through `gauge_plots.php`)
+
+**Why "rating extraction only" and not the plan's earlier 4-way sketch:** the plan-draft envisioned splitting "geometry / styling / axes / top-level". Reading the actual code, the two `generate_*_plot` functions inline their grid-line emission, axis-label formatting, and band-rendering — there's no extractable "geometry helper" or "styling helper" sitting at function granularity. Decoupling those would require **refactoring the renderers themselves** (extracting `_build_grid_lines`, `_build_polyline`, etc.), which is a behavior-equivalent refactor of intra-function bodies rather than a code-motion split.
+
+Rating is different. The 3 rating functions:
+- form a closed loop (`derive_rating_lookup` produces the array that `rate_*_to_*` consume)
+- are independently testable (SvgPlotTest already exercises them in isolation)
+- have a distinct concern (rating-curve interpolation, a hydrology domain concept)
+- contain the only DB-bound code in the file
+
+Extracting just rating is high-signal, low-risk. Further granularity (separating `nice_axis` or `_bands_svg` into their own files) is plausible but tiny — each would be a ~30-line file. Defer to Tier 6 cleanup if the file still feels unwieldy after the rating split.
+
+**Cluster-extraction target shape:**
+
+```
+php/includes/
+├── svg_plot.php             # ~390 lines: _split_y_label, _series_data_attr,
+│                            #   nice_axis, _bands_svg, generate_svg_plot,
+│                            #   generate_rating_dual_plot, _empty_svg.
+│                            #   require_once 'svg_plot_rating.php' so the
+│                            #   internal calls to rate_*_to_* inside
+│                            #   generate_rating_dual_plot still resolve.
+└── svg_plot_rating.php      # ~120 lines: derive_rating_lookup,
+                             #   rate_gauge_to_flow, rate_flow_to_gauge.
+                             #   No `require_once` needed (uses no helpers
+                             #   beyond PDO; lttb is only used by the
+                             #   downsampler in svg_plot.php proper).
+```
+
+**Non-obvious extraction risks:**
+
+- **`generate_rating_dual_plot` calls `rate_gauge_to_flow` and `rate_flow_to_gauge` internally** (lines 419–420 and inside the right-axis tick-generation loop). After extraction, `svg_plot.php` must `require_once svg_plot_rating.php` — `require_once` is idempotent so consumers that already require both files (none today, but future ones could) don't double-load.
+- **Consumer-side edits: zero.** PHP's function namespace is global; once `svg_plot.php` requires `svg_plot_rating.php`, every existing consumer (plot.php, gauge_plots.php, description_detail.php) keeps working without changes. The "require" is transitive.
+- **SvgPlotTest's `require_once` of `svg_plot.php`** at line 5 (per the existing test convention) similarly pulls in the rating file transitively. No test edit needed.
+- **`derive_rating_lookup`'s SQL uses `gauge_source` join + `observation.observed_at >= ?`** — a `PDO` is passed in; no global state. Pure extraction.
+- **`lttb_downsample` (from `lttb.php`) is only used inside `generate_svg_plot` / `generate_rating_dual_plot`** (lines 277, 384) — stays with the renderers, not with rating.
 
 ### Tier 5 — Apply template to remaining big files
 
