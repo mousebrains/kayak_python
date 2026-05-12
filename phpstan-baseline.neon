@@ -61,18 +61,6 @@ parameters:
 			path: php/gauge.php
 
 		-
-			message: '#^Cannot call method fetchColumn\(\) on PDOStatement\|false\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: php/gauge.php
-
-		-
-			message: '#^Parameter \#1 \$input of function validate_date expects string\|null, string\|false\|null given\.$#'
-			identifier: argument.type
-			count: 2
-			path: php/gauge.php
-
-		-
 			message: '#^Cannot call method fetchAll\(\) on PDOStatement\|false\.$#'
 			identifier: method.nonObject
 			count: 2
@@ -179,6 +167,36 @@ parameters:
 			identifier: offsetAccess.notFound
 			count: 1
 			path: php/includes/description_detail.php
+
+		-
+			message: '#^Cannot call method fetchColumn\(\) on PDOStatement\|false\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: php/includes/gauge_detail.php
+
+		-
+			message: '#^Function _load_gauge_associated\(\) should return array\{sources\: list\<array\<string, mixed\>\>, reaches\: list\<array\<string, mixed\>\>, reach_class_thresholds\: array\<int, list\<array\<string, mixed\>\>\>\} but returns array\{sources\: array, reaches\: array, reach_class_thresholds\: array\<int, non\-empty\-list\>\}\.$#'
+			identifier: return.type
+			count: 1
+			path: php/includes/gauge_detail.php
+
+		-
+			message: '#^Function _load_gauge_navigation\(\) should return array\{prev\: array\<string, mixed\>\|false, next\: array\<string, mixed\>\|false, position\: int\|string, total\: int\|string\} but returns array\{prev\: mixed, next\: mixed, position\: int\|string\|false\|null, total\: int\|string\|false\|null\}\.$#'
+			identifier: return.type
+			count: 1
+			path: php/includes/gauge_detail.php
+
+		-
+			message: '#^Function _load_gauge_readings\(\) should return list\<array\<string, mixed\>\> but returns array\.$#'
+			identifier: return.type
+			count: 1
+			path: php/includes/gauge_detail.php
+
+		-
+			message: '#^Function _render_date_form_and_plots invoked with 6 parameters, 7 required\.$#'
+			identifier: arguments.count
+			count: 1
+			path: php/includes/gauge_detail.php
 
 		-
 			message: '#^Function _gp_bands_for_axis\(\) has parameter \$class_range with no value type specified in iterable type array\.$#'
