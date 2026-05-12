@@ -13,18 +13,6 @@ parameters:
 			path: php/custom.php
 
 		-
-			message: '#^Parameter \#1 \$string of function htmlspecialchars expects string, string\|false given\.$#'
-			identifier: argument.type
-			count: 1
-			path: php/custom_gauges.php
-
-		-
-			message: '#^Parameter \#2 \$string of function explode expects string, string\|false given\.$#'
-			identifier: argument.type
-			count: 1
-			path: php/custom_gauges.php
-
-		-
 			message: '#^Parameter \#1 \$input of function validate_date expects string\|null, string\|false\|null given\.$#'
 			identifier: argument.type
 			count: 2
