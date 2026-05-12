@@ -28,13 +28,13 @@
       },
       "style": {
         "useTemplate": "off",
-        "useConst": "off",
         "noDescendingSpecificity": "off",
         "useDefaultParameterLast": "off"
       },
       "suspicious": {
         "noGlobalIsNan": "off",
-        "noRedundantUseStrict": "off"
+        "noRedundantUseStrict": "off",
+        "noVar": "error"
       },
       "correctness": {
         "noInnerDeclarations": "off"
