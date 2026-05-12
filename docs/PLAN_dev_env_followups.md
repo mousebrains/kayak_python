@@ -6,7 +6,8 @@
 > - iter 1 (2026-05-12): structural pivot — Phase 3 changes from "drop the symlinks" / "extend the symlinks" to "tell dev boxes to use a non-repo `OUTPUT_DIR`" (per user input). Old A/B/C alternatives kept as an appendix. Smaller fixes: cross-check ref bump, count corrections, end-state phrasing, `.env.example` callout.
 > - iter 2 (2026-05-12): 6 findings — Phase 3 cleanup script made safe for `public_html/includes` directory→symlink replacement; Phase 2 verification gate split into before/after-fix scenarios per layout; redundant Phase 2 risk text deduplicated; `.env.example` diff now uses a concrete commented example value; out-of-scope adds an nginx-dev ACL note; iter log + cross-check ref updated.
 > - iter 3 (2026-05-12): 3 findings — Phase 1 now also drops the stale `.gitignore:41` `php/style.css` entry (user-flagged); confirmed via grep that no build code writes to `php/style.css` — `deploy.py:107` and `_shared.py:52` only touch `output_dir/style.css`. Phase 3 verification gate corrected: `OUTPUT_DIR` is read by python-dotenv via `kayak.config`, not by shell `source` of the env file (bare `KEY=VAL` lines aren't exported into the child process). Cross-check ref updated.
-> - iter 4 (2026-05-12, this revision): 2 findings — End-state bullet about `php/style.css` "gitignored anyway" now contradicts iter 3 (gitignore entry is removed); rewritten to describe the post-fix invariant ("file gone AND gitignore entry gone"). Reproduce-section grep for `.gitignore` now also confirms the line removal.
+> - iter 4 (2026-05-12): 2 findings — End-state bullet about `php/style.css` "gitignored anyway" now contradicts iter 3 (gitignore entry is removed); rewritten to describe the post-fix invariant ("file gone AND gitignore entry gone"). Reproduce-section grep for `.gitignore` now also confirms the line removal.
+> - iter 5 (2026-05-12, this revision, stopping): 2 findings — Phase 1 Risk parenthetical "(already in `.gitignore:41`)" was misleading post-iter-3 (Phase 1 §4 removes that entry); rephrased to clarify the actual invariant (file is unstaged by §5 before any commit). Phase 3 verification path `/path/to/public_html_dev` → `$OUTPUT_DIR` for consistency with the rest of the section. Convergence: 9 → 6 → 3 → 2 → 2 findings.
 >
 > Dates absolute. Citations `file:line` against current `main`.
 
@@ -75,7 +76,7 @@ Three small edits + one local-only cleanup. Commits to `main`; pre-commit + CI v
 - `git status` shows only the intended diff (one biome.json edit + two Makefile lines + .gitignore additions).
 - On a machine with standalone tools: `make lint-css`, `make lint-shell`, `make lint-all` all run to completion. (Not testable on `levels` until biome/shellcheck CLIs are installed; tracked separately.)
 
-**Risk:** the `rm php/style.css` step (§5) is local-only and per-host: an unrelated dev box may not have the file, in which case the `rm` is a no-op. Commits don't touch the file (already in `.gitignore:41`).
+**Risk:** the `rm php/style.css` step (§5) is local-only and per-host: an unrelated dev box may not have the file, in which case the `rm` is a no-op. The Phase 1 commit itself doesn't stage `php/style.css` — the commit's diff is the biome/Makefile/`.gitignore` edits only — so even after §4 removes the gitignore entry, a leftover `php/style.css` won't sneak into the commit. It would show as untracked in `git status` from that point forward, which is what §5's `rm` resolves.
 
 ## Phase 2 — PHP doc-root fix (1 commit, ~10 minutes)
 
@@ -202,7 +203,7 @@ This is "dev does what prod does, just at a different path." Zero repo code chan
 - `OUTPUT_DIR` is read by `python-dotenv` via `kayak.config` (not by shell `source` — bare `KEY=VAL` lines wouldn't export to a child process anyway). To verify the env file picks up correctly: `/home/pat/.venv/bin/python -c 'from kayak import config; print(config.OUTPUT_DIR)'` should print the dev path.
 - `levels build` (no env-var prefix needed; config.py reads `~/.config/kayak/.env` automatically) writes to that path. Check: `ls -la "$OUTPUT_DIR/index.html"` after the build.
 - `git status` is clean after the build.
-- `php -S localhost:8000 -t /path/to/public_html_dev` serves the styled site; styled nav bar renders (Phase 2's fix is exercised via `$_SERVER['DOCUMENT_ROOT'] = "/path/to/public_html_dev"`).
+- `php -S localhost:8000 -t "$OUTPUT_DIR"` serves the styled site; styled nav bar renders (Phase 2's fix is exercised via `$_SERVER['DOCUMENT_ROOT'] = "$OUTPUT_DIR"`).
 - Live host unchanged — its `~/.config/kayak/.env` already carries the equivalent setting.
 
 **Risk:**
