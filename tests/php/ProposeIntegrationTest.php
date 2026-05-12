@@ -86,7 +86,9 @@ final class ProposeIntegrationTest extends IntegrationTestCase
             self::REACH_NAME,
             'csrf_token',
             '<form',
-            'full',                    // tier label in the daily-cap blurb
+            // Exact tag wrap — bare 'full' could collide with words like
+            // 'useful' or 'successful' in surrounding copy.
+            '<strong>full</strong>',
         );
         $this->assertNoBareInlineScript($resp['body']);
     }
