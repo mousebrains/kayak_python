@@ -186,11 +186,27 @@ This section holds two kinds of items: (a) findings downgraded to Low after audi
   - OR a once-only live manual test on staging, recorded in `tier1-audit.md`. ~5 min, no regression protection.
 - **Plan tier:** Tier 1.2 (this finding). Test addition is Tier 6 (apply findings).
 
+#### F-16 — Privacy policy "Your Rights" section contradicts the rest of the page
+
+- **Status:** 🔴 Open
+- **Threats:** Not a code-side threat; trust/policy correctness.
+- **Severity:** Low (user-trust-facing). The page reads as self-contradicting and signals carelessness on a page whose primary purpose is to project care.
+- **Description:** `php/privacy.php:87-90` ("Your Rights" section) reads: *"Because we collect only server access logs and no personal data, there is generally no personal data to access, correct, or delete."* This contradicts the upper "Data We Collect" section (lines 24-45) which lists contributor email addresses, proposed edits, comments, and cookies. The page was likely written before the editor pipeline existed and the "Your Rights" section was not refreshed when editor + change_request + edit_history landed.
+- **Repro:** Read `php/privacy.php`; compare "Data We Collect" against "Your Rights."
+- **Remediation:** Rewrite the "Your Rights" section to accurately describe:
+  - Deletion path: contact the club; operator-handled per D-T4.1.
+  - Export path: contact the club; operator-handled per D-T4.2.
+  - Audit-trail retention: indefinite (per D-T4.3a), but PII linkage is severed at deletion.
+  - Cookie expiry: 7 days for `ed_sess` (per D-T4.3c); session row purged 90 days post-expiry.
+  - Bump "Last updated" to refresh date.
+  - Add HTML comment `<!-- Annual review trigger: next review 2027-05-12 -->`.
+- **Plan tier:** Tier 4.4 (this finding). Implementation in Tier 6. Effort: ~20 min.
+
 ## Findings by status
 
 | Status | Count | IDs |
 |---|---|---|
-| 🔴 Open | 11 | F-1, F-2, F-3, F-8, F-9, F-10, F-11, F-12, F-13, F-14, F-15 |
+| 🔴 Open | 12 | F-1, F-2, F-3, F-8, F-9, F-10, F-11, F-12, F-13, F-14, F-15, F-16 |
 | 🟡 In progress | 0 | — |
 | 🟢 Closed | 0 | — |
 | ⚪ Accepted | 4 | F-4 (per D-T2.4), F-5 (per D-T1.3), F-6 (Phase 3.1 — documented convention adequate), F-7 (Phase 2.3 — confirmed safe) |
@@ -201,7 +217,7 @@ This section holds two kinds of items: (a) findings downgraded to Low after audi
 - **Tier 1** (auth review) — F-2, F-5, F-1, F-3, plus the gap audits that feed Tier 1's verification gate.
 - **Tier 2** (authz review) — F-7, F-8, F-9, F-13. Decision point on F-4.
 - **Tier 3** (I/O) — F-6, plus full XSS sweep that may add findings.
-- **Tier 4** (user-data) — decision-rich tier; doesn't directly act on the open findings but produces account-deletion / data-export choices that interact with F-3 (alias).
+- **Tier 4** (user-data) — produces D-T4.1..5 decisions; new F-16 (privacy policy "Your Rights" stale); Tier 6 implements `levels delete-editor`, `levels export-editor`, `levels editor-retention` CLIs + privacy.php refresh.
 - **Tier 5** (disclosure / response) — out-of-band; mostly decisions.
 - **Tier 6** (closeout) — apply remaining open findings; document accepted ones.
 

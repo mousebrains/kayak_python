@@ -95,9 +95,155 @@ But this is just a default; the per-use-case context at trigger time should driv
 
 ---
 
-## (placeholder) D-T4.x — Account lifecycle / data export / retention / privacy / security.txt
+## D-T4.1 — Account deletion model
 
-To be filled when Tier 4 lands. Multiple decision points; see plan.
+- **Date:** 2026-05-12
+- **Decision:** **Option A** (Manual operator-handled via CLI).
+- **Status:** Active (CLI to be implemented in Tier 6)
+- **Backing analysis:** [tier4-audit.md](tier4-audit.md) Phase 4.1.
+
+### Choice
+
+When a user requests account deletion (via the documented "contact the club" path in `php/privacy.php`), the operator runs a new CLI tool — `levels delete-editor --email <addr>` — which cascades the deletes through `editor → editor_session / editor_magic_link / maintainer_credential / change_request → change_request_attachment` inside one transaction. `edit_history.changed_by` strings persist (audit-trail preservation); optional `--anonymize-history` flag rewrites `'editor:<id>' → 'deleted:<id>'`.
+
+### Rationale
+
+1. **Demand is theoretical.** Zero requests in the project's history; realistic volume < 1/year for a hobby/club site.
+2. **Privacy policy already commits to the operator-handled path.** A CLI is the operational backbone of that promise.
+3. **Self-serve UI for an unused feature is wasted effort.** Option C (hard-delete button) adds a destructive-action UI element whose primary failure mode (accidental click) outweighs its benefit at zero demand volume.
+4. **Cascade behavior already supports manual deletion** — no schema change needed.
+
+### Re-evaluation triggers
+
+- Deletion-request volume hits ≥ 1/month (consider promoting to Option B/C).
+- Regulator imposes self-serve right-to-be-forgotten obligation.
+- Site scope grows beyond hobby/club.
+
+---
+
+## D-T4.2 — Data export
+
+- **Date:** 2026-05-12
+- **Decision:** **Option B** (On-request CLI export).
+- **Status:** Active (CLI to be implemented in Tier 6)
+- **Backing analysis:** [tier4-audit.md](tier4-audit.md) Phase 4.2.
+
+### Choice
+
+When a user requests an export of their data, the operator runs `levels export-editor --email <addr>` which dumps editor row + change_requests + edit_history (for that editor_id) to JSON. Pairs operationally with D-T4.1's manual deletion.
+
+### Rationale
+
+1. **Pairs with deletion.** Same workflow, same constraints; the operator can offer export-before-delete in one session.
+2. **Trivial to implement** — a SELECT across three tables, JSON dump.
+3. **Self-serve adds rate-limit / abuse surface** for a feature with no current demand.
+4. **CLI is cheap insurance** vs. no-export — having the script ready means a same-day response to any request.
+
+### Re-evaluation triggers
+
+- First user export request → operator experience informs whether to elevate to self-serve.
+- ≥ 1 export request/month sustained.
+- GDPR-equivalent regulatory obligation.
+
+---
+
+## D-T4.3 — Retention of audit/PII tables
+
+- **Date:** 2026-05-12
+- **Decision:** Three-part decision (one per field family).
+- **Status:** Active (purge CLI + systemd timer to be added in Tier 6)
+- **Backing analysis:** [tier4-audit.md](tier4-audit.md) Phase 4.3.
+
+### Choice
+
+| Sub-decision | Choice |
+|---|---|
+| 4.3a `edit_history.changed_by` | **A — Indefinite.** PII linkage is broken at editor-deletion time (D-T4.1), not via audit-trail decay. |
+| 4.3b `editor_magic_link.ip_issued` (plus the whole row) | **B — Purge** rows where `expires_at < now - 90 days`. |
+| 4.3c `editor_session.ip` + `user_agent` (plus the whole row) | **C — Delete** rows where `expires_at < now - 90 days`. No FK to `editor_session.id` exists; clean delete. |
+
+Implementation: new `levels editor-retention` CLI + daily `kayak-editor-retention.timer` systemd unit.
+
+### Rationale
+
+1. **`edit_history` is content audit, not PII log.** The string `editor:42` resolves to PII only via the live `editor` table; severing PII at editor-deletion time is the right hook.
+2. **90 days = conventional incident-discovery window** for credential issuance logs. Operator notices something off → ~3 months of issuance history to correlate.
+3. **Magic-link and session rows past 90-day post-expiry are dead weight.** The token_hash is stale, the IP is dead PII, and the operational value is zero.
+4. **`editor_session` rows can be hard-deleted** (verified no FK references `editor_session.id`); no need for nullify-only.
+
+### Re-evaluation triggers
+
+- An incident requires retroactive credential-issuance forensics beyond 90 days → consider 180 or 365 days.
+- Storage scale changes (each row is currently small; not a current concern).
+- Compliance regime requires explicit retention SLA.
+
+---
+
+## D-T4.4 — Privacy policy + Terms of Service
+
+- **Date:** 2026-05-12
+- **Decision:** **Option B** (Refresh privacy.php to fix F-16; defer ToS).
+- **Status:** Active (refresh to be implemented in Tier 6)
+- **Backing analysis:** [tier4-audit.md](tier4-audit.md) Phase 4.4. New finding [F-16](findings.md#f-16) filed.
+
+### Choice
+
+1. Refresh `php/privacy.php` to fix F-16 (the "Your Rights" section contradicts the upper "Data We Collect" section — likely written before the editor pipeline existed).
+2. Update "Last updated" date; add annual-review HTML comment trigger.
+3. Do NOT add a Terms of Service page at this time.
+4. Do NOT pursue lawyer review.
+
+### Rationale
+
+1. **F-16 must be fixed regardless** — a self-contradicting privacy policy is worse than a brief one.
+2. **ToS is overkill at hobby-club scale.** No revenue, no commercial liability surface, no DMCA volume. Implicit terms (be reasonable, respect copyright, contributions licensed back to WKCC) are conventional and don't need formalization.
+3. **Lawyer review** is appropriate only when revenue or specific compliance regimes (GDPR / COPPA / CCPA scope) apply — none do today.
+4. **Annual review trigger** anchors the page to a calendar, paired with Tier 5's re-review cadence.
+
+### Re-evaluation triggers
+
+- New data class added (e.g., file-upload activates D-T3.3 → privacy needs an attachment paragraph).
+- Revenue stream introduced.
+- Geographic expansion brings new compliance regimes into scope.
+- Annual calendar trigger.
+
+---
+
+## D-T4.5 — `security.txt` content
+
+- **Date:** 2026-05-12
+- **Decision:** **Option A + D** (Keep current RFC 9116 minimum; add Expires refresh to annual maintenance calendar).
+- **Status:** Active (no file change today; calendar item for 2027-04-01)
+- **Backing analysis:** [tier4-audit.md](tier4-audit.md) Phase 4.5.
+
+### Choice
+
+Current content (`static/security.txt`) stays as-is:
+```
+Contact: mailto:pat.kayak@gmail.com
+Expires: 2027-05-20T00:00:00Z
+Preferred-Languages: en
+```
+
+Calendar reminder for 2027-04-01: refresh `Expires:` to 2028-05-20 (or +1 year from refresh date).
+
+Defer PGP `Encryption:` line and `Acknowledgments:` / `Policy:` lines until concrete triggers.
+
+### Rationale
+
+1. **Current minimum is RFC 9116 compliant.** Adds Preferred-Languages as a courtesy.
+2. **PGP adds friction without uptake.** Researcher base at hobby-site tier reaches via plain email; PGP key custody is non-trivial ongoing cost.
+3. **Acknowledgments needs content.** An empty page is worse than no link; defer to first concrete disclosure.
+4. **Policy URL waits on Tier 5.** Until IR cadence is decided, no Policy page exists to link.
+
+### Re-evaluation triggers
+
+- Security researcher requests PGP.
+- Security researcher requests Acknowledgments.
+- Tier 5 decides IR cadence + creates a Policy URL → add `Policy:` line.
+- Annual Expires refresh (2027-04-01).
+
+---
 
 ## (placeholder) D-T5.x — Vulnerability disclosure / IR cadence / re-review
 
@@ -110,3 +256,8 @@ To be filled when Tier 5 lands.
 | D-T1.3 | Maintainer 2FA model | Option A (magic-link only) with documented re-eval triggers | 2026-05-12 | Active |
 | D-T2.4 | Audit trail tamper resistance | Option A (None) — rely on backups + web-side controls; re-eval triggers documented | 2026-05-12 | Active |
 | D-T3.3 | File-upload retention | Deferred — N/A (no upload endpoint); default would be Time-bounded if/when activated | 2026-05-12 | Deferred |
+| D-T4.1 | Account deletion | Option A (manual operator-handled `levels delete-editor` CLI) | 2026-05-12 | Active (impl Tier 6) |
+| D-T4.2 | Data export | Option B (on-request `levels export-editor` CLI) | 2026-05-12 | Active (impl Tier 6) |
+| D-T4.3 | Retention (audit / IPs / UAs) | 3-part: history indefinite; magic-link 90d purge; session 90d delete | 2026-05-12 | Active (impl Tier 6) |
+| D-T4.4 | Privacy + ToS | Option B (refresh privacy.php — fix F-16; defer ToS) | 2026-05-12 | Active (impl Tier 6) |
+| D-T4.5 | `security.txt` | Option A + D (keep current minimum; annual Expires refresh) | 2026-05-12 | Active |
