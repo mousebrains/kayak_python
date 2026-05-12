@@ -190,3 +190,48 @@ None.
 ### Phase 3.5 closeout
 
 - ✅ CSRF coverage matrix complete and verified.
+
+## Tier 3 closeout
+
+### Audit summary
+
+| Phase | Verdict | Findings touched |
+|---|---|---|
+| 3.1 XSS sweep | ✅ | F-6 ⚪ Accepted |
+| 3.2 SQLi sweep | ✅ | F-8 stays as code-smell refactor candidate |
+| 3.3 File-upload audit | ⊘ N/A | none — activates on endpoint wiring |
+| 3.4 Rate limiting + abuse posture | ✅ | none |
+| 3.5 CSRF audit | ✅ | none |
+
+### Decisions made
+
+- **D-T3.3** File-upload retention → **Deferred** (no endpoint; default would be Time-bounded if/when activated).
+
+### Findings touched
+
+| Id | Before Tier 3 | After Tier 3 |
+|---|---|---|
+| F-6 | 🔴 Open | ⚪ Accepted (documented convention via `php/includes/html.php:6-13`) |
+| F-8 | 🔴 Open | 🔴 Open (code-smell only; not SQLi-exploitable) |
+
+No new findings during Tier 3.
+
+### Tier 3 verification gate (per plan)
+
+- ✅ Each input vector tested or marked N/A with reason.
+- ⊘ File-upload posture documented (N/A; trigger conditions listed).
+- ✅ CSRF coverage matrix complete.
+
+### Looking ahead to Tier 4 (User-data obligations)
+
+Tier 4 is **all decision points** — no audit "phases" in the same sense. The 5 decision menus:
+
+1. **Account deletion** — manual / self-serve deactivation / self-serve hard delete.
+2. **Data export** — none / on-request / self-serve.
+3. **Retention of audit/PII tables** — indefinite vs N-year purge for `edit_history`, `editor_magic_link.ip_issued`, `editor_session.{ip,user_agent}`.
+4. **Privacy policy + terms** — keep current / refresh / add ToS / lawyer-reviewed.
+5. **`security.txt`** — keep current (Contact + Expires) / add Encryption (PGP key) / add Acknowledgments + Policy / refresh Expires annually.
+
+Plus D-1 design note from Tier 1.5 about self-serve email change.
+
+Tier 4 will be more "ask + record" than "audit + find."

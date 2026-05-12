@@ -12,6 +12,8 @@ Security artifacts for the editor pipeline. Maintained per `docs/PLAN_editor_sec
 | [findings.md](findings.md) | Open gaps + decisions, with per-finding remediation options + plan-tier allocation. The action tracker. | A finding is filed / dispositioned / closed. |
 | [decisions.md](decisions.md) | Per-tier decision-point log. Each entry: chosen option, rationale, re-evaluation triggers. | A decision is made at the end of a tier. |
 | [tier1-audit.md](tier1-audit.md) | Tier 1 (Authentication) audit log — per-phase test results, pass/fail verdicts, mitigation effort. | Per-phase during Tier 1; final closeout summary at end. |
+| [tier2-audit.md](tier2-audit.md) | Tier 2 (Authorization) audit log — same shape; covers role enforcement, IDOR, privilege escalation, audit trail integrity. | Per-phase during Tier 2; final closeout. |
+| [tier3-audit.md](tier3-audit.md) | Tier 3 (Input/output) audit log — XSS, SQLi, file-upload (N/A), rate-limit posture, CSRF. | Per-phase during Tier 3; final closeout. |
 
 ## Reading order
 
@@ -36,8 +38,8 @@ For someone returning to update controls after a code change:
 |---|---|---|
 | Tier 0 — Threat model + inventory | ✅ Complete (commits 86cfa9a / beaf58a / ae31719 / 21c9e1a) | editor-surface.md + threat-model.md + controls-map.md + findings.md + this README |
 | Tier 1 — Authentication review | ✅ Complete (commits 4e6d893 / c786d90 / 7f42ba0 / be64058 / b335f64 / aadb63c) | tier1-audit.md + decisions.md (D-T1.3) + findings.md updates (F-5 accepted; F-14, F-15 new) |
-| Tier 2 — Authorization review | ✅ Complete (commits 919baf9 / 2f98898 / 5911288 / this commit) | tier2-audit.md + decisions.md (D-T2.4) + findings.md updates (F-4, F-7 accepted; F-9 downgraded) |
-| Tier 3 — Input/output handling | ⏳ Pending | 5 phases + decision point on file-upload retention |
+| Tier 2 — Authorization review | ✅ Complete (commits e25ff12 / 192300c / cfa4e6a / 670212d) | tier2-audit.md + decisions.md (D-T2.4) + findings.md updates (F-4, F-7 accepted; F-9 downgraded) |
+| Tier 3 — Input/output handling | ✅ Complete (commits 0282cd3 / 1557135 / this commit) | tier3-audit.md + decisions.md (D-T3.3 Deferred) + findings.md updates (F-6 accepted) |
 | Tier 4 — User-data obligations | ⏳ Pending | 5 decision points (deletion / export / retention / privacy / security.txt) |
 | Tier 5 — Disclosure + response | ⏳ Pending | 3 decision points + 2 phases (runbook, restore drill) |
 | Tier 6 — Hardening + closeout | ⏳ Pending | Apply findings + decisions; final posture doc |

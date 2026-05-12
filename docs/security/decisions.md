@@ -70,12 +70,30 @@ Revisit when ANY of the following happens:
 
 ---
 
-## (placeholder) D-T3.x — File-upload retention
+## D-T3.3 — File-upload retention
 
-To be filled when Tier 3 lands AND the upload endpoint is wired. Decision menu:
-- Indefinite
-- Time-bounded (delete attachments older than X months)
-- Off-disk (S3-compatible bucket, signed URLs)
+- **Date:** 2026-05-12
+- **Decision:** **Deferred** — no upload endpoint exists; decision activates when the endpoint is wired.
+- **Status:** Deferred (trigger-conditional)
+- **Backing analysis:** [tier3-audit.md](tier3-audit.md) Phase 3.3.
+
+### Choice
+
+The decision menu (Indefinite / Time-bounded / Off-disk) cannot be made now because there's nothing to retain. The `change_request_attachment` schema is provisioned but no PHP endpoint accepts uploads. Re-open this decision when:
+
+1. The Phase 1b file-upload wiring lands in `php/`.
+2. AND the per-attachment use case is known (e.g., trip-report photos vs documentation PDFs — different lifetimes).
+
+### Recommended posture when activated
+
+If/when this decision becomes real, the default should be **Time-bounded** (delete attachments older than X months, with merged-proposal attachments getting longer retention). Rationale:
+- Indefinite grows storage unboundedly and increases disclosure blast radius after backup leaks.
+- Off-disk (S3-compatible) is overkill for the scale.
+- Time-bounded balances cost vs forensic value.
+
+But this is just a default; the per-use-case context at trigger time should drive the actual choice.
+
+---
 
 ## (placeholder) D-T4.x — Account lifecycle / data export / retention / privacy / security.txt
 
@@ -91,3 +109,4 @@ To be filled when Tier 5 lands.
 |---|---|---|---|---|
 | D-T1.3 | Maintainer 2FA model | Option A (magic-link only) with documented re-eval triggers | 2026-05-12 | Active |
 | D-T2.4 | Audit trail tamper resistance | Option A (None) — rely on backups + web-side controls; re-eval triggers documented | 2026-05-12 | Active |
+| D-T3.3 | File-upload retention | Deferred — N/A (no upload endpoint); default would be Time-bounded if/when activated | 2026-05-12 | Deferred |
