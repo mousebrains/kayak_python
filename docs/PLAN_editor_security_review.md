@@ -19,7 +19,7 @@ Goal of this plan: produce a documented security posture (what is in place, what
 - **Single operator.** No 24/7 incident response. No security team. Triage and patches happen during your awake hours.
 - **No SLA, no compliance regime.** Not GDPR-required, not CCPA-required, not HIPAA. *Choosing* to honor parts of those frameworks is a decision point, not an obligation.
 - **Live PHP-FPM lacks mbstring** ([reference_php_no_mbstring]).
-- **CSP + hCaptcha already in place** for `/contact.php`. Existing `tests/php/AuthTest.php`, `EditAuthTest.php`, `TurnstileTest.php`, `ReviewApproveRaceTest.php` cover slices of auth and propose paths.
+- **CSP + Turnstile already in place** for `/contact.php`. Existing `tests/php/AuthTest.php`, `EditAuthTest.php`, `TurnstileTest.php`, `ReviewApproveRaceTest.php` cover slices of auth and propose paths.
 - **Hetzner backups + rclone offsite** ([reference_hetzner_backups], [reference_offsite_backup]) cover data loss but not unauthorized data access.
 - **The PHP layer split** (`PLAN_php_layer_split.md`) may be in flight or complete; security findings in `auth.php` should drive its split timing in Tier 5 of the PHP plan, not the other way around.
 - **Phased.** Tier-by-tier review like the prior plans.
@@ -50,7 +50,7 @@ Tier 0 is mandatory + not menu-driven (it produces the inventory the rest of the
 1. **Phase 0.1 — Surface inventory.** `docs/security/editor-surface.md`:
    - Every PHP entry point that touches editor data (file path + URL)
    - Every DB table with PII or auth material (table name + sensitive columns)
-   - Every external service the editor talks to (mailer, hCaptcha, anything else)
+   - Every external service the editor talks to (mailer, Turnstile, anything else)
    - Every cookie set by the editor and its attributes
    - File-upload paths (where attachments land on disk; access permissions)
 2. **Phase 0.2 — Data classification.** Tag every column from Phase 0.1 with one of: **public** / **internal** / **PII** / **credential**. PII includes email; credential includes session tokens, magic-link tokens, and any password material.
@@ -69,7 +69,7 @@ Tier 0 is mandatory + not menu-driven (it produces the inventory the rest of the
 1. **Phase 1.1 — Magic-link audit.** Token generation entropy (CSPRNG?), token length, single-use enforcement, expiry window, replay prevention, link-leakage in mail headers / logs / Referer. Test: request a magic link; capture the token; use it; try to use it again; expect failure.
 2. **Phase 1.2 — Session audit.** Cookie attributes (`Secure`, `HttpOnly`, `SameSite=Lax` or `Strict`), session-id rotation on login, session-fixation protection, logout invalidation (server-side, not just cookie clear), idle/absolute timeout. Test: login; capture cookie; logout; replay cookie; expect 401.
 3. **Phase 1.3 — Maintainer credential audit.** What's `maintainer_credential` storing? If passwords: are they argon2id / bcrypt / scrypt with appropriate parameters? Salt? Pepper? If API keys: rotation procedure documented? Revocation tested?
-4. **Phase 1.4 — Brute-force / credential-stuffing posture.** Per-IP and per-account rate limits on login. Lockout policy. hCaptcha on what endpoints. Per-IP magic-link request rate limit.
+4. **Phase 1.4 — Brute-force / credential-stuffing posture.** Per-IP and per-account rate limits on login. Lockout policy. Turnstile on what endpoints. Per-IP magic-link request rate limit.
 5. **Phase 1.5 — Account-recovery flow.** Forgotten-magic-link handling. Email-changed handling. Account-takeover via email compromise: what's the blast radius?
 
 **Verification gate (end of Tier 1):**
@@ -108,7 +108,7 @@ Tier 0 is mandatory + not menu-driven (it produces the inventory the rest of the
 1. **Phase 3.1 — XSS sweep.** Every place user-supplied content reaches HTML output: is it escaped? `htmlspecialchars` with `ENT_QUOTES`? Or templated through something safer? Test: submit `<script>alert(1)</script>` everywhere accepting input; visit pages that render it; expect no execution.
 2. **Phase 3.2 — SQLi sweep.** Every PDO call: parameterized? No string concatenation? PHPStan should flag the obvious cases. Manual review for the rest.
 3. **Phase 3.3 — File-upload audit.** What types accepted? Size limit? MIME validation? Filename sanitization (path traversal)? Upload destination — is it served by nginx? If so, with what `Content-Type` headers? Stored with execute permissions stripped?
-4. **Phase 3.4 — Rate limiting + abuse posture.** What's behind hCaptcha (currently `/contact.php` per [project_editor_feature]). Should `propose.php`, `comment.php`, magic-link request be too? Rate limits at nginx layer? Application layer? Account-level vs IP-level?
+4. **Phase 3.4 — Rate limiting + abuse posture.** What's behind Turnstile (currently `/contact.php` per [project_editor_feature]). Should `propose.php`, `comment.php`, magic-link request be too? Rate limits at nginx layer? Application layer? Account-level vs IP-level?
 5. **Phase 3.5 — CSRF audit.** State-changing endpoints: token check? Token bound to session? Compared time-constant?
 
 **Verification gate (end of Tier 3):**
@@ -227,10 +227,10 @@ grep -A 8 "class Editor\|class EditorSession\|class EditorMagicLink\|class Maint
 ls tests/php/
 
 # CSP / nginx surface for editor endpoints (per project_editor_feature memory)
-sudo nginx -T 2>/dev/null | grep -B2 -A8 "/contact.php\|/edit.php\|/propose.php\|/review.php\|hCaptcha\|Content-Security-Policy"
+sudo nginx -T 2>/dev/null | grep -B2 -A8 "/contact.php\|/edit.php\|/propose.php\|/review.php\|Turnstile\|Content-Security-Policy"
 
-# hCaptcha and Turnstile integration locations
-grep -rn "hcaptcha\|turnstile\|hCaptcha\|Turnstile" php/ src/ 2>/dev/null
+# Turnstile and Turnstile integration locations
+grep -rn "turnstile\|Turnstile" php/ src/ 2>/dev/null
 
 # File-upload paths (Tier 3.3)
 grep -rn "move_uploaded_file\|\\\$_FILES" php/ 2>/dev/null
