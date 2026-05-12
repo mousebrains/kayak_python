@@ -4,11 +4,11 @@
 >
 > Dates are absolute. References are `file:line` against `main` at the time of writing.
 >
-> **Last verified against `main`:** commit `b7eb123` (2026-05-11). Confirmed: `src/kayak/cli/build.py` is 2187 lines / 50 functions; `levels build` accepts `--output-dir OUTPUT_DIR` (default `$OUTPUT_DIR` or `public_html/`); `ruff check --select C901` reports `_get_row_data` (cc=16) and `_collect_gauge_rows` (cc=17); five tests under `tests/test_build_*.py` and `tests/test_cli/test_build.py` + `tests/test_cli/test_main.py` import from `kayak.cli.build`.
+> **Last verified against `main`:** commit `b7eb123` (2026-05-11). Confirmed: `src/kayak/cli/build.py` is 2187 lines / 50 functions; `levels build` accepts `--output-dir OUTPUT_DIR` (default `$OUTPUT_DIR` or `public_html/`); `ruff check --select C901` reports three offenders — `_get_row_data` (cc=16), `_collect_gauge_rows` (cc=17), and `_deploy_source_files` (cc=11); five tests under `tests/test_build_*.py` and `tests/test_cli/test_build.py` + `tests/test_cli/test_main.py` import from `kayak.cli.build`.
 
 ## Why
 
-`src/kayak/cli/build.py` is the highest-LOC file in the repo (2187 lines, 50 functions, 54% test coverage) and houses every distinct concern in the static-HTML pipeline — HTML shell, per-state levels table, gauges page, sparkline SVGs, CSV/text exports, geojson, deploy orchestration. Two functions trip ruff C901 (currently suppressed): `_get_row_data` (cc=16), `_collect_gauge_rows` (cc=17). `_build_filter_bar` is 128 lines.
+`src/kayak/cli/build.py` is the highest-LOC file in the repo (2187 lines, 50 functions, 54% test coverage) and houses every distinct concern in the static-HTML pipeline — HTML shell, per-state levels table, gauges page, sparkline SVGs, CSV/text exports, geojson, deploy orchestration. Three functions trip ruff C901 (currently suppressed): `_get_row_data` (cc=16), `_collect_gauge_rows` (cc=17), `_deploy_source_files` (cc=11). `_build_filter_bar` is 128 lines.
 
 Goal: split by concern so each module is independently testable and tractable.
 
@@ -24,7 +24,7 @@ Top-level constants (lines 48–137, 224–234, 422, 505–519, 1293–1306) and
 | Exports (CSV/text) | 422–521 | `_csv_safe`, `_build_csv`, `_build_text` | + `_CSV_FORMULA_PREFIX` |
 | GeoJSON | 872–998 | `_reach_geometry`, `_build_reaches_static`, `_build_reaches_state` | + `GEOJSON_*` (69–70) |
 | Gauges page | 1293–1799 | 11 functions incl. `_collect_gauge_rows` (cc=17, 115 lines), `_build_gauges_table` (111 lines), station-name parsers | Has its own constants block |
-| Deploy / CLI | 1800–2187 | `addArgs`, `build`, `_build_to_dir` (95 lines), `_build_and_write`, `_deploy_source_files`, `_deploy_staging_to_live`, `_sweep_orphans`, `_emit_sitemap`, `_set_acls`, `_atomic_write` | CLI entry point |
+| Deploy / CLI | 1800–2187 | `addArgs`, `build`, `_build_to_dir` (95 lines), `_build_and_write`, `_deploy_source_files` (cc=11), `_deploy_staging_to_live`, `_sweep_orphans`, `_emit_sitemap`, `_set_acls`, `_atomic_write` | CLI entry point |
 
 ## Target shape
 
@@ -78,7 +78,12 @@ Nine commits. Tests + ruff + mypy must stay green between phases. Sparkline / CS
 6. **Phase 6 — gauges page.** Move the 11-function gauges cluster + its 4 constants. The bulk of the gauges code is self-contained; the only callers in the rest of `build.py` are `_build_to_dir`/`_build_and_write` which go to `deploy.py` later.
 7. **Phase 7 — levels table.** Move the 9-function levels cluster. Update `tests/test_build_filters.py` imports (5 symbols) and `tests/test_cli/test_build.py`.
 8. **Phase 8 — deploy.** Move `build`, `addArgs`, `_build_to_dir`, `_build_and_write`, `_deploy_*`, `_emit_sitemap`, `_set_acls`. Update `tests/test_build_deploy.py` imports (2 symbols + module alias). Replace `src/kayak/cli/build.py` with the 2-line re-export shim.
-9. **Phase 9 — refactor the cc>10 offenders** (`_get_row_data`, `_collect_gauge_rows`) **inside their new homes**. This is the only phase that should change behavior — and only at the function-extraction level, not the HTML output level. Enable `C901` in ruff (`pyproject.toml`).
+9. **Phase 9 — refactor the cc>10 offenders inside their new homes.** Three functions:
+   - `_get_row_data` (cc=16) → `levels.py`: extract per-cell formatters / per-data-type branches into helpers.
+   - `_collect_gauge_rows` (cc=17) → `gauges.py`: extract status-classification and metadata-merge into helpers.
+   - `_deploy_source_files` (cc=11) → `deploy.py`: extract the four sequential copy blocks into `_deploy_static_assets`, `_deploy_php_files`, `_deploy_config_files`. Lowest-risk of the three — pure file-copy refactor with no data-shape change.
+
+   This is the only phase that should change behavior — and only at the function-extraction level, not the HTML output level. Enable `C901` in ruff (`pyproject.toml`).
 
 Phases 1–8 are pure code motion: zero HTML output change, zero behavior change. Phase 9 is the real refactor.
 
