@@ -4,7 +4,8 @@
 >
 > **Iter log:**
 > - iter 1 (2026-05-12): 5 findings — Playwright's `webServer` block can't read env vars set in `globalSetup` (timing race); replaced with manual server lifecycle inside `globalSetup` mirroring `IntegrationTestCase.php`. `levels init-db` needs both `SQLITE_PATH` AND `DATABASE_URL` env vars, not just one. Phase 2 runtime budget phrasing clarified (≤30 s is total step time, not delta). Added `actions/upload-artifact` for `playwright-report/` on CI failure. Cross-check ref bumped + line-citations added.
-> - iter 2 (2026-05-12, this revision): 4 findings — Phase 1's `php -S -t public_html` serves the repo's tracked PHP symlinks, but Phase 3's `/Oregon.html` test needs `levels build` output that's not in the repo. Made the build step explicit in Phase 3's globalSetup expansion. Added `OUTPUT_DIR=<tmpdir>` isolation to globalSetup so the test build never clobbers the dev box's actual build output (whether default or per `PLAN_dev_env_followups.md` Phase 3 convention). Phase 3 risks: added Playwright `navigationTimeout` note re Leaflet tile-load timing.
+> - iter 2 (2026-05-12): 4 findings — Phase 1's `php -S -t public_html` serves the repo's tracked PHP symlinks, but Phase 3's `/Oregon.html` test needs `levels build` output that's not in the repo. Made the build step explicit in Phase 3's globalSetup expansion. Added `OUTPUT_DIR=<tmpdir>` isolation to globalSetup so the test build never clobbers the dev box's actual build output (whether default or per `PLAN_dev_env_followups.md` Phase 3 convention). Phase 3 risks: added Playwright `navigationTimeout` note re Leaflet tile-load timing.
+> - iter 3 (2026-05-12, this revision): 5 findings — `/custom.php` and `/custom_gauges.php` return HTTP 302 when called without `?ids=` (early redirect at `custom.php:19`); a smoke test asserting 200 would fail. Dropped from Phase 3's coverage; either page would need seeded reach IDs to exercise. Made "smoke = page-load only, no interactions" explicit in Phase 3 scope (resolves the gauge_picker XHR open question). Documented `--with-deps` no-sudo fallback (Phase 1 verification gate on no-sudo dev hosts like `levels` uses plain `npx playwright install chromium`). Confirmed `Oregon` is a seeded state per `init_db.py:29`. Cross-check ref bumped to `d3d6857`.
 >
 > Dates absolute. References `file:line` against current `main`.
 
@@ -134,7 +135,8 @@ Goal: working Playwright harness on a dev box. CI integration deferred to Phase 
    ```
 
 **Verification gate:**
-- Dev box: `npm ci && npx playwright install --with-deps chromium && npx playwright test` runs the spec and exits 0.
+- Dev box (with sudo): `npm ci && npx playwright install --with-deps chromium && npx playwright test` runs the spec and exits 0.
+- Dev box without sudo (e.g., the live host where `[feedback_no_sudo]` applies): substitute `npx playwright install chromium` (no `--with-deps`); relies on system Chromium libraries already being present. If a missing-lib error surfaces at first browser launch, the system needs `libgbm1 libnss3 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgtk-3-0 libatspi2.0-0` — install via the package manager off-process. CI runners include these by default.
 - `tests/js/smoke.spec.ts` is the only test; output reads `1 passed`.
 - The drill: change `'reaches matching'` to `'reaches NO_SUCH_STRING'` in the spec, re-run, confirm the test fails with a clear diff. Restore, re-run, confirm green again (mirrors the PHP Tier 1.4 drill protocol in commit `d3e7dce`).
 - No commit yet to `.github/workflows/ci.yml` — CI's biome lint gate covers no Playwright surface yet; this phase is sandbox-only.
@@ -196,6 +198,8 @@ Goal: CI gate. The plan deliberately doesn't expand test coverage yet — get on
 
 Goal: cover the remaining JS-heavy pages with smoke tests. Each test follows the same shape as Phase 1's drill — `page.goto`, expect `status === 200`, expect no `pageerror`/console-errors, optionally assert a key DOM element renders.
 
+**Scope: page-load only. No user interactions.** Smoke tests assert that pages render and JS initializes without throwing. Tests do NOT click filter pills, drag the map, hover sparklines, or submit forms. Interaction-coverage is a separate plan (and would require a different toolchain investment — likely Playwright fixtures + DOM-state assertions per scenario). This scoping keeps the gate fast, robust against flakes, and aligned with the regression class the JS cleanup work actually cared about (page-load crashes from strict-mode / closure-over-loop-var bugs).
+
 **Setup expansion (one extra step in `global-setup.ts` before the server spawn):** the per-state HTML test (`/Oregon.html`) needs build output; the static-build paths aren't tracked. Add a `levels build` invocation that targets a tmp dir so the test never clobbers the dev box's actual build output:
 
 ```ts
@@ -222,10 +226,10 @@ This OUTPUT_DIR isolation aligns with `PLAN_dev_env_followups.md` Phase 3's conv
 |---|---|---|---|
 | State HTML page renders | `/Oregon.html` (one of the per-state files emitted by `levels build`) | `levels.js`, `filters.js`, `plot-hover.js` | Renders the levels-table sticky header; filter pills are clickable. Needs `levels build` in global-setup (current global-setup only runs init-db). |
 | Map page renders | `/map.html` | `map.js` (Leaflet) | Map div has Leaflet `_leaflet_id` after init; layer-control rendered; status filter buttons exist. The 5-loop `_mfCasing/_mfHit` rendering loop (`map.js:276-299`) is exercised when the map JSON data loads, even with an empty `reaches-geom.json`. |
-| Picker renders | `/picker.php` | `picker.js`, `filters.js`, `search-map.js` | Pillbar renders; clicking a state pill doesn't throw; `search-map` div remains hidden until a state is toggled (no reaches in test DB). |
-| Gauge picker renders | `/gauge_picker.php` | `gauge_picker.js`, `filters.js` | Pillbar renders; clicking a state pill issues a JS request to fetch gauge list — needs careful handling: the JS makes an XHR which might error if no gauges are seeded. Possibly use `page.route()` to intercept the XHR with an empty response. Or seed minimal gauge rows. |
-| Custom view | `/custom.php` | `filters.js` | Renders with no IDs supplied → empty state path. Filter pills functional. |
-| Custom gauges view | `/custom_gauges.php` | `filters.js` | Same shape as `/custom.php`. |
+| Picker renders | `/picker.php` | `picker.js`, `filters.js`, `search-map.js` | Pillbar renders; `search-map` div hidden until a state pill is toggled (no interaction in smoke). Tests only the initial-load JS execution. |
+| Gauge picker renders | `/gauge_picker.php` | `gauge_picker.js`, `filters.js` | Pillbar renders. State-pill click would trigger an XHR to fetch gauge list — but smoke tests don't click, so the XHR is never triggered. Initial-load coverage only. |
+
+`/custom.php` and `/custom_gauges.php` are excluded from this phase: both return **HTTP 302** when called without `?ids=` (early redirect at `custom.php:19`). A meaningful smoke test against either would require seeded reach/gauge IDs and the `?ids=N,M,P` query — out of scope for "no seeded data" Phase 3.
 
 The detail-view pages (`/description.php?id=<n>`, `/gauge.php?id=<n>`) need DB rows. Two options:
 1. **Skip detail views** in Phase 3; track separately as Phase 4 if appetite emerges. Lightest.
