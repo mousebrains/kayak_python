@@ -667,12 +667,6 @@ parameters:
 			path: php/plot.php
 
 		-
-			message: '#^Parameter \#1 \$string of function htmlspecialchars expects string, string\|false given\.$#'
-			identifier: argument.type
-			count: 1
-			path: php/review.php
-
-		-
 			message: '#^Cannot call method fetch\(\) on PDOStatement\|false\.$#'
 			identifier: method.nonObject
 			count: 1
