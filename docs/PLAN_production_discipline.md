@@ -4,7 +4,8 @@
 >
 > **Iter log:**
 > - iter 1 (2026-05-12): 14 findings — `§Reproduce` reveals Tier 1 isn't from scratch. `kayak-notify-failure@.service` already exists and is wired to all 7 `kayak-*` services via `OnFailure=`; emails pat.kayak@gmail.com via msmtp and logs to syslog. Plan reframes Phase 1.4 from "add new template" to "extend existing notifier with parallel ntfy channel." `kayak-heartbeat.timer` also already exists as a weekly positive-signal email — `systemd/kayak-heartbeat.sh:1-5` explicitly inverts "only hear on failure"; Tier 1.5 drill must verify the chain after Phase 1.4 touches the notifier. `kayak-healthcheck.service` already runs hourly `scripts/health-check.sh` (exit codes 0/1/2 designed for external uptime checkers) — Tier 1.2's Better Stack monitor and Tier 2.1's `/status.json` can reuse it. Concrete timer count is 7 with named cadences: `kayak-pipeline` (hourly *:12), `kayak-healthcheck` (hourly *:45), `kayak-decimate` (02:32 daily), `kayak-editor-retention` (03:42 daily), `kayak-backup` (Sun 03:15), `kayak-audit-gauges` (2nd+17th 03:00), `kayak-heartbeat` (Sun 06:00). Other corrections: repo path is `systemd/`, not `deploy/systemd/` (Phase 1.3/1.4 references); DNS is Cloudflare (relevant when Tier 2.3 adds `status.mousebrains.com`); `kayak-backup-offsite.service` is in repo but not installed (drift — Tier 1 should decide install-or-remove); ntfy.sh topics are public (anyone with name can subscribe — explicit security note); `§Reproduce` timer-enumeration loop uses fragile `awk '{print $NF}'`; healthchecks.io free tier (20 checks) easily covers the 7 timers.
-> - iter 2 (2026-05-12, this revision): 7 findings — Phase 1.3 `ExecStartPost` curl that fails (network glitch) cascades to OnFailure and triggers a false alert. Prefix with `-` (`ExecStartPost=-/usr/bin/curl ...`) to mark the step ignorable per systemd convention. Phase 1.4 ntfy curl lacks an `NTFY_TOPIC`-unset guard — if Phase 1.4 lands before Phase 1.1 or `NTFY_TOPIC` is later rotated out, the curl POSTs to `ntfy.sh/` (invalid). Added `[ -n "${NTFY_TOPIC:-}" ] &&` guard. Phase 1.4 drill referenced placeholder `kayak-test.service` which doesn't exist; reworded to target an actual unit name (notifier doesn't check unit state, only uses `%i`). Phase 1.2 was vague about Better Stack free-tier specifics; baked in "10 monitors, 3-min interval, 1-month retention" with the verify-at-signup caveat. Tier 1 verification gate's "killed timer fires within one cadence window" hides that cadences range from hourly to bimonthly; tightened to "for hourly timers, fires within ~75 min." Added healthchecks.io check-naming convention (name = service name, e.g. `kayak-pipeline.service`) so the dashboard reads naturally. Cross-plan note: Tier 5.A (auth.php split) is load-bearing for the editor feature — Tier 1.2's Better Stack monitor catches an outright outage but won't surface a broken editor flow; Tier 2.2's synthetic content check on Oregon.html catches a build break, not a propose/review break. Documented as a known gap.
+> - iter 2 (2026-05-12): 7 findings — Phase 1.3 `ExecStartPost` curl that fails (network glitch) cascades to OnFailure and triggers a false alert. Prefix with `-` (`ExecStartPost=-/usr/bin/curl ...`) to mark the step ignorable per systemd convention. Phase 1.4 ntfy curl lacks an `NTFY_TOPIC`-unset guard — if Phase 1.4 lands before Phase 1.1 or `NTFY_TOPIC` is later rotated out, the curl POSTs to `ntfy.sh/` (invalid). Added `[ -n "${NTFY_TOPIC:-}" ] &&` guard. Phase 1.4 drill referenced placeholder `kayak-test.service` which doesn't exist; reworded to target an actual unit name (notifier doesn't check unit state, only uses `%i`). Phase 1.2 was vague about Better Stack free-tier specifics; baked in "10 monitors, 3-min interval, 1-month retention" with the verify-at-signup caveat. Tier 1 verification gate's "killed timer fires within one cadence window" hides that cadences range from hourly to bimonthly; tightened to "for hourly timers, fires within ~75 min." Added healthchecks.io check-naming convention (name = service name, e.g. `kayak-pipeline.service`) so the dashboard reads naturally. Cross-plan note: Tier 5.A (auth.php split) is load-bearing for the editor feature — Tier 1.2's Better Stack monitor catches an outright outage but won't surface a broken editor flow; Tier 2.2's synthetic content check on Oregon.html catches a build break, not a propose/review break. Documented as a known gap.
+> - iter 3 (2026-05-12, this revision): 7 findings — iter 1 misread `kayak-backup-offsite.service` state. It IS installed at `/etc/systemd/system/kayak-backup-offsite.service` — triggered by `kayak-backup.service`'s `OnSuccess=kayak-backup-offsite.service`, not by its own timer (intentionally — chained, not scheduled). Iter 1's `systemctl list-timers` audit missed `OnSuccess=`-chained services entirely. Plan-table grows from 7 to 8 rows (kayak-backup-offsite added with chained cadence); §Reproduce gets a chained-service check. Other corrections: "Decisions baked in" still said `A record` and "whatever registrar holds mousebrains.com" — replaced with Phase 2.3's now-known `CNAME` + Cloudflare facts. §Reproduce's last comment "Confirm no existing kayak-failure-notify@.service" was inverted by the iter 1 finding (Phase 1.4 now expects it); reframed. Tier 4 Phase 4.2 runbook entries have stale unit names (`kayak-build`, `kayak-fetch.timer`) from the pre-build-split era; corrected to `kayak-pipeline*` (build is part of the pipeline now). Verification gate's "7 services" count bumped to 8.
 >
 > Dates absolute. References `file:line` against current `main`.
 
@@ -27,7 +28,7 @@ Goal: detect failures within minutes (not "next time you check"); make recovery 
 - **Uptime + status page:** [Better Stack](https://betterstack.com) (formerly BetterUptime). The free tier includes a hosted status page — bundling Tier 1 monitoring + Tier 2.3 in the same SaaS. Alternative: UptimeRobot, which historically allows more monitors but no bundled status page. Verify both products' current free-tier terms at signup before committing.
 - **Push:** [ntfy.sh](https://ntfy.sh) public service. Self-hostable later if needed. Pushover ($5 one-time per platform) is the paid alternative.
 - **Internal dashboard:** Hand-rolled HTML page reading `kayak.db` directly. No Grafana stack at this scale — a 100-line PHP/Python page beats a metrics-pipeline for the metrics we actually need.
-- **Public status page DNS:** `status.mousebrains.com` (new A record under whatever registrar holds `mousebrains.com`).
+- **Public status page DNS:** `status.mousebrains.com` (new CNAME under Cloudflare; `mousebrains.com` is at `liv.ns.cloudflare.com` / `dale.ns.cloudflare.com`).
 - **Internal dashboard DNS:** `levels.mousebrains.com/_internal/` (vhost subpath, basic-auth or IP-allowlist, `noindex`). No new DNS.
 - **Per [feedback_no_sudo]:** all `/etc/` edits (systemd units, nginx vhosts, certbot) get prepared as diffs that you apply. Per [feedback_systemd_in_tree_copy]: every `/etc/systemd/system/kayak-*` patch also goes into the repo's installed location at the same time.
 
@@ -50,7 +51,7 @@ Each tier is several phases; **review gate between tiers**, not between phases.
 
 1. **Phase 1.1 — Notification routes.** Create ntfy.sh topic with a high-entropy name (e.g. `kayak-$(openssl rand -hex 12)`). **Security note:** ntfy.sh's public service has no auth — the topic name *is* the credential. Anyone who learns it can read alerts and inject fake ones. Keep it out of public commits, logs, and screenshots. Test with `curl -d "test" ntfy.sh/<topic>`. Save as `NTFY_TOPIC` in `~/.config/kayak/.env`. Subscribe on phone (ntfy app). Verify push within 30s. If the topic ever leaks (e.g. accidentally posted in a chat or commit), rotate to a new one and update both the env file and any phone subscription.
 2. **Phase 1.2 — External uptime monitor.** Sign up for Better Stack free tier (verify at signup: ~10 monitors, ~3-min check interval, 1-month retention). Create one monitor for `https://levels.mousebrains.com` (HEAD or GET, expect 200, 3-min interval). Add notification channels: email + ntfy webhook (Better Stack supports custom webhook destinations — point at `ntfy.sh/$NTFY_TOPIC`). Test by pausing nginx briefly on a quiet evening; confirm alert + recovery.
-3. **Phase 1.3 — Heartbeat per systemd timer.** healthchecks.io account; create one check per timer. **Current count: 7** (verified 2026-05-12 — see §Reproduce):
+3. **Phase 1.3 — Heartbeat per systemd service.** healthchecks.io account; create one check per service unit. **Current count: 8** (verified 2026-05-12 — see §Reproduce):
 
    | Service | Cadence | Notes |
    |---|---|---|
@@ -59,6 +60,7 @@ Each tier is several phases; **review gate between tiers**, not between phases.
    | `kayak-decimate.service`         | daily `02:32`     | thins old observations |
    | `kayak-editor-retention.service` | daily `03:42`     | editor-row retention sweep |
    | `kayak-backup.service`           | weekly Sun 03:15  | local DB snapshot |
+   | `kayak-backup-offsite.service`   | chained (Sun 03:15+) | chained via `OnSuccess=` from `kayak-backup.service`; rclone upload to gdrive-crypt |
    | `kayak-audit-gauges.service`     | bimonthly 03:00   | gauge-coverage audit |
    | `kayak-heartbeat.service`        | weekly Sun 06:00  | positive-signal heartbeat email; meta-monitor (see Phase 1.4 note) |
 
@@ -68,12 +70,12 @@ Each tier is several phases; **review gate between tiers**, not between phases.
    ```
    The `-` prefix marks the step ignorable per systemd convention — a heartbeat curl that fails due to a transient network glitch won't cascade into a false `OnFailure=` alert. The successful unit-of-work is still pinged the next run.
 
-   For `Type=oneshot` units (all 7 here are `Type=oneshot`), `ExecStartPost` runs only on `ExecStart` exit 0 — exactly the success signal we want. Edits go to `systemd/kayak-*.service` in this repo *and* the installed copy at `/etc/systemd/system/kayak-*.service` (per [feedback_systemd_in_tree_copy]). `sudo systemctl daemon-reload` after each batch. Tune the per-check schedule expectation in healthchecks.io to match each timer's cadence (the table's cadences are authoritative). 7 checks comfortably fit healthchecks.io's free-tier 20-check ceiling. **Check-naming convention:** name each healthchecks.io check after its service unit (e.g. `kayak-pipeline.service`) so the dashboard reads as a 1:1 map of the systemd units.
+   For `Type=oneshot` units (all 8 here are `Type=oneshot`), `ExecStartPost` runs only on `ExecStart` exit 0 — exactly the success signal we want. Edits go to `systemd/kayak-*.service` in this repo *and* the installed copy at `/etc/systemd/system/kayak-*.service` (per [feedback_systemd_in_tree_copy]). `sudo systemctl daemon-reload` after each batch. Tune the per-check schedule expectation in healthchecks.io to match each timer's cadence (the table's cadences are authoritative). 8 checks comfortably fit healthchecks.io's free-tier 20-check ceiling. **Check-naming convention:** name each healthchecks.io check after its service unit (e.g. `kayak-pipeline.service`) so the dashboard reads as a 1:1 map of the systemd units.
 
    **Note on `kayak-healthcheck.service`:** its `ExecStart` (`scripts/health-check.sh`) exits 1 on stale data and 2 on missing DB. The heartbeat curl on `ExecStartPost` therefore only fires when *both* the unit ran AND data is fresh — a 2-in-1 signal (unit-alive + data-flowing). A stale-data state and a unit failure both surface to healthchecks.io as "no ping in N minutes," which is fine for Tier 1 but means the dashboard can't distinguish them. Tier 2.1's `/status.json` will separate the two.
 
-   **Decision needed before Phase 1.3 starts:** `systemd/kayak-backup-offsite.service` exists in the repo but is not installed (`systemctl status kayak-backup-offsite.timer` → "not found"). Either install it (and give it a heartbeat) or remove from the repo. The plan's count assumes the current installed set; revisit if this resolves to install.
-4. **Phase 1.4 — Extend the existing failure notifier with an ntfy push channel.** Tier 1.4 is **not** greenfield — `kayak-notify-failure@.service` already exists at `/etc/systemd/system/kayak-notify-failure@.service` (mirrored in `systemd/kayak-notify-failure@.service`), wired to all 7 `kayak-*` services via `OnFailure=kayak-notify-failure@%n.service`. The current `ExecStart` logs to syslog and emails pat.kayak@gmail.com via msmtp. **Phase 1.4 adds a parallel ntfy curl** without disturbing the existing syslog + email paths:
+   **Note on `kayak-backup-offsite.service`:** it's installed but has no timer of its own — it runs whenever `kayak-backup.service` exits 0 (via `kayak-backup.service:OnSuccess=kayak-backup-offsite.service`). The heartbeat ping confirms the chained offsite upload also ran, not just the local snapshot. Failures during the offsite step route through the offsite unit's own `OnFailure=kayak-notify-failure@%n.service` (already wired) and do not roll back the local backup.
+4. **Phase 1.4 — Extend the existing failure notifier with an ntfy push channel.** Tier 1.4 is **not** greenfield — `kayak-notify-failure@.service` already exists at `/etc/systemd/system/kayak-notify-failure@.service` (mirrored in `systemd/kayak-notify-failure@.service`), wired to all 8 `kayak-*` services via `OnFailure=kayak-notify-failure@%n.service`. The current `ExecStart` logs to syslog and emails pat.kayak@gmail.com via msmtp. **Phase 1.4 adds a parallel ntfy curl** without disturbing the existing syslog + email paths:
    - Add `EnvironmentFile=-/home/pat/.config/kayak/.env` to the unit's `[Service]` section so `$NTFY_TOPIC` resolves.
    - Append a guarded ntfy curl to the existing `ExecStart` shell command, after the existing `mail -s ... | logger ...` line:
      ```
@@ -81,7 +83,7 @@ Each tier is several phases; **review gate between tiers**, not between phases.
          -H "Title: Kayak: %i failed" -H "Priority: high" 2>&1 | logger -t kayak-alert -p user.err
      ```
    - The `[ -n "${NTFY_TOPIC:-}" ]` guard keeps the unit working when `NTFY_TOPIC` is unset (e.g. Phase 1.4 lands before Phase 1.1, or the env var is later rotated out). Pipe-to-logger preserves the "broken channel doesn't silently drop" invariant the existing template establishes.
-   - All 7 services pick up the new channel automatically — no per-service edit needed (the `OnFailure=` wiring is already in place; verified in §Reproduce).
+   - All 8 services pick up the new channel automatically — no per-service edit needed (the `OnFailure=` wiring is already in place; verified in §Reproduce).
    - **Drill:** instantiate the notifier against a real service name to test the message format: `sudo systemctl start 'kayak-notify-failure@kayak-pipeline.service'`. The notifier doesn't check the unit's actual state — it only uses `%i` — so this safely renders the alert exactly as a real failure would. Verify the message lands in pat.kayak@gmail.com (existing path) AND on the phone via ntfy (new path).
 5. **Phase 1.5 — End-to-end drill.** Run three scenarios:
    - **Stopped timer:** `sudo systemctl stop kayak-pipeline.timer`; wait one full window past schedule (>1h since `*:12`). Verify healthchecks.io fires "no ping in N minutes" → email + push.
@@ -91,7 +93,7 @@ Each tier is several phases; **review gate between tiers**, not between phases.
    Document outcomes in `docs/operations.md` (placeholder created in Tier 4 — for now, a drafts file).
 
 **Verification gate (end of Tier 1):**
-- All 7 `kayak-*.service` units ping a healthchecks.io URL on success (verify with `for u in kayak-pipeline kayak-healthcheck …; do systemctl cat $u.service | grep ExecStartPost; done`)
+- All 8 `kayak-*.service` units ping a healthchecks.io URL on success (verify with `for u in kayak-pipeline kayak-healthcheck kayak-decimate kayak-editor-retention kayak-backup kayak-backup-offsite kayak-audit-gauges kayak-heartbeat; do systemctl cat $u.service | grep ExecStartPost; done`)
 - For an **hourly** timer (pipeline / healthcheck), a `systemctl stop` fires the alert within ~75 min (the cadence + healthchecks.io's grace period). Daily/weekly/bimonthly timers will take their respective windows; out of scope to drill all seven.
 - A 503/down site fires a Better Stack alert within a few minutes (the missed-checks threshold the monitor is configured for — at 3-min interval with 2 missed checks: ~6 min)
 - Push notification reaches the phone within ~30s of email
@@ -187,7 +189,7 @@ Each tier is several phases; **review gate between tiers**, not between phases.
    - Pointer to `docs/slo.md` and the runbook entries
 2. **Phase 4.2 — Common-failure runbooks.** Per-failure entries in `docs/operations.md` or sub-files:
    - **DB corruption:** restore from `~/backups/kayak.db.<date>` or rclone offsite (`docs/offsite-backup.md` exists; cross-link)
-   - **Build pipeline stuck:** `journalctl -u kayak-build` to diagnose; `sudo systemctl restart kayak-fetch.timer`
+   - **Build pipeline stuck:** `journalctl -u kayak-pipeline.service -n 100` to diagnose; `sudo systemctl restart kayak-pipeline.timer` (build runs as the last stage of the pipeline since the build.py split)
    - **Source feed broken:** find in `data/sources.yaml`, set `disabled: true`, file with vendor, redeploy
    - **SSL cert expired:** `sudo certbot renew --dry-run` first; then real renew; `nginx -s reload`
    - **Disk full:** `levels decimate`; check `~/logs/`; check `/tmp/`
@@ -272,6 +274,15 @@ rclone listremotes 2>/dev/null | grep -i gdrive
 # Existing CI surface (Tier 3 builds on this)
 cat .github/workflows/ci.yml | head -30
 
-# Confirm no existing /etc/systemd/system/kayak-failure-notify@.service
-ls /etc/systemd/system/ | grep -i failure
+# Confirm the existing notifier name — Phase 1.4 EXTENDS this unit
+# (it's `kayak-notify-failure@.service`, NOT `kayak-failure-notify@.service` —
+# the underscore vs hyphen ordering matters in the OnFailure= target).
+ls /etc/systemd/system/ | grep -i 'notify\|failure'
+
+# OnSuccess-chained services (timer-less) — Phase 1.3 must include these
+# in its heartbeat list. `list-timers` misses them.
+for u in $(systemctl list-units --type=service --all 'kayak-*' --no-legend 2>/dev/null | awk '{print $1}'); do
+  src=$(systemctl cat "$u" 2>/dev/null | grep -E '^(OnSuccess|OnFailure)=' | head -2)
+  [ -n "$src" ] && echo "$u: $src"
+done
 ```
