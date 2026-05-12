@@ -273,6 +273,18 @@ grep -B1 -A 3 "30 \* 60\|MAGIC_LINK_TTL" php/includes/auth.php
 # Application-side daily caps (Phase 0.1 inventory)
 grep -n "DAILY_CAP\|daily_cap\|TIER_DAILY" php/comment.php php/propose.php
 
-# Existing security docs (likely none)
+# Existing privacy policy + security.txt (Tier 4 decisions are about
+# whether to ADD to these, not whether to write them from scratch)
+ls -la php/privacy.php static/security.txt 2>/dev/null
+cat static/security.txt 2>/dev/null
+
+# fail2ban setup (Phase 1.4 — third defense layer above nginx limit_req)
+ls deploy/fail2ban/jail.d/ deploy/fail2ban/filter.d/ 2>/dev/null
+grep -B1 -A 5 "kayak\|editor" deploy/fail2ban/jail.local 2>/dev/null
+
+# HSTS — enabled or commented?
+grep -n "Strict-Transport-Security" deploy/levels deploy/SETUP.md 2>/dev/null
+
+# Existing security docs (likely none — this plan creates them)
 ls docs/security/ 2>/dev/null
 ```
