@@ -558,7 +558,7 @@ def _collect_gauge_rows(
         # Filter pills come straight from the gauge row — gauges.html no
         # longer walks linked reaches for state/HUC. data-state on the row is
         # the full state name (matches reach-side convention); the table cell
-        # still shows the postal abbreviation via _STATE_ABBREVS.
+        # still shows the postal abbreviation.
         state_abbrev = g.state or ""
         state_name = _ABBR_TO_STATE.get(state_abbrev, "")
         gauge_huc = g.huc or ""
