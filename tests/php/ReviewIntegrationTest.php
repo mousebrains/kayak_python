@@ -1,0 +1,278 @@
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/IntegrationTestCase.php';
+
+/**
+ * Baseline integration tests for review.php (Phase 5.R.1 of
+ * php_layer_split). Maintainer-only moderation queue.
+ *
+ * Reuses the seedEditorSession('…','maintainer') helper added in
+ * 5.P.1 so per-test maintainer + per-CR scenarios stay isolated.
+ *
+ * Covers:
+ *  - Anonymous → 302 to /login.php?next=…
+ *  - Editor (full, non-maintainer) → 403 not-allowed page
+ *  - Maintainer GET / (no id) → list view with status filter row
+ *  - Maintainer GET ?id=N → detail view with editable form (csrf + reach fields)
+ *  - Maintainer GET ?id=99999 → 404
+ *  - Maintainer POST approve with valid CSRF → 200 + applies change + flash
+ *  - Maintainer POST approve with invalid CSRF → 403 (CSRF double-submit fails)
+ *  - Maintainer POST reject → 200 + CR moves to 'rejected'
+ *  - Maintainer POST approve already-rejected → 200 + flash error, no apply
+ *
+ * Seed: 1 reach + per-test change_request rows seeded inside each
+ * test (so the test that mutates state doesn't interfere with the
+ * test that checks the rejection flash, etc.).
+ */
+final class ReviewIntegrationTest extends IntegrationTestCase
+{
+    private const REACH_ID = 9001;
+    private const REACH_NAME = 'Review Test Reach';
+
+    protected static function seedDatabase(PDO $db): void
+    {
+        $db->prepare(
+            'INSERT INTO reach
+                (id, name, display_name, river, description, sort_name, no_show)
+             VALUES (?, ?, ?, ?, ?, ?, ?)'
+        )->execute([
+            self::REACH_ID,
+            self::REACH_NAME,
+            self::REACH_NAME,
+            'Review River',
+            'Original description.',
+            'review test reach',
+            0,
+        ]);
+    }
+
+    /** Seed a pending change_request proposing a description tweak. */
+    private static function seedPendingCR(
+        int $editor_id,
+        string $proposed_description = 'A reviewer-proposed description.',
+        string $status = 'pending',
+    ): int {
+        $db = self::testDb();
+        $payload = json_encode([
+            'reach' => ['description' => $proposed_description],
+        ]);
+        $db->prepare(
+            "INSERT INTO change_request
+                (target_type, target_id, editor_id, subject, payload_json,
+                 status, submitted_at)
+             VALUES (?, ?, ?, ?, ?, ?, datetime('now'))"
+        )->execute([
+            'reach',
+            self::REACH_ID,
+            $editor_id,
+            'Description tweak',
+            $payload,
+            $status,
+        ]);
+        return (int)$db->lastInsertId();
+    }
+
+    public function testAnonymousRedirectsToLogin(): void
+    {
+        $resp = $this->request('/review.php');
+
+        $this->assertSame(302, $resp['status']);
+        $this->assertStringStartsWith('/login.php', $resp['headers']['location'] ?? '');
+    }
+
+    public function testNonMaintainerEditorGets403(): void
+    {
+        $auth = self::seedEditorSession('reviewer-editor@example.com', 'full');
+        $cookies = ['ed_sess' => $auth['session_token']];
+
+        $resp = $this->request('/review.php', [], $cookies);
+
+        $this->assertSame(403, $resp['status']);
+        $this->assertStringContainsString('Not allowed', $resp['body']);
+    }
+
+    public function testMaintainerGetListRenders(): void
+    {
+        $maint = self::seedEditorSession('list-maint@example.com', 'maintainer');
+        $editor = self::seedEditorSession('list-editor@example.com', 'full');
+        $cr_id = self::seedPendingCR($editor['editor_id']);
+        $cookies = ['ed_sess' => $maint['session_token']];
+
+        $resp = $this->request('/review.php', [], $cookies);
+
+        $this->assertSame(200, $resp['status']);
+        $this->assertResponseContains(
+            $resp['body'],
+            'Review queue',
+            'list-editor@example.com',
+            'Description tweak',
+            // Status filter strip — all five options rendered as links.
+            '/review.php?status=pending',
+            '/review.php?status=resolved',
+            // CR row links to the detail view.
+            '/review.php?id=' . $cr_id,
+        );
+        $this->assertNoBareInlineScript($resp['body']);
+    }
+
+    public function testMaintainerGetDetailRendersForm(): void
+    {
+        $maint = self::seedEditorSession('detail-maint@example.com', 'maintainer');
+        $editor = self::seedEditorSession('detail-editor@example.com', 'full');
+        $cr_id = self::seedPendingCR($editor['editor_id'], 'NEW DETAIL TEXT');
+        $cookies = ['ed_sess' => $maint['session_token']];
+
+        $resp = $this->request('/review.php', ['id' => $cr_id], $cookies);
+
+        $this->assertSame(200, $resp['status']);
+        $this->assertResponseContains(
+            $resp['body'],
+            'Review: Description tweak',
+            'detail-editor@example.com',
+            'csrf_token',
+            // The current vs proposed table renders both values.
+            'Original description.',
+            'NEW DETAIL TEXT',
+            // Approve button visible on pending reach proposals.
+            'value="approve"',
+            'value="reject"',
+        );
+        $this->assertNoBareInlineScript($resp['body']);
+    }
+
+    public function testMaintainerGet404OnMissingCR(): void
+    {
+        $maint = self::seedEditorSession('404-maint@example.com', 'maintainer');
+        $cookies = ['ed_sess' => $maint['session_token']];
+
+        $resp = $this->request('/review.php', ['id' => 9999999], $cookies);
+
+        $this->assertSame(404, $resp['status']);
+        $this->assertStringContainsString('No change request with id 9999999', $resp['body']);
+    }
+
+    public function testPostInvalidCsrfReturns403(): void
+    {
+        $maint = self::seedEditorSession('csrf-maint@example.com', 'maintainer');
+        $editor = self::seedEditorSession('csrf-editor@example.com', 'full');
+        $cr_id = self::seedPendingCR($editor['editor_id']);
+        $cookies = [
+            'ed_sess' => $maint['session_token'],
+            'ed_csrf' => $maint['csrf_token'],
+        ];
+        $post = [
+            'csrf_token' => 'a-different-token-that-does-not-match-cookie-0123456789abcdef',
+            'id' => (string)$cr_id,
+            'action' => 'approve',
+        ];
+
+        $resp = $this->request('/review.php', [], $cookies, 'POST', $post);
+
+        $this->assertSame(403, $resp['status']);
+        $this->assertStringContainsString('Invalid CSRF token', $resp['body']);
+
+        $db = self::testDb();
+        $row = $db->query("SELECT status FROM change_request WHERE id = $cr_id")->fetch();
+        $this->assertSame('pending', $row['status']);
+    }
+
+    public function testPostApproveAppliesChange(): void
+    {
+        $maint = self::seedEditorSession('approve-maint@example.com', 'maintainer');
+        $editor = self::seedEditorSession('approve-editor@example.com', 'full');
+        $cr_id = self::seedPendingCR($editor['editor_id'], 'APPROVED DESCRIPTION VALUE');
+        $cookies = [
+            'ed_sess' => $maint['session_token'],
+            'ed_csrf' => $maint['csrf_token'],
+        ];
+        $post = [
+            'csrf_token' => $maint['csrf_token'],
+            'id' => (string)$cr_id,
+            'action' => 'approve',
+            // Approve form mirrors payload fields back as reach_<field>.
+            'reach_description' => 'APPROVED DESCRIPTION VALUE',
+            'reviewer_note' => 'Looks good — applying.',
+        ];
+
+        $resp = $this->request('/review.php', [], $cookies, 'POST', $post);
+
+        $this->assertSame(200, $resp['status']);
+        $this->assertStringContainsString('Approved and applied', $resp['body']);
+
+        // CR transitioned and applied_json captured the applied payload.
+        $db = self::testDb();
+        $cr = $db->query("SELECT status, applied_json FROM change_request WHERE id = $cr_id")->fetch();
+        $this->assertSame('approved', $cr['status']);
+        $applied = json_decode((string)$cr['applied_json'], true);
+        $this->assertSame('APPROVED DESCRIPTION VALUE', $applied['reach']['description'] ?? null);
+
+        // Reach row picked up the new description.
+        $reach = $db->query('SELECT description FROM reach WHERE id = ' . self::REACH_ID)->fetch();
+        $this->assertSame('APPROVED DESCRIPTION VALUE', $reach['description']);
+    }
+
+    public function testPostRejectMarksRejected(): void
+    {
+        $maint = self::seedEditorSession('reject-maint@example.com', 'maintainer');
+        $editor = self::seedEditorSession('reject-editor@example.com', 'full');
+        $cr_id = self::seedPendingCR($editor['editor_id']);
+        $cookies = [
+            'ed_sess' => $maint['session_token'],
+            'ed_csrf' => $maint['csrf_token'],
+        ];
+        $post = [
+            'csrf_token' => $maint['csrf_token'],
+            'id' => (string)$cr_id,
+            'action' => 'reject',
+            'reviewer_note' => 'Out of scope for now.',
+        ];
+
+        $resp = $this->request('/review.php', [], $cookies, 'POST', $post);
+
+        $this->assertSame(200, $resp['status']);
+        $this->assertStringContainsString('Rejected', $resp['body']);
+
+        $db = self::testDb();
+        $cr = $db->query("SELECT status, reviewer_note FROM change_request WHERE id = $cr_id")->fetch();
+        $this->assertSame('rejected', $cr['status']);
+        $this->assertStringContainsString('Out of scope for now', (string)$cr['reviewer_note']);
+    }
+
+    public function testPostOnAlreadyReviewedShowsFlashError(): void
+    {
+        // Seed a CR that's already 'rejected' — the controller should
+        // short-circuit with a flash error before the action dispatch.
+        $maint = self::seedEditorSession('already-maint@example.com', 'maintainer');
+        $editor = self::seedEditorSession('already-editor@example.com', 'full');
+        $cr_id = self::seedPendingCR($editor['editor_id'], 'irrelevant', 'rejected');
+        $cookies = [
+            'ed_sess' => $maint['session_token'],
+            'ed_csrf' => $maint['csrf_token'],
+        ];
+        $post = [
+            'csrf_token' => $maint['csrf_token'],
+            'id' => (string)$cr_id,
+            'action' => 'approve',
+            'reach_description' => 'attempted late approval',
+        ];
+
+        $resp = $this->request('/review.php', [], $cookies, 'POST', $post);
+
+        $this->assertSame(200, $resp['status']);
+        $this->assertStringContainsString(
+            'This request has already been rejected',
+            $resp['body'],
+        );
+
+        // The CR is still 'rejected' (no transition) and applied_json
+        // is still null (no apply happened). Assert on CR state, not
+        // the reach row — earlier-running tests in this class may have
+        // mutated the shared seed reach.
+        $db = self::testDb();
+        $cr = $db->query("SELECT status, applied_json FROM change_request WHERE id = $cr_id")->fetch();
+        $this->assertSame('rejected', $cr['status']);
+        $this->assertNull($cr['applied_json']);
+    }
+}
