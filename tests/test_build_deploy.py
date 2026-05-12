@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-import kayak.cli.build as build_mod
-from kayak.cli.build import _deploy_staging_to_live, _sweep_orphans
+import kayak.web.build.deploy as build_mod
+from kayak.web.build.deploy import _deploy_staging_to_live, _sweep_orphans
 
 
 def _write(p: Path, content: str, mode: int = 0o644) -> None:

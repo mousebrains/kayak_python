@@ -1,4 +1,4 @@
-"""Tests for kayak.cli.build output generators."""
+"""Tests for the kayak.web.build output generators."""
 
 from datetime import UTC, datetime, timedelta
 from unittest import mock
