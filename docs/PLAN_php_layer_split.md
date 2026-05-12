@@ -352,6 +352,20 @@ php/includes/
 
 Per-file phase shape: baseline tests → cluster analysis (in commit messages, not this doc) → extract clusters → cleanup. Order: entry-points first (build experience with the template); then `gauge_plots.php`; then `auth.php` last because it's load-bearing for the editor feature and benefits from any patterns established earlier.
 
+**Progress tracker:**
+
+| File | Pre | Post | Phases | Status |
+|---|---:|---:|---|---|
+| `gauge.php`        | 432 | 52  | 5.G.1 `d46f5e2` / 5.G.2 `5ac3a57` / 5.G.3 `ad79589` / 5.G.4 this commit | ✓ Done — `gauge_search.php` (92) + `gauge_detail.php` (608) |
+| `propose.php`      | 430 | —   | not started — has POST + CSRF | pending |
+| `custom.php`       | 363 | —   | not started | pending |
+| `custom_gauges.php`| 325 | —   | not started | pending |
+| `review.php`       | 318 | —   | not started — has POST + CSRF | pending |
+| `includes/gauge_plots.php` | 386 | — | not started — helper split | pending |
+| `includes/auth.php`        | 407 | — | not started — helper split, last (load-bearing) | pending |
+
+Tier 5 outcome to date: 1 of 7 files done. Per-file gates (php -l + PHPStan + cs-fixer + integration tests green) met on each commit; CI green.
+
 **Cross-plan note:** `auth.php` is also covered by the editor security review (`PLAN_editor_security_review.md`). If a security finding lands while this tier is in flight, fix it first — splitting on top of a known security gap risks shipping the gap into more files.
 
 ### Tier 6 — PHPStan max + closeout
