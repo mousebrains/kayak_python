@@ -19,6 +19,8 @@ The development environment uses these paths (configured in `~/.config/kayak/.en
 
 `config.py` checks `~/.config/kayak/.env` before falling back to the default `load_dotenv()` search. PHP gets `SQLITE_PATH` from nginx `fastcgi_param`.
 
+**`OUTPUT_DIR` convention:** the live host sets `OUTPUT_DIR=/home/pat/public_html` (outside the repo), so `levels build` writes to the nginx docroot and never touches the repo tree. On a separate dev machine, set `OUTPUT_DIR=/home/<user>/public_html_dev` (or similar non-repo path) in `~/.config/kayak/.env` and serve with `php -S localhost:8000 -t "$OUTPUT_DIR"`. The default (unset) writes back into the repo's `public_html/`, which clobbers tracked dev symlinks and drops stray artifacts under `static/`. See `.env.example` for the full rationale.
+
 POSIX ACLs grant `www-data` access: execute-only on `/home/pat` and `/home/pat/kayak` (traverse), read on `public_html` and `php/` (with default ACLs for new files), read-write on `/home/pat/DB`.
 
 ### Quick start
