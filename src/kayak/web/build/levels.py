@@ -38,6 +38,57 @@ def _get_builder_columns() -> list[dict]:
     return sorted(cols, key=lambda c: c["sort_key"])
 
 
+_ROW_DTYPE_ORDER: tuple[tuple[str, DataType], ...] = (
+    ("flow", DataType.flow),
+    ("gage", DataType.gauge),
+    ("temperature", DataType.temperature),
+    ("inflow", DataType.inflow),
+)
+
+
+def _apply_reach_observation(
+    row: dict,
+    reach: Reach,
+    dtype_name: str,
+    dtype: DataType,
+    latest: LatestGaugeObservation,
+) -> None:
+    """Merge one (dtype, latest) into *row* — sets value, time, and level.
+
+    ``inflow`` is remapped onto the ``flow`` column if no direct flow has
+    been seen; if a flow row already exists, the inflow is dropped. Level
+    classification uses flow thresholds for inflow (its display target).
+    """
+    display_name = dtype_name
+    if dtype_name == "inflow":
+        if "flow" in row:
+            return
+        display_name = "flow"
+    row[display_name] = latest.value
+    if "time" not in row or latest.observed_at > row["time"]:
+        row["time"] = latest.observed_at
+    if display_name not in ("flow", "gage"):
+        return
+    classify_dtype = DataType.flow if dtype == DataType.inflow else dtype
+    level = classify_level(reach, classify_dtype, latest.value)
+    if level:
+        row[f"{display_name}_level"] = str(level)
+        if "status" not in row:
+            row["status"] = str(level)
+
+
+def _apply_row_staleness(row: dict) -> None:
+    """Flag *row* as expired/stale based on its newest observed_at."""
+    obs_time = row["time"]
+    if obs_time.tzinfo is None:
+        obs_time = obs_time.replace(tzinfo=UTC)
+    age = datetime.now(UTC) - obs_time
+    if age > DATA_EXPIRY_THRESHOLD:
+        row["expired"] = True
+    elif age > DATA_STALE_THRESHOLD:
+        row["stale"] = True
+
+
 def _get_row_data(
     reach: Reach,
     calculated_gauge_ids: set[int],
@@ -49,59 +100,26 @@ def _get_row_data(
         "display_name": reach.display_name or "",
         "gauge_location": reach.description or (reach.gauge.location if reach.gauge else "") or "",
         "drainage": reach.basin or "",
-        "class": "",
         # Render the cell as the 2-letter abbreviation (rightmost column on
         # index.html). Filter still uses full state names via data-state.
         "state": ", ".join(_STATE_ABBREVS.get(s.name, s.name) for s in reach.states)
         if reach.states
         else "",
         "db_name": reach.name,
+        "class": ", ".join(c.name for c in reach.classes) if reach.classes else "",
     }
 
-    if reach.classes:
-        row["class"] = ", ".join(c.name for c in reach.classes)
-
     gauge = reach.gauge
-    if gauge:
-        if gauge.id in calculated_gauge_ids:
-            row["is_estimated"] = True
-
-        for dtype_name, dtype in [
-            ("flow", DataType.flow),
-            ("gage", DataType.gauge),
-            ("temperature", DataType.temperature),
-            ("inflow", DataType.inflow),
-        ]:
-            latest = all_latest.get((gauge.id, dtype))
-            if latest and latest.value is not None:
-                # Display inflow in the flow column if no direct flow
-                display_name = dtype_name
-                if dtype_name == "inflow" and "flow" not in row:
-                    display_name = "flow"
-                elif dtype_name == "inflow":
-                    continue
-                row[display_name] = latest.value
-                if "time" not in row or latest.observed_at > row["time"]:
-                    row["time"] = latest.observed_at
-                # Classify flow/gage level (inflow uses flow thresholds)
-                classify_dtype = DataType.flow if dtype == DataType.inflow else dtype
-                if display_name in ("flow", "gage"):
-                    level = classify_level(reach, classify_dtype, latest.value)
-                    if level:
-                        row[f"{display_name}_level"] = str(level)
-                        if "status" not in row:
-                            row["status"] = str(level)
-
-        # Stale / expired detection
-        if "time" in row:
-            obs_time = row["time"]
-            if obs_time.tzinfo is None:
-                obs_time = obs_time.replace(tzinfo=UTC)
-            age = datetime.now(UTC) - obs_time
-            if age > DATA_EXPIRY_THRESHOLD:
-                row["expired"] = True
-            elif age > DATA_STALE_THRESHOLD:
-                row["stale"] = True
+    if gauge is None:
+        return row
+    if gauge.id in calculated_gauge_ids:
+        row["is_estimated"] = True
+    for dtype_name, dtype in _ROW_DTYPE_ORDER:
+        latest = all_latest.get((gauge.id, dtype))
+        if latest and latest.value is not None:
+            _apply_reach_observation(row, reach, dtype_name, dtype, latest)
+    if "time" in row:
+        _apply_row_staleness(row)
     return row
 
 

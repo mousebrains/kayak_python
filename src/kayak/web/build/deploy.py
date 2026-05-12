@@ -70,48 +70,66 @@ def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -
     parser.set_defaults(func=build)
 
 
-def _deploy_source_files(output_dir: Path) -> None:
-    """Copy source files from the repo into the output directory.
+def _deploy_static_assets(output_dir: Path) -> None:
+    """Copy the in-repo ``static/`` tree into ``output_dir/static/``.
 
-    Makes the output directory self-contained — no symlinks pointing
-    back into the repo.  Covers static assets, PHP files, and config.
+    ``sw.js`` lands at the output root (not under ``static/``) so the
+    service worker controls scope ``/``. Directories under ``static/``
+    propagate via ``copytree`` with ``dirs_exist_ok=True``.
     """
-    # Static assets (icons, JS, manifest)
     static_dir = output_dir / "static"
     static_dir.mkdir(parents=True, exist_ok=True)
-    src_static = BASE_DIR / "static"
-    for path in src_static.iterdir():
+    for path in (BASE_DIR / "static").iterdir():
         if path.is_file():
-            if path.name == "sw.js":
-                # Service worker must live at root to control scope '/'
-                shutil.copy2(path, output_dir / path.name)
-            else:
-                shutil.copy2(path, static_dir / path.name)
+            dst = output_dir if path.name == "sw.js" else static_dir
+            shutil.copy2(path, dst / path.name)
         elif path.is_dir():
             shutil.copytree(path, static_dir / path.name, dirs_exist_ok=True)
 
-    # PHP files → output root
+
+def _deploy_php_files(output_dir: Path) -> None:
+    """Install the PHP layer: top-level pages, ``includes/``, and ``style.css``.
+
+    ``style.css`` lives at the output root because ``php/header.php`` reads
+    it via ``__DIR__/../style.css`` — the hashed copy under ``static/`` is
+    the cacheable variant served to static-HTML clients.
+    """
     php_dir = BASE_DIR / "php"
     for path in php_dir.iterdir():
         if path.is_file() and path.suffix == ".php":
             shutil.copy2(path, output_dir / path.name)
 
-    # PHP includes
     includes_dir = output_dir / "includes"
     includes_dir.mkdir(parents=True, exist_ok=True)
     for path in (php_dir / "includes").iterdir():
         if path.is_file():
             shutil.copy2(path, includes_dir / path.name)
 
-    # CSS for PHP inlining (header.php reads __DIR__/../style.css)
     shutil.copy2(_CSS_PATH, output_dir / "style.css")
 
-    # Config / static files from the in-repo public_html
+
+def _deploy_config_files(output_dir: Path) -> None:
+    """Copy ``.htaccess``, ``404.html``, ``robots.txt`` from ``public_html/``.
+
+    Only present files are copied — the rest of ``public_html/`` is the
+    deploy target and gets populated by the generated content path.
+    """
     repo_public = BASE_DIR / "public_html"
     for name in (".htaccess", "404.html", "robots.txt"):
         src = repo_public / name
         if src.is_file():
             shutil.copy2(src, output_dir / name)
+
+
+def _deploy_source_files(output_dir: Path) -> None:
+    """Copy source files from the repo into the output directory.
+
+    Makes the output directory self-contained — no symlinks pointing
+    back into the repo.  Covers static assets, PHP files, and config.
+    """
+    _deploy_static_assets(output_dir)
+    _deploy_php_files(output_dir)
+    _deploy_config_files(output_dir)
 
 
 def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:

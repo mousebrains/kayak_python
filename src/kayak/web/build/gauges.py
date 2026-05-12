@@ -204,6 +204,100 @@ def _gauge_status_from_reaches(
     return ("low" if counts["low"] >= counts["high"] else "high"), counts
 
 
+_GAUGE_DTYPE_ORDER: tuple[tuple[str, DataType], ...] = (
+    ("flow", DataType.flow),
+    ("gage", DataType.gauge),
+    ("temperature", DataType.temperature),
+    ("inflow", DataType.inflow),
+)
+
+
+def _resolve_gauge_display(
+    g: Gauge,
+    reaches: list[Reach],
+    metadata: dict[str, dict[str, str]],
+) -> tuple[str, str, str, str]:
+    """Return ``(river, location, display_name, sort_name)`` for one gauge.
+
+    Prefers the pre-normalized columns populated by
+    ``scripts/seed_gauge_display.py``. The resolver-based fallback only
+    fires for brand-new rows inserted after the last seeder run.
+    """
+    if g.river is not None:
+        river = g.river
+        location = g.location or ""
+        return river, location, g.display_name or river, g.sort_name or river.lower()
+    reach_river = next((r.river for r in reaches if r.river), "")
+    river, location = _resolve_river_location(g, metadata, reach_river)
+    display_name = f"{river} at {location}" if river and location else river or location
+    # Best-effort key so unseeded rows still land in a sensible slot.
+    elev = float(g.elevation) if g.elevation is not None else None
+    elev_key = f"{round(10000 - elev):06d}" if elev is not None else "999999"
+    return river, location, display_name, f"{river.lower()}|9|{elev_key}|999999"
+
+
+def _merge_gauge_observations(
+    row: dict[str, Any],
+    gauge_id: int,
+    all_latest: dict[tuple[int, DataType], LatestGaugeObservation],
+) -> None:
+    """Populate flow/gage/temperature/time on *row* from pre-loaded latest data.
+
+    ``inflow`` collapses into the ``flow`` column if no direct flow has
+    been seen — otherwise it is dropped, matching the reach-table priority.
+    """
+    for dtype_name, dtype in _GAUGE_DTYPE_ORDER:
+        latest = all_latest.get((gauge_id, dtype))
+        if latest is None or latest.value is None:
+            continue
+        if dtype_name == "inflow":
+            if "flow" in row:
+                continue
+            row["flow"] = latest.value
+        else:
+            row[dtype_name] = latest.value
+        if "time" not in row or latest.observed_at > row["time"]:
+            row["time"] = latest.observed_at
+
+
+def _gauge_observation_age(row: dict[str, Any]) -> object:
+    """Return the staleness sentinel for *row*: ``"expired"``, ``"stale"``, or ``None``.
+
+    The string sentinels mirror the reach-side semantics so the caller can
+    drop expired gauges and tag stale ones without re-parsing the timestamp.
+    """
+    obs_time = row.get("time")
+    if not isinstance(obs_time, datetime):
+        return None
+    if obs_time.tzinfo is None:
+        obs_time = obs_time.replace(tzinfo=UTC)
+    age = datetime.now(UTC) - obs_time
+    if age > DATA_EXPIRY_THRESHOLD:
+        return "expired"
+    if age > DATA_STALE_THRESHOLD:
+        return "stale"
+    return None
+
+
+def _apply_gauge_metadata(row: dict[str, Any], g: Gauge) -> None:
+    """Fill state/HUC/drainage/elevation columns from the gauge row.
+
+    Filter pills come straight from the gauge row — gauges.html no longer
+    walks linked reaches for state/HUC. ``data-state`` on the row is the
+    full state name (matches reach-side convention); the table cell still
+    shows the postal abbreviation.
+    """
+    state_abbrev = g.state or ""
+    gauge_huc = g.huc or ""
+    row["state"] = _ABBR_TO_STATE.get(state_abbrev, "")
+    row["state_abbrev"] = state_abbrev
+    row["huc6"] = gauge_huc[:6] if len(gauge_huc) >= 6 else ""
+    row["huc8"] = gauge_huc[:8] if len(gauge_huc) >= 8 else ""
+    row["has_huc"] = bool(row["huc8"])
+    row["drainage_area"] = float(g.drainage_area) if g.drainage_area is not None else None
+    row["elevation"] = float(g.elevation) if g.elevation is not None else None
+
+
 def _collect_gauge_rows(
     session: Session,
     all_latest: dict[tuple[int, DataType], LatestGaugeObservation],
@@ -231,23 +325,7 @@ def _collect_gauge_rows(
     rows: list[dict[str, Any]] = []
     for g in gauges:
         reaches = gauge_reaches.get(g.id, [])
-        # Prefer the pre-normalized columns populated by
-        # scripts/seed_gauge_display.py. The resolver-based fallback only
-        # fires for brand-new rows inserted after the last seeder run.
-        if g.river is not None:
-            river = g.river
-            location = g.location or ""
-            display_name = g.display_name or river
-            sort_name = g.sort_name or river.lower()
-        else:
-            reach_river = next((r.river for r in reaches if r.river), "")
-            river, location = _resolve_river_location(g, metadata, reach_river)
-            display_name = f"{river} at {location}" if river and location else river or location
-            # Best-effort key so unseeded rows still land in a sensible slot.
-            elev = float(g.elevation) if g.elevation is not None else None
-            elev_key = f"{round(10000 - elev):06d}" if elev is not None else "999999"
-            sort_name = f"{river.lower()}|9|{elev_key}|999999"
-
+        river, location, display_name, sort_name = _resolve_gauge_display(g, reaches, metadata)
         row: dict[str, Any] = {
             "gauge_id": g.id,
             "river": river,
@@ -256,59 +334,19 @@ def _collect_gauge_rows(
             "sort_name": sort_name,
             "is_estimated": g.id in calc_ids,
         }
-
-        for dtype_name, dtype in [
-            ("flow", DataType.flow),
-            ("gage", DataType.gauge),
-            ("temperature", DataType.temperature),
-            ("inflow", DataType.inflow),
-        ]:
-            latest = all_latest.get((g.id, dtype))
-            if latest is None or latest.value is None:
-                continue
-            if dtype_name == "inflow":
-                if "flow" in row:
-                    continue
-                row["flow"] = latest.value
-            else:
-                row[dtype_name] = latest.value
-            if "time" not in row or latest.observed_at > row["time"]:
-                row["time"] = latest.observed_at
-
+        _merge_gauge_observations(row, g.id, all_latest)
         if not any(k in row for k in ("flow", "gage", "temperature")):
             continue
-
-        obs_time = row.get("time")
-        if isinstance(obs_time, datetime):
-            if obs_time.tzinfo is None:
-                obs_time = obs_time.replace(tzinfo=UTC)
-            age = datetime.now(UTC) - obs_time
-            if age > DATA_EXPIRY_THRESHOLD:
-                continue
-            if age > DATA_STALE_THRESHOLD:
-                row["stale"] = True
-
-        # Filter pills come straight from the gauge row — gauges.html no
-        # longer walks linked reaches for state/HUC. data-state on the row is
-        # the full state name (matches reach-side convention); the table cell
-        # still shows the postal abbreviation.
-        state_abbrev = g.state or ""
-        state_name = _ABBR_TO_STATE.get(state_abbrev, "")
-        gauge_huc = g.huc or ""
-        row["state"] = state_name
-        row["state_abbrev"] = state_abbrev
-        row["huc6"] = gauge_huc[:6] if len(gauge_huc) >= 6 else ""
-        row["huc8"] = gauge_huc[:8] if len(gauge_huc) >= 8 else ""
-        row["has_huc"] = bool(row["huc8"])
-        row["drainage_area"] = float(g.drainage_area) if g.drainage_area is not None else None
-        row["elevation"] = float(g.elevation) if g.elevation is not None else None
-
-        # "Anything runnable?" rollup of associated-reach statuses.
+        age_tag = _gauge_observation_age(row)
+        if age_tag == "expired":
+            continue
+        if age_tag == "stale":
+            row["stale"] = True
+        _apply_gauge_metadata(row, g)
         status, status_counts = _gauge_status_from_reaches(reaches, calc_ids, all_latest)
         if status is not None:
             row["status"] = status
         row["status_counts"] = status_counts
-
         rows.append(row)
 
     # sort_name encodes the full row order (basin → fork rank → elevation
