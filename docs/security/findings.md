@@ -57,12 +57,15 @@
 
 #### F-6 — `htmlspecialchars` calls don't specify ENT flags
 
-- **Status:** 🔴 Open
+- **Status:** ⚪ Accepted (per Phase 3.1 audit, 2026-05-12) — documented convention is adequate.
 - **Threats:** T-T1 (stored XSS)
-- **Severity:** Medium-High impact, low-Medium likelihood (defaults are mostly safe).
-- **Description:** Grep across `php/*.php`: zero calls use explicit `ENT_QUOTES | ENT_HTML5`. PHP 8.1+ defaults to `ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML401`, which is OK for content contexts and quoted attribute contexts, but inadequate for HTML5 unquoted-attribute contexts (rare in this codebase but possible).
-- **Remediation:** Define a project-local `escape()` helper in `php/includes/html.php` (or wherever a render helper lives) that wraps `htmlspecialchars($s, ENT_QUOTES | ENT_HTML5, 'UTF-8')` and grep-replace call sites. Audit each call's context (content vs attribute) in the same pass.
-- **Plan tier:** Tier 3.1 (XSS sweep). Also a candidate for the PHP-layer-split plan as a "cross-file convention" rule.
+- **Severity:** ~~Medium-High impact~~ — no exploitable gap given the convention + actual codebase usage.
+- **Description:** Original concern: "no calls specify `ENT_QUOTES | ENT_HTML5`." After Phase 3.1 audit:
+  - `php/includes/html.php:6-13` documents the explicit convention: bare `htmlspecialchars($s)` everywhere; PHP 8.1+ defaults (`ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML401`) are correct for content + quoted-attribute contexts.
+  - HTML5 unquoted-attribute interpolation is not present in the codebase (grep verified — all `\$var` interpolations into HTML attributes are inside double quotes).
+  - The original F-6 framing missed the html.php docstring.
+- **Re-evaluation trigger:** if the codebase introduces unquoted-attribute interpolation, OR if a PHP version downgrade puts the default flags back to pre-8.1, revisit.
+- **Plan tier:** Tier 3.1 (this audit).
 
 #### F-7 — Mass-assignment whitelist confirmation in propose/review
 
@@ -187,10 +190,10 @@ These are not gaps per se — they're verification steps that need prod-side acc
 
 | Status | Count | IDs |
 |---|---|---|
-| 🔴 Open | 12 | F-1, F-2, F-3, F-6, F-8, F-9, F-10, F-11, F-12, F-13, F-14, F-15 |
+| 🔴 Open | 11 | F-1, F-2, F-3, F-8, F-9, F-10, F-11, F-12, F-13, F-14, F-15 |
 | 🟡 In progress | 0 | — |
 | 🟢 Closed | 0 | — |
-| ⚪ Accepted | 3 | F-5 (per D-T1.3), F-7 (Phase 2.3 — confirmed safe), F-4 (per D-T2.4) |
+| ⚪ Accepted | 4 | F-4 (per D-T2.4), F-5 (per D-T1.3), F-6 (Phase 3.1 — documented convention adequate), F-7 (Phase 2.3 — confirmed safe) |
 | 🔵 Deferred | 0 | — |
 
 ## Per-tier work allocation
