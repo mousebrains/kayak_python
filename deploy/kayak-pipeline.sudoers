@@ -28,6 +28,10 @@ Cmnd_Alias KAYAK_CTL = \
     /usr/bin/systemctl stop  kayak-decimate.timer, \
     /usr/bin/systemctl start kayak-decimate.service, \
     /usr/bin/systemctl stop  kayak-decimate.service, \
+    /usr/bin/systemctl start kayak-editor-retention.timer, \
+    /usr/bin/systemctl stop  kayak-editor-retention.timer, \
+    /usr/bin/systemctl start kayak-editor-retention.service, \
+    /usr/bin/systemctl stop  kayak-editor-retention.service, \
     /usr/bin/systemctl start kayak-backup.timer, \
     /usr/bin/systemctl stop  kayak-backup.timer, \
     /usr/bin/systemctl start kayak-backup.service, \

@@ -347,9 +347,9 @@ _Filled above (D-T5.1, D-T5.2, D-T5.3)._
 | D-T1.3 | Maintainer 2FA model | Option A (magic-link only) with documented re-eval triggers | 2026-05-12 | Active |
 | D-T2.4 | Audit trail tamper resistance | Option A (None) — rely on backups + web-side controls; re-eval triggers documented | 2026-05-12 | Active |
 | D-T3.3 | File-upload retention | Deferred — N/A (no upload endpoint); default would be Time-bounded if/when activated | 2026-05-12 | Deferred |
-| D-T4.1 | Account deletion | Option A (manual operator-handled `levels delete-editor` CLI) | 2026-05-12 | Active (impl Tier 6) |
-| D-T4.2 | Data export | Option B (on-request `levels export-editor` CLI) | 2026-05-12 | Active (impl Tier 6) |
-| D-T4.3 | Retention (audit / IPs / UAs) | 3-part: history indefinite; magic-link 90d purge; session 90d delete | 2026-05-12 | Active (impl Tier 6) |
+| D-T4.1 | Account deletion | Option A (manual operator-handled `levels delete-editor` CLI) | 2026-05-12 | Active (CLI shipped Tier 6) |
+| D-T4.2 | Data export | Option B (on-request `levels export-editor` CLI) | 2026-05-12 | Active (CLI shipped Tier 6) |
+| D-T4.3 | Retention (audit / IPs / UAs) | 3-part: history indefinite; magic-link 90d purge; session 90d delete | 2026-05-12 | Active (CLI + timer shipped Tier 6) |
 | D-T4.4 | Privacy + ToS | Option B (refresh privacy.php — fix F-16; defer ToS) | 2026-05-12 | Active (impl Tier 6) |
 | D-T4.5 | `security.txt` | Option A + D (keep current minimum; annual Expires refresh) | 2026-05-12 | Active |
 | D-T5.1 | Vulnerability disclosure path | Option A (security.txt only; GHSA on first-report trigger) | 2026-05-12 | Active |

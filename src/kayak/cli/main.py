@@ -9,6 +9,9 @@ from kayak.cli import (
     calc_rating,
     calculator,
     decimate,
+    delete_editor,
+    editor_retention,
+    export_editor,
     fetch,
     fetch_usgs_ogc,
     init_db,
@@ -45,6 +48,9 @@ def main() -> None:
     decimate.addArgs(subparsers)
     pipeline.addArgs(subparsers)
     seed_maintainer.addArgs(subparsers)
+    delete_editor.addArgs(subparsers)
+    export_editor.addArgs(subparsers)
+    editor_retention.addArgs(subparsers)
     trace_reach.addArgs(subparsers)
     assign_huc.addArgs(subparsers)
 

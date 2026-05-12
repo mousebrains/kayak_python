@@ -1,0 +1,10 @@
+[Unit]
+Description=Run kayak editor-retention daily (D-T4.3)
+
+[Timer]
+OnCalendar=03:42
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target
