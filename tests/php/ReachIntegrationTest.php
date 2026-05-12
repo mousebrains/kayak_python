@@ -114,9 +114,11 @@ final class ReachIntegrationTest extends IntegrationTestCase
 
     public function testSearchModeMultiResultRendersTable(): void
     {
-        // 'Test' matches both seeded reaches (display_name contains it for
-        // the no-gauge reach; river='Test River' for the no-gauge reach;
-        // 'A test reach' description for both — the OR-of-LIKEs picks both).
+        // 'Test' matches both seeded reaches. _search_reaches_query LIKEs
+        // display_name OR name OR river (NOT description): the gauged
+        // reach matches via display_name/name ("Willamette Test Reach")
+        // and the no-gauge reach matches via display_name/name + river
+        // ("No Gauge Test Reach" / "Test River").
         $resp = $this->request('/reach.php', ['q' => 'Test']);
 
         $this->assertSame(200, $resp['status']);
@@ -127,6 +129,7 @@ final class ReachIntegrationTest extends IntegrationTestCase
             self::REACH_NO_GAUGE_NAME,
             '</html>',
         );
+        $this->assertNoBareInlineScript($resp['body']);
     }
 
     public function testStateFilterListMode(): void
@@ -144,6 +147,7 @@ final class ReachIntegrationTest extends IntegrationTestCase
             self::REACH_NO_GAUGE_NAME,
             '</html>',
         );
+        $this->assertNoBareInlineScript($resp['body']);
     }
 
     public function testDefaultPathFallsThroughToFirstReach(): void
@@ -162,6 +166,7 @@ final class ReachIntegrationTest extends IntegrationTestCase
             'of 2',           // exactly 2 seeded reaches
             'Back to main page',
         );
+        $this->assertNoBareInlineScript($resp['body']);
     }
 
     public function testDetailModeRendersGaugedReach(): void
@@ -182,6 +187,7 @@ final class ReachIntegrationTest extends IntegrationTestCase
         );
         // CSP header must not be set by PHP (nginx owns it in prod).
         $this->assertArrayNotHasKey('content-security-policy', $resp['headers']);
+        $this->assertNoBareInlineScript($resp['body']);
     }
 
     public function testDetailModeRendersNoGaugeReach(): void
@@ -203,5 +209,6 @@ final class ReachIntegrationTest extends IntegrationTestCase
         $this->assertStringNotContainsString('Linked Gauge', $resp['body']);
         $this->assertStringNotContainsString('id="reach-map"', $resp['body']);
         $this->assertStringNotContainsString('Put-in', $resp['body']);
+        $this->assertNoBareInlineScript($resp['body']);
     }
 }

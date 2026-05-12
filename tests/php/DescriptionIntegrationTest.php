@@ -140,7 +140,12 @@ final class DescriptionIntegrationTest extends IntegrationTestCase
         $this->assertResponseContains(
             $resp['body'],
             self::REACH_WITH_GAUGE_NAME,
-            'Sandy',                         // River field
+            // 'Sandy' appears via the display_name "Sandy Test Reach" in
+            // <title>, <h2>, and the meta description — description.php's
+            // $fields list doesn't include a 'River' label, so the river
+            // column value is never echoed directly (see the longer comment
+            // on testDetailModeRendersNoGaugeReach below).
+            'Sandy',
             'Flow',                          // readings table label
             '1,235 CFS',                     // formatted flow value (rounded)
             'Data Sources',                  // sources section header
@@ -150,6 +155,7 @@ final class DescriptionIntegrationTest extends IntegrationTestCase
         );
         // No PHP-side CSP header (nginx owns it).
         $this->assertArrayNotHasKey('content-security-policy', $resp['headers']);
+        $this->assertNoBareInlineScript($resp['body']);
     }
 
     public function testDetailModeRendersNoGaugeReach(): void
@@ -172,6 +178,7 @@ final class DescriptionIntegrationTest extends IntegrationTestCase
         $this->assertStringNotContainsString('Data Sources', $resp['body']);
         $this->assertStringNotContainsString('class="readings-table"', $resp['body']);
         $this->assertStringNotContainsString('Put-in', $resp['body']);
+        $this->assertNoBareInlineScript($resp['body']);
     }
 
     public function testDateWindowedCallStillRenders(): void
@@ -190,6 +197,7 @@ final class DescriptionIntegrationTest extends IntegrationTestCase
             self::REACH_WITH_GAUGE_NAME,
             '</html>',
         );
+        $this->assertNoBareInlineScript($resp['body']);
     }
 
     public function testInvalidDateIgnoredNotRejected(): void
@@ -203,5 +211,6 @@ final class DescriptionIntegrationTest extends IntegrationTestCase
         ]);
 
         $this->assertSame(200, $resp['status']);
+        $this->assertNoBareInlineScript($resp['body']);
     }
 }

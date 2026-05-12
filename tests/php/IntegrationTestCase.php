@@ -211,6 +211,25 @@ abstract class IntegrationTestCase extends TestCase
     }
 
     /**
+     * Assert the body has no bare `<script>` tag — i.e. nothing the
+     * nginx-side strict CSP would block. Substring match on the literal
+     * `<script>` catches `<script>inline</script>` but not
+     * `<script src=...>` (the latter has the attribute value before
+     * the closing `>`).
+     *
+     * Carried forward from Phase 1.4's drill test (commit `d3e7dce`)
+     * so the regression guard scales to all HTML-rendering tests.
+     */
+    protected function assertNoBareInlineScript(string $body): void
+    {
+        $this->assertStringNotContainsString(
+            '<script>',
+            $body,
+            'inline <script> would clash with prod CSP',
+        );
+    }
+
+    /**
      * Subclass hook to seed rows after `levels init-db` runs.
      *
      * Override in subclasses to insert reach/gauge/observation/etc. test
