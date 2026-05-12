@@ -15,6 +15,8 @@ Security artifacts for the editor pipeline. Maintained per `docs/PLAN_editor_sec
 | [tier2-audit.md](tier2-audit.md) | Tier 2 (Authorization) audit log — same shape; covers role enforcement, IDOR, privilege escalation, audit trail integrity. | Per-phase during Tier 2; final closeout. |
 | [tier3-audit.md](tier3-audit.md) | Tier 3 (Input/output) audit log — XSS, SQLi, file-upload (N/A), rate-limit posture, CSRF. | Per-phase during Tier 3; final closeout. |
 | [tier4-audit.md](tier4-audit.md) | Tier 4 (User-data obligations) audit log — account deletion, data export, retention, privacy/ToS, security.txt. | Per-decision during Tier 4; final closeout. |
+| [tier5-audit.md](tier5-audit.md) | Tier 5 (Disclosure + response) audit log — disclosure path, IR cadence, re-review cadence, restore-drill plan, drill log. | Per-decision during Tier 5; per-drill log append. |
+| [incident-response.md](incident-response.md) | Operator's IR runbook — pre-incident dependencies, discovery flows, triage matrix, containment options (C1-C5), credential rotation playbooks, user notification template, post-incident review template. | After every incident; whenever D-T5.3 triggers a re-review. |
 
 ## Reading order
 
@@ -41,8 +43,8 @@ For someone returning to update controls after a code change:
 | Tier 1 — Authentication review | ✅ Complete (commits 4e6d893 / c786d90 / 7f42ba0 / be64058 / b335f64 / aadb63c) | tier1-audit.md + decisions.md (D-T1.3) + findings.md updates (F-5 accepted; F-14, F-15 new) |
 | Tier 2 — Authorization review | ✅ Complete (commits e25ff12 / 192300c / cfa4e6a / 670212d) | tier2-audit.md + decisions.md (D-T2.4) + findings.md updates (F-4, F-7 accepted; F-9 downgraded) |
 | Tier 3 — Input/output handling | ✅ Complete (commits 0282cd3 / 1557135 / 8730c64) | tier3-audit.md + decisions.md (D-T3.3 Deferred) + findings.md updates (F-6 accepted) |
-| Tier 4 — User-data obligations | ✅ Complete (commit this commit) | tier4-audit.md + decisions.md (D-T4.1..5) + findings.md updates (F-16 new); 4 Tier 6 implementation items: 3 CLIs + privacy.php refresh |
-| Tier 5 — Disclosure + response | ⏳ Pending | 3 decision points + 2 phases (runbook, restore drill) |
+| Tier 4 — User-data obligations | ✅ Complete (commit c32195b) | tier4-audit.md + decisions.md (D-T4.1..5) + findings.md updates (F-16 new); 4 Tier 6 implementation items: 3 CLIs + privacy.php refresh |
+| Tier 5 — Disclosure + response | ✅ Complete (this commit) | tier5-audit.md + incident-response.md (runbook) + decisions.md (D-T5.1..3); restore-drill plan documented (first execution pending operator). No new findings. |
 | Tier 6 — Hardening + closeout | ⏳ Pending | Apply findings + decisions; final posture doc |
 
 ## Out of scope

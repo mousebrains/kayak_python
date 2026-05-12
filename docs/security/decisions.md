@@ -245,9 +245,100 @@ Defer PGP `Encryption:` line and `Acknowledgments:` / `Policy:` lines until conc
 
 ---
 
+## D-T5.1 — Vulnerability disclosure path
+
+- **Date:** 2026-05-12
+- **Decision:** **Option A** (`security.txt` only; GHSA activation deferred to first-report trigger).
+- **Status:** Active
+- **Backing analysis:** [tier5-audit.md](tier5-audit.md) Phase 5.1.
+
+### Choice
+
+Keep the current `security.txt` minimum (`Contact: mailto:pat.kayak@gmail.com` + `Expires:` + `Preferred-Languages:` — fixed by D-T4.5). No GitHub Security Advisories (GHSA), no HackerOne, no bug bounty.
+
+### Rationale
+
+1. **Zero historical reports** — the channel isn't a bottleneck.
+2. **Best-effort response commitment (D-T5.2)** is honest given single-operator availability; promising a faster coordinated channel without resourcing it would be dishonest.
+3. **GHSA is the natural promotion path** when the first coordinated report arrives. One click in the GitHub repo enables Private Vulnerability Reporting; security.txt gains a `Policy:` line then. Zero pre-investment.
+4. **HackerOne / bounty** mismatched to scale.
+
+### Re-evaluation triggers
+
+- First coordinated-disclosure report → activate GHSA, add `Policy:` to security.txt.
+- Researcher requests PGP / coordinated-publish.
+- Disclosure volume ≥ 1/quarter.
+
+---
+
+## D-T5.2 — Incident-response cadence
+
+- **Date:** 2026-05-12
+- **Decision:** **Option A** (Best-effort, documented in [incident-response.md](incident-response.md)).
+- **Status:** Active
+- **Backing analysis:** [tier5-audit.md](tier5-audit.md) Phase 5.2.
+
+### Choice
+
+Best-effort response. Concrete commitments documented in `incident-response.md`:
+- Security gmail checked at least once per business day.
+- Initial acknowledgment within 2 business days.
+- Triage decision within 5 business days for non-urgent reports; same-day for active-abuse reports.
+
+### Rationale
+
+1. **Aspirational SLAs that aren't enforced are noise** — they create false reporter expectations without changing actual response time.
+2. **Single-operator availability is constrained by vacation / illness / day-job.** Routinely-missed SLAs erode trust faster than honest "best-effort" framing.
+3. **Best-effort, documented in concrete language** in the runbook, is the truthful posture.
+
+### Re-evaluation triggers
+
+- Second maintainer joins → 24h triage SLA becomes credible.
+- Site scope grows beyond hobby/club.
+- Compliance regime requires documented SLA.
+
+---
+
+## D-T5.3 — Re-review cadence
+
+- **Date:** 2026-05-12
+- **Decision:** **Option B + light annual touch** (major-change-triggered focused re-review + ~half-day annual housekeeping).
+- **Status:** Active
+- **Backing analysis:** [tier5-audit.md](tier5-audit.md) Phase 5.3.
+
+### Choice
+
+**Major-change triggers** (focused re-review of the affected slice):
+- New PHP endpoint joining the editor pipeline.
+- New DB table containing PII or holding credentials.
+- New external service (auth, hosting move, CDN, captcha replacement).
+- New privileged operation (file upload, bulk delete, etc.).
+- Major dependency upgrade (PHP-FPM major version, nginx replaced, SQLite → other DB).
+
+**Annual light touch** (every 12 months from Tier 5 closeout, so next: ~2027-05-12):
+- Re-read findings.md + decisions.md.
+- Check whether re-evaluation triggers fired since last review.
+- Refresh static/security.txt Expires line (per D-T4.5).
+- Update README Tier status table.
+- Effort: ~half-day.
+
+### Rationale
+
+1. **Once-and-done discards the audit infrastructure.** findings.md + decisions.md are designed to be re-checked.
+2. **Annual full re-review** is over-investment at hobby scale; major changes happen rarely.
+3. **Major-change-only alone misses drift detection.** Code and dependencies shift even without major changes. The annual light touch is the minimal counter-drift mechanism.
+
+### Re-evaluation triggers
+
+- A "major change" trigger fires.
+- An incident occurs (post-mortem includes re-evaluating decisions touched by the incident).
+- Second maintainer joins (fresh eyes are themselves a re-review event).
+
+---
+
 ## (placeholder) D-T5.x — Vulnerability disclosure / IR cadence / re-review
 
-To be filled when Tier 5 lands.
+_Filled above (D-T5.1, D-T5.2, D-T5.3)._
 
 ## Decision summary
 
@@ -261,3 +352,6 @@ To be filled when Tier 5 lands.
 | D-T4.3 | Retention (audit / IPs / UAs) | 3-part: history indefinite; magic-link 90d purge; session 90d delete | 2026-05-12 | Active (impl Tier 6) |
 | D-T4.4 | Privacy + ToS | Option B (refresh privacy.php — fix F-16; defer ToS) | 2026-05-12 | Active (impl Tier 6) |
 | D-T4.5 | `security.txt` | Option A + D (keep current minimum; annual Expires refresh) | 2026-05-12 | Active |
+| D-T5.1 | Vulnerability disclosure path | Option A (security.txt only; GHSA on first-report trigger) | 2026-05-12 | Active |
+| D-T5.2 | IR cadence | Option A (Best-effort, documented in incident-response.md) | 2026-05-12 | Active |
+| D-T5.3 | Re-review cadence | Option B + light annual touch (major-change-triggered + ~half-day yearly) | 2026-05-12 | Active |
