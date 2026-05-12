@@ -27,7 +27,12 @@ require_once __DIR__ . '/auth.php';
 function css_head_block(): string {
     static $block = null;
     if ($block !== null) return $block;
-    $doc_root = __DIR__ . '/..';
+    // Use the request-time doc root rather than __DIR__/.. — when this file
+    // is loaded through the symlink at public_html/includes/header.php (dev
+    // workflow), __DIR__ resolves to php/includes (the symlink target) and
+    // __DIR__/.. lands in php/, which lacks the hashed CSS sidecar. Same
+    // pattern as leaflet.css in gauge_map.php:79-88.
+    $doc_root = $_SERVER['DOCUMENT_ROOT'] ?? (__DIR__ . '/..');
     $hash_path = $doc_root . '/static/style.css.hash';
     if (is_readable($hash_path)) {
         $hash = trim((string)file_get_contents($hash_path));
