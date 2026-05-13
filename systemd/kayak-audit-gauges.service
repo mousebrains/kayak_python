@@ -9,6 +9,9 @@ User=pat
 WorkingDirectory=/home/pat/kayak
 EnvironmentFile=/home/pat/.config/kayak/.env
 ExecStart=/home/pat/.venv/bin/python3 /home/pat/kayak/scripts/audit_gauges.py --days 16 --email ${KAYAK_AUDIT_EMAIL}
+# `-` prefix: a transient curl failure on the heartbeat won't cascade to a
+# false OnFailure alert. See PLAN_production_discipline.md Phase 1.3.
+ExecStartPost=-/usr/bin/curl -fsS -m 10 --retry 3 -o /dev/null ${HC_AUDIT_GAUGES}
 TimeoutStartSec=600
 Nice=15
 

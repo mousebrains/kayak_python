@@ -9,15 +9,18 @@ User=pat
 WorkingDirectory=/home/pat/kayak
 EnvironmentFile=/home/pat/.config/kayak/.env
 ExecStart=/home/pat/.venv/bin/levels decimate
+# `-` prefix: a transient curl failure on the heartbeat won't cascade to a
+# false OnFailure alert. See PLAN_production_discipline.md Phase 1.3.
+ExecStartPost=-/usr/bin/curl -fsS -m 10 --retry 3 -o /dev/null ${HC_DECIMATE}
 TimeoutStartSec=600
 Nice=15
 
-# Sandboxing. Decimate only touches the local DB — no network needed.
+# Sandboxing. Decimate touches the local DB; the ExecStartPost heartbeat
+# needs outbound HTTPS to hc-ping.com (Phase 1.3). PrivateNetwork +
+# IPAddressDeny removed and AF_INET/AF_INET6 added in 2026-05-12.
 NoNewPrivileges=yes
 PrivateTmp=yes
 PrivateDevices=yes
-PrivateNetwork=yes
-IPAddressDeny=any
 ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=/home/pat/DB /home/pat/.config
@@ -29,7 +32,7 @@ ProtectClock=yes
 ProtectHostname=yes
 ProtectProc=invisible
 ProcSubset=pid
-RestrictAddressFamilies=AF_UNIX
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 RestrictNamespaces=yes
 RestrictRealtime=yes
 RestrictSUIDSGID=yes

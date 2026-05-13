@@ -8,15 +8,19 @@ User=pat
 WorkingDirectory=/home/pat/kayak
 EnvironmentFile=-/home/pat/.config/kayak/.env
 ExecStart=/home/pat/kayak/scripts/health-check.sh
+# `-` prefix: a transient curl failure on the heartbeat won't cascade to a
+# false OnFailure alert. See PLAN_production_discipline.md Phase 1.3.
+ExecStartPost=-/usr/bin/curl -fsS -m 10 --retry 3 -o /dev/null ${HC_HEALTHCHECK}
 Nice=15
 
-# Sandboxing — DB access via health-check.sh, no network required.
+# Sandboxing — DB access via health-check.sh + the ExecStartPost heartbeat
+# needs outbound HTTPS to hc-ping.com (Phase 1.3). PrivateNetwork removed
+# and AF_INET/AF_INET6 added in 2026-05-12 for the heartbeat.
 # NB: SQLite WAL mode needs to create -wal/-shm beside the DB, so the DB
 # dir must be ReadWritePaths even though the script only SELECTs.
 NoNewPrivileges=yes
 PrivateTmp=yes
 PrivateDevices=yes
-PrivateNetwork=yes
 ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=/home/pat/DB
@@ -28,7 +32,7 @@ ProtectClock=yes
 ProtectHostname=yes
 ProtectProc=invisible
 ProcSubset=pid
-RestrictAddressFamilies=AF_UNIX
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 RestrictNamespaces=yes
 RestrictRealtime=yes
 RestrictSUIDSGID=yes
