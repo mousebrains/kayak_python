@@ -400,4 +400,4 @@ id,reach_id,name,low,low_data_type,high,high_data_type
 399,336,I+(II),600.0,flow,1200.0,flow
 400,60,V,3000.0,flow,,
 401,389,II+,900.0,flow,2000.0,flow
-402,390,III,,,,
+402,390,III,500.0,flow,3000.0,flow
