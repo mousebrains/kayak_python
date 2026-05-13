@@ -113,7 +113,10 @@ jobs:
         # already-installed system libs.
         run: npx playwright install --with-deps chromium
       - name: JS smoke tests
-        run: npx playwright test
+        # Same wrapper as `composer test` / `composer analyse` — the
+        # package.json script is the canonical entry point so local
+        # `npm test` and CI run the same command.
+        run: npm test
       - name: Upload Playwright report (on failure)
         if: failure()
         uses: actions/upload-artifact@v4
