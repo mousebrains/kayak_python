@@ -89,6 +89,39 @@ jobs:
         # 1.2 of docs/PLAN_php_layer_split.md.
         run: vendor/bin/php-cs-fixer fix --dry-run --diff
 
+      # JS smoke tests via Playwright (docs/PLAN_js_smoke_tests.md
+      # Phase 2). globalSetup spawns its own `php -S` against a
+      # `levels init-db`+`levels build`-seeded tmp DB, so no extra
+      # PHP-server orchestration is needed in this job — Playwright
+      # owns the lifecycle.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22' # Active LTS until Apr 2027; matches plan's recommendation.
+          cache: 'npm'
+      - name: Install JS test deps
+        run: npm ci
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+      - name: Install Playwright browser (chromium)
+        # --with-deps installs Chromium's apt-level system libs; needs
+        # sudo on the runner, which GitHub-hosted Ubuntu runners support.
+        # Dev hosts without sudo (see [feedback_no_sudo] in CLAUDE memory)
+        # use plain `npx playwright install chromium` and rely on
+        # already-installed system libs.
+        run: npx playwright install --with-deps chromium
+      - name: JS smoke tests
+        run: npx playwright test
+      - name: Upload Playwright report (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+
   typecheck:
     runs-on: ubuntu-latest
     steps:
