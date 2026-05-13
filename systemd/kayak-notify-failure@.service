@@ -12,4 +12,4 @@ EnvironmentFile=-/home/pat/.config/kayak/.env
 # pipes any failure back to syslog so broken msmtp or curl doesn't silently
 # drop alerts. Requires /etc/msmtprc to have a real Gmail app password set;
 # NTFY_TOPIC must be set in the EnvironmentFile for the push channel.
-ExecStart=/bin/bash -c 'MSG="ALERT: %i failed at $(date -u +\"%%Y-%%m-%%dT%%H:%%M:%%SZ\")"; echo "$MSG" | logger -t kayak-alert -p user.err; echo "$MSG" | mail -s "Kayak: %i failed" pat.kayak@gmail.com 2>&1 | logger -t kayak-alert -p user.err; [ -n "${NTFY_TOPIC:-}" ] && echo "$MSG" | curl -fsS -m 10 --retry 3 -d @- "ntfy.sh/$NTFY_TOPIC" -H "Title: Kayak: %i failed" -H "Priority: high" 2>&1 | logger -t kayak-alert -p user.err'
+ExecStart=/bin/bash -c 'MSG="ALERT: %i failed at $(date -u +\"%%Y-%%m-%%dT%%H:%%M:%%SZ\")"; echo "$MSG" | logger -t kayak-alert -p user.err; echo "$MSG" | mail -s "Kayak: %i failed" pat.kayak@gmail.com 2>&1 | logger -t kayak-alert -p user.err; if [ -n "${NTFY_TOPIC:-}" ]; then echo "$MSG" | curl -fsS -m 10 --retry 3 -d @- "ntfy.sh/$NTFY_TOPIC" -H "Title: Kayak: %i failed" -H "Priority: high" 2>&1 | logger -t kayak-alert -p user.err; fi'
