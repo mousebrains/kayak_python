@@ -4,6 +4,8 @@
 >
 > Dates are absolute. References are `file:line:function` against current `main`.
 
+> **Status (2026-05-12, post-`b662118`):** closed. The tracing carve-out was the last open item from this plan and shipped in `b662118` — `find_huc4` and `trace_reach` were split into four helpers (`_scan_dir_for_huc4`, `_resolve_huc4`, `_extend_and_trim_path`, `_load_missing_geoms`); both land at cc≤5. Pinned regression tests live at `tests/test_tracing/test_trace.py` (Sandy reach ground truth). `[tool.ruff.lint.per-file-ignores]` is now empty — the stanza is removed entirely; `ruff check --config 'lint.per-file-ignores={}' src/kayak/tracing/` reports 0 hits. Type annotations for `kayak.tracing.*` remain deferred and the `[tool.mypy.overrides]` carve-out stays — the original plan deferred tracing pending "tests + type annotations + complexity in one PR," and this closure ships tests + complexity, leaving annotations as the lone remaining piece. The §Decisions baked in / §Out of scope sections below describe the original deferral and are kept as a historical record of how the work was sequenced.
+
 ## Context
 
 The build.py split (PR commits `7281e74`..`2f39e15`) added `C901` to `ruff.lint.select` to gate new complexity in `kayak.web.build`. To keep the build.py PR small, 11 files outside `web/build/` were grandfathered in `[tool.ruff.lint.per-file-ignores]` — `src/kayak/cli/*`, `parsers/*`, `tracing/*`, `huc/*`, `utils/*`. Those grandfather entries hide 15 cc>10 functions across 11 files. This plan refactors 10 of them in 3 phases, marks 2 with `# noqa: C901` for structural reasons, leaves 2 in `tracing/*` as deferred work (mirroring the existing mypy override on that module), and shrinks the `per-file-ignores` stanza tier-by-tier so the gate applies everywhere except `tracing/*` when the plan completes.
@@ -240,8 +242,8 @@ diff /tmp/p3-snap.sql /tmp/p3-after.sql | wc -l      # should be ≈ baseline + 
 
 ## Out of scope
 
-- **`tracing/trace.py` (`trace_reach` cc=15, `find_huc4` cc=11).** No tests exist for this module; its mypy override in `pyproject.toml:92–98` documents it as deferred standalone-script integration. Refactor when the module gets fully integrated (tests + type annotations + complexity in one PR), not as a one-off cc fix. `per-file-ignores` keeps `"src/kayak/tracing/*" = ["C901"]` paired with the mypy carve-out.
-- **Type annotations for `tracing/trace.py`.** Same rationale as above.
+- ~~**`tracing/trace.py` (`trace_reach` cc=15, `find_huc4` cc=11).**~~ → **Closed 2026-05-12 in `b662118`** (see status banner at top). Original rationale: no tests exist for this module; its mypy override in `pyproject.toml:92–98` documents it as deferred standalone-script integration. Refactor when the module gets fully integrated (tests + type annotations + complexity in one PR), not as a one-off cc fix. The closure shipped tests + complexity; type annotations remain deferred (next bullet).
+- **Type annotations for `tracing/trace.py`.** Still deferred — the `[tool.mypy.overrides]` carve-out for `kayak.tracing.*` stays. `b662118` shipped tests + complexity but left annotations for a follow-up.
 - **Refactoring `_safe_eval` / `_eval` in `calculator.py`.** Marked `# noqa: C901` instead (see *Decisions baked in*).
 - **Module splits.** `cli/calculator.py` (314 LOC), `cli/fetch.py` (403 LOC), `utils/http_client.py` (431 LOC) all stay as single files. The build.py-split precedent (2187 LOC monolith) does not apply here.
 - **New integration tests** beyond the two pinned regressions for `calc_rating`. Existing coverage is the regression net.
