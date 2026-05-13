@@ -70,13 +70,6 @@ src = ["src"]
 select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF", "C901"]
 ignore = ["E501", "SIM108"]
 
-[tool.ruff.lint.per-file-ignores]
-# C901 is enforced across the tree. Only `tracing/*` remains grandfathered,
-# paired with its mypy carve-out below — see docs/PLAN_c901_cleanup.md
-# § Out of scope for why integrating that module is deferred until tests +
-# type annotations + complexity refactor can land in one PR.
-"src/kayak/tracing/*" = ["C901"]
-
 [tool.ruff.lint.isort]
 known-first-party = ["kayak"]
 

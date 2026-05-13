@@ -57,6 +57,32 @@ def haversine(lat1, lon1, lat2, lon2):
     return 2 * R * math.asin(math.sqrt(a))
 
 
+def _scan_dir_for_huc4(directory, accept_fn, path_fn, layer_name, huc4_from_name, bbox):
+    """Scan ``directory`` for files matching ``accept_fn``; return the HUC4
+    whose ``layer_name`` has a feature inside ``bbox``, or None.
+
+    Shared body for find_huc4's two passes (pre-extracted GPKGs and raw
+    GDB zips). ``path_fn(name)`` builds the OGR-openable path for a file
+    in the dir; ``huc4_from_name(name)`` extracts the HUC4 code from the
+    file name.
+    """
+    if not os.path.isdir(directory):
+        return None
+    minx, miny, maxx, maxy = bbox
+    for name in sorted(os.listdir(directory)):
+        if not accept_fn(name):
+            continue
+        ds = ogr.Open(path_fn(name))
+        layer = ds.GetLayerByName(layer_name) if ds else None
+        if layer is not None:
+            layer.SetSpatialFilterRect(minx, miny, maxx, maxy)
+            if layer.GetFeatureCount() > 0:
+                ds = None
+                return huc4_from_name(name)
+        ds = None
+    return None
+
+
 def find_huc4(lat, lon, buffer_deg=0.15):
     """Find which HUC4 has flowlines near the given coordinates.
 
@@ -64,48 +90,27 @@ def find_huc4(lat, lon, buffer_deg=0.15):
     HUC4s are resolved by actual flowline proximity.
     Checks pre-extracted GPKGs first (fast), then raw GDB ZIPs.
     """
-    # Try pre-extracted GPKGs first
-    if os.path.isdir(TRACE_DIR):
-        for f in sorted(os.listdir(TRACE_DIR)):
-            if not f.startswith("trace_") or not f.endswith(".gpkg"):
-                continue
-            path = os.path.join(TRACE_DIR, f)
-            ds = ogr.Open(path)
-            layer = ds.GetLayerByName("flowline")
-            if layer:
-                layer.SetSpatialFilterRect(
-                    lon - buffer_deg,
-                    lat - buffer_deg,
-                    lon + buffer_deg,
-                    lat + buffer_deg,
-                )
-                if layer.GetFeatureCount() > 0:
-                    huc4 = f.replace("trace_", "").replace(".gpkg", "")
-                    ds = None
-                    return huc4
-            ds = None
-
-    # Fall back to raw GDB ZIPs
-    if os.path.isdir(NHD_HR_DIR):
-        for f in sorted(os.listdir(NHD_HR_DIR)):
-            if not f.endswith("_GDB.zip"):
-                continue
-            path = f"/vsizip/{NHD_HR_DIR}/{f}"
-            ds = ogr.Open(path)
-            layer = ds.GetLayerByName("NHDFlowline")
-            if layer:
-                layer.SetSpatialFilterRect(
-                    lon - buffer_deg,
-                    lat - buffer_deg,
-                    lon + buffer_deg,
-                    lat + buffer_deg,
-                )
-                if layer.GetFeatureCount() > 0:
-                    huc4 = f.split("_")[2]
-                    ds = None
-                    return huc4
-            ds = None
-    return None
+    bbox = (lon - buffer_deg, lat - buffer_deg, lon + buffer_deg, lat + buffer_deg)
+    # Try pre-extracted GPKGs first.
+    huc4 = _scan_dir_for_huc4(
+        TRACE_DIR,
+        accept_fn=lambda n: n.startswith("trace_") and n.endswith(".gpkg"),
+        path_fn=lambda n: os.path.join(TRACE_DIR, n),
+        layer_name="flowline",
+        huc4_from_name=lambda n: n.replace("trace_", "").replace(".gpkg", ""),
+        bbox=bbox,
+    )
+    if huc4 is not None:
+        return huc4
+    # Fall back to raw GDB ZIPs.
+    return _scan_dir_for_huc4(
+        NHD_HR_DIR,
+        accept_fn=lambda n: n.endswith("_GDB.zip"),
+        path_fn=lambda n: f"/vsizip/{NHD_HR_DIR}/{n}",
+        layer_name="NHDFlowline",
+        huc4_from_name=lambda n: n.split("_")[2],
+        bbox=bbox,
+    )
 
 
 def data_source(huc4):
@@ -359,6 +364,75 @@ def make_map(coords, putin, takeout, name, miles, filename):
     plt.close()
 
 
+def _resolve_huc4(huc4, putin, takeout, log):
+    """Return ``huc4`` if non-None, otherwise auto-detect from putin then takeout.
+
+    Raises ValueError if no HUC4 can be resolved from either endpoint.
+    """
+    if huc4 is not None:
+        return huc4
+    log("Finding HUC4...")
+    detected = find_huc4(putin[0], putin[1]) or find_huc4(takeout[0], takeout[1])
+    if not detected:
+        raise ValueError(f"Could not find HUC4 for putin={putin}, takeout={takeout}")
+    return detected
+
+
+def _extend_and_trim_path(start_id, putin, takeout, by_hydroseq, by_nhdpid, src):
+    """Trace downstream from ``start_id`` and trim to the segment nearest
+    ``takeout``. Used when the exact takeout isn't on the main stem so
+    ``trace_hydroseq`` returned None.
+
+    Returns ``(path, geoms)`` where ``path`` is the trimmed list of
+    NHDPlusIDs (inclusive on both ends) and ``geoms`` is the
+    ``{nhdpid: ogr.Geometry}`` map produced by ``find_nearest_on_path``.
+
+    Raises ValueError if no downstream segments can be traced.
+    """
+    current = by_nhdpid[start_id][0]
+    extended_path = []
+    for _ in range(2000):
+        if current not in by_hydroseq:
+            break
+        nid, dn = by_hydroseq[current]
+        extended_path.append(nid)
+        if dn == 0:
+            break
+        current = dn
+
+    if not extended_path:
+        raise ValueError("Could not trace downstream from put-in.")
+
+    end_idx, geoms = find_nearest_on_path(takeout[0], takeout[1], extended_path, src)
+    pt = ogr.Geometry(ogr.wkbPoint)
+    pt.AddPoint(putin[1], putin[0])
+    start_idx = 0
+    best_start = float("inf")
+    for i, nid in enumerate(extended_path):
+        if nid in geoms:
+            d = pt.Distance(geoms[nid])
+            if d < best_start:
+                best_start = d
+                start_idx = i
+
+    return extended_path[start_idx : end_idx + 1], geoms, start_idx, end_idx
+
+
+def _load_missing_geoms(src, path, geoms):
+    """Hydrate any path segment geometries that ``find_nearest_on_path``
+    didn't already load. Mutates ``geoms`` in place.
+    """
+    data_path, fl_layer_name, _, _ = src
+    ds = ogr.Open(data_path)
+    layer = ds.GetLayerByName(fl_layer_name)
+    path_set = set(path)
+    for feat in layer:
+        nid = feat.GetField("NHDPlusID")
+        if nid in path_set and nid not in geoms:
+            geoms[nid] = feat.GetGeometryRef().Clone()
+    ds = None
+
+
 def trace_reach(putin, takeout, huc4=None, verbose=False):
     """Trace a stream reach and return a list of (lat, lon) vertices.
 
@@ -376,13 +450,7 @@ def trace_reach(putin, takeout, huc4=None, verbose=False):
     """
     log = print if verbose else lambda *a, **k: None
 
-    if huc4 is None:
-        log("Finding HUC4...")
-        huc4 = find_huc4(putin[0], putin[1])
-        if not huc4:
-            huc4 = find_huc4(takeout[0], takeout[1])
-        if not huc4:
-            raise ValueError(f"Could not find HUC4 for putin={putin}, takeout={takeout}")
+    huc4 = _resolve_huc4(huc4, putin, takeout, log)
     log(f"Using HUC4: {huc4}")
 
     src = data_source(huc4)
@@ -407,47 +475,14 @@ def trace_reach(putin, takeout, huc4=None, verbose=False):
 
     if path is None:
         log("  Exact end not on main stem, tracing extended and trimming...")
-        current = by_nhdpid[start_id][0]
-        extended_path = []
-        for _ in range(2000):
-            if current not in by_hydroseq:
-                break
-            nid, dn = by_hydroseq[current]
-            extended_path.append(nid)
-            if dn == 0:
-                break
-            current = dn
-
-        if not extended_path:
-            raise ValueError("Could not trace downstream from put-in.")
-
-        end_idx, geoms = find_nearest_on_path(takeout[0], takeout[1], extended_path, src)
-        start_idx = 0
-        pt = ogr.Geometry(ogr.wkbPoint)
-        pt.AddPoint(putin[1], putin[0])
-        best_start = float("inf")
-        for i, nid in enumerate(extended_path):
-            if nid in geoms:
-                d = pt.Distance(geoms[nid])
-                if d < best_start:
-                    best_start = d
-                    start_idx = i
-
-        path = extended_path[start_idx : end_idx + 1]
+        path, geoms, start_idx, end_idx = _extend_and_trim_path(
+            start_id, putin, takeout, by_hydroseq, by_nhdpid, src
+        )
         log(f"  Trimmed to {len(path)} segments (indices {start_idx}..{end_idx})")
     else:
         _, geoms = find_nearest_on_path(takeout[0], takeout[1], path, src)
 
-    # Load any missing geometries and collect stream names
-    data_path, fl_layer_name, _, _ = src
-    ds = ogr.Open(data_path)
-    layer = ds.GetLayerByName(fl_layer_name)
-    path_set = set(path)
-    for feat in layer:
-        nid = feat.GetField("NHDPlusID")
-        if nid in path_set and nid not in geoms:
-            geoms[nid] = feat.GetGeometryRef().Clone()
-    ds = None
+    _load_missing_geoms(src, path, geoms)
 
     coords = build_trace(path, geoms, putin, takeout)
     log(f"Trace: {total_distance(coords):.1f} miles, {len(coords):,} points, {len(path)} segments")
