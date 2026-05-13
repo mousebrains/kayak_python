@@ -42,3 +42,55 @@ test('/reach.php?st=OR loads with no JS errors', async ({ page }) => {
   await expect(page.locator('body')).toContainText('reaches matching');
   expect(errors).toEqual([]);
 });
+
+test('/Oregon.html loads with no JS errors', async ({ page }) => {
+  // Per-state HTML emitted by `levels build` — exercises levels.js +
+  // filters.js + plot-hover.js. With zero observations in the init-db'd
+  // test DB, the levels table is empty but the filter-bar UI still
+  // renders and binds event handlers (the path that historically broke
+  // under the `var → let` refactor in PLAN_js_cleanup.md Phase 3).
+  const errors = captureJsErrors(page);
+
+  const resp = await page.goto('/Oregon.html');
+  expect(resp?.status()).toBe(200);
+  await expect(page.locator('#filter-bar')).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
+
+test('/map.html loads with no JS errors', async ({ page }) => {
+  // Leaflet map page — exercises map.js (the largest JS file and the
+  // one most touched by the cleanup tier). Asserting on the Leaflet
+  // container's existence confirms map.js ran past its init block
+  // (the 5-loop `_mfCasing/_mfHit` rendering at map.js:276-299 needs
+  // the container to construct successfully).
+  const errors = captureJsErrors(page);
+
+  const resp = await page.goto('/map.html');
+  expect(resp?.status()).toBe(200);
+  await expect(page.locator('.leaflet-container')).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
+
+test('/picker.php loads with no JS errors', async ({ page }) => {
+  // Reach picker — exercises picker.js + filters.js + search-map.js.
+  // Initial-load coverage only; smoke tests don't click state pills
+  // so the search-map's lazy XHR fetch is never triggered.
+  const errors = captureJsErrors(page);
+
+  const resp = await page.goto('/picker.php');
+  expect(resp?.status()).toBe(200);
+  await expect(page.locator('#filter-bar')).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
+
+test('/gauge_picker.php loads with no JS errors', async ({ page }) => {
+  // Gauge picker — exercises gauge_picker.js + filters.js. Same
+  // initial-load coverage rationale as picker.php; the state-pill-
+  // triggered XHR to fetch the gauge list is not exercised.
+  const errors = captureJsErrors(page);
+
+  const resp = await page.goto('/gauge_picker.php');
+  expect(resp?.status()).toBe(200);
+  await expect(page.locator('#filter-bar')).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
