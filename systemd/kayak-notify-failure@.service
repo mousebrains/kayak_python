@@ -4,7 +4,12 @@ Description=Send failure notification for %i
 [Service]
 Type=oneshot
 User=pat
-# Log to syslog (source of truth) then attempt email. Mail failures are
-# piped back to syslog so a broken msmtp doesn't silently drop alerts.
-# Requires /etc/msmtprc to have a real Gmail app password set.
-ExecStart=/bin/bash -c 'MSG="ALERT: %i failed at $(date -u +\"%%Y-%%m-%%dT%%H:%%M:%%SZ\")"; echo "$MSG" | logger -t kayak-alert -p user.err; echo "$MSG" | mail -s "Kayak: %i failed" pat.kayak@gmail.com 2>&1 | logger -t kayak-alert -p user.err'
+# `-` prefix: unit still works if the env file is missing; the ntfy branch
+# in ExecStart is guarded on NTFY_TOPIC being non-empty, so a missing file
+# just disables the push channel (email + syslog paths unaffected).
+EnvironmentFile=-/home/pat/.config/kayak/.env
+# Log to syslog (source of truth) then attempt email + push. Each channel
+# pipes any failure back to syslog so broken msmtp or curl doesn't silently
+# drop alerts. Requires /etc/msmtprc to have a real Gmail app password set;
+# NTFY_TOPIC must be set in the EnvironmentFile for the push channel.
+ExecStart=/bin/bash -c 'MSG="ALERT: %i failed at $(date -u +\"%%Y-%%m-%%dT%%H:%%M:%%SZ\")"; echo "$MSG" | logger -t kayak-alert -p user.err; echo "$MSG" | mail -s "Kayak: %i failed" pat.kayak@gmail.com 2>&1 | logger -t kayak-alert -p user.err; [ -n "${NTFY_TOPIC:-}" ] && echo "$MSG" | curl -fsS -m 10 --retry 3 -d @- "ntfy.sh/$NTFY_TOPIC" -H "Title: Kayak: %i failed" -H "Priority: high" 2>&1 | logger -t kayak-alert -p user.err'
