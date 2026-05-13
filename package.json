@@ -1,0 +1,12 @@
+{
+  "name": "kayak-js-tests",
+  "private": true,
+  "description": "Playwright JS smoke tests for the kayak PHP layer. See docs/PLAN_js_smoke_tests.md.",
+  "scripts": {
+    "test": "playwright test",
+    "test-install-browsers": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.51.0"
+  }
+}

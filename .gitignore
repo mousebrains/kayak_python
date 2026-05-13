@@ -63,3 +63,9 @@ Trace-cache/
 
 # Ad-hoc research / analysis scratch
 tpw/
+
+# JS smoke-test scaffold (docs/PLAN_js_smoke_tests.md)
+node_modules/
+playwright-report/
+test-results/
+/tests/js/.cache/
