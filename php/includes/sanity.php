@@ -28,6 +28,7 @@ function normalize_name(string $s): string {
 // Display name
 // ---------------------------------------------------------------------------
 
+/** @return list<array{level: 'error'|'warning', field: string, message: string}> */
 function check_display_name(string $proposed, ?string $river): array {
     $issues = [];
     $proposed = trim($proposed);
@@ -55,6 +56,7 @@ function check_display_name(string $proposed, ?string $river): array {
 // Free-form text
 // ---------------------------------------------------------------------------
 
+/** @return list<array{level: 'error'|'warning', field: string, message: string}> */
 function check_text_length(string $field, string $value, int $max): array {
     if (strlen($value) > $max) {
         return [['level' => 'error', 'field' => $field,
@@ -93,6 +95,8 @@ function strip_html_tags(string $s): string {
 /**
  * Validate a whitewater class string. Matches patterns seen in the live
  * data: "III", "III+", "II-III", "IV V", "III+(IV)", "V.1".
+ *
+ * @return list<array{level: 'error'|'warning', field: string, message: string}>
  */
 function check_class_string(string $field, string $value): array {
     $v = trim($value);
@@ -123,6 +127,8 @@ function check_class_string(string $field, string $value): array {
  *
  * - low <= high.
  * - CFS values in [0, 200000], gauge-ft in [-20, 100].
+ *
+ * @return list<array{level: 'error'|'warning', field: string, message: string}>
  */
 function check_flow_range(?float $low, ?float $high, string $data_type = 'flow'): array {
     $issues = [];
@@ -156,6 +162,7 @@ function _haversine_mi(float $lat1, float $lon1, float $lat2, float $lon2): floa
     return 2 * $R * asin(min(1.0, sqrt($a)));
 }
 
+/** @return list<array{level: 'error'|'warning', field: string, message: string}> */
 function check_coords(
     string $field,
     ?float $lat,
@@ -190,7 +197,11 @@ function check_coords(
     return $issues;
 }
 
-/** Check that put-in and take-out are plausibly a single run. */
+/**
+ * Check that put-in and take-out are plausibly a single run.
+ *
+ * @return list<array{level: 'error'|'warning', field: string, message: string}>
+ */
 function check_putin_takeout(
     ?float $lat_s, ?float $lon_s, ?float $lat_e, ?float $lon_e
 ): array {
@@ -211,10 +222,18 @@ function check_putin_takeout(
 // Aggregation
 // ---------------------------------------------------------------------------
 
+/**
+ * @param  list<array{level: 'error'|'warning', field: string, message: string}> $issues
+ * @return list<array{level: 'error'|'warning', field: string, message: string}>
+ */
 function sanity_errors(array $issues): array {
     return array_values(array_filter($issues, fn($i) => ($i['level'] ?? '') === 'error'));
 }
 
+/**
+ * @param  list<array{level: 'error'|'warning', field: string, message: string}> $issues
+ * @return list<array{level: 'error'|'warning', field: string, message: string}>
+ */
 function sanity_warnings(array $issues): array {
     return array_values(array_filter($issues, fn($i) => ($i['level'] ?? '') === 'warning'));
 }
