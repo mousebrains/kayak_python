@@ -56,7 +56,15 @@ jobs:
         run: shellcheck --severity=warning scripts/*.sh systemd/*.sh
 
       - name: Install PHP dev dependencies
-        run: composer install --no-interaction --no-progress --prefer-dist
+        # setup-php@v2 writes ~/.composer/auth.json with the runner's
+        # ambient GITHUB_TOKEN. GitHub recently shifted the runner token
+        # to an OIDC/JWT format (ghs_<appid>_<jwt>) whose dot separators
+        # fail composer's char check. composer.json has no github-hosted
+        # deps — only Packagist — so clearing the auth is the cleanest
+        # fix (no rate-limit concerns either; deps come from Packagist).
+        run: |
+          composer config --global --unset github-oauth.github.com || true
+          composer install --no-interaction --no-progress --prefer-dist
 
       # PHPUnit needs `levels init-db` available to seed the integration
       # tests' tmp SQLite schema (option (b) from PLAN_php_layer_split.md
