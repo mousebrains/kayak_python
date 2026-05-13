@@ -17,11 +17,14 @@ declare(strict_types=1);
  * (river/creek/fork/branch/brook/run/slough), collapses whitespace.
  */
 function normalize_name(string $s): string {
+    // preg_replace returns null only on regex error (impossible for these
+    // patterns) or invalid UTF-8 — fall back to the prior value rather
+    // than crashing downstream string ops.
     $s = strtolower($s);
-    $s = preg_replace('/[^\p{L}\p{N}\s]+/u', ' ', $s);
-    $s = preg_replace('/\b(river|creek|fork|branch|brook|run|slough|the|of)\b/u', ' ', $s);
-    $s = preg_replace('/\s+/', ' ', trim((string)$s));
-    return (string)$s;
+    $s = preg_replace('/[^\p{L}\p{N}\s]+/u', ' ', $s) ?? $s;
+    $s = preg_replace('/\b(river|creek|fork|branch|brook|run|slough|the|of)\b/u', ' ', $s) ?? $s;
+    $s = preg_replace('/\s+/', ' ', trim($s)) ?? $s;
+    return $s;
 }
 
 // ---------------------------------------------------------------------------
@@ -81,8 +84,12 @@ function strip_html_tags(string $s): string {
     // like "<scr<script>ipt>" collapse all the way.
     for ($i = 0; $i < 5; $i++) {
         $before = $s;
-        $s = preg_replace('/<!--.*?-->/s', '', $s);
-        $s = preg_replace('/<\/?[a-zA-Z][a-zA-Z0-9]*(?:\s[^<>]*)?\/?>/', '', $s);
+        // preg_replace returns null on regex error (impossible here) or
+        // invalid UTF-8; fall back to the prior pass's $s so the loop
+        // makes forward progress (or terminates via the $s === $before
+        // guard) rather than crashing.
+        $s = preg_replace('/<!--.*?-->/s', '', $s) ?? $s;
+        $s = preg_replace('/<\/?[a-zA-Z][a-zA-Z0-9]*(?:\s[^<>]*)?\/?>/', '', $s) ?? $s;
         if ($s === $before) break;
     }
     return trim($s);

@@ -55,7 +55,9 @@ function send_email(string $to, string $subject, string $body, array $extra_head
     // PHP's mail() does not reliably sanitize the subject across versions,
     // and callers may pass DB-sourced strings (reach names, contact
     // subjects) that we must not let escape into header context.
-    $subject = preg_replace('/[\r\n]+/', ' ', $subject);
+    // preg_replace returns null on regex error (impossible for this pattern)
+    // or invalid UTF-8 in $subject — fall back to the original in either case.
+    $subject = preg_replace('/[\r\n]+/', ' ', $subject) ?? $subject;
     $from = mail_from();
     $default_headers = [
         'From'                      => $from,
@@ -79,7 +81,7 @@ function send_email(string $to, string $subject, string $body, array $extra_head
     if ($dump !== null) {
         if (!is_dir($dump)) @mkdir($dump, 0700, true);
         $stamp = date('YmdHis') . '-' . bin2hex(random_bytes(3));
-        $safe_to = preg_replace('/[^\w.@+-]+/', '_', $to);
+        $safe_to = preg_replace('/[^\w.@+-]+/', '_', $to) ?? '_';
         $file = "$dump/mail-$stamp-$safe_to.txt";
         $out = "To: $to\n$headers\nSubject: $subject\n\n$body\n";
         file_put_contents($file, $out);
