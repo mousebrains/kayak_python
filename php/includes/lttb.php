@@ -3,9 +3,9 @@ declare(strict_types=1);
 /**
  * Largest Triangle Three Buckets (LTTB) downsampling.
  *
- * @param array $data  Array of [x, y] pairs, sorted by x.
- * @param int   $threshold  Target number of output points.
- * @return array  Downsampled [x, y] pairs.
+ * @param  list<array{0: int|float, 1: int|float}> $data       [x, y] pairs, sorted by x.
+ * @param  int                                     $threshold  Target number of output points.
+ * @return list<array{0: int|float, 1: int|float}>             Downsampled [x, y] pairs.
  */
 function lttb_downsample(array $data, int $threshold): array {
     $n = count($data);

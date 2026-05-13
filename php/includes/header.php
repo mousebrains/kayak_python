@@ -57,6 +57,8 @@ function css_head_block(): string {
  * 'source' → gauge picker, everything else → reach picker. Pages that mean
  * to override (e.g. picker.php and gauge_picker.php themselves) can pass
  * 'picker_kind' explicitly.
+ *
+ * @param array<string, mixed> $context  type / id / picker_kind hints.
  */
 function render_nav(string $active, array $context): string {
     $picker_cls  = $active === 'picker'  ? ' class="active"' : '';
@@ -103,6 +105,7 @@ function render_nav(string $active, array $context): string {
     return $left . $right;
 }
 
+/** @param array<string, mixed> $context  Passed through to render_nav(). */
 function include_header(
     string $title = 'River Levels',
     string $active = '',

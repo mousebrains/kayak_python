@@ -25,7 +25,13 @@ declare(strict_types=1);
 require_once __DIR__ . '/svg_plot.php';
 require_once __DIR__ . '/gauge_plots_data.php';
 
-/** Emit one single-axis plot div, or nothing if the series has <2 points. */
+/**
+ * Emit one single-axis plot div, or nothing if the series has <2 points.
+ *
+ * @param list<int>                              $times
+ * @param list<float>                            $values
+ * @param array{low: ?float, high: ?float}|null  $bands
+ */
 function _gp_render_single_plot(
     array $times,
     array $values,
@@ -48,6 +54,10 @@ function _gp_render_single_plot(
  * Returns ['low' => ?float, 'high' => ?float] in $axis_type units, or null if
  * the row is empty / a bound's data_type can't be converted (e.g. gauge bound
  * but no rating lookup is available for a flow plot).
+ *
+ * @param  array<string, mixed>|null      $class_range
+ * @param  array<string, mixed>|null      $rating_lookup
+ * @return array{low: ?float, high: ?float}|null
  */
 function _gp_bands_for_axis(?array $class_range, string $axis_type, ?array $rating_lookup = null): ?array
 {
@@ -121,7 +131,7 @@ function gp_resolve_window(PDO $db, int $gauge_id, ?string $start_date, ?string 
  * @param ?string $start_date  Current value or null → default from $latest_ts.
  * @param ?string $end_date    Current value or null → default from $latest_ts.
  * @param int    $latest_ts    Used to compute default start/end when unset.
- * @param array  $extra_links  [[label, url], ...] rendered after the Update button.
+ * @param list<array{label: string, url: string}> $extra_links  Rendered after the Update button.
  */
 function gp_render_date_form(
     int $id,
@@ -158,6 +168,8 @@ function gp_render_date_form(
  *      render the dual-axis flow+gauge plot.
  *   3. Else, fall back to single-axis plots for each available series.
  *   4. Always append a temperature plot if data exists.
+ *
+ * @param array<string, mixed>|null $class_range  reach_class row (low/high/data_type), or null.
  */
 function gp_render_plots(
     PDO $db,

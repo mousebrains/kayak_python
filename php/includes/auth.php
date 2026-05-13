@@ -147,6 +147,8 @@ function clear_editor_session(?PDO $db_override = null): void
  * $db_override is for tests only; when present the per-request memoization
  * is bypassed so different sessions can be exercised within the same PHP
  * process. Production callers pass nothing.
+ *
+ * @return array<string, mixed>|null  Editor + session-join row, or null when no valid session.
  */
 function current_editor(?PDO $db_override = null): ?array
 {
@@ -206,12 +208,14 @@ function current_editor(?PDO $db_override = null): ?array
     return $row;
 }
 
+/** @param array<string, mixed>|null $ed */
 function is_maintainer(?array $ed = null): bool
 {
     $ed ??= current_editor();
     return $ed !== null && ($ed['status'] ?? '') === 'maintainer';
 }
 
+/** @return array<string, mixed> */
 function require_editor(): array
 {
     $ed = current_editor();
@@ -223,6 +227,7 @@ function require_editor(): array
     return $ed;
 }
 
+/** @return array<string, mixed> */
 function require_maintainer(): array
 {
     $ed = require_editor();

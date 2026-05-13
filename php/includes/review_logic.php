@@ -16,6 +16,8 @@ require_once __DIR__ . '/mail.php';
  * Load the current state for a change_request's target so we can diff
  * and later build edit_history rows. Returns associative state arrays
  * keyed by 'reach', 'reach_class' (names + primary range).
+ *
+ * @return array{reach: array<string, mixed>, reach_class: array{names: list<string>, range: array{low: ?float, high: ?float, data_type: string}}}|null
  */
 function review_load_target_state(PDO $db, string $type, int $id): ?array {
     if ($type !== 'reach') return null;
@@ -58,6 +60,11 @@ function merge_reviewer_note(string $prev, string $new): string {
     return $prev === '' ? $entry : rtrim($prev) . "\n\n" . $entry;
 }
 
+/**
+ * @param array<string, mixed> $cr        change_request row.
+ * @param array<string, mixed> $applied   payload-shaped overlay (reach + reach_class).
+ * @return array{ok: bool, err?: string}
+ */
 function review_approve(PDO $db, array $cr, array $applied, int $maint_id, string $new_note): array {
     $type = $cr['target_type'];
     $tid  = (int)$cr['target_id'];
@@ -158,7 +165,11 @@ function review_approve(PDO $db, array $cr, array $applied, int $maint_id, strin
     return ['ok' => true];
 }
 
-/** Returns true on transition, false if another maintainer already reviewed. */
+/**
+ * Returns true on transition, false if another maintainer already reviewed.
+ *
+ * @param array<string, mixed> $cr change_request row.
+ */
 function review_reject(PDO $db, array $cr, string $new_note, int $maint_id): bool {
     $merged = merge_reviewer_note((string)($cr['reviewer_note'] ?? ''), $new_note);
     $stmt = $db->prepare(
@@ -171,6 +182,7 @@ function review_reject(PDO $db, array $cr, string $new_note, int $maint_id): boo
     return $stmt->rowCount() > 0;
 }
 
+/** @param array<string, mixed> $cr change_request row. */
 function review_notify_editor(PDO $db, array $cr, string $decision, string $note): void {
     $st = $db->prepare('SELECT email FROM editor WHERE id = ?');
     $st->execute([$cr['editor_id']]);
@@ -185,7 +197,11 @@ function review_notify_editor(PDO $db, array $cr, string $decision, string $note
     );
 }
 
-/** Send a maintainer reply without changing the request's status. */
+/**
+ * Send a maintainer reply without changing the request's status.
+ *
+ * @param array<string, mixed> $cr change_request row.
+ */
 function review_send_reply(PDO $db, array $cr, string $reply, int $maint_id): void {
     $merged = merge_reviewer_note((string)($cr['reviewer_note'] ?? ''), $reply);
     $db->prepare('UPDATE change_request SET reviewer_note = ? WHERE id = ?')
@@ -207,6 +223,8 @@ function review_send_reply(PDO $db, array $cr, string $reply, int $maint_id): vo
 /**
  * Terminal close without a payload apply (site comments, mooted proposals).
  * Returns true on transition, false if another maintainer already reviewed.
+ *
+ * @param array<string, mixed> $cr change_request row.
  */
 function review_resolve(PDO $db, array $cr, string $new_note, int $maint_id): bool {
     $merged = merge_reviewer_note((string)($cr['reviewer_note'] ?? ''), $new_note);
@@ -220,7 +238,11 @@ function review_resolve(PDO $db, array $cr, string $new_note, int $maint_id): bo
     return $stmt->rowCount() > 0;
 }
 
-/** Returns true on transition, false if another maintainer already reviewed. */
+/**
+ * Returns true on transition, false if another maintainer already reviewed.
+ *
+ * @param array<string, mixed> $cr change_request row.
+ */
 function review_reply_and_close(PDO $db, array $cr, string $reply, int $maint_id): bool {
     $merged = merge_reviewer_note((string)($cr['reviewer_note'] ?? ''), $reply);
     $stmt = $db->prepare(

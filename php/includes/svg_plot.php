@@ -21,6 +21,8 @@ function _split_y_label(string $y_label): array {
 /**
  * JSON-encode a series payload for a data-series="..." SVG attribute.
  * HTML-escapes for safe interpolation inside double-quoted attribute.
+ *
+ * @param array<int|string, mixed> $series
  */
 function _series_data_attr(array $series): string {
     $json = json_encode($series, JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION);
@@ -31,7 +33,7 @@ function _series_data_attr(array $series): string {
 /**
  * Compute nice Y-axis bounds and step for round tick labels.
  *
- * @return array [$y_min, $y_max, $step]
+ * @return array{0: float, 1: float, 2: float} [$y_min, $y_max, $step]
  */
 function nice_axis(float $data_min, float $data_max): array {
     $range = $data_max - $data_min;
@@ -70,7 +72,7 @@ function nice_axis(float $data_min, float $data_max): array {
  * Render low/okay/high background bands (in axis units) clipped to the
  * visible y-range. Bands are decorative — they never extend the y-axis.
  *
- * @param ?array $bands  ['low' => ?float, 'high' => ?float] in axis units, or null.
+ * @param array{low?: ?float, high?: ?float}|null $bands  Axis-unit bounds, or null.
  */
 function _bands_svg(?array $bands, float $y_min, float $y_max, int $ml, int $mt, int $pw, int $ph): string {
     if ($bands === null) return '';
@@ -112,16 +114,15 @@ function _bands_svg(?array $bands, float $y_min, float $y_max, int $ml, int $mt,
 /**
  * Generate a lightweight time-series SVG plot.
  *
- * @param array  $times   Array of Unix timestamps.
- * @param array  $values  Array of float values.
- * @param string $title   Plot title.
- * @param string $y_label Y-axis label.
- * @param int    $width   SVG width.
- * @param int    $height  SVG height.
- * @param int    $target_points  LTTB target.
- * @param bool   $is_flow Whether Y-axis values are flow (integer labels).
- * @param ?array $bands   Optional ['low' => ?float, 'high' => ?float] in axis units.
- * @return string  SVG markup.
+ * @param list<int>                               $times          Unix timestamps.
+ * @param list<float>                             $values         Float values.
+ * @param string                                  $title          Plot title.
+ * @param string                                  $y_label        Y-axis label.
+ * @param int                                     $width          SVG width.
+ * @param int                                     $height         SVG height.
+ * @param int                                     $target_points  LTTB target.
+ * @param bool                                    $is_flow        Whether Y-axis values are flow (integer labels).
+ * @param array{low?: ?float, high?: ?float}|null $bands          Axis-unit band bounds.
  */
 function generate_svg_plot(
     array $times,
@@ -231,11 +232,12 @@ SVG;
  * ticks land on "nice" gauge-height values and are placed at the y-pixel that
  * maps to that gauge's flow through $rating_lookup.
  *
- * @param array $flow_times      Unix timestamps.
- * @param array $flow_values     Flow values (CFS).
- * @param array<int, array{0: float, 1: float}> $rating_lookup  Sorted (gauge_ft, flow_cfs) pairs.
- * @param string $title          Plot title.
- * @param string $primary_label  Left-axis label, e.g. 'Flow (CFS)' or 'Inflow (CFS)'.
+ * @param list<int>                               $flow_times      Unix timestamps.
+ * @param list<float>                             $flow_values     Flow values (CFS).
+ * @param array<int, array{0: float, 1: float}>   $rating_lookup   Sorted (gauge_ft, flow_cfs) pairs.
+ * @param string                                  $title           Plot title.
+ * @param string                                  $primary_label   Left-axis label.
+ * @param array{low?: ?float, high?: ?float}|null $bands           Axis-unit band bounds.
  */
 function generate_rating_dual_plot(
     array $flow_times,
