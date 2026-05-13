@@ -67,21 +67,34 @@ def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -
         default=BATCH_SIZE,
         help=f"Sites per request (default: {BATCH_SIZE})",
     )
+    parser.add_argument(
+        "--site",
+        action="append",
+        default=None,
+        metavar="USGS_ID",
+        help="Restrict fetch to this USGS site id; repeatable (default: all gauges with usgs_id)",
+    )
 
 
-def _build_site_map(session: Session) -> dict[str, int]:
+def _build_site_map(session: Session, restrict_to: set[str] | None = None) -> dict[str, int]:
     """Build a mapping of usgs_id → source_id from the database.
 
     Joins gauge → gauge_source → source to find the source_id for each
     USGS station.  When a gauge has multiple sources, prefer the one
     whose name matches the usgs_id (the actual USGS source).
+
+    ``restrict_to``: if set, only sites whose usgs_id is in the set are
+    returned (used by ``--site`` for targeted backfills).
     """
-    rows = session.execute(
+    stmt = (
         select(Gauge.usgs_id, Source.id, Source.name)
         .join(GaugeSource, Gauge.id == GaugeSource.gauge_id)
         .join(Source, GaugeSource.source_id == Source.id)
         .where(Gauge.usgs_id.is_not(None))
-    ).all()
+    )
+    if restrict_to is not None:
+        stmt = stmt.where(Gauge.usgs_id.in_(restrict_to))
+    rows = session.execute(stmt).all()
     result: dict[str, int] = {}
     for usgs_id, source_id, source_name in rows:
         if usgs_id not in result or source_name == usgs_id:
@@ -241,10 +254,13 @@ def fetch_usgs_ogc(args: argparse.Namespace) -> None:
     if dry_run:
         print("Dry run mode — no data will be stored")
 
+    sites_arg = getattr(args, "site", None)
+    restrict_to: set[str] | None = set(sites_arg) if sites_arg else None
+
     # Phase 1: Read site map (short read-only session)
     session = get_session()
     try:
-        site_map = _build_site_map(session)
+        site_map = _build_site_map(session, restrict_to)
     finally:
         session.close()
 

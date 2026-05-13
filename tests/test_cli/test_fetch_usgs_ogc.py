@@ -77,6 +77,14 @@ def test_build_site_map(session):
     assert site_map == {"14306500": src.id}
 
 
+def test_build_site_map_restrict_to_filters_sites(session):
+    """``restrict_to`` narrows the map to the listed usgs_ids (for --site)."""
+    src_a, _ = _make_usgs_source(session, usgs_id="14306500")
+    _make_usgs_source(session, usgs_id="14307605")
+    assert _build_site_map(session, {"14306500"}) == {"14306500": src_a.id}
+    assert _build_site_map(session, set()) == {}
+
+
 def test_build_site_map_excludes_null_usgs_id(session):
     """Gauges without usgs_id are excluded from the site map."""
     fetch_url = FetchUrl(url="https://example.com/other", parser="other", is_active=True)
