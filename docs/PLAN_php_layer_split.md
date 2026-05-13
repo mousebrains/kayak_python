@@ -392,6 +392,16 @@ Per-file phase shape: baseline tests → cluster analysis (in commit messages, n
 2. **Phase 6.2 — Raise PHPStan to max (or as high as the codebase tolerates).** Bump from the Tier-1 level toward level 9. Given the PHPDoc gap noted in Constraints, getting all the way to 9 may require adding native type declarations across `includes/*.php`. Realistic outcome: land at level 8 with a small grandfather list rather than level 9 with a giant one. Use `phpstan-baseline.neon` if the diff is too large for inline fixes.
 3. **Phase 6.3 — Update `CLAUDE.md`.** Document the new PHP discipline: PHPStan level, php-cs-fixer command, integration-test pattern. Pointer to `php/includes/` naming convention.
 
+**Tier 6 outcome (this commit):**
+
+| Phase | Status | Commit | Result |
+|---|---|---|---|
+| 6.1 — Shrink grandfather list | ✓ Done | `cdbbbba` (6 files) + `d5b3bd8` (sanity.php) | Baseline 119 → 79 entries (−40, 34%). missingType.iterableValue class went 46 → 2; most-common class essentially cleared via PHPDoc additions. |
+| 6.2 — Bump PHPStan to level 8 | ✓ Done | `760df8d` | Bump 7 → 8 surfaced 7 findings, all `preg_replace returns null` propagation in mail.php (2) + sanity.php (5). Fixed at source with `?? <fallback>` rather than baselined. Level-8 gate green. |
+| 6.3 — CLAUDE.md PHP discipline | ✓ Done | this commit | New "PHP Tooling" + "PHP Conventions" sections — composer scripts, level-8 gate, mbstring/CSP constraints, IntegrationTestCase pattern, file-prefix helper rule from the 998976d CI lesson, no-load-time-side-effects rule. |
+
+**Why not level 9?** Level 9 would force narrow `mixed` types and require explicit null-checks at every place we currently lean on PHP's coercion. The remaining 79 baseline entries at level 8 are mostly `PDOStatement|false` and `string|false` threading — fixing those in bulk is a separate maintenance pass (per-call-site, not bulk-replaceable via PHPDoc). The bump from 7 → 8 captured the highest-value findings (the chained-`preg_replace` null-propagation class) without paying for level 9's diminishing returns.
+
 ## Risks
 
 - **mbstring trap.** CI has it; production doesn't. Extracted helpers that drift toward `mb_strlen`/`mb_substr` will pass tests but fail in production silently (with subtle character-handling bugs, not crashes). Mitigation: add a CI grep step `! grep -rn "\bmb_" php/` that fails the build.
