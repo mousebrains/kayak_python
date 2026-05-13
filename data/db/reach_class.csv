@@ -132,9 +132,9 @@ id,reach_id,name,low,low_data_type,high,high_data_type
 131,184,II(III),900.0,flow,3000.0,flow
 132,187,I-III,400.0,flow,1600.0,flow
 133,188,IV,2000.0,flow,6000.0,flow
-134,189,V,6.0,flow,12.0,flow
+134,189,V,1600.0,flow,10000.0,flow
 135,190,I-IV,500.0,flow,1500.0,flow
-136,192,II-IV,6.0,gauge,17.0,gauge
+136,192,II-IV,1600.0,flow,31000.0,flow
 137,193,II-III,700.0,flow,3500.0,flow
 138,194,III-IV,1400.0,flow,3000.0,flow
 139,195,IV(V),500.0,flow,3500.0,flow
@@ -158,8 +158,8 @@ id,reach_id,name,low,low_data_type,high,high_data_type
 157,217,III+(V),400.0,flow,1650.0,flow
 158,218,II(III),900.0,flow,3000.0,flow
 159,220,III,900.0,flow,7000.0,flow
-160,221,V+,3.0,flow,5.0,flow
-161,223,IV(V),5.0,flow,7.0,flow
+160,221,V+,3.0,gauge,5.0,gauge
+161,223,IV(V),5.0,gauge,7.0,gauge
 162,224,IV+,300.0,flow,1200.0,flow
 163,225,II,200.0,flow,10000.0,flow
 164,226,III-IV,200.0,flow,1500.0,flow
@@ -173,11 +173,11 @@ id,reach_id,name,low,low_data_type,high,high_data_type
 172,235,II-III,400.0,flow,2000.0,flow
 173,236,IV-V,1000.0,flow,7000.0,flow
 174,237,II-III,400.0,flow,1500.0,flow
-175,238,II-IV+,5.0,flow,9.0,flow
+175,238,II-IV+,5.0,gauge,9.0,gauge
 176,239,II+(IV),800.0,flow,2000.0,flow
 177,241,II-III(IV),400.0,flow,2000.0,flow
 178,242,IV-V,1000.0,flow,4000.0,flow
-179,243,III+(IV),7.0,flow,10.0,flow
+179,243,III+(IV),7.0,gauge,10.0,gauge
 180,244,V,200.0,flow,900.0,flow
 181,245,IV+,2000.0,flow,5000.0,flow
 182,246,III-IV+,2500.0,flow,6000.0,flow
@@ -209,7 +209,7 @@ id,reach_id,name,low,low_data_type,high,high_data_type
 208,276,IV+,1000.0,flow,2500.0,flow
 209,277,IV-V,1000.0,flow,3000.0,flow
 210,278,III-IV+,200.0,flow,500.0,flow
-211,279,I-II(III),5.2,flow,7.0,flow
+211,279,I-II(III),5.2,gauge,7.0,gauge
 212,280,IV(V),4000.0,flow,10000.0,flow
 213,281,III-IV,400.0,flow,7000.0,flow
 214,282,IV(V),2000.0,flow,7000.0,flow
@@ -222,7 +222,7 @@ id,reach_id,name,low,low_data_type,high,high_data_type
 221,289,II-III+(IV),800.0,flow,3000.0,flow
 222,290,III-IV,2300.0,flow,5000.0,flow
 223,291,III+(V),500.0,flow,2500.0,flow
-224,292,I(II),4.0,flow,6.0,flow
+224,292,I(II),4.0,gauge,6.0,gauge
 225,293,III-IV,250.0,flow,1000.0,flow
 226,58,I,400.0,flow,1500.0,flow
 227,85,II-III,300.0,flow,1500.0,flow
@@ -400,3 +400,4 @@ id,reach_id,name,low,low_data_type,high,high_data_type
 399,336,I+(II),600.0,flow,1200.0,flow
 400,60,V,3000.0,flow,,
 401,389,II+,900.0,flow,2000.0,flow
+402,390,III,,,,

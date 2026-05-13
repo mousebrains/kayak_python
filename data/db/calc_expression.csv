@@ -14,3 +14,4 @@ id,data_type,expression,time_expression,note
 10,flow,"round(greatest(0, fa::Fall_Creek_Inflow::inflow - wb::14150800::flow), 1)",fa::Fall_Creek_Inflow::inflow wb::14150800::flow,Fall Creek above Winberry: total reservoir inflow minus Winberry tributary
 11,flow,al::Applegate_Lake::inflow,al::Applegate_Lake::inflow,MF Applegate flow = Applegate Lake inflow (single tributary at reservoir)
 12,flow,"round(greatest(0, jo::Johnson_Yellopine_merge::flow + st::EFSF_Stibnite::flow))",jo::Johnson_Yellopine_merge::flow st::EFSF_Stibnite::flow,EF of SF Salmon at 5349 put-in ≈ Johnson Cr + Stibnite EFSF headwater
+13,flow,"round(greatest(0, sm::Suislaw_Mapleton_merge::flow - lc::14307605::flow))",sm::Suislaw_Mapleton_merge::flow lc::14307605::flow,Siuslaw above Lake Creek = Siuslaw at Mapleton − Lake Creek at Swisshome

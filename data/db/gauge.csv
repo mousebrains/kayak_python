@@ -185,3 +185,5 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 184,28B080,,,Washougal,45.5835856510001,-122.34569456,,WASW,,,WASW1,,,,51.9,,170800010606,0,Washougal,Washougal at Washougal,washougal|9|009948|999999,WA
 185,CORVALLIS_merge,,,Corvallis,44.566361,-123.256806,,,,,CORO3,,14171600,,180.0,4420.0,170900030609,0,Willamette,Willamette at Corvallis,willamette|9|009820|004420,OR
 186,14158850,,,blw Trail Bridge Dam,44.2679001,-122.0497826,,,,,,,14158850,,1980.0,184.0,170900040206,0,McKenzie,McKenzie blw Trail Bridge Dam,mckenzie|9|008020|000184,OR
+187,14307605,,,Swisshome,44.0565,-123.7946889,,,,,,,14307605,,115.0,223.0,17100206,0,Lake Creek,Lake Creek at Swisshome,lake creek|9|009885|000223,OR
+188,Siuslaw_above_LakeCreek_calc,,,above Lake Creek,44.05501612351312,-123.79482873628976,,,,,,,,,50.0,365.0,17100206,0,Siuslaw,Siuslaw above Lake Creek,siuslaw|9|009950|000365,OR
