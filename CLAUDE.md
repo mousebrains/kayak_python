@@ -85,6 +85,54 @@ Ruff config: Python 3.13 target, 100-char line length, rules `E W F I UP B SIM R
 php -S localhost:8000 -t public_html  # Serve PHP pages + static build output
 ```
 
+### PHP Tooling
+
+```bash
+composer install --no-interaction --no-progress --prefer-dist  # First-time setup
+
+composer test                          # vendor/bin/phpunit
+composer analyse                       # vendor/bin/phpstan --memory-limit=1G (level 8)
+composer fix                           # vendor/bin/php-cs-fixer fix (in-place)
+composer fix-check                     # ... --dry-run (what CI runs)
+composer baseline                      # Regenerate phpstan-baseline.neon
+```
+
+PHPStan runs at **level 8** with `phpstan-baseline.neon` carrying pre-existing
+`PDOStatement|false`/`string|false`-narrowing finds (see file header for the
+shrinkage history through Tiers 2–6 of `docs/PLAN_php_layer_split.md`).
+PHP-FPM in prod **lacks mbstring** — use `strlen`/`substr`/`strtolower`,
+not `mb_*`. CSP is enforced — `<script>` tags must have `src=`; no inline
+event handlers.
+
+Integration tests use `tests/php/IntegrationTestCase.php`, which spawns
+`php -S 127.0.0.1:0` against a tmp SQLite DB seeded by `levels init-db`
+plus a per-test-class `seedDatabase()` hook. For editor-gated endpoints,
+`seedEditorSession($email, $status = 'full'|'maintainer')` returns
+`{editor_id, session_token, csrf_token}` — pass through `request()`'s
+`$cookies` arg as `ed_sess` + `ed_csrf`, plus `csrf_token` in the POST
+body for double-submit CSRF.
+
+### PHP Conventions (`php/includes/`)
+
+- **One concern per file.** Entry-point shims in `php/*.php` stay <60
+  lines (arg-parse + auth-gate + dispatch); the work lives in
+  `php/includes/<entry>_handler.php`.
+- **File-private helpers carry the file's prefix.** Use `_<file>_*`
+  (e.g. `_review_handle_post`, `_render_custom_table`, `_gp_fetch_series`),
+  not bare `_*`. PHP's global function namespace makes bare-underscore
+  collisions invisible locally but fatal on PHPStan's file-load-order in
+  CI (see commit `998976d` for the lesson).
+- **Module constants too.** Use `<FILE>_<NAME>` (e.g.
+  `CUSTOM_LEVELS_STATUS_META`, `REVIEW_LIST_STATUSES`) to keep the
+  same boundary.
+- **No load-time side effects in `includes/*.php`.** `require_once`,
+  `const`, and `function` definitions only — load-time PDO or echo
+  breaks `phpunit.xml`'s coverage isolation.
+- **Public vs private.** Function names without a leading underscore
+  are part of the file's public API (consumed by other files); names
+  with a leading underscore are file-private and may be renamed
+  freely.
+
 ### Stream Tracing
 
 ```bash
