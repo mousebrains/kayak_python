@@ -63,6 +63,15 @@ test('/map.html loads with no JS errors', async ({ page }) => {
   // container's existence confirms map.js ran past its init block
   // (the 5-loop `_mfCasing/_mfHit` rendering at map.js:276-299 needs
   // the container to construct successfully).
+  //
+  // **Load-bearing data dependency:** map.js:120 emits
+  // `console.error('map data load failed:', e)` if reaches-geom.json
+  // can't be fetched. Today `levels build` always writes that file
+  // (empty-array JSON is still valid + serveable), so the toEqual([])
+  // check holds. If a future build optimization adds "skip empty
+  // static JSON," this test goes red for a non-bug — update the
+  // build step in global-setup.ts or seed reach data before that
+  // change lands.
   const errors = captureJsErrors(page);
 
   const resp = await page.goto('/map.html');

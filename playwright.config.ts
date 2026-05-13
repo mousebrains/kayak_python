@@ -28,6 +28,10 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: 'tests/js',
   workers: 1, // php -S is single-threaded; serial execution avoids races.
+  // Block an accidental `test.only(...)` from landing green in CI —
+  // skipped-but-passing isn't a regression locally but is a real one
+  // on main where only one of N tests would actually run.
+  forbidOnly: !!process.env.CI,
   globalSetup: './tests/js/global-setup.ts',
   globalTeardown: './tests/js/global-teardown.ts',
   use: {

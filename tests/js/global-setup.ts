@@ -76,6 +76,11 @@ export default async function globalSetup(): Promise<void> {
         ...process.env,
         SQLITE_PATH: dbPath,
         DATABASE_URL: databaseUrl,
+        // EDITOR_FEATURE=0 means /auth.php, /login.php, /propose.php
+        // etc. return 404 under JS smoke tests. Intentional divergence
+        // from tests/php/IntegrationTestCase.php (which sets =1): JS
+        // smoke is page-load-only and editor flows are out of scope
+        // per docs/PLAN_js_smoke_tests.md §"Out of scope".
         EDITOR_FEATURE: '0',
         MAIL_FROM: 'test@example.com',
         SITE_URL: 'http://127.0.0.1',
@@ -88,11 +93,26 @@ export default async function globalSetup(): Promise<void> {
     },
   );
 
-  // Surface server stderr if the process dies before serving requests —
-  // helps diagnose "port in use" or PHP fatal-on-boot failures.
-  phpProc.stderr?.on('data', () => { /* drained but not echoed; on failure the report HTML keeps the artifact */ });
+  // Buffer stderr so a fail-fast exit can include it in the error
+  // message. Without this, a port-already-in-use death looks like a
+  // generic "server never started" timeout, which is unactionable.
+  let stderrBuf = '';
+  phpProc.stderr?.on('data', (chunk: Buffer) => {
+    stderrBuf += chunk.toString('utf8');
+  });
 
-  await waitForPort('127.0.0.1', port, 5_000);
+  let exited = false;
+  let exitInfo: { code: number | null; signal: NodeJS.Signals | null } | null = null;
+  phpProc.on('exit', (code, signal) => {
+    exited = true;
+    exitInfo = { code, signal };
+  });
+
+  await waitForPort('127.0.0.1', port, 5_000, () => exited, () => ({
+    exitInfo,
+    stderr: stderrBuf,
+    port,
+  }));
 
   // Persist for globalTeardown. process.env strings only — no arbitrary
   // types — so JSON-encode the structured handoff.
@@ -125,15 +145,63 @@ function resolveLevelsCommand(repoRoot: string): string | null {
   }
 }
 
-/** Poll <host>:<port> until a TCP connect succeeds, or throw after <timeoutMs>. */
-async function waitForPort(host: string, port: number, timeoutMs: number): Promise<void> {
+/**
+ * Poll <host>:<port> until a TCP connect succeeds, or throw after
+ * <timeoutMs>. If <exitedCb> returns true mid-wait (the server died),
+ * fail fast with the exit + stderr context from <contextCb> instead
+ * of waiting out the full timeout — port-in-use / PHP-boot-fatal
+ * deaths surface in <100 ms but the timeout error alone is
+ * unactionable.
+ */
+async function waitForPort(
+  host: string,
+  port: number,
+  timeoutMs: number,
+  exitedCb: () => boolean,
+  contextCb: () => { exitInfo: { code: number | null; signal: NodeJS.Signals | null } | null; stderr: string; port: number },
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
+  // Initial settle: PHP -S death on bind-failure is ~50 ms; wait a
+  // tick so the 'exit' event lands before the squatter race below.
+  await sleep(100);
   while (Date.now() < deadline) {
+    if (exitedCb()) {
+      throwDeadServer(host, contextCb());
+    }
     const ok = await tryConnect(host, port);
-    if (ok) return;
+    if (ok) {
+      // The port responded — but did OUR process bind it, or is a
+      // squatter on the same port serving the bytes? If our spawned
+      // PHP exited after the connect, it died on bind ("Address
+      // already in use") and the connect we just saw went to whoever
+      // had the port first.
+      await sleep(50);
+      if (exitedCb()) {
+        throwDeadServer(host, contextCb());
+      }
+      return;
+    }
     await sleep(50);
   }
-  throw new Error(`PHP server at ${host}:${port} never started accepting within ${timeoutMs}ms`);
+  throw new Error(
+    `PHP server at ${host}:${port} never started accepting within ${timeoutMs}ms ` +
+      `(process still running, port not bound)`,
+  );
+}
+
+function throwDeadServer(
+  host: string,
+  ctx: { exitInfo: { code: number | null; signal: NodeJS.Signals | null } | null; stderr: string; port: number },
+): never {
+  const exitDesc = ctx.exitInfo
+    ? `exited (code=${ctx.exitInfo.code} signal=${ctx.exitInfo.signal})`
+    : 'exited';
+  throw new Error(
+    `PHP server died before/while listening on ${host}:${ctx.port}: ${exitDesc}\n` +
+      `stderr:\n${ctx.stderr || '(empty)'}\n` +
+      'Common cause: another process is already bound to that port. ' +
+      'Override with KAYAK_TEST_PORT=<other>.',
+  );
 }
 
 function tryConnect(host: string, port: number): Promise<boolean> {
