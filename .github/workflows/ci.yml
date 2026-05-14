@@ -52,8 +52,11 @@ jobs:
           # what prod has, so a future mb_* call fails locally + in CI before it
           # 500s in prod. Verified zero mb_* call sites in src/, php/, scripts/,
           # tests/ as of 2026-05-14.
-          extensions: pdo_sqlite, curl
-          coverage: none
+          extensions: pdo_sqlite, curl, pcov
+          # pcov is the lightweight line-coverage driver (vs xdebug).
+          # PHPUnit emits the Clover report consumed by
+          # scripts/check-php-coverage.sh. T2.7 / PLAN_pre_release_followup.md.
+          coverage: pcov
           tools: composer:v2
 
       - name: Install biome
@@ -105,8 +108,12 @@ jobs:
       - name: Install kayak package (for `levels init-db`)
         run: pip install -e .
 
-      - name: PHPUnit
-        run: vendor/bin/phpunit
+      - name: PHPUnit (with line coverage via pcov)
+        run: vendor/bin/phpunit --coverage-clover=coverage.xml --coverage-text
+
+      - name: PHP coverage gate (40% floor)
+        # T2.7: ratchet upward in follow-up PRs as coverage grows.
+        run: FLOOR_PERCENT=40 scripts/check-php-coverage.sh coverage.xml
 
       - name: PHPStan
         # Level 7 with phpstan-baseline.neon grandfathering the 123
