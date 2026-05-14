@@ -30,6 +30,7 @@ function include_footer(): void {
 <footer>
 <p>$links</p>
 <p>Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.</p>
+<p>Code: <a href="/LICENSE.txt">GPL v3</a> &middot; Data: <a href="/LICENSE-DATA.txt">CC BY-NC 4.0</a></p>
 </footer>
 <script src="/static/levels.js" defer></script>
 <script src="/static/plot-hover.js" defer></script>

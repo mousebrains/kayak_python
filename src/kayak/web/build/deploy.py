@@ -29,12 +29,12 @@ from kayak.web.build._shared import (
     _CSS_PATH,
     _FILTERS_JS_PATH,
     _JS_PATH,
+    _LICENSE_META,
     _NAV_STATES,
     _atomic_write,
     _css_link_tag,
     _load_css,
 )
-from kayak.web.build.exports import _build_csv, _build_text
 from kayak.web.build.gauges import _write_gauges_page
 from kayak.web.build.geojson import _build_reaches_state, _build_reaches_static
 from kayak.web.build.levels import (
@@ -58,9 +58,7 @@ logger = logging.getLogger(__name__)
 
 def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     """Register the 'build' subcommand."""
-    parser = subparsers.add_parser(
-        "build", help="Generate static HTML/CSV/text files to output directory"
-    )
+    parser = subparsers.add_parser("build", help="Generate static HTML files to output directory")
     parser.add_argument(
         "--output-dir",
         default=os.environ.get("OUTPUT_DIR", str(BASE_DIR / "public_html")),
@@ -120,6 +118,19 @@ def _deploy_config_files(output_dir: Path) -> None:
             shutil.copy2(src, output_dir / name)
 
 
+def _deploy_license_files(output_dir: Path) -> None:
+    """Copy LICENSE (GPL v3) and LICENSE-DATA (CC BY-NC 4.0) from repo root.
+
+    Served as ``.txt`` so nginx returns ``text/plain`` and browsers render
+    them inline. The footer in ``php/includes/footer.php`` and the static-
+    page footer link to ``/LICENSE.txt`` and ``/LICENSE-DATA.txt``.
+    """
+    for src_name, dst_name in (("LICENSE", "LICENSE.txt"), ("LICENSE-DATA", "LICENSE-DATA.txt")):
+        src = BASE_DIR / src_name
+        if src.is_file():
+            shutil.copy2(src, output_dir / dst_name)
+
+
 def _deploy_source_files(output_dir: Path) -> None:
     """Copy source files from the repo into the output directory.
 
@@ -129,6 +140,7 @@ def _deploy_source_files(output_dir: Path) -> None:
     _deploy_static_assets(output_dir)
     _deploy_php_files(output_dir)
     _deploy_config_files(output_dir)
+    _deploy_license_files(output_dir)
 
 
 def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
@@ -190,9 +202,7 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
         # index.html = all reaches levels table (excludes map_only). Data
         # spans every state, so this is the "all page" that gets the state
         # filter group in the filter bar. state="" keeps the nav bar with
-        # no state highlighted, the title as plain "River Levels", and the
-        # companion CSV/text at levels.csv / levels.text rather than
-        # mis-labeling them as Oregon-specific.
+        # no state highlighted and the title as plain "River Levels".
         _build_and_write(
             session,
             index_reaches,
@@ -358,7 +368,7 @@ def _sweep_orphans(live: Path, kept: set[Path]) -> list[Path]:
 
 
 def build(args: argparse.Namespace) -> None:
-    """Generate static HTML/CSV/text files into output_dir.
+    """Generate static HTML files into output_dir.
 
     Builds to a sibling ``.staging`` directory, applies ACLs, then per-file
     rename-replaces each output into output_dir and sweeps orphans. The
@@ -405,8 +415,7 @@ def _build_and_write(
     preloaded: tuple[set[int], dict[tuple[int, DataType], LatestGaugeObservation]] | None = None,
     filename: str | None = None,
 ) -> None:
-    """Build and write CSV, text, and HTML for a state (or all)."""
-    suffix = f"_{state}" if state else ""
+    """Build and write the HTML page + sparklines for a state (or all)."""
     label = state or "all"
     if filename is None:
         filename = f"{state}.html" if state else "all.html"
@@ -422,14 +431,6 @@ def _build_and_write(
         calculated_gauge_ids = get_calculated_gauge_ids(session, gauge_ids)
         all_latest = get_all_latest_gauges(session, gauge_ids)
     sparkline_obs = _select_sparkline_series(session, gauge_ids)
-
-    # CSV
-    csv_content = _build_csv(reaches, columns, state, calculated_gauge_ids, all_latest)
-    _atomic_write(output_dir / f"levels{suffix}.csv", csv_content)
-
-    # Text
-    text_content = _build_text(reaches, columns, state, calculated_gauge_ids, all_latest)
-    _atomic_write(output_dir / f"levels{suffix}.text", text_content)
 
     # HTML — sparklines loaded lazily via JS
     table_html, letters = _build_html_table(
@@ -452,7 +453,10 @@ def _build_and_write(
     )
     _atomic_write(output_dir / filename, page_html)
 
-    # Sparklines JSON — keyed by gauge_id, loaded by levels.js after paint
+    # Sparklines JSON — keyed by gauge_id, loaded by levels.js after paint.
+    # _meta carries the data license; the JS consumer at
+    # src/kayak/web/static/levels.js does keyed lookup by data-gid only, so
+    # adding extra top-level keys is non-breaking.
     sparklines: dict[str, str] = {}
     for reach in reaches:
         if reach.gauge and reach.gauge.id not in sparklines:
@@ -461,4 +465,5 @@ def _build_and_write(
                 sparklines[str(reach.gauge.id)] = svg
     static_dir = output_dir / "static"
     static_dir.mkdir(parents=True, exist_ok=True)
-    _atomic_write(static_dir / "sparklines.json", json.dumps(sparklines))
+    sparklines_out: dict[str, Any] = {"_meta": _LICENSE_META, **sparklines}
+    _atomic_write(static_dir / "sparklines.json", json.dumps(sparklines_out))

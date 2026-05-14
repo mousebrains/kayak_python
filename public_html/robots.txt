@@ -7,10 +7,43 @@ Disallow: /
 User-agent: ClaudeBot
 Disallow: /
 
+User-agent: anthropic-ai
+Disallow: /
+
 User-agent: CCBot
 Disallow: /
 
 User-agent: Google-Extended
+Disallow: /
+
+User-agent: PerplexityBot
+Disallow: /
+
+User-agent: Applebot-Extended
+Disallow: /
+
+User-agent: Meta-ExternalAgent
+Disallow: /
+
+User-agent: FacebookBot
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+User-agent: Amazonbot
+Disallow: /
+
+User-agent: DuckAssistBot
+Disallow: /
+
+User-agent: ImagesiftBot
+Disallow: /
+
+User-agent: omgili
+Disallow: /
+
+User-agent: Diffbot
 Disallow: /
 
 User-agent: *
@@ -29,6 +62,8 @@ Disallow: /latest.php
 Disallow: /data.php
 Disallow: /plot.php
 Disallow: /csp-report.php
+Disallow: /levels.csv
+Disallow: /levels.text
 Allow: /
 
 Sitemap: https://levels.wkcc.org/sitemap.xml

@@ -168,6 +168,8 @@ def _build_footer_html() -> str:
         f"<p>{links}</p>\n"
         "<p>Data sourced from USGS, NOAA, USACE, USBR, "
         "and other government agencies.</p>\n"
+        '<p>Code: <a href="/LICENSE.txt">GPL v3</a> '
+        '&middot; Data: <a href="/LICENSE-DATA.txt">CC BY-NC 4.0</a></p>\n'
         "</footer>"
     )
 

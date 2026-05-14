@@ -24,6 +24,18 @@ DATA_EXPIRY_THRESHOLD = timedelta(days=7)
 BRAND_COLOR = "#1b5591"
 BRAND_COLOR_DARK = "#0d3057"
 
+# Embedded license attribution for machine-readable outputs. Added at the
+# top level of every generated JSON file so the license travels with any
+# downloaded copy. See LICENSE-DATA at the repo root for the full terms.
+_LICENSE_META = {
+    "license": "CC BY-NC 4.0",
+    "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+    "attribution": "levels.mousebrains.com",
+    "notice": (
+        "Metadata + calculated values: CC BY-NC 4.0. Observations: public domain at source."
+    ),
+}
+
 _STATE_ABBREVS = {
     "Arizona": "AZ",
     "California": "CA",

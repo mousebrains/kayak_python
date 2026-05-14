@@ -100,6 +100,7 @@ def test_state_file_emits_status_only_when_no_gauge(session) -> None:
 
     raw = _build_reaches_state([a, b], set(), {})
     doc = json.loads(raw)
+    doc.pop("_meta", None)
 
     # Reaches with no gauge get a bare status entry — no v/u/d/ts.
     assert doc == {"10": {"s": "unknown"}, "11": {"s": "unknown"}}
@@ -109,5 +110,17 @@ def test_reach_without_geometry_is_skipped(session) -> None:
     r = _mk_reach(session, 99, name="no_geom", display="NoGeom", geom=None)
     static = json.loads(_build_reaches_static([r]))
     state = json.loads(_build_reaches_state([r], set(), {}))
+    state.pop("_meta", None)
     assert static["features"] == []
     assert state == {}
+
+
+def test_outputs_carry_license_meta(session) -> None:
+    """Every generated JSON file embeds CC BY-NC 4.0 attribution at top level."""
+    r = _mk_reach(session, 200, name="r200", display="R200", geom="-122 44,-122.1 44.1")
+    static = json.loads(_build_reaches_static([r]))
+    state = json.loads(_build_reaches_state([r], set(), {}))
+    for doc in (static, state):
+        assert doc["_meta"]["license"] == "CC BY-NC 4.0"
+        assert doc["_meta"]["attribution"] == "levels.mousebrains.com"
+        assert doc["_meta"]["license_url"].startswith("https://creativecommons.org/")

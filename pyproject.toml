@@ -6,6 +6,7 @@ build-backend = "hatchling.build"
 name = "kayak"
 version = "0.1.0"
 description = "River level data aggregation from government agencies"
+license = "GPL-3.0-or-later"
 requires-python = ">=3.13"
 dependencies = [
     "SQLAlchemy>=2.0",

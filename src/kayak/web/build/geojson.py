@@ -7,6 +7,7 @@ from datetime import UTC
 from kayak.db.models import DataType, LatestGaugeObservation, Reach
 from kayak.utils.class_tiers import parse_class_tiers
 from kayak.utils.simplify import parse_geom, simplify
+from kayak.web.build._shared import _LICENSE_META
 from kayak.web.build.levels import _get_row_data
 
 # GeoJSON geometry simplification. Coordinate precision is matched to the
@@ -82,7 +83,10 @@ def _build_reaches_static(
             "state": reach.states[0].name if reach.states else "",
         }
         features.append({"type": "Feature", "properties": props, "geometry": geometry})
-    return json.dumps({"type": "FeatureCollection", "features": features}, separators=(",", ":"))
+    return json.dumps(
+        {"_meta": _LICENSE_META, "type": "FeatureCollection", "features": features},
+        separators=(",", ":"),
+    )
 
 
 _POPUP_PRIMARY_ORDER: tuple[tuple[DataType, str, str], ...] = (
@@ -112,7 +116,7 @@ def _build_reaches_state(
     matches the listing pages even when the level threshold lives on a
     different data type than the displayed value.
     """
-    out: dict[str, dict] = {}
+    out: dict[str, dict] = {"_meta": _LICENSE_META}
     for reach in reaches:
         # Only emit reaches whose geometry also makes it into the static
         # file; otherwise the client would carry state it cannot paint.

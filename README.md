@@ -130,6 +130,16 @@ Key systemd timers:
 | [docs/schema-overview.svg](docs/schema-overview.svg) | ER diagram |
 | [docs/nginx-hardening.md](docs/nginx-hardening.md) | Security hardening guide |
 
-## License
+## Licensing
 
-[GNU General Public License v3.0](LICENSE)
+The project ships under four complementary licenses, reflecting the
+different origins and curatorial labor of each layer:
+
+| Layer | License |
+|---|---|
+| Code (Python + PHP) | [GPL v3 or later](LICENSE) |
+| Database metadata | [CC BY-NC 4.0](LICENSE-DATA) |
+| Calculated gauge series | [CC BY-NC 4.0](LICENSE-DATA) |
+| Observation time-series | Public domain at source (USGS, NOAA, USACE, USBR, IDWR, state agencies) |
+
+See [LICENSE](LICENSE) for the full code-license text and [LICENSE-DATA](LICENSE-DATA) for the full data-license terms.

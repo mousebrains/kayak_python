@@ -2,7 +2,7 @@
     "name": "kayak/php",
     "description": "PHP dynamic layer for levels.wkcc.org — tests + static analysis.",
     "type": "project",
-    "license": "proprietary",
+    "license": "GPL-3.0-or-later",
     "require": {
         "php": "^8.4",
         "ext-pdo": "*",
