@@ -160,3 +160,87 @@ For each orphan source, pick one of:
 
 After applying the migration, run `levels orphan-check` on prod to
 confirm zero rows, and the next pipeline run will exit clean.
+
+## Future work — known graph-integrity gaps
+
+These were called out as "Out of scope" by
+`docs/PLAN_orphan_sources.md` so the orphan-check work stayed
+focused. Each one is a real bug surface that a follow-on plan
+should pick up.
+
+### Adjacent graph-health checks
+
+`find_orphan_sources` (in `src/kayak/db/sources.py`) detects one
+specific invariant violation: a fetch-backed `source` row with no
+`gauge_source` link. The same one-row-per-violation reporting shape
+generalizes to several sibling invariants worth a dedicated check
+(and likely a parallel `levels orphan-check`-style CLI plus
+end-of-pipeline gate):
+
+| invariant | violation symptom |
+|-----------|-------------------|
+| Every active `fetch_url` has at least one `source` consuming it | URL fetches into nothing; observations land but nothing reads them. Distinct from current orphan-check, which catches the *source* end of the same edge. |
+| Every `gauge` has at least one `gauge_source` link | Gauge displays no data; reaches pointing at it are silently dark. |
+| Every `reach` has a non-NULL `gauge_id` | Reach renders without a level value on the front page. |
+| Every `calc_expression.time_expression` resolves to a live gauge + data_type | The May 2026 incident was downstream of this; the orphan-check catches the upstream symptom but not the calc-side staleness directly. |
+
+A future plan should pick which of these to land first — the
+`gauge` and `reach` checks are the highest signal because they
+gate user-visible data; the `fetch_url` check is cheap but rarely
+fires; the `calc_expression` check is the trickiest because it
+requires evaluating the time_expression's gauge-name resolution.
+
+### `init-db`'s missing `gauge_source` seed path
+
+`levels init-db` seeds `state`, `source`, and `fetch_url` from
+`data/sources.yaml` but **does not** create any `gauge_source`
+links. Only one migration in the entire repo (0020) contains
+`INSERT INTO gauge_source` and even then only as a fix; the rest of
+the live links are operator-applied side effects that exist only on
+the production DB.
+
+Consequences:
+
+- **`init-db` + `migrate` on a fresh DB produces a DB where every
+  fetch-backed source is an orphan.** `levels orphan-check` would
+  flag ~300 rows.
+- **Rebuilding prod from scratch (e.g., after a catastrophic
+  corruption with no usable backup) is not possible** purely from
+  what's checked in — the operator would have to re-derive every
+  `gauge_source` link from memory or from a stale CSV snapshot.
+- The CSVs under `data/db/*.csv` are
+  nightly auto-snapshots, not seeds. They're useful for git-diff
+  drift detection but no code path reads them back into the DB.
+
+A future plan should pick a direction:
+
+- **Read-back-from-CSV at init-db time.** Cheapest. `init-db`
+  reads `data/db/gauge_source.csv` (and probably also
+  `data/db/gauge.csv`, `reach.csv`, etc.) after `Base.metadata.create_all`.
+  Risk: CSV drift becomes load-bearing instead of advisory.
+- **A bootstrap migration that contains the entire `gauge_source`
+  table.** Heaviest. Migration `0001_baseline.sql` would balloon
+  but the DB rebuild path becomes mechanical.
+- **A `levels seed-from-csv` subcommand operators run after
+  `init-db`.** Splits the cost. Day-to-day fresh-DB
+  development (tests) stays empty; prod rebuild has a documented
+  one-command recovery step.
+
+### Smaller follow-ups (one-line each)
+
+- **Rename `_auto_create_source`** to express the danger surface
+  more clearly (e.g., `_auto_create_orphan_source` when
+  `source_map` is empty). Rejected during the orphan-source plan
+  as not worth the churn; revisit if the function gains more
+  conditional behavior.
+- **Schema-level FK / CHECK constraint** that fetch-backed sources
+  must have a `gauge_source` link. SQLite triggers don't span tables
+  cleanly and would block legitimate intermediate migration states.
+  Phase 2b's post-pipeline check covers the same invariant at
+  query-time, but a constraint would catch violations earlier.
+- **Orphan-source deletion path.** Currently the only documented
+  recovery for an orphan is "link it to a gauge" or "deactivate
+  the URL." Deleting the source row itself requires the
+  0018-style observation re-pointing dance, which has no helper
+  yet. A `levels delete-orphan-source --id N --reroute-to M`
+  subcommand would close that gap.
