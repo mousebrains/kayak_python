@@ -13,14 +13,20 @@ ExecStartPost=-/usr/bin/curl -fsS -m 10 --retry 3 -o /dev/null ${HC_CERT_RENEWAL
 TimeoutStartSec=300
 Nice=15
 
-# Root needs to read /etc/letsencrypt + write /var/log/letsencrypt, plus
-# /home/pat/.config/kayak/.env for the HC_CERT_RENEWAL_TEST var. ProtectHome
+# certbot --nginx --dry-run needs to:
+#   - read /etc/letsencrypt (cert state)
+#   - write /var/log/letsencrypt + /var/lib/letsencrypt (certbot work)
+#   - run `nginx -t`, which opens /var/log/nginx/error.log for append
+#   - have the --nginx plugin insert/remove a temporary location block in
+#     /etc/nginx/ during ACME validation, even on dry-run
+#   - reload nginx via the pid in /run/nginx.pid
+# Plus /home/pat/.config/kayak/.env for HC_CERT_RENEWAL_TEST. ProtectHome
 # is read-only (matches every other kayak-* unit's pattern) so root can still
 # read the env file while /home is otherwise locked.
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
-ReadWritePaths=/etc/letsencrypt /var/log/letsencrypt /var/lib/letsencrypt
+ReadWritePaths=/etc/letsencrypt /var/log/letsencrypt /var/lib/letsencrypt /etc/nginx /var/log/nginx /run
 ProtectHome=read-only
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
