@@ -15,20 +15,14 @@ ExecStartPost=-/usr/bin/curl -fsS -m 10 --retry 3 -o /dev/null ${HC_PIPELINE}
 TimeoutStartSec=400
 Nice=10
 
-# Sandboxing. Pre-QW.6 this granted write access to all of /home/pat;
-# the public_html.staging-then-rename(2) flow (post-symlink-retirement,
-# see project_public_html_standalone) only needs three subdirs:
-#   /home/pat/public_html          — build output (atomic rename(2) per file)
-#   /home/pat/public_html.staging  — sibling staging dir under shutil.rmtree
-#   /home/pat/DB                   — kayak.db + WAL sidecars
-# /home/pat/.config is left readable (ProtectHome=read-only still permits
-# reads of the EnvironmentFile via dotenv); the pipeline never writes there.
+# Sandboxing. /home/pat is needed in ReadWritePaths because build.py swaps
+# the public_html symlink in the home dir via rename().
 NoNewPrivileges=yes
 PrivateTmp=yes
 PrivateDevices=yes
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/home/pat/public_html /home/pat/public_html.staging /home/pat/DB
+ReadWritePaths=/home/pat /home/pat/DB /home/pat/.config
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes
