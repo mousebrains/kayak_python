@@ -353,6 +353,11 @@ def _sweep_orphans(live: Path, kept: set[Path]) -> list[Path]:
     directories are left alone — harmless, and avoids a race with any
     concurrent reader.
 
+    Skips paths under ``.staging`` (the in-progress build tree, which
+    lives as a subdir of output_dir per QW.6 — see ``build()`` docstring).
+    Otherwise the sweep would delete every staged file the current build
+    just wrote.
+
     Returns the list of relative paths removed, for the build log.
     """
     live = live.resolve()
@@ -361,20 +366,33 @@ def _sweep_orphans(live: Path, kept: set[Path]) -> list[Path]:
         if not p.is_file() or p.is_symlink():
             continue
         rel = p.relative_to(live)
+        if rel.parts and rel.parts[0] == _STAGING_DIRNAME:
+            continue
         if rel not in kept:
             p.unlink()
             removed.append(rel)
     return removed
 
 
+_STAGING_DIRNAME = ".staging"
+
+
 def build(args: argparse.Namespace) -> None:
     """Generate static HTML files into output_dir.
 
-    Builds to a sibling ``.staging`` directory, applies ACLs, then per-file
-    rename-replaces each output into output_dir and sweeps orphans. The
-    per-file rename keeps every URL atomic — a request always sees either
-    the old or new file, never a half-written one — without ever swapping
-    a symlink under in-flight PHP requests.
+    Builds to a ``.staging`` subdirectory of output_dir, applies ACLs, then
+    per-file rename-replaces each output into output_dir and sweeps orphans.
+    The per-file rename keeps every URL atomic — a request always sees
+    either the old or new file, never a half-written one — without ever
+    swapping a symlink under in-flight PHP requests.
+
+    Why ``.staging`` is a subdir, not a sibling: per QW.6 (audit follow-up
+    plan), kayak-pipeline.service narrows ``ReadWritePaths`` to specific
+    subdirs. systemd validates every path exists at namespace-setup time,
+    so a sibling ``public_html.staging`` (which is rmtree'd between runs)
+    fails the check. A subdir lives inside output_dir, which always exists.
+    nginx's ``location ~ /\\.`` dotfile rule blocks ``/.staging/*`` access,
+    so this dir is invisible to clients.
     """
     output_dir = Path(
         getattr(args, "output_dir", None)
@@ -382,7 +400,7 @@ def build(args: argparse.Namespace) -> None:
         or str(BASE_DIR / "public_html")
     )
     output_dir.mkdir(parents=True, exist_ok=True)
-    staging = output_dir.parent / f"{output_dir.name}.staging"
+    staging = output_dir / _STAGING_DIRNAME
     if staging.exists():
         shutil.rmtree(staging)
     staging.mkdir(parents=True)

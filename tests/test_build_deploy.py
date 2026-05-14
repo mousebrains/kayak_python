@@ -318,17 +318,23 @@ def test_build_cleans_staging_on_failure(tmp_path: Path, monkeypatch: pytest.Mon
         build_mod.build(argparse.Namespace(output_dir=str(live)))
 
     assert (live / "index.html").read_text() == "untouched"
-    assert not (tmp_path / "public_html.staging").exists()
+    # Staging dir lives at <live>/.staging post-QW.6; finally cleared it.
+    assert not (live / ".staging").exists()
 
 
 def test_build_removes_stale_staging_before_rebuild(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A stale .staging dir from a previous aborted run is wiped before
-    the new build writes to it."""
+    the new build writes to it.
+
+    Post-QW.6 staging lives at ``<output_dir>/.staging``, not as a sibling,
+    so the QW.6 systemd ReadWritePaths bind-mount finds it inside the
+    always-present output_dir.
+    """
     live = tmp_path / "public_html"
     live.mkdir()
-    stale_staging = tmp_path / "public_html.staging"
+    stale_staging = live / ".staging"
     stale_staging.mkdir()
     (stale_staging / "leftover.html").write_text("from a prior aborted build")
 
