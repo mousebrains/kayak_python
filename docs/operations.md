@@ -230,6 +230,11 @@ When `kayak-pipeline.service` exits nonzero:
    - `build` — usually a Python exception from a schema change that
      didn't propagate to the build code. Re-run `pytest tests/` to
      surface.
+   - `orphan-check` — a fetch-active source has no `gauge_source`
+     link; the pipeline build still completed but the run is marked
+     failed so the operator notices. Triage steps in
+     [`docs/migrations.md` § "Reacting to an orphan-check pipeline
+     alert"](migrations.md#reacting-to-an-orphan-check-pipeline-alert).
 
 3. **Run the failing step on its own** to iterate faster than waiting
    for the next timer fire:

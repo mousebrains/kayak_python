@@ -169,6 +169,7 @@ Schema evolution:
 1. Add or change the model in `models.py`.
 2. For new fresh-DB shape only, `levels init-db` (re)creates tables via `Base.metadata.create_all()` and stamps every discovered migration file as applied.
 3. For changes that need to land on an existing DB (ALTER / DROP / rename / CHECK), add a new `data/db/migrations/NNNN_description.sql` and run `levels migrate` — SQL runs in file-order inside a transaction; the row in `schema_migrations` records completion.
+4. Migrations that delete `source` rows have a checklist — see [`docs/migrations.md`](docs/migrations.md) for the orphan-prevention pre-flight (calc-input verification, fetch_url cleanup, `levels orphan-check` against a sandbox).
 
 ### Parser System
 
