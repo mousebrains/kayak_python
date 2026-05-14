@@ -327,16 +327,38 @@ class TestValidateUrl:
 # ---------------------------------------------------------------------------
 
 
+class _FakeAsyncContent:
+    """Minimal aiohttp StreamReader-like for _read_capped_text."""
+
+    def __init__(self, body_bytes: bytes):
+        self._body = body_bytes
+
+    async def read(self, n: int = -1) -> bytes:
+        if n < 0 or n >= len(self._body):
+            return self._body
+        return self._body[:n]
+
+
 class _FakeAsyncResponse:
     """Minimal async context manager mimicking aiohttp response."""
 
-    def __init__(self, status=200, body="ok", headers=None):
+    def __init__(self, status=200, body="ok", headers=None, content_length=None, charset=None):
         self.status = status
         self._body = body
         self.headers = headers or {"Content-Type": "text/plain"}
+        body_bytes = body.encode("utf-8") if isinstance(body, str) else body
+        self.content = _FakeAsyncContent(body_bytes)
+        # Real aiohttp.ClientResponse exposes content_length as the server's
+        # Content-Length header (int) or None. Default to None so the cap
+        # path falls through to the stream-read check.
+        self.content_length = content_length
+        self.charset = charset or "utf-8"
 
     async def text(self, errors="replace"):
-        return self._body
+        # Kept for backward compatibility with any test still calling it
+        # directly; production code path now uses _read_capped_text(resp).
+        body = self._body
+        return body if isinstance(body, str) else body.decode(self.charset, errors=errors)
 
     async def __aenter__(self):
         return self
@@ -558,3 +580,60 @@ class TestAsyncFetchMany:
         assert results["http://retry.com/page"].ok is True
         assert results["http://retry.com/page"].text == "recovered"
         assert call_count == 3
+
+    def test_caps_oversize_body_via_stream(self):
+        """A chunked response over _MAX_BODY_BYTES returns an error FetchResult."""
+        from kayak.utils.http_client import _MAX_BODY_BYTES
+
+        urls = ["http://hostile.com/huge"]
+        oversize = b"A" * (_MAX_BODY_BYTES + 100)
+        fake_session = _FakeSession({"http://hostile.com/huge": _FakeAsyncResponse(200, oversize)})
+
+        with (
+            patch("kayak.utils.http_client.aiohttp.TCPConnector"),
+            patch("kayak.utils.http_client.aiohttp.ClientSession", return_value=fake_session),
+        ):
+            results = asyncio.run(async_fetch_many(urls, timeout=10))
+
+        result = results["http://hostile.com/huge"]
+        assert result.ok is False
+        assert result.error is not None
+        assert "cap" in result.error.lower()
+
+    def test_caps_oversize_body_via_content_length(self):
+        """A response advertising Content-Length over the cap is rejected pre-read."""
+        from kayak.utils.http_client import _MAX_BODY_BYTES
+
+        urls = ["http://hostile.com/lying"]
+        # Tiny body but a huge advertised Content-Length — bail before reading.
+        resp = _FakeAsyncResponse(200, "ok", content_length=_MAX_BODY_BYTES * 4)
+        fake_session = _FakeSession({"http://hostile.com/lying": resp})
+
+        with (
+            patch("kayak.utils.http_client.aiohttp.TCPConnector"),
+            patch("kayak.utils.http_client.aiohttp.ClientSession", return_value=fake_session),
+        ):
+            results = asyncio.run(async_fetch_many(urls, timeout=10))
+
+        result = results["http://hostile.com/lying"]
+        assert result.ok is False
+        assert "Content-Length" in (result.error or "")
+
+    def test_body_at_cap_is_accepted(self):
+        """A body of exactly _MAX_BODY_BYTES bytes succeeds (boundary check)."""
+        from kayak.utils.http_client import _MAX_BODY_BYTES
+
+        urls = ["http://normal.com/big"]
+        # Right at the limit — not over.
+        body = b"X" * _MAX_BODY_BYTES
+        fake_session = _FakeSession({"http://normal.com/big": _FakeAsyncResponse(200, body)})
+
+        with (
+            patch("kayak.utils.http_client.aiohttp.TCPConnector"),
+            patch("kayak.utils.http_client.aiohttp.ClientSession", return_value=fake_session),
+        ):
+            results = asyncio.run(async_fetch_many(urls, timeout=10))
+
+        result = results["http://normal.com/big"]
+        assert result.ok is True
+        assert len(result.text) == _MAX_BODY_BYTES

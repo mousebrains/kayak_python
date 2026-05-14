@@ -128,7 +128,14 @@ def test_pipeline_exits_nonzero_on_failure(
     mock_build,
     mock_engine,
 ):
-    """A step exception runs later steps, then raises SystemExit(1)."""
+    """A fetch failure short-circuits downstream and raises SystemExit(1).
+
+    Pre-QW.5 this test asserted "subsequent steps still ran" — the audit
+    flagged that as encoding the bug as a feature (stale data baked into
+    the build after fetch failed). New behavior: fail-fast. Downstream
+    transform/build steps are skipped; --continue-on-error opts back into
+    the old "run everything" shape (see test_pipeline_continue_on_error).
+    """
     conn = MagicMock()
     mock_engine.return_value.connect.return_value.__enter__ = MagicMock(return_value=conn)
     mock_engine.return_value.connect.return_value.__exit__ = MagicMock(return_value=False)
@@ -140,10 +147,14 @@ def test_pipeline_exits_nonzero_on_failure(
         pipeline(args)
     assert exc_info.value.code == 1
 
-    # Subsequent steps still ran before we exited.
+    # fetch attempted; fetch-usgs-ogc is independent and still runs.
     mock_fetch.assert_called_once()
-    mock_calc_rating.assert_called_once()
-    mock_build.assert_called_once()
+    mock_ogc.assert_called_once()
+    # Downstream transforms / build short-circuit because fetch failed.
+    mock_calc_rating.assert_not_called()
+    mock_gauge_cache.assert_not_called()
+    mock_calculator.assert_not_called()
+    mock_build.assert_not_called()
 
 
 @patch("kayak.cli.pipeline.get_engine")
@@ -162,7 +173,11 @@ def test_pipeline_continue_on_error_suppresses_exit(
     mock_build,
     mock_engine,
 ):
-    """--continue-on-error: failures are reported but pipeline returns 0."""
+    """--continue-on-error: run all steps regardless of fetch failure, exit 0.
+
+    Forensic mode — operator wants to see how far the pipeline can get
+    even with broken fetch. Disables the QW.5 fail-fast short-circuit.
+    """
     conn = MagicMock()
     mock_engine.return_value.connect.return_value.__enter__ = MagicMock(return_value=conn)
     mock_engine.return_value.connect.return_value.__exit__ = MagicMock(return_value=False)
@@ -173,5 +188,45 @@ def test_pipeline_continue_on_error_suppresses_exit(
     # Must not raise SystemExit.
     pipeline(args)
 
+    # Every step runs even though fetch raised.
     mock_fetch.assert_called_once()
+    mock_ogc.assert_called_once()
+    mock_calc_rating.assert_called_once()
+    mock_gauge_cache.assert_called_once()
+    mock_calculator.assert_called_once()
     mock_build.assert_called_once()
+
+
+@patch("kayak.cli.pipeline.get_engine")
+@patch("kayak.cli.pipeline.build.build")
+@patch("kayak.cli.pipeline.calculator.calculator")
+@patch("kayak.cli.pipeline._update_gauge_cache")
+@patch("kayak.cli.pipeline.calc_rating.calc_rating")
+@patch("kayak.cli.pipeline.fetch_usgs_ogc.fetch_usgs_ogc")
+@patch("kayak.cli.pipeline.fetch.fetch")
+def test_pipeline_runs_downstream_when_only_usgs_ogc_fails(
+    mock_fetch,
+    mock_ogc,
+    mock_calc_rating,
+    mock_gauge_cache,
+    mock_calculator,
+    mock_build,
+    mock_engine,
+):
+    """fetch-usgs-ogc failing also short-circuits — both fetches are 'fetch steps'."""
+    conn = MagicMock()
+    mock_engine.return_value.connect.return_value.__enter__ = MagicMock(return_value=conn)
+    mock_engine.return_value.connect.return_value.__exit__ = MagicMock(return_value=False)
+
+    # fetch succeeds, fetch-usgs-ogc fails.
+    mock_ogc.side_effect = RuntimeError("OGC endpoint down")
+
+    args = _make_args()
+    with pytest.raises(SystemExit) as exc_info:
+        pipeline(args)
+    assert exc_info.value.code == 1
+
+    mock_fetch.assert_called_once()
+    mock_ogc.assert_called_once()
+    # Downstream still skipped — a fetch step failed.
+    mock_build.assert_not_called()

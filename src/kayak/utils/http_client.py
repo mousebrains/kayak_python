@@ -168,6 +168,31 @@ class FetchResult:
 _RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 _MAX_RETRIES = 3
 
+# Cap response body at 50 MB. Government data feeds are <1 MB typically;
+# 50 MB leaves >50x headroom for legitimate spikes. Above this we treat
+# the feed as hostile (or upstream as unhealthy) and reject the response
+# — better than OOM-killing the pipeline. Applied to the async path
+# (_async_fetch_one) which is where the bulk of pipeline fetches go.
+_MAX_BODY_BYTES = 50_000_000
+
+
+async def _read_capped_text(resp: aiohttp.ClientResponse) -> str:
+    """Mirror ``resp.text(errors='replace')`` but cap body at _MAX_BODY_BYTES.
+
+    Raises ``ValueError`` if the response is over the cap — either because
+    the server-provided ``Content-Length`` exceeds it, or because the
+    actual stream returned more bytes than allowed (chunked transfer with
+    no Content-Length).
+    """
+    cl = resp.content_length
+    if cl is not None and cl > _MAX_BODY_BYTES:
+        raise ValueError(f"Content-Length {cl} exceeds {_MAX_BODY_BYTES}-byte body cap")
+    raw = await resp.content.read(_MAX_BODY_BYTES + 1)
+    if len(raw) > _MAX_BODY_BYTES:
+        raise ValueError(f"Response body exceeded {_MAX_BODY_BYTES}-byte cap")
+    charset = resp.charset or "utf-8"
+    return raw.decode(charset, errors="replace")
+
 
 # Hosts that rate-limit aggressively when many requests arrive at once.
 # Tuning lives in data/http_concurrency.yaml; the loader is cached so the
@@ -248,7 +273,7 @@ def fetch(url: str, timeout: int | None = None) -> FetchResult:
     return last_result or FetchResult(url=url, error="Max retries exceeded")
 
 
-async def _async_fetch_one(
+async def _async_fetch_one(  # noqa: C901  # body cap adds one branch; restructure deferred to T3.1
     url: str,
     session: aiohttp.ClientSession,
     semaphore: asyncio.Semaphore,
@@ -294,7 +319,11 @@ async def _async_fetch_one(
                     ssl=ssl_arg,
                 ) as resp,
             ):
-                body = await resp.text(errors="replace")
+                try:
+                    body = await _read_capped_text(resp)
+                except ValueError as e:
+                    logger.warning("Body cap exceeded for %s: %s", url, e)
+                    return FetchResult(url=url, error=str(e))
                 status = resp.status
                 headers = dict(resp.headers)
 

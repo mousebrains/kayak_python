@@ -20,6 +20,25 @@ from kayak.db.engine import get_engine
 
 logger = logging.getLogger(__name__)
 
+# Steps that acquire new data. If any of these fail, running the downstream
+# transform/build steps just bakes stale data into the next published HTML
+# without any signal to the operator. Fail-fast skips them so the
+# OnFailure=kayak-notify-failure hook fires loudly instead.
+_FETCH_STEP_NAMES = frozenset({"fetch", "fetch-usgs-ogc"})
+
+
+def _skip_downstream_after_fetch_failure(
+    step_name: str,
+    failures: list[tuple[str, str]],
+    continue_on_error: bool,
+) -> bool:
+    """Decide whether to short-circuit a non-fetch step when a fetch failed."""
+    if continue_on_error:
+        return False
+    if step_name in _FETCH_STEP_NAMES:
+        return False
+    return any(f[0] in _FETCH_STEP_NAMES for f in failures)
+
 
 def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     """Register the 'pipeline' subcommand."""
@@ -49,7 +68,7 @@ def _update_gauge_cache(args: argparse.Namespace) -> None:
         session.close()
 
 
-def pipeline(args: argparse.Namespace) -> None:
+def pipeline(args: argparse.Namespace) -> None:  # noqa: C901  # fail-fast adds one branch; full DAG refactor is T3.2
     """Run the full data pipeline."""
     steps = []
 
@@ -68,8 +87,19 @@ def pipeline(args: argparse.Namespace) -> None:
     )
 
     failures: list[tuple[str, str]] = []
+    skipped: list[str] = []
 
     for step_name, func in steps:
+        # Fail-fast: if any fetch step already failed, skip downstream transforms
+        # and build so we don't publish stale data silently. --continue-on-error
+        # opts out of this for forensic runs.
+        if _skip_downstream_after_fetch_failure(step_name, failures, args.continue_on_error):
+            print(f"\n{'=' * 60}", flush=True)
+            print(f"Skipping: {step_name} (upstream fetch step failed)", flush=True)
+            print(f"{'=' * 60}", flush=True)
+            skipped.append(step_name)
+            continue
+
         print(f"\n{'=' * 60}", flush=True)
         print(f"Running: {step_name}", flush=True)
         print(f"{'=' * 60}", flush=True)
@@ -94,6 +124,12 @@ def pipeline(args: argparse.Namespace) -> None:
         logger.warning("PRAGMA optimize failed: %s", e)
 
     print(f"\n{'=' * 60}", flush=True)
+    if skipped:
+        print(
+            f"Pipeline skipped {len(skipped)} step(s) due to upstream fetch failure: "
+            f"{', '.join(skipped)}",
+            flush=True,
+        )
     if failures:
         print(f"Pipeline finished with {len(failures)} failure(s):", flush=True)
         for step_name, msg in failures:
