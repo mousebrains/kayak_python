@@ -13,6 +13,7 @@ Runs the full data pipeline in order:
 import argparse
 import logging
 import time
+from collections.abc import Callable
 
 from sqlalchemy import text
 
@@ -104,15 +105,19 @@ def _orphan_check(args: argparse.Namespace) -> None:
     raise RuntimeError(f"{len(rows)} orphan source(s) found — see ERROR logs above")
 
 
-def pipeline(args: argparse.Namespace) -> None:  # noqa: C901  # fail-fast adds one branch; full DAG refactor is T3.2
-    """Run the full data pipeline."""
-    steps = []
+_Step = tuple[str, "Callable[[argparse.Namespace], None]"]
 
-    if not args.skip_fetch:
+
+def _build_steps(skip_fetch: bool) -> list[_Step]:
+    """Return the ordered list of pipeline steps.
+
+    Pulled out so tests can assert step order by inspection (no mocking).
+    Honors --skip-fetch by dropping the `fetch` step.
+    """
+    steps: list[_Step] = []
+    if not skip_fetch:
         steps.append(("fetch", fetch.fetch))
-
     steps.append(("fetch-usgs-ogc", fetch_usgs_ogc.fetch_usgs_ogc))
-
     steps.extend(
         [
             ("calc-rating", calc_rating.calc_rating),
@@ -122,6 +127,12 @@ def pipeline(args: argparse.Namespace) -> None:  # noqa: C901  # fail-fast adds 
             ("orphan-check", _orphan_check),
         ]
     )
+    return steps
+
+
+def pipeline(args: argparse.Namespace) -> None:
+    """Run the full data pipeline."""
+    steps = _build_steps(args.skip_fetch)
 
     failures: list[tuple[str, str]] = []
     skipped: list[str] = []
