@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly Kayak certbot dry-run renewal test
+
+[Timer]
+OnCalendar=Mon *-*-* 04:15:00
+RandomizedDelaySec=15min
+Persistent=true
+Unit=kayak-cert-renewal-test.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Kayak Let's Encrypt cert health probe
+
+[Timer]
+OnCalendar=*-*-* 06:30:00
+RandomizedDelaySec=15min
+Persistent=true
+Unit=kayak-cert-expiry.service
+
+[Install]
+WantedBy=timers.target

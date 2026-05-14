@@ -34,7 +34,11 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: "8.4"
-          extensions: pdo_sqlite, curl, mbstring
+          # Prod PHP-FPM lacks mbstring (CLAUDE.md §PHP Tooling). CI installs only
+          # what prod has, so a future mb_* call fails locally + in CI before it
+          # 500s in prod. Verified zero mb_* call sites in src/, php/, scripts/,
+          # tests/ as of 2026-05-14.
+          extensions: pdo_sqlite, curl
           coverage: none
           tools: composer:v2
 
