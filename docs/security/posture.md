@@ -81,7 +81,7 @@ These items have explicit triggers that flip them out of Accepted status. Operat
 | F-5 | Maintainer magic-link only (no 2FA) — Gmail 2FA is the gate | Second maintainer; F-4 implemented; new privileged web operation added; maintainer-account incident |
 | F-6 | `htmlspecialchars()` convention documented; PHP 8.1+ defaults adequate | Drop to PHP < 8.1; convention violated by new code |
 | F-7 | Mass-assignment whitelists cross-file-verified safe | New tier-whitelisted field; refactor that breaks the keys→fields invariant |
-| F-8 | SQL string concat is code-smell only; safe in current usage | `PLAN_php_layer_split` activates; new caller adds less-trusted source; future re-audit finds drift |
+| F-8 | SQL string concat is code-smell only; safe in current usage | `docs/done/PLAN_php_layer_split.md` re-activates; new caller adds less-trusted source; future re-audit finds drift |
 
 ## Deferred findings — trigger conditions
 
@@ -108,7 +108,7 @@ Recurring obligations from the security review:
 ## Out-of-scope items
 
 Documented in `docs/PLAN_editor_security_review.md` under "Out of scope":
-- External pentest, WAF, code-signing / SBOM, compliance certifications, DDoS protection beyond Hetzner default, PHP-layer code refactor (tracked separately in `PLAN_php_layer_split.md`).
+- External pentest, WAF, code-signing / SBOM, compliance certifications, DDoS protection beyond Hetzner default, PHP-layer code refactor (tracked separately in `docs/done/PLAN_php_layer_split.md`).
 
 ## Update triggers for this doc
 

@@ -82,7 +82,7 @@
 
 #### F-8 — `UPDATE $table SET $sets` SQL string concat in edit.php + review_logic.php
 
-- **Status:** ⚪ Accepted (Tier 6 disposition: code-smell tracked; safe in current usage; pair with PLAN_php_layer_split if/when activated).
+- **Status:** ⚪ Accepted (Tier 6 disposition: code-smell tracked; safe in current usage; pair with `docs/done/PLAN_php_layer_split.md` if/when activated).
 - **Threats:** T-T4, T-E2
 - **Severity:** Critical impact if a column or table name from user input ever lands in the concat; low likelihood with current callers.
 - **Description:** Two sites concat into `prepare()`:
@@ -92,10 +92,10 @@
   Both currently use whitelisted `$table` and `$sets` (the `$field = ?` strings have field names from the editable-field list). Safe in current usage; the pattern is a code smell — a future contributor could pass user-supplied keys.
 - **Acceptance rationale:**
   1. **Cross-file invariants verified safe.** Tier 2.3 audit (commit `cfa4e6a`) traced the call chain end-to-end: `$table` is restricted via `in_array($table, ['reach', 'gauge'])` whitelist at the entrypoint of edit.php; `$sets` items use `$field` from the const `$editable_fields` whitelist; in review_logic.php `$f` comes from `array_keys($payload['reach'])` whose keys are constrained at the proposer's tier-whitelist (verified in F-7 closure). No user-controlled key reaches the concat under any current code path.
-  2. **Refactor scope is non-trivial.** A clean fix is a 2-table dispatch + a builder helper (per F-7 / F-8 original remediation note). That refactor naturally belongs to `docs/PLAN_php_layer_split.md` rather than this security review's closeout. Doing it here would expand the security-review PR scope across the editor flow's hot path.
+  2. **Refactor scope is non-trivial.** A clean fix is a 2-table dispatch + a builder helper (per F-7 / F-8 original remediation note). That refactor naturally belongs to `docs/done/PLAN_php_layer_split.md` rather than this security review's closeout. Doing it here would expand the security-review PR scope across the editor flow's hot path.
   3. **Visible code marker prevents regression.** F-8 stays cited from tier3-audit.md Phase 3.2 (the `$where`/`$sql` variable construction sites table) so a future security-review iteration sees the same code-smell flag and can re-decide.
 - **Re-evaluation triggers:**
-  - PLAN_php_layer_split activates and touches edit.php / review_logic.php — bundle the refactor into that work.
+  - `docs/done/PLAN_php_layer_split.md` re-activates and touches edit.php / review_logic.php — bundle the refactor into that work.
   - A new caller is added that constructs `$sets` or `$table` from a less-trusted source.
   - Any future Tier 2.x re-audit finds drift in the invariants.
 - **Plan tier:** Tier 2.1 / Tier 2.3 audit; Tier 6 accept.

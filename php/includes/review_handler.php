@@ -12,7 +12,7 @@ declare(strict_types=1);
  *
  * Helpers prefixed with `_review_` are file-private and carry the
  * file's name as part of the prefix (Tier 5 CI-lesson note in
- * docs/PLAN_php_layer_split.md). This matters here because review.php
+ * docs/done/PLAN_php_layer_split.md). This matters here because review.php
  * already requires review_logic.php which exports several
  * `review_*` helpers (review_approve, review_reject, …); the
  * file-private helpers stay underscored + file-prefixed to keep the

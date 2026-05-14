@@ -14,7 +14,7 @@ import net from 'node:net';
  *   5. Hand the {pid, tmpDir, dbPath, port} off to globalTeardown via env vars
  *
  * Mirrors tests/php/IntegrationTestCase.php's setUpBeforeClass; same
- * pattern, different runner. See docs/PLAN_js_smoke_tests.md Phase 1.
+ * pattern, different runner. See docs/done/PLAN_js_smoke_tests.md Phase 1.
  *
  * No exports of `KAYAK_TEST_BASE_URL` — the Playwright config hardcodes
  * the baseURL because the config loads before this file runs (the
@@ -80,7 +80,7 @@ export default async function globalSetup(): Promise<void> {
         // etc. return 404 under JS smoke tests. Intentional divergence
         // from tests/php/IntegrationTestCase.php (which sets =1): JS
         // smoke is page-load-only and editor flows are out of scope
-        // per docs/PLAN_js_smoke_tests.md §"Out of scope".
+        // per docs/done/PLAN_js_smoke_tests.md §"Out of scope".
         EDITOR_FEATURE: '0',
         MAIL_FROM: 'test@example.com',
         SITE_URL: 'http://127.0.0.1',

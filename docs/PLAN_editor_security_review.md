@@ -31,7 +31,7 @@ Goal of this plan: produce a documented security posture (what is in place, what
 - **HSTS may not be enabled.** `deploy/SETUP.md:340` says "Once SSL is confirmed working, uncomment the HSTS header in `deploy/levels`". Check whether the directive is currently active; if not, the live HSTS header may be in a snippet not in the repo. Tier 1.2 / Tier 0.4 should confirm.
 - **Maintainer auth is currently magic-link.** Per `php/admin.php:130`, statuses are `pending / minimal / full / banned / maintainer / all`. `is_maintainer()` and `require_maintainer()` gate maintainer-only endpoints. There's NO separate maintainer login flow — maintainers use the same `/login.php` magic-link path. The `maintainer_credential` (WebAuthn) table exists but no PHP code references WebAuthn yet (verified via repo-wide grep for `webauthn|publicKey|navigator.credentials`).
 - **Hetzner backups + rclone offsite** ([reference_hetzner_backups], [reference_offsite_backup]) cover data loss but not unauthorized data access.
-- **The PHP layer split** (`PLAN_php_layer_split.md`) may be in flight or complete; security findings in `auth.php` should drive its split timing in Tier 5 of the PHP plan, not the other way around.
+- **The PHP layer split** (`docs/done/PLAN_php_layer_split.md`) may be in flight or complete; security findings in `auth.php` should drive its split timing in Tier 5 of the PHP plan, not the other way around.
 - **Phased.** Tier-by-tier review like the prior plans.
 
 ## Decisions deferred to per-tier menus
@@ -228,7 +228,7 @@ This tier is nearly all decision points — there's no "right answer" without ex
 - **Code-signing / supply-chain hardening.** Composer + uv lockfiles cover the basics; deeper SBOM work is a separate plan.
 - **Compliance certifications** (SOC 2, ISO 27001). Not relevant for a hobby/club site.
 - **DDoS protection** beyond what Hetzner provides. Separate plan.
-- **PHP-layer code refactor** for security. Tracked in `PLAN_php_layer_split.md`. If a security finding lands in `auth.php` while the PHP split is in flight, fix the security finding first.
+- **PHP-layer code refactor** for security. Tracked in `docs/done/PLAN_php_layer_split.md`. If a security finding lands in `auth.php` while the PHP split is in flight, fix the security finding first.
 
 ## Reproduce
 

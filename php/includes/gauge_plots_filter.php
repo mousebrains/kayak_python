@@ -10,7 +10,7 @@ declare(strict_types=1);
  * Helpers keep their pre-extract `_gp_` prefix (file-private to the
  * gauge_plots cluster); the prefix doesn't clash with anything
  * outside the cluster (see Tier 5 CI-lesson note in
- * docs/PLAN_php_layer_split.md). Split out as part of Tier 5.GP so
+ * docs/done/PLAN_php_layer_split.md). Split out as part of Tier 5.GP so
  * the math is testable / readable on its own.
  */
 

@@ -7,7 +7,7 @@ errors). Closeout recorded in `3a8ab05`.
 
 ## Context
 
-`docs/PLAN_js_cleanup.md` Phase 1 (lint coverage gap) landed as commit `87226ed`; Phase 2 (strict-mode adoption) landed as `c8363a0`. Both are on `origin/main`. Phase 3 — eliminating the last 236 `var` declarations across 7 hand-written JS files and installing a permanent `noVar`/`useConst` gate in `biome.json` — was left as an explicit decision point. User has chosen to execute it: **full 4-commit Phase 3 with full per-commit browser smoke walks.**
+`docs/done/PLAN_js_cleanup.md` Phase 1 (lint coverage gap) landed as commit `87226ed`; Phase 2 (strict-mode adoption) landed as `c8363a0`. Both are on `origin/main`. Phase 3 — eliminating the last 236 `var` declarations across 7 hand-written JS files and installing a permanent `noVar`/`useConst` gate in `biome.json` — was left as an explicit decision point. User has chosen to execute it: **full 4-commit Phase 3 with full per-commit browser smoke walks.**
 
 What this accomplishes:
 - Every hand-written JS file becomes uniform on `const`/`let` (block-scoped, immutable-by-default). Matches the 3 files (`picker.js`, `gauge_picker.js`, `sw.js`) that are already 100% modern.

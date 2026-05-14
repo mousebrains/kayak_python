@@ -12,7 +12,7 @@ use PHPUnit\Framework\TestCase;
  * randomly-assigned port (avoids port-reuse races on CI re-runs).
  *
  * Schema is seeded by `levels init-db` against a tmp SQLite file (option
- * (b) from docs/PLAN_php_layer_split.md Phase 1.3 — stays in lockstep
+ * (b) from docs/done/PLAN_php_layer_split.md Phase 1.3 — stays in lockstep
  * with src/kayak/db/models.py without a parallel SQL fixture).
  *
  * Env vars that PHP-FPM normally injects via nginx fastcgi_param are

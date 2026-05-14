@@ -226,7 +226,7 @@ execFileSync('levels', ['build'], {
 
 Then switch the `php -S` invocation from `-t public_html` to `-t ${buildOutput}`. The build copies tracked PHP files + builds state HTML + writes `static/style-<hash>.css` etc. into `$buildOutput`, giving the tests a self-contained docroot that mirrors production layout. Cost: `levels build` runs in ~6 s on hardware comparable to GitHub runners — acceptable startup cost.
 
-This OUTPUT_DIR isolation aligns with `PLAN_dev_env_followups.md` Phase 3's convention (the dev box sets `OUTPUT_DIR` outside the repo); the test does the same thing for a tmp dir.
+This OUTPUT_DIR isolation aligns with `docs/PLAN_dev_env_followups.md` Phase 3's convention (the dev box sets `OUTPUT_DIR` outside the repo); the test does the same thing for a tmp dir.
 
 **Tests to add to `tests/js/smoke.spec.ts`:**
 

@@ -4,7 +4,7 @@ import { test, expect, type Page } from '@playwright/test';
  * JS smoke tests — assert pages load and JS initializes without
  * throwing. Scope is page-load only; tests do NOT click filter
  * pills, drag the map, hover sparklines, or submit forms (see
- * docs/PLAN_js_smoke_tests.md Phase 3 scoping).
+ * docs/done/PLAN_js_smoke_tests.md Phase 3 scoping).
  *
  * **Tile-load timing:** never `await page.waitForLoadState('networkidle')`
  * here. Leaflet fetches tiles from upstream CDNs (OpenTopoMap, OSM,
@@ -48,7 +48,7 @@ test('/Oregon.html loads with no JS errors', async ({ page }) => {
   // filters.js + plot-hover.js. With zero observations in the init-db'd
   // test DB, the levels table is empty but the filter-bar UI still
   // renders and binds event handlers (the path that historically broke
-  // under the `var → let` refactor in PLAN_js_cleanup.md Phase 3).
+  // under the `var → let` refactor in docs/done/PLAN_js_cleanup.md Phase 3).
   const errors = captureJsErrors(page);
 
   const resp = await page.goto('/Oregon.html');

@@ -239,7 +239,7 @@ Phase 1 / Phase 2 risks are documented in their respective sections. Cross-cutti
 - **`pre-commit autoupdate`** — separate hygiene task; current versions (biome 2.4.11, shellcheck 0.10.0.1) match CI which is what matters.
 - **Restructuring `_deploy_php_files` to be incremental** — out of scope; the current full-copy approach is fine for ~30 files and lets Phase 3's "build is mandatory if `OUTPUT_DIR` is set" workflow run in ~6s.
 - **`public_html` POSIX ACL audit** — the existing default ACLs (`/home/pat/public_html` rwx for `www-data` per CLAUDE.md) apply to the directory, not individual files. New dev paths (`public_html_dev`) don't need ACLs **if served via `php -S`** (runs as the user). If a dev wants to test under nginx + FPM (closer to prod), the analogous ACL setup from CLAUDE.md applies to the new path — out of scope here; document it locally if/when the case comes up.
-- **Editor / contact / proposals security surface** — `docs/PLAN_editor_security_review.md` and `docs/PLAN_php_layer_split.md` cover that area; the four new `docs/security/*.md` artifacts at `21c9e1a` orthogonal to this plan.
+- **Editor / contact / proposals security surface** — `docs/PLAN_editor_security_review.md` and `docs/done/PLAN_php_layer_split.md` cover that area; the four new `docs/security/*.md` artifacts at `21c9e1a` orthogonal to this plan.
 - **Enforcing `OUTPUT_DIR` is set on dev** — e.g. via a Makefile guard. Convention-only is sufficient; tooling enforcement is overkill for a one/two-person dev set.
 
 ## Reproduce / verify

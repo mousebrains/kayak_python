@@ -14,7 +14,7 @@ declare(strict_types=1);
  *
  * Helpers prefixed with `_` are file-private and carry the file's
  * name as part of the prefix (Tier 5 CI-lesson note in
- * docs/PLAN_php_layer_split.md).
+ * docs/done/PLAN_php_layer_split.md).
  */
 
 require_once __DIR__ . '/db.php';

@@ -1,6 +1,6 @@
 # Dev-environment follow-ups
 
-Pre-existing issues uncovered during the JS cleanup work (PLAN_js_cleanup Phase 1–3). All predate that work and were deferred per "we'll fix them later." Listed roughly in increasing scope.
+Pre-existing issues uncovered during the JS cleanup work (`docs/done/PLAN_js_cleanup.md` Phase 1–3). All predate that work and were deferred per "we'll fix them later." Listed roughly in increasing scope.
 
 > **Symptoms depend on `OUTPUT_DIR`.** This document was written from a dev machine where `OUTPUT_DIR` is unset and defaults to `BASE_DIR/public_html` (`src/kayak/config.py:35`) — i.e., `levels build` writes back into the repo's `public_html/`, on top of the dev-convenience symlinks. On the live host (`levels`), `~/.config/kayak/.env` sets `OUTPUT_DIR=/home/pat/public_html` (a sibling outside the repo), so the build never touches the repo's tree.
 >

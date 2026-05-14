@@ -82,7 +82,7 @@ function handle_description_detail(
 /**
  * Prev/next reach ids by sort_name, plus total + current position.
  * Same 4-query shape as reach_detail's `_load_reach_navigation` (one
- * of three sub-clusters that overlap; see PLAN_php_layer_split Tier 3
+ * of three sub-clusters that overlap; see docs/done/PLAN_php_layer_split.md Tier 3
  * follow-up note about a future shared-helpers DRY pass).
  *
  * @param  array<string, mixed> $reach
@@ -665,7 +665,7 @@ function _render_data_sources(PDO $db, ?array $gauge): void
  * Skipped if neither the guidebook list nor reach.aw_id applies.
  * (Note: reach_detail.php has a nearly identical render — a follow-up
  * DRY pass could share the body via a parameter for the surrounding
- * button bar; see PLAN_php_layer_split Tier 3 closeout.)
+ * button bar; see docs/done/PLAN_php_layer_split.md Tier 3 closeout.)
  *
  * @param array<string, mixed> $reach
  */

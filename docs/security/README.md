@@ -52,4 +52,4 @@ For someone returning to update controls after a code change:
 ## Out of scope
 
 Documented in `docs/PLAN_editor_security_review.md` under "Out of scope":
-- External pentest, WAF, code-signing/SBOM, compliance certifications, DDoS protection beyond Hetzner default, PHP-layer code refactor (tracked separately in `PLAN_php_layer_split.md`).
+- External pentest, WAF, code-signing/SBOM, compliance certifications, DDoS protection beyond Hetzner default, PHP-layer code refactor (tracked separately in `docs/done/PLAN_php_layer_split.md`).

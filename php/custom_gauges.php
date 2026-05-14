@@ -9,7 +9,7 @@ declare(strict_types=1);
  *
  * Thin orchestration shim — arg-parse + empty-redirect + dispatch.
  * Everything else lives in includes/custom_gauges_handler.php
- * (Tier 5.C.3 of docs/PLAN_php_layer_split.md).
+ * (Tier 5.C.3 of docs/done/PLAN_php_layer_split.md).
  */
 
 require_once __DIR__ . '/includes/db.php';

@@ -15,7 +15,7 @@ declare(strict_types=1);
  *
  * Thin orchestration shim — feature-gate + maintainer-auth + dispatch.
  * Everything else lives in includes/review_handler.php (Tier 5.R.2
- * of docs/PLAN_php_layer_split.md).
+ * of docs/done/PLAN_php_layer_split.md).
  */
 
 require_once __DIR__ . '/includes/auth.php';

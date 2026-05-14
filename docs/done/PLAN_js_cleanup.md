@@ -203,7 +203,7 @@ Splitting into 4 commits (vs one big diff) keeps each batch reviewable in isolat
 - **TypeScript migration.** Not a current goal.
 - **`leaflet.js` modernization / minification audit.** 144 KB minified vendored library; not project code. Out of scope.
 - **`docs/map-color-tune/map3.js`** (348 LOC). A one-off developer tool inside `docs/`, not deployed to the site. Not worth linting; don't add to biome's includes.
-- **PHP-layer changes** (`docs/PLAN_editor_security_review.md` / `docs/PLAN_php_layer_split.md` cover that surface).
+- **PHP-layer changes** (`docs/PLAN_editor_security_review.md` / `docs/done/PLAN_php_layer_split.md` cover that surface).
 - **Enabling biome's formatter** (`"formatter": {"enabled": false}` currently). Separate decision — would create a one-time bulk-format diff and require coordination with anyone editing JS in flight.
 - **Switching biome's includes from explicit paths to a `static/*.js` glob.** The explicit-path style was specifically chosen to exclude `leaflet.js`; a glob would re-include it. Match the existing pattern.
 - **Adding JS files to `.gitignore` cleanup**. `static/.DS_Store` is present; that's a macOS-specific concern outside this plan.
