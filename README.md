@@ -123,6 +123,7 @@ Key systemd timers:
 - **kayak-cert-renewal-test** — weekly Monday 04:15 (`certbot renew --dry-run`)
 - **kayak-backup-weekly** — weekly Sunday 03:15 (4-copy retention; chains to off-site upload via `OnSuccess=`)
 - **kayak-audit-gauges** — weekly Sunday 03:29 (orphan-gauge + reach-mapping audit, emails on drift)
+- **kayak-config-drift** — weekly Sunday 05:30 (diffs repo `conf/`/`deploy/`/`systemd/` against `/etc/`, alerts on drift)
 - **kayak-heartbeat** — weekly Sunday 06:00 (confirms alert pipeline)
 
 ## Documentation

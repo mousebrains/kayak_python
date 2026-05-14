@@ -1,0 +1,39 @@
+[Unit]
+Description=Kayak: weekly config drift check (repo vs /etc/)
+After=network-online.target
+OnFailure=kayak-notify-failure@%n.service
+
+[Service]
+Type=oneshot
+# User=root: some target paths (sudoers.d, sshd_config.d) are not
+# world-readable; we need root to stat + cmp them. The script never
+# writes anything — it's pure diff + reporting.
+User=root
+EnvironmentFile=-/home/pat/.config/kayak/.env
+ExecStart=/home/pat/kayak/scripts/check-config-drift.sh
+# `-` prefix: a transient hc-ping curl glitch shouldn't cascade to OnFailure.
+ExecStartPost=-/usr/bin/curl -fsS -m 10 --retry 3 -o /dev/null ${HC_CONFIG_DRIFT}
+TimeoutStartSec=120
+Nice=15
+
+# Sandboxing — read-only. The unit doesn't write to /etc/; ProtectSystem
+# stays strict with no ReadWritePaths. ProtectHome=read-only lets us read
+# the in-repo /home/pat/kayak/{conf,deploy,systemd}/ files.
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+UMask=0022

@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly Kayak config drift check
+
+[Timer]
+OnCalendar=Sun *-*-* 05:30:00
+RandomizedDelaySec=15min
+Persistent=true
+Unit=kayak-config-drift.service
+
+[Install]
+WantedBy=timers.target
