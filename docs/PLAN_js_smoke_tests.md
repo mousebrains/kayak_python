@@ -1,5 +1,10 @@
 # Plan — JS smoke tests via Playwright in CI
 
+**Status:** Done. JS-T1 `fd35bb1` (Playwright scaffold + first drill),
+JS-T2 `b3f2cdf` (CI wiring in `lint-misc`), JS-T3 `4327068` (expand to
+5 page-load smoke tests). Review fixups `3e2573c` (fail-fast +
+forbidOnly + doc notes) and `796ddc7` (invoke via `npm test`).
+
 > **Cross-check:** plan drafted 2026-05-12 against `main` at `d3e7dce`; iter 1 re-verified against `8ad4a37` (the initial-draft commit). Inputs verified: `tests/php/IntegrationTestCase.php` (Tier 1.3 PHP scaffold; `resolveVenvCommand:204`), `.github/workflows/ci.yml` (`lint-misc:27`; `pip install -e .:70-71`), `pyproject.toml` (editable install pattern), `static/*.js` + `src/kayak/web/static/*.js` (10 hand-written JS files, all IIFE-style classic scripts).
 >
 > **Iter log:**

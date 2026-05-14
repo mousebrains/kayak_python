@@ -40,19 +40,27 @@ Both layers share the same SQLite database. See
 ## Quick Start
 
 ```bash
-# 1. Install
-python3 -m venv /path/to/venv
-/path/to/venv/bin/pip install -e ".[dev]"
+# 1. Install into a venv (one-time)
+python3 -m venv .venv
+.venv/bin/pip install -e ".[dev]"
 
-# 2. Initialize database (creates tables, seeds states/sources from YAML)
+# 2. Activate it — every subsequent step assumes `levels` resolves to .venv/bin/levels.
+source .venv/bin/activate
+
+# 3. Initialize database (creates tables, seeds states/sources from YAML)
 levels init-db
 
-# 3. Run the full pipeline (fetch live data, generate HTML)
+# 4. Run the full pipeline (fetch live data, generate HTML)
 levels pipeline
 
-# 4. Serve locally
+# 5. Serve locally
 php -S localhost:8000 -t public_html
 ```
+
+Prefer fully-qualified paths over `source .venv/bin/activate` if your
+shell config makes activation noisy: replace every `levels …` with
+`/path/to/.venv/bin/levels …`. Production runs that way — see
+`deploy/SETUP.md` for the prod layout.
 
 ## CLI Commands
 

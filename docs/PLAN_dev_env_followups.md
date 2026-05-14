@@ -1,5 +1,11 @@
 # Plan — Dev-environment follow-ups
 
+**Status:** Drafted (iter 5 stopped 2026-05-12, 2 findings). Not yet
+executed — awaiting decision on Phase 3 dev-machine `OUTPUT_DIR`
+convention. The live host is already on the recommended layout
+(`OUTPUT_DIR=/home/pat/public_html` outside the repo); only dev boxes
+remain to migrate.
+
 > **Cross-check:** plan drafted 2026-05-12 against `main` at `9446e51`; iter 1 re-verified against `21c9e1a`; iter 2 against `b141f79`; iter 3 against `2c5a4e4`. Inputs (`biome.json`, `Makefile`, `.gitignore`, `php/includes/header.php`, `php/includes/gauge_map.php`, `deploy/SETUP.md`, `src/kayak/config.py`, `src/kayak/web/build/deploy.py`, `src/kayak/web/build/_shared.py`, `.env.example`) unchanged across all ranges; the only commits in range touch `docs/security/*.md` and this plan itself. A reviewer on a default-config dev machine (`OUTPUT_DIR` unset → defaults to `BASE_DIR/public_html` per `src/kayak/config.py:35`) will see additional symptoms; the fixes themselves are env-independent.
 >
 > **Iter log:**

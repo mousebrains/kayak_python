@@ -1,5 +1,11 @@
 # Plan — PHP layer split (apply build.py-split discipline to PHP)
 
+**Status:** Done. Tiers 1–6 all closed out: Tier 2 `7ca7da3` (reach.php),
+Tier 3 `a6d5242` (description.php), Tier 4 `02d086f` (svg_plot.php),
+Tier 5 `f4968c3` (gauge / propose / custom / custom_gauges / review +
+auth / gauge_plots sub-helper splits), Tier 6 `7c77576` (PHPStan level
+5 → 8 with baseline 119 → 79, a 40% drop).
+
 > **Cross-check:** plan drafted 2026-05-11 against the PHP layer at HEAD (`75de842`). A second Claude session should re-run the read-only commands in **§Reproduce** before any tier starts, especially the file-size and PHPStan-level sanity checks — the PHP layer is more actively edited than `cli/build.py` was, and the file inventory may have shifted.
 
 ## Why

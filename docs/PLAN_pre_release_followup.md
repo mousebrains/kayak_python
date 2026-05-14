@@ -1,5 +1,9 @@
 # Plan — Pre-release follow-up after 2026-05-13 audit pass
 
+**Status:** In progress (as of 2026-05-14). P0.1, P0.2, all 12 Quick Wins,
+T1.1, T1.2, T1.4 landed; T1.5 in flight. Tier 2 (test/CI maturity) and
+Tier 3 (architecture) not yet started.
+
 > **Cross-check:** Plan drafted 2026-05-13 against `main` after a three-iteration audit pass that ran 15 parallel investigations (security, Python quality, PHP quality, testing/CI, ops, DB, docs, architecture, deps, repo hygiene, data-loss scenarios, editor-flow attacks, frontend a11y, doc drift, claim verification). The audit was harsh-grading and the overall verdict was **B−** — ship-quality after a small set of fixes, but several gaps stand between this and what a Series-B company would adopt as a critical dependency. This plan consolidates the audit's P0/P1/tier-roadmap output.
 >
 > Where this plan and [`PLAN_production_discipline.md`](PLAN_production_discipline.md) overlap, **production-discipline is the source of truth** for deploy.sh / runbook / SLO / drill items; this plan cross-references rather than duplicating. New material is the cert-expiry monitor, the test/CI maturity tier, the architecture tier, and a handful of Quick Wins.

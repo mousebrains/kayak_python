@@ -1,5 +1,10 @@
 # Plan — Phase 3 of PLAN_js_cleanup: `var → const/let` modernization
 
+**Status:** Done. P3a `598c422` (map.js + plot-hover.js), P3b `bf300d7`
+(filters.js + feature-map.js), P3c `39e4c95` (reach-map / search-map /
+levels), P3d `142c2cb` (`noVar` + `useConst` biome gates promoted to
+errors). Closeout recorded in `3a8ab05`.
+
 ## Context
 
 `docs/PLAN_js_cleanup.md` Phase 1 (lint coverage gap) landed as commit `87226ed`; Phase 2 (strict-mode adoption) landed as `c8363a0`. Both are on `origin/main`. Phase 3 — eliminating the last 236 `var` declarations across 7 hand-written JS files and installing a permanent `noVar`/`useConst` gate in `biome.json` — was left as an explicit decision point. User has chosen to execute it: **full 4-commit Phase 3 with full per-commit browser smoke walks.**

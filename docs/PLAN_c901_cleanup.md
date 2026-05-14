@@ -1,5 +1,8 @@
 # Plan — C901 cleanup for the grandfathered scripts
 
+**Status:** In progress (drafted 2026-05-11; partial execution — see
+commit `3d4786c` "trace.py de c901" 2026-05-12 and follow-ups).
+
 > **Cross-check:** plan drafted 2026-05-11 against `main` at `2f39e15` (after the build.py split landed). A second Claude session should re-run the read-only commands in **§Reproduce** to confirm the C901 hit list before any phase starts — `ruff` may have refined the rule between drafting and execution.
 >
 > Dates are absolute. References are `file:line:function` against current `main`.

@@ -1,5 +1,9 @@
 # Plan — Editor feature security review
 
+**Status:** Drafted (iter 9 stopped 2026-05-12, 1 finding). Not yet
+executed — menu-style tiers 2–5 await per-tier decisions; Tier 0 threat
+model is the gating output before subsequent tiers can be sized.
+
 > **Cross-check:** plan drafted 2026-05-11 against the editor surface deployed in `project_editor_feature` (Phase 1+2). The structure of this plan is **menu-style** for tiers 2–5 because the user has flagged that real-world options matter — each tier presents the choice space rather than a prescriptive pick. Tier 0 (threat model) is the only tier whose output is mandatory before subsequent tiers can be sized.
 >
 > A second Claude session should re-run the read-only commands in **§Reproduce** to confirm the editor-related file and DB-table inventory hasn't shifted.

@@ -1,5 +1,18 @@
 # Plan — Production discipline for kayak
 
+**Status:** In progress (as of 2026-05-14). Phase 1 (heartbeats + push
+notifications) landed. Phase 2 / 3 / 4 work overlaps with the audit
+follow-up plan (`PLAN_pre_release_followup.md` Tiers 1-3); this plan
+is the source of truth for deploy.sh / runbook / SLO / drill items,
+while the audit plan covers cert monitor + test/CI maturity + architecture.
+
+**Note on timer counts in the iter log:** historical "8 services"
+counts refer to the pre-2026-05-14 state. As of 2026-05-14 the live
+host runs 12 timers (added kayak-backup-hourly, kayak-cert-expiry,
+kayak-cert-renewal-test, kayak-config-drift, kayak-metadata-snapshot;
+renamed kayak-backup → kayak-backup-weekly). See `deploy/SETUP.md`
+§timer schedule for the authoritative current list.
+
 > **Cross-check:** plan drafted 2026-05-11 against the live host (`levels.mousebrains.com`, single Hetzner VPS, sole operator). Iterated 2026-05-12 against `main` at `ffbb387` plus the live `systemctl` state. A subsequent session should re-run the read-only commands in **§Reproduce** to confirm the current-state findings before any tier starts.
 >
 > **Iter log:**

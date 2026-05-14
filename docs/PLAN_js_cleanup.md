@@ -1,5 +1,11 @@
 # Plan — JS cleanup (close lint gap + decide on `var` modernization)
 
+**Status:** Done. Phase 1 landed in `87226ed` ("ci: close JS lint
+coverage gap") and Phase 2 in `c8363a0` ("js: adopt strict mode across
+all hand-written JS"). Phase 3 (`var → const/let` modernization) was
+carved out as its own plan in [`PLAN_js_cleanup_phase3.md`](PLAN_js_cleanup_phase3.md)
+and is also complete.
+
 > **Cross-check:** plan drafted 2026-05-11 against `main` at `629e97c`. A second Claude session should re-run §Reproduce to confirm the unlinted-files list and the biome warning count before Phase 1 starts.
 >
 > Dates are absolute. References are `file:line` against current `main`.

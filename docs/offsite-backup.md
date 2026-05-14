@@ -64,8 +64,9 @@ Stop services first, replace, restart. Kayak runs nginx + php-fpm + a few
 systemd timers; stopping the timers prevents writes during swap.
 
 ```bash
-sudo systemctl stop kayak-pipeline.timer kayak-decimate.timer kayak-audit-gauges.timer
-sudo systemctl stop php8.2-fpm   # or whichever php-fpm version
+sudo systemctl stop kayak-pipeline.timer kayak-decimate.timer \
+    kayak-audit-gauges.timer kayak-backup-weekly.timer kayak-backup-hourly.timer
+sudo systemctl stop php8.4-fpm   # or whichever php-fpm version (Debian 13 ships 8.4)
 
 # Move the live DB aside (don't delete — keeps a safety net)
 mv /home/pat/DB/kayak.db /home/pat/DB/kayak.db.pre-restore
@@ -73,8 +74,9 @@ mv /home/pat/DB/kayak.db /home/pat/DB/kayak.db.pre-restore
 cp /tmp/restore/backup-*.db /home/pat/DB/kayak.db
 chmod 664 /home/pat/DB/kayak.db
 
-sudo systemctl start php8.2-fpm
-sudo systemctl start kayak-pipeline.timer kayak-decimate.timer kayak-audit-gauges.timer
+sudo systemctl start php8.4-fpm
+sudo systemctl start kayak-pipeline.timer kayak-decimate.timer \
+    kayak-audit-gauges.timer kayak-backup-weekly.timer kayak-backup-hourly.timer
 ```
 
 Then `levels pipeline` once to rebuild the static HTML against the
