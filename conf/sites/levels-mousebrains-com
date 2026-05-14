@@ -31,13 +31,10 @@ server {
 
     server_name levels.mousebrains.com;
 
-    # Dual logging: the legacy combined log preserves the path that fail2ban
-    # filters (jail.local, jail.d/kayak-edit*.conf) currently watch. The
-    # per-host log gives transition visibility — watch this one shrink as
-    # users migrate to levels.wkcc.org. Drop the legacy line after
-    # fail2ban filters migrate to multi-file logpaths.
-    access_log /var/log/nginx/kayak-access.log kayak_timed;
-    error_log  /var/log/nginx/kayak-error.log;
+    # Per-host log only. fail2ban jails read the levels-*.{access,error}.log
+    # glob (jail.local + jail.d/kayak-edit*.conf), so adding a fourth vhost
+    # later needs no fail2ban edit. Watch this file shrink as users migrate
+    # to levels.wkcc.org after DNS cuts over.
     access_log /var/log/nginx/levels-mousebrains.access.log kayak_timed;
     error_log  /var/log/nginx/levels-mousebrains.error.log;
 

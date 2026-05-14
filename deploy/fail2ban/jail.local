@@ -19,16 +19,16 @@ mode = aggressive
 
 [nginx-http-auth]
 enabled = true
-logpath = /var/log/nginx/kayak-error.log
+logpath = /var/log/nginx/levels-*.error.log
 
 [nginx-botsearch]
 enabled = true
 maxretry = 2
-logpath = /var/log/nginx/kayak-access.log
+logpath = /var/log/nginx/levels-*.access.log
 
 [nginx-limit-req]
 enabled = true
-logpath = /var/log/nginx/kayak-error.log
+logpath = /var/log/nginx/levels-*.error.log
 
 [nginx-malicious]
 enabled = true
@@ -37,7 +37,7 @@ maxretry = 1
 findtime = 1d
 bantime = 1w
 logpath = /var/log/nginx/access.log
-          /var/log/nginx/kayak-access.log
+          /var/log/nginx/levels-*.access.log
 
 [nginx-default-block]
 enabled = true

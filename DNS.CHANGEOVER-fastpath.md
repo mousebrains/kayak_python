@@ -12,21 +12,20 @@ ticket (the A→CNAME flip itself).
 | Path | Use when | Trade-off |
 |---|---|---|
 | Original `DNS.CHANGEOVER.md` | No pre-issued cert for `levels.wkcc.org` available | Most thorough; ends with one 3-SAN cert + permanent `_acme-challenge` CNAMEs as a fallback path |
-| **Fast path (this doc)** | `dreamhost/cert.rsa` + `dreamhost/privkey.rsa` are present (validated 2026-05-14) | Skips Phases 1 + 2 of the original; uses the DreamHost cert as a bridge until DNS propagates (~T+3 from the A→CNAME flip), then **expands the existing levels.mousebrains.com cert to add `levels.wkcc.org` as a third SAN via HTTP-01**. End-state matches the original (single 3-SAN cert renewed by certbot); the DNS-01 acquisition phase is bypassed entirely. |
+| **Fast path (this doc)** | Bridge cert installed at `/etc/nginx/certs/levels.wkcc.org.{cert,privkey}` on Hetzner (installed 2026-05-14) | Skips Phases 1 + 2 of the original; uses the DreamHost-issued cert as a bridge until DNS propagates (~T+3 from the A→CNAME flip), then **expands the existing levels.mousebrains.com cert to add `levels.wkcc.org` as a third SAN via HTTP-01**. End-state matches the original (single 3-SAN cert renewed by certbot); the DNS-01 acquisition phase is bypassed entirely. |
 
 ## Cert facts (verified 2026-05-14)
 
 | Property | Value |
 |---|---|
-| File: cert | `dreamhost/cert.rsa` (3616 bytes) |
-| File: key | `dreamhost/privkey.rsa` (1704 bytes, PKCS#8 unencrypted) |
-| Cert/key match | ✅ moduli identical (`MD5 ddc4099a262829d1ac56d20e0b252dd8`) |
+| Installed at | `/etc/nginx/certs/levels.wkcc.org.cert` (3616 bytes, fullchain) + `/etc/nginx/certs/levels.wkcc.org.privkey` (1704 bytes, PKCS#8 unencrypted) |
+| Cert/key match | ✅ moduli identical |
 | Subject | `CN=levels.wkcc.org` |
 | SubjectAltName | `DNS:levels.wkcc.org, DNS:www.levels.wkcc.org` |
 | Issuer | `C=US, O=Let's Encrypt, CN=R13` |
 | Validity | `notBefore=2026-05-12T00:47:33Z` → `notAfter=2026-08-10T00:47:32Z` |
 | Bundle | 2-cert chain (leaf + intermediate — nginx `ssl_certificate` ready as-is) |
-| Origin | Auto-issued by DreamHost's LE automation for the current ClubExpress-hosted site |
+| Origin | Auto-issued by DreamHost's LE automation for the current ClubExpress-hosted site; staged transiently under `dreamhost/` then installed and removed from the repo on 2026-05-14 |
 
 ## Plan
 
@@ -208,11 +207,9 @@ sudo rm /etc/nginx/certs/levels.wkcc.org.privkey
    has been on `authenticator=nginx` throughout, and Phase C's `--expand`
    preserves that.
 
-3. **Decide what to do with `dreamhost/`** in the repo. Options:
-   - Keep as a historical record (the files become invalid after
-     2026-08-10 regardless, so no security risk).
-   - Delete after Phase C succeeds (recommended). Add a one-line note to
-     the commit message linking back to this doc.
+3. **`dreamhost/`** has already been removed from the repo (2026-05-14,
+   before Phase A landed). No further action; this item is here only as
+   a marker that the cleanup is done.
 
 4. **Optionally** add the permanent `_acme-challenge` CNAMEs from the
    original plan's Phase 1 anyway. The fast path doesn't need them, but

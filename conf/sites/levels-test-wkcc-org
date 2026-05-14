@@ -30,12 +30,9 @@ server {
 
     server_name levels-test.wkcc.org;
 
-    # Dual logging: the legacy combined log preserves the path that fail2ban
-    # filters (jail.local, jail.d/kayak-edit*.conf) currently watch. The
-    # per-host log gives transition visibility. Drop the legacy line after
-    # fail2ban filters migrate to multi-file logpaths.
-    access_log /var/log/nginx/kayak-access.log kayak_timed;
-    error_log  /var/log/nginx/kayak-error.log;
+    # Per-host log only. fail2ban jails read the levels-*.{access,error}.log
+    # glob (jail.local + jail.d/kayak-edit*.conf), so adding a fourth vhost
+    # later needs no fail2ban edit.
     access_log /var/log/nginx/levels-test.access.log kayak_timed;
     error_log  /var/log/nginx/levels-test.error.log;
 

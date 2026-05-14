@@ -41,13 +41,10 @@ server {
 
     server_name levels.wkcc.org;
 
-    # Dual logging: the legacy combined log preserves the path that fail2ban
-    # filters (jail.local, jail.d/kayak-edit*.conf) currently watch. The
-    # per-host log gives transition visibility — once DNS cuts over, this
-    # is where the bulk of traffic lands. Drop the legacy line after
-    # fail2ban filters migrate to multi-file logpaths.
-    access_log /var/log/nginx/kayak-access.log kayak_timed;
-    error_log  /var/log/nginx/kayak-error.log;
+    # Per-host log only. fail2ban jails read the levels-*.{access,error}.log
+    # glob (jail.local + jail.d/kayak-edit*.conf), so adding a fourth vhost
+    # later needs no fail2ban edit. Once DNS cuts over, this is where the
+    # bulk of traffic lands.
     access_log /var/log/nginx/levels-wkcc.access.log kayak_timed;
     error_log  /var/log/nginx/levels-wkcc.error.log;
 
