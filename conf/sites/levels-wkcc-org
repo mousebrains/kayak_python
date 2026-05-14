@@ -24,7 +24,11 @@ server {
 }
 
 server {
-    listen [::]:443 ssl ipv6only=on; # managed by Certbot
+    # ipv6only=on lives on levels-mousebrains-com (the alphabetically-first
+    # vhost in sites-enabled/). nginx accepts the IPV6_V6ONLY socket option
+    # exactly once per [::]:443 socket; repeating it here breaks `nginx -t`
+    # with "duplicate listen options for [::]:443".
+    listen [::]:443 ssl; # managed by Certbot
     listen 443 ssl; # managed by Certbot
     http2 on;
 
