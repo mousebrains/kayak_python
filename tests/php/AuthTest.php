@@ -88,4 +88,50 @@ final class AuthTest extends TestCase
             'shared-IP cap (20/hour) must kick in regardless of email'
         );
     }
+
+    public function testNormalizeEmailTrimsAndLowercases(): void
+    {
+        $this->assertSame('a@example.com', normalize_email('  A@Example.COM '));
+    }
+
+    public function testNormalizeEmailGmailStripsPlusTag(): void
+    {
+        // +tag is a Gmail alias for the same mailbox.
+        $this->assertSame('foo@gmail.com', normalize_email('foo+anything@gmail.com'));
+        $this->assertSame('foo@gmail.com', normalize_email('foo+a+b+c@gmail.com'));
+    }
+
+    public function testNormalizeEmailGmailStripsDots(): void
+    {
+        // Gmail ignores dots in the local part.
+        $this->assertSame('foo@gmail.com', normalize_email('f.o.o@gmail.com'));
+        $this->assertSame('foobar@gmail.com', normalize_email('f.oo.b.a.r@gmail.com'));
+    }
+
+    public function testNormalizeEmailGmailCombinedDotsAndPlus(): void
+    {
+        // f.o.o+tag@gmail.com -> foo@gmail.com (dots stripped after +tag drop).
+        $this->assertSame('foo@gmail.com', normalize_email('f.o.o+spam@gmail.com'));
+    }
+
+    public function testNormalizeEmailGooglemailAlias(): void
+    {
+        // googlemail.com is a Gmail alias domain; normalize to gmail.com.
+        $this->assertSame('foo@gmail.com', normalize_email('foo@googlemail.com'));
+        $this->assertSame('foo@gmail.com', normalize_email('f.o.o+x@googlemail.com'));
+    }
+
+    public function testNormalizeEmailLeavesNonGmailAlone(): void
+    {
+        // Dots + tags are NOT special for arbitrary providers (some treat
+        // the local part literally). Leave them alone.
+        $this->assertSame('f.o.o+tag@example.com', normalize_email('F.O.O+tag@Example.com'));
+        $this->assertSame('user+work@protonmail.com', normalize_email('user+work@protonmail.com'));
+    }
+
+    public function testNormalizeEmailHandlesMalformed(): void
+    {
+        // No '@' — return trimmed+lowercased as-is, don't crash.
+        $this->assertSame('not-an-email', normalize_email('  Not-An-Email '));
+    }
 }

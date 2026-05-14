@@ -31,10 +31,38 @@ require_once __DIR__ . '/db.php';
 // apparent cycle with auth.php → auth_magic_link.php is safe.
 require_once __DIR__ . '/auth.php';
 
-/** Normalize an email address: trim, lowercase. */
+/**
+ * Normalize an email address for rate-limiting and lookup.
+ *
+ * Trim + lowercase universally. For Gmail (gmail.com / googlemail.com)
+ * apply Gmail's delivery rules so the same mailbox doesn't appear to
+ * be N distinct addresses:
+ *   - strip "+tag" from the local part (foo+bar@gmail.com -> foo@gmail.com)
+ *   - strip dots in the local part (f.o.o@gmail.com -> foo@gmail.com)
+ *   - googlemail.com -> gmail.com (alias domain)
+ * This closes the magic-link-per-email rate cap bypass routes via the
+ * obvious +tag / dot-alias aliases. Other providers untouched — some
+ * treat the local part more literally and our rate cap is best-effort
+ * anyway.
+ */
 function normalize_email(string $email): string
 {
-    return strtolower(trim($email));
+    $email = strtolower(trim($email));
+    $at = strrpos($email, '@');
+    if ($at === false) {
+        return $email;
+    }
+    $local  = substr($email, 0, $at);
+    $domain = substr($email, $at + 1);
+    if ($domain === 'gmail.com' || $domain === 'googlemail.com') {
+        $plus = strpos($local, '+');
+        if ($plus !== false) {
+            $local = substr($local, 0, $plus);
+        }
+        $local  = str_replace('.', '', $local);
+        $domain = 'gmail.com';
+    }
+    return $local . '@' . $domain;
 }
 
 /**

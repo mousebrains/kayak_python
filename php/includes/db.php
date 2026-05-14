@@ -29,6 +29,10 @@ function get_db(): PDO {
         $pdo = new PDO("sqlite:$db_path", null, null, [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            // SQLite PDO uses native prepares regardless, but pinning this off
+            // defends against a future driver swap (e.g. MySQL/Postgres) where
+            // emulated prepares are on by default and silently lose type info.
+            PDO::ATTR_EMULATE_PREPARES => false,
         ]);
         $pdo->exec('PRAGMA journal_mode=WAL');
         $pdo->exec('PRAGMA foreign_keys=ON');
