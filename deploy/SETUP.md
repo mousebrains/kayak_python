@@ -351,7 +351,7 @@ origin, and free with no usage caps.
 sudo /home/pat/kayak/systemd/install.service.sh
 ```
 
-This copies the service/timer units to `/etc/systemd/system/`, enables and starts the timers. The `kayak-backup-offsite.service` is chained from `kayak-backup.service` via `OnSuccess=` and does not need its own timer.
+This copies the service/timer units to `/etc/systemd/system/`, enables and starts the timers. The `kayak-backup-offsite.service` is chained from `kayak-backup-weekly.service` via `OnSuccess=` and does not need its own timer.
 
 Verify:
 
@@ -359,13 +359,18 @@ Verify:
 systemctl list-timers 'kayak-*' --all
 ```
 
-Expected schedule (six timers, jittered via `RandomizedDelaySec=300`):
+Expected schedule (11 timers; most jittered via `RandomizedDelaySec=`):
 - **kayak-pipeline.timer** — every hour at `:12` (fetches data, builds HTML)
+- **kayak-backup-hourly.timer** — every hour at `:38` (sqlite `.backup` + WAL checkpoint; 24-copy retention; RPO ≤ 1h)
 - **kayak-healthcheck.timer** — every hour at `:45` (data-freshness check)
 - **kayak-decimate.timer** — daily at 02:32 (thins old observations, VACUUM)
-- **kayak-backup.timer** — weekly Sunday at 03:15 (SQLite snapshot + 4-copy retention; off-site upload chains via `OnSuccess=`)
+- **kayak-editor-retention.timer** — daily at 03:45 (prunes expired editor sessions + magic links)
+- **kayak-metadata-snapshot.timer** — daily at 04:30 (commits metadata-table drift to `data/db/*.csv`)
+- **kayak-cert-expiry.timer** — daily at 06:30 (Let's Encrypt cert health probe; pages on <21 days remaining)
+- **kayak-cert-renewal-test.timer** — weekly Monday at 04:15 (`certbot renew --dry-run`)
+- **kayak-backup-weekly.timer** — weekly Sunday at 03:15 (SQLite snapshot + 4-copy retention; off-site upload chains via `OnSuccess=`)
+- **kayak-audit-gauges.timer** — weekly Sunday at 03:29 (orphan-gauge + reach-mapping audit, emails maintainer digest)
 - **kayak-heartbeat.timer** — weekly Sunday at 06:00 (mail-path liveness)
-- **kayak-audit-gauges.timer** — every 2 months (gauge-metadata sanity, emails maintainer digest)
 
 ## 9. Verify
 
@@ -563,8 +568,8 @@ within the Hetzner network — no egress fees.
    ssh -p 23 -i /home/pat/.ssh/id_storagebox u123456@u123456.your-storagebox.de mkdir -p backups
    ```
 
-4. Add the rsync step to `systemd/kayak-backup.sh`, after the local backup
-   and before the retention cleanup:
+4. Add the rsync step to `systemd/kayak-backup-weekly.sh`, after the local
+   backup and before the retention cleanup:
 
    ```bash
    # Off-site copy to Hetzner Storage Box
@@ -576,7 +581,7 @@ within the Hetzner network — no egress fees.
 5. Test manually:
 
    ```bash
-   sudo -u pat /home/pat/kayak/systemd/kayak-backup.sh
+   sudo -u pat /home/pat/kayak/systemd/kayak-backup-weekly.sh
    ssh -p 23 -i /home/pat/.ssh/id_storagebox u123456@u123456.your-storagebox.de ls -lh backups/
    ```
 

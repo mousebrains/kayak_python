@@ -18,7 +18,7 @@ Both scripts use compressed snapshots staged in `~/kayak/backups/` on the remote
 
 ## Layout
 
-Scripts assume the repo lives at `<somewhere>/kayak/` and the local DB sits next to it at `<somewhere>/DB/kayak.db` (i.e. `../DB/kayak.db` from the repo root). This matches `systemd/kayak-backup.sh` on the server.
+Scripts assume the repo lives at `<somewhere>/kayak/` and the local DB sits next to it at `<somewhere>/DB/kayak.db` (i.e. `../DB/kayak.db` from the repo root). This matches `systemd/kayak-backup-weekly.sh` on the server.
 
 Override via env vars if needed:
 ```
@@ -59,7 +59,7 @@ What it does:
 1. Local: `PRAGMA wal_checkpoint(TRUNCATE)`, then `sqlite3 .backup` → `kayak-from-local-<UTC>.db`, `gzip -9`.
 2. `rsync` the `.gz` to `~/kayak/backups/` on the remote.
 3. On the remote, within a single SSH session:
-   - Stop `kayak-pipeline.{timer,service}`, `kayak-decimate.{timer,service}`, `kayak-backup.{timer,service}`.
+   - Stop `kayak-pipeline.{timer,service}`, `kayak-decimate.{timer,service}`, `kayak-backup-weekly.{timer,service}`, `kayak-backup-hourly.{timer,service}`.
    - `PRAGMA wal_checkpoint(TRUNCATE)` on live, then `.backup` it to `/tmp/kayak-live-final-<ts>.db` — this captures every observation the pipeline wrote while we were editing.
    - `gunzip` our uploaded snapshot to `/tmp/kayak-new-<ts>.db`.
    - Merge via `sqlite3`:
@@ -96,13 +96,13 @@ Every push archives the pre-push live DB:
 To revert, on the remote:
 
 ```bash
-sudo systemctl stop kayak-pipeline.timer kayak-decimate.timer kayak-backup.timer
+sudo systemctl stop kayak-pipeline.timer kayak-decimate.timer kayak-backup-weekly.timer kayak-backup-hourly.timer
 sudo systemctl stop kayak-pipeline.service
 mv ~/DB/kayak.db ~/DB/kayak.db.bad
 gunzip -c ~/kayak/backups/kayak-replaced-<UTC>.db.gz > ~/DB/kayak.db
 chmod 664 ~/DB/kayak.db
 rm -f ~/DB/kayak.db-wal ~/DB/kayak.db-shm
-sudo systemctl start kayak-pipeline.timer kayak-decimate.timer kayak-backup.timer
+sudo systemctl start kayak-pipeline.timer kayak-decimate.timer kayak-backup-weekly.timer kayak-backup-hourly.timer
 ```
 
 ## Caveats

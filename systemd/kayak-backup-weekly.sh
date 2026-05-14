@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Weekly SQLite backup with retention policy.
 #
+# Runs via kayak-backup-weekly.timer (Sun 03:15). Chains to
+# kayak-backup-offsite.service via OnSuccess= on the unit. The hourly
+# counterpart kayak-backup-hourly.{sh,service,timer} keeps a separate
+# 24-file window for short-RPO recovery; this script keeps the long-tail.
+#
 # Filenames are backup-YYYYMMDDTHHMMSSZ.db.gz (UTC, second-resolution).
 # A new timestamp on every invocation makes the script idempotent under
 # same-day re-runs — the gzip step never collides with an existing file.

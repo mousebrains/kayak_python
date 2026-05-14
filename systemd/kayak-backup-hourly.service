@@ -1,7 +1,5 @@
 [Unit]
-Description=Upload latest kayak backup to Google Drive (encrypted)
-After=network-online.target
-Wants=network-online.target
+Description=Kayak SQLite database backup (hourly, 24-copy retention)
 OnFailure=kayak-notify-failure@%n.service
 
 [Service]
@@ -9,21 +7,21 @@ Type=oneshot
 User=pat
 WorkingDirectory=/home/pat/kayak
 EnvironmentFile=/home/pat/.config/kayak/.env
-ExecStart=/home/pat/kayak/systemd/kayak-backup-offsite.sh
+ExecStart=/home/pat/kayak/systemd/kayak-backup-hourly.sh
 # `-` prefix: a transient curl failure on the heartbeat won't cascade to a
 # false OnFailure alert. See PLAN_production_discipline.md Phase 1.3.
-ExecStartPost=-/usr/bin/curl -fsS -m 10 --retry 3 -o /dev/null ${HC_BACKUP_OFFSITE}
+ExecStartPost=-/usr/bin/curl -fsS -m 10 --retry 3 -o /dev/null ${HC_BACKUP_HOURLY}
 Nice=15
-TimeoutStartSec=30min
 
-# Sandboxing. Needs network for rclone → googleapis.com; otherwise mirrors
-# kayak-backup-weekly.service. R/W on rclone config (token refresh) and cache.
+# Sandboxing — matches kayak-backup-weekly.service. The hourly path is
+# local-only (no offsite chain), so the writable set is the DB dir +
+# backups dir + env file dir.
 NoNewPrivileges=yes
 PrivateTmp=yes
 PrivateDevices=yes
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/home/pat/.config/rclone -/home/pat/.cache
+ReadWritePaths=/home/pat/DB /home/pat/kayak/backups /home/pat/.config
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes

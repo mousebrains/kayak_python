@@ -8,11 +8,14 @@ Google Drive, layered on top of the local weekly snapshot in
 
 | When | Service | What |
 |---|---|---|
-| Sun 03:15 | `kayak-backup.service` | sqlite `.backup` + gzip + local rotation |
+| Hourly :38 | `kayak-backup-hourly.service` | sqlite `.backup` + WAL checkpoint + gzip; 24-copy retention. Local only. |
+| Sun 03:15 | `kayak-backup-weekly.service` | sqlite `.backup` + gzip + local rotation (4 copies) |
 | Sun 03:15+ | `kayak-backup-offsite.service` | rclone copy → `gdrive-crypt:`, prune to newest 26 |
 
-Chained via `OnSuccess=kayak-backup-offsite.service` on the local-backup
-unit — the offsite job only runs after a successful local snapshot.
+Chained via `OnSuccess=kayak-backup-offsite.service` on the weekly-backup
+unit — the offsite job only runs after a successful weekly local snapshot.
+The hourly is local-only (RPO ≤ 1h); the weekly + offsite carry the
+long-tail durability.
 Failures in the offsite job route to `kayak-notify-failure@%n.service` and
 trigger an email to `pat.kayak@gmail.com` via msmtp; they do **not** roll
 back the local backup.
@@ -119,7 +122,7 @@ To upload an off-cycle snapshot (after a major DB change, before risky
 ops, etc.):
 
 ```bash
-sudo systemctl start kayak-backup.service          # runs both
+sudo systemctl start kayak-backup-weekly.service   # runs both via OnSuccess chain
 # OR, if the local backup is already current:
 sudo systemctl start kayak-backup-offsite.service  # uploads newest local
 ```

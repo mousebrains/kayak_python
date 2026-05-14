@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Upload the newest local DB backup to Google Drive (encrypted via rclone crypt).
 #
-# Triggered by kayak-backup.service via OnSuccess= — runs only after a
-# successful local backup. Failures here route through OnFailure= →
-# kayak-notify-failure@.service for an email alert, but do NOT roll back
-# the local backup.
+# Triggered by kayak-backup-weekly.service via OnSuccess= — runs only
+# after a successful weekly local backup. The hourly backup is local-
+# only (no offsite chain). Failures here route through OnFailure= →
+# kayak-notify-failure@.service for an email alert, but do NOT roll
+# back the local backup.
 #
 # Retention: keep newest 26 off-host (~6 months of weekly), prune older.
 

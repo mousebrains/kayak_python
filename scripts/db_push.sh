@@ -86,8 +86,10 @@ NEW_DB="/tmp/kayak-new-${TS}.db"
 REPLACED_GZ="${BACKUP_DIR}/kayak-replaced-${TS}.db"
 
 echo "--- Stopping pipeline timers ---"
-for unit in kayak-pipeline.timer kayak-decimate.timer kayak-backup.timer \
-            kayak-pipeline.service kayak-decimate.service kayak-backup.service; do
+for unit in kayak-pipeline.timer kayak-decimate.timer \
+            kayak-backup-weekly.timer kayak-backup-hourly.timer \
+            kayak-pipeline.service kayak-decimate.service \
+            kayak-backup-weekly.service kayak-backup-hourly.service; do
     sudo -n systemctl stop "$unit" 2>/dev/null || true
 done
 
@@ -128,7 +130,8 @@ integrity=$(sqlite3 "$NEW_DB" 'PRAGMA integrity_check;')
 if [[ "$integrity" != "ok" ]]; then
     echo "Integrity check failed: $integrity" >&2
     echo "Live DB is untouched. Staged file: $NEW_DB" >&2
-    for unit in kayak-pipeline.timer kayak-decimate.timer kayak-backup.timer; do
+    for unit in kayak-pipeline.timer kayak-decimate.timer \
+                kayak-backup-weekly.timer kayak-backup-hourly.timer; do
         sudo -n systemctl start "$unit"
     done
     exit 1
@@ -145,7 +148,8 @@ mv "$NEW_DB" "$DB"
 chmod 660 "$DB"
 
 echo "--- Restarting timers ---"
-for unit in kayak-pipeline.timer kayak-decimate.timer kayak-backup.timer; do
+for unit in kayak-pipeline.timer kayak-decimate.timer \
+            kayak-backup-weekly.timer kayak-backup-hourly.timer; do
     sudo -n systemctl start "$unit"
 done
 
