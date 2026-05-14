@@ -70,6 +70,15 @@ jobs:
           composer config --global --unset github-oauth.github.com || true
           composer install --no-interaction --no-progress --prefer-dist
 
+      - name: composer audit
+        # Fails on any known vulnerability in installed packages
+        # (Packagist's advisory feed). Default behavior includes dev
+        # deps. roave/security-advisories (require-dev) is a belt-and-
+        # suspenders gate that refuses to resolve known-bad versions at
+        # composer install time; this step catches advisories that
+        # landed after the last lock-file update.
+        run: composer audit
+
       # PHPUnit needs `levels init-db` available to seed the integration
       # tests' tmp SQLite schema (option (b) from PLAN_php_layer_split.md
       # Phase 1.3 — keeps the schema in lockstep with src/kayak/db/models.py
@@ -112,6 +121,13 @@ jobs:
           cache: 'npm'
       - name: Install JS test deps
         run: npm ci
+
+      - name: npm audit
+        # Fail only on high or critical advisories — moderate/low are noisy
+        # for a tooling-only package.json (biome + playwright). Matches the
+        # severity gate the composer audit step uses (composer audit defaults
+        # to all severities, but its advisory set is much smaller).
+        run: npm audit --audit-level=high
       - name: Cache Playwright browsers
         uses: actions/cache@v4
         with:
