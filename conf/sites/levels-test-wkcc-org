@@ -1,0 +1,43 @@
+# conf/sites/levels-test-wkcc-org
+# Deployed to /etc/nginx/sites-available/levels-test-wkcc-org.
+#
+# Test hostname for the kayak project. CNAMEs to levels.mousebrains.com
+# at the DNS layer; the cert is the shared 3-SAN cert at
+# /etc/letsencrypt/live/levels.mousebrains.com/. Currently shares the
+# same root as production; will get its own root when staging tests
+# need to diverge.
+
+# Redirect HTTP → HTTPS
+server {
+    listen 80;
+    listen [::]:80;
+    server_name levels-test.wkcc.org;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen [::]:443 ssl ipv6only=on; # managed by Certbot
+    listen 443 ssl; # managed by Certbot
+    http2 on;
+
+    ssl_certificate /etc/letsencrypt/live/levels.mousebrains.com/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/levels.mousebrains.com/privkey.pem; # managed by Certbot
+    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+
+    # OCSP stapling intentionally NOT enabled: Let's Encrypt's ISRG/E7 certs
+    # no longer include an OCSP responder URL (CA/B Forum baseline 2024+).
+
+    server_name levels-test.wkcc.org;
+
+    # Dual logging: the legacy combined log preserves the path that fail2ban
+    # filters (jail.local, jail.d/kayak-edit*.conf) currently watch. The
+    # per-host log gives transition visibility. Drop the legacy line after
+    # fail2ban filters migrate to multi-file logpaths.
+    access_log /var/log/nginx/kayak-access.log kayak_timed;
+    error_log  /var/log/nginx/kayak-error.log;
+    access_log /var/log/nginx/levels-test.access.log kayak_timed;
+    error_log  /var/log/nginx/levels-test.error.log;
+
+    include /etc/nginx/snippets/levels-common.conf;
+}
