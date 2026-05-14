@@ -82,10 +82,10 @@ obvious.
    If that fails, do not proceed — the A-record flip relies on Hetzner
    serving this cert.
 
-### Phase B — DNS cutover at ClubExpress (one ticket)
+### Phase B — DNS cutover at ClubExpress (one ticket) + repo branding flip
 
-Identical to `DNS.CHANGEOVER.md` Phase 3. Open a ticket with ClubExpress
-to change:
+Identical to `DNS.CHANGEOVER.md` Phase 3 on the DNS side. Open a ticket
+with ClubExpress to change:
 
 ```
 levels.wkcc.org.   A      208.97.186.232
@@ -103,6 +103,67 @@ the flip if ClubExpress allows it, to shorten the propagation tail.
 Because Hetzner already has a valid cert for `levels.wkcc.org`, users see
 no SSL warning regardless of resolver propagation order. There's no race
 to win.
+
+#### Repo branding flip (run alongside the DNS flip)
+
+Pre-staged on branch `cutover/wkcc-branding-flip` (one commit; do the
+audit yourself with `git log -p main..cutover/wkcc-branding-flip` —
+it's 4 files, 17/13 lines). Four edits:
+
+- `LICENSE-DATA` opening paragraph URL + attribution example.
+- `src/kayak/web/build/_shared.py:33` — `_LICENSE_META["attribution"]`
+  flip; embedded in every generated `*.geojson` + `sparklines.json`
+  download, so the value travels with each downloaded copy.
+- `tests/test_build_geojson_split.py:125` — the assertion that
+  matches `_LICENSE_META["attribution"]`; must flip in lock-step.
+- `deploy/nginx-editor-env.conf` `$site_url` map — soak-default
+  `"https://levels-test.wkcc.org"` becomes a hostname-aware map
+  (explicit `levels-test.wkcc.org → test`; `default → https://levels.wkcc.org`).
+  PHP magic-link emails will start citing the new URL.
+
+Apply order (the user accepts the propagation gap — i.e. some
+resolvers still resolve to the old A record while the generated
+output and PHP responses already cite the new hostname; resolver
+state catches up over ~T+3 hours per the original plan's TTL math):
+
+```bash
+# 1. Merge the cutover branch on main.
+git -C /home/pat/kayak fetch
+git -C /home/pat/kayak checkout main
+git -C /home/pat/kayak merge --ff-only cutover/wkcc-branding-flip
+git -C /home/pat/kayak push
+
+# 2. Deploy the new editor-env.conf and reload nginx.
+sudo install -m 0644 /home/pat/kayak/deploy/nginx-editor-env.conf \
+    /etc/nginx/conf.d/editor-env.conf
+sudo nginx -t && sudo systemctl reload nginx
+
+# 3. Trigger an early pipeline run so the next build emits JSON with
+#    the new attribution. (Otherwise the systemd timer would catch up
+#    on its next firing — also fine.)
+/home/pat/.venv/bin/levels build
+
+# 4. Smoke-check the change landed:
+grep -q 'levels.wkcc.org' /home/pat/public_html/static/reaches.geojson \
+    && echo "OK: GeoJSON carries new attribution" \
+    || echo "MISS: re-run levels build"
+curl -s -I 'https://levels-test.wkcc.org/' >/dev/null \
+    && curl -s 'https://levels-test.wkcc.org/contact.php' | grep -q 'levels-test.wkcc.org' \
+    && echo "OK: soak host still cites test URL" \
+    || echo "MISS: editor-env.conf may not have reloaded"
+```
+
+If any step fails, the rollback is `git -C /home/pat/kayak revert
+HEAD --no-edit && git push` (which restores the pre-flip attribution
+on the next build) plus the inverse `sudo cp` of the previously
+deployed editor-env.conf from `~/etc-backups/` or a manual edit.
+The DNS A→CNAME flip can be rolled back independently by reverting
+the ClubExpress ticket.
+
+After ClubExpress actions the ticket and resolvers begin pointing
+`levels.wkcc.org` at Hetzner, the only user-visible difference is
+that the new hostname renders correctly with a valid cert (because
+the bridge cert from Phase A is already installed).
 
 ### Phase C — Expand the existing cert to add `levels.wkcc.org` as a third SAN (~T+3 from Phase B, or later)
 
