@@ -182,9 +182,15 @@ def test_pipeline_fetch_through_build_smoke(tmp_path: Path) -> None:
 
     # OUTPUT_DIR override routes build()'s path lookup onto our tmp dir.
     # Stub fetch-usgs-ogc to avoid hitting the real USGS OGC endpoint.
+    # Stub sync_sources to skip the data/sources.yaml seed — `_seed()`
+    # already populated the one FetchUrl + Source this test needs;
+    # letting sync_sources run would mint 100+ unlinked source rows
+    # that the new orphan-check pipeline step (PLAN_orphan_sources
+    # Phase 2b) flags as failures.
     with (
         patch.dict("os.environ", {"DATABASE_URL": db_url, "OUTPUT_DIR": str(output_dir)}),
         patch("kayak.cli.fetch.load_sources", return_value=yaml_sources),
+        patch("kayak.cli.fetch.sync_sources", return_value=0),
         patch("kayak.cli.pipeline.fetch_usgs_ogc.fetch_usgs_ogc", return_value=None),
     ):
         try:
