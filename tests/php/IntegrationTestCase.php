@@ -31,6 +31,8 @@ abstract class IntegrationTestCase extends TestCase
     private static array $serverPipes = [];
     private static int $serverPort = 0;
     private static string $dbPath = '';
+    /** Tmp directory the test PHP server writes outbound mail to. */
+    protected static string $mailDumpDir = '';
 
     public static function setUpBeforeClass(): void
     {
@@ -80,12 +82,21 @@ abstract class IntegrationTestCase extends TestCase
         // 2. Spawn `php -S 127.0.0.1:0 -t <docroot>` with the env vars PHP
         // normally gets from nginx fastcgi_param plus the test SQLITE_PATH.
         $docroot = $repoRoot . '/public_html';
+        // MAIL_DUMP_DIR makes send_email() write messages to files in this
+        // tmp dir instead of invoking the real mail() (which on prod hands
+        // off to msmtp and actually delivers — verified by a bounce loop
+        // from approve-editor@example.com on 2026-05-14). Per-class tmp dir
+        // is created here and cleaned up in tearDownAfterClass.
+        $mailDir = sys_get_temp_dir() . '/kayak-test-mail-' . uniqid('', true);
+        mkdir($mailDir, 0700, true);
+        self::$mailDumpDir = $mailDir;
         $env = [
             'PATH' => getenv('PATH') ?: '/usr/bin:/bin',
             'HOME' => getenv('HOME') ?: '/tmp',
             'SQLITE_PATH' => $dbPath,
             'EDITOR_FEATURE' => '1',
             'MAIL_FROM' => 'test@example.com',
+            'MAIL_DUMP_DIR' => $mailDir,
             'SITE_URL' => 'http://127.0.0.1',
             'TURNSTILE_SITE_KEY' => 'TEST_SITE_KEY',
             'TURNSTILE_SECRET' => 'TEST_SECRET',
@@ -133,6 +144,17 @@ abstract class IntegrationTestCase extends TestCase
             unlink(self::$dbPath);
         }
         self::$dbPath = '';
+        // Clean up the mail-dump dir: each test class gets its own so a
+        // failure in one doesn't pollute the next.
+        if (self::$mailDumpDir !== '' && is_dir(self::$mailDumpDir)) {
+            foreach (glob(self::$mailDumpDir . '/*') ?: [] as $f) {
+                if (is_file($f)) {
+                    unlink($f);
+                }
+            }
+            rmdir(self::$mailDumpDir);
+        }
+        self::$mailDumpDir = '';
     }
 
     /**
