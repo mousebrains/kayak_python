@@ -17,6 +17,7 @@ from kayak.cli import (
     init_db,
     merge,
     migrate,
+    orphan_check,
     pipeline,
     seed_maintainer,
     trace_reach,
@@ -46,6 +47,7 @@ def main() -> None:
     calculator.addArgs(subparsers)
     build.addArgs(subparsers)
     decimate.addArgs(subparsers)
+    orphan_check.addArgs(subparsers)
     pipeline.addArgs(subparsers)
     seed_maintainer.addArgs(subparsers)
     delete_editor.addArgs(subparsers)
