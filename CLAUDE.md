@@ -114,24 +114,9 @@ body for double-submit CSRF.
 
 ### PHP Conventions (`php/includes/`)
 
-- **One concern per file.** Entry-point shims in `php/*.php` stay <60
-  lines (arg-parse + auth-gate + dispatch); the work lives in
-  `php/includes/<entry>_handler.php`.
-- **File-private helpers carry the file's prefix.** Use `_<file>_*`
-  (e.g. `_review_handle_post`, `_render_custom_table`, `_gp_fetch_series`),
-  not bare `_*`. PHP's global function namespace makes bare-underscore
-  collisions invisible locally but fatal on PHPStan's file-load-order in
-  CI (see commit `998976d` for the lesson).
-- **Module constants too.** Use `<FILE>_<NAME>` (e.g.
-  `CUSTOM_LEVELS_STATUS_META`, `REVIEW_LIST_STATUSES`) to keep the
-  same boundary.
-- **No load-time side effects in `includes/*.php`.** `require_once`,
-  `const`, and `function` definitions only — load-time PDO or echo
-  breaks `phpunit.xml`'s coverage isolation.
-- **Public vs private.** Function names without a leading underscore
-  are part of the file's public API (consumed by other files); names
-  with a leading underscore are file-private and may be renamed
-  freely.
+Moved to [`php/CONVENTIONS.md`](php/CONVENTIONS.md). The runtime
+constraints (mbstring, CSP) and integration-test scaffold remain in
+§ "PHP Tooling" above.
 
 ### Stream Tracing
 

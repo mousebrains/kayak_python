@@ -1,5 +1,19 @@
 name: CI
 
+# CI/prod parity (PLAN_pre_release_followup.md T2.1):
+#
+# Prod runs Debian 13 (Trixie): PHP 8.4, Python 3.13. The runner image
+# `ubuntu-24.04` is the closest LTS GitHub offers; we pin to it
+# explicitly instead of `ubuntu-latest` so a future auto-bump (to
+# ubuntu-26.04 in 2026) can't silently shift the system-library
+# baseline. PHP and Python are further pinned to 8.4 / 3.13 via
+# shivammathur/setup-php@v2 and actions/setup-python@v6 — those
+# override whatever the OS ships, so the prod-parity invariant doesn't
+# rely on the runner's default toolchain.
+#
+# An OS / PHP / Python bump on prod requires a PR that updates these
+# pins (and verifies parity locally), not a CI surprise.
+
 on:
   push:
     branches: [main]
@@ -12,7 +26,7 @@ concurrency:
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -26,7 +40,7 @@ jobs:
 
   lint-misc:
     name: Lint PHP/JS/CSS/Shell
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
 
@@ -154,7 +168,7 @@ jobs:
           retention-days: 14
 
   typecheck:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -166,7 +180,7 @@ jobs:
       - run: mypy src/
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -190,7 +204,7 @@ jobs:
 
   secret-scan:
     name: gitleaks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # gitleaks-action@v2 calls GET /pulls/N/commits to enumerate the PR
     # range, which needs pull-requests: read. The workflow's default token
     # gets only contents: read on pull_request events, so the call 403'd.
@@ -207,7 +221,7 @@ jobs:
 
   security-audit:
     name: pip-audit
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6

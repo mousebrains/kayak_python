@@ -96,6 +96,15 @@ See `scripts/` for helper scripts. The typical workflow:
 4. Add the fetch URL to `data/sources.yaml`
 5. Run `levels init-db` and `levels pipeline`
 
+## PHP code style
+
+Conventions for files under `php/` and `php/includes/` (file shape,
+naming, helper prefixes, module constants) live in
+[`php/CONVENTIONS.md`](php/CONVENTIONS.md). Runtime constraints
+(mbstring, CSP), tooling commands (composer, PHPStan, PHPUnit,
+php-cs-fixer), and the integration-test scaffold are documented in
+[`CLAUDE.md`](CLAUDE.md) § "PHP Tooling".
+
 ## Project Structure
 
 ```

@@ -58,3 +58,15 @@ repos:
         # Skipped if vendor/ isn't present (fresh checkout). Operator runs
         # `composer install` once.
         stages: [pre-commit]
+      - id: phpstan
+        name: PHPStan
+        # Same gate CI runs in lint-misc (level 7 with phpstan-baseline.neon
+        # grandfathering). Surfaces typed-PHP regressions before push
+        # instead of waiting for the CI cycle. Per PLAN_pre_release_followup.md T2.6.
+        entry: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
+        language: system
+        files: \.php$
+        pass_filenames: false
+        # Skipped if vendor/ isn't present (fresh checkout); same caveat
+        # as php-cs-fixer above.
+        stages: [pre-commit]
