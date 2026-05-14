@@ -446,9 +446,11 @@ def _build_gauges_table(rows: list[dict[str, Any]]) -> tuple[str, list[str]]:
             flow_cell = ""
         lines.append(f'  <td class="td-flow" data-label="Flow">{flow_cell}</td>')
 
+        # aria-hidden on the placeholder so SR skips empty spans; the
+        # decorative SVG inside (when JS resolves it) is also aria-hidden.
         lines.append(
             f'  <td class="td-spark secondary" data-label="2-day Trend">'
-            f'<span class="spark" data-gid="{gid}"></span></td>'
+            f'<span class="spark" data-gid="{gid}" aria-hidden="true"></span></td>'
         )
 
         gage_val = row.get("gage")

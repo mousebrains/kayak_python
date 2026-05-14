@@ -168,12 +168,19 @@ def _format_cell_value(col: dict[str, Any], row: dict, reach_id: int, gauge_id: 
         # sparklines.json, so we emit the placeholder whenever a gauge
         # exists even if this reach's flow value itself is empty.
         gid_attr = f' data-gid="{gauge_id}"' if gauge_id else ""
+        # aria-hidden on the outer placeholder so screen readers skip ~50
+        # empty spans per page before JS resolves the SVG inside. The
+        # numeric value to the left of the spark already conveys the
+        # relevant info; the sparkline is decorative trend context.
         if isinstance(val, int | float):
             lvl = html_mod.escape(str(row["flow_level"])) if row.get("flow_level") else ""
             lvl_cls = f' class="level-{lvl}"' if lvl else ""
-            return f'<span{lvl_cls}>{val:,.0f}</span><span class="spark"{gid_attr}></span>'
+            return (
+                f"<span{lvl_cls}>{val:,.0f}</span>"
+                f'<span class="spark"{gid_attr} aria-hidden="true"></span>'
+            )
         if gauge_id:
-            return f'<span class="spark"{gid_attr}></span>'
+            return f'<span class="spark"{gid_attr} aria-hidden="true"></span>'
         return ""
     elif col["type"] == "gage" and isinstance(val, int | float):
         lvl = html_mod.escape(str(row["gage_level"])) if row.get("gage_level") else ""
@@ -302,8 +309,14 @@ def _collect_filter_data(
     states: set[str] = set()
     statuses: set[str] = set()
     tiers: set[str] = set()
-    # huc6_code -> set of (huc8_code, huc8_name) tuples present in the rows.
-    huc6_to_huc8s: dict[str, set[tuple[str, str]]] = {}
+    # huc6_code -> {huc8_code: display_name}. Using a dict (not a set of
+    # tuples) collapses the case where the same huc8 appears across rows
+    # with different `reach.basin` labels, which previously rendered as two
+    # pills with the same code but different display names. On collision,
+    # prefer the first non-numeric (named-basin) value we see; later named
+    # values tie-break alphabetically, with the huc8 code as a stable last
+    # resort if no reach supplied a named basin.
+    huc6_to_huc8s: dict[str, dict[str, str]] = {}
     has_no_huc = False
     for reach, row in visible:
         for s in reach.states:
@@ -319,14 +332,25 @@ def _collect_filter_data(
         if reach.huc and len(reach.huc) >= 8:
             huc6 = reach.huc[:6]
             huc8 = reach.huc[:8]
-            huc6_to_huc8s.setdefault(huc6, set()).add((huc8, reach.basin or huc8))
+            candidate = reach.basin or huc8
+            bucket = huc6_to_huc8s.setdefault(huc6, {})
+            existing = bucket.get(huc8)
+            # Prefer a named basin (non-numeric) over the huc8 fallback,
+            # then alphabetical among named candidates for determinism.
+            if existing is None:
+                bucket[huc8] = candidate
+            elif existing == huc8 and candidate != huc8:
+                # Existing is the numeric fallback; the new candidate is named.
+                bucket[huc8] = candidate
+            elif candidate != huc8 and existing != huc8 and candidate < existing:
+                bucket[huc8] = candidate
         else:
             has_no_huc = True
     huc6_groups = [
         {
             "huc6": huc6,
             "name": huc6_names.get(huc6, huc6),
-            "huc8s": sorted(huc8s),
+            "huc8s": sorted(huc8s.items()),
         }
         for huc6, huc8s in sorted(
             huc6_to_huc8s.items(), key=lambda kv: huc6_names.get(kv[0], kv[0])

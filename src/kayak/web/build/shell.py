@@ -15,6 +15,20 @@ from kayak.web.build._shared import (
     _og_meta,
 )
 
+# Windy.com center coords for the "Weather" nav link, per active state.
+# These mirror the per-state external-resource URLs further down in this
+# file (the {State} Weather — Windy entries in _STATE_LINKS). Pages with
+# no active state (all-reaches index, map, gauges) fall back to a PNW
+# overview view; the user can pan from there.
+_STATE_WEATHER_URL: dict[str, str] = {
+    "Oregon": "https://www.windy.com/?44.0,-120.5,7",
+    "Washington": "https://www.windy.com/?47.5,-120.5,7",
+    "Idaho": "https://www.windy.com/?44.4,-114.7,7",
+    "Nevada": "https://www.windy.com/?39.5,-116.9,7",
+    "California": "https://www.windy.com/?37.2,-119.5,6",
+}
+_DEFAULT_WEATHER_URL = "https://www.windy.com/?43.0,-118.0,6"
+
 # Links for adjacent state pages
 _STATE_LINKS: dict[str, list[tuple[str, str]]] = {
     "Oregon": [
@@ -134,7 +148,13 @@ def _build_nav(
         links.append('<a href="/gauge_picker.php">Gauge<br>Picker</a>')
     else:
         links.append('<a href="/picker.php">Reach<br>Picker</a>')
-    links.append('<a href="https://www.windy.com/?44.0,-120.5,7">Oregon<br>Weather</a>')
+    weather_url = _STATE_WEATHER_URL.get(active_state, _DEFAULT_WEATHER_URL)
+    weather_label = (
+        f"{_STATE_ABBREVS.get(active_state, '')}<br>Weather"
+        if active_state in _STATE_WEATHER_URL
+        else "Weather"
+    )
+    links.append(f'<a href="{weather_url}">{weather_label}</a>')
     return "\n    ".join(links)
 
 

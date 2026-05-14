@@ -221,10 +221,11 @@ def test_collect_filter_data_huc6_grouping_unit() -> None:
     # Direct exercise of the post-grouping format. Simulates what build does
     # after receiving a dict of huc6 names.
     huc6_names = {"170900": "Willamette", "170800": "Lower Columbia"}
-    # Build the structure the same way _collect_filter_data would, by hand:
-    huc6_to_huc8s: dict[str, set[tuple[str, str]]] = {
-        "170900": {("17090011", "Clackamas"), ("17090004", "Mckenzie")},
-        "170800": {("17080001", "Lower Columbia-Sandy")},
+    # Build the structure the same way _collect_filter_data would, by hand
+    # (post-QW.8a it's a nested dict, not a set of tuples).
+    huc6_to_huc8s: dict[str, dict[str, str]] = {
+        "170900": {"17090011": "Clackamas", "17090004": "Mckenzie"},
+        "170800": {"17080001": "Lower Columbia-Sandy"},
     }
     expected = [
         {
@@ -239,10 +240,64 @@ def test_collect_filter_data_huc6_grouping_unit() -> None:
         },
     ]
     actual = [
-        {"huc6": h6, "name": huc6_names.get(h6, h6), "huc8s": sorted(h8s)}
+        {"huc6": h6, "name": huc6_names.get(h6, h6), "huc8s": sorted(h8s.items())}
         for h6, h8s in sorted(huc6_to_huc8s.items(), key=lambda kv: huc6_names.get(kv[0], kv[0]))
     ]
     assert actual == expected
+
+
+def test_collect_filter_data_dedupes_huc8_with_mixed_basin_labels(session, monkeypatch) -> None:
+    """QW.8a: two reaches sharing huc8 but different basin labels → one pill.
+
+    Pre-QW.8a the same huc8 code appeared twice in the rendered pills with
+    different display names because (huc8, basin) tuples in a set didn't
+    collapse. Post-QW.8a a dict collapses by huc8; on collision the named
+    basin wins over the numeric-fallback, then alphabetical.
+    """
+    from kayak.web.build import levels as levels_mod
+
+    st_or = _state(session, "Oregon")
+    r_named = _mk(
+        session,
+        name="r-named",
+        display_name="R-named",
+        sort_name="R-named",
+        basin="Clackamas",
+        huc="170900110403",
+    )
+    r_named.states.append(st_or)
+    r_numeric_fallback = _mk(
+        session,
+        name="r-noname",
+        display_name="R-noname",
+        sort_name="R-noname",
+        basin=None,  # falls back to huc8 string in the old code path
+        huc="170900110000",
+    )
+    r_numeric_fallback.states.append(st_or)
+    # Same huc8 prefix (17090011), different basin labels: previously rendered
+    # as two pills ('Clackamas' AND '17090011'). Should collapse to one pill
+    # with the named basin winning.
+    session.flush()
+
+    # Bypass observation gating; the dedup logic doesn't care which rows are
+    # "visible" so we feed both directly.
+    def _identity_visible(reaches, _calculated, _all_latest):
+        return [(r, {"status": "okay"}) for r in reaches]
+
+    monkeypatch.setattr(levels_mod, "_filter_visible_rows", _identity_visible)
+    out = levels_mod._collect_filter_data(
+        [r_named, r_numeric_fallback], set(), {}, {"170900": "Willamette"}
+    )
+    huc6_groups = out["huc6_groups"]
+    assert len(huc6_groups) == 1
+    huc8s = huc6_groups[0]["huc8s"]
+    # Exactly one entry for 17090011 — collapsed.
+    codes = [code for code, _ in huc8s]
+    assert codes.count("17090011") == 1
+    # Named basin wins over the numeric fallback on collision.
+    name_for_17090011 = next(name for code, name in huc8s if code == "17090011")
+    assert name_for_17090011 == "Clackamas"
 
 
 # ---------------------------------------------------------------------------
