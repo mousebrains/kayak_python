@@ -20,6 +20,7 @@ def _make_args(**overrides):
     return Namespace(**defaults)
 
 
+@patch("kayak.cli.pipeline._orphan_check")
 @patch("kayak.cli.pipeline.get_engine")
 @patch("kayak.cli.pipeline.build.build")
 @patch("kayak.cli.pipeline.calculator.calculator")
@@ -35,6 +36,7 @@ def test_pipeline_calls_all_steps(
     mock_calculator,
     mock_build,
     mock_engine,
+    mock_orphan_check,
 ):
     """Pipeline calls all steps in order."""
     conn = MagicMock()
@@ -52,6 +54,7 @@ def test_pipeline_calls_all_steps(
     mock_build.assert_called_once_with(args)
 
 
+@patch("kayak.cli.pipeline._orphan_check")
 @patch("kayak.cli.pipeline.get_engine")
 @patch("kayak.cli.pipeline.build.build")
 @patch("kayak.cli.pipeline.calculator.calculator")
@@ -67,6 +70,7 @@ def test_pipeline_skip_fetch(
     mock_calculator,
     mock_build,
     mock_engine,
+    mock_orphan_check,
 ):
     """--skip-fetch omits the fetch step."""
     conn = MagicMock()
@@ -83,6 +87,7 @@ def test_pipeline_skip_fetch(
     mock_build.assert_called_once()
 
 
+@patch("kayak.cli.pipeline._orphan_check")
 @patch("kayak.cli.pipeline.get_engine")
 @patch("kayak.cli.pipeline.build.build")
 @patch("kayak.cli.pipeline.calculator.calculator")
@@ -98,6 +103,7 @@ def test_pipeline_pragma_optimize(
     mock_calculator,
     mock_build,
     mock_engine,
+    mock_orphan_check,
 ):
     """Pipeline runs PRAGMA optimize after all steps."""
     conn = MagicMock()
@@ -112,6 +118,7 @@ def test_pipeline_pragma_optimize(
     assert "optimize" in str(sql).lower()
 
 
+@patch("kayak.cli.pipeline._orphan_check")
 @patch("kayak.cli.pipeline.get_engine")
 @patch("kayak.cli.pipeline.build.build")
 @patch("kayak.cli.pipeline.calculator.calculator")
@@ -127,6 +134,7 @@ def test_pipeline_exits_nonzero_on_failure(
     mock_calculator,
     mock_build,
     mock_engine,
+    mock_orphan_check,
 ):
     """A fetch failure short-circuits downstream and raises SystemExit(1).
 
@@ -157,6 +165,7 @@ def test_pipeline_exits_nonzero_on_failure(
     mock_build.assert_not_called()
 
 
+@patch("kayak.cli.pipeline._orphan_check")
 @patch("kayak.cli.pipeline.get_engine")
 @patch("kayak.cli.pipeline.build.build")
 @patch("kayak.cli.pipeline.calculator.calculator")
@@ -172,6 +181,7 @@ def test_pipeline_continue_on_error_suppresses_exit(
     mock_calculator,
     mock_build,
     mock_engine,
+    mock_orphan_check,
 ):
     """--continue-on-error: run all steps regardless of fetch failure, exit 0.
 
@@ -197,6 +207,7 @@ def test_pipeline_continue_on_error_suppresses_exit(
     mock_build.assert_called_once()
 
 
+@patch("kayak.cli.pipeline._orphan_check")
 @patch("kayak.cli.pipeline.get_engine")
 @patch("kayak.cli.pipeline.build.build")
 @patch("kayak.cli.pipeline.calculator.calculator")
@@ -212,6 +223,7 @@ def test_pipeline_runs_downstream_when_only_usgs_ogc_fails(
     mock_calculator,
     mock_build,
     mock_engine,
+    mock_orphan_check,
 ):
     """fetch-usgs-ogc failing also short-circuits — both fetches are 'fetch steps'."""
     conn = MagicMock()
@@ -230,3 +242,94 @@ def test_pipeline_runs_downstream_when_only_usgs_ogc_fails(
     mock_ogc.assert_called_once()
     # Downstream still skipped — a fetch step failed.
     mock_build.assert_not_called()
+
+
+@patch("kayak.cli.pipeline.find_orphan_sources")
+@patch("kayak.cli.pipeline.get_engine")
+@patch("kayak.cli.pipeline.build.build")
+@patch("kayak.cli.pipeline.calculator.calculator")
+@patch("kayak.cli.pipeline._update_gauge_cache")
+@patch("kayak.cli.pipeline.calc_rating.calc_rating")
+@patch("kayak.cli.pipeline.fetch_usgs_ogc.fetch_usgs_ogc")
+@patch("kayak.cli.pipeline.fetch.fetch")
+def test_orphan_check_soft_fail(
+    mock_fetch,
+    mock_ogc,
+    mock_calc_rating,
+    mock_gauge_cache,
+    mock_calculator,
+    mock_build,
+    mock_engine,
+    mock_find_orphans,
+):
+    """Orphan-check at end of pipeline: soft-fail.
+
+    When find_orphan_sources returns rows, the pipeline:
+    - completes build (the public site stays fresh on data we have)
+    - records orphan-check in the failures list
+    - exits non-zero so systemd's OnFailure handler fires email + ntfy
+
+    Asserting mock_build was called is the load-bearing soft-fail invariant
+    — protects against future refactors that short-circuit before build.
+    """
+    from kayak.db.sources import OrphanRow
+
+    conn = MagicMock()
+    mock_engine.return_value.connect.return_value.__enter__ = MagicMock(return_value=conn)
+    mock_engine.return_value.connect.return_value.__exit__ = MagicMock(return_value=False)
+
+    mock_find_orphans.return_value = [
+        OrphanRow(
+            source_id=999,
+            name="ORPHAN_STN",
+            agency="test",
+            url="https://example.com/orphan",
+            is_active=True,
+            latest_obs=None,
+        )
+    ]
+
+    args = _make_args()
+    with pytest.raises(SystemExit) as exc_info:
+        pipeline(args)
+    assert exc_info.value.code == 1
+
+    # All upstream steps ran, including build (soft-fail invariant).
+    mock_fetch.assert_called_once()
+    mock_ogc.assert_called_once()
+    mock_calc_rating.assert_called_once()
+    mock_gauge_cache.assert_called_once()
+    mock_calculator.assert_called_once()
+    mock_build.assert_called_once()
+    mock_find_orphans.assert_called_once()
+
+
+@patch("kayak.cli.pipeline.find_orphan_sources")
+@patch("kayak.cli.pipeline.get_engine")
+@patch("kayak.cli.pipeline.build.build")
+@patch("kayak.cli.pipeline.calculator.calculator")
+@patch("kayak.cli.pipeline._update_gauge_cache")
+@patch("kayak.cli.pipeline.calc_rating.calc_rating")
+@patch("kayak.cli.pipeline.fetch_usgs_ogc.fetch_usgs_ogc")
+@patch("kayak.cli.pipeline.fetch.fetch")
+def test_orphan_check_clean_run_exits_zero(
+    mock_fetch,
+    mock_ogc,
+    mock_calc_rating,
+    mock_gauge_cache,
+    mock_calculator,
+    mock_build,
+    mock_engine,
+    mock_find_orphans,
+):
+    """No orphans → pipeline exits 0 normally."""
+    conn = MagicMock()
+    mock_engine.return_value.connect.return_value.__enter__ = MagicMock(return_value=conn)
+    mock_engine.return_value.connect.return_value.__exit__ = MagicMock(return_value=False)
+
+    mock_find_orphans.return_value = []
+
+    args = _make_args()
+    # Must not raise SystemExit.
+    pipeline(args)
+    mock_find_orphans.assert_called_once()

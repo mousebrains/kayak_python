@@ -7,6 +7,7 @@ Runs the full data pipeline in order:
 4. update-gauge-cache — recompute gauge-level latest values
 5. calculator — compute derived values
 6. build — generate output pages
+7. orphan-check — soft-fail if any fetch-active source lacks a gauge_source link
 """
 
 import argparse
@@ -17,6 +18,7 @@ from sqlalchemy import text
 
 from kayak.cli import build, calc_rating, calculator, fetch, fetch_usgs_ogc
 from kayak.db.engine import get_engine
+from kayak.db.sources import find_orphan_sources
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +70,40 @@ def _update_gauge_cache(args: argparse.Namespace) -> None:
         session.close()
 
 
+def _orphan_check(args: argparse.Namespace) -> None:
+    """Soft-fail if any fetch-active source has no gauge_source link.
+
+    Runs *after* build so a fresh orphan never blocks the public site from
+    updating. Raises ``RuntimeError`` so the pipeline's existing per-step
+    try/except appends to its ``failures`` list and the run exits non-zero
+    — at which point systemd marks ``kayak-pipeline.service`` failed and
+    fires its existing ``OnFailure=kayak-notify-failure@%n.service`` chain
+    (email + ntfy). See ``docs/PLAN_orphan_sources.md`` Phase 2b.
+    """
+    from kayak.db.engine import get_session
+
+    session = get_session()
+    try:
+        rows = find_orphan_sources(session)
+    finally:
+        session.close()
+
+    if not rows:
+        print("Orphan-check: clean.")
+        return
+
+    logger.error("Orphan-check found %d unlinked fetch-active source(s):", len(rows))
+    for r in rows:
+        logger.error(
+            "  source.id=%d name=%s url=%s latest=%s",
+            r.source_id,
+            r.name,
+            r.url,
+            r.latest_obs.isoformat() if r.latest_obs else "(none)",
+        )
+    raise RuntimeError(f"{len(rows)} orphan source(s) found — see ERROR logs above")
+
+
 def pipeline(args: argparse.Namespace) -> None:  # noqa: C901  # fail-fast adds one branch; full DAG refactor is T3.2
     """Run the full data pipeline."""
     steps = []
@@ -83,6 +119,7 @@ def pipeline(args: argparse.Namespace) -> None:  # noqa: C901  # fail-fast adds 
             ("update-gauge-cache", _update_gauge_cache),
             ("calculator", calculator.calculator),
             ("build", build.build),
+            ("orphan-check", _orphan_check),
         ]
     )
 
