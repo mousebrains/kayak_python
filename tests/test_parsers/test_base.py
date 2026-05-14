@@ -254,3 +254,58 @@ class TestAutoCreateSource:
         parser = ConcreteParser(url="https://example.com/test", session=session, source_id=None)
         result = parser.dump_to_db("MISSING", DataType.flow, datetime.now(UTC), 100.0)
         assert result is False
+
+    def test_orphaned_url_logs_error(self, session, caplog):
+        """Empty source_map at auto-create time = URL orphaned of sources;
+        escalate to ERROR so Phase 2b's end-of-pipeline gate can act."""
+        import logging
+
+        fu = FetchUrl(url="https://example.com/orphaned-url", parser="test", is_active=True)
+        session.add(fu)
+        session.flush()
+
+        parser = ConcreteParser(
+            url="https://example.com/orphaned-url",
+            session=session,
+            fetch_url_id=fu.id,
+            agency="test_agency",
+            # source_map omitted → defaults to empty dict.
+        )
+        with caplog.at_level(logging.ERROR, logger="kayak.parsers.base"):
+            parser.dump_to_db("LONE_STN", DataType.flow, datetime.now(UTC), 1.0)
+
+        error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+        assert len(error_records) == 1
+        msg = error_records[0].getMessage()
+        assert "ORPHAN auto-create" in msg
+        assert "LONE_STN" in msg
+        assert "https://example.com/orphaned-url" in msg
+
+    def test_multistation_url_does_not_log_error(self, session, caplog):
+        """Non-empty source_map = legitimate multi-station feed (USGS basin
+        query, wa.gov station dir); auto-create stays at WARNING only."""
+        import logging
+
+        fu = FetchUrl(url="https://example.com/multistation", parser="test", is_active=True)
+        session.add(fu)
+        session.flush()
+        # Pre-existing sibling source on the same URL.
+        sibling = Source(name="SIBLING", fetch_url_id=fu.id)
+        session.add(sibling)
+        session.flush()
+
+        parser = ConcreteParser(
+            url="https://example.com/multistation",
+            session=session,
+            fetch_url_id=fu.id,
+            agency="test_agency",
+            source_map={"SIBLING": sibling.id},  # non-empty: multi-station case
+        )
+        with caplog.at_level(logging.WARNING, logger="kayak.parsers.base"):
+            parser.dump_to_db("NEW_STN", DataType.flow, datetime.now(UTC), 1.0)
+
+        error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+        assert error_records == []  # no ORPHAN ERROR
+        warning_records = [r for r in caplog.records if r.levelno == logging.WARNING]
+        # Existing TZ warning still fires.
+        assert any("no timezone" in r.getMessage() for r in warning_records)

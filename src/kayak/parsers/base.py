@@ -165,12 +165,23 @@ class BaseParser(ABC):
     def _auto_create_source(self, station: str) -> int:
         """Auto-create a Source record for an unknown station.
 
-        Returns the new source_id and caches it in source_map. Emits a
-        warning (not info) because the new row has no ``timezone`` set — if
-        this feed publishes local time, observations will be stored as
-        naive UTC (shifted by the local offset) until the station is added
-        to the URL's ``stations:`` block in data/sources.yaml.
+        Returns the new source_id and caches it in source_map. Always emits
+        the timezone WARNING (the new row has no ``timezone`` set — if this
+        feed publishes local time, observations will be stored as naive UTC
+        shifted by the local offset until the station is added to the URL's
+        ``stations:`` block in data/sources.yaml).
+
+        Additionally escalates to ERROR when ``self.source_map`` is empty
+        before the new row goes in: that means the fetch_url has zero other
+        live sources, the post-deletion-migration "URL orphaned of sources"
+        case (see ``docs/PLAN_orphan_sources.md``). The new Source row will
+        also be missing a ``gauge_source`` link — Phase 2b's end-of-pipeline
+        gate trips on this. Logging here lets the operator find the
+        offending URL by grepping the fetch run output. The legitimate
+        multi-station case (USGS basin feeds, wa.gov station dirs) leaves
+        ``source_map`` non-empty and silences the ERROR.
         """
+        url_was_orphaned = not self.source_map
         src = Source(name=station, agency=self.agency, fetch_url_id=self.fetch_url_id)
         self.session.add(src)
         self.session.flush()
@@ -182,6 +193,17 @@ class BaseParser(ABC):
             src.id,
             station,
         )
+        if url_was_orphaned:
+            logger.error(
+                "ORPHAN auto-create: Source id=%d (station %s, url=%s, "
+                "fetch_url_id=%s) — the URL had no other live sources. "
+                "Link via gauge_source or remove the URL from sources.yaml. "
+                "See docs/PLAN_orphan_sources.md.",
+                src.id,
+                station,
+                self.url,
+                self.fetch_url_id,
+            )
         return src.id
 
     def _flush_buffer(self) -> None:
