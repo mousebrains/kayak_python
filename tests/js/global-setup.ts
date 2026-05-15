@@ -40,11 +40,19 @@ export default async function globalSetup(): Promise<void> {
   // SQLAlchemy; PHP reads SQLITE_PATH from the process env (mirroring
   // nginx's fastcgi_param). One without the other → partial seed or
   // PHP-side `Cannot open database`.
+  // EDITOR_FEATURE=1 covers two spec families with one server:
+  //   * smoke.spec.ts — page-load assertions; the editor feature flag
+  //     doesn't change any of the pages it visits (per-state HTML,
+  //     /reach.php, /map.html, etc.) so flipping the flag on is a
+  //     no-op for those tests.
+  //   * editor.spec.ts (T2.5) — login → propose → review → approve
+  //     flow needs /propose.php, /review.php, /edit.php live; those
+  //     all return 404 under EDITOR_FEATURE=0.
   const sharedEnv = {
     ...process.env,
     SQLITE_PATH: dbPath,
     DATABASE_URL: databaseUrl,
-    EDITOR_FEATURE: '0',
+    EDITOR_FEATURE: '1',
   };
 
   execFileSync(levelsBin, ['init-db'], {
@@ -76,12 +84,12 @@ export default async function globalSetup(): Promise<void> {
         ...process.env,
         SQLITE_PATH: dbPath,
         DATABASE_URL: databaseUrl,
-        // EDITOR_FEATURE=0 means /auth.php, /login.php, /propose.php
-        // etc. return 404 under JS smoke tests. Intentional divergence
-        // from tests/php/IntegrationTestCase.php (which sets =1): JS
-        // smoke is page-load-only and editor flows are out of scope
-        // per docs/done/PLAN_js_smoke_tests.md §"Out of scope".
-        EDITOR_FEATURE: '0',
+        // EDITOR_FEATURE=1 enables /auth.php, /login.php, /propose.php,
+        // /review.php so editor.spec.ts (T2.5) can drive the
+        // login → propose → review → approve journey. smoke.spec.ts
+        // visits only feature-flag-independent pages so the flip is
+        // a no-op there.
+        EDITOR_FEATURE: '1',
         MAIL_FROM: 'test@example.com',
         SITE_URL: 'http://127.0.0.1',
         TURNSTILE_SITE_KEY: 'TEST_SITE_KEY',
