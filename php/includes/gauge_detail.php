@@ -563,18 +563,23 @@ function _render_associated_reaches(array $reaches, array $reach_status_by_id): 
     }
     echo '<h3 style="margin-top:1rem">Associated Reaches</h3>';
     echo '<table class="readings-table">';
-    echo '<tr><th>Name</th><th>River</th><th>Class</th><th>Length</th><th>Watershed</th><th>Status</th></tr>';
+    // Location right after Name: on a per-gauge page, r.description differentiates
+    // reaches more than r.river (river is often constant across rows). Watershed
+    // (r.basin) was the prior 5th column — dropped because it's uniformly the same
+    // basin for reaches on the same gauge, so adds no signal. Per
+    // docs/PLAN_map_and_ui_tweaks.md Item 4.
+    echo '<tr><th>Name</th><th>Location</th><th>River</th><th>Class</th><th>Length</th><th>Status</th></tr>';
     foreach ($reaches as $r) {
         $rname = htmlspecialchars($r['name']);
+        $location = htmlspecialchars((string)($r['description'] ?? ''));
         $river = htmlspecialchars($r['river'] ?? '');
         $classes = htmlspecialchars($r['classes'] ?? '');
         $len = $r['length'] !== null ? number_format((float)$r['length'], 1) . ' mi' : '';
-        $basin = htmlspecialchars($r['basin'] ?? '');
         $status = $reach_status_by_id[(int)$r['id']] ?? 'unknown';
         $status_html = $status === 'unknown'
             ? '<span style="color:var(--c-text-muted)">unknown</span>'
             : '<span class="level-' . $status . '">' . $status . '</span>';
-        echo "<tr><td><a href=\"/description.php?id={$r['id']}\">$rname</a></td><td>$river</td><td>$classes</td><td>$len</td><td>$basin</td><td>$status_html</td></tr>\n";
+        echo "<tr><td><a href=\"/description.php?id={$r['id']}\">$rname</a></td><td>$location</td><td>$river</td><td>$classes</td><td>$len</td><td>$status_html</td></tr>\n";
     }
     echo '</table>';
 }
