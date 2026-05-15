@@ -1,19 +1,26 @@
 """Pipeline orchestrator (replaces scripts/master).
 
-Runs the full data pipeline in order:
-1. fetch — fetch from remote agencies
-2. fetch-usgs-ogc — fetch USGS data via OGC API
-3. calc-rating — apply rating tables
-4. update-gauge-cache — recompute gauge-level latest values
-5. calculator — compute derived values
-6. build — generate output pages
-7. orphan-check — soft-fail if any fetch-active source lacks a gauge_source link
+Runs the data pipeline as a DAG with explicit per-step ``requires``.
+Steps are still evaluated in topological list order (no parallelism
+yet); ``requires`` controls only the skip cascade — a step is skipped
+when any of its prerequisites failed or was itself skipped. That
+collapses the old ``_FETCH_STEP_NAMES`` hard-coded fail-fast into the
+step list itself, so adding a new step is one row, not a code edit
+across two helpers.
+
+Default DAG:
+
+  fetch ─────────┐
+  fetch-usgs-ogc ┤
+                 ├──> calc-rating ──> update-gauge-cache ──> calculator ──> build ──> orphan-check
 """
 
 import argparse
 import logging
 import time
 from collections.abc import Callable
+from dataclasses import dataclass, field
+from enum import Enum
 
 from sqlalchemy import text
 
@@ -23,24 +30,42 @@ from kayak.db.sources import find_orphan_sources
 
 logger = logging.getLogger(__name__)
 
-# Steps that acquire new data. If any of these fail, running the downstream
-# transform/build steps just bakes stale data into the next published HTML
-# without any signal to the operator. Fail-fast skips them so the
-# OnFailure=kayak-notify-failure hook fires loudly instead.
-_FETCH_STEP_NAMES = frozenset({"fetch", "fetch-usgs-ogc"})
+
+class _Result(Enum):
+    """Per-step outcome tracked across pipeline iteration."""
+
+    ok = "ok"
+    failed = "failed"
+    skipped = "skipped"
 
 
-def _skip_downstream_after_fetch_failure(
-    step_name: str,
-    failures: list[tuple[str, str]],
+@dataclass(frozen=True)
+class _Step:
+    name: str
+    fn: Callable[[argparse.Namespace], None]
+    # Names of steps that must have completed (ok) for this step to run.
+    # A step is skipped when any of its prerequisites failed OR was
+    # skipped, modulo --continue-on-error (which disables the cascade).
+    # An entry naming a step that wasn't scheduled (e.g. "fetch" under
+    # --skip-fetch) is treated as a no-op — the missing prereq doesn't
+    # block this step. That preserves the long-standing "--skip-fetch
+    # lets the rest of the pipeline run" contract.
+    requires: tuple[str, ...] = field(default_factory=tuple)
+
+
+def _should_skip(
+    step: _Step,
+    results: dict[str, _Result],
     continue_on_error: bool,
 ) -> bool:
-    """Decide whether to short-circuit a non-fetch step when a fetch failed."""
+    """Skip this step when any required upstream failed or was skipped."""
     if continue_on_error:
         return False
-    if step_name in _FETCH_STEP_NAMES:
-        return False
-    return any(f[0] in _FETCH_STEP_NAMES for f in failures)
+    for req in step.requires:
+        outcome = results.get(req)
+        if outcome in (_Result.failed, _Result.skipped):
+            return True
+    return False
 
 
 def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
@@ -76,10 +101,10 @@ def _orphan_check(args: argparse.Namespace) -> None:
 
     Runs *after* build so a fresh orphan never blocks the public site from
     updating. Raises ``RuntimeError`` so the pipeline's existing per-step
-    try/except appends to its ``failures`` list and the run exits non-zero
-    — at which point systemd marks ``kayak-pipeline.service`` failed and
-    fires its existing ``OnFailure=kayak-notify-failure@%n.service`` chain
-    (email + ntfy). See ``docs/PLAN_orphan_sources.md`` Phase 2b.
+    try/except records the failure and the run exits non-zero — at which
+    point systemd marks ``kayak-pipeline.service`` failed and fires its
+    existing ``OnFailure=kayak-notify-failure@%n.service`` chain (email
+    + ntfy). See ``docs/PLAN_orphan_sources.md`` Phase 2b.
     """
     from kayak.db.engine import get_session
 
@@ -105,26 +130,29 @@ def _orphan_check(args: argparse.Namespace) -> None:
     raise RuntimeError(f"{len(rows)} orphan source(s) found — see ERROR logs above")
 
 
-_Step = tuple[str, "Callable[[argparse.Namespace], None]"]
-
-
 def _build_steps(skip_fetch: bool) -> list[_Step]:
     """Return the ordered list of pipeline steps.
 
-    Pulled out so tests can assert step order by inspection (no mocking).
-    Honors --skip-fetch by dropping the `fetch` step.
+    Pulled out so tests can assert structure by inspection (no mocking).
+    ``--skip-fetch`` drops the ``fetch`` step; downstream steps name
+    ``"fetch"`` in ``requires`` but the missing-prereq rule treats that
+    as a no-op so the rest of the pipeline still runs.
     """
     steps: list[_Step] = []
     if not skip_fetch:
-        steps.append(("fetch", fetch.fetch))
-    steps.append(("fetch-usgs-ogc", fetch_usgs_ogc.fetch_usgs_ogc))
+        steps.append(_Step("fetch", fetch.fetch))
+    steps.append(_Step("fetch-usgs-ogc", fetch_usgs_ogc.fetch_usgs_ogc))
     steps.extend(
         [
-            ("calc-rating", calc_rating.calc_rating),
-            ("update-gauge-cache", _update_gauge_cache),
-            ("calculator", calculator.calculator),
-            ("build", build.build),
-            ("orphan-check", _orphan_check),
+            _Step(
+                "calc-rating",
+                calc_rating.calc_rating,
+                requires=("fetch", "fetch-usgs-ogc"),
+            ),
+            _Step("update-gauge-cache", _update_gauge_cache, requires=("calc-rating",)),
+            _Step("calculator", calculator.calculator, requires=("update-gauge-cache",)),
+            _Step("build", build.build, requires=("update-gauge-cache", "calculator")),
+            _Step("orphan-check", _orphan_check, requires=("build",)),
         ]
     )
     return steps
@@ -134,33 +162,34 @@ def pipeline(args: argparse.Namespace) -> None:
     """Run the full data pipeline."""
     steps = _build_steps(args.skip_fetch)
 
+    results: dict[str, _Result] = {}
     failures: list[tuple[str, str]] = []
     skipped: list[str] = []
 
-    for step_name, func in steps:
-        # Fail-fast: if any fetch step already failed, skip downstream transforms
-        # and build so we don't publish stale data silently. --continue-on-error
-        # opts out of this for forensic runs.
-        if _skip_downstream_after_fetch_failure(step_name, failures, args.continue_on_error):
+    for step in steps:
+        if _should_skip(step, results, args.continue_on_error):
             print(f"\n{'=' * 60}", flush=True)
-            print(f"Skipping: {step_name} (upstream fetch step failed)", flush=True)
+            print(f"Skipping: {step.name} (upstream prerequisite failed)", flush=True)
             print(f"{'=' * 60}", flush=True)
-            skipped.append(step_name)
+            results[step.name] = _Result.skipped
+            skipped.append(step.name)
             continue
 
         print(f"\n{'=' * 60}", flush=True)
-        print(f"Running: {step_name}", flush=True)
+        print(f"Running: {step.name}", flush=True)
         print(f"{'=' * 60}", flush=True)
         start = time.time()
         try:
-            func(args)
+            step.fn(args)
+            results[step.name] = _Result.ok
         except SystemExit:
-            pass
+            results[step.name] = _Result.ok
         except Exception as e:
-            logger.error("Error in %s: %s", step_name, e)
-            failures.append((step_name, str(e)))
+            logger.error("Error in %s: %s", step.name, e)
+            failures.append((step.name, str(e)))
+            results[step.name] = _Result.failed
         elapsed = time.time() - start
-        print(f"Completed {step_name} in {elapsed:.1f}s", flush=True)
+        print(f"Completed {step.name} in {elapsed:.1f}s", flush=True)
 
     # Run PRAGMA optimize to update SQLite query planner statistics
     try:
@@ -174,7 +203,7 @@ def pipeline(args: argparse.Namespace) -> None:
     print(f"\n{'=' * 60}", flush=True)
     if skipped:
         print(
-            f"Pipeline skipped {len(skipped)} step(s) due to upstream fetch failure: "
+            f"Pipeline skipped {len(skipped)} step(s) due to upstream failure: "
             f"{', '.join(skipped)}",
             flush=True,
         )

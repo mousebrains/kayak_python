@@ -45,7 +45,7 @@ def test_pipeline_step_order():
     added, this test must be updated to reflect the new order; that's
     the gate.
     """
-    names = [name for name, _func in _build_steps(skip_fetch=False)]
+    names = [step.name for step in _build_steps(skip_fetch=False)]
     assert names == [
         "fetch",
         "fetch-usgs-ogc",
@@ -59,7 +59,7 @@ def test_pipeline_step_order():
 
 def test_pipeline_skip_fetch_drops_fetch_step():
     """``--skip-fetch`` removes only the ``fetch`` entry; nothing else moves."""
-    names = [name for name, _func in _build_steps(skip_fetch=True)]
+    names = [step.name for step in _build_steps(skip_fetch=True)]
     assert names == [
         "fetch-usgs-ogc",
         "calc-rating",
@@ -68,6 +68,26 @@ def test_pipeline_skip_fetch_drops_fetch_step():
         "build",
         "orphan-check",
     ]
+
+
+def test_pipeline_dag_dependencies():
+    """The skip-cascade requires-graph matches the documented topology.
+
+    Pinning this here so a typo in `_build_steps` (e.g. a missing
+    requires=) doesn't silently let a downstream step run on stale
+    state. Adding a new step needs one row here too — that's the
+    gate.
+    """
+    deps = {step.name: step.requires for step in _build_steps(skip_fetch=False)}
+    assert deps == {
+        "fetch": (),
+        "fetch-usgs-ogc": (),
+        "calc-rating": ("fetch", "fetch-usgs-ogc"),
+        "update-gauge-cache": ("calc-rating",),
+        "calculator": ("update-gauge-cache",),
+        "build": ("update-gauge-cache", "calculator"),
+        "orphan-check": ("build",),
+    }
 
 
 @patch("kayak.cli.pipeline._orphan_check")
