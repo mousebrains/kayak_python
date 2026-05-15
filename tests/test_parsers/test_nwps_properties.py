@@ -188,6 +188,20 @@ def test_kcfs_input_is_converted_to_cfs(session, sample_source, flow):
     are tested separately). 1000 kcfs = 1 million cfs is well above
     real-world values but inside the strategy's safe arithmetic range.
     """
+    # Hypothesis runs ~50 examples per test invocation, all sharing the
+    # function-scoped session + sample_source. Without explicit
+    # per-example cleanup the parser's flow inserts accumulate; on a
+    # fast runner all 50 land within one second so ON CONFLICT
+    # (source_id, data_type, observed_at) dedupes them into one row —
+    # but on slower CI (e.g. 3.13) ``observed_at`` drifts across
+    # seconds, distinct rows accumulate, and the .scalar() below
+    # raises MultipleResultsFound. Clear flows from this source up-front
+    # so the assertion measures this example's insert alone.
+    session.query(Observation).filter_by(
+        source_id=sample_source.id, data_type=DataType.flow
+    ).delete()
+    session.flush()
+
     payload = _make_payload(
         secondary_units="kcfs",
         entries=[{"validTime": _recent_timestamp(), "primary": 5.0, "secondary": flow}],
