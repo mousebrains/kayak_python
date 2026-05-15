@@ -4,9 +4,15 @@ declare(strict_types=1);
 use PHPUnit\Framework\TestCase;
 
 /**
- * _turnstile_env() env/$_SERVER precedence — PHP gets secrets through
- * getenv() (set by PHP-FPM pool env from /etc/kayak/secrets.env), with a
- * $_SERVER fallback for the legacy nginx fastcgi_param path.
+ * turnstile_site_key() / turnstile_secret() resolve via Config.
+ *
+ * Config::str reads the JSON snapshot first, then falls back to
+ * getenv(strtoupper($key)). When neither source supplies a value, the
+ * helpers return an empty string and turnstile_enabled() reports false.
+ *
+ * Tests don't write a runtime-config.json on disk; the Config singleton
+ * loads, fails to find the file, logs one [CONFIG-FALLBACK] line per
+ * test run, and the getenv chain takes over.
  */
 final class TurnstileTest extends TestCase
 {
@@ -19,32 +25,44 @@ final class TurnstileTest extends TestCase
     {
         // Clean up any env we set so tests don't leak into each other.
         putenv('TURNSTILE_SECRET');
-        unset($_SERVER['TURNSTILE_SECRET']);
+        putenv('TURNSTILE_SITE_KEY');
+        Config::reset_for_test();
     }
 
     public function testEmptyWhenNothingSet(): void
     {
-        $this->assertSame('', _turnstile_env('TURNSTILE_SECRET'));
+        $this->assertSame('', turnstile_secret());
+        $this->assertSame('', turnstile_site_key());
     }
 
-    public function testGetenvPreferredOverServer(): void
+    public function testGetenvSuppliesValueWhenJsonMissing(): void
     {
+        // Default Config path (/etc/kayak/runtime-config.json) typically
+        // exists on a deployed host but isn't readable by the test runner;
+        // Config::str falls back to getenv. (The test runner deliberately
+        // avoids writing a JSON file — see the class docblock.)
         putenv('TURNSTILE_SECRET=from-env');
-        $_SERVER['TURNSTILE_SECRET'] = 'from-server';
-        $this->assertSame('from-env', _turnstile_env('TURNSTILE_SECRET'));
+        putenv('TURNSTILE_SITE_KEY=site-key-from-env');
+        $this->assertSame('from-env', turnstile_secret());
+        $this->assertSame('site-key-from-env', turnstile_site_key());
     }
 
-    public function testServerFallbackWhenGetenvMissing(): void
+    public function testJsonValueWinsOverEnv(): void
     {
-        putenv('TURNSTILE_SECRET');  // clear
-        $_SERVER['TURNSTILE_SECRET'] = 'server-only';
-        $this->assertSame('server-only', _turnstile_env('TURNSTILE_SECRET'));
-    }
-
-    public function testServerFallbackWhenGetenvEmpty(): void
-    {
-        putenv('TURNSTILE_SECRET=');  // set but empty
-        $_SERVER['TURNSTILE_SECRET'] = 'server-fallback';
-        $this->assertSame('server-fallback', _turnstile_env('TURNSTILE_SECRET'));
+        $tmp = tempnam(sys_get_temp_dir(), 'kayak-config-');
+        $this->assertNotFalse($tmp);
+        file_put_contents($tmp, json_encode([
+            'turnstile_secret'   => 'from-json',
+            'turnstile_site_key' => 'site-key-from-json',
+        ]));
+        try {
+            Config::for_test($tmp);
+            putenv('TURNSTILE_SECRET=from-env');
+            putenv('TURNSTILE_SITE_KEY=site-key-from-env');
+            $this->assertSame('from-json', turnstile_secret());
+            $this->assertSame('site-key-from-json', turnstile_site_key());
+        } finally {
+            unlink($tmp);
+        }
     }
 }

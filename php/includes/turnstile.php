@@ -6,16 +6,17 @@ declare(strict_types=1);
  * Enabled only when TURNSTILE_SITE_KEY and TURNSTILE_SECRET are both set.
  * When disabled, turnstile_verify() returns true — useful for dev and for
  * pre-rollout before keys are obtained.
+ *
+ * Both keys resolve via Config (JSON snapshot + getenv-uppercase fallback
+ * baked into Config::str). The secret is stored plaintext in the JSON
+ * because /etc/kayak/runtime-config.json is mode 0640 root:www-data —
+ * readable only by root and php-fpm.
  */
 
-function _turnstile_env(string $name): string {
-    $v = getenv($name);
-    if ($v === false || $v === '') $v = (string)($_SERVER[$name] ?? '');
-    return $v;
-}
+require_once __DIR__ . '/config.php';
 
-function turnstile_site_key(): string { return _turnstile_env('TURNSTILE_SITE_KEY'); }
-function turnstile_secret(): string { return _turnstile_env('TURNSTILE_SECRET'); }
+function turnstile_site_key(): string { return Config::str('turnstile_site_key'); }
+function turnstile_secret(): string { return Config::str('turnstile_secret'); }
 
 function turnstile_enabled(): bool {
     return turnstile_site_key() !== '' && turnstile_secret() !== '';
