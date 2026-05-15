@@ -176,6 +176,44 @@ class TestDotenvPrecedence:
         )
         assert result.stdout.strip() == "From-Os-Env"
 
+    def test_sudo_user_fallback_when_root_home_lacks_dotenv(self, tmp_path: Path) -> None:
+        # Simulate ``sudo -n levels emit-config``: HOME=/root (no .env there),
+        # SUDO_USER=pat (whose home DOES have .env). The fallback path must
+        # find pat's .env so emit-config writes the operator's live values.
+        root_home = tmp_path / "root"
+        root_home.mkdir()
+        operator_home = tmp_path / "operator"
+        env_dir = operator_home / ".config" / "kayak"
+        env_dir.mkdir(parents=True)
+        (env_dir / ".env").write_text("MAINTAINER_NAME=From-Sudo-Fallback\n")
+
+        # The subprocess script monkey-patches pwd.getpwnam to point our
+        # synthetic SUDO_USER at the temp home, since pwd.getpwnam('test-op')
+        # would otherwise fail on a real system.
+        script = textwrap.dedent(f"""
+            import pwd
+            class _Pw:
+                pw_dir = {str(operator_home)!r}
+            real = pwd.getpwnam
+            pwd.getpwnam = lambda name: _Pw() if name == 'test-op' else real(name)
+            from kayak.config import KayakConfig
+            print(KayakConfig().maintainer_name)
+        """)
+
+        env = os.environ.copy()
+        env["HOME"] = str(root_home)
+        env["SUDO_USER"] = "test-op"
+        env.pop("MAINTAINER_NAME", None)
+
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert result.stdout.strip() == "From-Sudo-Fallback"
+
     def test_dotenv_fills_in_when_os_env_missing(self, tmp_path: Path) -> None:
         # Same setup but no OS env override; .env supplies the value.
         fake_home = tmp_path / "home"

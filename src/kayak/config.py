@@ -23,8 +23,35 @@ from dotenv import load_dotenv
 from pydantic import AnyHttpUrl, EmailStr, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
-_config_env = Path.home() / ".config" / "kayak" / ".env"
-load_dotenv(_config_env if _config_env.exists() else None)
+
+def _config_env_path() -> Path | None:
+    """Locate ``~/.config/kayak/.env``, with a SUDO_USER fallback.
+
+    When ``scripts/deploy.sh`` runs ``sudo -n levels emit-config``, the
+    levels process is root but the operator (typically ``pat``) is named
+    in ``SUDO_USER``. ``Path.home()`` resolves to ``/root`` in that case
+    and the dotenv load is a no-op, so the snapshot would land with
+    pydantic defaults instead of the operator's live env. Fall back to
+    ``~SUDO_USER/.config/kayak/.env`` to keep emit-config's output
+    consistent with what the operator sees from a normal shell.
+    """
+    primary = Path.home() / ".config" / "kayak" / ".env"
+    if primary.exists():
+        return primary
+    sudo_user = os.environ.get("SUDO_USER")
+    if sudo_user:
+        try:
+            import pwd
+
+            fallback = Path(pwd.getpwnam(sudo_user).pw_dir) / ".config" / "kayak" / ".env"
+        except KeyError:
+            return None
+        if fallback.exists():
+            return fallback
+    return None
+
+
+load_dotenv(_config_env_path())
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = BASE_DIR / "data"
