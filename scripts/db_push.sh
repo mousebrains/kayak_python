@@ -14,9 +14,12 @@
 
 set -euo pipefail
 
+: "${KAYAK_HOME:=/home/pat}"
+[ -r /etc/kayak/env ] && . /etc/kayak/env
+
 REMOTE_HOST="${REMOTE_HOST:-pat@levels.mousebrains.com}"
-REMOTE_DB="${REMOTE_DB:-/home/pat/DB/kayak.db}"
-REMOTE_BACKUP_DIR="${REMOTE_BACKUP_DIR:-/home/pat/kayak/backups}"
+REMOTE_DB="${REMOTE_DB:-${KAYAK_HOME}/DB/kayak.db}"
+REMOTE_BACKUP_DIR="${REMOTE_BACKUP_DIR:-${KAYAK_HOME}/kayak/backups}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"

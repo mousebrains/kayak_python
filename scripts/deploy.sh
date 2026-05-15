@@ -20,9 +20,14 @@
 
 set -euo pipefail
 
-REPO="/home/pat/kayak"
-VENV_PIP="/home/pat/.venv/bin/pip"
-LEVELS="/home/pat/.venv/bin/levels"
+# Path indirection — sourced /etc/kayak/env overrides; otherwise the
+# default keeps the dev shell working without the file present.
+: "${KAYAK_HOME:=/home/pat}"
+[ -r /etc/kayak/env ] && . /etc/kayak/env
+
+REPO="${KAYAK_HOME}/kayak"
+VENV_PIP="${KAYAK_HOME}/.venv/bin/pip"
+LEVELS="${KAYAK_HOME}/.venv/bin/levels"
 
 # --- preconditions -----------------------------------------------------
 

@@ -20,8 +20,11 @@
 
 set -euo pipefail
 
-DB="${SQLITE_PATH:-/home/pat/DB/kayak.db}"
-BACKUP_DIR="/home/pat/kayak/backups"
+: "${KAYAK_HOME:=/home/pat}"
+[ -r /etc/kayak/env ] && . /etc/kayak/env
+
+DB="${SQLITE_PATH:-${KAYAK_HOME}/DB/kayak.db}"
+BACKUP_DIR="${KAYAK_HOME}/kayak/backups"
 KEEP=24
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 DEST="$BACKUP_DIR/hourly-$STAMP.db"

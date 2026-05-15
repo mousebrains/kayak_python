@@ -11,7 +11,10 @@
 
 set -euo pipefail
 
-BACKUP_DIR="/home/pat/kayak/backups"
+: "${KAYAK_HOME:=/home/pat}"
+[ -r /etc/kayak/env ] && . /etc/kayak/env
+
+BACKUP_DIR="${KAYAK_HOME}/kayak/backups"
 REMOTE="gdrive-crypt"
 KEEP=26
 

@@ -11,6 +11,9 @@
 
 set -euo pipefail
 
+: "${KAYAK_HOME:=/home/pat}"
+[ -r /etc/kayak/env ] && . /etc/kayak/env
+
 HOST=$(hostname)
 TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 DAYS=${RECAP_DAYS:-7}
@@ -18,7 +21,7 @@ SUBJECT="Kayak levels recap — $HOST $(date +%Y-%m-%d) (last ${DAYS}d)"
 
 # scripts/recap.py exits 0 even with no events; the only failure path
 # is journalctl missing (handled inside the script with exit 2).
-RECAP=$(/home/pat/.venv/bin/python3 /home/pat/kayak/scripts/recap.py \
+RECAP=$("${KAYAK_HOME}/.venv/bin/python3" "${KAYAK_HOME}/kayak/scripts/recap.py" \
     --days "$DAYS" --unit 'kayak-*' 2>&1)
 
 BODY=$(cat <<EOF

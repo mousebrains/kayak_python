@@ -18,7 +18,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VENV="${KAYAK_VENV:-/home/pat/.venv}"
+: "${KAYAK_HOME:=/home/pat}"
+[ -r /etc/kayak/env ] && . /etc/kayak/env
+
+VENV="${KAYAK_VENV:-${KAYAK_HOME}/.venv}"
 PYTHON="$VENV/bin/python3"
 ERALCHEMY="$VENV/bin/eralchemy"
 OUTPUT="docs/schema-overview.svg"

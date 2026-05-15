@@ -13,8 +13,11 @@
 
 set -euo pipefail
 
-REPO=/home/pat/kayak
-VENV_PY=/home/pat/.venv/bin/python3
+: "${KAYAK_HOME:=/home/pat}"
+[ -r /etc/kayak/env ] && . /etc/kayak/env
+
+REPO="${KAYAK_HOME}/kayak"
+VENV_PY="${KAYAK_HOME}/.venv/bin/python3"
 BRANCH=main
 
 cd "$REPO"

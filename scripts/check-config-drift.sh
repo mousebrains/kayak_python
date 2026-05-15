@@ -18,7 +18,10 @@
 
 set -euo pipefail
 
-REPO="${REPO:-/home/pat/kayak}"
+: "${KAYAK_HOME:=/home/pat}"
+[ -r /etc/kayak/env ] && . /etc/kayak/env
+
+REPO="${REPO:-${KAYAK_HOME}/kayak}"
 
 # Manifest of (repo_path, install_path) pairs. Tab-separated; lines starting
 # with # are comments. Files NOT in this manifest:
