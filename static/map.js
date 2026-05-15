@@ -26,6 +26,18 @@ const CLASS_TIERS=['I','II','III','IV','V','?'];
 const DEFAULT_VIEW=[44.0,-120.5];
 const DEFAULT_ZOOM=7;
 
+// Item 1 of docs/PLAN_map_and_ui_tweaks.md: hover-opens-popup is desktop-
+// only. Touch-only devices keep tap-to-open (Leaflet's built-in click
+// behavior). (hover: hover) matches devices whose primary input can
+// hover (mice, trackpads); (pointer: fine) gates out touchscreens-with-
+// stylus that emit fake hovers. Evaluated once at module load.
+const DESKTOP_HOVER=window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+// Grace window between cursor leaving both surfaces (trace + popup
+// interior) and the popup actually closing. Sized for a normal slow
+// traversal from trace edge into popup body. Decision §5 of the plan;
+// tuning band 100–200 ms if it feels wrong in the browser.
+const POPUP_CLOSE_GRACE_MS=150;
+
 function esc(s){const d=document.createElement('div');d.textContent=s==null?'':s;return d.innerHTML;}
 
 // reaches-state.json was once {id: "status"}; it's now {id: {s, t, v, u, d, ts}}.
@@ -221,15 +233,51 @@ function renderMap(geom,state){
 
       const target=hit||layer;
       target.bindPopup(buildPopup);
+      // Two-surface hover tracking for the desktop hover-popup flow.
+      // The popup body wraps in <a href="/description.php?id=...">; we
+      // need to let the user move from trace into the popup to click,
+      // so close only when neither surface is hovered (with a grace
+      // window for normal cursor traversal). Touch devices keep
+      // Leaflet's built-in click-to-open. Item 1 of
+      // docs/PLAN_map_and_ui_tweaks.md.
+      let closeTimer=null;
+      function scheduleClose(){
+        if(closeTimer!==null)clearTimeout(closeTimer);
+        closeTimer=setTimeout(function(){
+          closeTimer=null;
+          if(!layer._mfHovered&&!layer._mfPopupHovered)target.closePopup();
+        },POPUP_CLOSE_GRACE_MS);
+      }
+      function cancelClose(){
+        if(closeTimer!==null){clearTimeout(closeTimer);closeTimer=null;}
+      }
       target.on('mouseover',function(){
         layer._mfHovered=true;
         layer.setStyle(HOVER_LINE);
         if(layer._mfCasing)layer._mfCasing.setStyle(HOVER_CASING);
+        if(DESKTOP_HOVER){cancelClose();target.openPopup();}
       });
       target.on('mouseout',function(){
         layer._mfHovered=false;
         layer.setStyle(REST_LINE);
         if(layer._mfCasing)layer._mfCasing.setStyle({weight:REST_CASING.weight});
+        if(DESKTOP_HOVER)scheduleClose();
+      });
+      // popupopen fires each time the popup is shown; attach hover
+      // listeners to the popup DOM node so cancelling/scheduling the
+      // close timer keeps the popup alive while the cursor sits on it.
+      target.on('popupopen',function(e){
+        if(!DESKTOP_HOVER)return;
+        const el=e.popup.getElement();
+        if(!el)return;
+        el.addEventListener('mouseenter',function(){
+          layer._mfPopupHovered=true;
+          cancelClose();
+        });
+        el.addEventListener('mouseleave',function(){
+          layer._mfPopupHovered=false;
+          scheduleClose();
+        });
       });
     },
   });
