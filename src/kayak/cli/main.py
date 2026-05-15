@@ -22,6 +22,7 @@ from kayak.cli import (
     pipeline,
     seed_maintainer,
     trace_reach,
+    validate_config,
 )
 from kayak.cli.logger import addArgs as addLoggerArgs
 from kayak.cli.logger import mkLogger
@@ -57,6 +58,7 @@ def main() -> None:
     trace_reach.addArgs(subparsers)
     assign_huc.addArgs(subparsers)
     emit_config.addArgs(subparsers)
+    validate_config.addArgs(subparsers)
 
     args = parser.parse_args()
     mkLogger(args)

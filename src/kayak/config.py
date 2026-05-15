@@ -84,11 +84,16 @@ class KayakConfig(BaseSettings):
     # ``extra="forbid"`` catches typos in explicit ``KayakConfig(...)``
     # kwargs (test fixtures); it does NOT reject unrelated env vars,
     # because pydantic-settings only consults env vars whose names map
-    # to declared fields. Typo-in-env-var-name protection comes later
-    # via ``levels validate-config --known-env`` (Phase 1).
+    # to declared fields. Typo-in-env-var-name protection lives in
+    # ``levels validate-config --known-env`` (Phase 3.2).
+    # ``validate_default=True`` runs field validators on the default
+    # values too, so a default that drifts out of its constraint
+    # (e.g. someone changes ``fetch_timeout``'s default to 0) fails
+    # at instantiation, not at the first env override.
     model_config = SettingsConfigDict(
         case_sensitive=False,
         extra="forbid",
+        validate_default=True,
     )
 
     # Core

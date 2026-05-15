@@ -77,6 +77,17 @@ else
     echo "(pyproject.toml unchanged — skipping pip install)"
 fi
 
+# --- 2.5. validate config ---------------------------------------------
+#
+# Pydantic surfaces any invalid env (out-of-range int, malformed URL,
+# bad email, extra kwargs) BEFORE migrate so a misconfig can't half-
+# apply schema changes. Runs after `pip install -e .` so the latest
+# model is loaded. Exit 1 = field invalid; exit 2 = runner failure;
+# either fails the deploy.
+
+echo ">>> levels validate-config"
+"$LEVELS" validate-config
+
 # --- 3. migrate --------------------------------------------------------
 
 echo ">>> levels migrate"
