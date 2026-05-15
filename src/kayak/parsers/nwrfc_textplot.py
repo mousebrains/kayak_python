@@ -21,7 +21,7 @@ import re
 from datetime import UTC, datetime
 
 from kayak.db.models import DataType
-from kayak.parsers.base import BaseParser
+from kayak.parsers.base import BaseParser, ObservationRecord
 from kayak.parsers.registry import register
 from kayak.utils.conversions import parse_datetime, safe_float
 
@@ -48,15 +48,23 @@ class NWRFCTextPlotParser(BaseParser):
 
     name = "nwrfc.textplot"
 
-    def parse(self, text: str) -> int:
-        self._db_updates = 0
-        self._obs_buffer = []
+    def parse_records(
+        self,
+        text: str,
+        *,
+        now: datetime | None = None,
+    ) -> list[ObservationRecord]:
+        """Pure: HTML → records. No session, no DB.
+
+        Returns ``[]`` for empty/malformed bodies — the regex-based
+        extraction is tolerant by design (no exceptions to catch).
+        """
+        if now is None:
+            now = datetime.now(UTC)
 
         station = self._extract_station(self.url)
         header_lower = text.lower()
-
         tz = "PDT" if "(pdt)" in header_lower else "PST" if "(pst)" in header_lower else None
-        now = datetime.now(UTC)
 
         value_dtypes = self._infer_value_columns(text)
 
@@ -67,6 +75,7 @@ class NWRFCTextPlotParser(BaseParser):
             r"<td[^>]*>\s*([\d]{4}-[\d]{2}-[\d]{2}\s+[\d]{2}:[\d]{2})\s*</td>" + value_re
         )
 
+        records: list[ObservationRecord] = []
         for m in re.finditer(pattern, text):
             when = parse_datetime(m.group(1).strip(), tz_name=tz)
             if when is None or when > now:
@@ -75,8 +84,17 @@ class NWRFCTextPlotParser(BaseParser):
                 val = safe_float(m.group(i + 2))
                 if val is None or val < 0:
                     continue
-                self.dump_to_db(station, dt, when, val)
+                records.append(ObservationRecord(station, dt, when, val))
+        return records
 
+    def parse(self, text: str) -> int:
+        """Thin wrapper over ``parse_records`` + the legacy DB path."""
+        self._db_updates = 0
+        self._obs_buffer = []
+
+        records = self.parse_records(text)
+        for r in records:
+            self.dump_to_db(r.station, r.data_type, r.observed_at, r.value)
         self._flush_buffer()
 
         if self._db_updates == 0:
