@@ -22,4 +22,10 @@
             <file>php/includes/db.php</file>
         </exclude>
     </source>
+    <!-- pcov is a line-only driver (no path coverage). T2.7 sets pcov as
+         the engine via shivammathur/setup-php; PHPUnit 11.x picks it up
+         automatically once a driver is present, but specifying the
+         <coverage> block is the documented shape and avoids the "no
+         coverage configuration found" silent-fallback path. -->
+    <coverage pathCoverage="false" includeUncoveredFiles="true"/>
 </phpunit>
