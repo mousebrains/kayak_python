@@ -1,13 +1,25 @@
 # Plan — C901 cleanup for the grandfathered scripts
 
-**Status:** In progress (drafted 2026-05-11; partial execution — see
-commit `3d4786c` "trace.py de c901" 2026-05-12 and follow-ups).
+**Status:** Closed (2026-05-12, verified clean 2026-05-15). All phases shipped:
 
-> **Cross-check:** plan drafted 2026-05-11 against `main` at `2f39e15` (after the build.py split landed). A second Claude session should re-run the read-only commands in **§Reproduce** to confirm the C901 hit list before any phase starts — `ruff` may have refined the rule between drafting and execution.
->
-> Dates are absolute. References are `file:line:function` against current `main`.
+- **Plan check-in** — commit `629e97c` (2026-05-11).
+- **Phase 1** — `529561e` (parsers + utils + huc, 6 functions → cc≤8).
+- **Phase 2** — `74eb9bc` (`fetch_usgs_ogc`, 2 functions → cc≤7).
+- **Phase 3a** — `1dd03e5` (`fetch` cc 30 → ≤7).
+- **Phase 3b** — `a7b13c9` (`calc_rating` cc 22 → ≤7).
+- **Phase 3c** — `8eacf1a` (`calculator` cc 30 → ≤8 + `# noqa: C901` on `_safe_eval`/`_eval`; closed the `cli/*` per-file-ignore).
+- **Tracing carve-out** — `b662118` followed by polish in `3d4786c` (2026-05-12). `find_huc4` and `trace_reach` split into four helpers (`_scan_dir_for_huc4`, `_resolve_huc4`, `_extend_and_trim_path`, `_load_missing_geoms`); both land at cc≤5. Regression tests in `tests/test_tracing/test_trace.py` (Sandy reach ground truth).
 
-> **Status (2026-05-12, post-`b662118`):** closed. The tracing carve-out was the last open item from this plan and shipped in `b662118` — `find_huc4` and `trace_reach` were split into four helpers (`_scan_dir_for_huc4`, `_resolve_huc4`, `_extend_and_trim_path`, `_load_missing_geoms`); both land at cc≤5. Pinned regression tests live at `tests/test_tracing/test_trace.py` (Sandy reach ground truth). `[tool.ruff.lint.per-file-ignores]` is now empty — the stanza is removed entirely; `ruff check --config 'lint.per-file-ignores={}' src/kayak/tracing/` reports 0 hits. Type annotations for `kayak.tracing.*` remain deferred and the `[tool.mypy.overrides]` carve-out stays — the original plan deferred tracing pending "tests + type annotations + complexity in one PR," and this closure ships tests + complexity, leaving annotations as the lone remaining piece. The §Decisions baked in / §Out of scope sections below describe the original deferral and are kept as a historical record of how the work was sequenced.
+**End state re-verified 2026-05-15 against `main` at `804b02d`:**
+- `ruff check src/ --select C901 --config 'lint.per-file-ignores={}'` → **All checks passed!** (0 hits even with overrides bypassed).
+- `[tool.ruff.lint.per-file-ignores]` stanza is **removed entirely** from `pyproject.toml` — exceeds the plan's target end-state ("retains `tracing/*`"); the tracing closeout dropped that last entry too.
+- The two `# noqa: C901` markers remain on `cli/calculator.py:50` (`_safe_eval`) and `:67` (`_eval`) per § Decisions baked in.
+
+**Residual deferred work:** type annotations for `kayak.tracing.*`. The `[tool.mypy.overrides]` carve-out stays. The original plan deferred tracing pending "tests + type annotations + complexity in one PR" — `b662118` shipped tests + complexity; annotations remain a separate follow-on (out of scope for this plan).
+
+The original draft Context / Why / Decisions baked in / Out of scope / Reproduce sections are preserved below as the historical record of how the work was sequenced.
+
+> **Cross-check:** plan drafted 2026-05-11 against `main` at `2f39e15` (after the build.py split landed). Dates absolute. References are `file:line:function` against the `main` at draft time.
 
 ## Context
 

@@ -3,7 +3,7 @@
 Pinned ground truth for one real reach (Sandy, HUC4 1708) captured
 2026-05-12 against the pre-refactor implementation. The refactor that
 splits trace_reach's cc=15 body into three helpers (per
-docs/PLAN_c901_cleanup.md §Out of scope, executed despite the deferral)
+docs/done/PLAN_c901_cleanup.md §Out of scope, executed despite the deferral)
 must not change the path. The test is the regression net the plan said
 this module didn't have.
 

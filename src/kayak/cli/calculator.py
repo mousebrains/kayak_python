@@ -59,7 +59,7 @@ def _safe_eval(expr: str, values: dict[str, float] | None = None) -> float:  # n
     _eval_binop, …) would inflate the call surface from one helper to seven, force
     `lookup` (a closure variable) into every signature, and not actually reduce
     total complexity — just move it under McCabe's threshold while making the
-    dispatch table harder to read. See docs/PLAN_c901_cleanup.md § Decisions baked in.
+    dispatch table harder to read. See docs/done/PLAN_c901_cleanup.md § Decisions baked in.
     """
     tree = ast.parse(expr, mode="eval")
     lookup = values or {}
