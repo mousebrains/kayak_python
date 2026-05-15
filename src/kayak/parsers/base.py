@@ -2,12 +2,20 @@
 
 Each parser processes text fetched from a government agency data source.
 Subclasses implement ``parse_line()``, which is called for each line.
+
+T3.1 (parser/IO decoupling) is migrating each parser to expose a pure
+``parse_records(text) -> list[ObservationRecord]`` alongside the
+existing ``parse(text) -> int``. The pure form is testable without a
+session and is the eventual single source of truth; the legacy form
+still wraps the existing ``dump_to_db`` → ``_flush_buffer`` path while
+other parsers catch up.
 """
 
 import html
 import logging
 import re
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
@@ -22,6 +30,23 @@ from kayak.db.sources import get_negative_flow_source_ids
 logger = logging.getLogger(__name__)
 
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
+
+
+@dataclass(frozen=True)
+class ObservationRecord:
+    """One parsed observation, pre-DB.
+
+    The four fields every ``dump_to_db`` call already carries. Frozen
+    so tests can ``assertEqual`` on lists of records. ``observed_at``
+    is always timezone-aware UTC by the time a parser emits a record
+    (naive-timestamp parsers do the localization step inline before
+    constructing the record).
+    """
+
+    station: str
+    data_type: DataType
+    observed_at: datetime
+    value: float
 
 
 class BaseParser(ABC):

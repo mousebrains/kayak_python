@@ -12,7 +12,7 @@ import re
 from datetime import UTC, datetime
 
 from kayak.db.models import DataType
-from kayak.parsers.base import BaseParser
+from kayak.parsers.base import BaseParser, ObservationRecord
 from kayak.parsers.registry import register
 from kayak.utils.conversions import kcfs_to_cfs, parse_datetime
 
@@ -29,20 +29,35 @@ class NWPSParser(BaseParser):
     Parses JSON from the NWPS stageflow/observed endpoint. Extracts stage
     (ft) and flow (cfs or kcfs, converted to cfs). Sentinel values -999
     and -9999 are treated as missing data.
+
+    T3.1 status: ``parse_records`` is the pure entry point;
+    ``parse`` is a thin wrapper that feeds the records through the
+    legacy ``dump_to_db``/``_flush_buffer`` path so the rest of the
+    pipeline (latest-observation cache, gauge cache, auto-create-
+    source ERROR path) keeps working unchanged.
     """
 
     name = "nwps"
 
-    def parse(self, text: str) -> int:
-        """Parse JSON response from NWPS stageflow/observed endpoint."""
-        self._db_updates = 0
-        self._obs_buffer = []
+    def parse_records(
+        self,
+        text: str,
+        *,
+        now: datetime | None = None,
+    ) -> list[ObservationRecord]:
+        """Pure: text → records. No session, no DB, no logging side-effects.
+
+        ``now`` defaults to ``datetime.now(UTC)``; tests pin it to
+        defeat the clock-drift races that bit the property-test sweep
+        (commit ``33e4998``).
+        """
+        if now is None:
+            now = datetime.now(UTC)
 
         try:
             data = json.loads(text)
         except (json.JSONDecodeError, TypeError):
-            logger.error("JSON parse error for %s", self.url)
-            return 0
+            return []
 
         # Extract station LID from URL path: .../gauges/{LID}/stageflow/...
         station = self._extract_station(self.url)
@@ -54,8 +69,7 @@ class NWPSParser(BaseParser):
         has_flow = secondary_units in ("kcfs", "cfs")
         flow_is_kcfs = secondary_units == "kcfs"
 
-        now = datetime.now(UTC)
-
+        records: list[ObservationRecord] = []
         for entry in data.get("data") or []:
             valid_time = entry.get("validTime")
             if not valid_time:
@@ -68,10 +82,33 @@ class NWPSParser(BaseParser):
 
             stage, flow = self._extract_stage_and_flow(entry, has_stage, has_flow, flow_is_kcfs)
             if stage is not None:
-                self.dump_to_db(station, DataType.gauge, when, stage)
+                records.append(ObservationRecord(station, DataType.gauge, when, stage))
             if flow is not None:
-                self.dump_to_db(station, DataType.flow, when, flow)
+                records.append(ObservationRecord(station, DataType.flow, when, flow))
 
+        return records
+
+    def parse(self, text: str) -> int:
+        """Thin wrapper over ``parse_records`` + the legacy DB path.
+
+        Logs a JSON-parse error on malformed input (preserves the prior
+        behavior — ``parse_records`` returns ``[]`` silently because
+        it has no logger contract).
+        """
+        self._db_updates = 0
+        self._obs_buffer = []
+
+        # Pre-emptive JSON parse so the error log still fires (the pure
+        # path swallows it for testability). Cheap — json.loads is fast.
+        try:
+            json.loads(text)
+        except (json.JSONDecodeError, TypeError):
+            logger.error("JSON parse error for %s", self.url)
+            return 0
+
+        records = self.parse_records(text)
+        for r in records:
+            self.dump_to_db(r.station, r.data_type, r.observed_at, r.value)
         self._flush_buffer()
 
         if self._db_updates == 0:
