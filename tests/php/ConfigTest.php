@@ -32,7 +32,9 @@ final class ConfigTest extends TestCase
 
     protected function tearDown(): void
     {
-        Config::reset_for_test();
+        // Restore bootstrap's empty Config — null'ing the singleton
+        // would die_500 the next test class's first Config read.
+        Config::install_for_tests([]);
     }
 
     // ---------------------------------------------------------------
@@ -111,21 +113,24 @@ final class ConfigTest extends TestCase
         $this->assertSame('https://fallback/', Config::url('site_url', 'https://fallback/'));
     }
 
-    public function testGetenvFallbackWhenJsonMissingKey(): void
+    public function testReturnsDefaultWhenKeyAbsent(): void
     {
+        // Phase 4 removed the getenv() fallback. A key not in the JSON
+        // returns the wrapper's $default; env vars are irrelevant.
         $this->_install_fixture([]);
-        putenv('SITE_URL=https://env-value.com/');
+        putenv('SITE_URL=https://env-value-ignored.com/');
         try {
-            $this->assertSame('https://env-value.com/', Config::str('site_url'));
+            $this->assertSame('https://fallback/', Config::str('site_url', 'https://fallback/'));
         } finally {
             putenv('SITE_URL');
         }
     }
 
-    public function testJsonWinsOverGetenv(): void
+    public function testEnvVarIgnoredWhenJsonPresent(): void
     {
+        // Same key in env and JSON: JSON wins (only it gets read at all).
         $this->_install_fixture(['site_url' => 'https://from-json.com/']);
-        putenv('SITE_URL=https://from-env.com/');
+        putenv('SITE_URL=https://from-env-ignored.com/');
         try {
             $this->assertSame('https://from-json.com/', Config::str('site_url'));
         } finally {
@@ -175,86 +180,58 @@ final class ConfigTest extends TestCase
         }
     }
 
-    public function testSchemaCheckWarnsOnMissingExpectedKey(): void
+    public function testFatalDie500OnMissingJson(): void
     {
-        // JSON with only a subset of ALWAYS_PRESENT_KEYS — Config should
-        // log one [CONFIG-SCHEMA] WARN per missing key without failing.
-        $tmp = tempnam(sys_get_temp_dir(), 'kayak-partial-');
-        $this->assertNotFalse($tmp);
-        file_put_contents($tmp, json_encode([
-            'database_url' => 'sqlite:////tmp/test.db',
-            // database_path, output_dir, fetch_*, maintainer_*, site_url,
-            // editor_*, csp_log_path all missing.
-        ]));
-
-        $log = tempnam(sys_get_temp_dir(), 'kayak-schema-log-');
-        $this->assertNotFalse($log);
-        $prev = ini_set('error_log', $log);
-        try {
-            Config::for_test($tmp);
-            $contents = (string)file_get_contents($log);
-            $this->assertStringContainsString('[CONFIG-SCHEMA]', $contents);
-            $this->assertStringContainsString("'site_url' missing", $contents);
-            $this->assertStringContainsString("'csp_log_path' missing", $contents);
-        } finally {
-            if ($prev !== false) {
-                ini_set('error_log', $prev);
-            }
-            @unlink($tmp);
-            @unlink($log);
-        }
+        // Subprocess: Config::for_test on a non-existent path must log
+        // [CONFIG-FATAL] and exit(1). We can't assert this in-process
+        // because the SUT calls exit() which would kill PHPUnit.
+        $script_dir = sys_get_temp_dir();
+        $config_php = realpath(__DIR__ . '/../../php/includes/config.php');
+        $this->assertNotFalse($config_php);
+        $script = $script_dir . '/kayak-fatal-' . uniqid() . '.php';
+        file_put_contents(
+            $script,
+            "<?php\nrequire_once " . var_export($config_php, true) . ";\n"
+            . "Config::for_test('/nonexistent/path/runtime-config.json');\n"
+            . "echo 'unreachable';\n",
+        );
+        $output_lines = [];
+        $exit_code = 0;
+        // ``error_log=`` directs PHP's error_log() at stderr so 2>&1
+        // captures the [CONFIG-FATAL] line; ``log_errors=0`` keeps the
+        // engine quiet on its own deprecations.
+        exec(
+            'php -d "error_log=" -d "log_errors=1" ' . escapeshellarg($script) . ' 2>&1',
+            $output_lines,
+            $exit_code,
+        );
+        @unlink($script);
+        $combined = implode("\n", $output_lines);
+        $this->assertSame(1, $exit_code, "exit code should be 1, got $exit_code; output: $combined");
+        $this->assertStringContainsString('[CONFIG-FATAL]', $combined);
+        $this->assertStringNotContainsString('unreachable', $combined);
     }
 
-    public function testSchemaCheckSilentWhenAllKeysPresent(): void
+    public function testExtraKeysSilent(): void
     {
-        // Hand-rolled full JSON should produce zero [CONFIG-SCHEMA] lines.
-        $tmp = tempnam(sys_get_temp_dir(), 'kayak-full-');
-        $this->assertNotFalse($tmp);
-        file_put_contents($tmp, json_encode([
-            'database_url'            => 'sqlite:////tmp/test.db',
-            'database_path'           => '/tmp/test.db',
-            'output_dir'              => '/tmp',
-            'fetch_timeout'           => 300,
-            'fetch_budget'            => 240,
-            'fetch_user_agent'        => 'kayak/1.0',
-            'maintainer_emails'       => [],
-            'maintainer_name'         => 'Test',
-            'site_url'                => 'https://test.example.com/',
-            'editor_feature'          => true,
-            'editor_session_ttl_days' => 7,
-            'csp_log_path'            => '/tmp/csp.log',
-        ]));
+        // Phase 4.2 removed the ALWAYS_PRESENT_KEYS embedded schema —
+        // the JSON IS the schema now. A JSON with extra keys not used
+        // by PHP (ntfy_topic, hc_*, etc.) loads silently.
+        $this->_install_fixture([
+            'site_url' => 'https://example.com/',
+            // The full pipeline JSON has many keys; ensure the loader
+            // doesn't care which ones are PHP-relevant.
+            'ntfy_topic' => 'kayak-test',
+            'hc_pipeline' => 'https://hc-ping.com/abc',
+        ]);
 
-        $log = tempnam(sys_get_temp_dir(), 'kayak-no-schema-warn-');
+        $log = tempnam(sys_get_temp_dir(), 'kayak-extra-keys-');
         $this->assertNotFalse($log);
         $prev = ini_set('error_log', $log);
         try {
-            Config::for_test($tmp);
+            $this->assertSame('https://example.com/', Config::str('site_url'));
             $contents = (string)file_get_contents($log);
-            $this->assertStringNotContainsString('[CONFIG-SCHEMA]', $contents);
-        } finally {
-            if ($prev !== false) {
-                ini_set('error_log', $prev);
-            }
-            @unlink($tmp);
-            @unlink($log);
-        }
-    }
-
-    public function testFallbackLogLineFiresWhenJsonAbsent(): void
-    {
-        // for_test() on a non-existent path triggers the [CONFIG-FALLBACK]
-        // warn. Capture stderr via PHP's error_log → /dev/stderr to assert
-        // the log line fired.
-        $log = tempnam(sys_get_temp_dir(), 'kayak-error-log-');
-        $this->assertNotFalse($log);
-        $prev = ini_set('error_log', $log);
-        try {
-            Config::for_test('/nonexistent/path/runtime-config.json');
-            // Force one read so the log fires (lazy load).
-            Config::str('site_url');
-            $contents = (string)file_get_contents($log);
-            $this->assertStringContainsString('[CONFIG-FALLBACK]', $contents);
+            $this->assertSame('', $contents);
         } finally {
             if ($prev !== false) {
                 ini_set('error_log', $prev);

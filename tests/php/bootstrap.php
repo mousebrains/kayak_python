@@ -7,12 +7,22 @@ declare(strict_types=1);
  * enough schema to exercise auth / magic-link / session code. Starter
  * tests inline the CREATE TABLE they need; this helper saves the repeat.
  *
+ * Also pre-installs a Config singleton with empty test data so any
+ * test that touches the Config class (transitively via auth.php /
+ * mail.php / turnstile.php / db.php) doesn't die_500 trying to read
+ * /etc/kayak/runtime-config.json at the file-not-readable path. Tests
+ * that need real config values override via ``Config::for_test($path)``
+ * or ``Config::install_for_tests($data)``.
+ *
  * The EDITOR_SESSION_COOKIE / EDITOR_CSRF_COOKIE / EDITOR_SESSION_DAYS
  * constants are defined by php/includes/auth.php. Every test that uses
  * them also requires auth.php, so they are always present when needed —
  * no bootstrap-side pre-definitions (those collide with auth.php's
  * `const` declarations under PHP 9).
  */
+
+require_once __DIR__ . '/../../php/includes/config.php';
+Config::install_for_tests([]);
 
 /** Fresh in-memory SQLite PDO with a minimal editor/magic-link/session schema. */
 function kayak_test_pdo(): PDO {

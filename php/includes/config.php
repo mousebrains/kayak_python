@@ -10,14 +10,12 @@ declare(strict_types=1);
  * Static methods are the production API; instance methods exist for
  * test factories.
  *
- * Phase 2 of `docs/PLAN_tier3_closeout.md` § T3.3: when the JSON is
- * missing, parse-failed, or the requested key is absent, the reader
- * falls back to `getenv($KEY_UPPER)` and logs a single
- * `[CONFIG-FALLBACK]` line per request. The FPM-pool env channel
- * (`env[X] = $X` in deploy/kayak-fpm-pool.conf) still carries values
- * after Phase 2.5 drops the nginx fastcgi_param lines, so the
- * fallback stays load-bearing for keys whose JSON-emit isn't wired
- * yet.
+ * Phase 4 of `docs/PLAN_tier3_closeout.md` § T3.3: the JSON is the
+ * single source of truth. A missing or unparseable file is fatal —
+ * the request 500s and PHP-FPM logs `[CONFIG-FATAL]` for triage.
+ * The getenv() fallback that Phase 2 carried as a dual-read shim is
+ * gone; a key absent from the JSON returns the wrapper's $default.
+ * Keys outside the schema are silent (forward-compat).
  *
  * PHPStan level 8: the typed wrappers (str/int/bool/list/url) are
  * the public API; `Config::get()` returns mixed for the rare callers
@@ -27,39 +25,7 @@ final class Config
 {
     public const DEFAULT_PATH = '/etc/kayak/runtime-config.json';
 
-    /**
-     * Keys the JSON snapshot is contracted to carry on every emit.
-     *
-     * These are the fields KayakConfig declares with non-None defaults
-     * (or non-null derived keys like database_path), so emit-config
-     * always writes them out. A key listed here that's absent from
-     * the loaded JSON triggers a schema-drift WARN at load time — the
-     * usual cause is a stale runtime-config.json that pre-dates a
-     * newly-added KayakConfig field.
-     *
-     * Optional fields (mail_from, turnstile_*, ntfy_topic, hc_* —
-     * any field declared `T | None` with default None) are
-     * intentionally NOT listed; their absence is legitimate.
-     */
-    private const ALWAYS_PRESENT_KEYS = [
-        'database_url',
-        'database_path',
-        'output_dir',
-        'fetch_timeout',
-        'fetch_budget',
-        'fetch_user_agent',
-        'maintainer_emails',
-        'maintainer_name',
-        'site_url',
-        'editor_feature',
-        'editor_session_ttl_days',
-        'csp_log_path',
-    ];
-
     private static ?Config $singleton = null;
-
-    /** @var bool Static so the warn line fires at most once per request. */
-    private static bool $fallback_logged = false;
 
     /** @var array<string, mixed> */
     private array $data;
@@ -89,79 +55,73 @@ final class Config
 
     /**
      * Test factory: install a config instance loaded from $path as the
-     * active singleton. Callers tear down via `Config::reset_for_test()`
-     * to restore default behavior.
+     * active singleton. Callers tear down via `Config::reset_for_test()`.
      */
     public static function for_test(string $path): self
     {
         $instance = self::load($path);
         self::$singleton = $instance;
-        self::$fallback_logged = false;
         return $instance;
     }
 
     /**
-     * Clear the singleton + fallback flag so the next read re-loads.
-     * Called from test teardown.
+     * Test factory: install a config instance from an in-memory array,
+     * bypassing the file load. Used by tests/php/bootstrap.php to seed
+     * an empty Config so the singleton never falls through to die_500
+     * trying to read /etc/kayak/runtime-config.json on the test runner.
+     *
+     * @param array<string, mixed> $data
+     */
+    public static function install_for_tests(array $data): self
+    {
+        $instance = new self($data);
+        self::$singleton = $instance;
+        return $instance;
+    }
+
+    /**
+     * Clear the singleton so the next read re-loads (and possibly
+     * die_500s if no JSON is present). Pair with bootstrap's
+     * install_for_tests([]) in tearDown if a test mutated the singleton.
      */
     public static function reset_for_test(): void
     {
         self::$singleton = null;
-        self::$fallback_logged = false;
     }
 
     private static function load(string $path): self
     {
         $raw = @file_get_contents($path);
         if ($raw === false) {
-            self::log_fallback_once("runtime-config.json not readable: $path");
-            return new self([]);
+            self::die_500("runtime-config.json not readable: $path");
         }
         $parsed = json_decode($raw, true);
         if (!is_array($parsed)) {
-            self::log_fallback_once("runtime-config.json parse failed: $path");
-            return new self([]);
+            self::die_500("runtime-config.json parse failed: $path");
         }
-        self::check_schema($parsed, $path);
         return new self($parsed);
     }
 
     /**
-     * Compare $data's keys against the ALWAYS_PRESENT_KEYS contract;
-     * log one WARN per missing key. Missing keys still resolve via
-     * the getenv fallback in Config::get(); this just makes the
-     * schema-drift visible in php-fpm logs.
-     *
-     * @param array<string, mixed> $data
+     * Log a CONFIG-FATAL line, return HTTP 500, and exit. Called from
+     * load() when the JSON snapshot is missing or unparseable — the
+     * request can't safely continue without resolved config.
      */
-    private static function check_schema(array $data, string $path): void
+    private static function die_500(string $reason): never
     {
-        $missing = [];
-        foreach (self::ALWAYS_PRESENT_KEYS as $key) {
-            if (!array_key_exists($key, $data)) {
-                $missing[] = $key;
-            }
+        error_log("[CONFIG-FATAL] $reason");
+        if (!headers_sent()) {
+            http_response_code(500);
+            header('Content-Type: text/plain; charset=utf-8');
         }
-        foreach ($missing as $key) {
-            error_log(
-                "[CONFIG-SCHEMA] expected key '$key' missing from $path "
-                . '— re-run `levels emit-config`'
-            );
-        }
-    }
-
-    private static function log_fallback_once(string $reason): void
-    {
-        if (self::$fallback_logged) {
-            return;
-        }
-        self::$fallback_logged = true;
-        error_log('[CONFIG-FALLBACK] ' . $reason . ' — using getenv() chain');
+        echo "Server configuration error. Check journalctl -u php-fpm for [CONFIG-FATAL].\n";
+        exit(1);
     }
 
     /**
-     * Return the raw JSON value for $key, or getenv(strtoupper($key)),
-     * or $default.
+     * Return the raw JSON value for $key, or $default. Phase 4 removed
+     * the getenv() shim; keys absent from the JSON get the wrapper's
+     * declared default.
      *
      * @param mixed $default
      * @return mixed
@@ -169,14 +129,7 @@ final class Config
     public static function get(string $key, $default = null)
     {
         $cfg = self::get_singleton();
-        if (array_key_exists($key, $cfg->data)) {
-            return $cfg->data[$key];
-        }
-        $env = getenv(strtoupper($key));
-        if ($env !== false && $env !== '') {
-            return $env;
-        }
-        return $default;
+        return array_key_exists($key, $cfg->data) ? $cfg->data[$key] : $default;
     }
 
     public static function str(string $key, string $default = ''): string
@@ -249,5 +202,30 @@ final class Config
             return $v;
         }
         return $default;
+    }
+
+    /**
+     * Print the resolved config to stdout for `php show-config.php`
+     * incident-response use. Matches `levels show-config --format table`
+     * for human inspection.
+     */
+    public static function dump(): void
+    {
+        $cfg = self::get_singleton();
+        if ($cfg->data === []) {
+            echo "(no config data — JSON path missing or empty)\n";
+            return;
+        }
+        $width = max(array_map('strlen', array_keys($cfg->data)));
+        ksort($cfg->data);
+        foreach ($cfg->data as $key => $value) {
+            $rendered = match (true) {
+                is_array($value) => $value === [] ? '(empty list)' : implode(', ', array_map('strval', $value)),
+                is_bool($value)  => $value ? 'true' : 'false',
+                is_null($value)  => '(null)',
+                default          => (string)$value,
+            };
+            printf("  %-{$width}s  %s\n", $key, $rendered);
+        }
     }
 }

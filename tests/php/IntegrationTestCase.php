@@ -33,6 +33,8 @@ abstract class IntegrationTestCase extends TestCase
     private static string $dbPath = '';
     /** Tmp directory the test PHP server writes outbound mail to. */
     protected static string $mailDumpDir = '';
+    /** Tmp runtime-config.json the php -S subprocess reads via KAYAK_CONFIG_PATH. */
+    private static string $configJsonPath = '';
 
     public static function setUpBeforeClass(): void
     {
@@ -90,16 +92,49 @@ abstract class IntegrationTestCase extends TestCase
         $mailDir = sys_get_temp_dir() . '/kayak-test-mail-' . uniqid('', true);
         mkdir($mailDir, 0700, true);
         self::$mailDumpDir = $mailDir;
-        $env = [
+        // 2.5. Emit a runtime-config.json against the test env so the
+        // php -S subprocess can read it. After Phase 4 of T3.3, Config
+        // dies HTTP-500 on a missing JSON; this generates a per-class
+        // file in tmp that lives until tearDownAfterClass. The env
+        // passed to emit-config also drives the JSON's content (e.g.
+        // DATABASE_URL → database_path key, MAIL_FROM → mail_from).
+        $configJson = sys_get_temp_dir() . '/kayak-test-config-' . uniqid('', true) . '.json';
+        $emit_env = [
             'PATH' => getenv('PATH') ?: '/usr/bin:/bin',
             'HOME' => getenv('HOME') ?: '/tmp',
-            'SQLITE_PATH' => $dbPath,
-            'EDITOR_FEATURE' => '1',
+            'DATABASE_URL' => 'sqlite:///' . $dbPath,
+            'OUTPUT_DIR' => sys_get_temp_dir(),
+            'EDITOR_FEATURE' => 'true',
             'MAIL_FROM' => 'test@example.com',
             'MAIL_DUMP_DIR' => $mailDir,
             'SITE_URL' => 'http://127.0.0.1',
             'TURNSTILE_SITE_KEY' => 'TEST_SITE_KEY',
             'TURNSTILE_SECRET' => 'TEST_SECRET',
+        ];
+        $emit_cmd = escapeshellarg($venvLevels) . ' emit-config --out=' . escapeshellarg($configJson) . ' 2>&1';
+        $emit_proc = proc_open($emit_cmd, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $emit_pipes, null, $emit_env);
+        if (!is_resource($emit_proc)) {
+            throw new RuntimeException('Failed to spawn `levels emit-config` for the test fixture');
+        }
+        $emit_stdout = stream_get_contents($emit_pipes[1]);
+        $emit_stderr = stream_get_contents($emit_pipes[2]);
+        fclose($emit_pipes[1]);
+        fclose($emit_pipes[2]);
+        $emit_rc = proc_close($emit_proc);
+        if ($emit_rc !== 0) {
+            throw new RuntimeException("`levels emit-config` failed (rc=$emit_rc): $emit_stderr / $emit_stdout");
+        }
+        self::$configJsonPath = $configJson;
+
+        $env = [
+            'PATH' => getenv('PATH') ?: '/usr/bin:/bin',
+            'HOME' => getenv('HOME') ?: '/tmp',
+            'KAYAK_CONFIG_PATH' => $configJson,
+            // SQLITE_PATH is kept as a belt-and-suspenders for the
+            // _sqlite_path() fallback chain (Config first, then this
+            // env, then __DIR__-relative). Other env vars are now
+            // sourced from the JSON via Config::str(...).
+            'SQLITE_PATH' => $dbPath,
         ];
         $descriptorspec = [
             0 => ['pipe', 'r'],  // stdin
@@ -144,6 +179,10 @@ abstract class IntegrationTestCase extends TestCase
             unlink(self::$dbPath);
         }
         self::$dbPath = '';
+        if (self::$configJsonPath !== '' && file_exists(self::$configJsonPath)) {
+            unlink(self::$configJsonPath);
+        }
+        self::$configJsonPath = '';
         // Clean up the mail-dump dir: each test class gets its own so a
         // failure in one doesn't pollute the next.
         if (self::$mailDumpDir !== '' && is_dir(self::$mailDumpDir)) {
