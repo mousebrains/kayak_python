@@ -1,10 +1,30 @@
 # Plan — Dev-environment follow-ups
 
-**Status:** Drafted (iter 5 stopped 2026-05-12, 2 findings). Not yet
-executed — awaiting decision on Phase 3 dev-machine `OUTPUT_DIR`
-convention. The live host is already on the recommended layout
-(`OUTPUT_DIR=/home/pat/public_html` outside the repo); only dev boxes
-remain to migrate.
+**Status:** Closed (verified clean 2026-05-15 against `main` at `a559fc0`). All three phases shipped:
+
+- **Phase 1 — Lint config cleanup:** `biome.json` no longer references
+  `php/style.css`; `Makefile`'s `lint-css` target is
+  `biome check src/kayak/web/static/style.css`; `lint-shell` is
+  `shellcheck --severity=warning scripts/*.sh systemd/*.sh deploy/*.sh`
+  (no `hardening/*.sh` glob); `.gitignore` carries the five new
+  stray-artifact patterns (`static/levels.js`, `filters.js`,
+  `sparklines.json`, `style-*.css`, `style.css.hash`) and the stale
+  `php/style.css` entry is gone; `php/style.css` itself is gone from
+  disk.
+- **Phase 2 — PHP doc-root fix:** `php/includes/header.php`'s
+  `css_head_block()` uses
+  `$doc_root = $_SERVER['DOCUMENT_ROOT'] ?? (__DIR__ . '/..')` with
+  the same explanatory comment Phase 2 proposed, aligning it with
+  `gauge_map.php:79-88`'s precedent.
+- **Phase 3 — `OUTPUT_DIR` dev convention:** `.env.example` carries
+  the multi-paragraph DEFAULT / RECOMMENDED / Production rationale;
+  `CLAUDE.md` § Local Development Setup has the OUTPUT_DIR convention
+  paragraph (at line 22 of the current file).
+
+**Residual:** the post-Phase-3 local-only `rm` cleanups (any leftover
+`php/style.css`, `public_html/csp-report.php`, etc. from pre-convention
+dev boxes) are operator-side and per-host — out of scope for any
+repo commit. The live host needs none of them.
 
 > **Cross-check:** plan drafted 2026-05-12 against `main` at `9446e51`; iter 1 re-verified against `21c9e1a`; iter 2 against `b141f79`; iter 3 against `2c5a4e4`. Inputs (`biome.json`, `Makefile`, `.gitignore`, `php/includes/header.php`, `php/includes/gauge_map.php`, `deploy/SETUP.md`, `src/kayak/config.py`, `src/kayak/web/build/deploy.py`, `src/kayak/web/build/_shared.py`, `.env.example`) unchanged across all ranges; the only commits in range touch `docs/security/*.md` and this plan itself. A reviewer on a default-config dev machine (`OUTPUT_DIR` unset → defaults to `BASE_DIR/public_html` per `src/kayak/config.py:35`) will see additional symptoms; the fixes themselves are env-independent.
 >

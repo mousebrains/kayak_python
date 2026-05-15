@@ -264,7 +264,7 @@ PLAN_js_smoke\|PLAN_php_layer_split" docs/ src/ tests/ php/ scripts/`):
 Cross-boundary references (file stays in `docs/`, target moved to
 `docs/done/` — needs `done/X.md` prefix):
 
-- `docs/PLAN_dev_env_followups.md:242` references `PLAN_php_layer_split.md`
+- `docs/done/PLAN_dev_env_followups.md:242` references `PLAN_php_layer_split.md`
 - `docs/done/PLAN_editor_security_review.md:34, 231` references `PLAN_php_layer_split.md`
 - `docs/dev-env-followups.md:3` references `PLAN_js_cleanup`
 
