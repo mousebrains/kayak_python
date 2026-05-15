@@ -8,11 +8,14 @@ declare(strict_types=1);
  * Both CSP v1 payloads (`{"csp-report": {...}}`) and Reporting API v2
  * payloads (arrays of `{"type":"csp-violation","body":{...}}`) are accepted.
  *
- * Each parsed report becomes one JSON-per-line entry in
- * `/home/pat/logs/csp.log` (a www-data-writable path inside the PHP
+ * Each parsed report becomes one JSON-per-line entry at the path
+ * `Config::str('csp_log_path')` resolves to (default
+ * `/home/pat/logs/csp.log`, a www-data-writable path inside the PHP
  * open_basedir via ACL). Rotated weekly by /etc/logrotate.d/kayak-csp;
  * harvested into the release directory by ../../logs/syncit.
  */
+
+require_once __DIR__ . '/includes/config.php';
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     http_response_code(405);
@@ -81,7 +84,7 @@ if (!$lines) {
 }
 
 @file_put_contents(
-    '/home/pat/logs/csp.log',
+    Config::str('csp_log_path', '/home/pat/logs/csp.log'),
     implode("\n", $lines) . "\n",
     FILE_APPEND | LOCK_EX
 );
