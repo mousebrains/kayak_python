@@ -89,35 +89,19 @@ class NWPSParser(BaseParser):
         return records
 
     def parse(self, text: str) -> int:
-        """Thin wrapper over ``parse_records`` + the legacy DB path.
+        """Override to keep the prior JSON-parse-error log line.
 
-        Logs a JSON-parse error on malformed input (preserves the prior
-        behavior — ``parse_records`` returns ``[]`` silently because
-        it has no logger contract).
+        The pure ``parse_records`` returns ``[]`` silently on malformed
+        input so test callers don't have to suppress logs; this wrapper
+        re-runs ``json.loads`` once (cheap) to emit the ERROR before
+        delegating to ``super().parse()``.
         """
-        self._db_updates = 0
-        self._obs_buffer = []
-
-        # Pre-emptive JSON parse so the error log still fires (the pure
-        # path swallows it for testability). Cheap — json.loads is fast.
         try:
             json.loads(text)
         except (json.JSONDecodeError, TypeError):
             logger.error("JSON parse error for %s", self.url)
             return 0
-
-        records = self.parse_records(text)
-        for r in records:
-            self.dump_to_db(r.station, r.data_type, r.observed_at, r.value)
-        self._flush_buffer()
-
-        if self._db_updates == 0:
-            logger.warning("No database updates from %s parser(%s)", self.url, self.name)
-
-        return self._db_updates
-
-    def parse_line(self, line: str) -> bool:
-        return True
+        return super().parse(text)
 
     @staticmethod
     def _extract_stage_and_flow(

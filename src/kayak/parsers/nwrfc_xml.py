@@ -151,25 +151,17 @@ class NWRFCXMLParser(BaseParser):
         return ObservationRecord(station, data_type, when, val)
 
     def parse(self, text: str) -> int:
-        """Thin wrapper over ``parse_records`` + the legacy DB path.
+        """Override to keep the lxml-missing / XML-syntax error logs.
 
-        Preserves the original logging contract: lxml-import-error,
-        XML-syntax-error, and zero-updates each emit their own log
-        line (``parse_records`` is silent for testability).
+        ``parse_records`` silently returns ``[]`` for both cases; this
+        wrapper re-runs the XML parse once with URL context so the
+        error log fires before delegating to ``super().parse()``.
         """
-        self._db_updates = 0
-        self._obs_buffer = []
-
         try:
             from lxml import etree
         except ImportError:
             logger.error("lxml required for NWRFC XML parser")
             return 0
-
-        # Do the XML parse here too so the syntax-error log fires with
-        # the URL context. parse_records will silently re-parse on its
-        # side, but lxml parsing is fast and the duplication keeps the
-        # pure / wrapper contracts cleanly separated.
         xml_parser = etree.XMLParser(
             resolve_entities=False,
             no_network=True,
@@ -181,19 +173,7 @@ class NWRFCXMLParser(BaseParser):
         except etree.XMLSyntaxError as e:
             logger.error("XML parse error for %s: %s", self.url, e)
             return 0
-
-        records = self.parse_records(text)
-        for r in records:
-            self.dump_to_db(r.station, r.data_type, r.observed_at, r.value)
-        self._flush_buffer()
-
-        if self._db_updates == 0:
-            logger.warning("No database updates from %s parser(%s)", self.url, self.name)
-
-        return self._db_updates
-
-    def parse_line(self, line: str) -> bool:
-        return True
+        return super().parse(text)
 
     @staticmethod
     def _local_tag(elem: Any) -> str:

@@ -102,41 +102,22 @@ class USACECDAParser(BaseParser):
         return ObservationRecord(station, data_type, when, float(value))
 
     def parse(self, text: str) -> int:
-        """Thin wrapper over ``parse_records`` + the legacy DB path.
+        """Override to keep the prior JSON-parse-error log line.
 
-        Preserves the pre-T3.1 logging contract: a JSON parse error
-        emits an error log (``parse_records`` swallows it for purity),
-        and an unknown parameter emits a debug log (the legacy debug
-        line; per-call rather than per-skip is fine for diagnostics).
+        ``parse_records`` already enforces the ``timezone=GMT`` URL guard
+        (raises ``ValueError``) and returns ``[]`` silently on malformed
+        JSON; this wrapper re-runs ``json.loads`` once to emit the ERROR
+        before delegating to ``super().parse()``.
         """
-        self._db_updates = 0
-        self._obs_buffer = []
-
-        # Pre-flight: the timezone=GMT guard from parse_records would
-        # also catch this, but the legacy parse() raises BEFORE the
-        # buffer reset; preserve that ordering.
         if "timezone=GMT" not in self.url:
             raise ValueError(
                 f"USACE CDA URL must include 'timezone=GMT' (got {self.url!r}); "
                 "without it the server defaults to PST and timestamps will be "
                 "stored 8h early."
             )
-
         try:
             json.loads(text)
         except (json.JSONDecodeError, TypeError):
             logger.error("JSON parse error for %s", self.url)
             return 0
-
-        records = self.parse_records(text)
-        for r in records:
-            self.dump_to_db(r.station, r.data_type, r.observed_at, r.value)
-        self._flush_buffer()
-
-        if self._db_updates == 0:
-            logger.warning("No database updates from %s parser(%s)", self.url, self.name)
-
-        return self._db_updates
-
-    def parse_line(self, line: str) -> bool:
-        return True
+        return super().parse(text)

@@ -16,7 +16,6 @@ table; pages without a recognisable header fall back to a 1-column
 flow/inflow heuristic (covers truncated/error bodies and test fixtures).
 """
 
-import logging
 import re
 from datetime import UTC, datetime
 
@@ -24,9 +23,6 @@ from kayak.db.models import DataType
 from kayak.parsers.base import BaseParser, ObservationRecord
 from kayak.parsers.registry import register
 from kayak.utils.conversions import parse_datetime, safe_float
-
-logger = logging.getLogger(__name__)
-
 
 _LABEL_TO_DTYPE = {
     "stage": DataType.gauge,
@@ -86,24 +82,6 @@ class NWRFCTextPlotParser(BaseParser):
                     continue
                 records.append(ObservationRecord(station, dt, when, val))
         return records
-
-    def parse(self, text: str) -> int:
-        """Thin wrapper over ``parse_records`` + the legacy DB path."""
-        self._db_updates = 0
-        self._obs_buffer = []
-
-        records = self.parse_records(text)
-        for r in records:
-            self.dump_to_db(r.station, r.data_type, r.observed_at, r.value)
-        self._flush_buffer()
-
-        if self._db_updates == 0:
-            logger.warning("No database updates from %s parser(%s)", self.url, self.name)
-
-        return self._db_updates
-
-    def parse_line(self, line: str) -> bool:
-        return True
 
     @staticmethod
     def _infer_value_columns(text: str) -> list[DataType]:

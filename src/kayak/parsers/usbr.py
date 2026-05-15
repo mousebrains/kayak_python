@@ -6,7 +6,6 @@ URL parameter ``format=csv`` produces clean CSV without HTML wrapping.
 Data codes: Q=FLOW, GH=GAGE, WC/WF=TEMPERATURE, etc.
 """
 
-import logging
 import math
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -17,8 +16,6 @@ from kayak.db.models import DataType
 from kayak.parsers.base import BaseParser, ObservationRecord
 from kayak.parsers.registry import register
 from kayak.utils.conversions import celsius_to_fahrenheit, parse_datetime, safe_float
-
-logger = logging.getLogger(__name__)
 
 # USBR data type code to DataType mapping
 _CODE_MAP: dict[str, DataType | None] = {
@@ -102,20 +99,6 @@ class USBRParser(BaseParser):
                 continue
             self._collect_data_row(stripped, records)
         return records
-
-    def parse(self, text: str) -> int:
-        """Thin wrapper over ``parse_records`` + the legacy DB path."""
-        self._db_updates = 0
-        self._obs_buffer = []
-        for r in self.parse_records(text):
-            self.dump_to_db(r.station, r.data_type, r.observed_at, r.value)
-        self._flush_buffer()
-        if self._db_updates == 0:
-            logger.warning("No database updates from %s parser(%s)", self.url, self.name)
-        return self._db_updates
-
-    def parse_line(self, line: str) -> bool:  # pragma: no cover — kept for ABC
-        return True
 
     def _parse_header(self, line: str) -> bool:
         """Parse CSV header: ``DateTime,station_code,station_code,...``"""

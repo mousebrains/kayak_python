@@ -7,18 +7,14 @@ Type detection from header: Water=TEMPERATURE, Stage=GAGE, else FLOW
 Quality field (last column) must be 0-200 for valid data.
 """
 
-import logging
 import math
 from datetime import UTC, datetime
-from typing import Any
 from zoneinfo import ZoneInfo
 
 from kayak.db.models import DataType
 from kayak.parsers.base import BaseParser, ObservationRecord
 from kayak.parsers.registry import register
 from kayak.utils.conversions import celsius_to_fahrenheit, parse_datetime, safe_float
-
-logger = logging.getLogger(__name__)
 
 
 @register("wa.gov")
@@ -32,13 +28,6 @@ class WaGovParser(BaseParser):
     """
 
     name = "wa.gov"
-
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        # Kept for ABC compliance; parse_records owns the state walk now.
-        self._state = 0
-        self._station = ""
-        self._data_type = DataType.flow
 
     def parse_records(self, text: str) -> list[ObservationRecord]:
         """Pure: WA DOE text → records. No session, no DB.
@@ -81,20 +70,6 @@ class WaGovParser(BaseParser):
             if record is not None:
                 records.append(record)
         return records
-
-    def parse(self, text: str) -> int:
-        """Thin wrapper over ``parse_records`` + the legacy DB path."""
-        self._db_updates = 0
-        self._obs_buffer = []
-        for r in self.parse_records(text):
-            self.dump_to_db(r.station, r.data_type, r.observed_at, r.value)
-        self._flush_buffer()
-        if self._db_updates == 0:
-            logger.warning("No database updates from %s parser(%s)", self.url, self.name)
-        return self._db_updates
-
-    def parse_line(self, line: str) -> bool:  # pragma: no cover — kept for ABC
-        return True
 
     @staticmethod
     def _handle_header(

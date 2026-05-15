@@ -1,14 +1,12 @@
 """Abstract base parser.
 
-Each parser processes text fetched from a government agency data source.
-Subclasses implement ``parse_line()``, which is called for each line.
-
-T3.1 (parser/IO decoupling) is migrating each parser to expose a pure
-``parse_records(text) -> list[ObservationRecord]`` alongside the
-existing ``parse(text) -> int``. The pure form is testable without a
-session and is the eventual single source of truth; the legacy form
-still wraps the existing ``dump_to_db`` → ``_flush_buffer`` path while
-other parsers catch up.
+Each parser processes text fetched from a government agency data source
+by implementing a pure ``parse_records(text) -> list[ObservationRecord]``
+method.  The base class's ``parse()`` wraps that with the legacy
+``dump_to_db`` → ``_flush_buffer`` path, so subclasses only ever have
+to think about text → records.  Three of the six parsers (nwps,
+usace.cda, nwrfc.xml) override ``parse()`` to preserve a specific
+syntax-error log line; the rest inherit the base wrapper unchanged.
 """
 
 import html
@@ -38,9 +36,12 @@ class ObservationRecord:
 
     The four fields every ``dump_to_db`` call already carries. Frozen
     so tests can ``assertEqual`` on lists of records. ``observed_at``
-    is always timezone-aware UTC by the time a parser emits a record
+    is normally timezone-aware UTC by the time a parser emits a record
     (naive-timestamp parsers do the localization step inline before
-    constructing the record).
+    constructing the record). Parsers whose feeds publish per-station
+    local time (USBR, wa.gov) MAY emit naive datetimes when the
+    construction-time ``source_tz_map`` lacks the station — those get
+    stored as-is and treated as UTC by SQLite.
     """
 
     station: str
@@ -52,7 +53,7 @@ class ObservationRecord:
 class BaseParser(ABC):
     """Abstract base for all data source parsers.
 
-    Subclasses must implement ``parse_line()`` and ``name``.
+    Subclasses must implement ``parse_records()`` and set ``name``.
     """
 
     name: str = "base"  # Override in subclass
@@ -86,40 +87,39 @@ class BaseParser(ABC):
         self._tz_cache: dict[str, ZoneInfo] = {}
 
     # ------------------------------------------------------------------
-    # Text feeding (mirrors serveUpLines / serveUpCookedLines)
+    # Pure parsing contract + thin DB wrapper
     # ------------------------------------------------------------------
 
-    def parse(self, text: str) -> int:
-        """Feed raw text to the parser, line by line.
+    @abstractmethod
+    def parse_records(self, text: str) -> list["ObservationRecord"]:
+        """Pure: feed text → list of records. No session, no DB.
 
-        Returns the number of database updates made.
+        Implementations should return ``[]`` for malformed input — the
+        ``parse()`` wrapper handles any error-log line. Parsers whose
+        feeds publish per-station local time may apply
+        ``self.source_tz_map`` localization inline; everything else
+        should emit tz-aware UTC datetimes.
+        """
+        ...
+
+    def parse(self, text: str) -> int:
+        """Wrap ``parse_records`` with the legacy DB path.
+
+        Resets the per-call counters, runs the pure parse, dumps each
+        record through ``dump_to_db`` (which still handles
+        per-station tz-map localization for any naive datetime the
+        parser passed through), flushes the buffer, and emits the
+        "no updates" warning if nothing landed. Returns the number of
+        observations counted by ``dump_to_db``.
         """
         self._db_updates = 0
         self._obs_buffer = []
-        for raw_line in text.splitlines():
-            line = raw_line.replace("\r", "")
-            if not self.parse_line(line):
-                break
-
+        for r in self.parse_records(text):
+            self.dump_to_db(r.station, r.data_type, r.observed_at, r.value)
         self._flush_buffer()
-
         if self._db_updates == 0:
             logger.warning("No database updates from %s parser(%s)", self.url, self.name)
-
         return self._db_updates
-
-    def parse_cooked(self, text: str) -> int:
-        """Feed HTML-rendered text (strip tags first), then parse.
-
-        Mirrors serveUpCookedLines() which runs HTMLrender before parsing.
-        """
-        clean = self._strip_html(text)
-        return self.parse(clean)
-
-    @abstractmethod
-    def parse_line(self, line: str) -> bool:
-        """Process a single line. Return False to stop processing."""
-        ...
 
     # ------------------------------------------------------------------
     # Database helpers (mirrors dumpToDatabase)

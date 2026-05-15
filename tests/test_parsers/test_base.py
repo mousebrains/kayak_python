@@ -3,37 +3,27 @@
 from datetime import UTC, datetime
 
 from kayak.db.models import DataType, FetchUrl, Observation, Source
-from kayak.parsers.base import BaseParser
+from kayak.parsers.base import BaseParser, ObservationRecord
 
 
 class ConcreteParser(BaseParser):
-    """Minimal concrete parser for testing the base class."""
+    """Minimal concrete parser for testing the base class.
+
+    Emits one record per ``DATA:`` line. The base ``parse()`` wrapper
+    is what we're exercising — these tests stay focused on it.
+    """
 
     name = "test"
     _seq = 0
 
-    def parse_line(self, line):
-        if line.startswith("DATA:"):
-            ConcreteParser._seq += 1
-            ts = datetime(2026, 1, 1, 12, ConcreteParser._seq, tzinfo=UTC)
-            self.dump_to_db("test_station", DataType.flow, ts, 100.0)
-        return True
-
-
-class StopParser(BaseParser):
-    """Parser that stops after encountering STOP."""
-
-    name = "stop_test"
-    _seq = 0
-
-    def parse_line(self, line):
-        if line == "STOP":
-            return False
-        if line.startswith("DATA:"):
-            StopParser._seq += 1
-            ts = datetime(2026, 1, 1, 13, StopParser._seq, tzinfo=UTC)
-            self.dump_to_db("test_station", DataType.flow, ts, 50.0)
-        return True
+    def parse_records(self, text):
+        records = []
+        for line in text.splitlines():
+            if line.startswith("DATA:"):
+                ConcreteParser._seq += 1
+                ts = datetime(2026, 1, 1, 12, ConcreteParser._seq, tzinfo=UTC)
+                records.append(ObservationRecord("test_station", DataType.flow, ts, 100.0))
+        return records
 
 
 def _make_source(session, name="base_test"):
@@ -62,7 +52,7 @@ class TestParseEmpty:
 
 class TestParseWithData:
     def test_parse_matching_lines_increments(self, session):
-        """Matching lines should increment _db_updates and store observations."""
+        """Matching records should increment _db_updates and store observations."""
         src = _make_source(session)
         parser = ConcreteParser(url="https://example.com/test", session=session, source_id=src.id)
         count = parser.parse("DATA: one\nDATA: two\n")
@@ -82,16 +72,6 @@ class TestParseWithData:
         assert session.query(Observation).count() == 0
 
 
-class TestParseLineStop:
-    def test_returning_false_stops_processing(self, session):
-        """parse_line returning False should stop further processing."""
-        src = _make_source(session)
-        parser = StopParser(url="https://example.com/test", session=session, source_id=src.id)
-        count = parser.parse("DATA: one\nSTOP\nDATA: two\n")
-        # Only the first DATA line is processed; STOP halts before DATA two
-        assert count == 1
-
-
 class TestStripHtml:
     def test_removes_tags(self):
         """_strip_html should remove HTML tags."""
@@ -101,15 +81,6 @@ class TestStripHtml:
         """_strip_html should decode HTML entities."""
         assert BaseParser._strip_html("&amp;") == "&"
         assert BaseParser._strip_html("&lt;tag&gt;") == "<tag>"
-
-
-class TestParseCooked:
-    def test_strips_html_then_parses(self, session):
-        """parse_cooked should strip HTML before parsing lines."""
-        src = _make_source(session)
-        parser = ConcreteParser(url="https://example.com/test", session=session, source_id=src.id)
-        count = parser.parse_cooked("<p>DATA: value</p>")
-        assert count == 1
 
 
 class TestDumpToDbNoSource:
