@@ -214,6 +214,14 @@ jobs:
       - name: Verify uv.lock matches pyproject.toml
         run: uv lock --check
       - run: uv sync --locked --all-extras
+      # KayakConfig boots cleanly against the CI runner's (mostly empty)
+      # env — exercises `validate_default=True` so a default that drifts
+      # out of its constraint (e.g. fetch_timeout=0) fails CI rather than
+      # silently shipping. --known-env --strict promotes "config-shaped
+      # OS env not in the allowlist" to a build break; the prefix scan
+      # ignores GitHub-runner internals (GITHUB_*, RUNNER_*, INPUT_*).
+      - name: validate-config (Phase 3.4)
+        run: uv run levels validate-config --known-env --strict
       # ``-m ''`` overrides the project default ``-m 'not slow'`` so the
       # integration test still gates merges in CI. Coverage threshold only
       # makes sense once, so attach it to the 3.13 leg.
