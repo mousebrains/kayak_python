@@ -1,8 +1,11 @@
 # Plan — Pre-release follow-up after 2026-05-13 audit pass
 
-**Status:** In progress (as of 2026-05-14). P0.1, P0.2, all 12 Quick Wins,
-T1.1, T1.2, T1.4 landed; T1.5 in flight. Tier 2 (test/CI maturity) and
-Tier 3 (architecture) not yet started.
+**Status:** In progress (as of 2026-05-15).
+- **P0:** P0.1 + P0.2 landed. P0.3 (DreamHost legacy MySQL password rotation) acknowledged, not actioned.
+- **Quick Wins:** all 12 landed.
+- **Tier 1:** T1.1, T1.2, T1.3 (≡ QW.6), T1.4, T1.5 landed. T1 restore drill (Phase 4.4 of `PLAN_production_discipline.md`) still pending operator execution.
+- **Tier 2:** T2.1, T2.2, T2.3, T2.4, T2.5, T2.6, T2.7, T2.9 landed. T2.8 (`.gitleaks.toml` + `_<file>_*` convention pre-commit grep) not yet started.
+- **Tier 3:** T3.1, T3.2, T3.3, T3.4, T3.5 closed 2026-05-15 (see `docs/done/PLAN_tier3_closeout.md`). T3.6 (release discipline / `scripts/release.sh`) not yet started.
 
 > **Cross-check:** Plan drafted 2026-05-13 against `main` after a three-iteration audit pass that ran 15 parallel investigations (security, Python quality, PHP quality, testing/CI, ops, DB, docs, architecture, deps, repo hygiene, data-loss scenarios, editor-flow attacks, frontend a11y, doc drift, claim verification). The audit was harsh-grading and the overall verdict was **B−** — ship-quality after a small set of fixes, but several gaps stand between this and what a Series-B company would adopt as a critical dependency. This plan consolidates the audit's P0/P1/tier-roadmap output.
 >
