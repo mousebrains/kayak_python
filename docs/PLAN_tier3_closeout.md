@@ -1201,6 +1201,39 @@ necessity.
      carries the leading-comment annotation from § 5.3, so a
      reader doesn't waste cycles re-discovering the constraint.
 
+   **Actual residual after Phase 5.4 lands (2026-05-15): 86** —
+   distributed as:
+
+   | Kind | Predicted | Actual | Delta / cause |
+   |---|---|---|---|
+   | `WorkingDirectory=` | 12 | 12 | — |
+   | `EnvironmentFile=` | 13 | 15 | +2 (three services added since plan: `cert-expiry`, `cert-renewal-test`, `config-drift`; one carries no env file) |
+   | `ReadWritePaths=` | 10 | 10 | — |
+   | `ExecStart=/home/pat/...` | 0 | 13 | **+13 — systemd 257 rejected `${KAYAK_HOME}/.venv/bin/levels` as binary path** ("Neither a valid executable name nor an absolute path" — systemd.exec(5): "the first argument may not be a variable"). Phase 5.3 reverted ExecStart binary literals; ExecStart arguments and ExecStartPost= still expand. |
+   | `Environment=KAYAK_HOME=/home/pat` | 12 | 15 | +3 (same three-service drift) |
+   | `root /home/pat/public_html;` | 1 | 1 | — |
+   | `alias /home/pat/...` | 2 | 2 | — |
+   | `open_basedir` (1 line, 4 path entries) | 1 | 1 | — |
+   | `KAYAK_HOME=/home/pat` (template) | 1 | 1 | — |
+   | Shell-script `: "${KAYAK_HOME:=/home/pat}"` prologue defaults | (not enumerated) | 11 | new indirection floor — one per script that sources `/etc/kayak/env` |
+   | PHP docstrings + Config default fallback | (not enumerated) | 5 | 2× `show-config.php` invocation examples, 1× `db.php` layout docstring, 1× `csp-report.php` docstring, 1× `Config::str('csp_log_path', '/home/pat/logs/csp.log')` fallback default |
+   | **Total residual** | **52** | **86** | **+34** |
+
+   Indirection-line filtered count (excluding the 27 lines that
+   ARE the parameterization — 15 `Environment=KAYAK_HOME=`, 11
+   shell-prologue defaults, 1 `env.example`) is **59**.
+
+   The two newly-discovered constraints relative to the plan's
+   prediction — `ExecStart=` binary literal and PHP-FPM
+   `open_basedir` literal — both surface as "stays literal with
+   leading-comment annotation" (§ 5.3 for ExecStart, § 5.6 for
+   open_basedir). The reduction is meaningful but smaller than the
+   plan estimated: 86 → 86 raw / 59 filtered, where the gain is
+   primarily *semantic* — the literal paths now sit next to
+   comments that explain why they can't be parameterized, so a
+   future operator relocating `KAYAK_HOME` sees the constraint
+   inline instead of inferring it.
+
 **Effort:** ~6 h.
 - 0.5h template file (`deploy/kayak-env.example`)
 - 1.5h systemd unit edits (12 services × 4 small edits each, mechanical)
