@@ -340,10 +340,18 @@ function _render_custom_header(array $reaches, array $tiers_by_reach): void
         . '<button type="button" data-none>None</button>'
         . '</span>';
     $reach_count = count($reaches);
+    // "Edit selection" carries the resolved reach ids so picker.php
+    // pre-checks them — picker.js:readIdsFromUrl() does the auto-check
+    // when ?ids= is present. Rebuild from $reaches rather than threading
+    // the original $ids through _render_custom_header's signature; that
+    // naturally drops any ids the DB couldn't resolve (which the picker
+    // wouldn't pre-check anyway). Per docs/PLAN_map_and_ui_tweaks.md Item 3.
+    $id_csv = implode(',', array_map(static fn(array $r): int => (int)$r['id'], $reaches));
+    $picker_href = '/picker.php' . ($id_csv !== '' ? '?ids=' . $id_csv : '');
     ?>
 <h2>Custom Levels Page</h2>
 <p style="margin:.3rem 0 .5rem;font-size:.85rem">
-  <a href="/picker.php">Edit selection</a> | <a href="/index.html">Home</a>
+  <a href="<?= htmlspecialchars($picker_href, ENT_QUOTES) ?>">Edit selection</a> | <a href="/index.html">Home</a>
   | <?= $reach_count ?> reach<?= $reach_count !== 1 ? 'es' : '' ?>
 </p>
 
