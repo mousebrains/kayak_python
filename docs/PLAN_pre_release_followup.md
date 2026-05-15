@@ -747,26 +747,28 @@ Wire `KAYAK_HOME=/home/pat` into `/etc/kayak/env` (sourced from each systemd uni
 
 ### T3.5 — Decide on dormant schema features
 
+**Status: Closed (2026-05-15)** — see `data/db/migrations/0022_drop_dormant_features.sql` and `docs/PLAN_tier3_closeout.md` § Phase 6 for the per-feature rationale, and `docs/operations.md` § Schema decisions for the audit-vs-reality split.
+
 **Why.** Per architecture audit ARCH-H10: 6+ schema-only features carry maintenance cost on every migration + PHPStan run. Each new migration has to think about them.
 
-**Per-feature decision:**
+**Per-feature decision (as shipped):**
 
 | Feature | Decision | Justification |
 |---|---|---|
 | `rating` / `rating_data` tables + `calc-rating` step | **KEEP** | Documented dormant in `CLAUDE.md`; reserved for per-gauge rating curves. No active maintenance cost beyond presence. |
-| `MaintainerCredential` (WebAuthn schema) | **REMOVE** | Schema only; no register/assert code. Adds CASCADE obligations on `delete_editor`. |
+| `MaintainerCredential` (WebAuthn schema) | **DROPPED in 0022** | Schema only; no register/assert code. CASCADE on `delete_editor` had nothing to cascade. |
 | `ChangeRequestAttachment` (photo uploads) | **KEEP** | Documented as "Phase 2+" pending; FPM upload limit pre-blocks abuse. |
-| `ChangeStatus.auto_applied` enum value | **REMOVE** | No writer; pollutes the enum. |
-| `ChangeTarget.trip_report` enum value | **REMOVE** | No writer; no flow. |
-| `EditorStatus.minimal` tier | **REMOVE** | Never authorizes anything (per `propose_handler.php:94` check `tier ∈ {full, maintainer}`). |
+| `ChangeStatus.auto_applied` enum value | **KEEP** | Removing the value shrinks SQLAlchemy-emit `VARCHAR(11)`→`VARCHAR(6)`; the live DB's column is `VARCHAR(11)`. A schema-parity-clean removal needs a table-rebuild migration under `@no_transaction` — cosmetic-only gain. Documented in 0022's commit body. |
+| `ChangeTarget.trip_report` enum value | **KEEP** | Same VARCHAR-length reason. |
+| `EditorStatus.minimal` tier | **KEEP** | Audit was wrong: `admin.php` promotes `pending→minimal` (first review step), `propose_handler.php` has a `minimal`-specific daily cap (10/day), live DB has 1 editor at this tier. |
 
-**Change.** One migration: `data/db/migrations/0020_drop_dormant_features.sql`. Drops `maintainer_credential` table. Migrations to remove enum values are SQLite-ALTER-table-rebuild jobs — gated `@no_transaction`. Update `src/kayak/db/models.py` correspondingly.
+**Change (as shipped).** `data/db/migrations/0022_drop_dormant_features.sql` drops `maintainer_credential` only. The three enum-value removals were dropped from scope after the schema-parity test (T2.3) showed that removing them shrinks the SQLAlchemy-emitted VARCHAR length below the live column width; that would require a table-rebuild migration under `@no_transaction` for cosmetic-only gain. `EditorStatus.minimal` was retained outright — the audit's claim of "never authorizes anything" was wrong.
 
-**Acceptance.** `pytest`, `phpstan analyse`, and the new T2.3 schema-parity test all pass. `sqlite3 kayak.db .schema` is one table shorter.
+**Acceptance.** Met: `pytest`, `phpstan analyse`, and the T2.3 schema-parity test all pass; `sqlite3 kayak.db .schema | grep maintainer_credential` returns 0 hits.
 
-**Effort.** 1 day.
+**Effort.** Actual ~0.5d (one migration + three "decided to keep" commits + this closeout pass). Budget was 1d.
 
-**Depends on.** T2.3 (schema parity test) lands first so the removal-migration is caught if it drifts from the ORM.
+**Depends on.** T2.3 (schema parity test) — landed Phase 3.4.
 
 ### T3.6 — Release discipline
 
@@ -791,7 +793,7 @@ Wire `KAYAK_HOME=/home/pat` into `/etc/kayak/env` (sourced from each systemd uni
 - `cli/pipeline.py` is a DAG; a fetch failure cleanly skips downstream (T3.2).
 - `levels emit-config` writes `/etc/kayak/runtime-config.json` consumed by both Python and PHP (T3.3).
 - `grep -rn '/home/pat' --include='*.{php,sh,service,timer}'` finds only `KAYAK_HOME=` lines (T3.4).
-- The schema is one table + three enum values lighter (T3.5).
+- The schema is one table lighter (T3.5 closed 2026-05-15; the three enum-value removals were dropped from scope — see § T3.5).
 - `scripts/release.sh` exists; prod is running a tagged release (T3.6).
 
 ---
@@ -821,7 +823,7 @@ These are areas the audit specifically confirmed are right:
 
 These came up in the audit but are not in this plan:
 
-- **WebAuthn passkeys for maintainers.** Would replace magic-link-only for the maintainer tier; `MaintainerCredential` schema exists. Per T3.5 the schema is being removed. Re-add when actually building it.
+- **WebAuthn passkeys for maintainers.** Would replace magic-link-only for the maintainer tier. The `MaintainerCredential` schema was dropped in migration 0022 (T3.5). Re-add when actually building it.
 - **Containerization.** Tier 3.4 (`KAYAK_HOME`) unblocks it, but actually building the Dockerfile and migrating is out of scope. Single-host Hetzner is fine for now.
 - **Staging host.** A second host that mirrors prod for testing. Would close the "test/prod parity" loop further than the CI parity in T2.1.
 - **Email change for editors.** Per editor-flow audit scenario 13: no endpoint exists today. When built (Phase 2+), must require fresh re-auth + confirmation to the old address.

@@ -581,9 +581,11 @@ Resequenced by dependency:
 | # | Item | Effort | Depends on |
 |---|---|---|---|
 | 4.1 | T3.2 — Pipeline DAG | 1d | QW.5 stopgap (already in) |
-| 4.2 | T3.5 — Dormant schema cleanup | 1d | T2.3 schema parity (Phase 3.4) |
+| 4.2 | T3.5 — Dormant schema cleanup (closed) | 0d | T2.3 done; see notes |
 | 4.3 | T3.3 — Typed config spine | 2d | Phase 2 deploy.sh |
 | 4.4 | T3.1 — Parser/IO decoupling | 2-3d | T2.2 property tests for the parser being refactored (Phase 3.7) |
+
+(T3.5: closed 2026-05-15 — see `PLAN_tier3_closeout.md` § Phase 6 and migration `data/db/migrations/0022_drop_dormant_features.sql` for the per-feature rationale; the "1d" budget was the audit estimate pre-decision and is no longer needed.)
 
 (`T3.4` and `T3.6` are bundled into Phase 2; not listed here.)
 

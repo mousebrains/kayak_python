@@ -210,6 +210,91 @@ swap completed.
    `.schema | wc -l` against a fresh `levels init-db`'s output to
    confirm parity.
 
+## Schema decisions
+
+This section captures the per-feature outcomes from T3.5 of
+`PLAN_pre_release_followup.md` (architecture audit ARCH-H10), so a
+future maintainer auditing the schema can re-derive "why is X still
+here" without re-reading migration 0022's commit body.
+
+### Audit vs. reality
+
+The audit flagged **four** schema features as removal candidates.
+Migration `data/db/migrations/0022_drop_dormant_features.sql` shipped
+only one of them; the other three were retained:
+
+| Candidate | Outcome | Reason |
+|---|---|---|
+| `maintainer_credential` table | **DROPPED in 0022** | WebAuthn passkey schema, never wired to register/assert code. Live DB had zero rows. |
+| `ChangeStatus.auto_applied` enum value | **KEPT** | Removing it shrinks SQLAlchemy-emit `target_type VARCHAR(11)` → `VARCHAR(6)`. Live column is `VARCHAR(11)` — a parity-clean removal requires a table-rebuild migration for cosmetic-only gain. |
+| `ChangeTarget.trip_report` enum value | **KEPT** | Same VARCHAR-length reason. |
+| `EditorStatus.minimal` tier | **KEPT** | Audit was wrong. `admin.php` promotes `pending→minimal` as the first review step; `propose_handler.php` has a `minimal`-specific daily cap (10/day); live DB has 1 editor at this tier. |
+
+The other two rows that appeared in T3.5's plan table
+(`rating` / `rating_data` and `ChangeRequestAttachment`) were
+"schema-only carry cost" entries the audit listed for completeness,
+with KEEP justifications baked in — they were never in flux.
+
+### Where the VARCHAR-length gate lives
+
+`tests/test_db/test_schema_parity.py` compares the SQLAlchemy-emitted
+schema (`Base.metadata.create_all` against a fresh `:memory:` DB) with
+a fresh `levels init-db` against a tmp-file DB. The check compares
+column types as strings, so `VARCHAR(11)` ≠ `VARCHAR(6)` even if the
+data fits in both.
+
+For columns backed by Python `Enum`s, SQLAlchemy derives the VARCHAR
+length from `max(len(member.name) for member in enum)`. Adding or
+removing an enum value can therefore shift the emitted column width,
+which trips schema-parity on a live DB that pre-dates the change.
+
+### Dropping a kept enum value later
+
+If a future change makes one of the kept enum values genuinely
+unreferenced (e.g. removing the `change_request` flow entirely), the
+recipe is:
+
+1. **Schedule a maintenance window.** The migration touches every row
+   in `change_request` (or the table that owns the column). It runs
+   under `@no_transaction` because `PRAGMA foreign_keys = OFF` has to
+   be effective, and SQLite ignores that pragma mid-transaction (see
+   § Recovering from a partial `@no_transaction` migration above).
+
+2. **Write a table-rebuild migration**, named per the existing
+   `data/db/migrations/NNNN_*.sql` sequence. Pattern (adapted from
+   `0012_reach_name_partial_unique.sql`):
+
+   ```sql
+   -- @no_transaction
+   PRAGMA foreign_keys = OFF;
+
+   CREATE TABLE change_request_new (
+       -- ... full column list with the narrower VARCHAR(N) ...
+   );
+
+   INSERT INTO change_request_new SELECT * FROM change_request;
+
+   DROP TABLE change_request;
+   ALTER TABLE change_request_new RENAME TO change_request;
+
+   -- Re-create every index and trigger that lived on the original.
+
+   PRAGMA foreign_keys = ON;
+   ```
+
+3. **Update `src/kayak/db/models.py`** in the same commit: drop the
+   enum value. The schema-parity test now passes because the live
+   column width matches the ORM-emit width.
+
+4. **Run `levels migrate`** during the maintenance window; verify no
+   `_new` tables remain afterwards (see § Recovering from a partial
+   `@no_transaction` migration for the cleanup recipe if it dies
+   mid-flight).
+
+Don't combine this with other schema changes in the same migration —
+table-rebuild migrations are the single load-bearing operation per
+file, and combining them complicates recovery.
+
 ## Cert renewal
 
 See `DNS.CHANGEOVER-fastpath.md` for the active cert lifecycle plan
