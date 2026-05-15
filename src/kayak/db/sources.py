@@ -83,7 +83,7 @@ def find_orphan_sources(session: Session) -> list[OrphanRow]:
 
     Used by :func:`kayak.cli.orphan_check.orphan_check` and by the
     pipeline's end-of-run gate (Phase 2b of
-    ``docs/PLAN_orphan_sources.md``).
+    ``docs/done/PLAN_orphan_sources.md``).
 
     ``MAX(latest_obs)`` aggregates across the per-data_type rows in
     ``latest_observation`` — a source emitting multiple data_types

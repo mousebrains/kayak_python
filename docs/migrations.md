@@ -164,7 +164,7 @@ confirm zero rows, and the next pipeline run will exit clean.
 ## Future work — known graph-integrity gaps
 
 These were called out as "Out of scope" by
-`docs/PLAN_orphan_sources.md` so the orphan-check work stayed
+`docs/done/PLAN_orphan_sources.md` so the orphan-check work stayed
 focused. Each one is a real bug surface that a follow-on plan
 should pick up.
 
@@ -172,23 +172,26 @@ should pick up.
 
 `find_orphan_sources` (in `src/kayak/db/sources.py`) detects one
 specific invariant violation: a fetch-backed `source` row with no
-`gauge_source` link. The same one-row-per-violation reporting shape
-generalizes to several sibling invariants worth a dedicated check
-(and likely a parallel `levels orphan-check`-style CLI plus
-end-of-pipeline gate):
+`gauge_source` link.
+
+On 2026-05-15, three of the originally-listed sibling invariants
+were dropped as intentional design states rather than violations:
+
+- **gauges with no `gauge_source` link** — data providers come and
+  go but the gauge's historical observations are worth preserving
+  even when no live source remains. The two affected gauges on the
+  live DB (ids 87, 89) are kept on purpose.
+- **reaches with no `gauge_id`** — not every reach has a monitored
+  gauge; ~43 reaches on the live DB are in this state by design
+  (many WA/ID/CA runs are tracked without one).
+- **active `fetch_url` with no source** — zero live violations on
+  prod and the check would almost never fire.
+
+The one sibling invariant still worth a follow-on plan is:
 
 | invariant | violation symptom |
 |-----------|-------------------|
-| Every active `fetch_url` has at least one `source` consuming it | URL fetches into nothing; observations land but nothing reads them. Distinct from current orphan-check, which catches the *source* end of the same edge. |
-| Every `gauge` has at least one `gauge_source` link | Gauge displays no data; reaches pointing at it are silently dark. |
-| Every `reach` has a non-NULL `gauge_id` | Reach renders without a level value on the front page. |
-| Every `calc_expression.time_expression` resolves to a live gauge + data_type | The May 2026 incident was downstream of this; the orphan-check catches the upstream symptom but not the calc-side staleness directly. |
-
-A future plan should pick which of these to land first — the
-`gauge` and `reach` checks are the highest signal because they
-gate user-visible data; the `fetch_url` check is cheap but rarely
-fires; the `calc_expression` check is the trickiest because it
-requires evaluating the time_expression's gauge-name resolution.
+| Every `calc_expression.time_expression` resolves to a live gauge + data_type | The May 2026 incident was downstream of this; the orphan-check catches the upstream symptom but not the calc-side staleness directly. Trickiest of the four to implement — requires evaluating the time-expression's gauge-name resolution. |
 
 ### `init-db`'s missing `gauge_source` seed path
 

@@ -199,7 +199,7 @@ class BaseParser(ABC):
         Additionally escalates to ERROR when ``self.source_map`` is empty
         before the new row goes in: that means the fetch_url has zero other
         live sources, the post-deletion-migration "URL orphaned of sources"
-        case (see ``docs/PLAN_orphan_sources.md``). The new Source row will
+        case (see ``docs/done/PLAN_orphan_sources.md``). The new Source row will
         also be missing a ``gauge_source`` link — Phase 2b's end-of-pipeline
         gate trips on this. Logging here lets the operator find the
         offending URL by grepping the fetch run output. The legitimate
@@ -223,7 +223,7 @@ class BaseParser(ABC):
                 "ORPHAN auto-create: Source id=%d (station %s, url=%s, "
                 "fetch_url_id=%s) — the URL had no other live sources. "
                 "Link via gauge_source or remove the URL from sources.yaml. "
-                "See docs/PLAN_orphan_sources.md.",
+                "See docs/done/PLAN_orphan_sources.md.",
                 src.id,
                 station,
                 self.url,

@@ -7,7 +7,7 @@ migration removes a source row without deactivating its fetch_url —
 the next ``levels fetch`` then auto-creates a replacement Source
 without a gauge_source link (parsers/base.py::_auto_create_source).
 
-See ``docs/PLAN_orphan_sources.md`` for the systemic context and the
+See ``docs/done/PLAN_orphan_sources.md`` for the systemic context and the
 follow-up pipeline integration that escalates these to alerts.
 """
 

@@ -1,12 +1,18 @@
 # Plan — Stop fetch silently feeding orphan sources
 
-**Status:** Drafted 2026-05-14 against `main` at `c5e073f` (migration
-0020 just landed; gauges 161 + 174 are live again). Not yet executed.
-The plan targets the systemic bug behind today's incident: auto-create
-mints `source` rows without `gauge_source` links, so when a deletion
-migration removes a source but leaves its `fetch_url` active, the next
-pipeline run silently rebuilds an orphan that fetches forever into a
-dead end.
+**Status:** Closed (2026-05-15). All 4 phases shipped:
+- **Phase 0** — `data/db/migrations/0021_resolve_orphan_sources.sql` (commit `5a876a0`): linked the 5 known orphan sources (29C100 STG+WTM, 28B080 STG+WTM, WASW1) to gauges 150 and 184.
+- **Phase 1** — `levels orphan-check` CLI + `src/kayak/db/sources.py::find_orphan_sources()` (commit `1699631`). Tests in `tests/test_db/test_sources.py` and `tests/test_cli/test_orphan_check.py`.
+- **Phase 2** — auto-create ERROR escalation (`src/kayak/parsers/base.py:209-232`) + post-build orphan-check pipeline step (`src/kayak/cli/pipeline.py:109-132`); both in commit `bd25db4`. Soft-fail behavior verified in `tests/test_cli/test_pipeline.py::test_orphan_check_soft_fail`.
+- **Phase 3** — `docs/migrations.md` (commits `89b47a6`, `fc75c50`). Cross-linked from `CLAUDE.md` "Schema evolution:" block.
+
+Live DB confirms zero orphan rows (`find_orphan_sources()` returns `[]`).
+
+Two follow-up areas were reviewed 2026-05-15 and closed out:
+- **Adjacent graph-health checks** — three sibling invariants (active `fetch_url` with no source; gauge with no `gauge_source` link; reach with no `gauge_id`) — confirmed intentional design states rather than bugs. Providers come and go but the gauge history is worth preserving; not every reach has a monitored gauge. See `docs/migrations.md` § "Adjacent graph-health checks" for the residual calc-expression-resolution surface that remains future-work-worthy.
+- **`init-db`'s missing `gauge_source` seed path** — left as future work in `docs/migrations.md`; indirectly relevant to the Tier 1 restore drill.
+
+Original draft context preserved below for historical reference. The plan targeted the systemic bug behind the 2026-05-11 incident: auto-create mints `source` rows without `gauge_source` links, so when a deletion migration removes a source but leaves its `fetch_url` active, the next pipeline run silently rebuilds an orphan that fetches forever into a dead end.
 
 > **Iter log:**
 > - draft (2026-05-14): one pass.

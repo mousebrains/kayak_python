@@ -140,7 +140,7 @@ Runs these steps in order:
 4. **update-gauge-cache** — recomputes gauge-level latest observation values
 5. **calculator** — evaluates `CalcExpression` formulas referencing `LatestObservation` values
 6. **build** — generates per-state HTML pages, CSV, and text files to `public_html/`; inlines CSS and SVG sparklines
-7. **orphan-check** — soft-fails the run (after build) if any fetch-active source lacks a `gauge_source` link; the existing systemd `OnFailure` chain emails + ntfys on the non-zero exit. See `docs/PLAN_orphan_sources.md`.
+7. **orphan-check** — soft-fails the run (after build) if any fetch-active source lacks a `gauge_source` link; the existing systemd `OnFailure` chain emails + ntfys on the non-zero exit. See `docs/done/PLAN_orphan_sources.md`.
 
 **Note:** `merge` (for gauges with multiple sources) is not part of the pipeline — run `levels merge` manually when needed.
 

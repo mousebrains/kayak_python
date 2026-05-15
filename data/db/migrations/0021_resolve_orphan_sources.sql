@@ -1,6 +1,6 @@
 -- Migration 0021: relink 5 orphan fetch-active sources to their gauges.
 --
--- Phase 0 of docs/PLAN_orphan_sources.md. Companion to migration 0020
+-- Phase 0 of docs/done/PLAN_orphan_sources.md. Companion to migration 0020
 -- which fixed the calc-input orphans (sources 299, 300); this one
 -- handles the 5 remaining orphan rows on prod, all wa.gov STG/WTM or
 -- NWPS endpoints whose previous source-row siblings were deleted by

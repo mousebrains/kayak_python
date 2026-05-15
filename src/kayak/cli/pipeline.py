@@ -106,7 +106,7 @@ def _orphan_check(args: argparse.Namespace) -> None:
     try/except records the failure and the run exits non-zero — at which
     point systemd marks ``kayak-pipeline.service`` failed and fires its
     existing ``OnFailure=kayak-notify-failure@%n.service`` chain (email
-    + ntfy). See ``docs/PLAN_orphan_sources.md`` Phase 2b.
+    + ntfy). See ``docs/done/PLAN_orphan_sources.md`` Phase 2b.
     """
     from kayak.db.engine import get_session
 
