@@ -21,6 +21,29 @@ breaks, the steps shouldn't depend on a network round-trip to GitHub.
 | Monitoring | healthchecks.io (heartbeats), ntfy.sh (push), msmtp → Gmail (email). |
 | Backups | `/home/pat/kayak/backups/` (hourly + weekly local) + Google Drive crypt (weekly off-site). |
 
+## Routine code deploy
+
+`scripts/deploy.sh` codifies the common path: pull main, refresh
+Python deps only if `pyproject.toml` changed, apply pending migrations,
+rebuild static HTML. Run as `pat` from `/home/pat/kayak`:
+
+```bash
+cd /home/pat/kayak
+./scripts/deploy.sh
+```
+
+It exits non-zero on any sub-step failure (`set -e`). It does NOT
+touch `/etc/systemd/system/`, `/etc/nginx/`, or anything else
+root-owned — those rare changes need the manual diff-then-`sudo cp`
+flow (and a `sudo nginx -t` / `sudo systemctl daemon-reload` after).
+When the pulled commits touch `systemd/`, `conf/sites/`, or
+`conf/snippets/`, the script prints a NOTICE listing the changed
+paths so you know to apply them by hand.
+
+Rollback: `git checkout <prev-sha> && ./scripts/deploy.sh`. Note that
+data migrations are forward-only — a code rollback that depends on
+old schema needs a fresh migration to undo the change first.
+
 ## Health endpoints / monitoring map
 
 | Signal | Path / unit | Configured cadence |
