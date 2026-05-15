@@ -35,11 +35,13 @@ export default async function globalSetup(): Promise<void> {
   const baseTmp = mkdtempSync(path.join(tmpdir(), 'kayak-js-'));
   const dbPath = path.join(baseTmp, 'kayak-test.db');
   const databaseUrl = `sqlite:///${dbPath}`;
+  const configJsonPath = path.join(baseTmp, 'runtime-config.json');
 
-  // Both env vars are required — kayak.config reads DATABASE_URL for
-  // SQLAlchemy; PHP reads SQLITE_PATH from the process env (mirroring
-  // nginx's fastcgi_param). One without the other → partial seed or
-  // PHP-side `Cannot open database`.
+  // Env shared by `levels init-db`, `levels build`, and
+  // `levels emit-config`. SQLITE_PATH lets PHP's _sqlite_path()
+  // fallback chain still resolve if Config::str('database_path')
+  // ever returns the empty default; DATABASE_URL drives SQLAlchemy
+  // and seeds the JSON's database_path key.
   // EDITOR_FEATURE=1 covers two spec families with one server:
   //   * smoke.spec.ts — page-load assertions; the editor feature flag
   //     doesn't change any of the pages it visits (per-state HTML,
@@ -48,11 +50,18 @@ export default async function globalSetup(): Promise<void> {
   //   * editor.spec.ts (T2.5) — login → propose → review → approve
   //     flow needs /propose.php, /review.php, /edit.php live; those
   //     all return 404 under EDITOR_FEATURE=0.
+  // MAIL_FROM / SITE_URL / TURNSTILE_* mirror the prod env vars so
+  // the emitted JSON has the keys editor.spec.ts requires; without
+  // them, Phase 4 Config strict-mode dies HTTP-500 on first read.
   const sharedEnv = {
     ...process.env,
     SQLITE_PATH: dbPath,
     DATABASE_URL: databaseUrl,
     EDITOR_FEATURE: '1',
+    MAIL_FROM: 'test@example.com',
+    SITE_URL: 'http://127.0.0.1',
+    TURNSTILE_SITE_KEY: 'TEST_SITE_KEY',
+    TURNSTILE_SECRET: 'TEST_SECRET',
   };
 
   execFileSync(levelsBin, ['init-db'], {
@@ -74,6 +83,19 @@ export default async function globalSetup(): Promise<void> {
     throw new Error(`levels build did not produce ${docroot}`);
   }
 
+  // Phase 4 of T3.3 made PHP's Config singleton fatal-on-missing —
+  // every PHP page now requires a readable runtime-config.json or
+  // dies HTTP 500. Mirror tests/php/IntegrationTestCase.php and mint
+  // a per-run JSON inside baseTmp so global-teardown's rmSync sweeps
+  // it. KAYAK_CONFIG_PATH below points the php -S subprocess at it.
+  execFileSync(levelsBin, ['emit-config', `--out=${configJsonPath}`], {
+    env: sharedEnv,
+    stdio: 'pipe',
+  });
+  if (!existsSync(configJsonPath)) {
+    throw new Error(`levels emit-config did not produce ${configJsonPath}`);
+  }
+
   const port = parseInt(process.env.KAYAK_TEST_PORT ?? '8000', 10);
 
   const phpProc = spawn(
@@ -82,18 +104,13 @@ export default async function globalSetup(): Promise<void> {
     {
       env: {
         ...process.env,
+        KAYAK_CONFIG_PATH: configJsonPath,
+        // SQLITE_PATH stays as the belt-and-suspenders for PHP's
+        // _sqlite_path() fallback chain (Config first, then this
+        // env, then __DIR__-relative). Every other test-only setting
+        // (EDITOR_FEATURE, MAIL_FROM, SITE_URL, TURNSTILE_*) is now
+        // sourced from the JSON via Config::str(...) — see Phase 4.
         SQLITE_PATH: dbPath,
-        DATABASE_URL: databaseUrl,
-        // EDITOR_FEATURE=1 enables /auth.php, /login.php, /propose.php,
-        // /review.php so editor.spec.ts (T2.5) can drive the
-        // login → propose → review → approve journey. smoke.spec.ts
-        // visits only feature-flag-independent pages so the flip is
-        // a no-op there.
-        EDITOR_FEATURE: '1',
-        MAIL_FROM: 'test@example.com',
-        SITE_URL: 'http://127.0.0.1',
-        TURNSTILE_SITE_KEY: 'TEST_SITE_KEY',
-        TURNSTILE_SECRET: 'TEST_SECRET',
       },
       cwd: repoRoot,
       stdio: ['ignore', 'pipe', 'pipe'],
