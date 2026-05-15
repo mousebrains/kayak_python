@@ -625,11 +625,24 @@ convention rollout).
 
 ### 5.2 — `PLAN_editor_security_review.md`
 
-Drafted through iter 9 (1 finding; stopped). Tier 0 threat model is
-the gating output; menu-style tiers 2-5 depend on it. Once Tier 0
-lands, decide which menu items to execute.
+**Status (2026-05-14):** all 7 tiers complete from the dev side. The
+review produced `docs/security/` (14 documents totalling ~2900 lines)
+covering: editor-surface inventory, STRIDE threat model with 29
+threats, controls map with file:line refs, findings tracker
+(5 Closed, 6 Accepted, 2 Deferred-to-second-maintainer-trigger,
+3 Open as operator prod-side confirms), per-tier audit logs, an
+incident-response runbook, posture rollup, and decisions log. Plus
+three new CLIs (`levels delete-editor`, `levels export-editor`,
+`levels editor-retention`) and the editor-retention systemd timer
+from Tier 4. Tier-by-tier closeout commits are listed in
+`docs/security/README.md` § Tier status; Tier 6 closeout commit is
+`1640cc2`.
 
-**Effort:** Tier 0 alone is ~1 day; downstream tiers TBD.
+**Outstanding (operator-side, can't be done from dev):** F-10, F-11,
+F-12 prod-side confirms in `docs/security/findings.md` plus the
+restore-drill execution (D-T5.3 / Phase 4.4 of production-discipline).
+
+**Effort:** done.
 
 ## Phase 6 — Production-discipline closeout
 
@@ -643,10 +656,26 @@ Partial today via `healthchecks.io` + `journalctl`. Net new:
 - A "last 30 days" recap script summarizing alert counts vs. SLO
   targets, sourced from `journalctl -u kayak-*` + healthchecks history.
 
-**Effort:** ~1.5 days.
+**Status (2026-05-14):** scaffold + timer shipped.
+`kayak.utils.struct_log.emit` writes JSON-envelope events into
+journald from the pipeline (`pipeline_start/done`, `step_start/done/
+failed/skipped`); `scripts/recap.py` re-parses them via
+`journalctl --output=json` and prints a per-step ok/failed/skipped
+tally with elapsed_s percentiles. A new `kayak-recap.timer` mails
+the operator a 7-day recap every Monday at 07:00 (operator action:
+`sudo systemd/install.service.sh` to land the new unit files).
+Healthchecks.io history integration is deferred — journald is the
+source of truth for our use case.
+
+**Effort:** ~1.5 days → done.
 
 ### 6.2 — Tier 4 SLO + bus-factor + rollback proc
 
+- **Rollback procedure** — done 2026-05-14 in `docs/operations.md`
+  §Rollback. Documents the SHA-based manual rollback flow (no `deploy.sh
+  --tag` until T3.6 release.sh lands), lists six destructive migrations
+  that make code-only rollback insufficient, points at backup restore for
+  the cross-migration case.
 - **SLO definitions:** add to `docs/operations.md` (or split out
   `docs/slo.md` per production-discipline §4.3). Targets: availability
   ≥99.5%, pipeline freshness ≤2h stale per source, backup RPO ≤1h
