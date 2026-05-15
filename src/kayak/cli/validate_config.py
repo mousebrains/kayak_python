@@ -47,6 +47,7 @@ _CONFIG_PREFIXES = (
     "HC_",
     "NTFY_",
     "CSP_",
+    "AUDIT_",
     "KAYAK_",
 )
 

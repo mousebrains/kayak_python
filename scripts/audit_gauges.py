@@ -259,7 +259,7 @@ def _group_stale_by_gauge(stale: list) -> list:
     return result
 
 
-def _send_email_digest(
+def _send_email_digest(  # noqa: C901 — pre-existing complexity; tracked in task #45 refactor
     addr: str,
     days: int,
     stopped: list,
@@ -361,7 +361,7 @@ def _send_email_digest(
         print(f"WARNING: failed to send audit email: {e}", file=sys.stderr)
 
 
-def main():
+def main():  # noqa: C901 — pre-existing complexity; tracked in task #45 refactor
     parser = argparse.ArgumentParser(description="Audit gauge metadata")
     parser.add_argument(
         "--no-refresh",
@@ -389,8 +389,8 @@ def main():
     parser.add_argument(
         "--email",
         type=str,
-        default=os.environ.get("KAYAK_AUDIT_EMAIL"),
-        help="Email digest to this address (or set KAYAK_AUDIT_EMAIL). Always sends if set.",
+        default=os.environ.get("AUDIT_EMAIL"),
+        help="Email digest to this address (or set AUDIT_EMAIL). Always sends if set.",
     )
     args = parser.parse_args()
 

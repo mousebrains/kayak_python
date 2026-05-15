@@ -128,6 +128,13 @@ class KayakConfig(BaseSettings):
     mail_reply_to: EmailStr | None = None
     mail_dump_dir: Path | None = None
 
+    # Operator email-digest destination. Read by scripts/audit_gauges.py
+    # (the weekly gauge-metadata audit timer) and emitted into the JSON
+    # so future PHP / Python consumers don't have to re-implement the env
+    # read. Currently consumed only by the script, but living in the
+    # typed model keeps it within validate-config's allowlist.
+    audit_email: EmailStr | None = None
+
     # Where the CSP-violation reporter writes JSON lines. Hardcoded
     # operator-specific default for now; Phase 5 (T3.4) will swap to
     # ``${KAYAK_HOME}/logs/csp.log`` once that indirection lands.
