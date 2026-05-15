@@ -8,17 +8,18 @@ declare(strict_types=1);
  *
  * For dev/test: set MAIL_DUMP_DIR to write messages to files instead of
  * sending them. Useful when working locally without MTA configured.
+ *
+ * MAIL_FROM / MAIL_REPLY_TO / MAIL_DUMP_DIR resolve via Config (JSON,
+ * env fallback baked into Config::str). The hardcoded `noreply@<host>`
+ * + `noreply@levels.wkcc.org` defaults remain for "neither JSON nor
+ * env sets a value" cases.
  */
 
-function _mail_env(string $name): string {
-    $v = getenv($name);
-    if ($v === false || $v === '') $v = (string)($_SERVER[$name] ?? '');
-    return $v;
-}
+require_once __DIR__ . '/config.php';
 
 function mail_from(): string {
-    $from = _mail_env('MAIL_FROM');
-    if ($from !== '') return $from;
+    $v = Config::str('mail_from');
+    if ($v !== '') return $v;
     $host = gethostname() ?: 'localhost';
     return "noreply@$host";
 }
@@ -29,13 +30,13 @@ function mail_from(): string {
  * domain. Override via env MAIL_REPLY_TO if needed.
  */
 function mail_reply_to(): string {
-    $r = _mail_env('MAIL_REPLY_TO');
-    return $r !== '' ? $r : 'noreply@levels.wkcc.org';
+    $v = Config::str('mail_reply_to');
+    return $v !== '' ? $v : 'noreply@levels.wkcc.org';
 }
 
 function mail_dump_dir(): ?string {
-    $dir = _mail_env('MAIL_DUMP_DIR');
-    return $dir !== '' ? $dir : null;
+    $v = Config::str('mail_dump_dir');
+    return $v !== '' ? $v : null;
 }
 
 /**
