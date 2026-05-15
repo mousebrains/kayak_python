@@ -3,18 +3,23 @@ declare(strict_types=1);
 /**
  * SQLite database connection helper.
  *
- * Reads SQLITE_PATH from the environment. The fallback is computed relative
- * to __DIR__ and works for both layouts we care about:
+ * Resolves the database path via the typed config (`Config::str('database_path')`,
+ * sourced from /etc/kayak/runtime-config.json), falling back to the SQLITE_PATH
+ * env var, then to a path computed relative to __DIR__ for both layouts:
  *   dev:  /Users/.../kayak/php/includes/db.php   -> /Users/.../DB/kayak.db
  *   prod: /home/pat/public_html/includes/db.php  -> /home/pat/DB/kayak.db
  * dirname(__DIR__, 3) walks up includes/ -> (php|public_html)/ -> project-parent,
  * and joins in /DB/kayak.db — the same sibling layout used by backup/decimate.
  */
 
+require_once __DIR__ . '/config.php';
+
 /**
  * Resolve the SQLite path without opening a connection, so it's unit-testable.
  */
 function _sqlite_path(): string {
+    $cfg = Config::str('database_path');
+    if ($cfg !== '') return $cfg;
     $env = getenv('SQLITE_PATH');
     if ($env !== false && $env !== '') return $env;
     return dirname(__DIR__, 3) . '/DB/kayak.db';
