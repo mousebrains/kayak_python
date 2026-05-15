@@ -325,8 +325,22 @@ def _build_placeholder_page(css_link: str, states: list[str], state: str) -> str
 </html>"""
 
 
-def _build_map_page(css_link: str, states: list[str], geom_url: str, state_url: str) -> str:
-    """Build map.html with an interactive Leaflet map of all reaches."""
+def _build_map_page(
+    css_link: str,
+    states: list[str],
+    geom_url: str,
+    state_url: str,
+    gauges_geom_url: str = "",
+    gauges_state_url: str = "",
+) -> str:
+    """Build map.html with an interactive Leaflet map of all reaches.
+
+    ``gauges_geom_url`` / ``gauges_state_url`` are Item 2's gauge-layer
+    JSON URLs (map_and_ui_tweaks). When empty (e.g. in tests that don't
+    build a gauge layer), the data attributes still render but
+    static/map.js treats absent attrs as "no gauge layer to fetch".
+    Defaulted for back-compat with the prior 4-arg signature.
+    """
     nav_html = _build_nav(states, active_page="map")
 
     return f"""<!DOCTYPE html>
@@ -390,7 +404,7 @@ main {{padding:0;max-width:none;}}
   {_build_right_cluster()}
 </header>
 <main>
-<div id="map" data-geom-url="{html_mod.escape(geom_url, quote=True)}" data-state-url="{html_mod.escape(state_url, quote=True)}"></div>
+<div id="map" data-geom-url="{html_mod.escape(geom_url, quote=True)}" data-state-url="{html_mod.escape(state_url, quote=True)}" data-gauges-geom-url="{html_mod.escape(gauges_geom_url, quote=True)}" data-gauges-state-url="{html_mod.escape(gauges_state_url, quote=True)}"></div>
 </main>
 {_build_footer_html()}
 <script src="/static/leaflet.js" defer></script>

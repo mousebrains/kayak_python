@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from kayak.config import BASE_DIR, SITE_URL
 from kayak.db.cache import get_all_latest_gauges
@@ -36,7 +36,12 @@ from kayak.web.build._shared import (
     _load_css,
 )
 from kayak.web.build.gauges import _write_gauges_page
-from kayak.web.build.geojson import _build_reaches_state, _build_reaches_static
+from kayak.web.build.geojson import (
+    _build_gauges_state,
+    _build_gauges_static,
+    _build_reaches_state,
+    _build_reaches_static,
+)
 from kayak.web.build.levels import (
     _build_filter_bar,
     _build_html_table,
@@ -160,10 +165,26 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
 
         print(f"Building site: {len(index_reaches)} reaches")
 
-        # Pre-load data for all reaches at gauge level
+        # Pre-load data for all reaches at gauge level. all_latest covers
+        # every gauge with an observation (not just reach-linked ones) so
+        # the gauges-state.json build later can read orphan-gauge readings
+        # too — reach-side consumers only look up reach-linked keys so the
+        # broader load is a strict superset, no behavior change for them.
         gauge_ids = [r.gauge_id for r in all_reaches if r.gauge_id]
         calculated_gauge_ids = get_calculated_gauge_ids(session, gauge_ids)
-        all_latest = get_all_latest_gauges(session, gauge_ids)
+        all_gauge_ids_with_obs = list(
+            session.scalars(select(LatestGaugeObservation.gauge_id).distinct())
+        )
+        all_latest = get_all_latest_gauges(session, all_gauge_ids_with_obs)
+        # All gauges with a (lat, lon) for the map's gauge layer; reaches
+        # eager-loaded so _gauge_status_from_reaches doesn't N+1.
+        all_gauges = list(
+            session.scalars(
+                select(Gauge)
+                .options(selectinload(Gauge.reaches))
+                .where(Gauge.latitude.is_not(None), Gauge.longitude.is_not(None))
+            )
+        )
 
         # Deploy source files (static assets, PHP, config)
         _deploy_source_files(output_dir)
@@ -185,10 +206,21 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
         geom_hash = hashlib.sha256(static_json.encode()).hexdigest()[:10]
         _atomic_write(static_dir / "reaches-geom.json", static_json)
         _atomic_write(static_dir / "reaches-state.json", state_json)
+        # Same split for the gauge layer (Item 2 of map_and_ui_tweaks).
+        # Static geometry + metadata is long-cached and content-hashed;
+        # state (status + readings + staleness) refreshes hourly.
+        gauges_geom_json = _build_gauges_static(all_gauges)
+        gauges_state_json = _build_gauges_state(all_gauges, calculated_gauge_ids, all_latest)
+        gauges_geom_hash = hashlib.sha256(gauges_geom_json.encode()).hexdigest()[:10]
+        _atomic_write(static_dir / "gauges-geom.json", gauges_geom_json)
+        _atomic_write(static_dir / "gauges-state.json", gauges_state_json)
         logger.info(
-            "reaches-geom.json: %d bytes; reaches-state.json: %d bytes",
+            "reaches-geom.json: %d bytes; reaches-state.json: %d bytes; "
+            "gauges-geom.json: %d bytes; gauges-state.json: %d bytes",
             len(static_json),
             len(state_json),
+            len(gauges_geom_json),
+            len(gauges_state_json),
         )
         # Drop the retired combined file if an older build left one behind.
         with suppress(FileNotFoundError):
@@ -196,7 +228,11 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
 
         geom_url = f"/static/reaches-geom.json?v={geom_hash}"
         state_url = "/static/reaches-state.json"
-        map_html = _build_map_page(css_link, states, geom_url, state_url)
+        gauges_geom_url = f"/static/gauges-geom.json?v={gauges_geom_hash}"
+        gauges_state_url = "/static/gauges-state.json"
+        map_html = _build_map_page(
+            css_link, states, geom_url, state_url, gauges_geom_url, gauges_state_url
+        )
         _atomic_write(output_dir / "map.html", map_html)
 
         # index.html = all reaches levels table (excludes map_only). Data
@@ -216,14 +252,11 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
             is_all_page=True,
         )
 
-        # gauges.html — supplemental all-gauges listing. Re-fetch the cache
-        # over every gauge id it knows about so we also surface gauges with
-        # no reach linkage (orphans / future reach work).
-        gauges_latest = get_all_latest_gauges(
-            session,
-            list(session.scalars(select(LatestGaugeObservation.gauge_id).distinct())),
-        )
-        _write_gauges_page(session, gauges_latest, states, css_link, output_dir)
+        # gauges.html — supplemental all-gauges listing. all_latest (loaded
+        # above with the full all_gauge_ids_with_obs set) already covers
+        # every gauge with observations including orphans, so reuse it
+        # rather than re-querying.
+        _write_gauges_page(session, all_latest, states, css_link, output_dir)
 
         # Links pages for all nav states (including Oregon)
         for state in _NAV_STATES:

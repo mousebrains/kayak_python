@@ -38,6 +38,21 @@ const DESKTOP_HOVER=window.matchMedia('(hover: hover) and (pointer: fine)').matc
 // tuning band 100–200 ms if it feels wrong in the browser.
 const POPUP_CLOSE_GRACE_MS=150;
 
+// Item 2 of docs/PLAN_map_and_ui_tweaks.md — gauge markers.
+//   ZOOM_THRESHOLD: state-wide views (z<9) get tiny dots; zoom-in
+//     (z>=9) gets the larger marker so the user can read the cluster.
+//   RADIUS_LOW/HIGH: visible marker radius in pixels at each tier.
+//   HIT_RADIUS: transparent overlay sized for a 44 px-ish mobile tap
+//     target regardless of zoom — mirrors HIT_POINT for point reaches.
+const GAUGE_ZOOM_THRESHOLD=9;
+const GAUGE_RADIUS_LOW=3;
+const GAUGE_RADIUS_HIGH=7;
+const GAUGE_HIT_RADIUS=14;
+// Tagged-stale gauge markers (>1 d <=7 d old) render at reduced
+// opacity to telegraph "data may be old without being expired".
+// 0.55 mirrors `.rp-stale` opacity in style.css for the reach popup.
+const GAUGE_STALE_OPACITY=0.55;
+
 function esc(s){const d=document.createElement('div');d.textContent=s==null?'':s;return d.innerHTML;}
 
 // reaches-state.json was once {id: "status"}; it's now {id: {s, t, v, u, d, ts}}.
@@ -76,7 +91,10 @@ function fmtAge(ms){
 const STALE_MS=24*3600*1000;
 
 function parseHash(){
-  const out={s:null,c:null};
+  // gauges defaults to true (Decision §2 — gauges visible by default).
+  // Only ?gauges=off persists in the hash; toggling back on clears it
+  // so the common-case URL stays short.
+  const out={s:null,c:null,gauges:true};
   const h=(location.hash||'').replace(/^#/,'');
   if(!h)return out;
   h.split('&').forEach(function(kv){
@@ -85,15 +103,18 @@ function parseHash(){
     const k=kv.slice(0,eq), v=kv.slice(eq+1);
     if(k==='s'||k==='c'){
       out[k]=v===''?[]:decodeURIComponent(v).split(',').filter(Boolean);
+    }else if(k==='gauges' && v==='off'){
+      out.gauges=false;
     }
   });
   return out;
 }
 
-function writeHash(sSet,cSet){
+function writeHash(sSet,cSet,showGauges){
   const parts=[];
   if(sSet.size!==STATUSES.length)parts.push('s='+Array.from(sSet).join(','));
   if(cSet.size!==CLASS_TIERS.length)parts.push('c='+Array.from(cSet).join(','));
+  if(showGauges===false)parts.push('gauges=off');
   const hash=parts.length?('#'+parts.join('&')):'';
   if(hash!==location.hash){
     history.replaceState(null,'',location.pathname+location.search+hash);
@@ -103,6 +124,11 @@ function writeHash(sSet,cSet){
 const mapEl=document.getElementById('map');
 const geomUrl=mapEl.dataset.geomUrl;
 const stateUrl=mapEl.dataset.stateUrl;
+// Gauge layer URLs (Item 2 of map_and_ui_tweaks). Empty string when the
+// builder didn't wire a gauge layer (older snapshots, tests). When
+// either is missing, renderMap skips the gauge layer wholesale.
+const gaugesGeomUrl=mapEl.dataset.gaugesGeomUrl||'';
+const gaugesStateUrl=mapEl.dataset.gaugesStateUrl||'';
 
 const map=L.map('map');
 const topo=L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,attribution:'OpenTopoMap'});
@@ -122,21 +148,39 @@ function fail(msg){
   ctl.addTo(map);
 }
 
+// Reach JSON must succeed; gauge JSON is best-effort — a 404 / parse
+// error logs a warning and the map still renders without the layer
+// (Item 2c). Resolving to null lets renderMap treat absence uniformly.
+function fetchOptional(url, label){
+  if(!url)return Promise.resolve(null);
+  return fetch(url)
+    .then(function(r){
+      if(!r.ok){console.warn('map: '+label+' fetch '+r.status);return null;}
+      return r.json();
+    })
+    .catch(function(e){console.warn('map: '+label+' fetch failed:',e);return null;});
+}
+
 Promise.all([
   fetch(geomUrl).then(function(r){if(!r.ok)throw new Error('geom '+r.status);return r.json();}),
   fetch(stateUrl).then(function(r){if(!r.ok)throw new Error('state '+r.status);return r.json();}),
+  fetchOptional(gaugesGeomUrl,'gauges-geom'),
+  fetchOptional(gaugesStateUrl,'gauges-state'),
 ]).then(function(res){
-  const geom=res[0], state=res[1];
-  renderMap(geom,state);
+  renderMap(res[0],res[1],res[2],res[3]);
 }).catch(function(e){
   console.error('map data load failed:',e);
   fail('Map data failed to load.');
 });
 
-function renderMap(geom,state){
+function renderMap(geom,state,gaugesGeom,gaugesState){
   const initial=parseHash();
   const sSet=new Set(initial.s===null?STATUSES:initial.s);
   const cSet=new Set(initial.c===null?CLASS_TIERS:initial.c);
+  // Gauge layer is available only when both files loaded cleanly.
+  // hasGaugeLayer gates the filter checkbox AND the fitBounds union.
+  const hasGaugeLayer = !!(gaugesGeom && gaugesState);
+  let showGauges = hasGaugeLayer && initial.gauges;
 
   // Dark halo casing 2px wider than the colored line at 0.75 opacity.
   // Denser than the prior 0.5 because the line itself dropped from 4 to
@@ -298,9 +342,139 @@ function renderMap(geom,state){
         lyr._mfCasing.setStyle({weight:hov?HOVER_CASING.weight:REST_CASING.weight});
       }
     }
+    // Zoom-graded gauge marker radius — visible markers only, hit
+    // shapes stay constant so the tap target doesn't shrink at low zoom.
+    if(gaugeMarkers.length){
+      const r=gaugeRadiusForZoom(map.getZoom());
+      for(let i=0;i<gaugeMarkers.length;i++)gaugeMarkers[i].setRadius(r);
+    }
   });
 
   const group=L.layerGroup().addTo(map);
+
+  // Gauge layer (Item 2 of map_and_ui_tweaks). Built only when both
+  // gauge JSON files loaded — empty layerGroup otherwise so the rest
+  // of the file can treat gaugeLayer as always-present.
+  const gaugeLayer=L.layerGroup();
+  const gaugeMarkers=[];  // visible circleMarkers, kept for zoom restyle
+  if(hasGaugeLayer)buildGaugeLayer(gaugesGeom,gaugesState,gaugeLayer,gaugeMarkers);
+  if(hasGaugeLayer && showGauges)gaugeLayer.addTo(map);
+
+  function gaugeRadiusForZoom(z){
+    return (z==null||z<GAUGE_ZOOM_THRESHOLD)?GAUGE_RADIUS_LOW:GAUGE_RADIUS_HIGH;
+  }
+
+  // Build the visible + hit circleMarker pair for each gauge feature.
+  // Mirrors Item 1's hover mechanic so desktop users get the same
+  // open-on-hover / close-after-grace behavior on gauge markers as on
+  // reach lines. Markers are pushed into ``markerArr`` so the zoomend
+  // handler can restyle them when the threshold is crossed.
+  function buildGaugeLayer(geom,state,layerGroup,markerArr){
+    const features=(geom&&geom.features)||[];
+    const initialRadius=gaugeRadiusForZoom(map.getZoom());
+    for(let i=0;i<features.length;i++){
+      const f=features[i];
+      const gid=f.id;
+      const coords=f.geometry&&f.geometry.coordinates;
+      if(!coords||coords.length!==2)continue;
+      const ll=L.latLng(coords[1],coords[0]);
+      const entry=state[gid]||{s:'unknown'};
+      const status=entry.s||'unknown';
+      const stale=!!entry.stale;
+      const color=COLORS[status]||COLORS.unknown;
+      const baseOpacity=stale?GAUGE_STALE_OPACITY:1.0;
+      const baseFillOpacity=stale?GAUGE_STALE_OPACITY:0.85;
+
+      const visible=L.circleMarker(ll,{
+        radius:initialRadius,
+        fillColor:color,
+        color:'#333',
+        weight:1,
+        opacity:baseOpacity,
+        fillOpacity:baseFillOpacity,
+        interactive:false,
+      });
+      markerArr.push(visible);
+      layerGroup.addLayer(visible);
+
+      // Transparent 14 px hit shape mirrors HIT_POINT for reaches —
+      // gives mobile a reliable tap target even at low zoom where the
+      // visible marker shrinks to 3 px.
+      const hit=L.circleMarker(ll,{
+        radius:GAUGE_HIT_RADIUS,
+        opacity:0,
+        fillOpacity:0,
+        interactive:true,
+      });
+      layerGroup.addLayer(hit);
+
+      const props=f.properties||{};
+      function buildPopup(){
+        const ageMs=entry.ts?(Date.now()-Date.parse(entry.ts)):-1;
+        const ageStr=ageMs>=0?fmtAge(ageMs):'';
+        let html='<a class="reach-popup" href="/gauge.php?id='+parseInt(gid,10)+'">';
+        html+='<div class="rp-name">'+esc(props.name||'')+'</div>';
+        const subtitleParts=[];
+        if(props.river)subtitleParts.push(props.river);
+        if(props.location&&props.location!==props.river)subtitleParts.push(props.location);
+        if(subtitleParts.length){
+          html+='<div class="rp-sub">'+esc(subtitleParts.join(' · '))+'</div>';
+        }
+        const readings=[];
+        if(entry.flow)readings.push(fmtValue(entry.flow.v,'flow',entry.flow.u));
+        if(entry.gage)readings.push(fmtValue(entry.gage.v,'gage',entry.gage.u));
+        if(entry.temperature)readings.push(fmtValue(entry.temperature.v,'temperature',entry.temperature.u));
+        if(readings.length){
+          html+='<div class="rp-reading'+(stale?' rp-stale':'')+'">'+esc(readings.join(' · '))+'</div>';
+        }
+        html+='<div class="rp-footer">';
+        if(ageStr)html+='<span class="rp-time">'+esc(ageStr)+'</span>';
+        html+='<span class="rp-status-text"><span class="rp-dot" style="color:'+color+'">&#9679;</span> '+esc(status)+'</span>';
+        html+='</div></a>';
+        return html;
+      }
+      hit.bindPopup(buildPopup);
+
+      // Two-surface hover mechanic. ``traceHovered`` covers the gauge
+      // marker hit shape; ``popupHovered`` covers the popup body — the
+      // popup wraps in <a href> so the cursor must traverse from
+      // marker → popup to click without the popup closing under it.
+      let closeTimer=null;
+      let traceHovered=false;
+      let popupHovered=false;
+      function scheduleClose(){
+        if(closeTimer!==null)clearTimeout(closeTimer);
+        closeTimer=setTimeout(function(){
+          closeTimer=null;
+          if(!traceHovered&&!popupHovered)hit.closePopup();
+        },POPUP_CLOSE_GRACE_MS);
+      }
+      function cancelClose(){
+        if(closeTimer!==null){clearTimeout(closeTimer);closeTimer=null;}
+      }
+      hit.on('mouseover',function(){
+        traceHovered=true;
+        if(DESKTOP_HOVER){cancelClose();hit.openPopup();}
+      });
+      hit.on('mouseout',function(){
+        traceHovered=false;
+        if(DESKTOP_HOVER)scheduleClose();
+      });
+      hit.on('popupopen',function(e){
+        if(!DESKTOP_HOVER)return;
+        const el=e.popup.getElement();
+        if(!el)return;
+        el.addEventListener('mouseenter',function(){
+          popupHovered=true;
+          cancelClose();
+        });
+        el.addEventListener('mouseleave',function(){
+          popupHovered=false;
+          scheduleClose();
+        });
+      });
+    }
+  }
 
   function matches(layer){
     if(!sSet.has(layer._mfStatus))return false;
@@ -327,8 +501,15 @@ function renderMap(geom,state){
     if(countEl)countEl.textContent=visible.length+' reach'+(visible.length===1?'':'es');
     if(firstPaint){
       firstPaint=false;
-      if(visible.length){
-        map.fitBounds(L.featureGroup(visible).getBounds().pad(0.05));
+      // Bounds union: include gauge markers in the initial fit when
+      // the layer is visible, so a state-wide view shows both reach
+      // network and the gauges that monitor it (plan §2c.4).
+      const boundsLayers=visible.slice();
+      if(hasGaugeLayer&&showGauges){
+        for(let i=0;i<gaugeMarkers.length;i++)boundsLayers.push(gaugeMarkers[i]);
+      }
+      if(boundsLayers.length){
+        map.fitBounds(L.featureGroup(boundsLayers).getBounds().pad(0.05));
       }else{
         map.setView(DEFAULT_VIEW,DEFAULT_ZOOM);
       }
@@ -345,14 +526,28 @@ function renderMap(geom,state){
     // the paths exist before we re-append them in the right z-order.
     for(let i=0;i<visible.length;i++)visible[i].bringToFront();
     for(let i=0;i<visible.length;i++)if(visible[i]._mfHit)visible[i]._mfHit.bringToFront();
-    writeHash(sSet,cSet);
+    writeHash(sSet,cSet,showGauges);
   }
 
-  countEl=addFilterControl(sSet,cSet,refilter);
+  // Layer toggle: add/remove the gauge layerGroup without re-running
+  // refilter — fitBounds is firstPaint-only, so toggling shouldn't
+  // jolt the user's current pan/zoom. URL hash updates so the toggle
+  // state is shareable.
+  function onGaugeToggle(checked){
+    showGauges=checked;
+    if(showGauges){
+      if(!map.hasLayer(gaugeLayer))gaugeLayer.addTo(map);
+    }else if(map.hasLayer(gaugeLayer)){
+      map.removeLayer(gaugeLayer);
+    }
+    writeHash(sSet,cSet,showGauges);
+  }
+
+  countEl=addFilterControl(sSet,cSet,refilter,hasGaugeLayer,showGauges,onGaugeToggle);
   refilter();
 }
 
-function addFilterControl(sSet,cSet,onChange){
+function addFilterControl(sSet,cSet,onChange,hasGaugeLayer,showGauges,onLayerToggle){
   const ctl=L.control({position:'topright'});
   let countEl;
   ctl.onAdd=function(){
@@ -393,6 +588,19 @@ function addFilterControl(sSet,cSet,onChange){
       });
       lab.appendChild(document.createTextNode(' '+t));
     });
+
+    // Layers fieldset (Item 2c.5): only rendered when both gauge JSON
+    // files loaded. Default-ON state lives in renderMap; this
+    // checkbox is a thin view onto onLayerToggle.
+    if(hasGaugeLayer){
+      const lFs=L.DomUtil.create('fieldset','',panel);
+      L.DomUtil.create('legend','',lFs).textContent='Layers';
+      const lab=L.DomUtil.create('label','',lFs);
+      const cb=L.DomUtil.create('input','',lab);
+      cb.type='checkbox';cb.value='gauges';cb.checked=showGauges;
+      cb.addEventListener('change',function(){onLayerToggle(cb.checked);});
+      lab.appendChild(document.createTextNode(' Show gauges'));
+    }
 
     countEl=L.DomUtil.create('div','mf-count',panel);
     countEl.setAttribute('aria-live','polite');
