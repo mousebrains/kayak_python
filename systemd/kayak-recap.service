@@ -16,6 +16,9 @@ Environment=KAYAK_HOME=/home/pat
 EnvironmentFile=-/etc/kayak/env
 EnvironmentFile=-/home/pat/.config/kayak/.env
 ExecStart=/home/pat/kayak/systemd/kayak-recap.sh
+# `-` prefix: a transient curl failure on the heartbeat won't cascade to a
+# false OnFailure alert. See docs/PLAN_production_discipline.md Phase 1.3.
+ExecStartPost=-/usr/bin/curl -fsS -m 10 --retry 3 -o /dev/null ${HC_RECAP}
 Nice=15
 
 # Sandboxing — mirrors kayak-heartbeat.service.
