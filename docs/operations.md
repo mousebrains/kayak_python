@@ -44,6 +44,50 @@ Rollback: `git checkout <prev-sha> && ./scripts/deploy.sh`. Note that
 data migrations are forward-only — a code rollback that depends on
 old schema needs a fresh migration to undo the change first.
 
+## Releases
+
+`scripts/release.sh` prepares a release commit (bumps
+`pyproject.toml`, flips `CHANGELOG.md`'s `[Unreleased]` heading to a
+dated `[X.Y.Z]` section, commits). It does **not** create the git
+tag — that step is intentionally manual so the maintainer controls
+when the version goes out.
+
+```bash
+cd /home/pat/kayak
+scripts/release.sh 1.0.1            # or 1.1.0 / 2.0.0 — explicit semver
+# Script prints the tag command; copy-paste when ready:
+git tag -a v1.0.1 -m 'release v1.0.1'
+git push origin v1.0.1
+git push origin main
+```
+
+Pre-flight checks (refuses if any fail):
+- Working tree must be clean (no uncommitted edits).
+- Tag `vX.Y.Z` must not already exist locally or on origin.
+- `CHANGELOG.md` must have an `## [Unreleased]` heading to flip.
+
+**Pre-v1.0.0:** direct-to-`main` commits + an immediate
+`scripts/deploy.sh` push. **Post-v1.0.0:** every change starts on a
+feature branch, lands via PR, merges, then deploys. The v1.0.0 tag
+is the transition marker.
+
+To check what's running on prod against the tag set:
+
+```bash
+cd /home/pat/kayak
+git fetch --tags
+git describe --tags --exact-match HEAD 2>/dev/null || git describe --tags HEAD
+```
+
+A future deploy.sh enhancement will write the deployed tag to
+`/etc/kayak/VERSION` (production-discipline Tier 3 follow-up) so the
+check becomes a privilege-free `cat`. For now, `git describe` is the
+authoritative answer.
+
+See § Rollback below for the SHA-based rollback recipe; once tags
+exist, prefer `git checkout v<prev-version>` over a raw SHA — same
+mechanics, more readable in the audit log.
+
 ## Health endpoints / monitoring map
 
 | Signal | Path / unit | Configured cadence |
