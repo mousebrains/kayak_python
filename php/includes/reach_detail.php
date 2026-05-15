@@ -16,6 +16,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/header.php';
 require_once __DIR__ . '/footer.php';
 require_once __DIR__ . '/html.php';
+require_once __DIR__ . '/gauge_map.php';
 
 /**
  * Dispatch detail mode and write the full HTTP response.
@@ -46,8 +47,12 @@ function handle_reach_detail(
     $preconnects = '<link rel="preconnect" href="https://a.tile.opentopomap.org">'
         . '<link rel="preconnect" href="https://b.tile.opentopomap.org">'
         . '<link rel="preconnect" href="https://c.tile.opentopomap.org">';
-    include_header($name . ' - Reach', '', '', $preconnects);
-    echo $compact_css;
+    include_header(
+        $name . ' - Reach',
+        '',
+        '',
+        $preconnects . gm_head_links() . $compact_css,
+    );
 
     _render_reach_nav_bar(
         $db,
@@ -551,8 +556,6 @@ function _render_reach_map(array $reach, ?array $gauge): array
         }
     }
 
-    $leaflet_css = file_get_contents($_SERVER['DOCUMENT_ROOT'] . '/static/leaflet.css');
-    echo '<style>' . $leaflet_css . '</style>';
     $pts_json = htmlspecialchars(json_encode($map_points));
     echo '<div id="reach-map" style="height:400px;margin-top:1rem;border:1px solid #ccc"'
         . ' data-points="' . $pts_json . '"';

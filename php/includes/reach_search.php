@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/header.php';
 require_once __DIR__ . '/footer.php';
+require_once __DIR__ . '/gauge_map.php';
 
 /**
  * Map-marker color palette. Indexed by result row position; mirrors the
@@ -55,8 +56,12 @@ function handle_search_mode(
     $preconnects = '<link rel="preconnect" href="https://a.tile.opentopomap.org">'
         . '<link rel="preconnect" href="https://b.tile.opentopomap.org">'
         . '<link rel="preconnect" href="https://c.tile.opentopomap.org">';
-    include_header('Reach Search', '', '', $preconnects);
-    echo $compact_css;
+    include_header(
+        'Reach Search',
+        '',
+        '',
+        $preconnects . gm_head_links() . $compact_css,
+    );
     echo '<h2>Reach Search</h2>';
 
     $has_map = false;
@@ -321,8 +326,6 @@ function _render_search_map(PDO $db, array $results, array $gauge_ids, array $re
 
     $map_gauges = _collect_search_map_gauges($db, $gauge_ids, $reach_readings);
 
-    $leaflet_css = file_get_contents($_SERVER['DOCUMENT_ROOT'] . '/static/leaflet.css');
-    echo '<style>' . $leaflet_css . '</style>';
     $map_json = htmlspecialchars(json_encode($map_reaches));
     $colors_json = htmlspecialchars(json_encode(REACH_SEARCH_MAP_COLORS));
     $gauges_json = htmlspecialchars(json_encode($map_gauges));

@@ -238,7 +238,7 @@ function _render_description_header(int $id, string $name): void
         "$name - Description",
         '',
         "Real-time river data for $name — flow, gage height, and conditions.",
-        $preconnects,
+        $preconnects . gm_head_links(),
         ['type' => 'reach', 'id' => $id]
     );
 }

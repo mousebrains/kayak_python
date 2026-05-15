@@ -415,6 +415,15 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .prose .support h3{margin-top:0}
 .prose .warn{background:#fff4e0;border-left:4px solid #c06000;padding:.75em 1em;margin:1em 0}
 
+/* Leaflet reach-popup (consumed by gauge_map.php and the map.html popup) */
+.leaflet-popup-content:has(.reach-popup){margin:0}
+.reach-popup{display:block;color:var(--c-text);text-decoration:none;padding:10px 14px;border-radius:8px;cursor:pointer}
+.reach-popup:hover{background:var(--c-hover)}
+.reach-popup:focus-visible{outline:2px solid var(--c-link);outline-offset:-2px;background:var(--c-hover)}
+.reach-popup .rp-name{font-weight:700;font-size:.95rem;line-height:1.3}
+.reach-popup .rp-loc{font-size:.85rem;color:var(--c-text-muted);margin-top:2px}
+.reach-popup .rp-cls{font-size:.85rem;color:var(--c-text-muted);margin-top:2px}
+
 /* Print */
 @media print{
   header,.letter-nav,footer,.picker-actions{display:none}

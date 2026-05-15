@@ -278,7 +278,7 @@ function _render_gauge_header(array $gauge, string $gauge_display): void
     header('Cache-Control: no-cache');
     include_header(
         $gauge_display . ' - Gauge',
-        '', '', '',
+        '', '', gm_head_links(),
         ['type' => 'gauge', 'id' => (int)$gauge['id']]
     );
 }

@@ -3,10 +3,26 @@ declare(strict_types=1);
 /**
  * Shared Leaflet map emitter for gauge/reach detail pages.
  *
- * Emits an inline <style> block (from static/leaflet.css) and a div that
- * static/feature-map.js picks up after page load. The caller decides which
- * labelled points to show and whether to attach a river track polyline.
+ * Emits a div that static/feature-map.js picks up after page load. The
+ * caller decides which labelled points to show and whether to attach a
+ * river track polyline.
+ *
+ * Callers MUST include the Leaflet stylesheet in <head> via gm_head_links()
+ * — emitting <style> from here would land it inside <main>, which the HTML
+ * spec disallows (style is metadata, not flow content). The reach-popup
+ * CSS is shipped in the main style.css, so no per-page injection needed.
  */
+
+/**
+ * Return the <head> fragment a map-bearing page must include in extra_head.
+ *
+ * Currently just the Leaflet stylesheet link. Static, but exposed as a
+ * function so future additions (preload hints, etc) have one place to land.
+ */
+function gm_head_links(): string
+{
+    return '<link rel="stylesheet" href="/static/leaflet.css">';
+}
 
 /**
  * Render a Leaflet map block with labelled markers + optional river track(s).
@@ -76,33 +92,6 @@ function gm_render_map(
     $color_attr  = htmlspecialchars($track_color);
     $rt_attr     = htmlspecialchars($rt_json);
 
-    // leaflet.css lives at <docroot>/static/leaflet.css. __DIR__ resolves
-    // to the PHP source path (kayak/php/includes), not the doc root, so
-    // resolve via $_SERVER['DOCUMENT_ROOT'] which nginx sets per fastcgi.
-    //
-    // Cached in a static so subsequent requests served by the same FPM
-    // worker skip the ~15KB disk read. Empty string is the cached-miss
-    // sentinel (distinguishable from null = unprimed).
-    static $leaflet_css = null;
-    if ($leaflet_css === null) {
-        $css_path = $_SERVER['DOCUMENT_ROOT'] . '/static/leaflet.css';
-        $contents = @file_get_contents($css_path);
-        $leaflet_css = $contents !== false ? $contents : '';
-    }
-    if ($leaflet_css !== '') {
-        echo '<style>' . $leaflet_css . '</style>';
-    }
-    // Popup styles for clickable reach tracks (gauge page). Mirrors the
-    // map.html popup so the look is consistent across pages.
-    echo '<style>'
-        . '.leaflet-popup-content:has(.reach-popup){margin:0}'
-        . '.reach-popup{display:block;color:var(--c-text);text-decoration:none;padding:10px 14px;border-radius:8px;cursor:pointer}'
-        . '.reach-popup:hover{background:var(--c-hover)}'
-        . '.reach-popup:focus-visible{outline:2px solid var(--c-link);outline-offset:-2px;background:var(--c-hover)}'
-        . '.reach-popup .rp-name{font-weight:700;font-size:.95rem;line-height:1.3}'
-        . '.reach-popup .rp-loc{font-size:.85rem;color:var(--c-text-muted);margin-top:2px}'
-        . '.reach-popup .rp-cls{font-size:.85rem;color:var(--c-text-muted);margin-top:2px}'
-        . '</style>';
     echo '<div id="feature-map"'
         . ' style="height:350px;margin-top:1rem;border:1px solid #ccc"'
         . ' data-points="' . $points_attr . '"'
