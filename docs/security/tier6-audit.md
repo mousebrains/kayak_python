@@ -1,6 +1,6 @@
 # Tier 6 — Hardening + closeout audit
 
-> Per `docs/PLAN_editor_security_review.md` § Tier 6. Applies the findings + decisions from Tiers 1–5; produces a final posture summary.
+> Per `docs/done/PLAN_editor_security_review.md` § Tier 6. Applies the findings + decisions from Tiers 1–5; produces a final posture summary.
 >
 > Cross-references: [findings.md](findings.md) for per-finding status; [decisions.md](decisions.md) for D-T1..5.x; [posture.md](posture.md) for the rolled-up summary; per-tier audit logs for the source analysis.
 

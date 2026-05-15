@@ -1,6 +1,6 @@
 # Tier 2 — Authorization review audit log
 
-> **Started:** 2026-05-12 against `main` at `aadb63c`. Per `docs/PLAN_editor_security_review.md` Tier 2 verification gate: "Authorization matrix documented (role × endpoint → expected response); each row tested; IDOR sweep produced no findings (or each one is filed)."
+> **Started:** 2026-05-12 against `main` at `aadb63c`. Per `docs/done/PLAN_editor_security_review.md` Tier 2 verification gate: "Authorization matrix documented (role × endpoint → expected response); each row tested; IDOR sweep produced no findings (or each one is filed)."
 >
 > Verdict legend: ✅ pass / ⚠ partial / ❌ fail / ⊘ N/A.
 

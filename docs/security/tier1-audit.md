@@ -1,6 +1,6 @@
 # Tier 1 — Authentication review audit log
 
-> **Started:** 2026-05-12 against `main` at `21c9e1a`. Per `docs/PLAN_editor_security_review.md` Tier 1 verification gate: "Each of the above tested with a written log of pass/fail/N/A; failures filed as findings; mitigation effort estimated for each finding."
+> **Started:** 2026-05-12 against `main` at `21c9e1a`. Per `docs/done/PLAN_editor_security_review.md` Tier 1 verification gate: "Each of the above tested with a written log of pass/fail/N/A; failures filed as findings; mitigation effort estimated for each finding."
 >
 > Verdict legend: ✅ pass / ⚠ partial / ❌ fail / ⊘ N/A.
 
@@ -133,7 +133,7 @@ Impact rating: **Critical** for the editor pipeline, but **bounded** — the att
 
 ### Audit (c) — 2FA decision
 
-Three documented options (decision menu from `docs/PLAN_editor_security_review.md` Tier 1.3):
+Three documented options (decision menu from `docs/done/PLAN_editor_security_review.md` Tier 1.3):
 
 | Option | Cost | Strength | UX cost | Notes |
 |---|---|---|---|---|

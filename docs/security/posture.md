@@ -1,6 +1,6 @@
 # Editor pipeline — security posture summary (2026-05-12)
 
-> Final posture doc produced by Tier 6 of `docs/PLAN_editor_security_review.md`. Snapshot of what controls exist, what's accepted/deferred and why, and the operator's standing obligations. Update on major changes (per D-T5.3) or during the annual light-touch re-review (next: ~2027-05-12).
+> Final posture doc produced by Tier 6 of `docs/done/PLAN_editor_security_review.md`. Snapshot of what controls exist, what's accepted/deferred and why, and the operator's standing obligations. Update on major changes (per D-T5.3) or during the annual light-touch re-review (next: ~2027-05-12).
 
 ## At a glance
 
@@ -107,7 +107,7 @@ Recurring obligations from the security review:
 
 ## Out-of-scope items
 
-Documented in `docs/PLAN_editor_security_review.md` under "Out of scope":
+Documented in `docs/done/PLAN_editor_security_review.md` under "Out of scope":
 - External pentest, WAF, code-signing / SBOM, compliance certifications, DDoS protection beyond Hetzner default, PHP-layer code refactor (tracked separately in `docs/done/PLAN_php_layer_split.md`).
 
 ## Update triggers for this doc

@@ -1,6 +1,6 @@
 # Security decisions log
 
-> Per `docs/PLAN_editor_security_review.md`: each tier's decision points get a written choice + rationale here. Decisions are versioned by date; superseded entries stay for audit trail.
+> Per `docs/done/PLAN_editor_security_review.md`: each tier's decision points get a written choice + rationale here. Decisions are versioned by date; superseded entries stay for audit trail.
 >
 > Cross-references: [findings.md](findings.md) for the gaps being decided about; [tier1-audit.md](tier1-audit.md) (and future per-tier audit logs) for the analysis backing each decision.
 

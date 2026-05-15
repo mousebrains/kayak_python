@@ -1,6 +1,6 @@
 # Editor pipeline threat model
 
-> **Drafted:** 2026-05-12 against `main` at `86cfa9a`. Part of `docs/PLAN_editor_security_review.md` Tier 0.3. STRIDE-style; proportional (nation-state actors out of scope).
+> **Drafted:** 2026-05-12 against `main` at `86cfa9a`. Part of `docs/done/PLAN_editor_security_review.md` Tier 0.3. STRIDE-style; proportional (nation-state actors out of scope).
 >
 > Read [editor-surface.md](editor-surface.md) first for the asset inventory and component map. [controls-map.md](controls-map.md) maps each threat below to existing mitigations and gaps; gaps become entries in [findings.md](findings.md).
 
@@ -119,7 +119,7 @@ Sorting by (Impact × Likelihood) — likelihood is rough qualitative.
 
 ## Cross-reference to plan's existing findings
 
-Plan-doc seeds (from `docs/PLAN_editor_security_review.md` Constraints + Phase 1.1/1.5 notes) map to:
+Plan-doc seeds (from `docs/done/PLAN_editor_security_review.md` Constraints + Phase 1.1/1.5 notes) map to:
 
 - "Magic-link token in URL" → **T-S1 / T-I4**
 - "HSTS may not be enabled" → adjacent to **T-S3** (HSTS reduces session-cookie capture risk on first-load HTTP→HTTPS)

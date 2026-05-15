@@ -1,12 +1,64 @@
 # Plan — Editor feature security review
 
-**Status:** Drafted (iter 9 stopped 2026-05-12, 1 finding). Not yet
-executed — menu-style tiers 2–5 await per-tier decisions; Tier 0 threat
-model is the gating output before subsequent tiers can be sized.
+**Status:** Closed (2026-05-12, verified clean 2026-05-15). All 6 tiers
+executed; closeout summary lives in
+[`docs/security/posture.md`](security/posture.md). Per-tier artifacts:
 
-> **Cross-check:** plan drafted 2026-05-11 against the editor surface deployed in `project_editor_feature` (Phase 1+2). The structure of this plan is **menu-style** for tiers 2–5 because the user has flagged that real-world options matter — each tier presents the choice space rather than a prescriptive pick. Tier 0 (threat model) is the only tier whose output is mandatory before subsequent tiers can be sized.
->
-> A second Claude session should re-run the read-only commands in **§Reproduce** to confirm the editor-related file and DB-table inventory hasn't shifted.
+- **Tier 0 — threat model + inventory:** `docs/security/editor-surface.md`,
+  `threat-model.md`, `controls-map.md`.
+- **Tier 1 — authentication review:** `docs/security/tier1-audit.md`.
+  Decision D-T1.3 → "magic-link only" (Option A, accepted with second-
+  maintainer-trigger re-evaluation).
+- **Tier 2 — authorization review:** `docs/security/tier2-audit.md`.
+  IDOR sweep clean; D-T2.4 → audit-trail tamper-resistance accepted
+  (DB + backups + web-side controls suffice for current scale).
+- **Tier 3 — input/output handling:** `docs/security/tier3-audit.md`.
+  XSS / SQLi / CSRF sweeps clean; file-upload phase deferred (schema
+  present, no PHP endpoint wired — D-T3.3).
+- **Tier 4 — user-data obligations:** `docs/security/tier4-audit.md`.
+  All five decision points written up in
+  `docs/security/decisions.md` (D-T4.1 manual deletion via CLI,
+  D-T4.2 manual export via CLI, D-T4.3 90-day retention purge timer,
+  D-T4.4 no ToS, D-T4.5 security.txt minimal).
+- **Tier 5 — disclosure + response:** `docs/security/tier5-audit.md`
+  + `docs/security/incident-response.md`. D-T5.1/2/3 captured.
+- **Tier 6 — hardening + closeout:** `docs/security/tier6-audit.md`
+  applied findings F-1 (HSTS, `ff107e8`), F-2 (magic-link log
+  redaction), F-14 (Referrer-Policy on `/auth.php`), F-15 (session-
+  revocation regression test), F-16 (privacy.php refresh). Magic-link
+  flow split GET-interstitial → POST-consume in `9b05b4a`.
+
+**Findings ledger (per [`findings.md`](security/posture.md) at posture
+date 2026-05-12):**
+- 5 **Closed** by code/config in Tier 6.
+- 6 **Accepted** with re-evaluation triggers (F-3, F-4, F-5, F-6, F-7,
+  F-8); rationale in `decisions.md`.
+- 2 **Deferred** to the second-maintainer trigger (F-9, F-13).
+- 3 **Open** — operator-side live-host confirmations only (F-10, F-11,
+  F-12); no remaining plan work.
+
+**Standing operator obligations** captured in `posture.md`:
+- Daily security gmail check at `pat.kayak@gmail.com`.
+- Daily `kayak-editor-retention.timer` purge of expired magic-links /
+  sessions (90-day TTL).
+- `static/security.txt` Expires refresh by 2027-04-01.
+- Annual light-touch re-review ~2027-05-12.
+
+**Residual deferred work** stays gated by explicit triggers:
+- WebAuthn / passkey wiring (`maintainer_credential` schema present,
+  PHP not wired) — D-T1.3 trigger = second maintainer joins.
+- File-upload audit (Phase 3.3) — D-T3.3 trigger = upload endpoint
+  added.
+- Audit-trail external-sink hardening — D-T2.4 trigger = second
+  maintainer or compliance regime.
+
+> **Cross-check:** plan drafted 2026-05-11 against the editor surface
+> deployed in `project_editor_feature` (Phase 1+2). Original draft was
+> menu-style for tiers 2-5 because real-world options needed
+> calibration; the decisions made are now captured in
+> `docs/security/decisions.md`. Closeout doc moved under `docs/done/`
+> matching `PLAN_orphan_sources.md` / `PLAN_c901_cleanup.md` /
+> `PLAN_tier3_closeout.md` precedent.
 
 ## Why
 

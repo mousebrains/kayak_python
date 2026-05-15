@@ -1,6 +1,6 @@
 # Editor surface inventory
 
-> **Drafted:** 2026-05-12 against `main` at `9446e51`. Part of `docs/PLAN_editor_security_review.md` Tier 0. Reading order: this doc enumerates the surface; [threat-model.md](threat-model.md) enumerates risks against it; [controls-map.md](controls-map.md) maps existing controls to those risks; [findings.md](findings.md) tracks gaps.
+> **Drafted:** 2026-05-12 against `main` at `9446e51`. Part of `docs/done/PLAN_editor_security_review.md` Tier 0. Reading order: this doc enumerates the surface; [threat-model.md](threat-model.md) enumerates risks against it; [controls-map.md](controls-map.md) maps existing controls to those risks; [findings.md](findings.md) tracks gaps.
 >
 > This doc is updated when a new PHP endpoint, DB table, cookie, rate limit, or external service joins the editor pipeline. Stale-data risk is highest for the "Cross-tier counts" sub-section.
 

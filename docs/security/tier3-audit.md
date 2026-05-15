@@ -1,6 +1,6 @@
 # Tier 3 — Input/output handling audit log
 
-> **Started:** 2026-05-12 against `main` at `670212d`. Per `docs/PLAN_editor_security_review.md` Tier 3 verification gate: "Each input vector tested (or marked N/A with reason); file-upload posture documented and tested; CSRF coverage matrix complete."
+> **Started:** 2026-05-12 against `main` at `670212d`. Per `docs/done/PLAN_editor_security_review.md` Tier 3 verification gate: "Each input vector tested (or marked N/A with reason); file-upload posture documented and tested; CSRF coverage matrix complete."
 >
 > Verdict legend: ✅ pass / ⚠ partial / ❌ fail / ⊘ N/A.
 

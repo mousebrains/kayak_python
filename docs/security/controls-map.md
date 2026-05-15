@@ -1,6 +1,6 @@
 # Existing-controls map
 
-> **Drafted:** 2026-05-12 against `main` at `beaf58a`. Part of `docs/PLAN_editor_security_review.md` Tier 0.4. Each threat from [threat-model.md](threat-model.md) gets one row: existing control (with `file:line`), status (✓ in place / ⚠ partial / ✗ missing), and a finding marker `[F-Nn]` linking to [findings.md](findings.md) where status is ⚠/✗.
+> **Drafted:** 2026-05-12 against `main` at `beaf58a`. Part of `docs/done/PLAN_editor_security_review.md` Tier 0.4. Each threat from [threat-model.md](threat-model.md) gets one row: existing control (with `file:line`), status (✓ in place / ⚠ partial / ✗ missing), and a finding marker `[F-Nn]` linking to [findings.md](findings.md) where status is ⚠/✗.
 >
 > Read [editor-surface.md](editor-surface.md) for the asset/component reference; [threat-model.md](threat-model.md) for the threat IDs (`T-Sn`/`T-Tn`/`T-Rn`/`T-In`/`T-Dn`/`T-En`).
 

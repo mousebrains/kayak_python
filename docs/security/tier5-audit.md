@@ -1,6 +1,6 @@
 # Tier 5 — Disclosure + response audit
 
-> Per `docs/PLAN_editor_security_review.md` § Tier 5. Three decision points (disclosure path / IR cadence / re-review cadence) plus two phases (IR runbook draft / backup-restore drill from a security angle).
+> Per `docs/done/PLAN_editor_security_review.md` § Tier 5. Three decision points (disclosure path / IR cadence / re-review cadence) plus two phases (IR runbook draft / backup-restore drill from a security angle).
 >
 > Cross-references: [decisions.md](decisions.md) for the formal D-T5.x entries; [incident-response.md](incident-response.md) for the runbook produced in Phase 5.4; [tier4-audit.md](tier4-audit.md) Phase 4.5 for the `security.txt` content that lives alongside D-T5.1.
 

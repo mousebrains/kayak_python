@@ -1,6 +1,6 @@
 # `docs/security/`
 
-Security artifacts for the editor pipeline. Maintained per `docs/PLAN_editor_security_review.md`.
+Security artifacts for the editor pipeline. Maintained per `docs/done/PLAN_editor_security_review.md`.
 
 ## Contents
 
@@ -51,5 +51,5 @@ For someone returning to update controls after a code change:
 
 ## Out of scope
 
-Documented in `docs/PLAN_editor_security_review.md` under "Out of scope":
+Documented in `docs/done/PLAN_editor_security_review.md` under "Out of scope":
 - External pentest, WAF, code-signing/SBOM, compliance certifications, DDoS protection beyond Hetzner default, PHP-layer code refactor (tracked separately in `docs/done/PLAN_php_layer_split.md`).

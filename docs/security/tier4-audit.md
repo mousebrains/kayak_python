@@ -1,6 +1,6 @@
 # Tier 4 — User-data obligations audit
 
-> Per `docs/PLAN_editor_security_review.md` § Tier 4. Five decision points (account deletion / data export / retention / privacy + ToS / security.txt). Unlike Tiers 1–3, this tier is almost entirely decisions — there is little to "test." The audit captures the current state, surfaces the menu, and records the rationale for each choice.
+> Per `docs/done/PLAN_editor_security_review.md` § Tier 4. Five decision points (account deletion / data export / retention / privacy + ToS / security.txt). Unlike Tiers 1–3, this tier is almost entirely decisions — there is little to "test." The audit captures the current state, surfaces the menu, and records the rationale for each choice.
 >
 > Cross-references: [editor-surface.md](editor-surface.md) for the asset inventory, [findings.md](findings.md) for the resulting actions, [decisions.md](decisions.md) for the formal D-T4.x entries.
 

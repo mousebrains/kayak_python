@@ -1,6 +1,6 @@
 # Incident response runbook — editor pipeline
 
-> Maintained per Tier 5 of `docs/PLAN_editor_security_review.md`. Aligned with D-T5.1 (security.txt-only disclosure), D-T5.2 (best-effort response), D-T5.3 (major-change-triggered re-review).
+> Maintained per Tier 5 of `docs/done/PLAN_editor_security_review.md`. Aligned with D-T5.1 (security.txt-only disclosure), D-T5.2 (best-effort response), D-T5.3 (major-change-triggered re-review).
 >
 > Audience: the operator (single-maintainer today; second maintainer would inherit this). Pre-incident, the operator should read this end-to-end once.
 

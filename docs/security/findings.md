@@ -2,7 +2,7 @@
 
 > **Status:** Seeded at Tier 0 (2026-05-12). 13 findings filed; each gets a Tier-1+ disposition (fix / accept-as-risk / defer-with-date).
 >
-> Cross-references: threats in [threat-model.md](threat-model.md) (`T-Xn`); controls in [controls-map.md](controls-map.md). See `docs/PLAN_editor_security_review.md` for the tier workflow.
+> Cross-references: threats in [threat-model.md](threat-model.md) (`T-Xn`); controls in [controls-map.md](controls-map.md). See `docs/done/PLAN_editor_security_review.md` for the tier workflow.
 
 ## Status legend
 
