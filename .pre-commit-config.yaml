@@ -17,6 +17,8 @@ repos:
           - python-dotenv
           - lxml-stubs
           - aiohttp
+          - pydantic>=2.7
+          - pydantic-settings>=2.4
         pass_filenames: false
         args: [src/]
 

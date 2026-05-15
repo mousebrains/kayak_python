@@ -15,6 +15,8 @@ dependencies = [
     "python-dotenv>=1.0",
     "PyYAML>=6.0",
     "aiohttp>=3.13.4",   # CVE-2026-34513..34525 (10 CVEs) fixed in 3.13.4
+    "pydantic[email]>=2.7,<3",       # T3.3 typed config — 2.7 is first 3.13-supporting release; [email] pulls email-validator for EmailStr
+    "pydantic-settings>=2.4,<3",      # T3.3 typed config — env-driven BaseSettings; 2.4 ships 3.13 wheels
 ]
 
 [project.optional-dependencies]
