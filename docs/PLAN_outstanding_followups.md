@@ -676,10 +676,17 @@ source of truth for our use case.
   --tag` until T3.6 release.sh lands), lists six destructive migrations
   that make code-only rollback insufficient, points at backup restore for
   the cross-migration case.
-- **SLO definitions:** add to `docs/operations.md` (or split out
-  `docs/slo.md` per production-discipline §4.3). Targets: availability
-  ≥99.5%, pipeline freshness ≤2h stale per source, backup RPO ≤1h
-  confirmed.
+- **SLO definitions** — done 2026-05-14 in `docs/slo.md` (split out
+  per production-discipline §4.3). Five targets: availability A
+  (≥99.5%/30d), freshness F (≤2h/source), backup RPO B (≤1h), build
+  freshness D (≤75min), magic-link delivery E (≥95%). Each row names
+  the measurement signal + dashboard. "What's not an SLO" section
+  documents the deliberate omissions.
+- **Bus-factor partner** — done 2026-05-14 in `docs/operations.md`
+  §Bus-factor partner. Documents what the partner needs (access
+  matrix), walkthrough cadence (annual), escalation path, and the
+  pre-departure checklist. Walkthrough log seeded empty; first entry
+  due when the partner is identified.
 - **Bus-factor partner** (production-discipline §4.5): identify one
   trusted person; walk through `docs/operations.md` together; document
   escalation path; arrange read-only SSH access.

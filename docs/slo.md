@@ -1,0 +1,85 @@
+# Service-level objectives
+
+Per `PLAN_production_discipline.md` Tier 4 / `PLAN_outstanding_followups.md`
+§6.2. These targets describe what "healthy" means for the live site
+(`levels.mousebrains.com`). Single operator, hobby project — these are
+internal thresholds for "should I look at this," not external SLAs.
+
+When an SLO trends red, file it as an issue in the next operator review
+(see `docs/operations.md` § Bus-factor partner) and decide whether the
+target needs revision, a control needs strengthening, or the incident
+was load-bearing for a one-off and the trend ignores it.
+
+## Targets
+
+| # | SLO | Target | Measurement | Where the signal lives |
+|---|---|---|---|---|
+| **A** | Site availability | ≥ **99.5% / 30d** (~3.6 h/month error budget) | Better Stack uptime monitor on `https://levels.mousebrains.com/`, 3-min interval, HTTP 2xx | Better Stack dashboard `Uptime / kayak` |
+| **F** | Pipeline freshness per source | ≤ **2 h** since `latest_observation.observed_at` for active sources during their feed's expected cadence | `scripts/health-check.sh` exits non-zero on stale; surfaced via `kayak-healthcheck.service` heartbeat | `journalctl -u kayak-healthcheck` + healthchecks.io `kayak-healthcheck` check |
+| **B** | Backup RPO | ≤ **1 h** confirmed by a successful hourly snapshot | `kayak-backup-hourly.service` (hourly `*:38`) pings healthchecks.io on success; backup files land at `/home/pat/kayak/backups/backup-<UTC>.db.gz` | healthchecks.io `kayak-backup-hourly` check + `ls -la /home/pat/kayak/backups/` |
+| **D** | Build-time freshness | New static HTML written within **75 min** of the hourly pipeline tick (`kayak-pipeline.timer` runs at `*:12`, ~30 min budget for fetch + calc + build, +headroom) | `kayak-pipeline.service` heartbeat ping fires only after the build step exits 0 | healthchecks.io `kayak-pipeline` check + `stat /home/pat/public_html/Oregon.html` |
+| **E** | Editor magic-link delivery | ≥ **95% / 30d** of magic-link emails reach the inbox within 60 s | `php/includes/mail.php` logs every send attempt; success measured by absence of msmtp error in `journalctl` and operator-noticed bounces | `journalctl -t magiclink` + `php/includes/mail.php` retry counters |
+
+## How the budgets fire
+
+* **Availability (A).** Better Stack alerts when the monitor's 3-min check
+  fails twice in a row (≈6 min of downtime). One ~6-min hiccup costs ~3%
+  of the monthly error budget. Two unrelated 6-min hiccups in a month
+  still leave headroom; three or four says "stop tolerating one-off
+  flakes."
+* **Freshness (F).** `scripts/health-check.sh` returns non-zero when any
+  active source's last observation is older than the feed's expected
+  cadence + 2 h. Healthchecks.io fires when the heartbeat doesn't ping
+  on time *or* the service exits non-zero (`ExecStartPost=-/usr/bin/curl`
+  only runs when `ExecStart` succeeds). So "stale" and "unit crashed"
+  both surface as the same alert.
+* **Backup (B).** The hourly snapshot is the load-bearing RPO control.
+  The Sunday weekly snapshot is the lower-volume retention copy plus
+  the off-site upload trigger; it does not count toward the RPO target.
+* **Build freshness (D).** The 75-min ceiling matches the operational
+  note in `PLAN_production_discipline.md` Tier 1.2 — Better Stack pages
+  "for hourly timers, fires within ~75 min" if the heartbeat goes
+  missing. If real fetch times grow above the budget (e.g. USGS OGC
+  going slow), tighten the pipeline DAG or split fetch into a second
+  service before raising the SLO.
+* **Magic-link (E).** A degraded msmtp / Gmail relay manifests as
+  `mail.php` returning `false` from `send_magic_link()`. The 95% target
+  reflects "best-effort, no second-channel fallback" — failures should
+  be rare but aren't paged. Trending degradation triggers a rotation
+  of the Gmail app-password or a switch to a transactional provider.
+
+## What's intentionally not an SLO
+
+* **Pipeline successes per day.** Per-source flake is normal and
+  expected (network blips, upstream maintenance). The freshness SLO (F)
+  catches the case that matters — observations stopped arriving — not
+  the journal of which feed hiccuped on any given tick.
+* **Editor uptime.** The editor surface (login / propose / review) is
+  load-bearing for the maintainer workflow but not for public reads.
+  Outage there is captured by SLO A (whole-site 200) plus the editor
+  feature's own healthcheck path; it doesn't need a separate SLO.
+* **Off-site backup latency.** The `kayak-backup-offsite.service`
+  chained behind Sunday's weekly snapshot adds a second copy outside
+  Hetzner. Failures already alert (Phase 1.4 notifier); a separate SLO
+  here would just duplicate that signal.
+* **Pipeline test-suite green-rate.** That belongs in CI dashboards,
+  not the production-discipline SLO list.
+
+## Re-evaluation
+
+These targets are deliberately conservative — they let an obvious
+regression surface without paging on every transient. Revisit when:
+
+* A single month burns >50 % of the availability error budget (3.6 h ×
+  0.5 ≈ **108 min downtime**) and the cause was not load-bearing.
+* The freshness SLO trips twice in 30 days on the same source — either
+  the source is unreliable enough to deserve a longer per-source
+  window, or the upstream API has changed and the parser needs
+  attention.
+* The hourly backup snapshot misses for any reason during normal
+  operation. RPO ≤ 1 h is the headline number for "what can we lose if
+  the disk dies right now"; it's not negotiable without a deliberate
+  decision.
+* A new SLO becomes obviously load-bearing (e.g. when a second
+  maintainer joins, the editor surface's availability probably needs
+  its own target).

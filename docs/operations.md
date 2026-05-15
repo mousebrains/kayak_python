@@ -404,6 +404,86 @@ pushed in the meantime — that's the safety belt for the rare two-
 operator case. Open a follow-up commit on `main` to undo or fix the
 regression rather than leaving `main` permanently behind.
 
+## Bus-factor partner
+
+Single-operator hobby project. If the operator is unreachable for a
+period long enough to matter (vacation, hospital, life event), the
+site can still serve cached static HTML for weeks — what degrades
+first is the freshness SLO (see [docs/slo.md](slo.md) F), and the
+recovery flows in this document need a human at the keyboard.
+
+The bus-factor partner is one trusted person who can keep the lights
+on for a short window without the operator. **No formal SLA**; the
+relationship is "best-effort backup on-call."
+
+### What the partner needs
+
+| Item | Where it lives | Who grants |
+|---|---|---|
+| Read access to this runbook + `docs/slo.md` + `docs/security/incident-response.md` | Public repo at `github.com/mousebrains/kayak_python` | Already public |
+| SSH access to `levels.mousebrains.com` | Hetzner VPS | Operator adds the partner's pubkey to `~/.ssh/authorized_keys` (read-only `pat` access is enough for diagnosis; full deploy access only if the partner is expected to ship fixes) |
+| Healthchecks.io view access | Free-tier team feature | Operator invites by email from the project dashboard |
+| Better Stack view access | Free-tier team feature | Operator invites by email |
+| ntfy.sh topic name | `NTFY_TOPIC` in `~/.config/kayak/.env` | Operator shares the topic out-of-band (1Password, signed message, in-person); rotate after sharing if practical |
+| Gmail account credentials *(only if mail-path recovery is expected)* | `pat.kayak@gmail.com` | 1Password share; rotate after revocation |
+| `~/.config/kayak/.env` contents | `chmod 600` on the live host | Operator hands over an SSH-copyable snapshot; sensitive (DB url, captcha secrets, `NTFY_TOPIC`) |
+
+The partner does **not** need write access to GitHub or the
+`gdrive-crypt:` remote unless they're expected to push hotfixes or
+restore from off-site — both are deliberate escalation steps.
+
+### Walkthrough cadence
+
+Once a year (or whenever this runbook changes substantially), the
+operator should:
+
+1. Open [`docs/operations.md`](operations.md) and
+   [`docs/security/incident-response.md`](security/incident-response.md)
+   side-by-side with the partner.
+2. Walk through each `§` of this file, confirming the partner can
+   find each command and knows what triggers each procedure.
+3. Run one practice drill from the partner's machine — typical
+   choice is the restore drill (§Backup + restore → Restore from
+   local hourly), recovering into a scratch directory rather than
+   the live DB.
+4. Log the walkthrough date + any gaps surfaced in a short
+   addendum at the top of this section (date + initials + "next
+   walkthrough due YYYY-MM-DD").
+
+### Escalation path
+
+If something is on fire and the partner is the only available
+operator:
+
+1. **Confirm scope.** Open `levels.mousebrains.com`; check the
+   Better Stack dashboard; run `systemctl list-timers --all
+   'kayak-*' --no-pager` over SSH.
+2. **Try the lowest-risk fix first.** A restart (`sudo systemctl
+   restart kayak-pipeline.service`) is the lowest-blast-radius
+   action; a deploy is next; a restore from backup is the highest
+   blast-radius option (do not invoke without operator
+   authorization unless the DB is demonstrably corrupt).
+3. **Document everything.** Append a short journal entry to
+   [`docs/security/incident-response.md`](security/incident-response.md)
+   at the bottom (date, action, outcome) so the operator can pick
+   up the thread on return.
+
+### Standing list of "things to tell the partner before leaving"
+
+- Where the off-site backup lives (`gdrive-crypt:` rclone remote;
+  passphrase in 1Password).
+- That ntfy.sh's topic name *is* the credential — don't paste it.
+- That `db_push.sh` is operator-only and the partner should NEVER
+  run it (live DB overwrite). `db_pull.sh` is safe.
+- That the live host runs the `pat` user; there is no separate
+  deploy user yet.
+- Expected return date + how to reach the operator if absolutely
+  required (operator's preferred channel for emergencies).
+
+> *Walkthrough log:*
+> *Not yet conducted. First walkthrough scheduled when the partner
+> is identified.*
+
 ## Quick reference: stop everything before a destructive operation
 
 ```bash
