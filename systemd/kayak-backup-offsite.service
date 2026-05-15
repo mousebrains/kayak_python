@@ -8,6 +8,14 @@ OnFailure=kayak-notify-failure@%n.service
 Type=oneshot
 User=pat
 WorkingDirectory=/home/pat/kayak
+# Paths in WorkingDirectory= / EnvironmentFile= / ReadWritePaths= AND
+# the binary path in ExecStart= itself are LITERAL — systemd does not
+# expand $VAR in those positions (executable name must be an absolute
+# literal per systemd.exec). ExecStart= arguments and ExecStartPost=
+# DO expand ${KAYAK_HOME} (set by /etc/kayak/env with the in-unit
+# fallback default below).
+Environment=KAYAK_HOME=/home/pat
+EnvironmentFile=-/etc/kayak/env
 EnvironmentFile=/home/pat/.config/kayak/.env
 ExecStart=/home/pat/kayak/systemd/kayak-backup-offsite.sh
 # `-` prefix: a transient curl failure on the heartbeat won't cascade to a

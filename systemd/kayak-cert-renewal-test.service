@@ -7,6 +7,14 @@ OnFailure=kayak-notify-failure@%n.service
 [Service]
 Type=oneshot
 User=root
+# Paths in WorkingDirectory= / EnvironmentFile= / ReadWritePaths= AND
+# the binary path in ExecStart= itself are LITERAL — systemd does not
+# expand $VAR in those positions (executable name must be an absolute
+# literal per systemd.exec). ExecStart= arguments and ExecStartPost=
+# DO expand ${KAYAK_HOME} (set by /etc/kayak/env with the in-unit
+# fallback default below).
+Environment=KAYAK_HOME=/home/pat
+EnvironmentFile=-/etc/kayak/env
 EnvironmentFile=/home/pat/.config/kayak/.env
 ExecStart=/usr/bin/certbot renew --dry-run --quiet --non-interactive --no-random-sleep-on-renew
 ExecStartPost=-/usr/bin/curl -fsS -m 10 --retry 3 -o /dev/null ${HC_CERT_RENEWAL_TEST}

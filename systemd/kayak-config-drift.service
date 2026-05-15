@@ -9,6 +9,14 @@ Type=oneshot
 # world-readable; we need root to stat + cmp them. The script never
 # writes anything — it's pure diff + reporting.
 User=root
+# Paths in WorkingDirectory= / EnvironmentFile= / ReadWritePaths= AND
+# the binary path in ExecStart= itself are LITERAL — systemd does not
+# expand $VAR in those positions (executable name must be an absolute
+# literal per systemd.exec). ExecStart= arguments and ExecStartPost=
+# DO expand ${KAYAK_HOME} (set by /etc/kayak/env with the in-unit
+# fallback default below).
+Environment=KAYAK_HOME=/home/pat
+EnvironmentFile=-/etc/kayak/env
 EnvironmentFile=-/home/pat/.config/kayak/.env
 ExecStart=/home/pat/kayak/scripts/check-config-drift.sh
 # `-` prefix: a transient hc-ping curl glitch shouldn't cascade to OnFailure.

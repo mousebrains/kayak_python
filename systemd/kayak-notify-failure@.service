@@ -7,6 +7,14 @@ User=pat
 # `-` prefix: unit still works if the env file is missing; the ntfy branch
 # in ExecStart is guarded on NTFY_TOPIC being non-empty, so a missing file
 # just disables the push channel (email + syslog paths unaffected).
+# Paths in WorkingDirectory= / EnvironmentFile= / ReadWritePaths= AND
+# the binary path in ExecStart= itself are LITERAL — systemd does not
+# expand $VAR in those positions (executable name must be an absolute
+# literal per systemd.exec). ExecStart= arguments and ExecStartPost=
+# DO expand ${KAYAK_HOME} (set by /etc/kayak/env with the in-unit
+# fallback default below).
+Environment=KAYAK_HOME=/home/pat
+EnvironmentFile=-/etc/kayak/env
 EnvironmentFile=-/home/pat/.config/kayak/.env
 # Log to syslog (source of truth) then attempt email + push. Each channel
 # pipes any failure back to syslog so broken msmtp or curl doesn't silently
