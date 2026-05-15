@@ -82,6 +82,18 @@ fi
 echo ">>> levels migrate"
 "$LEVELS" migrate
 
+# --- 3.5. emit /etc/kayak/runtime-config.json -------------------------
+#
+# Writes the typed-config JSON snapshot consumed by PHP. Atomic (same-
+# dir .tmp + rename) and idempotent (skips the write when the resolved
+# config hasn't changed). Requires the deploy/sudoers.d/kayak-emit-config
+# grant to be installed at /etc/sudoers.d/kayak-emit-config (one-time
+# operator setup; see deploy/SETUP.md). No php-fpm reload needed —
+# PHP re-reads the JSON file once per request.
+
+echo ">>> sudo -n levels emit-config"
+sudo -n "$LEVELS" emit-config --out /etc/kayak/runtime-config.json
+
 # --- 4. build static HTML ---------------------------------------------
 
 echo ">>> levels build"

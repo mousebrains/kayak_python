@@ -1,0 +1,31 @@
+# /etc/sudoers.d/kayak-emit-config
+#
+# Grants user `pat` password-less sudo for the typed-config emit
+# command. Required by scripts/deploy.sh's mid-deploy step:
+#
+#     sudo -n /home/pat/.venv/bin/levels emit-config --out /etc/kayak/runtime-config.json
+#
+# The grant is pinned to the exact `levels` binary path under
+# /home/pat/.venv/bin/ and the `emit-config` subcommand. The trailing
+# `*` covers --out and --dry-run flags but never strays outside the
+# levels CLI's emit-config subcommand.
+#
+# Install (on the live server, as root):
+#
+#     install -m 440 -o root -g root \
+#         /home/pat/kayak/deploy/sudoers.d/kayak-emit-config \
+#         /etc/sudoers.d/kayak-emit-config
+#     visudo -cf /etc/sudoers.d/kayak-emit-config   # validate
+#
+# Requirements:
+#   - file mode must be 440
+#   - owner must be root:root
+#   - the file must pass `visudo -cf` before being reloaded
+#
+# Why this is safe: emit-config's only side effect is to write the
+# JSON snapshot to /etc/kayak/runtime-config.json (mode 0640
+# root:www-data). It cannot run other levels subcommands, modify
+# systemd, or touch the database. See docs/PLAN_tier3_closeout.md
+# § Phase 1.5 for the iter-log rationale.
+
+pat ALL=(root) NOPASSWD: /home/pat/.venv/bin/levels emit-config*

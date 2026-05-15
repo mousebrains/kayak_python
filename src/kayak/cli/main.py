@@ -11,6 +11,7 @@ from kayak.cli import (
     decimate,
     delete_editor,
     editor_retention,
+    emit_config,
     export_editor,
     fetch,
     fetch_usgs_ogc,
@@ -55,6 +56,7 @@ def main() -> None:
     editor_retention.addArgs(subparsers)
     trace_reach.addArgs(subparsers)
     assign_huc.addArgs(subparsers)
+    emit_config.addArgs(subparsers)
 
     args = parser.parse_args()
     mkLogger(args)

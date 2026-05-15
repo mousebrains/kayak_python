@@ -345,6 +345,43 @@ key was `HCAPTCHA_SECRET`). It switched to Cloudflare Turnstile on
 2026-05-01 — Turnstile is invisible by default (no puzzle), single CSP
 origin, and free with no usage caps.
 
+### Typed config (`/etc/kayak/runtime-config.json`)
+
+`scripts/deploy.sh` calls `sudo -n levels emit-config` between
+`levels migrate` and `levels build` to refresh
+`/etc/kayak/runtime-config.json` — the JSON snapshot PHP (and any
+future consumer) reads instead of each component re-doing `getenv()`
+calls. The grant lives in `deploy/sudoers.d/kayak-emit-config` and is
+pinned to the exact `emit-config` invocation (it cannot run other
+levels subcommands or modify anything outside `/etc/kayak/`).
+
+Install once on a fresh host:
+
+```bash
+sudo install -m 440 -o root -g root \
+    /home/pat/kayak/deploy/sudoers.d/kayak-emit-config \
+    /etc/sudoers.d/kayak-emit-config
+sudo visudo -cf /etc/sudoers.d/kayak-emit-config   # validate
+```
+
+Verify the grant works:
+
+```bash
+sudo -n /home/pat/.venv/bin/levels emit-config --dry-run | head -5
+# Should print the first 5 lines of the JSON snapshot with no password prompt.
+```
+
+Inspect the resolved config any time (human-readable table):
+
+```bash
+/home/pat/.venv/bin/levels show-config
+```
+
+The JSON file is mode 0640 root:www-data — read it with
+`sudo cat /etc/kayak/runtime-config.json` or via `levels show-config
+--format json`. No `php-fpm reload` is needed for JSON content
+changes; PHP re-reads the file once per request.
+
 ## 8. Systemd timers
 
 ```bash

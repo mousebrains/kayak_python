@@ -12,6 +12,7 @@ obj
 !deploy/sshd_config.d/
 !deploy/sysctl.d/
 !deploy/apt.conf.d/
+!deploy/sudoers.d/
 tpw.master.2*
 tkw.*
 tpw.*
