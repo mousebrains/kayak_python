@@ -305,31 +305,44 @@ env[SQLITE_PATH] = /home/pat/kayak/kayak.db
 
 Alternatively, the nginx config passes `SQLITE_PATH` via `fastcgi_param`, so this step is optional.
 
-### Secrets (TURNSTILE_SECRET)
+### Config files (`/etc/kayak/env` + `/etc/kayak/secrets.env`)
 
-Keep the Cloudflare Turnstile site-verify secret out of nginx config files
-(those are world-readable). Store it in a restricted env file and expose
-it only to PHP-FPM workers.
+Two deploy-time files land under `/etc/kayak/`:
 
-All of the work below is packaged in `deploy/install-secrets.sh`:
+- `env` (mode 0644 root:root, world-readable) — `KAYAK_HOME=/home/pat`
+  path indirection consumed by `kayak-*.service` `ExecStart=` lines
+  and the helper shell scripts. NOT a secret.
+- `secrets.env` (mode 0600 root:www-data) — the Cloudflare Turnstile
+  site-verify secret, kept out of world-readable nginx config and
+  exposed only to PHP-FPM workers.
+
+All of the work below is packaged in `deploy/install-config.sh`:
 
 ```bash
-# First run — installs /etc/kayak/secrets.env from the template and exits so
-# you can edit it. The value is empty at this point; install-secrets.sh will
-# refuse to proceed until TURNSTILE_SECRET is set.
-sudo deploy/install-secrets.sh
+# First run — installs /etc/kayak/env (if missing) + /etc/kayak/secrets.env
+# from the templates and exits so you can fill in the Turnstile secret.
+# install-config.sh refuses to proceed until TURNSTILE_SECRET is set.
+sudo deploy/install-config.sh
 
 # Fill in the real Turnstile secret (dash.cloudflare.com → Turnstile → site → Settings).
 sudo -e /etc/kayak/secrets.env
 
 # Second run — installs the PHP-FPM pool overlay + systemd drop-in,
 # validates nginx, restarts php-fpm, reloads nginx.
-sudo deploy/install-secrets.sh
+sudo deploy/install-config.sh
 ```
 
-PHP's `_turnstile_env()` helper prefers `getenv()` over `$_SERVER[]`, so once
-PHP-FPM has the value in its environment the application code keeps working
-without change.
+`KAYAK_HOME` is parameterized via `Environment=KAYAK_HOME=/home/pat`
+inside each `kayak-*.service` (the in-unit floor) plus
+`EnvironmentFile=-/etc/kayak/env` (which overrides when present).
+`ExecStart=` and `ExecStartPost=` then interpolate `${KAYAK_HOME}/…`.
+Paths in `WorkingDirectory=` / `EnvironmentFile=` / `ReadWritePaths=`
+remain literal — systemd doesn't expand env vars in those directives.
+
+PHP reads `TURNSTILE_SECRET` from the JSON snapshot
+`/etc/kayak/runtime-config.json` (Phase 2 of T3.3); the FPM-pool's
+`env[TURNSTILE_SECRET] = $TURNSTILE_SECRET` re-export keeps a second
+copy in `getenv()` as defense-in-depth.
 
 `/edit.php` used to read `EDIT_PASSWORD` via HTTP Basic Auth; it now gates
 maintainer access on the `ed_sess` editor-session cookie (same pattern as

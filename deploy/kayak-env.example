@@ -1,0 +1,20 @@
+# /etc/kayak/env — non-secret deploy-time configuration
+#
+# Install: sudo install -D -m 0644 -o root -g root \
+#     deploy/kayak-env.example /etc/kayak/env
+#
+# After edits: no daemon-reload needed (EnvironmentFile content is
+# re-read at each service start). kayak-*.service units are
+# Type=oneshot, so the next timer firing picks up the change. A
+# long-running service (none today) would need an explicit restart.
+#
+# KAYAK_HOME parameterizes paths under the operator's $HOME for
+# kayak-*.service ExecStart= / ExecStartPost= directives and the
+# helper shell scripts under systemd/ and scripts/. It CANNOT be
+# used in systemd WorkingDirectory= / EnvironmentFile= /
+# ReadWritePaths= — those directives do not expand env vars and the
+# paths there stay literal. Each remaining literal carries a leading-
+# comment annotation in its unit; see docs/PLAN_tier3_closeout.md
+# § Phase 5.3 / 5.7 for the residual-count rationale.
+
+KAYAK_HOME=/home/pat

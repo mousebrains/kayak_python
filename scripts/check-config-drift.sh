@@ -58,6 +58,7 @@ deploy/logrotate-kayak-csp	/etc/logrotate.d/kayak-csp
 deploy/nftables.conf	/etc/nftables.conf
 deploy/kayak-pipeline.sudoers	/etc/sudoers.d/kayak-pipeline
 deploy/sudoers.d/kayak-emit-config	/etc/sudoers.d/kayak-emit-config
+deploy/kayak-env.example	/etc/kayak/env
 deploy/msmtp-aliases	/etc/msmtp-aliases
 # sysctl, apt, sshd
 deploy/sysctl.d/90-hardening.conf	/etc/sysctl.d/90-hardening.conf

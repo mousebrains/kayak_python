@@ -1,25 +1,29 @@
 #!/usr/bin/env bash
-# install-secrets.sh — install the PHP-FPM secrets infrastructure for the
-# kayak app: /etc/kayak/secrets.env (mode 0600 root:www-data), the kayak
-# pool overlay, and the systemd drop-in that wires the env file into the
-# php-fpm master.
+# install-config.sh — install kayak's deploy-time config infrastructure:
+#   1. /etc/kayak/env (mode 0644 root:root) — non-secret path indirection
+#      (KAYAK_HOME) read by every kayak-*.service via EnvironmentFile=.
+#   2. /etc/kayak/secrets.env (mode 0600 root:www-data) — PHP-FPM secrets.
+#   3. The PHP-FPM pool overlay + systemd drop-in that wires the
+#      secrets.env into the php-fpm master.
 #
-# Idempotent: safe to re-run. Won't overwrite an existing secrets.env.
+# Idempotent: safe to re-run. Won't overwrite an existing /etc/kayak/env
+# or /etc/kayak/secrets.env (the env file's idempotence preserves any
+# operator hand-edits; the secrets file preserves the live values).
 #
-# Run on a fresh host (or after re-imaging) to bring the secrets-handling
-# infrastructure up. After the first run it installs the secrets.env
-# template and exits — edit /etc/kayak/secrets.env, then re-run.
+# Run on a fresh host (or after re-imaging). After the first run it
+# installs the env file (KAYAK_HOME=/home/pat default) and the secrets
+# template, then exits so you can edit secrets.env; re-run after.
 #
 # Usage:
-#   sudo deploy/install-secrets.sh
+#   sudo deploy/install-config.sh
 #
 # Run from the repo root. Must be root (invoke via sudo).
 #
-# History: this was originally migrate-secrets.sh, a one-shot migration
-# that moved HCAPTCHA_SECRET off nginx fastcgi_param. The migration is
-# done; the install part remains useful for fresh deploys. The captcha
-# provider switched from hCaptcha to Cloudflare Turnstile on 2026-05-01;
-# the only key in secrets.env today is TURNSTILE_SECRET.
+# History: this was originally install-secrets.sh (and before that,
+# migrate-secrets.sh — a one-shot to move HCAPTCHA_SECRET off nginx
+# fastcgi_param). Renamed to install-config.sh in T3.3 Phase 5.2 when
+# the /etc/kayak/env step landed; the captcha provider switched from
+# hCaptcha to Cloudflare Turnstile on 2026-05-01.
 
 set -euo pipefail
 
@@ -38,8 +42,25 @@ FPM_POOL_DIR="/etc/php/${PHP_VER}/fpm/pool.d"
 FPM_DROPIN_DIR="/etc/systemd/system/${FPM_UNIT}.d"
 
 SECRETS_FILE="/etc/kayak/secrets.env"
+ENV_FILE="/etc/kayak/env"
 
 say() { printf '• %s\n' "$*"; }
+
+# ---------------------------------------------------------------------------
+# 0. KAYAK_HOME env file — non-secret path indirection (T3.3 Phase 5).
+#    Installs ahead of secrets so the rest of the script can rely on
+#    /etc/kayak/ existing. mode 0644 root:root — world-readable on
+#    purpose; this is a deploy-time path, not a secret.
+# ---------------------------------------------------------------------------
+
+if [[ -e "$ENV_FILE" ]]; then
+    say "kayak env file already present at $ENV_FILE (leaving untouched)"
+else
+    say "installing kayak env file at $ENV_FILE"
+    install -D -m 0644 -o root -g root \
+        "$DEPLOY_DIR/kayak-env.example" \
+        "$ENV_FILE"
+fi
 
 # ---------------------------------------------------------------------------
 # 1. Secrets env file — install only if missing so we don't clobber live values.
