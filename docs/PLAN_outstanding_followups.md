@@ -610,13 +610,18 @@ Resequenced by dependency:
 
 ### 5.1 — `PLAN_dev_env_followups.md` Phase 3
 
-Already drafted through iter 5 (2 findings; stopped). Execute: tell
-dev boxes to set `OUTPUT_DIR=/home/<user>/public_html_dev` in
-`~/.config/kayak/.env`; rewrite the README "Quick Start" to expect
-the non-default `OUTPUT_DIR`. The live host is already on the
-canonical layout — no prod impact.
+**Status (2026-05-14):** done. The OUTPUT_DIR dev convention is documented
+in `.env.example:11-23` (full rationale, recommended layout, prod path)
+and `CLAUDE.md:22` (one-paragraph note under Local Development Setup
+pointing at `.env.example` for full rationale). Live host carries
+`OUTPUT_DIR=/home/pat/public_html` in `~/.config/kayak/.env` — already
+matches the canonical layout. No code changes needed; remaining
+"local-only cleanup on existing dev boxes" steps in
+`PLAN_dev_env_followups.md` Phase 3 are reproduce-on-demand and don't
+need to commit.
 
-**Effort:** ~1 day.
+**Effort:** ~1 day → 0 (already shipped via doc edits during the OUTPUT_DIR
+convention rollout).
 
 ### 5.2 — `PLAN_editor_security_review.md`
 

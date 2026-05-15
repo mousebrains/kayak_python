@@ -17,6 +17,7 @@ Default DAG:
 
 import argparse
 import logging
+import secrets
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -27,6 +28,7 @@ from sqlalchemy import text
 from kayak.cli import build, calc_rating, calculator, fetch, fetch_usgs_ogc
 from kayak.db.engine import get_engine
 from kayak.db.sources import find_orphan_sources
+from kayak.utils.struct_log import emit as struct_emit
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +163,19 @@ def _build_steps(skip_fetch: bool) -> list[_Step]:
 def pipeline(args: argparse.Namespace) -> None:
     """Run the full data pipeline."""
     steps = _build_steps(args.skip_fetch)
+    # Random run_id so the recap script can group all step events from
+    # a single pipeline invocation, even when several runs interleave
+    # in journald (manual + systemd-triggered).
+    run_id = secrets.token_hex(6)
+    pipeline_start = time.time()
+
+    struct_emit(
+        "pipeline_start",
+        run_id=run_id,
+        steps=[s.name for s in steps],
+        skip_fetch=bool(args.skip_fetch),
+        continue_on_error=bool(args.continue_on_error),
+    )
 
     results: dict[str, _Result] = {}
     failures: list[tuple[str, str]] = []
@@ -173,11 +188,18 @@ def pipeline(args: argparse.Namespace) -> None:
             print(f"{'=' * 60}", flush=True)
             results[step.name] = _Result.skipped
             skipped.append(step.name)
+            struct_emit(
+                "step_skipped",
+                run_id=run_id,
+                step=step.name,
+                reason="upstream_failed",
+            )
             continue
 
         print(f"\n{'=' * 60}", flush=True)
         print(f"Running: {step.name}", flush=True)
         print(f"{'=' * 60}", flush=True)
+        struct_emit("step_start", run_id=run_id, step=step.name)
         start = time.time()
         try:
             step.fn(args)
@@ -190,6 +212,14 @@ def pipeline(args: argparse.Namespace) -> None:
             results[step.name] = _Result.failed
         elapsed = time.time() - start
         print(f"Completed {step.name} in {elapsed:.1f}s", flush=True)
+        struct_emit(
+            "step_done" if results[step.name] is _Result.ok else "step_failed",
+            run_id=run_id,
+            step=step.name,
+            elapsed_s=round(elapsed, 3),
+            outcome=results[step.name].value,
+            error=failures[-1][1] if results[step.name] is _Result.failed else None,
+        )
 
     # Run PRAGMA optimize to update SQLite query planner statistics
     try:
@@ -207,6 +237,14 @@ def pipeline(args: argparse.Namespace) -> None:
             f"{', '.join(skipped)}",
             flush=True,
         )
+    struct_emit(
+        "pipeline_done",
+        run_id=run_id,
+        elapsed_s=round(time.time() - pipeline_start, 3),
+        ok=sum(1 for r in results.values() if r is _Result.ok),
+        failed=len(failures),
+        skipped=len(skipped),
+    )
     if failures:
         print(f"Pipeline finished with {len(failures)} failure(s):", flush=True)
         for step_name, msg in failures:
