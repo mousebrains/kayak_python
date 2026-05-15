@@ -26,6 +26,7 @@ dev = [
     "types-PyYAML>=6.0",
     "types-requests>=2.31",
     "lxml-stubs>=0.5",
+    "hypothesis>=6.150",  # Property-based testing for parsers (T2.2)
 ]
 geo = [
     "shapely>=2",
