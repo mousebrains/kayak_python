@@ -1,6 +1,6 @@
 """``levels emit-config`` + ``levels show-config`` subcommands.
 
-Phase 1 of `docs/PLAN_tier3_closeout.md` § T3.3: write the resolved
+Phase 1 of `docs/done/PLAN_tier3_closeout.md` § T3.3: write the resolved
 ``KayakConfig`` to ``/etc/kayak/runtime-config.json`` (mode 0640
 root:www-data) so PHP and any future consumers read a single
 typed source of truth instead of each component re-doing

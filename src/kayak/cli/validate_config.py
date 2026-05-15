@@ -1,6 +1,6 @@
 """``levels validate-config`` subcommand.
 
-Phase 3 of `docs/PLAN_tier3_closeout.md` § T3.3: construct
+Phase 3 of `docs/done/PLAN_tier3_closeout.md` § T3.3: construct
 ``KayakConfig`` against the live env so pydantic surfaces any
 out-of-range / unparseable / unknown-extra problems before the deploy
 proceeds. Wired into ``scripts/deploy.sh`` between the pip-install

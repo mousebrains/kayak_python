@@ -6,7 +6,7 @@ existing ``from kayak.config import DATABASE_URL`` call pattern; new
 code should use ``get_config()`` (or instantiate ``KayakConfig()``
 directly when test-monkeypatching env vars).
 
-Phase 0 of `docs/PLAN_tier3_closeout.md` § T3.3: the schema lands; no
+Phase 0 of `docs/done/PLAN_tier3_closeout.md` § T3.3: the schema lands; no
 read-path consumers move yet. Phases 1-4 introduce ``levels
 emit-config``, the PHP read path, and finally remove the module-level
 constants.

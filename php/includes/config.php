@@ -10,7 +10,7 @@ declare(strict_types=1);
  * Static methods are the production API; instance methods exist for
  * test factories.
  *
- * Phase 4 of `docs/PLAN_tier3_closeout.md` § T3.3: the JSON is the
+ * Phase 4 of `docs/done/PLAN_tier3_closeout.md` § T3.3: the JSON is the
  * single source of truth. A missing or unparseable file is fatal —
  * the request 500s and PHP-FPM logs `[CONFIG-FATAL]` for triage.
  * The getenv() fallback that Phase 2 carried as a dual-read shim is
