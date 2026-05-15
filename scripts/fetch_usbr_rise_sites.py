@@ -115,6 +115,84 @@ def extract_lat_lon(coords: dict | None) -> tuple[float | None, float | None]:
     return lat, lon
 
 
+def _index_record_endpoints(
+    records: list[dict], item_end: dict[int, str]
+) -> tuple[dict[int, int | None], dict[int, str | None]]:
+    """Walk records once to build (record_id → location_id) and
+    (record_id → max temporalEndDate-across-items)."""
+    record_location: dict[int, int | None] = {}
+    record_end: dict[int, str | None] = {}
+    for rec in records:
+        attr = rec["attributes"]
+        rid = attr["_id"]
+        rel = rec.get("relationships", {})
+        loc = rel.get("location", {}).get("data")
+        record_location[rid] = (
+            int(loc["id"].split("/")[-1]) if loc and isinstance(loc, dict) else None
+        )
+        max_end: str | None = None
+        for item_rel in rel.get("catalogItems", {}).get("data", []) or []:
+            iid = int(item_rel["id"].split("/")[-1])
+            end = item_end.get(iid)
+            if end and (max_end is None or end > max_end):
+                max_end = end
+        record_end[rid] = max_end
+    return record_location, record_end
+
+
+def _aggregate_location_end(
+    record_location: dict[int, int | None], record_end: dict[int, str | None]
+) -> dict[int, str]:
+    """Roll up per-record max temporalEndDate to per-location max."""
+    location_end: dict[int, str] = {}
+    for rid, lid in record_location.items():
+        if lid is None:
+            continue
+        end = record_end.get(rid)
+        if end and (lid not in location_end or end > location_end[lid]):
+            location_end[lid] = end
+    return location_end
+
+
+def _build_site_row(loc: dict, location_end: dict[int, str], cutoff: str) -> dict:
+    """Flatten a single RISE location entity into a usbr_rise_site row."""
+    attr = loc["attributes"]
+    rid = attr["_id"]
+    coords = attr.get("locationCoordinates")
+    lat, lon = extract_lat_lon(coords)
+    name = attr.get("locationName") or ""
+    src_match = SOURCE_CODE_RE.search(name)
+    elev_raw = attr.get("elevation")
+    try:
+        elev = float(elev_raw) if elev_raw is not None else None
+    except (TypeError, ValueError):
+        elev = None
+    states = ",".join(
+        s["id"].split("/")[-1]
+        for s in loc.get("relationships", {}).get("states", {}).get("data", []) or []
+    )
+    last_data = location_end.get(rid)
+    return {
+        "rise_id": rid,
+        "name": name,
+        "source_code": src_match.group(1) if src_match else None,
+        "type_name": attr.get("locationTypeName"),
+        "status_id": attr.get("locationStatusId"),
+        "latitude": lat,
+        "longitude": lon,
+        "geometry_type": (coords or {}).get("type"),
+        "elevation_ft": elev,
+        "states": states,
+        "unified_region": ",".join(attr.get("locationUnifiedRegionNames") or []),
+        "timezone": attr.get("timezone"),
+        "horizontal_datum": (attr.get("horizontalDatum") or {}).get("_id"),
+        "create_date": attr.get("createDate"),
+        "update_date": attr.get("updateDate"),
+        "last_data_date": last_data,
+        "is_active": 1 if (last_data and last_data >= cutoff) else 0,
+    }
+
+
 def main() -> None:
     db_path = (
         sys.argv[1]
@@ -142,75 +220,11 @@ def main() -> None:
         if end:
             item_end[attr["_id"]] = end
 
-    # Record → (location_id, max temporalEndDate across items)
-    record_location: dict[int, int | None] = {}
-    record_end: dict[int, str | None] = {}
-    for rec in records:
-        attr = rec["attributes"]
-        rid = attr["_id"]
-        rel = rec.get("relationships", {})
-        loc = rel.get("location", {}).get("data")
-        record_location[rid] = (
-            int(loc["id"].split("/")[-1]) if loc and isinstance(loc, dict) else None
-        )
-        max_end: str | None = None
-        for item_rel in rel.get("catalogItems", {}).get("data", []) or []:
-            iid = int(item_rel["id"].split("/")[-1])
-            end = item_end.get(iid)
-            if end and (max_end is None or end > max_end):
-                max_end = end
-        record_end[rid] = max_end
-
-    # Location → max temporalEndDate (across all its records)
-    location_end: dict[int, str] = {}
-    for rid, lid in record_location.items():
-        if lid is None:
-            continue
-        end = record_end.get(rid)
-        if end and (lid not in location_end or end > location_end[lid]):
-            location_end[lid] = end
+    record_location, record_end = _index_record_endpoints(records, item_end)
+    location_end = _aggregate_location_end(record_location, record_end)
 
     cutoff = (datetime.now(UTC) - timedelta(days=ACTIVE_WINDOW_DAYS)).isoformat()
-
-    rows: list[dict] = []
-    for loc in locations:
-        attr = loc["attributes"]
-        rid = attr["_id"]
-        coords = attr.get("locationCoordinates")
-        lat, lon = extract_lat_lon(coords)
-        name = attr.get("locationName") or ""
-        src_match = SOURCE_CODE_RE.search(name)
-        elev_raw = attr.get("elevation")
-        try:
-            elev = float(elev_raw) if elev_raw is not None else None
-        except (TypeError, ValueError):
-            elev = None
-        states = ",".join(
-            s["id"].split("/")[-1]
-            for s in loc.get("relationships", {}).get("states", {}).get("data", []) or []
-        )
-        last_data = location_end.get(rid)
-        rows.append(
-            {
-                "rise_id": rid,
-                "name": name,
-                "source_code": src_match.group(1) if src_match else None,
-                "type_name": attr.get("locationTypeName"),
-                "status_id": attr.get("locationStatusId"),
-                "latitude": lat,
-                "longitude": lon,
-                "geometry_type": (coords or {}).get("type"),
-                "elevation_ft": elev,
-                "states": states,
-                "unified_region": ",".join(attr.get("locationUnifiedRegionNames") or []),
-                "timezone": attr.get("timezone"),
-                "horizontal_datum": (attr.get("horizontalDatum") or {}).get("_id"),
-                "create_date": attr.get("createDate"),
-                "update_date": attr.get("updateDate"),
-                "last_data_date": last_data,
-                "is_active": 1 if (last_data and last_data >= cutoff) else 0,
-            }
-        )
+    rows: list[dict] = [_build_site_row(loc, location_end, cutoff) for loc in locations]
 
     conn = sqlite3.connect(db_path)
     conn.execute(CREATE_TABLE)

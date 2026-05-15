@@ -74,6 +74,85 @@ async def gather_elevations(points, concurrency):
         return results
 
 
+def _load_reaches(conn, reach_ids_csv):
+    """Pull every reach with both put-in and take-out coords, optionally
+    filtered to a comma-separated ID list."""
+    query = """
+        SELECT id, display_name,
+               latitude_start, longitude_start,
+               latitude_end,   longitude_end,
+               elevation, elevation_lost, length, gradient
+        FROM reach
+        WHERE latitude_start IS NOT NULL AND longitude_start IS NOT NULL
+          AND latitude_end   IS NOT NULL AND longitude_end   IS NOT NULL
+    """
+    params: list = []
+    if reach_ids_csv:
+        ids = [int(x) for x in reach_ids_csv.split(",")]
+        placeholders = ",".join(["?"] * len(ids))
+        query += f" AND id IN ({placeholders})"
+        params = ids
+    query += " ORDER BY id"
+    return conn.execute(query, params).fetchall()
+
+
+def _classify_reach_changes(reaches, elevations):
+    """Partition each reach into update/unchanged/failed buckets.
+
+    Returns ``(updates, failures, changed_rows)``:
+      updates       list[tuple] for the UPDATE executemany
+      failures      list[(rid, name, put_m, take_m)] for the failure report
+      changed_rows  list[str] of preformatted lines to print
+    """
+    updates: list = []
+    failures: list = []
+    changed_rows: list[str] = []
+    for r in reaches:
+        rid = r["id"]
+        put_m = elevations.get(f"{rid}:put")
+        take_m = elevations.get(f"{rid}:take")
+        if put_m is None or take_m is None:
+            failures.append((rid, r["display_name"], put_m, take_m))
+            continue
+
+        new_el = round(put_m * M_TO_FT)
+        new_drop = round(abs(put_m - take_m) * M_TO_FT)
+        new_grd = None
+        if r["length"] and r["length"] > 0:
+            new_grd = round(new_drop / r["length"], 1)
+
+        old_el = r["elevation"]
+        old_drop = r["elevation_lost"]
+        old_grd = r["gradient"]
+
+        if (
+            old_el == new_el
+            and old_drop == new_drop
+            and (old_grd == new_grd or (old_grd is None and new_grd is None))
+        ):
+            continue
+
+        changed_rows.append(
+            f"{rid:>5}  {(r['display_name'] or '')[:22]:<22}  "
+            f"{(str(old_el) if old_el is not None else '-'):>7} -> {new_el:>7}  "
+            f"{(str(old_drop) if old_drop is not None else '-'):>8} -> {new_drop:>8}  "
+            f"{(str(old_grd) if old_grd is not None else '-'):>7} -> "
+            f"{(str(new_grd) if new_grd is not None else '-'):>7}"
+        )
+        updates.append((new_el, new_drop, new_grd, rid))
+    return updates, failures, changed_rows
+
+
+def _print_failures(failures):
+    if not failures:
+        return
+    print("\nFailed lookups (probably outside 3DEP coverage — unlikely in WA/OR/ID):")
+    for rid, name, put_m, take_m in failures[:10]:
+        print(f"  {rid}  {name}  put={put_m} take={take_m}")
+    if len(failures) > 10:
+        print(f"  ... and {len(failures) - 10} more")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--db", default=DEFAULT_DB)
@@ -87,23 +166,7 @@ def main():
     conn = sqlite3.connect(args.db)
     conn.row_factory = sqlite3.Row
 
-    query = """
-        SELECT id, display_name,
-               latitude_start, longitude_start,
-               latitude_end,   longitude_end,
-               elevation, elevation_lost, length, gradient
-        FROM reach
-        WHERE latitude_start IS NOT NULL AND longitude_start IS NOT NULL
-          AND latitude_end   IS NOT NULL AND longitude_end   IS NOT NULL
-    """
-    params = []
-    if args.reach_ids:
-        ids = [int(x) for x in args.reach_ids.split(",")]
-        placeholders = ",".join(["?"] * len(ids))
-        query += f" AND id IN ({placeholders})"
-        params = ids
-    query += " ORDER BY id"
-    reaches = conn.execute(query, params).fetchall()
+    reaches = _load_reaches(conn, args.reach_ids)
     print(f"Scope: {len(reaches)} reach(es)")
 
     points = []
@@ -124,54 +187,15 @@ def main():
     print(fmt_hdr)
     print("-" * len(fmt_hdr))
 
-    updates = []
-    failures = []
-    for r in reaches:
-        rid = r["id"]
-        put_m = elevations.get(f"{rid}:put")
-        take_m = elevations.get(f"{rid}:take")
-        if put_m is None or take_m is None:
-            failures.append((rid, r["display_name"], put_m, take_m))
-            continue
-
-        new_el = round(put_m * M_TO_FT)
-        new_drop = round(abs(put_m - take_m) * M_TO_FT)
-        new_grd = None
-        if r["length"] and r["length"] > 0:
-            new_grd = round(new_drop / r["length"], 1)
-
-        old_el = r["elevation"]
-        old_drop = r["elevation_lost"]
-        old_grd = r["gradient"]
-
-        # Skip if no change within rounding
-        if (
-            old_el == new_el
-            and old_drop == new_drop
-            and (old_grd == new_grd or (old_grd is None and new_grd is None))
-        ):
-            continue
-
-        print(
-            f"{rid:>5}  {(r['display_name'] or '')[:22]:<22}  "
-            f"{(str(old_el) if old_el is not None else '-'):>7} -> {new_el:>7}  "
-            f"{(str(old_drop) if old_drop is not None else '-'):>8} -> {new_drop:>8}  "
-            f"{(str(old_grd) if old_grd is not None else '-'):>7} -> "
-            f"{(str(new_grd) if new_grd is not None else '-'):>7}"
-        )
-        updates.append((new_el, new_drop, new_grd, rid))
+    updates, failures, changed_rows = _classify_reach_changes(reaches, elevations)
+    for row in changed_rows:
+        print(row)
 
     print()
     print(
         f"{len(updates)} reach(es) to update ({len(reaches) - len(updates) - len(failures)} unchanged, {len(failures)} failed)."
     )
-
-    if failures:
-        print("\nFailed lookups (probably outside 3DEP coverage — unlikely in WA/OR/ID):")
-        for rid, name, put_m, take_m in failures[:10]:
-            print(f"  {rid}  {name}  put={put_m} take={take_m}")
-        if len(failures) > 10:
-            print(f"  ... and {len(failures) - 10} more")
+    _print_failures(failures)
 
     if not args.apply:
         print("\nDry-run only. Pass --apply to write changes.")

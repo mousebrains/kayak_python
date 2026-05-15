@@ -221,27 +221,30 @@ def group_by_name(features):
 # --- Merge logic ------------------------------------------------------------
 
 
+def _emit_with_reason(feats, reason, density=None):
+    """Tag every feature in ``feats`` with the chosen merge_reason
+    (and optional density) and return them as (geom, attrs) pairs."""
+    out = []
+    for _name, geom, attrs in feats:
+        attrs["merge_reason"] = reason
+        if density is not None:
+            attrs["density"] = f"{density:.1f}"
+        out.append((geom, attrs))
+    return out
+
+
 def merge_stream_group(nhd_feats, osm_feats):
     """Merge features for a single stream name.
 
     For each spatial region, pick the higher-resolution source.
     Returns list of (geom, attrs) to include in output.
     """
-    results = []
-
-    # If only one source has features, return all of them
     if not nhd_feats and not osm_feats:
-        return results
+        return []
     if not nhd_feats:
-        for _name, geom, attrs in osm_feats:
-            attrs["merge_reason"] = "osm_only"
-            results.append((geom, attrs))
-        return results
+        return _emit_with_reason(osm_feats, "osm_only")
     if not osm_feats:
-        for _name, geom, attrs in nhd_feats:
-            attrs["merge_reason"] = "nhd_only"
-            results.append((geom, attrs))
-        return results
+        return _emit_with_reason(nhd_feats, "nhd_only")
 
     # Both sources have features — compare spatially
     nhd_geoms = [g for _, g, _ in nhd_feats]
@@ -263,30 +266,14 @@ def merge_stream_group(nhd_feats, osm_feats):
     )
 
     if coverage_ratio > 0.3:
-        # Both cover similar extent — pick higher density
         if osm_density > nhd_density * 1.2:
-            # OSM is meaningfully denser — use it
-            for _name, geom, attrs in osm_feats:
-                attrs["merge_reason"] = "osm_higher_density"
-                attrs["density"] = f"{osm_density:.1f}"
-                results.append((geom, attrs))
-        else:
-            # NHD wins (or roughly equal — prefer authoritative source)
-            for _name, geom, attrs in nhd_feats:
-                attrs["merge_reason"] = "nhd_preferred"
-                attrs["density"] = f"{nhd_density:.1f}"
-                results.append((geom, attrs))
-    else:
-        # Coverage differs significantly — include both (they likely cover
-        # different parts of the stream, e.g., NHD has tributaries OSM doesn't)
-        for _name, geom, attrs in nhd_feats:
-            attrs["merge_reason"] = "nhd_extended_coverage"
-            results.append((geom, attrs))
-        for _name, geom, attrs in osm_feats:
-            attrs["merge_reason"] = "osm_extended_coverage"
-            results.append((geom, attrs))
-
-    return results
+            return _emit_with_reason(osm_feats, "osm_higher_density", osm_density)
+        return _emit_with_reason(nhd_feats, "nhd_preferred", nhd_density)
+    # Coverage differs significantly — include both (they likely cover
+    # different parts of the stream, e.g., NHD has tributaries OSM doesn't)
+    return _emit_with_reason(nhd_feats, "nhd_extended_coverage") + _emit_with_reason(
+        osm_feats, "osm_extended_coverage"
+    )
 
 
 # --- Spatial matching -------------------------------------------------------

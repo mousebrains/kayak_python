@@ -227,12 +227,12 @@ def build_sort_name(river: str, elevation: float | None, drainage_area: float | 
     # Elevation DESC: invert so higher → smaller numeric. Sentinel 15000 for
     # NULL pushes rows without elevation to the end of their group.
     if elevation is not None:
-        elev_key = f"{int(round(10000 - float(elevation))):06d}"
+        elev_key = f"{round(10000 - float(elevation)):06d}"
     else:
         elev_key = "999999"
     # DA ASC: zero-pad. Sentinel 999999 pushes NULL DA to end.
     if drainage_area is not None:
-        da_key = f"{int(round(float(drainage_area))):06d}"
+        da_key = f"{round(float(drainage_area)):06d}"
     else:
         da_key = "999999"
     return f"{basin.lower()}|{fork_rank}{fork}|{elev_key}|{da_key}"
