@@ -25,6 +25,20 @@ import sys
 from collections import Counter, defaultdict
 from typing import Any
 
+# Events emitted by kayak.utils.struct_log. Anything else with an
+# ``event`` field (e.g. ntfy.sh's response bodies, which carry
+# ``"event": "message"``) is not ours and gets dropped.
+_KNOWN_EVENTS = frozenset(
+    {
+        "pipeline_start",
+        "pipeline_done",
+        "step_start",
+        "step_done",
+        "step_failed",
+        "step_skipped",
+    }
+)
+
 
 def _journalctl_json(unit_glob: str, since: str) -> list[dict[str, Any]]:
     """Pull journald entries for the given unit glob and time window.
@@ -68,7 +82,7 @@ def _journalctl_json(unit_glob: str, since: str) -> list[dict[str, Any]]:
             payload = json.loads(message)
         except json.JSONDecodeError:
             continue
-        if not isinstance(payload, dict) or "event" not in payload:
+        if not isinstance(payload, dict) or payload.get("event") not in _KNOWN_EVENTS:
             continue
         # Carry the systemd unit forward so we can group cross-unit.
         payload["_unit"] = entry.get("_SYSTEMD_UNIT") or entry.get("UNIT")

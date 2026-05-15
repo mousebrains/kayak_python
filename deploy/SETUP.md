@@ -359,7 +359,7 @@ Verify:
 systemctl list-timers 'kayak-*' --all
 ```
 
-Expected schedule (12 timers; most jittered via `RandomizedDelaySec=`):
+Expected schedule (13 timers; most jittered via `RandomizedDelaySec=`):
 - **kayak-pipeline.timer** — every hour at `:12` (fetches data, builds HTML)
 - **kayak-backup-hourly.timer** — every hour at `:38` (sqlite `.backup` + WAL checkpoint; 24-copy retention; RPO ≤ 1h)
 - **kayak-healthcheck.timer** — every hour at `:45` (data-freshness check)
@@ -368,6 +368,7 @@ Expected schedule (12 timers; most jittered via `RandomizedDelaySec=`):
 - **kayak-metadata-snapshot.timer** — daily at 04:30 (commits metadata-table drift to `data/db/*.csv`)
 - **kayak-cert-expiry.timer** — daily at 06:30 (Let's Encrypt cert health probe; pages on <21 days remaining)
 - **kayak-cert-renewal-test.timer** — weekly Monday at 04:15 (`certbot renew --dry-run`)
+- **kayak-recap.timer** — weekly Monday at 07:00 (pipeline-activity recap email; reads structured events from journald)
 - **kayak-backup-weekly.timer** — weekly Sunday at 03:15 (SQLite snapshot + 4-copy retention; off-site upload chains via `OnSuccess=`)
 - **kayak-audit-gauges.timer** — weekly Sunday at 03:29 (orphan-gauge + reach-mapping audit, emails maintainer digest)
 - **kayak-config-drift.timer** — weekly Sunday at 05:30 (diff repo `conf/`/`deploy/`/`systemd/` against `/etc/`, alert on drift)
