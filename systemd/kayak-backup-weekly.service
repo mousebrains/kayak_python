@@ -11,7 +11,7 @@ EnvironmentFile=/home/pat/.config/kayak/.env
 ExecStart=/home/pat/kayak/systemd/kayak-backup-weekly.sh
 # `-` prefix: a transient curl failure on the heartbeat won't cascade to a
 # false OnFailure alert. See PLAN_production_discipline.md Phase 1.3.
-ExecStartPost=-/usr/bin/curl -fsS -m 10 --retry 3 -o /dev/null ${HC_BACKUP}
+ExecStartPost=-/usr/bin/curl -fsS -m 10 --retry 3 -o /dev/null ${HC_BACKUP_WEEKLY}
 Nice=15
 
 # Sandboxing. Backup runs sqlite3 + gzip locally; the ExecStartPost heartbeat
