@@ -27,6 +27,35 @@ final class Config
 {
     public const DEFAULT_PATH = '/etc/kayak/runtime-config.json';
 
+    /**
+     * Keys the JSON snapshot is contracted to carry on every emit.
+     *
+     * These are the fields KayakConfig declares with non-None defaults
+     * (or non-null derived keys like database_path), so emit-config
+     * always writes them out. A key listed here that's absent from
+     * the loaded JSON triggers a schema-drift WARN at load time — the
+     * usual cause is a stale runtime-config.json that pre-dates a
+     * newly-added KayakConfig field.
+     *
+     * Optional fields (mail_from, turnstile_*, ntfy_topic, hc_* —
+     * any field declared `T | None` with default None) are
+     * intentionally NOT listed; their absence is legitimate.
+     */
+    private const ALWAYS_PRESENT_KEYS = [
+        'database_url',
+        'database_path',
+        'output_dir',
+        'fetch_timeout',
+        'fetch_budget',
+        'fetch_user_agent',
+        'maintainer_emails',
+        'maintainer_name',
+        'site_url',
+        'editor_feature',
+        'editor_session_ttl_days',
+        'csp_log_path',
+    ];
+
     private static ?Config $singleton = null;
 
     /** @var bool Static so the warn line fires at most once per request. */
@@ -93,7 +122,32 @@ final class Config
             self::log_fallback_once("runtime-config.json parse failed: $path");
             return new self([]);
         }
+        self::check_schema($parsed, $path);
         return new self($parsed);
+    }
+
+    /**
+     * Compare $data's keys against the ALWAYS_PRESENT_KEYS contract;
+     * log one WARN per missing key. Missing keys still resolve via
+     * the getenv fallback in Config::get(); this just makes the
+     * schema-drift visible in php-fpm logs.
+     *
+     * @param array<string, mixed> $data
+     */
+    private static function check_schema(array $data, string $path): void
+    {
+        $missing = [];
+        foreach (self::ALWAYS_PRESENT_KEYS as $key) {
+            if (!array_key_exists($key, $data)) {
+                $missing[] = $key;
+            }
+        }
+        foreach ($missing as $key) {
+            error_log(
+                "[CONFIG-SCHEMA] expected key '$key' missing from $path "
+                . '— re-run `levels emit-config`'
+            );
+        }
     }
 
     private static function log_fallback_once(string $reason): void

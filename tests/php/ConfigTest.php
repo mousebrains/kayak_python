@@ -175,6 +175,72 @@ final class ConfigTest extends TestCase
         }
     }
 
+    public function testSchemaCheckWarnsOnMissingExpectedKey(): void
+    {
+        // JSON with only a subset of ALWAYS_PRESENT_KEYS — Config should
+        // log one [CONFIG-SCHEMA] WARN per missing key without failing.
+        $tmp = tempnam(sys_get_temp_dir(), 'kayak-partial-');
+        $this->assertNotFalse($tmp);
+        file_put_contents($tmp, json_encode([
+            'database_url' => 'sqlite:////tmp/test.db',
+            // database_path, output_dir, fetch_*, maintainer_*, site_url,
+            // editor_*, csp_log_path all missing.
+        ]));
+
+        $log = tempnam(sys_get_temp_dir(), 'kayak-schema-log-');
+        $this->assertNotFalse($log);
+        $prev = ini_set('error_log', $log);
+        try {
+            Config::for_test($tmp);
+            $contents = (string)file_get_contents($log);
+            $this->assertStringContainsString('[CONFIG-SCHEMA]', $contents);
+            $this->assertStringContainsString("'site_url' missing", $contents);
+            $this->assertStringContainsString("'csp_log_path' missing", $contents);
+        } finally {
+            if ($prev !== false) {
+                ini_set('error_log', $prev);
+            }
+            @unlink($tmp);
+            @unlink($log);
+        }
+    }
+
+    public function testSchemaCheckSilentWhenAllKeysPresent(): void
+    {
+        // Hand-rolled full JSON should produce zero [CONFIG-SCHEMA] lines.
+        $tmp = tempnam(sys_get_temp_dir(), 'kayak-full-');
+        $this->assertNotFalse($tmp);
+        file_put_contents($tmp, json_encode([
+            'database_url'            => 'sqlite:////tmp/test.db',
+            'database_path'           => '/tmp/test.db',
+            'output_dir'              => '/tmp',
+            'fetch_timeout'           => 300,
+            'fetch_budget'            => 240,
+            'fetch_user_agent'        => 'kayak/1.0',
+            'maintainer_emails'       => [],
+            'maintainer_name'         => 'Test',
+            'site_url'                => 'https://test.example.com/',
+            'editor_feature'          => true,
+            'editor_session_ttl_days' => 7,
+            'csp_log_path'            => '/tmp/csp.log',
+        ]));
+
+        $log = tempnam(sys_get_temp_dir(), 'kayak-no-schema-warn-');
+        $this->assertNotFalse($log);
+        $prev = ini_set('error_log', $log);
+        try {
+            Config::for_test($tmp);
+            $contents = (string)file_get_contents($log);
+            $this->assertStringNotContainsString('[CONFIG-SCHEMA]', $contents);
+        } finally {
+            if ($prev !== false) {
+                ini_set('error_log', $prev);
+            }
+            @unlink($tmp);
+            @unlink($log);
+        }
+    }
+
     public function testFallbackLogLineFiresWhenJsonAbsent(): void
     {
         // for_test() on a non-existent path triggers the [CONFIG-FALLBACK]
