@@ -21,13 +21,26 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/config.php';
 
 // ---------------------------------------------------------------------------
 // Feature flag
 // ---------------------------------------------------------------------------
 
+/**
+ * Generic env-name lookup with Config-first ordering.
+ *
+ * Used by ``comment.php`` / ``login.php`` / ``propose_handler.php`` for
+ * ``SITE_URL`` lookups. New code paths should call ``Config::str/int/
+ * bool/list/url`` directly with the lowercased JSON key — ``auth_env``
+ * is the source-compat shim while Phase 2.2 of T3.3 migrates callers.
+ */
 function auth_env(string $name): string
 {
+    $cfg = Config::str(strtolower($name));
+    if ($cfg !== '') {
+        return $cfg;
+    }
     $v = getenv($name);
     if ($v === false || $v === '') {
         $v = (string)($_SERVER[$name] ?? '');
@@ -37,8 +50,7 @@ function auth_env(string $name): string
 
 function editor_feature_enabled(): bool
 {
-    $v = auth_env('EDITOR_FEATURE');
-    return $v === '1' || strcasecmp($v, 'true') === 0;
+    return Config::bool('editor_feature', false);
 }
 
 /** Abort with 404 if the feature flag is not on. */
@@ -283,10 +295,19 @@ function require_csrf(): void
  */
 function maintainer_emails(): array
 {
-    $env = auth_env('MAINTAINER_EMAIL');
-    if ($env !== '') {
+    // 1. ``MAINTAINER_EMAIL`` env (singular, CSV) lets the operator
+    //    override the JSON snapshot without re-running emit-config.
+    $env = getenv('MAINTAINER_EMAIL');
+    if ($env !== false && $env !== '') {
         return array_values(array_filter(array_map('trim', explode(',', $env))));
     }
+    // 2. ``maintainer_emails`` from /etc/kayak/runtime-config.json
+    //    (list[EmailStr] from KayakConfig).
+    $cfg = Config::list('maintainer_emails');
+    if ($cfg !== []) {
+        return $cfg;
+    }
+    // 3. DB-rows fallback — the documented "no env / JSON" behavior.
     try {
         $stmt = get_db()->prepare(
             "SELECT email FROM editor WHERE status = 'maintainer' ORDER BY id"
@@ -299,7 +320,11 @@ function maintainer_emails(): array
     } catch (Throwable) {
         // fall through
     }
-    return ['pat.kayak@gmail.com'];
+    // 4. Empty + WARN. The hardcoded ``pat.kayak@gmail.com`` literal
+    //    that used to live here is gone — the JSON guarantees at least
+    //    an empty list, so this branch only fires when nothing is set.
+    error_log('[CONFIG-FALLBACK] maintainer_emails: no env / JSON / DB-row source available');
+    return [];
 }
 
 // ---------------------------------------------------------------------------
