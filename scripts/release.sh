@@ -15,7 +15,7 @@
 #   scripts/release.sh 1.0.1          # patch
 #   scripts/release.sh 1.1.0          # minor
 #
-# Per T3.6 of docs/PLAN_pre_release_followup.md and the release-flow
+# Per T3.6 of docs/done/PLAN_pre_release_followup.md and the release-flow
 # section of docs/operations.md.
 
 set -euo pipefail

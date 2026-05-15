@@ -249,7 +249,7 @@ swap completed.
    ```
 
 6. **Sanity-check:** the test suite's schema-parity check (T2.3 of
-   `docs/PLAN_pre_release_followup.md` — pending) will compare
+   `docs/done/PLAN_pre_release_followup.md` — pending) will compare
    migration-built vs ORM-built shape; until then, eyeball
    `.schema | wc -l` against a fresh `levels init-db`'s output to
    confirm parity.

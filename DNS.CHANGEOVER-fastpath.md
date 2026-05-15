@@ -249,7 +249,7 @@ sudo rm /etc/nginx/certs/levels.wkcc.org.privkey
 ### Phase D — Cleanup
 
 1. **Update `EXPECTED_SANS`** in `~/.config/kayak/.env` for the cert-expiry
-   monitor (see [`docs/PLAN_pre_release_followup.md`](docs/PLAN_pre_release_followup.md)
+   monitor (see [`docs/done/PLAN_pre_release_followup.md`](docs/done/PLAN_pre_release_followup.md)
    §P0.2):
 
    ```
@@ -348,7 +348,7 @@ Before opening the ClubExpress ticket:
 - `conf/sites/levels-wkcc-org` is committed and deployed (`diff` between
   repo and `/etc/nginx/sites-available/levels-wkcc-org` is empty).
 - The existing `kayak-cert-expiry.timer` (if already deployed per
-  `docs/PLAN_pre_release_followup.md` §P0.2) is still passing with
+  `docs/done/PLAN_pre_release_followup.md` §P0.2) is still passing with
   `EXPECTED_SANS` unchanged — the bridge install doesn't affect the
   existing 2-SAN monitor.
 - A recent backup of `/etc/nginx/` exists (since this path edits a vhost).
@@ -358,7 +358,7 @@ Before opening the ClubExpress ticket:
 - [`DNS.CHANGEOVER.md`](DNS.CHANGEOVER.md) — original plan; this doc
   obsoletes its Phases 1 + 2 but its Phase 3 (A→CNAME flip) is identical
   to Phase B here.
-- [`docs/PLAN_pre_release_followup.md`](docs/PLAN_pre_release_followup.md)
+- [`docs/done/PLAN_pre_release_followup.md`](docs/done/PLAN_pre_release_followup.md)
   §P0.2 — cert-expiry monitor; this doc clarifies the `EXPECTED_SANS`
   values for fast-path adopters and removes the "wait for Phase 4 step 3"
   caveat on the weekly renewal timer.

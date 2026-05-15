@@ -14,7 +14,7 @@
 # Why this exists: the 2026-05-10 preflight pass found drift between repo
 # templates and live /etc/ files (e.g. tuned values clobbered by a stale
 # `sudo cp deploy/X /etc/Y`). Catching drift weekly turns silent regressions
-# into telemetry: see docs/PLAN_pre_release_followup.md §T1.2.
+# into telemetry: see docs/done/PLAN_pre_release_followup.md §T1.2.
 
 set -euo pipefail
 

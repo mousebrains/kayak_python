@@ -9,7 +9,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
-- **Cert-expiry monitor** (P0.2 of `docs/PLAN_pre_release_followup.md`):
+- **Cert-expiry monitor** (P0.2 of `docs/done/PLAN_pre_release_followup.md`):
   daily live TLS probe via `kayak-cert-expiry.timer` (User=pat, 3-attempt
   probe per host, union-coverage SAN check); weekly `certbot renew
   --dry-run` via `kayak-cert-renewal-test.timer` (User=root). Both

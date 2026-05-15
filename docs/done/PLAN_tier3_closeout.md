@@ -17,7 +17,7 @@
 > **Drafted:** 2026-05-14 against `main` at `eaa51c8` (T3.3 only);
 > **extended:** 2026-05-14 against `main` at `248b899` (added T3.4 + T3.5
 > phases + iter log v2). Source plans:
-> `docs/PLAN_pre_release_followup.md` §§ T3.3 / T3.4 / T3.5 (architecture
+> `docs/done/PLAN_pre_release_followup.md` §§ T3.3 / T3.4 / T3.5 (architecture
 > audit ARCH-H7 / ARCH-H8 / ARCH-H10), `docs/PLAN_outstanding_followups.md`
 > § Phase 4.
 >

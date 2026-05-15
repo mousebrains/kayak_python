@@ -787,7 +787,7 @@ Read-only commands to refresh the inventory before any phase starts:
 grep -nH "^\*\*Status:\*\*" docs/PLAN_*.md
 
 # Tier 2/3 items from pre_release_followup
-grep -nE "^### T[23]\." docs/PLAN_pre_release_followup.md
+grep -nE "^### T[23]\." docs/done/PLAN_pre_release_followup.md
 
 # Production-discipline phases
 grep -nE "^### Tier|^### Phase" docs/PLAN_production_discipline.md
