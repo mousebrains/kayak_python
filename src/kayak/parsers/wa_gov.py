@@ -9,10 +9,12 @@ Quality field (last column) must be 0-200 for valid data.
 
 import logging
 import math
+from datetime import UTC, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from kayak.db.models import DataType
-from kayak.parsers.base import BaseParser
+from kayak.parsers.base import BaseParser, ObservationRecord
 from kayak.parsers.registry import register
 from kayak.utils.conversions import celsius_to_fahrenheit, parse_datetime, safe_float
 
@@ -33,72 +35,134 @@ class WaGovParser(BaseParser):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        # Kept for ABC compliance; parse_records owns the state walk now.
         self._state = 0
         self._station = ""
         self._data_type = DataType.flow
 
-    def parse_line(self, line: str) -> bool:
-        if not line.strip():
-            return True
-        parts = line.split()
-        if len(parts) < 2:
-            return True
+    def parse_records(self, text: str) -> list[ObservationRecord]:
+        """Pure: WA DOE text → records. No session, no DB.
 
-        if self._state == 0:
-            self._handle_header(parts)
-            return True
-        if self._state == 1:
-            if parts[0].startswith("---"):
-                self._state = 2
-            return True
-        # State 2+: Data rows
-        if parts[0] == "Quality":
-            self._state = 0
-            return True
-        self._emit_data_row(line, parts)
+        Drives the same three-state machine the legacy ``parse_line``
+        used, but reset per call: state 0 finds the ``STATIONID--name``
+        line, state 1 waits for the ``---`` separator, state 2+ reads
+        data rows.  A line beginning with ``Quality`` flips back to
+        state 0 so multi-station bodies parse end-to-end.
+
+        Naive timestamps are localized via ``source_tz_map`` before
+        being emitted (sources.yaml seeds wa.gov stations with
+        ``timezone: Etc/GMT+8`` — PST year-round, no DST).
+        """
+        state = 0
+        station = ""
+        data_type = DataType.flow
+        records: list[ObservationRecord] = []
+
+        for raw_line in text.splitlines():
+            line = raw_line.replace("\r", "")
+            if not line.strip():
+                continue
+            parts = line.split()
+            if len(parts) < 2:
+                continue
+
+            if state == 0:
+                state, station, data_type = self._handle_header(parts, station, data_type)
+                continue
+            if state == 1:
+                if parts[0].startswith("---"):
+                    state = 2
+                continue
+            # State 2+: Data rows
+            if parts[0] == "Quality":
+                state = 0
+                continue
+            record = self._record_from_row(line, parts, station, data_type)
+            if record is not None:
+                records.append(record)
+        return records
+
+    def parse(self, text: str) -> int:
+        """Thin wrapper over ``parse_records`` + the legacy DB path."""
+        self._db_updates = 0
+        self._obs_buffer = []
+        for r in self.parse_records(text):
+            self.dump_to_db(r.station, r.data_type, r.observed_at, r.value)
+        self._flush_buffer()
+        if self._db_updates == 0:
+            logger.warning("No database updates from %s parser(%s)", self.url, self.name)
+        return self._db_updates
+
+    def parse_line(self, line: str) -> bool:  # pragma: no cover — kept for ABC
         return True
 
-    def _handle_header(self, parts: list[str]) -> None:
-        """State-0 dispatch: pick up station header or `DATE TIME …` row."""
+    @staticmethod
+    def _handle_header(
+        parts: list[str], station: str, data_type: DataType
+    ) -> tuple[int, str, DataType]:
+        """Pick up either a station header or the ``DATE TIME …`` row.
+
+        Returns ``(next_state, station, data_type)``.
+        """
         if parts[0] == "DATE" and parts[1] == "TIME":
-            self._state = 1
-            self._data_type = DataType.flow
+            new_dt = DataType.flow
             if len(parts) >= 3:
                 type_hint = parts[2].lower()
                 if type_hint.startswith("water"):
-                    self._data_type = DataType.temperature
+                    new_dt = DataType.temperature
                 elif type_hint.startswith("stage"):
-                    self._data_type = DataType.gauge
-        elif "--" in parts[0]:
+                    new_dt = DataType.gauge
+            return 1, station, new_dt
+        if "--" in parts[0]:
             # Station header looks like "STATIONID--description"
-            self._station = parts[0].split("--")[0]
+            return 0, parts[0].split("--")[0], data_type
+        return 0, station, data_type
 
-    def _emit_data_row(self, line: str, parts: list[str]) -> None:
-        """State-2 body: emit one observation per data row when fully valid."""
-        if not self._station or len(parts) <= 3:
-            return
+    def _record_from_row(
+        self,
+        line: str,
+        parts: list[str],
+        station: str,
+        data_type: DataType,
+    ) -> ObservationRecord | None:
+        """State-2 body: build one record per data row when fully valid."""
+        if not station or len(parts) <= 3:
+            return None
         if "No Data" in line:
-            return
+            return None
 
         # Last column is quality code; 0 means "no quality code available" in
         # WA DOE data, treated as suspect. Valid quality codes are 1-199.
         quality = safe_float(parts[-1])
         if quality is None or quality <= 0 or quality >= 200:
-            return
+            return None
 
-        # Timestamps are naive; source.timezone (seeded from sources.yaml
+        # Timestamps are naive; source_tz_map (seeded from sources.yaml
         # stations: block, typically "Etc/GMT+8" — PST year-round, no DST)
-        # is applied by BaseParser.dump_to_db.
+        # gets applied by self._localize so the record carries tz-aware UTC.
         time_str = parts[0] + " " + parts[1]
         when = parse_datetime(time_str, assume_naive=True)
         if when is None:
-            return
+            return None
 
         val = safe_float(parts[2])
         if val is None or not math.isfinite(val):
-            return
+            return None
 
-        if self._data_type == DataType.temperature:
+        if data_type == DataType.temperature:
             val = celsius_to_fahrenheit(val)
 
-        self.dump_to_db(self._station, self._data_type, when, val)
+        return ObservationRecord(station, data_type, self._localize(when, station), val)
+
+    def _localize(self, when: datetime, station: str) -> datetime:
+        """Apply source_tz_map to a naive datetime; pass tz-aware through."""
+        if when.tzinfo is not None:
+            return when
+        tz_name = self.source_tz_map.get(station)
+        if not tz_name:
+            return when
+        tz = self._tz_cache.get(tz_name)
+        if tz is None:
+            tz = ZoneInfo(tz_name)
+            self._tz_cache[tz_name] = tz
+        return when.replace(tzinfo=tz).astimezone(UTC)
