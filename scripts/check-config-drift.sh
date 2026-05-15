@@ -29,8 +29,9 @@ REPO="${REPO:-${KAYAK_HOME}/kayak}"
 #     under conf/sites/ replaces these.
 #   - deploy/secrets.env.example, deploy/msmtprc.example — example templates,
 #     not deployed.
-#   - deploy/install-secrets.sh, deploy/SETUP.md, systemd/install.service.sh —
-#     admin tooling / docs.
+#   - deploy/install-config.sh, deploy/SETUP.md, systemd/install.service.sh —
+#     admin tooling / docs. (install-config.sh was renamed from
+#     install-secrets.sh in T3.3 Phase 5.2.)
 #   - systemd/*.sh — helper scripts run in-tree from /home/pat/kayak/systemd/,
 #     not copied to /etc/.
 read -r -d '' MANIFEST <<'EOF' || true

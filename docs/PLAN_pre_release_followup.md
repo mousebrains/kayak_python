@@ -710,6 +710,8 @@ def run_pipeline(args):
 
 ### T3.3 — Typed config spine
 
+**Status: Closed (2026-05-15)** — see `docs/PLAN_tier3_closeout.md` Phases 0–4 for the per-phase shipping log. Final shape: `src/kayak/config.py` is a `pydantic-settings` model; `levels emit-config` writes `/etc/kayak/runtime-config.json` (mode 0640 root:www-data, atomic same-dir tmp + rename); `php/includes/config.php` reads it via `Config::str/int/bool/list/url()` with no `getenv` fallback (HTTP-500 on missing JSON). The nginx `fastcgi_param` channel for `SQLITE_PATH` / `EDITOR_FEATURE` / `TURNSTILE_SITE_KEY` / `MAIL_FROM` / `SITE_URL` is gone; the FPM pool only re-exports `TURNSTILE_SECRET`. `tests/test_config.py` (Python) + `tests/php/ConfigTest.php` (PHP) enforce schema parity. See `docs/operations.md` § Config for the operator runbook.
+
 **Why.** Per architecture audit ARCH-H7: configuration lives in env, `~/.config/kayak/.env`, `data/sources.yaml`, `data/builder.yaml`, systemd units, nginx `fastcgi_param`, DB tables, and an `EDITOR_FEATURE` runtime flag. Python's `kayak.config` and PHP's `auth_env`/`maintainer_emails` agree on maintainer email only by coincidence (both fall back to a hardcoded string).
 
 **Change.**
@@ -726,6 +728,8 @@ def run_pipeline(args):
 **Depends on.** production-discipline Tier 3 (deploy.sh) — the JSON regen step lives there.
 
 ### T3.4 — Replace `/home/pat` hardcoding with `KAYAK_HOME`
+
+**Status: Closed (2026-05-15)** — see `docs/PLAN_tier3_closeout.md` Phase 5 for the per-sub-phase shipping log. `KAYAK_HOME` lands via `/etc/kayak/env` (installed by `deploy/install-config.sh`); every `kayak-*.service` carries `Environment=KAYAK_HOME=/home/pat` + `EnvironmentFile=-/etc/kayak/env`; every targeted shell script sources `/etc/kayak/env` with a `: "${KAYAK_HOME:=/home/pat}"` fallback prologue. **The acceptance criterion ("grep returns only `KAYAK_HOME=`-style assignments") is consciously unmet.** Three systemd directive shapes can't expand env vars at all (`WorkingDirectory=`, `EnvironmentFile=`, `ReadWritePaths=`) and the `ExecStart=` binary-path slot can't either (systemd 257 rejects `${KAYAK_HOME}/.venv/bin/levels`: "the first argument may not be a variable" — `man systemd.exec`). Two adjacent surfaces (nginx `root /home/pat/public_html;` and PHP-FPM `open_basedir`) similarly can't expand env vars by the layer's design. Each remaining literal carries a leading-comment annotation documenting the layer-level constraint, so a future operator relocating `KAYAK_HOME` sees the reason inline. The Phase 5.7 reconciliation table in the closeout plan breaks the residual 86 hits down line-by-line.
 
 **Why.** Per architecture audit ARCH-H8: `/home/pat` is welded into PHP, systemd, scripts, snapshot. Blocks containerization, blocks any second host, blocks any second maintainer's local dev setup.
 

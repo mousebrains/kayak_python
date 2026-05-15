@@ -215,9 +215,8 @@ MAINTAINER_NAME: str = _config.maintainer_name
 # defensively, but make the constant byte-identical for grep stability).
 SITE_URL: str = str(_config.site_url).rstrip("/")
 
-# ``MAINTAINER_EMAIL`` preserves the single-string contract from before
-# the typed model (Phase 0 = no behavior change). New code should use
-# ``get_config().maintainer_emails`` (list[EmailStr]); the hardcoded
-# fallback below is removed in Phase 2 alongside the PHP read-path
-# migration.
-MAINTAINER_EMAIL: str = os.environ.get("MAINTAINER_EMAIL", "pat.kayak@gmail.com")
+# ``MAINTAINER_EMAIL`` module constant was removed in T3.3 closeout —
+# no consumers import it (grep -rn 'from kayak.config import' returned
+# zero hits on the name). Use ``get_config().maintainer_emails``
+# (list[EmailStr]) in new code; PHP reads the same through
+# ``Config::list('maintainer_emails')``.

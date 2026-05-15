@@ -1,5 +1,19 @@
 # PLAN: Tier 3 closeout — typed config spine (T3.3) + KAYAK_HOME indirection (T3.4) + dormant-schema decision (T3.5)
 
+> **Status: Closed (2026-05-15).** All seven phases shipped + verified in
+> prod. Final residual diverged from prediction (86 raw / 59 indirection-
+> filtered vs. plan's 52) — see Phase 5.7's "Actual residual" table for
+> the per-row reconciliation. Two latent bugs surfaced and were fixed
+> during the operator-side install: (a) `/etc/kayak/runtime-config.json`
+> was outside PHP-FPM `open_basedir` so every PHP page 500'd post-deploy
+> until Phase-5-late commit `2c89518` added the path; (b) `levels emit-
+> config` wasn't reading `/etc/kayak/secrets.env`, so the JSON had empty
+> `turnstile_*` and captcha verification silently bypassed — fixed in
+> commit `450fbe7`. Both fixes are reflected in `docs/operations.md`
+> § Config. The follow-up plans (`PLAN_pre_release_followup.md` §§ T3.3 /
+> T3.4 / T3.5, `PLAN_outstanding_followups.md` § Phase 4.2) all carry
+> "Closed (2026-05-15)" banners pointing back here.
+>
 > **Drafted:** 2026-05-14 against `main` at `eaa51c8` (T3.3 only);
 > **extended:** 2026-05-14 against `main` at `248b899` (added T3.4 + T3.5
 > phases + iter log v2). Source plans:
@@ -1352,80 +1366,96 @@ When all seven phases complete:
 
 ### T3.3 (Phases 0–4)
 
-- [ ] `src/kayak/config.py` is a `pydantic-settings` model; no
-      module-level `os.environ.get` calls remain.
-- [ ] `levels emit-config`, `levels show-config`, `levels validate-
+- [x] `src/kayak/config.py` is a `pydantic-settings` model; no
+      module-level `os.environ.get` calls remain. (The dead
+      `MAINTAINER_EMAIL` module constant was removed in the
+      2026-05-15 closeout.)
+- [x] `levels emit-config`, `levels show-config`, `levels validate-
       config` exist and are documented in `levels --help`.
-- [ ] `/etc/kayak/runtime-config.json` is the PHP source of truth;
+- [x] `/etc/kayak/runtime-config.json` is the PHP source of truth;
       mode 0640 root:www-data. Atomic writes via same-dir tmp +
       rename.
-- [ ] `deploy/sudoers.d/kayak-emit-config` installed; deploy.sh
+- [x] `deploy/sudoers.d/kayak-emit-config` installed; deploy.sh
       runs `sudo -n levels emit-config` automatically.
-- [ ] `php/includes/config.php` exists; PHPStan level 8 clean; no
+- [x] `php/includes/config.php` exists; PHPStan level 8 clean; no
       `getenv` fallbacks remain.
-- [ ] `php/includes/{auth,mail,turnstile,db}.php` and all consumers
+- [x] `php/includes/{auth,mail,turnstile,db}.php` and all consumers
       read via `Config::str/int/bool/list/url()` typed wrappers.
-- [ ] `php/includes/auth.php::maintainer_emails()` preserves the
+- [x] `php/includes/auth.php::maintainer_emails()` preserves the
       DB-rows fallback (NOT just env → JSON → empty); the
       hardcoded literal is gone.
-- [ ] `conf/snippets/levels-common.conf` no longer carries any of
+- [x] `conf/snippets/levels-common.conf` no longer carries any of
       `SQLITE_PATH`, `EDITOR_FEATURE`, `TURNSTILE_SITE_KEY`,
       `MAIL_FROM`, `SITE_URL` as `fastcgi_param` lines (only
       `SCRIPT_FILENAME` + `include fastcgi_params` remain).
-- [ ] `deploy/kayak-fpm-pool.conf`'s `env[X] = $X` re-export lines
+- [x] `deploy/kayak-fpm-pool.conf`'s `env[X] = $X` re-export lines
       are pruned. Only `TURNSTILE_SECRET` survives (defense-in-
       depth — JSON 0640 group-readable vs env vars per-process; the
       JSON has it too but the env channel is the belt to the JSON's
       suspenders for the single live secret).
-- [ ] `tests/php/ConfigTest.php` validates schema parity.
-- [ ] `tests/test_config.py` covers env parsing, validation,
+- [x] `tests/php/ConfigTest.php` validates schema parity.
+- [x] `tests/test_config.py` covers env parsing, validation,
       defaults, and the late-binding test from Phase 0.
-- [ ] `scripts/deploy.sh` runs `validate-config` → `emit-config` in
+- [x] `scripts/deploy.sh` runs `validate-config` → `emit-config` in
       order; no NOTICE for JSON content changes (php-fpm picks up
       automatically).
-- [ ] `scripts/check-config-drift.sh` ignores `runtime-config.json`.
-- [ ] `docs/operations.md` § Config: new section describing the
+- [x] `scripts/check-config-drift.sh` ignores `runtime-config.json`
+      (the file is not in the opt-in manifest, so the drift checker
+      never compares it).
+- [x] `docs/operations.md` § Config: new section describing the
       JSON path, the emit/show/validate commands, the sudoers
       grant, and the "what to do when config drift is suspected"
       runbook.
 
 ### T3.4 (Phase 5)
 
-- [ ] `deploy/kayak-env.example` exists; `/etc/kayak/env` installed
+- [x] `deploy/kayak-env.example` exists; `/etc/kayak/env` installed
       mode 0644 root:root carrying `KAYAK_HOME=/home/pat`.
-- [ ] `deploy/install-secrets.sh` renamed to `install-config.sh`;
+- [x] `deploy/install-secrets.sh` renamed to `install-config.sh`;
       `deploy/SETUP.md` references updated; the script installs
       `/etc/kayak/env` before secrets.
-- [ ] `scripts/check-config-drift.sh` manifest includes
+- [x] `scripts/check-config-drift.sh` manifest includes
       `deploy/kayak-env.example<TAB>/etc/kayak/env`.
-- [ ] Every `kayak-*.service` carries `Environment=KAYAK_HOME=/home/pat`
-      + `EnvironmentFile=-/etc/kayak/env`; its `ExecStart=` uses
+- [x] Every `kayak-*.service` carries `Environment=KAYAK_HOME=/home/pat`
+      + `EnvironmentFile=-/etc/kayak/env`; ExecStart arguments use
       `${KAYAK_HOME}/...`; a leading comment documents the
       WorkingDirectory/EnvironmentFile/ReadWritePaths literal-path
-      reason.
-- [ ] Every targeted shell script sources `/etc/kayak/env` with the
+      reason. (ExecStart **binary path** stays literal — systemd
+      257 rejects `${KAYAK_HOME}/.venv/bin/levels`: "the first
+      argument may not be a variable" per systemd.exec(5). Constraint
+      surfaced during Phase 5.3 and documented in the unit-file
+      comment block.)
+- [x] Every targeted shell script sources `/etc/kayak/env` with the
       `: "${KAYAK_HOME:=/home/pat}"` default ahead of the source.
-- [ ] `php/csp-report.php` reads `csp_log_path` via
+- [x] `php/csp-report.php` reads `csp_log_path` via
       `Config::str(...)` (Phase 5.5 / T3.3 Phase 2.2 update).
-- [ ] `conf/snippets/levels-common.conf` carries the comment block
+- [x] `conf/snippets/levels-common.conf` carries the comment block
       explaining the nginx literal-path rationale.
-- [ ] Surface grep returns **52 hits** (12 `WorkingDirectory=` + 13
-      `EnvironmentFile=` + 10 `ReadWritePaths=` + 3 nginx + 1
-      PHP-FPM open_basedir + 12 `Environment=KAYAK_HOME=` floor +
-      1 template) — see Phase 5.7 table for the exact breakdown.
-- [ ] `deploy/kayak-fpm-pool.conf` open_basedir directive carries
-      the leading comment from Phase 5.6(b).
-- [ ] `deploy/SETUP.md` references `install-config.sh` (not the
+- [x] Surface grep — **predicted 52, actual 86.** See the "Actual
+      residual" reconciliation table in Phase 5.7 for the per-row
+      breakdown. The 34-hit divergence is dominated by 13 retained
+      `ExecStart=` binary-path literals (systemd constraint above),
+      3 services added post-plan (cert-expiry, cert-renewal-test,
+      config-drift), 11 shell-script `KAYAK_HOME:=/home/pat`
+      indirection-floor defaults (these ARE the parameterization),
+      and 5 PHP docstring + fallback-default refs.
+- [x] `deploy/kayak-fpm-pool.conf` open_basedir directive carries
+      the leading comment from Phase 5.6(b). (Phase 5.6 also added
+      `/etc/kayak/runtime-config.json` to the open_basedir colon
+      list itself — a latent bug surfaced after Phase 4's strict
+      Config: every PHP page 500'd until the path was allowlisted.)
+- [x] `deploy/SETUP.md` references `install-config.sh` (not the
       old `install-secrets.sh` name) everywhere.
 
 ### T3.5 (Phase 6)
 
-- [ ] `PLAN_pre_release_followup.md` § T3.5 table rewritten with
+- [x] `PLAN_pre_release_followup.md` § T3.5 table rewritten with
       "DROPPED in 0022" / "KEEP" + rationale per row; marked
-      "Status: Closed (2026-05-14)".
-- [ ] `PLAN_outstanding_followups.md` § Phase 4.2 row reads
+      "Status: Closed (2026-05-15)". (Date is 2026-05-15, not the
+      2026-05-14 originally drafted — landing slipped one day.)
+- [x] `PLAN_outstanding_followups.md` § Phase 4.2 row reads
       "(closed)" with a pointer to this plan + migration 0022.
-- [ ] `docs/operations.md` § Schema decisions exists; summarizes
+- [x] `docs/operations.md` § Schema decisions exists; summarizes
       the audit-vs-reality split; documents the VARCHAR-length
       gate; includes the table-rebuild recipe for any future
       drop.

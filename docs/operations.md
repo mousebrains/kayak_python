@@ -364,6 +364,75 @@ When `kayak-pipeline.service` exits nonzero:
 
    This opts out of QW.5's fail-fast and runs every step regardless.
 
+## Config
+
+The runtime configuration shared between Python (`kayak.config`) and PHP
+(`Config::*` in `php/includes/config.php`) is a single JSON snapshot:
+
+- **Location:** `/etc/kayak/runtime-config.json`, mode `0640 root:www-data`.
+  Atomically written by `levels emit-config` (same-dir `.tmp` + `rename(2)`).
+- **Schema:** every field on `KayakConfig` (`src/kayak/config.py`) becomes
+  a key in the JSON. SecretStr fields land plaintext — the file mode is
+  the security boundary, not field masking.
+- **Inputs:** `~/.config/kayak/.env` (operator-managed non-secrets) +
+  `/etc/kayak/secrets.env` (root:www-data 0600 — Turnstile site key /
+  secret). `kayak.config` loads both via `load_dotenv` at import time;
+  the secrets.env load is gated on `os.access(R_OK)` so dev shells where
+  pat can't read root-owned files silently skip it.
+
+### Inspecting
+
+```bash
+# Python view — resolved KayakConfig as a table (no JSON file read).
+levels show-config
+
+# PHP view — reads /etc/kayak/runtime-config.json. Refuses HTTP serving.
+sudo php /home/pat/kayak/php/show-config.php
+```
+
+### Refreshing
+
+`scripts/deploy.sh` re-emits on every deploy via the sudoers grant at
+`/etc/sudoers.d/kayak-emit-config` (allows `pat ALL=(root) NOPASSWD: …
+levels emit-config*`). Manual refresh:
+
+```bash
+sudo -n /home/pat/.venv/bin/levels emit-config --out /etc/kayak/runtime-config.json
+```
+
+PHP picks up the new JSON on the next request (per-request `Config`
+singleton; no FPM reload needed).
+
+### Validation
+
+`levels validate-config` runs as part of `scripts/deploy.sh` before
+`emit-config`. It surfaces:
+
+- Out-of-range or malformed values (pydantic field validators).
+- Unknown `KAYAK_*` / `FETCH_*` / `MAIL_*` / `HC_*` / `EDITOR_*` /
+  `TURNSTILE_*` / etc. env vars (likely typos) when invoked with
+  `--known-env --strict`.
+
+Exit codes: `0` clean, `1` invalid field, `2` runner failure.
+
+### When config is fatal at request time
+
+Phase 4 of T3.3 made `php/includes/config.php` HTTP-500 on a missing
+or unparseable JSON; the error gets logged as `[CONFIG-FATAL]` to
+`php-fpm`'s journal. If `/login.php` (or anything else PHP) returns 500:
+
+```bash
+sudo journalctl -u php8.4-fpm --since '10 min ago' | grep CONFIG-FATAL
+```
+
+Common causes: `/etc/kayak/runtime-config.json` missing (re-emit), JSON
+outside `open_basedir` (check `deploy/kayak-fpm-pool.conf` — the path
+must be in the colon list), or file unreadable by www-data (`ls -la
+/etc/kayak/runtime-config.json` should show `-rw-r----- root www-data`).
+
+See § Config drift below for the weekly automated check that catches
+on-disk vs. repo skew across all tracked config files.
+
 ## Config drift
 
 The weekly `kayak-config-drift.service` (T1.2 of the audit follow-up

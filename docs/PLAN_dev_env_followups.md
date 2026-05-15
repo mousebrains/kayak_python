@@ -45,7 +45,7 @@ Goal: tree is clean on every host; `make lint-*` runs to completion where the to
 | `biome.json:15` | references `"php/style.css"` | no |
 | `Makefile:35` | `biome check php/style.css src/kayak/web/static/style.css` | no |
 | `Makefile:38` | globs `hardening/*.sh` (dir doesn't exist) | no |
-| `deploy/install-secrets.sh` | exists; not lint-covered | no |
+| `deploy/install-config.sh` | exists; not lint-covered | no |
 | `public_html/includes` (repo) | symlink → `../php/includes` (tracked, mode 120000) | no — same on both hosts |
 | `public_html/includes` (deploy target `/home/pat/public_html/includes`) | real directory | yes — on default-config dev the deploy target == repo |
 | `css_head_block()` at `php/includes/header.php:30` | `$doc_root = __DIR__ . '/..'` | yes — only a problem on dev hosts that serve the repo's `public_html/` directly via `php -S` |
@@ -63,7 +63,7 @@ Three small edits + one local-only cleanup. Commits to `main`; pre-commit + CI v
 
 1. **`biome.json:15`** — remove the `"php/style.css"` entry from `files.includes`. Resulting `lint-css` set is 1 CSS file (`src/kayak/web/static/style.css`); biome no longer emits `internalError/io`.
 2. **`Makefile:35` (`lint-css` target)** — change to `biome check src/kayak/web/static/style.css`. (Drop `php/style.css`.)
-3. **`Makefile:38` (`lint-shell` target)** — drop the `hardening/*.sh` glob. Add `deploy/*.sh` (1 file present: `deploy/install-secrets.sh`). Resulting target: `shellcheck --severity=warning scripts/*.sh systemd/*.sh deploy/*.sh`.
+3. **`Makefile:38` (`lint-shell` target)** — drop the `hardening/*.sh` glob. Add `deploy/*.sh` (1 file present: `deploy/install-config.sh`). Resulting target: `shellcheck --severity=warning scripts/*.sh systemd/*.sh deploy/*.sh`.
 4. **`.gitignore`** —
    - **Remove** the stale `php/style.css` entry at `.gitignore:41`. No build code writes to that path (verified: `deploy.py:107` and `_shared.py:52` only target `output_dir/style.css`); the entry has been masking the on-disk leftover from `a4e1e02` rather than gating any active artifact.
    - **Add** stray build-artifact patterns to forestall Issue 4's reappearance on any dev box that still uses default `OUTPUT_DIR`:
@@ -251,7 +251,7 @@ Read-only commands.
 ls -la php/style.css                    # leftover stale CSS (expected on this host)
 grep -n 'php/style.css' biome.json      # → line 15
 grep -n 'php/style.css\|hardening' Makefile
-ls deploy/*.sh                          # → deploy/install-secrets.sh
+ls deploy/*.sh                          # → deploy/install-config.sh
 grep -nE 'style.css|reaches-' .gitignore | head    # → php/style.css at line 41 (to remove); reaches-* at 39-40 (keep)
 
 # Phase 2 inputs

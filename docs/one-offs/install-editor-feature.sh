@@ -164,7 +164,8 @@ cat <<'EOF'
        map $host $mail_from          { default "noreply@levels.wkcc.org"; }
 
      The Turnstile *secret* lives in /etc/kayak/secrets.env (mode 0600
-     root:www-data) — never in nginx config. See deploy/install-secrets.sh.
+     root:www-data) — never in nginx config. See deploy/install-config.sh
+     (renamed from install-secrets.sh in T3.3 Phase 5.2).
 
      then:  sudo nginx -t && sudo systemctl reload nginx
 
