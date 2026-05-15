@@ -25,6 +25,15 @@ see `CLAUDE.md` § "PHP Tooling".
   makes bare-underscore collisions invisible locally but fatal on
   PHPStan's file-load-order in CI (see commit `998976d` for the
   lesson that motivated this).
+
+  Enforced by `scripts/check-php-helper-prefix.sh` (pre-commit hook
+  per PLAN_pre_release_followup.md § T2.8). The check accepts any
+  helper whose name contains the file's basename stem (with
+  `_handler` / `_detail` suffixes stripped), plus the documented
+  `_gp_*` cross-file cluster used by the gauge_plots* family. 24
+  grandfathered helpers from before the check landed live in
+  `scripts/php-helper-prefix.allowlist`; new helpers must satisfy
+  the rule rather than appending there.
 - **Module constants follow the same boundary.** Use `<FILE>_<NAME>`
   (e.g. `CUSTOM_LEVELS_STATUS_META`, `REVIEW_LIST_STATUSES`).
 - **Public vs private.** Function names without a leading underscore

@@ -1,0 +1,32 @@
+# gitleaks config — anchor for repo-local rules/allowlists.
+#
+# The pre-commit hook (`.pre-commit-config.yaml`, gitleaks repo) and CI
+# pre-push gate run gitleaks with this config. Without an explicit
+# config file, gitleaks falls back to its baked-in defaults; this file
+# extends those defaults plus reserves space for future repo-specific
+# allowlist entries (test fixtures that match the entropy heuristic,
+# documented public values that look secret, etc.).
+#
+# Per PLAN_pre_release_followup.md § T2.8.
+
+title = "Kayak gitleaks config"
+
+[extend]
+# Inherit gitleaks' built-in rule set. Any [[rules]] blocks below this
+# point ADD to the defaults rather than replacing them.
+useDefault = true
+
+# Repo-local allowlist anchor. No entries today — added inline as
+# false-positives surface. Documented examples that future entries
+# might cover:
+#
+#   - Test-fixture base64/hex strings under tests/ that aren't secrets.
+#   - The Turnstile site key in conf/snippets/security-headers-turnstile.conf
+#     (public, intentionally embedded — already not flagged by gitleaks
+#     defaults but worth allowlisting here if the rule set tightens).
+#
+# Format reminder:
+#   [[allowlists]]
+#   description = "<why this is safe to commit>"
+#   regexes = ['''<pcre>''']
+#   paths   = ['''<file glob>''']

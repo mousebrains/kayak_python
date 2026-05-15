@@ -72,3 +72,20 @@ repos:
         # Skipped if vendor/ isn't present (fresh checkout); same caveat
         # as php-cs-fixer above.
         stages: [pre-commit]
+      - id: php-helper-prefix
+        name: PHP helper-prefix convention
+        # Enforces the _<file>_* convention for file-private helpers in
+        # php/includes/. New helpers must contain the file's basename
+        # stem (with _handler / _detail stripped); the _gp_* cross-file
+        # cluster is allowlisted as a prefix; the 24 grandfathered
+        # offenders captured 2026-05-15 live in
+        # scripts/php-helper-prefix.allowlist. Per CONVENTIONS.md
+        # "File-private helpers carry the file's prefix" and
+        # PLAN_pre_release_followup.md § T2.8.
+        entry: scripts/check-php-helper-prefix.sh
+        language: system
+        # Trigger on any change to a check input OR the script/allowlist
+        # themselves (so e.g. dropping a line from the allowlist re-runs
+        # the gate on the next commit).
+        files: ^(php/includes/.+\.php|scripts/check-php-helper-prefix\.sh|scripts/php-helper-prefix\.allowlist)$
+        pass_filenames: false
