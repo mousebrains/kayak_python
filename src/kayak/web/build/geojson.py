@@ -171,7 +171,7 @@ def _build_gauges_static(gauges: list[Gauge]) -> str:
 
     Skips gauges without a (lat, lon) — the map can't paint them.
     Long-cached alongside reaches-geom.json. Per Item 2a of
-    ``docs/PLAN_map_and_ui_tweaks.md``.
+    ``docs/done/PLAN_map_and_ui_tweaks.md``.
     """
     p = GEOJSON_COORD_PRECISION
     features: list[dict] = []
@@ -228,7 +228,7 @@ def _build_gauges_state(
     Drops gauges with an expired observation (>7 days) — same threshold
     gauges.html uses. Skips gauges without lat/long (the static file
     already omits them so the client wouldn't paint anyway). Per Item 2a
-    of ``docs/PLAN_map_and_ui_tweaks.md``.
+    of ``docs/done/PLAN_map_and_ui_tweaks.md``.
     """
     out: dict[str, object] = {"_meta": _LICENSE_META}
     for g in gauges:

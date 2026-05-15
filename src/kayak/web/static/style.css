@@ -80,7 +80,7 @@ header nav.site-nav-right{margin-left:auto}
    overflows the strip. scroll-indicator.js toggles
    [data-overflow-left] / [data-overflow-right] on the scrollable
    element based on its scrollLeft vs scrollWidth-clientWidth.
-   Per docs/PLAN_map_and_ui_tweaks.md Item 5. Decision §6: accept
+   Per docs/done/PLAN_map_and_ui_tweaks.md Item 5. Decision §6: accept
    first-paint no-fade gap before defer-loaded JS attaches. */
 [data-scroll-indicate][data-overflow-right]:not([data-overflow-left]){
   -webkit-mask-image:linear-gradient(to right,#000 calc(100% - 14px),transparent);
@@ -283,6 +283,79 @@ tr.stale td{color:var(--c-text-faint);font-style:italic}
 .readings-table th,.readings-table td{padding:4px 10px;border:1px solid var(--c-border);text-align:left}
 .readings-table th{background:var(--c-primary);color:#fff;font-size:.8rem}
 .readings-table td{font-size:.85rem}
+
+/* Phone portrait: card view for the gauge.php "Associated Reaches"
+   table. Scoped to .assoc-reaches so the other four .readings-table
+   consumers (gauge readings, sources, description readings, data
+   export) keep the default table view. Row layout mirrors table.levels
+   card at :149-229; see docs/done/PLAN_assoc_reaches_card.md.
+   display:grid on <tr> breaks ARIA table semantics for screen readers
+   — accepted tradeoff (same as table.levels card mode). */
+@media(max-width:639px){
+  .readings-table.assoc-reaches{display:block;width:100%}
+  .readings-table.assoc-reaches thead{display:none}
+  .readings-table.assoc-reaches tbody{display:block}
+  .readings-table.assoc-reaches tr{
+    display:grid;
+    grid-template-columns:1fr auto;
+    column-gap:.4rem;
+    align-items:baseline;
+    padding:.35rem .5rem;
+    border-bottom:2px solid var(--c-primary);
+    background:var(--c-surface);
+  }
+  .readings-table.assoc-reaches td{padding:0;border:none;white-space:normal}
+
+  .readings-table.assoc-reaches td.td-name{
+    grid-row:1;grid-column:1;min-width:0;
+    font-size:1rem;font-weight:700;
+    overflow:hidden;text-overflow:ellipsis;
+  }
+  .readings-table.assoc-reaches td.td-name a{
+    display:inline;padding:0;margin:0;
+    color:var(--c-text);text-decoration:none;
+  }
+  .readings-table.assoc-reaches td[data-label="Class"]{
+    grid-row:1;grid-column:2;text-align:right;align-self:baseline;
+    font-size:.85rem;
+  }
+  .readings-table.assoc-reaches td[data-label="Location"]{
+    grid-row:2;grid-column:1;
+    font-size:.8rem;color:var(--c-text-muted);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .readings-table.assoc-reaches td[data-label="Length"]{
+    grid-row:2;grid-column:2;
+    font-size:.8rem;color:var(--c-text-muted);text-align:right;
+  }
+
+  /* River + textual Status are redundant on the card — River is
+     usually constant across rows on a per-gauge page, and the
+     status dot before the name encodes the same signal. */
+  .readings-table.assoc-reaches td.secondary[data-label="River"],
+  .readings-table.assoc-reaches td.td-status{display:none}
+
+  /* Status dot before the name, coloured by tr[data-status]. Mirrors
+     the table.levels rule at :223-228. */
+  .readings-table.assoc-reaches tr[data-status] td.td-name::before{
+    content:'\25cf  ';display:inline;color:var(--c-text-muted);
+  }
+  .readings-table.assoc-reaches tr[data-status="low"] td.td-name::before{color:var(--c-low)}
+  .readings-table.assoc-reaches tr[data-status="okay"] td.td-name::before{color:var(--c-okay)}
+  .readings-table.assoc-reaches tr[data-status="high"] td.td-name::before{color:var(--c-high)}
+}
+
+/* Tablet / landscape phone: cap Location to keep the right-hand
+   columns (Class / Length / Status) on-screen. Six columns at this
+   width are tight; ellipsis trims the strongest offender. */
+@media(min-width:640px) and (max-width:1023px){
+  .readings-table.assoc-reaches td[data-label="Location"]{
+    max-width:22ch;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+}
 
 /* Plot container */
 .plot-container{text-align:center;padding:1rem 0;position:relative}

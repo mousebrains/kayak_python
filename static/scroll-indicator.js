@@ -8,7 +8,7 @@
  *   - data-overflow-left only (scrolled to end):    left-edge fade
  *   - both attrs present (mid-scroll):              fades on both edges
  *
- * Per docs/PLAN_map_and_ui_tweaks.md Item 5. Decision §6 accepts the
+ * Per docs/done/PLAN_map_and_ui_tweaks.md Item 5. Decision §6 accepts the
  * brief first-paint no-fade gap before the `defer`-loaded script
  * attaches (~1 KB, sub-100 ms on modern connections).
  *

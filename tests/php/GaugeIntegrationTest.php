@@ -194,6 +194,7 @@ final class GaugeIntegrationTest extends IntegrationTestCase
             'Associated Sources',            // sources section
             'Associated Reaches',            // reaches section
             'Clackamas Above Estacada',      // associated reach name
+            'class="readings-table assoc-reaches"', // phone-card scoping hook
         );
         // Readings within 1 hour of now → no stale banner.
         $this->assertStringNotContainsString(

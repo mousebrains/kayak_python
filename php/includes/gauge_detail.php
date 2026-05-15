@@ -562,13 +562,19 @@ function _render_associated_reaches(array $reaches, array $reach_status_by_id): 
         return;
     }
     echo '<h3 style="margin-top:1rem">Associated Reaches</h3>';
-    echo '<table class="readings-table">';
+    // `assoc-reaches` is the scoping hook for the phone-portrait card
+    // layout in style.css — keeps the other four `.readings-table`
+    // consumers (gauge readings, sources, description readings,
+    // data export) on the default table view. Per
+    // docs/done/PLAN_assoc_reaches_card.md.
+    echo '<table class="readings-table assoc-reaches">';
     // Location right after Name: on a per-gauge page, r.description differentiates
     // reaches more than r.river (river is often constant across rows). Watershed
     // (r.basin) was the prior 5th column — dropped because it's uniformly the same
     // basin for reaches on the same gauge, so adds no signal. Per
-    // docs/PLAN_map_and_ui_tweaks.md Item 4.
-    echo '<tr><th>Name</th><th>Location</th><th>River</th><th>Class</th><th>Length</th><th>Status</th></tr>';
+    // docs/done/PLAN_map_and_ui_tweaks.md Item 4.
+    echo '<thead><tr><th>Name</th><th>Location</th><th>River</th><th>Class</th><th>Length</th><th>Status</th></tr></thead>';
+    echo '<tbody>';
     foreach ($reaches as $r) {
         $rname = htmlspecialchars($r['name']);
         $location = htmlspecialchars((string)($r['description'] ?? ''));
@@ -576,12 +582,20 @@ function _render_associated_reaches(array $reaches, array $reach_status_by_id): 
         $classes = htmlspecialchars($r['classes'] ?? '');
         $len = $r['length'] !== null ? number_format((float)$r['length'], 1) . ' mi' : '';
         $status = $reach_status_by_id[(int)$r['id']] ?? 'unknown';
+        $status_attr = htmlspecialchars($status);
         $status_html = $status === 'unknown'
             ? '<span style="color:var(--c-text-muted)">unknown</span>'
             : '<span class="level-' . $status . '">' . $status . '</span>';
-        echo "<tr><td><a href=\"/description.php?id={$r['id']}\">$rname</a></td><td>$location</td><td>$river</td><td>$classes</td><td>$len</td><td>$status_html</td></tr>\n";
+        echo "<tr data-status=\"$status_attr\">"
+            . "<td class=\"td-name\" data-label=\"Name\"><a href=\"/description.php?id={$r['id']}\">$rname</a></td>"
+            . "<td data-label=\"Location\">$location</td>"
+            . "<td class=\"secondary\" data-label=\"River\">$river</td>"
+            . "<td data-label=\"Class\">$classes</td>"
+            . "<td data-label=\"Length\">$len</td>"
+            . "<td class=\"td-status\" data-label=\"Status\">$status_html</td>"
+            . "</tr>\n";
     }
-    echo '</table>';
+    echo '</tbody></table>';
 }
 
 /**

@@ -26,7 +26,7 @@ const CLASS_TIERS=['I','II','III','IV','V','?'];
 const DEFAULT_VIEW=[44.0,-120.5];
 const DEFAULT_ZOOM=7;
 
-// Item 1 of docs/PLAN_map_and_ui_tweaks.md: hover-opens-popup is desktop-
+// Item 1 of docs/done/PLAN_map_and_ui_tweaks.md: hover-opens-popup is desktop-
 // only. Touch-only devices keep tap-to-open (Leaflet's built-in click
 // behavior). (hover: hover) matches devices whose primary input can
 // hover (mice, trackpads); (pointer: fine) gates out touchscreens-with-
@@ -38,7 +38,7 @@ const DESKTOP_HOVER=window.matchMedia('(hover: hover) and (pointer: fine)').matc
 // tuning band 100–200 ms if it feels wrong in the browser.
 const POPUP_CLOSE_GRACE_MS=150;
 
-// Item 2 of docs/PLAN_map_and_ui_tweaks.md — gauge markers.
+// Item 2 of docs/done/PLAN_map_and_ui_tweaks.md — gauge markers.
 //   ZOOM_THRESHOLD: state-wide views (z<9) get tiny dots; zoom-in
 //     (z>=9) gets the larger marker so the user can read the cluster.
 //   RADIUS_LOW/HIGH: visible marker radius in pixels at each tier.
@@ -283,7 +283,7 @@ function renderMap(geom,state,gaugesGeom,gaugesState){
       // so close only when neither surface is hovered (with a grace
       // window for normal cursor traversal). Touch devices keep
       // Leaflet's built-in click-to-open. Item 1 of
-      // docs/PLAN_map_and_ui_tweaks.md.
+      // docs/done/PLAN_map_and_ui_tweaks.md.
       let closeTimer=null;
       function scheduleClose(){
         if(closeTimer!==null)clearTimeout(closeTimer);
@@ -323,6 +323,16 @@ function renderMap(geom,state,gaugesGeom,gaugesState){
           scheduleClose();
         });
       });
+      // Desktop click-to-navigate: hover already shows the preview
+      // popup, so a click on the trace should commit to the
+      // description page rather than toggle the popup (Leaflet's
+      // default click behavior). Touch devices keep tap-to-open —
+      // the popup body is itself an <a href> for the second tap.
+      if(DESKTOP_HOVER){
+        target.on('click',function(){
+          window.location.href='/description.php?id='+parseInt(p.id,10);
+        });
+      }
     },
   });
 
@@ -473,6 +483,14 @@ function renderMap(geom,state,gaugesGeom,gaugesState){
           scheduleClose();
         });
       });
+      // Desktop click-to-navigate: same rationale as the reach path
+      // above. Hover already shows the gauge preview popup; a click
+      // commits to /gauge.php instead of toggling the popup closed.
+      if(DESKTOP_HOVER){
+        hit.on('click',function(){
+          window.location.href='/gauge.php?id='+parseInt(gid,10);
+        });
+      }
     }
   }
 

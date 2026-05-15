@@ -345,7 +345,7 @@ function _render_custom_header(array $reaches, array $tiers_by_reach): void
     // when ?ids= is present. Rebuild from $reaches rather than threading
     // the original $ids through _render_custom_header's signature; that
     // naturally drops any ids the DB couldn't resolve (which the picker
-    // wouldn't pre-check anyway). Per docs/PLAN_map_and_ui_tweaks.md Item 3.
+    // wouldn't pre-check anyway). Per docs/done/PLAN_map_and_ui_tweaks.md Item 3.
     $id_csv = implode(',', array_map(static fn(array $r): int => (int)$r['id'], $reaches));
     $picker_href = '/picker.php' . ($id_csv !== '' ? '?ids=' . $id_csv : '');
     ?>
