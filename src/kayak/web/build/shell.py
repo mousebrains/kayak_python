@@ -251,13 +251,14 @@ def _build_page(
 <link rel="icon" href="/static/favicon.ico">
 <link rel="manifest" href="/static/manifest.json">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
+<script src="/static/scroll-indicator.js" defer></script>
 {css_link}
 </head>
 <body>
 <a href="#main" class="skip-link">Skip to main content</a>
 <header>
   <h1><a href="/index.html">River Levels</a></h1>
-  <nav aria-label="State navigation">
+  <nav aria-label="State navigation" data-scroll-indicate>
     {nav_html}
   </nav>
   {_build_right_cluster()}
@@ -304,12 +305,13 @@ def _build_placeholder_page(css_link: str, states: list[str], state: str) -> str
 <link rel="icon" href="/static/favicon.ico">
 <link rel="manifest" href="/static/manifest.json">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
+<script src="/static/scroll-indicator.js" defer></script>
 {css_link}
 </head>
 <body>
 <header>
   <h1><a href="/index.html">River Levels</a></h1>
-  <nav aria-label="State navigation">
+  <nav aria-label="State navigation" data-scroll-indicate>
     {nav_html}
   </nav>
   {_build_right_cluster()}
@@ -340,6 +342,7 @@ def _build_map_page(css_link: str, states: list[str], geom_url: str, state_url: 
 <link rel="icon" href="/static/favicon.ico">
 <link rel="manifest" href="/static/manifest.json">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
+<script src="/static/scroll-indicator.js" defer></script>
 <link rel="stylesheet" href="/static/leaflet.css">
 {css_link}
 <style>
@@ -381,7 +384,7 @@ main {{padding:0;max-width:none;}}
 <body>
 <header>
   <h1><a href="/index.html">River Levels</a></h1>
-  <nav aria-label="State navigation">
+  <nav aria-label="State navigation" data-scroll-indicate>
     {nav_html}
   </nav>
   {_build_right_cluster()}

@@ -46,8 +46,10 @@ header nav.site-nav-right{margin-left:auto}
      Row 1: h1 (natural width) + state-nav (flex-grows, scrolls horizontally).
      Row 2: letter-nav (forced via flex-basis:100%, also scrolls).
    Each anchor keeps its 44×44 tap target; user swipes to reach items
-   off the right edge. The right-side mask fades the last ~14px as a
-   subtle "more →" hint without adding chrome. */
+   off the right edge. The fade is driven by scroll-indicator.js +
+   the [data-scroll-indicate] attribute rules below — kept out of
+   this media query so the indicator also applies at wider viewports
+   when content happens to overflow (e.g. many filter pills). */
 @media(max-width:767px){
   header > h1{flex-shrink:0}
   /* State nav (and any other non-letter nav) shares row 1 with h1. */
@@ -67,13 +69,30 @@ header nav.site-nav-right{margin-left:auto}
     overflow-y:hidden;
     -webkit-overflow-scrolling:touch;
     scrollbar-width:none;
-    -webkit-mask-image:linear-gradient(to right,#000 calc(100% - 14px),transparent);
-            mask-image:linear-gradient(to right,#000 calc(100% - 14px),transparent);
   }
   header > nav::-webkit-scrollbar,
   header > .letter-nav::-webkit-scrollbar{display:none}
   header > nav > a,
   header > .letter-nav > a{flex-shrink:0}
+}
+
+/* Scroll-position fades — applied on any viewport when content
+   overflows the strip. scroll-indicator.js toggles
+   [data-overflow-left] / [data-overflow-right] on the scrollable
+   element based on its scrollLeft vs scrollWidth-clientWidth.
+   Per docs/PLAN_map_and_ui_tweaks.md Item 5. Decision §6: accept
+   first-paint no-fade gap before defer-loaded JS attaches. */
+[data-scroll-indicate][data-overflow-right]:not([data-overflow-left]){
+  -webkit-mask-image:linear-gradient(to right,#000 calc(100% - 14px),transparent);
+          mask-image:linear-gradient(to right,#000 calc(100% - 14px),transparent);
+}
+[data-scroll-indicate][data-overflow-left]:not([data-overflow-right]){
+  -webkit-mask-image:linear-gradient(to right,transparent,#000 14px);
+          mask-image:linear-gradient(to right,transparent,#000 14px);
+}
+[data-scroll-indicate][data-overflow-left][data-overflow-right]{
+  -webkit-mask-image:linear-gradient(to right,transparent,#000 14px,#000 calc(100% - 14px),transparent);
+          mask-image:linear-gradient(to right,transparent,#000 14px,#000 calc(100% - 14px),transparent);
 }
 
 /* Letter navigation */

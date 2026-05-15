@@ -82,7 +82,9 @@ function render_nav(string $active, array $context): string {
     $ed      = $feature ? current_editor() : null;
     $maint   = $feature && is_maintainer($ed);
 
-    $left = '<nav class="site-nav" aria-label="Site navigation">'
+    // data-scroll-indicate flags this nav for scroll-indicator.js so the
+    // edge fades respond to scroll position (Item 5 of map_and_ui_tweaks).
+    $left = '<nav class="site-nav" aria-label="Site navigation" data-scroll-indicate>'
           . '<a href="' . $picker_url . '"' . $picker_cls . '>' . $picker_label . '</a>'
           . '<a href="/map.html"' . $map_cls . '>Map</a>';
 
@@ -148,6 +150,7 @@ function include_header(
 <meta name="theme-color" content="#0d3057" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="/static/favicon.ico">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
+<script src="/static/scroll-indicator.js" defer></script>
 $extra_head
 $css_block
 </head>
