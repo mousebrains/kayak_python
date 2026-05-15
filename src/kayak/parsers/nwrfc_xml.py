@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from kayak.db.models import DataType
-from kayak.parsers.base import BaseParser
+from kayak.parsers.base import BaseParser, ObservationRecord
 from kayak.parsers.registry import register
 from kayak.utils.conversions import parse_datetime, safe_float
 
@@ -37,64 +37,71 @@ class NWRFCXMLParser(BaseParser):
 
     name = "nwrfc.xml"
 
-    def parse(self, text: str) -> int:
-        """XML-based parsing instead of line-by-line."""
-        self._db_updates = 0
-        self._obs_buffer = []
+    def parse_records(
+        self,
+        text: str,
+        *,
+        now: datetime | None = None,
+    ) -> list[ObservationRecord]:
+        """Pure: XML → records. No session, no DB.
 
+        Returns ``[]`` on lxml import-error or XML-syntax-error — the
+        wrapper ``parse()`` handles the logging.
+        """
         try:
             from lxml import etree
         except ImportError:
-            logger.error("lxml required for NWRFC XML parser")
-            return 0
+            return []
 
-        # Disable entity resolution, network access, and DTD loading to block
-        # XXE and billion-laughs attacks. Inbound XML comes over TLS but
-        # we defend in depth.
-        parser = etree.XMLParser(
+        # Disable entity resolution, network access, and DTD loading to
+        # block XXE and billion-laughs attacks. Inbound XML comes over
+        # TLS but we defend in depth.
+        xml_parser = etree.XMLParser(
             resolve_entities=False,
             no_network=True,
             load_dtd=False,
             huge_tree=False,
         )
         try:
-            root = etree.fromstring(text.encode("utf-8"), parser)
-        except etree.XMLSyntaxError as e:
-            logger.error("XML parse error for %s: %s", self.url, e)
-            return 0
+            root = etree.fromstring(text.encode("utf-8"), xml_parser)
+        except etree.XMLSyntaxError:
+            return []
 
-        now = datetime.now(UTC)
+        if now is None:
+            now = datetime.now(UTC)
 
-        # Find all SiteData or observedData blocks
+        records: list[ObservationRecord] = []
         for site in root.iter():
             tag = self._local_tag(site)
-
-            if tag == "SiteData" or tag == "siteData":
+            if tag in ("SiteData", "siteData"):
                 station = site.get("id", "")
                 if not station:
-                    # Try child element
                     for child in site:
                         if self._local_tag(child) in ("siteId", "id"):
                             station = (child.text or "").strip()
                             break
-                self._parse_site(site, station, now)
+                self._collect_site(site, station, now, records)
+        return records
 
-        self._flush_buffer()
-
-        if self._db_updates == 0:
-            logger.warning("No database updates from %s parser(%s)", self.url, self.name)
-
-        return self._db_updates
-
-    def _parse_site(self, site_elem: Any, station: str, now: datetime) -> None:
-        """Parse one site's observed data."""
+    def _collect_site(
+        self,
+        site_elem: Any,
+        station: str,
+        now: datetime,
+        records: list[ObservationRecord],
+    ) -> None:
         for elem in site_elem.iter():
             tag = self._local_tag(elem)
             if tag in ("observedData", "observed"):
-                self._parse_observed(elem, station, now)
+                self._collect_observed(elem, station, now, records)
 
-    def _parse_observed(self, observed_elem: Any, station: str, now: datetime) -> None:
-        """Parse observed data block."""
+    def _collect_observed(
+        self,
+        observed_elem: Any,
+        station: str,
+        now: datetime,
+        records: list[ObservationRecord],
+    ) -> None:
         when: datetime | None = None
         for elem in observed_elem.iter():
             tag = self._local_tag(elem)
@@ -107,7 +114,9 @@ class NWRFCXMLParser(BaseParser):
                 continue
             handler = _TAG_HANDLERS.get(tag)
             if handler is not None:
-                self._emit_observation(station, when, elem, *handler)
+                record = self._record_from_elem(station, when, elem, *handler)
+                if record is not None:
+                    records.append(record)
 
     @staticmethod
     def _parse_when(text: str, now: datetime) -> datetime | None:
@@ -117,8 +126,8 @@ class NWRFCXMLParser(BaseParser):
             return None
         return when
 
-    def _emit_observation(
-        self,
+    @staticmethod
+    def _record_from_elem(
         station: str,
         when: datetime,
         elem: Any,
@@ -126,20 +135,62 @@ class NWRFCXMLParser(BaseParser):
         units_default: str,
         valid_unit_substrings: tuple[str, ...],
         require_non_negative: bool,
-    ) -> None:
-        """Emit one observation if `elem` carries a finite, unit-compatible value."""
+    ) -> ObservationRecord | None:
+        """Build a record if `elem` carries a finite, unit-compatible value."""
         text = (elem.text or "").strip()
         if not text:
-            return
+            return None
         units = elem.get("units", units_default).lower()
         if not any(s in units for s in valid_unit_substrings):
-            return
+            return None
         val = safe_float(text)
         if val is None or not math.isfinite(val):
-            return
+            return None
         if require_non_negative and val < 0:
-            return
-        self.dump_to_db(station, data_type, when, val)
+            return None
+        return ObservationRecord(station, data_type, when, val)
+
+    def parse(self, text: str) -> int:
+        """Thin wrapper over ``parse_records`` + the legacy DB path.
+
+        Preserves the original logging contract: lxml-import-error,
+        XML-syntax-error, and zero-updates each emit their own log
+        line (``parse_records`` is silent for testability).
+        """
+        self._db_updates = 0
+        self._obs_buffer = []
+
+        try:
+            from lxml import etree
+        except ImportError:
+            logger.error("lxml required for NWRFC XML parser")
+            return 0
+
+        # Do the XML parse here too so the syntax-error log fires with
+        # the URL context. parse_records will silently re-parse on its
+        # side, but lxml parsing is fast and the duplication keeps the
+        # pure / wrapper contracts cleanly separated.
+        xml_parser = etree.XMLParser(
+            resolve_entities=False,
+            no_network=True,
+            load_dtd=False,
+            huge_tree=False,
+        )
+        try:
+            etree.fromstring(text.encode("utf-8"), xml_parser)
+        except etree.XMLSyntaxError as e:
+            logger.error("XML parse error for %s: %s", self.url, e)
+            return 0
+
+        records = self.parse_records(text)
+        for r in records:
+            self.dump_to_db(r.station, r.data_type, r.observed_at, r.value)
+        self._flush_buffer()
+
+        if self._db_updates == 0:
+            logger.warning("No database updates from %s parser(%s)", self.url, self.name)
+
+        return self._db_updates
 
     def parse_line(self, line: str) -> bool:
         return True
