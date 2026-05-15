@@ -118,7 +118,16 @@ systemctl reload nginx
 # ---------------------------------------------------------------------------
 
 say "post-flight: scanning nginx -T for any remaining plaintext captcha secret"
-if nginx -T 2>/dev/null | grep -Ei '(HCAPTCHA|TURNSTILE)_SECRET[[:space:]]+[^$]' | grep -v '^#'; then
+# `^[[:space:]]*#` strips comments — nginx -T renders comments with the
+# location-block's leading indent, so the prior bare `^#` filter let
+# explanatory comments through (e.g. levels-common.conf's
+# "# getenv() fallback for TURNSTILE_SECRET via the FPM-pool env channel.").
+# Also pin to a leading `fastcgi_param ` directive: a bare secret-name
+# match anywhere in a line otherwise picks up any prose mentioning the
+# token, even in `add_header` or comment text.
+if nginx -T 2>/dev/null \
+    | grep -v '^[[:space:]]*#' \
+    | grep -Ei '^[[:space:]]*fastcgi_param[[:space:]]+(HCAPTCHA|TURNSTILE)_SECRET[[:space:]]+[^$]'; then
     echo "warning: nginx still references the secret directly — inspect above" >&2
     exit 4
 fi
