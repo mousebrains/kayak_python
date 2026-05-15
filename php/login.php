@@ -46,8 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $issued = issue_magic_link($email, $next);
             if (!$issued['banned']) {
                 $tok  = $issued['token'];
-                $site_env = auth_env('SITE_URL');
-                $base = rtrim($site_env !== '' ? $site_env : 'https://levels.wkcc.org', '/');
+                $base = rtrim(Config::str('site_url', 'https://levels.wkcc.org'), '/');
                 $link = $base . '/auth.php?t=' . urlencode($tok)
                       . '&next=' . rawurlencode($next);
                 $body = render_magic_link_email(

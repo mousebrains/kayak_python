@@ -27,27 +27,6 @@ require_once __DIR__ . '/config.php';
 // Feature flag
 // ---------------------------------------------------------------------------
 
-/**
- * Generic env-name lookup with Config-first ordering.
- *
- * Used by ``comment.php`` / ``login.php`` / ``propose_handler.php`` for
- * ``SITE_URL`` lookups. New code paths should call ``Config::str/int/
- * bool/list/url`` directly with the lowercased JSON key — ``auth_env``
- * is the source-compat shim while Phase 2.2 of T3.3 migrates callers.
- */
-function auth_env(string $name): string
-{
-    $cfg = Config::str(strtolower($name));
-    if ($cfg !== '') {
-        return $cfg;
-    }
-    $v = getenv($name);
-    if ($v === false || $v === '') {
-        $v = (string)($_SERVER[$name] ?? '');
-    }
-    return $v;
-}
-
 function editor_feature_enabled(): bool
 {
     return Config::bool('editor_feature', false);
