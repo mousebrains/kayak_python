@@ -57,6 +57,25 @@ class TestBuildConfigData:
         assert data["turnstile_secret"] == "real-secret-not-masked"
         assert "*" not in data["turnstile_secret"]
 
+    def test_database_path_derived_from_sqlite_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # SQLAlchemy SQLite URLs use 3 slashes for relative paths and 4
+        # for absolute (``sqlite:////home/...``). Strip exactly the 3-slash
+        # prefix; the 4th slash that introduces an absolute path stays.
+        monkeypatch.setenv("DATABASE_URL", "sqlite:////tmp/kayak-test.db")
+        data = build_config_data(KayakConfig())
+        assert data["database_path"] == "/tmp/kayak-test.db"
+        assert data["database_url"] == "sqlite:////tmp/kayak-test.db"
+
+    def test_database_path_omitted_for_non_sqlite_url(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Future-proof: postgres etc. shouldn't grow a misleading
+        # database_path field. The derivation only fires for sqlite:///.
+        monkeypatch.setenv("DATABASE_URL", "postgresql://localhost/kayak")
+        data = build_config_data(KayakConfig())
+        assert "database_path" not in data
+        assert data["database_url"] == "postgresql://localhost/kayak"
+
 
 class TestEmitConfig:
     """``levels emit-config`` writes JSON atomically + idempotently."""

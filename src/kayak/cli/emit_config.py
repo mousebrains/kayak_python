@@ -80,6 +80,11 @@ def build_config_data(cfg: KayakConfig) -> dict[str, Any]:
     its plaintext form. ``exclude_none`` keeps the JSON tight — fields
     that are ``None`` (most ``hc_*`` URLs on a dev box) are omitted
     rather than written as ``null``.
+
+    Derived keys for PHP consumers are added at the end:
+    - ``database_path``: the SQLite filesystem path, stripped of the
+      ``sqlite:///`` URL prefix. PHP's PDO constructor wants a path,
+      not a SQLAlchemy URL.
     """
     data = cfg.model_dump(mode="json", exclude_none=True)
     for name in type(cfg).model_fields:
@@ -88,6 +93,11 @@ def build_config_data(cfg: KayakConfig) -> dict[str, Any]:
         raw = getattr(cfg, name)
         if isinstance(raw, SecretStr):
             data[name] = raw.get_secret_value()
+
+    db_url = data.get("database_url")
+    if isinstance(db_url, str) and db_url.startswith("sqlite:///"):
+        data["database_path"] = db_url.removeprefix("sqlite:///")
+
     return data
 
 

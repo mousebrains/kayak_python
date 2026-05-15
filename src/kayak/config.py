@@ -120,7 +120,13 @@ class KayakConfig(BaseSettings):
 
     # Mail
     mail_from: EmailStr | None = None
+    mail_reply_to: EmailStr | None = None
     mail_dump_dir: Path | None = None
+
+    # Where the CSP-violation reporter writes JSON lines. Hardcoded
+    # operator-specific default for now; Phase 5 (T3.4) will swap to
+    # ``${KAYAK_HOME}/logs/csp.log`` once that indirection lands.
+    csp_log_path: Path = Path("/home/pat/logs/csp.log")
 
     # Editor surface
     editor_feature: bool = False
