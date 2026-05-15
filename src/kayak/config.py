@@ -53,6 +53,24 @@ def _config_env_path() -> Path | None:
 
 load_dotenv(_config_env_path())
 
+# /etc/kayak/secrets.env (mode 0600 root:www-data) carries production
+# secrets — TURNSTILE_SITE_KEY, TURNSTILE_SECRET — that are
+# intentionally NOT in the operator's ~/.config/kayak/.env. The
+# FPM-pool channel injects them into PHP workers, but `levels
+# emit-config` running as root via sudo also needs to see them so
+# they land in /etc/kayak/runtime-config.json — otherwise PHP's
+# Config::str('turnstile_secret') returns empty and turnstile.php's
+# `turnstile_enabled()` false-paths to `turnstile_verify() === true`,
+# silently bypassing captcha. `override=False` keeps the operator's
+# .env (and the OS env, which tests use) winning over secrets.env.
+# Gate on os.access(): `load_dotenv` silently no-ops on a missing
+# path but RAISES PermissionError when the file exists but isn't
+# readable (dev shells where pat can't read root:www-data 0600
+# files). Pre-checking with R_OK collapses both cases to a no-op.
+_SECRETS_ENV = Path("/etc/kayak/secrets.env")
+if _SECRETS_ENV.is_file() and os.access(_SECRETS_ENV, os.R_OK):
+    load_dotenv(_SECRETS_ENV, override=False)
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = BASE_DIR / "data"
 
