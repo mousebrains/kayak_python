@@ -9,10 +9,12 @@ Data codes: Q=FLOW, GH=GAGE, WC/WF=TEMPERATURE, etc.
 import logging
 import math
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from kayak.db.models import DataType
-from kayak.parsers.base import BaseParser
+from kayak.parsers.base import BaseParser, ObservationRecord
 from kayak.parsers.registry import register
 from kayak.utils.conversions import celsius_to_fahrenheit, parse_datetime, safe_float
 
@@ -70,21 +72,50 @@ class USBRParser(BaseParser):
         self._columns: list[_ColumnInfo | None] = []
         self._header_parsed = False
 
-    def parse(self, text: str) -> int:
-        """Strip HTML wrapper (if present) before parsing lines."""
+    def parse_records(self, text: str) -> list[ObservationRecord]:
+        """Pure: CSV → records. No session, no DB.
+
+        Strips an optional HTML wrapper (USBR sometimes serves CSV
+        wrapped in ``<pre>``), parses the header row, then walks data
+        rows.  Naive timestamps are localized via ``source_tz_map``
+        before being emitted — the resulting record always carries a
+        tz-aware UTC datetime when a station mapping exists (and the
+        original naive datetime when one doesn't, matching
+        ``dump_to_db``'s existing behaviour).
+        """
         if "<" in text:
             text = self._strip_html(text)
-        return super().parse(text)
 
-    def parse_line(self, line: str) -> bool:
-        stripped = line.strip()
-        if not stripped:
-            return True
+        # Reset stateful header parsing — parse_records is callable many
+        # times on the same instance (tests, retries) and must not carry
+        # column metadata from a previous body.
+        self._columns = []
+        self._header_parsed = False
 
-        # CSV format: first line is header, rest are data
-        if not self._header_parsed:
-            return self._parse_header(stripped)
-        return self._parse_data_row(stripped)
+        records: list[ObservationRecord] = []
+        for raw_line in text.splitlines():
+            stripped = raw_line.replace("\r", "").strip()
+            if not stripped:
+                continue
+            if not self._header_parsed:
+                self._parse_header(stripped)
+                continue
+            self._collect_data_row(stripped, records)
+        return records
+
+    def parse(self, text: str) -> int:
+        """Thin wrapper over ``parse_records`` + the legacy DB path."""
+        self._db_updates = 0
+        self._obs_buffer = []
+        for r in self.parse_records(text):
+            self.dump_to_db(r.station, r.data_type, r.observed_at, r.value)
+        self._flush_buffer()
+        if self._db_updates == 0:
+            logger.warning("No database updates from %s parser(%s)", self.url, self.name)
+        return self._db_updates
+
+    def parse_line(self, line: str) -> bool:  # pragma: no cover — kept for ABC
+        return True
 
     def _parse_header(self, line: str) -> bool:
         """Parse CSV header: ``DateTime,station_code,station_code,...``"""
@@ -113,18 +144,19 @@ class USBRParser(BaseParser):
         self._header_parsed = True
         return True
 
-    def _parse_data_row(self, line: str) -> bool:
+    def _collect_data_row(self, line: str, records: list[ObservationRecord]) -> None:
         parts = [p.strip() for p in line.split(",")]
         if len(parts) < 2:
-            return True
+            return
 
         # USBR pn-hydromet publishes each station in its own local timezone
         # (Oregon Pacific, Idaho Mountain, Malheur-County OR Mountain). We
-        # parse naive and let BaseParser.dump_to_db apply source.timezone
-        # per-station before UTC conversion.
+        # parse naive then apply per-station source_tz_map ourselves so the
+        # emitted record carries tz-aware UTC — dump_to_db sees an already
+        # localized datetime and passes it through.
         when = parse_datetime(parts[0], assume_naive=True)
         if when is None:
-            return True
+            return
 
         for i, info in enumerate(self._columns):
             if info is None:
@@ -140,6 +172,26 @@ class USBRParser(BaseParser):
             if info.is_celsius:
                 val = celsius_to_fahrenheit(val)
 
-            self.dump_to_db(info.station, info.data_type, when, val)
+            records.append(
+                ObservationRecord(
+                    info.station, info.data_type, self._localize(when, info.station), val
+                )
+            )
 
-        return True
+    def _localize(self, when: datetime, station: str) -> datetime:
+        """Apply source_tz_map to a naive datetime; pass tz-aware through.
+
+        Mirrors the dump_to_db logic so parse_records emits the same
+        timestamp the buffer would have stored.  Stays naive (and is
+        treated as UTC at store time) when source_tz_map lacks an entry.
+        """
+        if when.tzinfo is not None:
+            return when
+        tz_name = self.source_tz_map.get(station)
+        if not tz_name:
+            return when
+        tz = self._tz_cache.get(tz_name)
+        if tz is None:
+            tz = ZoneInfo(tz_name)
+            self._tz_cache[tz_name] = tz
+        return when.replace(tzinfo=tz).astimezone(UTC)
