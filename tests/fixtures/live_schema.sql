@@ -2,8 +2,8 @@
 -- Snapshot of the live DB schema; checked in to gate schema/model parity.
 -- Regenerate after structural migrations land. Do not edit by hand.
 --
--- Source: /home/pat/DB/kayak.db
--- Generated: 2026-05-14T23:15:17Z
+-- Source: /tmp/kayak-snapshot.p4taWw.db
+-- Generated: 2026-05-15T01:00:04Z
 
 CREATE TABLE calc_expression (
 	id INTEGER NOT NULL, 
@@ -181,21 +181,6 @@ CREATE TABLE "latest_observation" (
     PRIMARY KEY (source_id, data_type),
     FOREIGN KEY(source_id) REFERENCES source (id) ON DELETE CASCADE
 );
-CREATE TABLE maintainer_credential (
-	id INTEGER NOT NULL, 
-	editor_id INTEGER NOT NULL, 
-	credential_id VARCHAR(255) NOT NULL, 
-	public_key TEXT NOT NULL, 
-	sign_count INTEGER DEFAULT 0 NOT NULL, 
-	transports VARCHAR(128), 
-	nickname VARCHAR(64), 
-	created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, 
-	last_used_at DATETIME, 
-	revoked_at DATETIME, 
-	PRIMARY KEY (id), 
-	FOREIGN KEY(editor_id) REFERENCES editor (id) ON DELETE CASCADE, 
-	UNIQUE (credential_id)
-);
 CREATE TABLE observation (
 	source_id INTEGER NOT NULL, 
 	observed_at DATETIME NOT NULL, 
@@ -323,7 +308,6 @@ CREATE INDEX ix_gauge_usgs_id ON gauge (usgs_id);
 CREATE INDEX ix_huc_name_level ON huc_name (level);
 CREATE INDEX ix_latest_gauge_observation_source_id
     ON latest_gauge_observation (source_id);
-CREATE INDEX ix_maintainer_credential_editor_id ON maintainer_credential (editor_id);
 CREATE INDEX ix_observation_source_type_time ON observation (source_id, data_type, observed_at);
 CREATE INDEX ix_reach_class_reach_id
     ON reach_class (reach_id);

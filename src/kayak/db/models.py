@@ -64,6 +64,13 @@ class ChangeTarget(enum.StrEnum):
     gauge = "gauge"
     source = "source"
     site = "site"
+    # `trip_report` is unused in code as of 2026-05-14 (audit ARCH-H10
+    # flagged it for removal). Kept in the enum because the SQLAlchemy
+    # column derives VARCHAR length from max(len(v)) and shrinking it
+    # would require a table rebuild migration that isn't worth the
+    # cosmetic schema-parity match. Reuse for actual trip-report data
+    # when that feature ships, or remove during a future schema-shape
+    # migration that rebuilds change_request / edit_history anyway.
     trip_report = "trip_report"
 
 
@@ -74,6 +81,8 @@ class ChangeStatus(enum.StrEnum):
     approved = "approved"
     rejected = "rejected"
     resolved = "resolved"
+    # `auto_applied` is unused (no writer). Kept for the same
+    # VARCHAR-length reason as ChangeTarget.trip_report above.
     auto_applied = "auto_applied"
 
 
@@ -721,36 +730,6 @@ class EditorMagicLink(Base):
     next_url: Mapped[str | None] = mapped_column(String(512))
 
     __table_args__ = (Index("ix_editor_magic_link_editor_id", "editor_id"),)
-
-
-# ---------------------------------------------------------------------------
-# maintainer_credential (WebAuthn passkey — Phase 1b)
-# ---------------------------------------------------------------------------
-
-
-class MaintainerCredential(Base):
-    """WebAuthn (passkey) credential for a maintainer.
-
-    Phase 1 ships the table; Phase 1b wires registration + assertion.
-    One maintainer may enroll multiple credentials (phone, laptop, backup YubiKey).
-    """
-
-    __tablename__ = "maintainer_credential"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    editor_id: Mapped[int] = mapped_column(
-        ForeignKey("editor.id", ondelete="CASCADE"), nullable=False
-    )
-    credential_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    public_key: Mapped[str] = mapped_column(Text, nullable=False)
-    sign_count: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
-    transports: Mapped[str | None] = mapped_column(String(128))
-    nickname: Mapped[str | None] = mapped_column(String(64))
-    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
-    last_used_at: Mapped[datetime | None] = mapped_column()
-    revoked_at: Mapped[datetime | None] = mapped_column()
-
-    __table_args__ = (Index("ix_maintainer_credential_editor_id", "editor_id"),)
 
 
 # ---------------------------------------------------------------------------

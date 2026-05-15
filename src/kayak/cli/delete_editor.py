@@ -10,7 +10,6 @@ mediated. The user emails the club; the operator runs this script.
 The FK chain cascades cleanly:
     editor --CASCADE--> editor_session
     editor --CASCADE--> editor_magic_link
-    editor --CASCADE--> maintainer_credential
     editor --CASCADE--> change_request
         change_request --CASCADE--> change_request_attachment
         change_request --SET NULL--> edit_history.change_request_id
@@ -39,7 +38,6 @@ from kayak.db.models import (
     Editor,
     EditorMagicLink,
     EditorSession,
-    MaintainerCredential,
 )
 
 logger = logging.getLogger(__name__)
@@ -96,11 +94,6 @@ def delete_editor(args: argparse.Namespace) -> None:
             .select_from(EditorMagicLink)
             .where(EditorMagicLink.editor_id == editor_id)
         ).scalar_one()
-        n_credentials = session.execute(
-            select(func.count())
-            .select_from(MaintainerCredential)
-            .where(MaintainerCredential.editor_id == editor_id)
-        ).scalar_one()
         n_change_requests = session.execute(
             select(func.count())
             .select_from(ChangeRequest)
@@ -131,7 +124,6 @@ def delete_editor(args: argparse.Namespace) -> None:
         print("Will delete (CASCADE):")
         print(f"  editor_session rows         : {n_sessions}")
         print(f"  editor_magic_link rows      : {n_magic_links}")
-        print(f"  maintainer_credential rows  : {n_credentials}")
         print(f"  change_request rows         : {n_change_requests}")
         print(f"  change_request_attachment   : {n_attachments}")
         print("  editor row                  : 1")
