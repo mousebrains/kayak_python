@@ -92,7 +92,7 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 91,Rogue_Ray_Gold_merge,,,Gold Ray Dam,42.4373459696809,-122.987267808388,14359000,RYGOX,,,RYGO3,,14359000,33,1121.78,2053.0,171003080202,0,Rogue,Rogue at Gold Ray Dam,rogue|9|008878|002053,OR
 92,14155500,,,Cottage Grove,43.7929012392659,-122.991465543832,14155500,DORO,,,,,14155500,,685.24,270.0,170900020205,0,Row,Row at Cottage Grove,row|9|009315|000270,OR
 93,14154500,,,"Pitcher Creek, near Dorena",43.73527777777778,-122.87444444444444,14154500,DRRO,,,,,14154500,,856.16,211.0,170900020204,0,Row,"Row at Pitcher Creek, near Dorena",row|9|009144|000211,OR
-94,SALMON_WILLAMETTE_calc,,,,43.740821,-122.458827,,,,,,,,,1163.2,,170900010403,0,Salmon Creek,Salmon Creek,salmon creek|9|008837|999999,OR
+94,SALMON_WILLAMETTE_calc,,,Oakridge,43.740821,-122.458827,,,,,,,,,1163.2,,170900010403,0,Salmon Creek,Salmon Creek,salmon creek|9|008837|999999,OR
 95,Salmon_Whitebird_merge,,,White Bird,45.7502777777778,-116.323888888889,13317000,WHBI,,,WHBI1,,13317000,,1416.01,13421.0,170602090504,0,Salmon,Salmon at White Bird,salmon|9|008584|013421,ID
 96,SF_Salmon_Krassel_merge,,,Krassel Ranger Station,44.9869444,-115.725,13310700,KRSI,,,KRSI1,,13310700,,3750.0,330.0,170602080412,0,South Fork Salmon,South Fork Salmon at Krassel Ranger Station,salmon|0south|006250|000330,ID
 97,MF_Salmon_merge,,,Middle Fork Lodge,44.7215194444444,-115.014347222222,13309220,MIDI,,105897,MIDI1,,13309220,,4384.4,1042.0,170602050903,0,Middle Fork Salmon,Middle Fork Salmon at Middle Fork Lodge,salmon|0middle|005616|001042,ID
