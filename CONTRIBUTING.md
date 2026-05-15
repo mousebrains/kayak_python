@@ -57,7 +57,7 @@ When adding a new feature, add tests that cover:
 1. Create `src/kayak/parsers/your_parser.py`:
 
 ```python
-from kayak.parsers.base import BaseParser
+from kayak.parsers.base import BaseParser, ObservationRecord
 from kayak.parsers.registry import register
 
 @register("your_parser")
@@ -66,12 +66,21 @@ class YourParser(BaseParser):
 
     name = "your_parser"
 
-    def parse_line(self, line: str) -> bool:
-        # Parse one line, call self.dump_to_db() for each observation
-        # Return True to continue, False to stop
-        ...
-        return True
+    def parse_records(self, text: str) -> list[ObservationRecord]:
+        # Pure: text → records, no DB, no session.
+        # Build and return ObservationRecord(station, data_type, observed_at, value)
+        # for each observation found in text. Return [] on malformed input.
+        records: list[ObservationRecord] = []
+        # ... parsing logic ...
+        return records
 ```
+
+The inherited `BaseParser.parse(text)` wraps `parse_records` with the
+`dump_to_db` + buffer-flush + "no updates" warning path; only override
+it when you need to emit a syntax-error log line that `parse_records`
+can't (see `nwps.parse`, `usace_cda.parse`, `nwrfc_xml.parse` for
+examples — each re-validates the body and emits ERROR before
+delegating to `super().parse(text)`).
 
 2. Add the source URLs to `data/sources.yaml`:
 
@@ -83,8 +92,13 @@ your_parser:
 
 3. Run `levels init-db` to register the new fetch URLs.
 
-4. Add tests in `tests/test_parsers/test_your_parser.py` using sample data
-   from the API.
+4. Add tests in `tests/test_parsers/`:
+   - `test_your_parser_records.py` — session-free unit tests for
+     `parse_records`. No DB fixture needed; assert against the
+     returned `list[ObservationRecord]`.
+   - `test_your_parser.py` — end-to-end tests of `parse()` against a
+     fresh session (uses the `session` fixture). Pin a sample
+     payload from the live API.
 
 ## Adding a New Data Source (Gauge)
 

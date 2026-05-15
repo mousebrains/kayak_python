@@ -173,7 +173,7 @@ Schema evolution:
 
 ### Parser System
 
-Parsers inherit from `BaseParser` (in `src/kayak/parsers/base.py`) and register via `@register("name")` decorator. The `parse(text)` method feeds lines to `parse_line()` (abstract). `ensure_all_loaded()` imports all parser modules to trigger registration. Parser names match entries in `data/sources.yaml`.
+Parsers inherit from `BaseParser` (in `src/kayak/parsers/base.py`) and register via `@register("name")` decorator. Each parser implements `parse_records(text) -> list[ObservationRecord]` (abstract, pure — no DB); `BaseParser.parse(text)` wraps it with the `dump_to_db` + buffer-flush path. Only override `parse()` to emit a syntax-error log line (see `nwps`, `usace_cda`, `nwrfc_xml`). `ensure_all_loaded()` imports all parser modules to trigger registration. Parser names match entries in `data/sources.yaml`.
 
 ### CLI Pattern
 
