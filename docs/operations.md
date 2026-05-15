@@ -302,6 +302,108 @@ side is canonical:
 A clean run prints `Checked N file(s): N match, 0 differ, 0 missing`
 and exits 0.
 
+## Rollback (revert code to a previous SHA)
+
+When a deploy ships a regression — broken HTML, a 5xx on PHP pages,
+a crashing pipeline run — get back to a known-good code state by
+re-running `scripts/deploy.sh` against an earlier commit.
+
+### Decide what to roll back
+
+```bash
+# What's at HEAD now (the live SHA).
+cd /home/pat/kayak && git rev-parse HEAD
+
+# Recent main commits, with subject lines, for picking the rollback target.
+git log --oneline -n 20 main
+```
+
+Pick the **most recent SHA before the regression landed.** Tags (when
+they exist post-T3.6) are equivalent; until then, SHA is the unit.
+
+### Check whether DB migrations ran since that SHA
+
+`scripts/deploy.sh` runs `levels migrate` on every deploy. If a
+migration landed between the rollback target and `HEAD`, the schema
+is already at the newer shape and **code rollback alone won't
+restore the prior state.** Pre-check:
+
+```bash
+# Migrations applied since the rollback target.
+git diff --name-only <ROLLBACK_SHA>..HEAD -- data/db/migrations/
+```
+
+Schema changes are **forward-only.** The migrations listed below
+make `levels migrate` non-reversible by design — once they've run on
+prod, "roll back the code" no longer means "roll back the schema."
+Re-deploying earlier code over a newer schema is *usually* fine
+(SQLite ignores unknown columns; orphan tables sit unread) but is
+sometimes load-bearing — see the per-migration notes:
+
+| File | Why it can't be reversed by `levels migrate` |
+|---|---|
+| `0004_drop_alembic_version.sql`           | drops the legacy Alembic bookkeeping table; harmless to revisit code, but the row history is gone. |
+| `0006_drop_pages.sql`                     | drops the `pages` cache table. Earlier code that reads `Page` ORM rows will throw `OperationalError: no such table`. |
+| `0011_latest_observation_cascade.sql`     | rebuilds `latest_observation` with cascade FKs (table-recreate). Reverting the rebuild without restoring the previous DDL is non-trivial. |
+| `0017_normalize_agency_and_drop_orphan_nwrfc_xml.sql` | drops 11 inactive `fetch_url` rows and rewrites `source.agency`. The deleted URLs aren't recovered by reverting the SQL. |
+| `0018_drop_dead_split_sources.sql`        | deletes 19 dead `source` rows. The rows themselves are gone; only a DB restore brings them back. |
+| `0022_drop_dormant_features.sql`          | drops `maintainer_credential` (T3.5). Code older than 2026-05-13 doesn't reference it, so the missing table is silent — listed for completeness. |
+
+If your rollback target predates one of the destructive migrations
+above AND the older code still reads the dropped object, **restore
+the DB from the latest pre-migration backup** before redeploying. See
+§Backup + restore above; backups live at
+`/home/pat/kayak/backups/backup-<UTC-stamp>.db.gz`. The backup
+timestamps line up 1:1 with `kayak-backup.timer` runs (Sun 03:15 +
+the hourly snapshots from T1.1), so picking the right backup is
+matching the backup `<UTC-stamp>` to "just before the bad deploy."
+
+### Execute the rollback
+
+```bash
+# Already-clean working tree is enforced by deploy.sh; if you have
+# local changes, stash them first.
+cd /home/pat/kayak
+git fetch origin
+git checkout <ROLLBACK_SHA>          # detached HEAD is fine here
+git branch -f main HEAD              # move main to the rollback point
+git checkout main                    # re-attach
+
+scripts/deploy.sh
+```
+
+`deploy.sh` is idempotent: it pulls `--ff-only` (which is now a no-op
+since `main` is already at the rollback SHA), re-runs `levels
+migrate` (no-op when no new migrations are present), rebuilds static
+HTML, and reinstalls pip deps only if `pyproject.toml` changed
+direction.
+
+### Verify
+
+```bash
+git rev-parse HEAD                                            # should match <ROLLBACK_SHA>
+systemctl list-timers --all 'kayak-*' --no-pager | head        # timers still scheduled
+curl -fsS -o /dev/null https://levels.mousebrains.com/         # site renders
+journalctl -u kayak-pipeline.service --since '15 min ago' | tail
+```
+
+Run the recap (see `scripts/recap.py`) after the next `kayak-pipeline`
+firing to confirm structured events still flow.
+
+### Push the rollback upstream
+
+After verifying live is healthy at the rollback SHA, push the moved
+`main`:
+
+```bash
+git push --force-with-lease origin main
+```
+
+`--force-with-lease` (not `--force`) refuses to overwrite if anyone
+pushed in the meantime — that's the safety belt for the rare two-
+operator case. Open a follow-up commit on `main` to undo or fix the
+regression rather than leaving `main` permanently behind.
+
 ## Quick reference: stop everything before a destructive operation
 
 ```bash
