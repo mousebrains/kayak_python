@@ -18,8 +18,7 @@ Three actions per gauge:
   INSERT  — no USGS-style source linked at all. Create one and link it.
 
 The NWS source is always left in place — keeping it preserves redundancy
-and gives `levels merge` something to fuse later if the overlay on the
-PHP plot becomes a nuisance.
+so the gauge keeps reporting if USGS has an outage.
 
 Usage:
     /home/pat/.venv/bin/python3 scripts/split_usgs_sources.py

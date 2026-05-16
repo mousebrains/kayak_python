@@ -72,7 +72,6 @@ shell config makes activation noisy: replace every `levels …` with
 | `levels fetch` | Fetch observations from all active sources (standalone — also runs as pipeline stage 1) |
 | `levels fetch-usgs-ogc` | Fetch USGS continuous data via the OGC API for gauges with `usgs_id` |
 | `levels calc-rating` | Interpolate missing flow/gage values using rating tables |
-| `levels merge` | Merge observations from multiple sources per gauge (manual — not in pipeline) |
 | `levels calculator` | Evaluate calculated expressions (synthetic gauges) |
 | `levels build` | Generate static HTML/CSV/text to `public_html/` |
 | `levels decimate` | Thin old observations (keeps 90d full, 1h/365d, 6h/archive) |

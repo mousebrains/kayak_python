@@ -41,11 +41,11 @@ def test_help_flag(capsys):
 
 def test_known_subcommands_registered():
     """All expected subcommands are wired into the argument parser."""
-    expected = {"init-db", "fetch", "merge", "calc-rating", "calculator", "build", "pipeline"}
+    expected = {"init-db", "fetch", "calc-rating", "calculator", "build", "pipeline"}
     # Build the parser the same way main() does, but inspect rather than execute
     import argparse
 
-    from kayak.cli import build, calc_rating, calculator, fetch, init_db, merge, pipeline
+    from kayak.cli import build, calc_rating, calculator, fetch, init_db, pipeline
     from kayak.cli.logger import addArgs as addLoggerArgs
 
     parser = argparse.ArgumentParser(prog="levels")
@@ -55,7 +55,6 @@ def test_known_subcommands_registered():
 
     init_db.addArgs(subparsers)
     fetch.addArgs(subparsers)
-    merge.addArgs(subparsers)
     calc_rating.addArgs(subparsers)
     calculator.addArgs(subparsers)
     build.addArgs(subparsers)

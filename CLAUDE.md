@@ -49,7 +49,6 @@ levels build                         # Generate static HTML/CSV/text to public_h
 # Less-common subcommands (see `levels <cmd> --help` for details)
 levels fetch                         # One shot of the pipeline's first stage
 levels fetch-usgs-ogc                # Fetch USGS OGC continuous data for gauges with usgs_id
-levels merge                         # Median-fuse observations across a gauge's sources (manual-only)
 levels calc-rating                   # Interpolate via rating tables (dormant until rating_data loaded)
 levels calculator                    # Evaluate synthetic gauge expressions
 levels decimate                      # Thin old observations (daily via kayak-decimate timer)
@@ -142,7 +141,7 @@ Runs these steps in order:
 6. **build** — generates per-state HTML pages, CSV, and text files to `public_html/`; inlines CSS and SVG sparklines
 7. **orphan-check** — soft-fails the run (after build) if any fetch-active source lacks a `gauge_source` link; the existing systemd `OnFailure` chain emails + ntfys on the non-zero exit. See `docs/done/PLAN_orphan_sources.md`.
 
-**Note:** `merge` (for gauges with multiple sources) is not part of the pipeline — run `levels merge` manually when needed.
+Multi-source gauges aggregate across all linked sources directly: `update-gauge-cache` reads MAX across `gauge_source`, and PHP queries JOIN through `gauge_source` rather than picking a primary source.
 
 ### Two-Layer Web Architecture
 
