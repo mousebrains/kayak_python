@@ -99,3 +99,7 @@ id,url,parser,hours,is_active
 114,https://api.water.noaa.gov/nwps/v1/gauges/PITW1/stageflow/observed,nwps,,1
 115,https://api.water.noaa.gov/nwps/v1/gauges/KLCW1/stageflow/observed,nwps,,1
 116,https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=EUGO3&pe=HG,nwrfc.textplot,,1
+117,https://api.water.noaa.gov/nwps/v1/gauges/NEBO3/stageflow/observed,nwps,,1
+118,https://api.water.noaa.gov/nwps/v1/gauges/ORCO3/stageflow/observed,nwps,,1
+120,https://api.water.noaa.gov/nwps/v1/gauges/COCO3/stageflow/observed,nwps,,1
+121,https://api.water.noaa.gov/nwps/v1/gauges/IRGC1/stageflow/observed,nwps,,1

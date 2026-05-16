@@ -63,7 +63,7 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 62,14164900,,,"Hayden Br, at Springfield",44.0712365207472,-122.964527254659,14164900,,,,,,14164900,,400.0,1140.0,170900040706,0,Mckenzie,"Mckenzie at Hayden Br, at Springfield",mckenzie|9|009600|001140,OR
 63,McKenzie_Walterville_merge,,,Walterville,44.0698492269484,-122.771187401123,14163900,,,,MCZO3,,14163900,,600.0,1081.0,170900040706,0,McKenzie,McKenzie at Walterville,mckenzie|9|009400|001081,OR
 64,SF_McKenzie_Cougar_merge,,,Cougar Dam,44.0470670436432,-122.217824536089,14159200,SFCO,,,SFCO3,,14159200,23,1709.51,160.0,170900040307,0,South Fork McKenzie,South Fork McKenzie at Cougar Dam,mckenzie|0south|008290|000160,OR
-65,Clear_Lake_outlet,,,Clear Lake Outlet,44.3609545058304,-121.995617217441,14158500,TRBO,,,TRBO3,,14158500,24,3015.32,92.4,170900040202,0,McKenzie,McKenzie at Clear Lake Outlet,mckenzie|9|006985|000092,OR
+65,Clear_Lake_outlet,,,Trail Bridge Dam,44.3609545058304,-121.995617217441,14158500,TRBO,,,TRBO3,,14158500,24,3015.32,92.4,170900040202,0,McKenzie,McKenzie at Trail Bridge Dam,mckenzie|9|006985|000092,OR
 66,McKenzie_Leeburg_merge,,,Leaburg Dam,44.1237380356862,-122.627571535187,14163150,MZLO,,,MKLO3,,14163150,,710.0,1030.0,170900040703,0,McKenzie,McKenzie at Leaburg Dam,mckenzie|9|009290|001030,OR
 67,14091500,,,Grandview,44.6262275,-121.4839433,14091500,,,,,,14091500,,1974.36,316.0,170703011003,0,Metolius,Metolius at Grandview,metolius|9|008026|000316,OR
 68,MF_Willamette_below_NF_merge,,,Oakridge,43.8012351684092,-122.56088788998,14148000,OAKO,,,OAKO3,,14148000,25,935.0,924.0,170900010701,0,Middle Fork Willamette,Middle Fork Willamette at Oakridge,willamette|0middle|009065|000924,OR
@@ -85,14 +85,14 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 84,Quartzville_merge,,,Cascadia,44.5401235699613,-122.43591547938,14185900,QCCO,,,QCCO3,,14185900,29,1050.0,99.2,170900060305,0,Quartzville Creek,Quartzville Creek at Cascadia,quartzville creek|9|008950|000099,OR
 85,Rogue_Grants_Pass_merge,,,Grants Pass,42.4303960655558,-123.317836466831,14361500,GRAOX,,,GRAO3,,14361500,30,884.28,2459.0,171003080402,0,Rogue,Rogue at Grants Pass,rogue|9|009116|002459,OR
 86,Rogue_McLeod_merge,,,Mcleod,42.6554035422131,-122.715040824291,14337600,MCLO,,,MCLO3,,14337600,31,1489.08,938.0,171003070701,0,Rogue,Rogue at Mcleod,rogue|9|008511|000938,OR
-87,NF_ROGUE_LOST_CREEK_calc,,,River Bridge,42.71741,-122.532328,,,,,,,,,1881.3,,171003070113,0,North Fork Rogue,North Fork Rogue at River Bridge,rogue|0north|008119|999999,OR
+87,NF_ROGUE_LOST_CREEK_calc,,,River Bridge,42.71741,-122.532328,,,,,,,,,1881.3,,171003070113,0,Rogue,Rogue at River Bridge,rogue|9|008119|999999,OR
 88,14328000,,,Prospect,42.77484917,-122.4997585,14328000,,,,,,14328000,,2620.0,312.0,171003070113,0,Rogue,Rogue at Prospect,rogue|9|007380|000312,OR
-89,MF_ROGUE_LOST_CREEK_calc,,,Lost Creek Resv.,42.720425,-122.473029,,,,,,,,,2147.7,,171003070205,0,Middle Fork Rogue,Middle Fork Rogue at Lost Creek Resv.,rogue|0middle|007852|999999,OR
+89,MF_ROGUE_LOST_CREEK_calc,,,Lost Creek Resv.,42.720425,-122.473029,,,,,,,,,2147.7,,171003070205,0,Rogue,Rogue at Lost Creek Resv.,rogue|9|007852|999999,OR
 90,Rogue_Agness_merge,,,Agness,42.59277777777778,-124.062,14372300,AGNOX,,,AGNO3,,14372300,32,119.0,3939.0,171003100602,0,Rogue,Rogue at Agness,rogue|9|009881|003939,OR
 91,Rogue_Ray_Gold_merge,,,Gold Ray Dam,42.4373459696809,-122.987267808388,14359000,RYGOX,,,RYGO3,,14359000,33,1121.78,2053.0,171003080202,0,Rogue,Rogue at Gold Ray Dam,rogue|9|008878|002053,OR
 92,14155500,,,Cottage Grove,43.7929012392659,-122.991465543832,14155500,DORO,,,,,14155500,,685.24,270.0,170900020205,0,Row,Row at Cottage Grove,row|9|009315|000270,OR
 93,14154500,,,"Pitcher Creek, near Dorena",43.73527777777778,-122.87444444444444,14154500,DRRO,,,,,14154500,,856.16,211.0,170900020204,0,Row,"Row at Pitcher Creek, near Dorena",row|9|009144|000211,OR
-94,SALMON_WILLAMETTE_calc,,,Oakridge,43.740821,-122.458827,,,,,,,,,1163.2,,170900010403,0,Salmon Creek,Salmon Creek,salmon creek|9|008837|999999,OR
+94,SALMON_WILLAMETTE_calc,,,Oakridge,43.740821,-122.458827,,,,,,,,,1163.2,,170900010403,0,Salmon Creek,Salmon Creek at Oakridge,salmon creek|9|008837|999999,OR
 95,Salmon_Whitebird_merge,,,White Bird,45.7502777777778,-116.323888888889,13317000,WHBI,,,WHBI1,,13317000,,1416.01,13421.0,170602090504,0,Salmon,Salmon at White Bird,salmon|9|008584|013421,ID
 96,SF_Salmon_Krassel_merge,,,Krassel Ranger Station,44.9869444,-115.725,13310700,KRSI,,,KRSI1,,13310700,,3750.0,330.0,170602080412,0,South Fork Salmon,South Fork Salmon at Krassel Ranger Station,salmon|0south|006250|000330,ID
 97,MF_Salmon_merge,,,Middle Fork Lodge,44.7215194444444,-115.014347222222,13309220,MIDI,,105897,MIDI1,,13309220,,4384.4,1042.0,170602050903,0,Middle Fork Salmon,Middle Fork Salmon at Middle Fork Lodge,salmon|0middle|005616|001042,ID
@@ -120,7 +120,7 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 119,Smith_Crescent_City_merge,,,Crescent City,41.791476896737954,-124.07615146764506,11532500,,,,,,11532500,,82.75,614.0,180101010404,0,Smith,Smith at Crescent City,smith|9|009917|000614,CA
 120,Snake_Hells_Canyon_merge,,,Hells Canyon Dam Id-or State Line,45.2544444444444,-116.696944444444,13290450,HCDI,,,,,13290450,,1435.0,73300.0,170601010102,0,Snake,Snake at Hells Canyon Dam Id-or State Line,snake|9|008565|073300,OR
 121,Steamboat_merge,,,Glide,43.3498420203775,-122.728941540616,14316700,SCRO,,,SCRO3,,14316700,44,1128.55,227.0,171003010706,0,Steamboat Creek,Steamboat Creek at Glide,steamboat creek|9|008871|000227,OR
-122,Sunshine_calc,,,Confluence,44.815823,-123.764509,,,,,,,,,499.5,,171002040501,0,Sunshine,Sunshine at Confluence,sunshine|9|009500|999999,OR
+122,Sunshine_calc,,,Confluence,44.815823,-123.764509,,,,,,,,,499.5,,171002040501,0,Sunshine Creek,Sunshine Creek at Confluence,sunshine creek|9|009500|999999,OR
 123,14188800,,,Scio,44.7120668725711,-122.77008784099,14188800,TRSO,,,,,14188800,,370.0,109.73,170900060705,0,Thomas Creek,Thomas Creek at Scio,thomas creek|9|009630|000110,OR
 124,Tualatin_West_Linn_merge,,,West Linn,45.3506755926263,-122.676204437708,14207500,WSLO,,,WSLO3,,14207500,45,85.61,706.0,170900100504,0,Tualatin,Tualatin at West Linn,tualatin|9|009914|000706,OR
 125,Tualatin_Farmington_merge,,32.0,Farmington,45.4498391762694,-122.951213761155,14206500,FRMO,,,FRMO3,,14206500,46,100.0,706.0,170900100404,0,Tualatin,Tualatin at Farmington,tualatin|9|009900|000706,OR
@@ -139,11 +139,11 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 138,CF_Willamette_Goshen_merge,,,Goshen,43.9804032449365,-122.966469972572,14157500,GOSO,,,GOSO3,,14157500,53,474.0,642.0,170900020405,0,Coast Fork Willamette,Coast Fork Willamette at Goshen,coast fork willamette|9|009526|000642,OR
 139,ALBANY_merge,,,Albany,44.6387328328399,-123.10676155507,14174000,UALBO,,,ALBO3,,14174000,54,167.18,4840.0,170900030610,0,Willamette,Willamette at Albany,willamette|9|009833|004840,OR
 140,LONO3,,,London,43.6415101464236,-123.085908935681,14152500,LONO,,,LONO3,,14152500,,852.58,72.1,170900020303,0,Coast Fork Willamette,Coast Fork Willamette at London,coast fork willamette|9|009147|000072,OR
-141,14197900,,,Newberg,45.2845625124917,-122.961489251109,14197900,,,,,,14197900,,50.0,8350.0,170900070307,0,Willamette,Willamette at Newberg,willamette|9|009950|008350,OR
+141,NEWBERG_merge,,,Newberg,45.2845625124917,-122.961489251109,14197900,,,,NEBO3,,14197900,,50.0,8350.0,170900070307,0,Willamette,Willamette at Newberg,willamette|9|009950|008350,OR
 142,SALEM_merge,,,Salem,44.9442862974769,-123.042874245737,14191000,USLMO,,,SLMO3,,14191000,55,106.0,7280.0,170900070301,0,Willamette,Willamette at Salem,willamette|9|009894|007280,OR
 143,14153500,,,Cottage Grove Dam,43.7206778481042,-123.049799414876,14153500,COTO,,,,,14153500,,711.0,104.0,170900020305,0,Coast Fork Willamette,Coast Fork Willamette at Cottage Grove Dam,coast fork willamette|9|009289|000104,OR
 144,HARRISBURG_merge,,,Harrisburg,44.270401258546,-123.173703627243,14166000,UHARO,,,HARO3,,14166000,56,288.39,3420.0,170900030602,0,Willamette,Willamette at Harrisburg,willamette|9|009712|003420,OR
-145,Willamette_upper_falls_merge,,,Falls at Oregon City,45.34805555555556,-122.62052777777777,14207740,ORC,,,OCUO3,,14207740,57,50.0,10000.0,170900070405,0,Willamette,Willamette at Falls at Oregon City,willamette|9|009950|010000,OR
+145,Willamette_upper_falls_merge,,,above Falls at Oregon City,45.34805555555556,-122.62052777777777,14207740,ORC,,,OCUO3,,14207740,57,50.0,10000.0,170900070405,0,Willamette,Willamette above Falls at Oregon City,willamette|9|009950|010000,OR
 146,PORTLAND_merge,,,Portland,45.5175,-122.6691667,14211720,PRTO,,,PRTO3,,14211720,,2.0,11200.0,170900120202,0,Willamette,Willamette at Portland,willamette|9|009998|011200,OR
 147,11493500,,,Klamath Agency,42.739925,-121.83451666666666,11493500,,,,,,11493500,,4487.42,1290.0,180102010602,0,Williamson,Williamson at Klamath Agency,williamson|9|005513|001290,OR
 148,WILSON_merge,,,Tillamook,45.4759399592551,-123.725120924774,14301500,TLMO,,,TLMO3,,14301500,58,42.0,161.0,171002030508,0,Wilson,Wilson at Tillamook,wilson|9|009958|000161,OR
@@ -160,7 +160,7 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 159,"OAK GROVE FORK AT RIPPLEBROOK CAMPGROUND, OR",,,Ripplebrook Campground,45.07981389,-122.0428583,,,,,,,14209250,,1420.0,141.0,170900110306,0,Oak Grove Fork,Oak Grove Fork at Ripplebrook Campground,oak grove fork|9|008580|000141,OR
 160,"SOUTH FORK ROGUE RIVER NEAR PROSPECT, OR",,,Prospect,42.70638889,-122.388611,,,,,,,14332000,,3360.0,83.8,171003070207,0,South Fork Rogue,South Fork Rogue at Prospect,rogue|0south|006640|000084,OR
 161,Applegate_Lake,,,Applegate Reservoir,42.011,-123.154,,APLO3,,,APLO3,,14361900,,2000.9,223.0,171003090104,0,Applegate,Applegate at Applegate Reservoir,applegate|9|007999|000223,OR
-162,Molalla_above_Pine_Cr,,,Wilhoit,45.0097222,-122.4809167,,,,,,,14198500,,791.35,97.0,170900090403,0,Molalla,"Molalla above Pine Cr, nr Wilhoit",molalla|9|009209|000097,OR
+162,Molalla_above_Pine_Cr,,,Pc nr Wilhoit,45.0097222,-122.4809167,,,,,,,14198500,,791.35,97.0,170900090403,0,Molalla,Molalla at Pc nr Wilhoit,molalla|9|009209|000097,OR
 163,Illinois_Agness,,,Agness,42.54488,-124.05191,14378200,,,,,,14378200,,112.0,988.0,171003111102,0,Illinois,Illinois at Agness,illinois|9|009888|000988,OR
 164,14173500,,,Albany,44.620028,-123.128472,,,,,,,14173500,,181.0,372.0,170900030403,0,Calapooia,Calapooia at Albany,calapooia|9|009819|000372,OR
 165,14145500,,,"Salt Crk, near Oakridge",43.720957,-122.437826,,,,,,,14145500,,1208.0,392.0,170900010505,0,Middle Fork Willamette,"Middle Fork Willamette at Salt Crk, near Oakridge",willamette|0middle|008792|000392,OR
@@ -175,7 +175,7 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 174,Fall_Creek_Inflow,,,Fall Creek above Winberry (FALO3 inflow - 14150800 Winberry),43.972015,-122.65907,,,,,,,,,837.6,,170900010904,0,Fall Creek,Fall Creek at Fall Creek above Winberry (FALO3 inflow - 14150800 Winberry),fall creek|9|009162|999999,OR
 175,WLAO3,,,Willamina,45.047222,-123.502778,WLAO3,,,WLAO3,WLAO3,,,,242.1,,170900080404,0,South Yamhill,South Yamhill at Willamina,yamhill|0south|009758|999999,OR
 176,SF_McKenzie_near_Rainbow,,,Rainbow,44.136,-122.2484,14159500,,,,,,14159500,,1236.0,208.0,170900040308,0,South Fork Mckenzie,South Fork Mckenzie at Rainbow,mckenzie|0south|008764|000208,OR
-177,McKenzie_Rainbow,,,Rainbow,44.1664,-122.2558,CMRO3,CMRO3,,,CMRO3,,,,1160.0,,170900040502,0,McKenzie,McKenzie at Rainbow,mckenzie|9|008840|999999,OR
+177,McKenzie_Rainbow,,,South Fork,44.1664,-122.2558,CMRO3,CMRO3,,,CMRO3,,,,1160.0,,170900040502,0,McKenzie,McKenzie at South Fork,mckenzie|9|008840|999999,OR
 178,SALMON RIVER AB EAST FORK NR CLAYTON ID,,,East Fork nr Clayton,44.266642,-114.326758,,SAEI,,,SAEI1,,13297380,,5326.2,1200.0,170602010906,0,Salmon,Salmon at East Fork nr Clayton,salmon|9|004674|001200,ID
 179,SALMON RIVER NR SHOUP ID,,,Shoup,45.3225,-114.44,,,,,,,13307000,,3157.6,6239.0,170602031302,0,Salmon,Salmon at Shoup,salmon|9|006842|006239,ID
 180,EFSF_Stibnite,,,Stibnite,44.905722,-115.3295,,SFSI,,,SFSI1,,13311000,,6466.0,19.3,170602080201,0,East Fork South Fork Salmon,East Fork South Fork Salmon at Stibnite,salmon|0east|003534|000019,ID
@@ -184,6 +184,9 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 183,14128500,,,Carson,45.7267469824777,-121.794774605898,,WCNW,,,WCNW1,,14128500,,112.6,225.0,170701051008,0,Wind,Wind at Carson,wind|9|009887|000225,WA
 184,28B080,,,Washougal,45.5835856510001,-122.34569456,,WASW,,,WASW1,,,,51.9,,170800010606,0,Washougal,Washougal at Washougal,washougal|9|009948|999999,WA
 185,CORVALLIS_merge,,,Corvallis,44.566361,-123.256806,,,,,CORO3,,14171600,,180.0,4420.0,170900030609,0,Willamette,Willamette at Corvallis,willamette|9|009820|004420,OR
-186,14158850,,,blw Trail Bridge Dam,44.2679001,-122.0497826,,,,,,,14158850,,1980.0,184.0,170900040206,0,McKenzie,McKenzie blw Trail Bridge Dam,mckenzie|9|008020|000184,OR
+186,14158850,,,Trail Br Dam nr Belknap Springs,44.2679001,-122.0497826,,,,,,,14158850,,1980.0,184.0,170900040206,0,Mckenzie,Mckenzie at Trail Br Dam nr Belknap Springs,mckenzie|9|008020|000184,OR
 187,14307605,,,Swisshome,44.0565,-123.7946889,,,,,,,14307605,,115.0,223.0,17100206,0,Lake Creek,Lake Creek at Swisshome,lake creek|9|009885|000223,OR
-188,Siuslaw_above_LakeCreek_calc,,,above Lake Creek,44.05501612351312,-123.79482873628976,,,,,,,,,50.0,365.0,17100206,0,Siuslaw,Siuslaw above Lake Creek,siuslaw|9|009950|000365,OR
+188,Siuslaw_above_LakeCreek_calc,,,above Lake Creek,44.05501612351312,-123.79482873628976,,,,,,,,,50.0,365.0,17100206,0,Siuslaw,Siuslaw at above Lake Creek,siuslaw|9|009950|000365,OR
+190,Willamette_lower_falls_merge,,,below Falls at Oregon City,45.357621,-122.610925,14207770,,,,ORCO3,,14207770,,23.4,10000.0,,0,Willamette,Willamette below Falls at Oregon City,willamette|9|009977|010000,OR
+191,Clackamas_Big_Bottom,,,Big Bottom,45.017083,-121.923528,14208000,,,,,,14208000,,2051.0,136.0,,0,Clackamas,Clackamas at Big Bottom,clackamas|9|007949|000136,OR
+192,Clackamas_Oregon_City_merge,,,Oregon City,45.379287,-122.577313,14211010,,,,COCO3,,14211010,,22.7,940.0,,0,Clackamas,Clackamas at Oregon City,clackamas|9|009977|000940,OR
