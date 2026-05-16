@@ -328,15 +328,28 @@ class TestValidateUrl:
 
 
 class _FakeAsyncContent:
-    """Minimal aiohttp StreamReader-like for _read_capped_text."""
+    """Minimal aiohttp StreamReader-like for _read_capped_text.
+
+    Models the real "read up to n bytes" semantics so partial-read bugs
+    surface: a single ``read(n)`` returns only the first chunk (≤16 KB),
+    not the whole body. ``iter_chunked`` yields the full body in chunks.
+    """
 
     def __init__(self, body_bytes: bytes):
         self._body = body_bytes
 
     async def read(self, n: int = -1) -> bytes:
-        if n < 0 or n >= len(self._body):
+        # Simulate aiohttp's "up to n bytes" partial-read behavior: hand
+        # back the first 16 KB at most, not the full body. Production code
+        # must loop / iter_chunked rather than rely on a single read().
+        if n < 0:
             return self._body
-        return self._body[:n]
+        first_chunk = min(n, 16384, len(self._body))
+        return self._body[:first_chunk]
+
+    async def iter_chunked(self, chunk_size: int):
+        for i in range(0, len(self._body), chunk_size):
+            yield self._body[i : i + chunk_size]
 
 
 class _FakeAsyncResponse:

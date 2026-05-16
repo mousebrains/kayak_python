@@ -183,13 +183,24 @@ async def _read_capped_text(resp: aiohttp.ClientResponse) -> str:
     the server-provided ``Content-Length`` exceeds it, or because the
     actual stream returned more bytes than allowed (chunked transfer with
     no Content-Length).
+
+    ``resp.content.read(n)`` is "read **up to** n bytes" — for chunked
+    responses with no Content-Length (NWPS, ~400 KB) it returns only the
+    bytes currently buffered (often <32 KB), silently truncating the body.
+    Loop over ``iter_chunked`` instead so the cap stays enforced without
+    cutting healthy responses short.
     """
     cl = resp.content_length
     if cl is not None and cl > _MAX_BODY_BYTES:
         raise ValueError(f"Content-Length {cl} exceeds {_MAX_BODY_BYTES}-byte body cap")
-    raw = await resp.content.read(_MAX_BODY_BYTES + 1)
-    if len(raw) > _MAX_BODY_BYTES:
-        raise ValueError(f"Response body exceeded {_MAX_BODY_BYTES}-byte cap")
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in resp.content.iter_chunked(65536):
+        total += len(chunk)
+        if total > _MAX_BODY_BYTES:
+            raise ValueError(f"Response body exceeded {_MAX_BODY_BYTES}-byte cap")
+        chunks.append(chunk)
+    raw = b"".join(chunks)
     charset = resp.charset or "utf-8"
     return raw.decode(charset, errors="replace")
 
