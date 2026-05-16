@@ -24,6 +24,16 @@ than active use. Each filename links back to the file's git history —
 | `apply-audit-timer-biweekly.sh` | 2026-05-11 | One-shot patch that installed the bi-weekly `kayak-audit-gauges` systemd schedule on the live server (commit `972f1d6`). |
 | `apply-nginx-favicon.sh` | 2026-05-11 | One-shot patch that installed the `/favicon.ico` location block from `conf/levels.nginx` into live nginx (commit `49b2321`). |
 
+## Archived experiments (subdirectories)
+
+Small self-contained side projects kept for context. Each has its own
+README describing the experiment and how to revive it.
+
+| Subdirectory | Last touched | What it was |
+|---|---|---|
+| `map-color-tune/` | 2026-05-11 | Standalone three-pane Leaflet page that renders the same reach traces over OpenTopoMap, OpenStreetMap, and Esri Satellite so trace colors / casing / line-weight can be A/B'd against every basemap at once. Used while tuning the production `static/map.js` palette. See subdir README for redeploy steps. |
+| `regressions-WhiteSalmon/` | 2026-03-01 | R `lm()` calibration of White Salmon at Husum (gauge) vs. White Salmon at Underwood (feet) — predates the calc-expression / rating-table flow. Inputs: `data` (tabular), outputs: `fit.pdf`. Rerun with `R --no-save < regress.R` from the subdir. |
+
 ## Running one again
 
 You can still run these from the repo root via:

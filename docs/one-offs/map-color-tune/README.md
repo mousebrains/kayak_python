@@ -23,7 +23,7 @@ The tool is just three static files dropped into `public_html/tpw/`:
 
 ```bash
 mkdir -p /home/pat/public_html/tpw
-cp docs/tpw/{index.html,style.css,map3.js} /home/pat/public_html/tpw/
+cp docs/one-offs/map-color-tune/{index.html,style.css,map3.js} /home/pat/public_html/tpw/
 ```
 
 It pulls Leaflet from `/static/leaflet.{js,css}` and the reach data from
