@@ -16,7 +16,7 @@ breaks, the steps shouldn't depend on a network round-trip to GitHub.
 | App | Python (`src/kayak/`) + PHP (`php/`); two-layer architecture, see `CLAUDE.md`. |
 | Database | SQLite at `/home/pat/DB/kayak.db` (WAL mode). |
 | Web | nginx + PHP-FPM 8.4. Three vhosts: `levels.mousebrains.com`, `levels-test.wkcc.org`, `levels.wkcc.org`. |
-| Cert | Let's Encrypt 2-SAN at `/etc/letsencrypt/live/levels.mousebrains.com/` + bridge cert at `/etc/nginx/certs/levels.wkcc.org.{cert,privkey}` (the latter only during the DNS cutover window; see `DNS.CHANGEOVER-fastpath.md`). |
+| Cert | Let's Encrypt 2-SAN at `/etc/letsencrypt/live/levels.mousebrains.com/` + bridge cert at `/etc/nginx/certs/levels.wkcc.org.{cert,privkey}` (the latter only during the DNS cutover window; see `DNS.CHANGEOVER.md`). |
 | Scheduled work | 12 systemd timers — pipeline, backups, cert health, decimation, etc. See `deploy/SETUP.md` §timer schedule. |
 | Monitoring | healthchecks.io (heartbeats), ntfy.sh (push), msmtp → Gmail (email). Public status page at <https://status.mousebrains.com> (Better Stack hosted, CNAME → `statuspage.betteruptime.com`). |
 | Backups | `/home/pat/kayak/backups/` (hourly + weekly local) + Google Drive crypt (weekly off-site). |
@@ -349,7 +349,7 @@ file, and combining them complicates recovery.
 
 ## Cert renewal
 
-See `DNS.CHANGEOVER-fastpath.md` for the active cert lifecycle plan
+See `DNS.CHANGEOVER.md` for the active cert lifecycle plan
 (bridge cert during the DNS cutover window → `certbot --expand` once
 DNS propagates). The standard renewal path (post-cutover) is the
 OS-managed `certbot.timer` running twice daily; `kayak-cert-expiry.timer`

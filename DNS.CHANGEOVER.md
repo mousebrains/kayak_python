@@ -3,163 +3,92 @@
 Plan for adding `levels.wkcc.org` to this host (Hetzner VPS, IP `5.78.185.66`)
 without users seeing an SSL error during DNS propagation.
 
-## Current state (as of 2026-05-09)
+The path: install a pre-issued `levels.wkcc.org` Let's Encrypt cert as a
+**bridge** so Hetzner can serve a valid TLS handshake the moment the
+A-record flips; then once DNS has propagated (~T+3), expand the existing
+`levels.mousebrains.com` cert to add `levels.wkcc.org` as a third SAN via
+HTTP-01. End-state: single 3-SAN cert at
+`/etc/letsencrypt/live/levels.mousebrains.com/` covering all three
+hostnames, auto-renewed by certbot. ClubExpress touch is a single ticket
+(the A→CNAME flip itself); no DNS-01 dance, no permanent
+`_acme-challenge` CNAME delegation.
 
-- **`levels.wkcc.org`** → `A 208.97.186.232` (ClubExpress, the old host).
-- **`levels-test.wkcc.org`** → `CNAME levels.mousebrains.com` → `A 5.78.185.66` (this host).
-- **Existing Let's Encrypt cert on this host** covers two SANs:
-  - `levels.mousebrains.com`
-  - `levels-test.wkcc.org`
-- Cert is renewed via **HTTP-01** challenge.
-- We do **not** have direct access to ClubExpress's DNS records (changes go through
-  a support ticket); we **do** control `mousebrains.com` DNS.
+A DNS-01-with-CNAME-delegation variant (two ClubExpress tickets, three
+TXT records during acquisition) is preserved in the git history under
+the file's pre-2026-05-15 form if HTTP-01 ever breaks and the bridge
+cert isn't available; it's not the path used at cutover.
 
-## Goal
+## Cert facts (verified 2026-05-14)
 
-Have a 3-SAN cert (adding `levels.wkcc.org`) installed and active on this host
-**before** the `levels.wkcc.org` A-record is flipped to a CNAME. That way users
-see no SSL warning regardless of how long ClubExpress takes to propagate.
-
-## Why HTTP-01 alone won't cut it
-
-HTTP-01 requires `levels.wkcc.org` to resolve to this host so Let's Encrypt can
-fetch `http://levels.wkcc.org/.well-known/acme-challenge/<token>`. While
-`levels.wkcc.org` still points at `208.97.186.232`, HTTP-01 fails. We can't
-acquire the cert until *after* the DNS flip — exactly the window we want to
-avoid.
-
-DNS-01 doesn't have that constraint: it only needs a TXT record at
-`_acme-challenge.levels.wkcc.org`, which can exist independent of the A record.
-
-## Plan: DNS-01 with CNAME delegation
-
-The standard pattern. ClubExpress adds **one** permanent CNAME pointing the
-ACME challenge name into a zone we control. After that, all ACME validation
-(initial and renewal) is done by editing TXT records on `mousebrains.com` —
-no further ClubExpress involvement.
-
-### Phase 1 — Now (one-time ClubExpress request, user-invisible)
-
-Open a ticket with ClubExpress to add **two** CNAMEs on `wkcc.org`:
-
-```
-_acme-challenge.levels.wkcc.org.        CNAME   _acme-challenge.levels.wkcc.org.mousebrains.com.
-_acme-challenge.levels-test.wkcc.org.   CNAME   _acme-challenge.levels-test.wkcc.org.mousebrains.com.
-```
-
-(The right-hand-side names are arbitrary — anything we control under
-`mousebrains.com`. The form above is self-documenting.)
-
-Why both? Phase 2 acquires the cert via DNS-01, which requires a TXT record
-satisfiable for **every** SAN on the cert — including `levels-test.wkcc.org`,
-which currently renews via HTTP-01 only because its CNAME already resolves to
-this host. DNS-01 doesn't follow that A-record CNAME; it needs its own
-`_acme-challenge` record on the `wkcc.org` zone.
-
-These records affect only ACME validators; users see nothing. Safe to leave in
-place forever — they also serve as a permanent fallback if HTTP-01 ever breaks.
-
-Verify when they're live:
-
-```bash
-dig _acme-challenge.levels.wkcc.org CNAME +short @1.1.1.1
-# expect: _acme-challenge.levels.wkcc.org.mousebrains.com.
-
-dig _acme-challenge.levels-test.wkcc.org CNAME +short @1.1.1.1
-# expect: _acme-challenge.levels-test.wkcc.org.mousebrains.com.
-```
-
-### Phase 2 — Acquire the 3-SAN cert (before the A-record flip)
-
-On this host, expand the existing cert with DNS-01:
-
-```bash
-sudo certbot certonly --expand \
-  --cert-name levels.mousebrains.com \
-  --manual --preferred-challenges dns \
-  -d levels.mousebrains.com \
-  -d levels-test.wkcc.org \
-  -d levels.wkcc.org
-```
-
-Certbot will pause three times, once per SAN, and print a TXT value to add.
-All three TXTs go in the **mousebrains.com** zone on Cloudflare (the Phase 1
-CNAMEs delegate the wkcc.org names there):
-
-| Certbot prompts for TXT at | Add on Cloudflare in zone `mousebrains.com` |
+| Property | Value |
 |---|---|
-| `_acme-challenge.levels.mousebrains.com` | name `_acme-challenge.levels` |
-| `_acme-challenge.levels-test.wkcc.org` | name `_acme-challenge.levels-test.wkcc.org` |
-| `_acme-challenge.levels.wkcc.org` | name `_acme-challenge.levels.wkcc.org` |
+| Installed at | `/etc/nginx/certs/levels.wkcc.org.cert` (3616 bytes, fullchain) + `/etc/nginx/certs/levels.wkcc.org.privkey` (1704 bytes, PKCS#8 unencrypted) |
+| Cert/key match | ✅ moduli identical |
+| Subject | `CN=levels.wkcc.org` |
+| SubjectAltName | `DNS:levels.wkcc.org, DNS:www.levels.wkcc.org` |
+| Issuer | `C=US, O=Let's Encrypt, CN=R13` |
+| Validity | `notBefore=2026-05-12T00:47:33Z` → `notAfter=2026-08-10T00:47:32Z` |
+| Bundle | 2-cert chain (leaf + intermediate — nginx `ssl_certificate` ready as-is) |
+| Origin | Auto-issued by DreamHost's LE automation for the current ClubExpress-hosted site; staged transiently under `dreamhost/` then installed and removed from the repo on 2026-05-14 |
 
-Cloudflare auto-appends the zone, so the names typed in the Cloudflare UI are
-exactly the strings in the right column above (no trailing `.mousebrains.com`).
-Type `TXT`, content = the value certbot printed, proxy = **DNS only** (gray
-cloud — TXT can't be proxied anyway, but stay in the habit), TTL = Auto.
+## Plan
 
-Verify each one before pressing Enter in certbot:
+### Phase A — Install the bridge cert on Hetzner (today, user-invisible)
 
-```bash
-dig _acme-challenge.levels.wkcc.org TXT +short @1.1.1.1
-# expect the value certbot printed (returned via the CNAME → mousebrains.com)
+The cert/key files have been placed on the Hetzner host at:
+
+```
+/etc/nginx/certs/levels.wkcc.org.cert      (fullchain — leaf + intermediate)
+/etc/nginx/certs/levels.wkcc.org.privkey   (PKCS#8 private key)
 ```
 
-Cloudflare propagates in seconds. Once all three resolve, let certbot continue.
-Let's Encrypt follows each CNAME into mousebrains.com, reads the TXT,
-validates.
+Note: deliberately not under `/etc/letsencrypt/live/`. The bridge cert is
+**not** certbot-managed, and putting it under `/etc/letsencrypt/` would
+invite a future operator (or certbot itself) to assume the renewal config
+exists. Keeping it in `/etc/nginx/certs/` makes the bridge state visually
+obvious.
 
-#### Timing — how long is the TXT good for?
+1. **Verify the files are in place and the pair is valid:**
 
-- **Lower bound (when can you press Enter?):** ~30 seconds after saving in
-  Cloudflare. The `dig +short @1.1.1.1 <name>` check is canonical — if a
-  public resolver sees the value, Let's Encrypt's resolver will too.
-- **Upper bound (how long can it sit pending?):** ~7 days. That's the
-  lifetime of the pending ACME *order* certbot opens when you run the
-  command. After that, the order expires; re-running certbot prints fresh
-  TXT values to swap in. Within 7 days, the TXT can sit there indefinitely
-  — TXT records don't expire on their own.
-- **TTL on the record (Auto = 300s on Cloudflare)** controls how long
-  *resolvers cache the answer*, not when it becomes live. Fresh records
-  propagate to Cloudflare's edges in seconds.
-- **Order of operations matters:** save the TXT *first*, *then* press
-  Enter in certbot. If LE queries before the TXT exists and gets
-  `NXDOMAIN`, that absence may be negatively cached for 5–15 min (SOA
-  minimum), forcing a wait on retry.
+   ```bash
+   ls -l /etc/nginx/certs/levels.wkcc.org.{cert,privkey}
+   # expect: cert 0644 root:root, privkey 0600 root:root
+   diff <(sudo openssl x509 -in /etc/nginx/certs/levels.wkcc.org.cert -modulus -noout) \
+        <(sudo openssl rsa  -in /etc/nginx/certs/levels.wkcc.org.privkey -modulus -noout)
+   # expect: no output (moduli match)
+   ```
 
-#### Why not the `certbot-dns-cloudflare` plugin?
+2. **Deploy the updated `conf/sites/levels-wkcc-org`.** The repo file
+   already references `/etc/nginx/certs/levels.wkcc.org.{cert,privkey}`
+   (committed alongside this doc). Install and reload:
 
-The plugin would normally automate TXT updates, but it tries to find a
-Cloudflare zone for the literal challenge name (e.g.
-`_acme-challenge.levels.wkcc.org`), which lives in `wkcc.org` — not in
-Cloudflare — and errors out. It does not follow CNAMEs. For this one-shot,
-`--manual` is faster than scripting around the plugin. Tools that *do* follow
-CNAMEs natively (`acme.sh` with `--challenge-alias`, `lego` with
-`--dns.resolvers`) would automate it, but switching tools mid-stream isn't
-worth it.
+   ```bash
+   sudo install -m 0644 conf/sites/levels-wkcc-org \
+       /etc/nginx/sites-available/levels-wkcc-org
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
 
-#### Cleanup
+3. **Smoke-test via SNI** before the DNS flip. Because `levels.wkcc.org`
+   still resolves to ClubExpress, hit Hetzner by IP and pass the SNI name:
 
-After the cert issues you can delete the three TXT records on Cloudflare. The
-Phase 1 CNAMEs on ClubExpress stay. Future renewals will use HTTP-01 (since
-`levels.wkcc.org` resolves here after Phase 3), so no TXT is needed; if you
-ever need DNS-01 again, add a fresh TXT with whatever new value certbot prints.
+   ```bash
+   openssl s_client -connect 5.78.185.66:443 -servername levels.wkcc.org \
+       </dev/null 2>/dev/null \
+       | openssl x509 -noout -subject -issuer -dates -ext subjectAltName
+   # expect:
+   #   subject=CN=levels.wkcc.org
+   #   issuer=C=US, O=Let's Encrypt, CN=R13
+   #   notBefore=May 12 00:47:33 2026 GMT
+   #   notAfter=Aug 10 00:47:32 2026 GMT
+   #   X509v3 Subject Alternative Name: DNS:levels.wkcc.org, DNS:www.levels.wkcc.org
+   ```
 
-Reload nginx after the cert is issued:
+   If that fails, do not proceed — the A-record flip relies on Hetzner
+   serving this cert.
 
-```bash
-sudo nginx -t && sudo systemctl reload nginx
-```
+### Phase B — DNS cutover at ClubExpress (one ticket) + repo branding flip
 
-Sanity check the cert covers all three names:
-
-```bash
-sudo openssl x509 -in /etc/letsencrypt/live/levels.mousebrains.com/fullchain.pem \
-  -noout -text | grep -A1 'Subject Alternative Name'
-```
-
-### Phase 3 — DNS cutover at ClubExpress
-
-Open a second ticket with ClubExpress to change:
+Open a ticket with ClubExpress to change:
 
 ```
 levels.wkcc.org.   A      208.97.186.232
@@ -171,131 +100,246 @@ to:
 levels.wkcc.org.   CNAME  levels.mousebrains.com.
 ```
 
-Because the cert already includes `levels.wkcc.org`, users see a valid
-certificate the moment their resolver picks up the new record — no race, no
-warning, regardless of propagation time.
+Lower the existing 600s TTL a day or two ahead of the flip if
+ClubExpress allows it, to shorten the propagation tail.
 
-### After cutover
+Because Hetzner already has a valid cert for `levels.wkcc.org`, users see
+no SSL warning regardless of resolver propagation order. There's no race
+to win.
 
-The `_acme-challenge` CNAME stays in place permanently. Future renewals can use
-HTTP-01 (since `levels.wkcc.org` now resolves to this host), but DNS-01 remains
-available as a fallback if HTTP-01 ever breaks — without re-involving
-ClubExpress.
+#### Repo branding flip (run alongside the DNS flip)
 
-### Phase 4 — T+3 cleanup (after DNS has fully propagated)
+Pre-staged on branch `cutover/wkcc-branding-flip` (one commit; do the
+audit yourself with `git log -p main..cutover/wkcc-branding-flip` —
+it's 4 files, 17/13 lines). Four edits:
 
-By T+3 (≈ 2026-05-23) the `levels.wkcc.org` A→CNAME flip from Phase 3 has
-reached every cache that respects TTL, and we can verify the renewal path
-works end-to-end before forgetting about it.
+- `LICENSE-DATA` opening paragraph URL + attribution example.
+- `src/kayak/web/build/_shared.py:33` — `_LICENSE_META["attribution"]`
+  flip; embedded in every generated `*.geojson` + `sparklines.json`
+  download, so the value travels with each downloaded copy.
+- `tests/test_build_geojson_split.py:125` — the assertion that
+  matches `_LICENSE_META["attribution"]`; must flip in lock-step.
+- `deploy/nginx-editor-env.conf` `$site_url` map — soak-default
+  `"https://levels-test.wkcc.org"` becomes a hostname-aware map
+  (explicit `levels-test.wkcc.org → test`; `default → https://levels.wkcc.org`).
+  PHP magic-link emails will start citing the new URL.
 
-1.  **Confirm DNS propagation is complete.**
+Apply order (the user accepts the propagation gap — i.e. some
+resolvers still resolve to the old A record while the generated
+output and PHP responses already cite the new hostname; resolver
+state catches up over ~T+3 from the TTL math above):
 
-    ```bash
-    for r in 1.1.1.1 8.8.8.8 9.9.9.9 208.67.222.222; do
-        echo "@$r:"; dig +short @"$r" levels.wkcc.org A levels.wkcc.org CNAME
-    done
-    # Expect: CNAME levels.mousebrains.com. → A 5.78.185.66 from every resolver.
-    ```
+```bash
+# 1. Merge the cutover branch on main.
+git -C /home/pat/kayak fetch
+git -C /home/pat/kayak checkout main
+git -C /home/pat/kayak merge --ff-only cutover/wkcc-branding-flip
+git -C /home/pat/kayak push
 
-2.  **Delete the three temporary `_acme-challenge` TXT records** in the
-    Cloudflare zone `mousebrains.com` (added in Phase 2):
-    - `_acme-challenge.levels`
-    - `_acme-challenge.levels-test.wkcc.org`
-    - `_acme-challenge.levels.wkcc.org`
+# 2. Deploy the new editor-env.conf and reload nginx.
+sudo install -m 0644 /home/pat/kayak/deploy/nginx-editor-env.conf \
+    /etc/nginx/conf.d/editor-env.conf
+sudo nginx -t && sudo systemctl reload nginx
 
-    The two **CNAMEs** at ClubExpress stay in place permanently; only the
-    TXT values from Phase 2 are removed.
+# 3. Trigger an early pipeline run so the next build emits JSON with
+#    the new attribution. (Otherwise the systemd timer would catch up
+#    on its next firing — also fine.)
+/home/pat/.venv/bin/levels build
 
-3.  **Restore the renewal config to HTTP-01.** Phase 2 runs `certbot
-    --expand --manual --preferred-challenges dns`, which writes
-    `authenticator = manual` into the renewal config and would prompt
-    interactively at every renewal. Now that `levels.wkcc.org` resolves
-    here, switch back to nginx HTTP-01:
+# 4. Smoke-check the change landed:
+grep -q 'levels.wkcc.org' /home/pat/public_html/static/reaches.geojson \
+    && echo "OK: GeoJSON carries new attribution" \
+    || echo "MISS: re-run levels build"
+curl -s -I 'https://levels-test.wkcc.org/' >/dev/null \
+    && curl -s 'https://levels-test.wkcc.org/contact.php' | grep -q 'levels-test.wkcc.org' \
+    && echo "OK: soak host still cites test URL" \
+    || echo "MISS: editor-env.conf may not have reloaded"
+```
 
-    ```bash
-    sudo certbot certonly --force-renewal \
-      --cert-name levels.mousebrains.com \
-      --nginx \
-      -d levels.mousebrains.com -d levels-test.wkcc.org -d levels.wkcc.org
-    ```
+If any step fails, the rollback is `git -C /home/pat/kayak revert
+HEAD --no-edit && git push` (which restores the pre-flip attribution
+on the next build) plus the inverse `sudo cp` of the previously
+deployed editor-env.conf from `~/etc-backups/` or a manual edit.
+The DNS A→CNAME flip can be rolled back independently by reverting
+the ClubExpress ticket.
 
-    This reissues the same 3-SAN cert via HTTP-01 and rewrites the renewal
-    config to `authenticator=nginx`. Verify:
+After ClubExpress actions the ticket and resolvers begin pointing
+`levels.wkcc.org` at Hetzner, the only user-visible difference is
+that the new hostname renders correctly with a valid cert (because
+the bridge cert from Phase A is already installed).
 
-    ```bash
-    grep authenticator /etc/letsencrypt/renewal/levels.mousebrains.com.conf
-    # expect: authenticator = nginx
-    ```
+### Phase C — Expand the existing cert to add `levels.wkcc.org` as a third SAN (~T+3 from Phase B, or later)
 
-4.  **Dry-run the renewal.**
+Wait until DNS has propagated to every resolver we care about:
 
-    ```bash
-    sudo certbot renew --dry-run
-    # expect: "Congratulations, all simulated renewals succeeded"
-    ```
+```bash
+for r in 1.1.1.1 8.8.8.8 9.9.9.9 208.67.222.222; do
+    echo "@$r:"; dig +short @"$r" levels.wkcc.org A levels.wkcc.org CNAME
+done
+# Expect: CNAME levels.mousebrains.com. → A 5.78.185.66 from every resolver.
+```
 
-5.  **Restore the `levels.wkcc.org` TTL** at ClubExpress (if you lowered
-    it for the cutover) back to its previous value, e.g. 3600s.
+Then expand the existing 2-SAN cert to include `levels.wkcc.org`,
+authenticating via **HTTP-01** (works now because `levels.wkcc.org`
+resolves to Hetzner):
 
-6.  **Confirm traffic to `levels.wkcc.org` lands on this host.**
+```bash
+sudo certbot --nginx --expand \
+    --cert-name levels.mousebrains.com \
+    -d levels.mousebrains.com \
+    -d levels-test.wkcc.org \
+    -d levels.wkcc.org
+```
 
-    ```bash
-    curl -sI https://levels.wkcc.org/ | head -5
-    # expect: HTTP/2 200 from this nginx; check x-frame-options /
-    #         strict-transport-security headers match the other names.
+This:
 
-    openssl s_client -connect levels.wkcc.org:443 -servername levels.wkcc.org \
-        </dev/null 2>/dev/null | openssl x509 -noout -subject -issuer
-    # expect: subject CN=levels.mousebrains.com, issuer Let's Encrypt
-    ```
+- Replaces `/etc/letsencrypt/live/levels.mousebrains.com/{fullchain.pem,privkey.pem}`
+  with a fresh 3-SAN cert.
+- Leaves `/etc/letsencrypt/renewal/levels.mousebrains.com.conf` with
+  `authenticator = nginx` (unchanged — `--expand` reuses the existing
+  renewal config).
+- Does **not** edit the `levels-wkcc-org` vhost automatically, because
+  that vhost currently points to `/etc/nginx/certs/`. We do that in the
+  next step.
 
-7.  **Update the access-log analyzer** if it filters by hostname —
-    `levels.wkcc.org` is now a primary, not just an alias.
+Switch the `levels.wkcc.org` vhost back to the certbot-managed path so
+the bridge cert is no longer load-bearing:
 
-8.  **Optional: prune unused mousebrains.com DNS records** — the
-    `_acme-challenge.levels.wkcc.org.mousebrains.com` and sibling **target**
-    names from Phase 1 stay (they're the CNAME targets); the **TXT values**
-    underneath them from Phase 2 are what gets deleted.
+```bash
+# In repo: edit conf/sites/levels-wkcc-org so the ssl_certificate /
+# ssl_certificate_key directives point back to
+#     /etc/letsencrypt/live/levels.mousebrains.com/fullchain.pem
+#     /etc/letsencrypt/live/levels.mousebrains.com/privkey.pem
+# (Revert the bridge paths added in Phase A; restore the original
+# /etc/letsencrypt/live/levels.mousebrains.com/ lines.)
 
-If any of 1–6 fails, the rollback in Phase 3 still applies (revert the
-A-record CNAME at ClubExpress); the temporary TXTs and renewal config are
-forward-compatible and don't block a rollback.
+sudo install -m 0644 conf/sites/levels-wkcc-org \
+    /etc/nginx/sites-available/levels-wkcc-org
+sudo nginx -t && sudo systemctl reload nginx
+```
 
-## Pre-flight checks before Phase 2
+Verify the new state:
 
-Things to confirm before running certbot, since `--manual` interacts with the
-existing auto-renewal config:
+```bash
+sudo openssl x509 -in /etc/letsencrypt/live/levels.mousebrains.com/fullchain.pem \
+    -noout -ext subjectAltName
+# expect:
+#   X509v3 Subject Alternative Name:
+#       DNS:levels.mousebrains.com, DNS:levels-test.wkcc.org, DNS:levels.wkcc.org
 
-- **Current authenticator:** `sudo cat /etc/letsencrypt/renewal/levels.mousebrains.com.conf`
-  — confirm webroot vs nginx vs standalone, and whether `--expand --manual`
-  will overwrite the renewal config. If it does, the next auto-renew won't
-  pick up DNS-01 settings; we may want to revert the renewal config to
-  HTTP-01 after Phase 3 so cron-driven renewals just work.
-- **mousebrains.com DNS provider:** Cloudflare. The `certbot-dns-cloudflare`
-  plugin would normally automate this, but doesn't follow CNAMEs (see Phase 2
-  note), so manual TXT entry is the simplest path for the one-shot.
-- **TTL on the old `levels.wkcc.org` A record:** currently 600s. Lower it (if
-  ClubExpress allows) a day or two before Phase 3 to shorten propagation tail
-  for any caches that *do* respect TTL.
-- **Nginx server block for `levels.wkcc.org`:** make sure there's a
-  `server_name` entry for it on the existing TLS listener before Phase 3, so
-  requests arriving on the new CNAME don't fall through to a default server.
+grep authenticator /etc/letsencrypt/renewal/levels.mousebrains.com.conf
+# expect: authenticator = nginx (unchanged from before)
 
-## Alternatives considered
+sudo certbot renew --dry-run --cert-name levels.mousebrains.com
+# expect: "Congratulations, all simulated renewals succeeded"
 
-- **Race the HTTP-01 with the cutover.** At the moment ClubExpress flips DNS,
-  run `certbot --expand`. Window of SSL errors = time between user resolvers
-  seeing the new DNS and the cert being acquired (minutes to a few hours).
-  Acceptable if we can babysit the change, but worse than the DNS-01 plan.
+openssl s_client -connect levels.wkcc.org:443 -servername levels.wkcc.org \
+    </dev/null 2>/dev/null | openssl x509 -noout -subject -dates -ext subjectAltName
+# expect: subject CN=levels.mousebrains.com, SAN includes levels.wkcc.org,
+#         notAfter ~90 days from now (NOT the bridge cert's Aug 10 date).
+```
 
-- **Cloudflare in front.** Put `levels.wkcc.org` behind Cloudflare's free SSL.
-  ClubExpress would CNAME to Cloudflare, Cloudflare handles the cert and
-  proxies traffic to this origin. Bigger architectural change; not worth it
-  just to avoid one ClubExpress ticket.
+Delete the bridge files once the new cert is confirmed in service:
+
+```bash
+sudo rm /etc/nginx/certs/levels.wkcc.org.cert
+sudo rm /etc/nginx/certs/levels.wkcc.org.privkey
+# /etc/nginx/certs/ directory can stay or be removed depending on whether
+# it holds other certs.
+```
+
+### Phase D — Cleanup
+
+1. **Update `EXPECTED_SANS`** in `~/.config/kayak/.env` for the cert-expiry
+   monitor (see [`docs/done/PLAN_pre_release_followup.md`](docs/done/PLAN_pre_release_followup.md)
+   §P0.2):
+
+   ```
+   EXPECTED_SANS="levels.mousebrains.com levels-test.wkcc.org levels.wkcc.org"
+   ```
+
+   End-state is a single 3-SAN cert at
+   `/etc/letsencrypt/live/levels.mousebrains.com/` serving all three
+   hostnames. The monitor probes by hostname so the same `EXPECTED_SANS`
+   list works.
+
+2. **Enable the weekly renewal dry-run** (`kayak-cert-renewal-test.timer`).
+   This procedure never puts any cert into `authenticator=manual`, so
+   there's no gate to wait on. Enable as soon as the daily probe is
+   healthy — the existing `levels.mousebrains.com.conf` has been on
+   `authenticator=nginx` throughout, and Phase C's `--expand` preserves
+   that.
+
+3. **`dreamhost/`** has already been removed from the repo (2026-05-14,
+   before Phase A landed). No further action; this item is here only as
+   a marker that the cleanup is done.
+
+4. **Optionally** add permanent `_acme-challenge.levels.wkcc.org` and
+   `_acme-challenge.levels-test.wkcc.org` CNAMEs delegating into a
+   `mousebrains.com` zone we control. This plan doesn't need them, but
+   they're harmless (only ACME validators see them) and give you DNS-01
+   as a fallback if HTTP-01 ever breaks (nginx auth misconfigured, port
+   80 firewalled by accident, etc.). Not urgent; consider during a future
+   ClubExpress ticket cycle.
 
 ## Rollback
 
-If something goes wrong in Phase 2, the existing 2-SAN cert is untouched until
-the new one issues successfully — `--expand` writes the new cert atomically.
-If it goes wrong in Phase 3, ClubExpress can revert the CNAME back to the old
-A record; DNS-01 cert acquisition has no effect on the old host.
+- **If Phase A's `nginx -t` fails:** the live nginx config is unchanged.
+  Fix the vhost in repo, redeploy.
+- **If Phase B's A-record flip causes any issue:** ClubExpress reverts the
+  CNAME back to the old A record (`208.97.186.232`). The bridge cert on
+  Hetzner remains installed but harmless — it never serves anything
+  because traffic for `levels.wkcc.org` now routes back to ClubExpress.
+- **If Phase C's `certbot --nginx --expand` fails:** the existing 2-SAN
+  cert at `/etc/letsencrypt/live/levels.mousebrains.com/` is unchanged
+  (certbot writes atomically; a failed `--expand` leaves the prior cert
+  in place). The bridge cert continues to serve `levels.wkcc.org` until
+  2026-08-10. Plenty of window to debug. The monitor's warning threshold
+  (21 days remaining) fires around 2026-07-20 — a hard deadline visible
+  from telemetry.
+- **If the Phase C vhost revert fails to deploy** (after `--expand`
+  already succeeded): the vhost still points at `/etc/nginx/certs/`, so
+  the bridge cert keeps serving even though the 3-SAN cert is sitting
+  ready on disk. Same Aug-10 ceiling; just re-run the deploy.
+
+## Why this is safe
+
+The bridge cert and the post-cutover certbot-issued cert are both
+LE-signed leafs chained to ISRG Root X1. Browsers don't distinguish
+between them, so:
+
+- **Pre-cutover:** `levels.wkcc.org` A → `208.97.186.232` → ClubExpress
+  serves its copy of the cert. No user-visible change.
+- **Mid-cutover (during DNS propagation):** some resolvers see the old A
+  record, some see the new CNAME. Either path lands on a host with a
+  valid LE cert for `levels.wkcc.org`. No SSL warning.
+- **Post-cutover, pre-Phase-C (the bridge window, ~T+3):** Hetzner serves
+  the DreamHost-issued bridge cert from `/etc/nginx/certs/`. Users see a
+  valid LE cert for `levels.wkcc.org`.
+- **Post-Phase-C:** Hetzner serves the expanded 3-SAN cert from
+  `/etc/letsencrypt/live/levels.mousebrains.com/`, and `certbot.timer`
+  auto-renews it via HTTP-01 from now on.
+
+The classic race (user resolves to Hetzner before Hetzner has a valid
+cert for the new hostname) is impossible here because Hetzner has the
+bridge cert installed before the A record flips.
+
+## Pre-flight checks before Phase B
+
+Before opening the ClubExpress ticket:
+
+- `openssl s_client` SNI smoke test in Phase A step 3 returned the
+  expected cert.
+- `conf/sites/levels-wkcc-org` is committed and deployed (`diff` between
+  repo and `/etc/nginx/sites-available/levels-wkcc-org` is empty).
+- The existing `kayak-cert-expiry.timer` (if already deployed per
+  `docs/done/PLAN_pre_release_followup.md` §P0.2) is still passing with
+  `EXPECTED_SANS` unchanged — the bridge install doesn't affect the
+  existing 2-SAN monitor.
+- A recent backup of `/etc/nginx/` exists (since this path edits a vhost).
+
+## Cross-references
+
+- [`docs/done/PLAN_pre_release_followup.md`](docs/done/PLAN_pre_release_followup.md)
+  §P0.2 — cert-expiry monitor. The weekly renewal-test timer can be
+  enabled as soon as Phase A lands (no `authenticator=manual` window).

@@ -14,7 +14,7 @@
 # A healthy run posts to ${HC_CERT_EXPIRY} via ExecStartPost.
 #
 # Union-coverage rationale: during the DNS cutover window (per
-# DNS.CHANGEOVER-fastpath.md) we have two certs in service — the
+# DNS.CHANGEOVER.md) we have two certs in service — the
 # certbot-managed 2-SAN cert covers levels.mousebrains.com +
 # levels-test.wkcc.org, and the bridge cert at /etc/nginx/certs/ covers
 # levels.wkcc.org + www.levels.wkcc.org. The script verifies that the

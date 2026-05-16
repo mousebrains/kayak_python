@@ -25,11 +25,13 @@ All notable changes to this project will be documented in this file.
   endpoints, backup + restore from the new hourly window, partial
   `@no_transaction` migration recovery, pipeline failure triage,
   config-drift triage.
-- **DNS cutover fast-path plan** (`DNS.CHANGEOVER-fastpath.md`): uses
-  the DreamHost-issued LE cert at `/etc/nginx/certs/levels.wkcc.org.*`
-  as a bridge until DNS propagates, then `certbot --nginx --expand` to
-  add `levels.wkcc.org` as a third SAN — bypasses the DNS-01 +
-  ClubExpress-CNAME-delegation work of the original `DNS.CHANGEOVER.md`.
+- **DNS cutover plan** (`DNS.CHANGEOVER.md`): uses the DreamHost-issued
+  LE cert at `/etc/nginx/certs/levels.wkcc.org.*` as a bridge until DNS
+  propagates, then `certbot --nginx --expand` to add `levels.wkcc.org`
+  as a third SAN. Single ClubExpress ticket; no DNS-01 dance. (The
+  earlier DNS-01-with-CNAME-delegation draft was dropped 2026-05-15
+  once the bridge cert path was validated; the prior contents survive
+  in git history.)
 - **PHP integration tests dump mail to `/tmp`** instead of calling real
   `mail()` (which prod's msmtp dutifully delivered until catching on).
 - **Nightly metadata-table snapshot** to `data/db/*.csv` via
@@ -95,7 +97,7 @@ All notable changes to this project will be documented in this file.
   weekly backup, decimate, editor-retention, metadata-snapshot, cert-
   expiry, cert-renewal-test, audit-gauges, config-drift, heartbeat).
 - DNS cutover to `levels.wkcc.org` planned for mid-May 2026 (see
-  `DNS.CHANGEOVER-fastpath.md`).
+  `DNS.CHANGEOVER.md`).
 
 ## [0.1.0] - 2026-03-01
 

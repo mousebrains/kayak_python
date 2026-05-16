@@ -87,9 +87,12 @@ or an outstanding action.
 
 ### Cutover-day-and-after
 
-1. **Cert SAN expansion** — after ClubExpress publishes the CNAME
-   `levels.wkcc.org` → `levels.mousebrains.com`. Use the DNS-01
-   path from `DNS.CHANGEOVER.md` so the SSL handshake race is dodged.
+1. **Cert SAN expansion** — at T0+3 via HTTP-01 (`certbot --nginx --expand`)
+   per `DNS.CHANGEOVER.md` Phase C. The bridge cert at
+   `/etc/nginx/certs/levels.wkcc.org.{cert,privkey}` (installed
+   2026-05-14, post-dating this preflight) handles the cutover window
+   so there's no SSL handshake race to dodge. The DNS-01 acquisition
+   path the original preflight pointed at has been retired.
 
 2. **`$site_url` flip in `nginx-editor-env.conf`** at T0+3 (or
    whenever the new CNAME has propagated and traffic is on
@@ -155,8 +158,9 @@ Two unrun passes from the plan, parked until they're useful:
 
 - **Pass 5** — walk `DNS.CHANGEOVER.md` end-to-end against the live
   state and produce a single numbered cutover-day checklist.
-  Worth running ~48 h before cutover, after the ClubExpress CNAME
-  is staged.
+  Worth running ~48 h before cutover, after the bridge cert is in
+  place (Phase A — landed 2026-05-14) and the ClubExpress A→CNAME
+  ticket is queued (Phase B).
 - **Pass 6** — curl every URL in `sitemap.xml` from a third-party
   host (not the box itself) and verify 2xx + correct cache-control
   + OG meta intact. Worth running ~24 h before cutover as a final
