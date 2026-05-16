@@ -18,7 +18,7 @@ breaks, the steps shouldn't depend on a network round-trip to GitHub.
 | Web | nginx + PHP-FPM 8.4. Three vhosts: `levels.mousebrains.com`, `levels-test.wkcc.org`, `levels.wkcc.org`. |
 | Cert | Let's Encrypt 2-SAN at `/etc/letsencrypt/live/levels.mousebrains.com/` + bridge cert at `/etc/nginx/certs/levels.wkcc.org.{cert,privkey}` (the latter only during the DNS cutover window; see `DNS.CHANGEOVER-fastpath.md`). |
 | Scheduled work | 12 systemd timers — pipeline, backups, cert health, decimation, etc. See `deploy/SETUP.md` §timer schedule. |
-| Monitoring | healthchecks.io (heartbeats), ntfy.sh (push), msmtp → Gmail (email). |
+| Monitoring | healthchecks.io (heartbeats), ntfy.sh (push), msmtp → Gmail (email). Public status page at <https://status.mousebrains.com> (Better Stack hosted, CNAME → `statuspage.betteruptime.com`). |
 | Backups | `/home/pat/kayak/backups/` (hourly + weekly local) + Google Drive crypt (weekly off-site). |
 
 ## Routine code deploy
@@ -92,7 +92,8 @@ mechanics, more readable in the audit log.
 
 | Signal | Path / unit | Configured cadence |
 |---|---|---|
-| Public homepage | `https://levels.mousebrains.com/` | Better Stack uptime pinger |
+| Public status page | <https://status.mousebrains.com> | Better Stack hosted; surfaces the uptime + content-keyword monitors |
+| Public homepage | Better Stack monitor on the user-facing host | HEAD/GET 3-min interval (today: `levels-test.wkcc.org`; flip to `levels.wkcc.org` post-cutover) |
 | Pipeline heartbeat | `kayak-pipeline.service` → `${HC_PIPELINE}` | Every hour at :12 |
 | Hourly backup heartbeat | `kayak-backup-hourly.service` → `${HC_BACKUP_HOURLY}` | Every hour at :38 |
 | Data-freshness | `kayak-healthcheck.service` → `${HC_HEALTHCHECK}` | Every hour at :45 |
@@ -100,10 +101,14 @@ mechanics, more readable in the audit log.
 | Cert renewal dry-run | `kayak-cert-renewal-test.service` → `${HC_CERT_RENEWAL_TEST}` | Weekly Mon 04:15 |
 | Config drift | `kayak-config-drift.service` → `${HC_CONFIG_DRIFT}` | Weekly Sun 05:30 |
 | Mail-path liveness | `kayak-heartbeat.service` → `${HC_HEARTBEAT}` | Weekly Sun 06:00 |
+| Weekly recap | `kayak-recap.service` → `${HC_RECAP}` | Weekly Mon 07:00 |
 
 All HC_ URLs live in `~/.config/kayak/.env` (chmod 600). The
 `OnFailure=kayak-notify-failure@%n.service` template on every unit
-routes errors to email + ntfy.
+routes errors to email + ntfy. The Better Stack uptime monitor
+also pushes notifications to the same ntfy topic via a webhook
+destination, so a frontend outage and a unit failure surface
+through the same channel.
 
 ## Backup + restore
 

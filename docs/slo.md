@@ -10,6 +10,13 @@ When an SLO trends red, file it as an issue in the next operator review
 target needs revision, a control needs strengthening, or the incident
 was load-bearing for a one-off and the trend ignores it.
 
+The same Better Stack monitors that drive SLO **A** also feed the
+public status page at <https://status.mousebrains.com> — the audience
+there is the bus-factor partner and any club member who wants to know
+why the site is slow, not a contractual SLA reader. A green page +
+red SLO trend is possible (e.g. data-freshness drift while the homepage
+stays up); read the status page and this doc together.
+
 ## Targets
 
 | # | SLO | Target | Measurement | Where the signal lives |
