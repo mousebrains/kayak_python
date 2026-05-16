@@ -1,8 +1,18 @@
 # Plan — Production discipline for kayak
 
-**Status:** In progress (as of 2026-05-14). Phase 1 (heartbeats + push
-notifications) landed. Phase 2 / 3 / 4 work overlaps with the audit
-follow-up plan (`PLAN_pre_release_followup.md` Tiers 1-3); this plan
+**Status:** In progress (as of 2026-05-15). **Tier 1 fully landed**
+(heartbeats + push notifications, plus `kayak-fail-test.service`
+drill target). **Tier 2 partial** — 2.2 (synthetic content check) and
+2.3 (`status.mousebrains.com` Better Stack hosted page) live;
+**2.1 (`/status.json`) live as of 2026-05-15**; 2.4 (internal
+dashboard) and 2.5 (logs.analyze migration) still pending. **Tier 3
+partial** — 3.1 (`scripts/deploy.sh`) and 3.4 (rollback runbook
+entry) done; 3.2/3.3 (GHA staging+prod deploy) pending. **Tier 4
+mostly done** — 4.1/4.2/4.3/4.5 in `docs/operations.md` +
+`docs/slo.md`; 4.4 (recovery drill log) pending.
+
+Phase 2/3/4 work overlaps with the audit follow-up plan
+(`PLAN_pre_release_followup.md` Tiers 1-3); this plan
 is the source of truth for deploy.sh / runbook / SLO / drill items,
 while the audit plan covers cert monitor + test/CI maturity + architecture.
 
