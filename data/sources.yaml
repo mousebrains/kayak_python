@@ -98,6 +98,9 @@ nwps:
     # Klickitat (Washington) — PITW1 ↔ USGS 14113000, KLCW1 ↔ USGS 14107000.
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/PITW1/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/KLCW1/stageflow/observed"
+    # CNRFC — Klamath River below Iron Gate Dam (CA); matches USGS 11516530.
+    # Source row 43 was orphaned (no fetch_url); migration 0024 wired it here.
+    - url: "https://api.water.noaa.gov/nwps/v1/gauges/IRGC1/stageflow/observed"
 
 nwrfc.xml:
   urls:
