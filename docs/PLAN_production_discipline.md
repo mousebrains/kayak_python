@@ -1,18 +1,21 @@
 # Plan — Production discipline for kayak
 
-**Status:** In progress (as of 2026-05-15). **Tier 1 fully landed**
-(heartbeats + push notifications, plus `kayak-fail-test.service`
-drill target). **Tier 2 fully landed as of 2026-05-15** — 2.1
-(`/status.json`), 2.2 (synthetic content check), 2.3
-(`status.mousebrains.com` Better Stack hosted page), 2.4 (internal
-dashboard at `levels.mousebrains.com/_internal/`), and 2.5
-(logs.analyze migration → `levels analyze-logs`) all live;
-the daily-anomaly variant of 2.5 is deferred to ~T+30 per chat
-decision. **Tier 3
-partial** — 3.1 (`scripts/deploy.sh`) and 3.4 (rollback runbook
-entry) done; 3.2/3.3 (GHA staging+prod deploy) pending. **Tier 4
-mostly done** — 4.1/4.2/4.3/4.5 in `docs/operations.md` +
-`docs/slo.md`; 4.4 (recovery drill log) pending.
+**Status:** Pre-v1.0.0 scope **landed 2026-05-15**. Tier 1 fully
+landed (heartbeats + push notifications, plus `kayak-fail-test.service`
+drill target). Tier 2 fully landed — 2.1 (`/status.json`), 2.2
+(synthetic content check), 2.3 (`status.mousebrains.com` Better
+Stack hosted page), 2.4 (internal dashboard at
+`levels.wkcc.org/_internal/`), 2.5 (logs.analyze migration →
+`levels analyze-logs`). Tier 3 partial — 3.1 (`scripts/deploy.sh`)
+and 3.4 (rollback runbook) done; **3.2/3.3 (GHA staging+prod deploy)
+and 3.5 (deploy drill) deferred to ~T+30** per chat decision
+2026-05-15 (paired with `PLAN_three_instance_layout.md`'s
+three-instance work, which is the natural home for staged deploys).
+Tier 4 mostly done — 4.1/4.2/4.3/4.5 in `docs/operations.md` +
+`docs/slo.md`; **4.4 (recovery drill log) deferred to ~T+30**
+(pairs with the drill scenarios in 3.5). The daily-anomaly variant
+of 2.5 is also a T+30 follow-up. Nothing left to ship before
+v1.0.0 — close out scheduled after the T+30 deferrals land.
 
 Phase 2/3/4 work overlaps with the audit follow-up plan
 (`PLAN_pre_release_followup.md` Tiers 1-3); this plan
@@ -81,18 +84,26 @@ Each tier is several phases; **review gate between tiers**, not between phases.
 
 1. **Phase 1.1 — Notification routes.** Create ntfy.sh topic with a high-entropy name (e.g. `kayak-$(openssl rand -hex 12)`). **Security note:** ntfy.sh's public service has no auth — the topic name *is* the credential. Anyone who learns it can read alerts and inject fake ones. Keep it out of public commits, logs, and screenshots. Test with `curl -d "test" ntfy.sh/<topic>`. Save as `NTFY_TOPIC` in `~/.config/kayak/.env` (already `chmod 600`, verified 2026-05-12 — no extra ACL step needed). Subscribe on phone (ntfy app on iOS or Android). Verify push within 30s. If the topic ever leaks (e.g. accidentally posted in a chat or commit), rotate to a new one and update both the env file and any phone subscription. **iOS footnote:** iOS notifications via the public ntfy.sh service traverse an ntfy-operated Apple-push intermediary (iOS push requires Apple-approved servers). Reliable for this scale; self-host requires a paid Apple developer cert if you need to bypass the intermediary.
 2. **Phase 1.2 — External uptime monitor.** Sign up for Better Stack free tier (verify at signup: ~10 monitors, ~3-min check interval, 1-month retention). Create one monitor for `https://levels.mousebrains.com` (HEAD or GET, expect 200, 3-min interval). Add notification channels: email + ntfy webhook (Better Stack supports custom webhook destinations — point at `ntfy.sh/$NTFY_TOPIC`). Test by pausing nginx briefly on a quiet evening; confirm alert + recovery.
-3. **Phase 1.3 — Heartbeat per systemd service.** healthchecks.io account; create one check per service unit. **Current count: 8** (verified 2026-05-12 — see §Reproduce):
+3. **Phase 1.3 — Heartbeat per systemd service.** healthchecks.io account; create one check per service unit. **Current count: 14** (verified 2026-05-15 — see §Reproduce; `deploy/SETUP.md` §timer schedule is the authoritative listing):
 
    | Service | Cadence | Notes |
    |---|---|---|
    | `kayak-pipeline.service`         | hourly `*:12`     | fetch + build (most important) |
+   | `kayak-backup-hourly.service`    | hourly `*:38`     | local hourly DB snapshot |
    | `kayak-healthcheck.service`      | hourly `*:45`     | runs `scripts/health-check.sh` (data-freshness sentinel) |
    | `kayak-decimate.service`         | daily `02:32`     | thins old observations |
+   | `kayak-metadata-snapshot.service` | daily `04:30`    | commits metadata-CSV drift to git |
+   | `kayak-cert-expiry.service`      | daily `06:30`     | TLS cert-days-remaining probe |
    | `kayak-editor-retention.service` | daily `03:42`     | editor-row retention sweep |
-   | `kayak-backup.service`           | weekly Sun 03:15  | local DB snapshot |
-   | `kayak-backup-offsite.service`   | chained (Sun 03:15+) | chained via `OnSuccess=` from `kayak-backup.service`; rclone upload to gdrive-crypt |
-   | `kayak-audit-gauges.service`     | bimonthly 03:00   | gauge-coverage audit |
+   | `kayak-cert-renewal-test.service` | weekly Mon 04:15 | `certbot renew --dry-run` |
+   | `kayak-config-drift.service`     | weekly Sun 05:30  | repo→`/etc/` drift detector |
+   | `kayak-backup-weekly.service`    | weekly Sun 03:15  | local DB snapshot |
+   | `kayak-backup-offsite.service`   | chained (Sun 03:15+) | chained via `OnSuccess=` from `kayak-backup-weekly.service`; rclone upload to gdrive-crypt |
    | `kayak-heartbeat.service`        | weekly Sun 06:00  | positive-signal heartbeat email; meta-monitor (see Phase 1.4 note) |
+   | `kayak-recap.service`            | weekly Mon 07:00  | weekly operator recap email |
+   | `kayak-audit-gauges.service`     | bimonthly 03:00   | gauge-coverage audit |
+
+   `kayak-fail-test.service` is intentionally NOT in this table — it's the always-fails drill target (Phase 1.5); no `ExecStartPost`, no heartbeat URL.
 
    For each, add to its `[Service]` section (note the `-` prefix on `ExecStartPost`):
    ```
@@ -100,7 +111,7 @@ Each tier is several phases; **review gate between tiers**, not between phases.
    ```
    The `-` prefix marks the step ignorable per systemd convention — a heartbeat curl that fails due to a transient network glitch won't cascade into a false `OnFailure=` alert. The successful unit-of-work is still pinged the next run.
 
-   For `Type=oneshot` units (all production kayak-* services here are `Type=oneshot`), `ExecStartPost` runs only on `ExecStart` exit 0 — exactly the success signal we want. Edits go to `systemd/kayak-*.service` in this repo *and* the installed copy at `/etc/systemd/system/kayak-*.service` (per [feedback_systemd_in_tree_copy]). `sudo systemctl daemon-reload` after each batch. **Schedule mapping in healthchecks.io:** the cron form takes the timer's `OnCalendar=` expression 1:1 (e.g. `*:12` → `12 * * * *`); for the multiple hourly units (pipeline, healthcheck, backup-hourly) the simpler "every 60 min" form works too. 13 checks (2026-05-14 count) comfortably fit healthchecks.io's free-tier 20-check ceiling, but the headroom is narrower than the original "8 vs 20" framing — future additions need to watch the cap. **Check-naming convention:** name each healthchecks.io check after its service unit (e.g. `kayak-pipeline.service`) so the dashboard reads as a 1:1 map of the systemd units.
+   For `Type=oneshot` units (all production kayak-* services here are `Type=oneshot`), `ExecStartPost` runs only on `ExecStart` exit 0 — exactly the success signal we want. Edits go to `systemd/kayak-*.service` in this repo *and* the installed copy at `/etc/systemd/system/kayak-*.service` (per [feedback_systemd_in_tree_copy]). `sudo systemctl daemon-reload` after each batch. **Schedule mapping in healthchecks.io:** the cron form takes the timer's `OnCalendar=` expression 1:1 (e.g. `*:12` → `12 * * * *`); for the multiple hourly units (pipeline, healthcheck, backup-hourly) the simpler "every 60 min" form works too. 14 checks (2026-05-15 count) comfortably fit healthchecks.io's free-tier 20-check ceiling, but the headroom is narrower than the original "8 vs 20" framing — future additions need to watch the cap. **Check-naming convention:** name each healthchecks.io check after its service unit (e.g. `kayak-pipeline.service`) so the dashboard reads as a 1:1 map of the systemd units.
 
    **Operational note on `kayak-pipeline.service` exit semantics:** `levels pipeline` is designed to keep going on individual-source failures and exit 0 unless something catastrophic broke. The heartbeat ping therefore catches "pipeline didn't run / crashed entirely" but NOT "some sources silently failed." That's by design — `kayak-healthcheck.service` catches stale data; Tier 2.5's `analyze_logs.py` catches per-source failures. Different layers, different signals.
 
@@ -109,7 +120,7 @@ Each tier is several phases; **review gate between tiers**, not between phases.
    **Note on `kayak-backup-offsite.service`:** it's installed but has no timer of its own — it runs whenever `kayak-backup.service` exits 0 (via `kayak-backup.service:OnSuccess=kayak-backup-offsite.service`). The heartbeat ping confirms the chained offsite upload also ran, not just the local snapshot. Failures during the offsite step route through the offsite unit's own `OnFailure=kayak-notify-failure@%n.service` (already wired) and do not roll back the local backup.
 
    **Double-alert expectation for the backup chain:** if `kayak-backup.service` itself fails, the chained `kayak-backup-offsite.service` never runs. The operator sees two alerts at different times: an immediate notifier alert (backup failed) AND, later, a healthchecks.io "no ping in N days" alert (offsite stale). This is not noise — they confirm independent facts. The operator-side runbook entry (Tier 4.2) should silence the stale-offsite check until the backup is restored.
-4. **Phase 1.4 — Extend the existing failure notifier with an ntfy push channel.** Tier 1.4 is **not** greenfield — `kayak-notify-failure@.service` already exists at `/etc/systemd/system/kayak-notify-failure@.service` (mirrored in `systemd/kayak-notify-failure@.service`), wired to all production `kayak-*` services (13 as of 2026-05-14) via `OnFailure=kayak-notify-failure@%n.service`. The current `ExecStart` logs to syslog and emails pat.kayak@gmail.com via msmtp. **Phase 1.4 adds a parallel ntfy curl** without disturbing the existing syslog + email paths:
+4. **Phase 1.4 — Extend the existing failure notifier with an ntfy push channel.** Tier 1.4 is **not** greenfield — `kayak-notify-failure@.service` already exists at `/etc/systemd/system/kayak-notify-failure@.service` (mirrored in `systemd/kayak-notify-failure@.service`), wired to all production `kayak-*` services (14 as of 2026-05-15) via `OnFailure=kayak-notify-failure@%n.service`. The current `ExecStart` logs to syslog and emails pat.kayak@gmail.com via msmtp. **Phase 1.4 adds a parallel ntfy curl** without disturbing the existing syslog + email paths:
    - Add `EnvironmentFile=-/home/pat/.config/kayak/.env` to the unit's `[Service]` section so `$NTFY_TOPIC` resolves.
    - Append a guarded ntfy curl to the existing `ExecStart` shell command, after the existing `mail -s ... | logger ...` line:
      ```
@@ -132,14 +143,14 @@ Each tier is several phases; **review gate between tiers**, not between phases.
      User=pat
      ExecStart=/bin/false
      ```
-     Run `sudo systemctl start kayak-fail-test.service`; verify the notifier fires through BOTH the existing email path AND the new ntfy path. Leave the unit installed — it's the canonical drill target for any future notifier change (Tier 4 drills, future channel additions). **It is intentionally outside Phase 1.3's heartbeat table** (no `ExecStartPost`, always fails by design); the production-service count in the verification gate (13 as of 2026-05-14) refers to the production-work units.
+     Run `sudo systemctl start kayak-fail-test.service`; verify the notifier fires through BOTH the existing email path AND the new ntfy path. Leave the unit installed — it's the canonical drill target for any future notifier change (Tier 4 drills, future channel additions). **It is intentionally outside Phase 1.3's heartbeat table** (no `ExecStartPost`, always fails by design); the production-service count in the verification gate (14 as of 2026-05-15) refers to the production-work units.
    - **Existing weekly heartbeat:** `sudo systemctl start kayak-heartbeat.service` to trigger immediately; verify the "host alive" email still arrives. This is the meta-monitor (`systemd/kayak-heartbeat.sh:1-5`) confirming Phase 1.4's notifier edits didn't break the alert pipeline.
 
    Document outcomes in `docs/operations.md` (placeholder created in Tier 4 — for now, a drafts file).
 
 **Verification gate (end of Tier 1):**
-- All production `kayak-*.service` units ping a healthchecks.io URL on success (13 as of 2026-05-14; verify with `grep -l hc-ping /etc/systemd/system/kayak-*.service | wc -l` plus a spot-check of any unit that pings via `${HC_*_UUID}` env-var indirection rather than a literal `hc-ping.com` URL).
-- For an **hourly** timer (pipeline / healthcheck / backup-hourly), a `systemctl stop` fires the alert within ~75 min (the cadence + healthchecks.io's grace period). Daily/weekly/bimonthly timers will take their respective windows; out of scope to drill all thirteen.
+- All production `kayak-*.service` units ping a healthchecks.io URL on success (14 as of 2026-05-15; verify with `grep -l hc-ping /etc/systemd/system/kayak-*.service | wc -l` plus a spot-check of any unit that pings via `${HC_*_UUID}` env-var indirection rather than a literal `hc-ping.com` URL).
+- For an **hourly** timer (pipeline / healthcheck / backup-hourly), a `systemctl stop` fires the alert within ~75 min (the cadence + healthchecks.io's grace period). Daily/weekly/bimonthly timers will take their respective windows; out of scope to drill all fourteen.
 - A 503/down site fires a Better Stack alert within a few minutes (the missed-checks threshold the monitor is configured for — at 3-min interval with 2 missed checks: ~6 min)
 - Push notification reaches the phone within ~30s of email
 - Existing `kayak-heartbeat.service` weekly run still delivers its positive-signal email (verify via Phase 1.5 drill scenario 3, not by waiting a week)
@@ -202,13 +213,13 @@ Each tier is several phases; **review gate between tiers**, not between phases.
    # nginx reload only if the deployed nginx-config hash differs
    ```
    Manual today; CI-driven in Phase 3.2. Test from your shell first.
-2. **Phase 3.2 — Staging promotion via GHA.** Push to `main` after CI green triggers a `deploy-staging.yml` workflow that SSHes to the staging host (whichever serves `levels-test.wkcc.org` — confirm in [§Reproduce]) and runs `scripts/deploy.sh`. Use a deploy-only system user (NOT `pat`), restricted to `git pull` + `systemctl restart kayak-*` + `levels build` (no shell). SSH key stored in GHA secrets. Wire in a healthchecks.io heartbeat — failed deploy fires an alert via the Tier 1 path.
-3. **Phase 3.3 — Production deploy.** Tagging `vX.Y.Z` triggers `deploy-prod.yml` which uses GHA's [environments + protection rules](https://docs.github.com/en/actions/deployment/targeting-different-environments) to require a manual approval click before SSHing to the WKCC-branded prod hosts. Same `scripts/deploy.sh`, different target.
+2. **Phase 3.2 — Staging promotion via GHA.** ⏸️ **Deferred to ~T+30** (2026-05-15 chat decision). Pairs with `PLAN_three_instance_layout.md`, which re-opens the staging-host question on a non-single-host basis. Original design preserved below for reference. Push to `main` after CI green triggers a `deploy-staging.yml` workflow that SSHes to the staging host (whichever serves `levels-test.wkcc.org` — confirm in [§Reproduce]) and runs `scripts/deploy.sh`. Use a deploy-only system user (NOT `pat`), restricted to `git pull` + `systemctl restart kayak-*` + `levels build` (no shell). SSH key stored in GHA secrets. Wire in a healthchecks.io heartbeat — failed deploy fires an alert via the Tier 1 path.
+3. **Phase 3.3 — Production deploy.** ⏸️ **Deferred to ~T+30** (same chat decision). Tagging `vX.Y.Z` triggers `deploy-prod.yml` which uses GHA's [environments + protection rules](https://docs.github.com/en/actions/deployment/targeting-different-environments) to require a manual approval click before SSHing to the WKCC-branded prod hosts. Same `scripts/deploy.sh`, different target.
 4. **Phase 3.4 — Rollback.** Document the procedure in `docs/operations.md` (Tier 4):
    - Re-run `deploy-prod.yml` at the previous SHA via GHA's "re-run jobs" UI; OR
    - SSH to the host, `git checkout <prev-sha> && scripts/deploy.sh`
    Include a "data migrations are forward-only" caveat — rolling back code does NOT roll back DB schema; document the exception list.
-5. **Phase 3.5 — Drill.** Two scenarios:
+5. **Phase 3.5 — Drill.** ⏸️ **Deferred to ~T+30** (depends on 3.2/3.3 landing). Two scenarios:
    - Push a deliberately-broken change (test failure) to a feature branch; confirm CI catches it; confirm staging is unchanged.
    - Push a passing change; confirm staging deploys within 5 min, prod is unaffected; tag a release; confirm prod requires manual approval.
 
@@ -246,7 +257,7 @@ Each tier is several phases; **review gate between tiers**, not between phases.
    - **Data freshness:** ≥1 fresh observation per active source within 2h, 90% of the time. Measured by `/status.json` historical scrape.
    - **Response time:** p95 < 2s for `Oregon.html`. Measured by Better Stack.
    - Quarterly review: did we hit each SLO? If chronically failing, either fix the system or relax the SLO.
-4. **Phase 4.4 — Recovery drill.** Restore `kayak.db` from rclone offsite into a fresh container or temporary VM — *with the runbook in front of you, not from memory*. Note every gap (a command that didn't work, a path that was wrong, a credential you needed but couldn't find). Re-run after fixing the runbook. Repeat at least annually. Log dates of drills in `docs/operations.md`.
+4. **Phase 4.4 — Recovery drill.** ⏸️ **Deferred to ~T+30** (2026-05-15 chat decision; pairs with 3.5's deploy drill so both drill scenarios run together). Restore `kayak.db` from rclone offsite into a fresh container or temporary VM — *with the runbook in front of you, not from memory*. Note every gap (a command that didn't work, a path that was wrong, a credential you needed but couldn't find). Re-run after fixing the runbook. Repeat at least annually. Log dates of drills in `docs/operations.md`.
 5. **Phase 4.5 — Bus-factor light.** Identify one trusted person (kayak club admin? friend who codes?). Walk them through `docs/operations.md` in person. Get them ssh access (read-only first via a separate user; documented escalation to apply runbook entries). Update runbook with their feedback. They're the contact if you're unreachable for >48h.
 
 **Verification gate (end of Tier 4):**
