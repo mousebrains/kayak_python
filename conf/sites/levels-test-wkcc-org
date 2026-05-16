@@ -40,5 +40,24 @@ server {
     access_log /var/log/nginx/levels-test.access.log kayak_timed;
     error_log  /var/log/nginx/levels-test.error.log;
 
+    # /_internal/ — maintainer-only operator dashboard (docs/done/PLAN_internal_dashboard.md
+    # Phase 2.4). PHP enforces auth via require_maintainer(); nginx routes the
+    # two URIs and adds noindex headers. Test mirror of levels.wkcc.org —
+    # also serves the dashboard so pre-DNS-cutover testing has a working
+    # round-trip (login lands here via SITE_URL during the staging window).
+    location = /_internal/ {
+        rewrite ^ /_internal/index.php last;
+    }
+    location = /_internal/index.php {
+        limit_req zone=php burst=10 nodelay;
+        try_files $uri =404;
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+        add_header X-Robots-Tag "noindex, nofollow" always;
+        add_header Cache-Control "no-store, private" always;
+        include /etc/nginx/snippets/security-headers.conf;
+    }
+
     include /etc/nginx/snippets/levels-common.conf;
 }

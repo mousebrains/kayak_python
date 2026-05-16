@@ -38,5 +38,14 @@ server {
     access_log /var/log/nginx/levels-mousebrains.access.log kayak_timed;
     error_log  /var/log/nginx/levels-mousebrains.error.log;
 
+    # /_internal/ lives on the wkcc hosts (docs/done/PLAN_internal_dashboard.md Phase 2.4).
+    # `SITE_URL` is levels.wkcc.org, so the magic-link login flow lands on that
+    # host post-auth — mounting the dashboard here would break the round-trip.
+    # `^~` overrides the regex \.php$ block from levels-common.conf, blocking
+    # direct /_internal/index.php access on this legacy hostname.
+    location ^~ /_internal/ {
+        return 404;
+    }
+
     include /etc/nginx/snippets/levels-common.conf;
 }

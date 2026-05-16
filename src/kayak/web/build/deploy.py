@@ -90,7 +90,8 @@ def _deploy_static_assets(output_dir: Path) -> None:
 
 
 def _deploy_php_files(output_dir: Path) -> None:
-    """Install the PHP layer: top-level pages, ``includes/``, and ``style.css``.
+    """Install the PHP layer: top-level pages, ``includes/``, ``_internal/``,
+    and ``style.css``.
 
     ``style.css`` lives at the output root because ``php/header.php`` reads
     it via ``__DIR__/../style.css`` — the hashed copy under ``static/`` is
@@ -106,6 +107,17 @@ def _deploy_php_files(output_dir: Path) -> None:
     for path in (php_dir / "includes").iterdir():
         if path.is_file():
             shutil.copy2(path, includes_dir / path.name)
+
+    # _internal/ — maintainer-only dashboard. Mirror the includes/ pattern:
+    # a single flat dir; deeper structure can be added later if the
+    # dashboard grows into multiple PHP files. nginx only routes
+    # `/_internal/` and `/_internal/index.php` on the mousebrains vhost
+    # (docs/done/PLAN_internal_dashboard.md Phase 2.4).
+    internal_dir = output_dir / "_internal"
+    internal_dir.mkdir(parents=True, exist_ok=True)
+    for path in (php_dir / "_internal").iterdir():
+        if path.is_file():
+            shutil.copy2(path, internal_dir / path.name)
 
     shutil.copy2(_CSS_PATH, output_dir / "style.css")
 

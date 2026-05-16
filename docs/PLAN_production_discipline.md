@@ -2,13 +2,13 @@
 
 **Status:** In progress (as of 2026-05-15). **Tier 1 fully landed**
 (heartbeats + push notifications, plus `kayak-fail-test.service`
-drill target). **Tier 2 partial** — 2.2 (synthetic content check) and
-2.3 (`status.mousebrains.com` Better Stack hosted page) live;
-**2.1 (`/status.json`) live as of 2026-05-15**;
-**2.5 (logs.analyze migration → `levels analyze-logs`) landed
-2026-05-15** (re-scoped to on-demand CLI; daily-anomaly variant
-deferred to ~T+30 per chat decision); 2.4 (internal dashboard)
-still pending. **Tier 3
+drill target). **Tier 2 fully landed as of 2026-05-15** — 2.1
+(`/status.json`), 2.2 (synthetic content check), 2.3
+(`status.mousebrains.com` Better Stack hosted page), 2.4 (internal
+dashboard at `levels.mousebrains.com/_internal/`), and 2.5
+(logs.analyze migration → `levels analyze-logs`) all live;
+the daily-anomaly variant of 2.5 is deferred to ~T+30 per chat
+decision. **Tier 3
 partial** — 3.1 (`scripts/deploy.sh`) and 3.4 (rollback runbook
 entry) done; 3.2/3.3 (GHA staging+prod deploy) pending. **Tier 4
 mostly done** — 4.1/4.2/4.3/4.5 in `docs/operations.md` +
@@ -59,7 +59,7 @@ Goal: detect failures within minutes (not "next time you check"); make recovery 
 - **Push:** [ntfy.sh](https://ntfy.sh) public service. Self-hostable later if needed. Pushover ($5 one-time per platform) is the paid alternative.
 - **Internal dashboard:** Hand-rolled HTML page reading `kayak.db` directly. No Grafana stack at this scale — a 100-line PHP/Python page beats a metrics-pipeline for the metrics we actually need.
 - **Public status page DNS:** `status.mousebrains.com` (new CNAME under Cloudflare; `mousebrains.com` is at `liv.ns.cloudflare.com` / `dale.ns.cloudflare.com`).
-- **Internal dashboard DNS:** `levels.mousebrains.com/_internal/` (vhost subpath, basic-auth or IP-allowlist, `noindex`). No new DNS.
+- **Internal dashboard DNS:** `levels.wkcc.org/_internal/` (also `levels-test.wkcc.org/_internal/`; vhost subpath, maintainer-auth via the existing `editor_session` cookie, `noindex`). No new DNS, no new credential. Lives on the wkcc hosts because `SITE_URL=levels.wkcc.org` drives the magic-link round-trip — anchoring the dashboard to a different host would break login.
 - **Per [feedback_no_sudo]:** all `/etc/` edits (systemd units, nginx vhosts, certbot) get prepared as diffs that you apply. Per [feedback_systemd_in_tree_copy]: every `/etc/systemd/system/kayak-*` patch also goes into the repo's installed location at the same time.
 
 ## Target shape
@@ -67,7 +67,7 @@ Goal: detect failures within minutes (not "next time you check"); make recovery 
 | Tier | Delivers | SaaS | Self-host |
 |---|---|---|---|
 | 1 — Crash detection | Email + push within minutes of: site down, missed timer, unit failure | Better Stack (uptime), healthchecks.io (heartbeats), ntfy (push) | systemd `OnFailure=` template + per-timer `ExecStartPost` curl |
-| 2 — Status visibility | Public status page; internal dashboard; queryable `/status.json` | Better Stack hosted status page | `/status.json` endpoint; internal dashboard at `levels.mousebrains.com/_internal/`; `logs.analyze` migrated into repo |
+| 2 — Status visibility | Public status page; internal dashboard; queryable `/status.json` | Better Stack hosted status page | `/status.json` endpoint; internal dashboard at `levels.wkcc.org/_internal/`; `logs.analyze` migrated into repo |
 | 3 — Deploy automation | Push to main → tests pass → auto-deploy to staging; tagged release → manual approval → prod | GitHub Actions | `scripts/deploy.sh`; rollback procedure |
 | 4 — Runbook + SLO | `docs/operations.md`; defined SLO; recovery drill done with someone else at the keyboard | — | Runbook; `docs/slo.md`; quarterly drill log |
 
@@ -167,7 +167,7 @@ Each tier is several phases; **review gate between tiers**, not between phases.
    Set `Cache-Control: no-cache, max-age=10`. Open CORS for `status.mousebrains.com` so the public status page can fetch it.
 2. **Phase 2.2 — Synthetic content check.** Second Better Stack monitor for `https://levels.mousebrains.com/Oregon.html` with keyword check `WKCC River Levels`. Fires if the page is up but empty/error. Optional second keyword check on `/status.json` field `latest_observation_at` being within last 4h.
 3. **Phase 2.3 — Public status page.** Add a CNAME at `status.mousebrains.com` → Better Stack's hosted status page (configure to surface both monitors with friendly names). DNS for `mousebrains.com` is Cloudflare (verified 2026-05-12: `liv.ns.cloudflare.com` / `dale.ns.cloudflare.com`), so the change is a click in the Cloudflare dashboard. Free on the current tier. Alternative path if you outgrow Better Stack: hand-rolled HTML at `status.mousebrains.com` reading `/status.json` (more code, more control).
-4. **Phase 2.4 — Internal dashboard.** New nginx location at `levels.mousebrains.com/_internal/` (basic-auth via `htpasswd` or IP-allowlist; `add_header X-Robots-Tag noindex`). Renders, in one page reading `kayak.db`:
+4. **Phase 2.4 — Internal dashboard.** ✅ **Done 2026-05-15** — see `docs/done/PLAN_internal_dashboard.md`. New nginx location at `levels.wkcc.org/_internal/` (also `levels-test.wkcc.org/_internal/`); auth via `require_maintainer()` on the existing `editor_session` cookie (no new credential); `X-Robots-Tag: noindex` set both in nginx and in PHP. The legacy `levels.mousebrains.com` vhost carries a `^~ /_internal/ { return 404; }` guard — `SITE_URL` is `levels.wkcc.org`, so the magic-link login flow lands on the wkcc host post-auth; anchoring the dashboard to mousebrains would break the round-trip. Renders, in one page reading `kayak.db`:
    - Per-source freshness heatmap (green <1h, yellow <6h, red older)
    - Recent fetch error log (last 50 from `~/logs/...` or systemd journal)
    - Last 10 build durations (parsed from journal)

@@ -94,6 +94,7 @@ mechanics, more readable in the audit log.
 |---|---|---|
 | Public status page | <https://status.mousebrains.com> | Better Stack hosted; surfaces the uptime + content-keyword monitors |
 | Health snapshot JSON | `https://levels.mousebrains.com/status.json` (rewrites to `php/status.php`) | On-demand; `Cache-Control: no-cache, max-age=10`. Per-agency freshness rollup + per-status gauge counts |
+| Internal dashboard | `https://levels.wkcc.org/_internal/` (also `levels-test.wkcc.org/_internal/`; `php/_internal/index.php`) | On-demand; maintainer-only via `editor_session`. Per-source freshness, recent CSP violations, aggregate counts, build mtime, DB size. `levels.mousebrains.com` returns 404 (login flow targets `levels.wkcc.org` per `SITE_URL`, so the dashboard host has to match) |
 | Public homepage | Better Stack monitor on the user-facing host | HEAD/GET 3-min interval (today: `levels-test.wkcc.org`; flip to `levels.wkcc.org` post-cutover) |
 | Pipeline heartbeat | `kayak-pipeline.service` → `${HC_PIPELINE}` | Every hour at :12 |
 | Hourly backup heartbeat | `kayak-backup-hourly.service` → `${HC_BACKUP_HOURLY}` | Every hour at :38 |
