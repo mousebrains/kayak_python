@@ -14,7 +14,7 @@ Two flavors of test live here:
    covers the end-to-end DB→HTML path.
 
 Previously this file also held three tautological "did the mock get
-called?" tests; per T2.4 in PLAN_outstanding_followups.md / TEST-H3 they
+called?" tests; per T2.4 in docs/done/PLAN_outstanding_followups.md / TEST-H3 they
 were replaced by the inspection-based step-order assertion below.
 """
 

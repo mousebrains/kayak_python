@@ -1,6 +1,6 @@
 # Service-level objectives
 
-Per `PLAN_production_discipline.md` Tier 4 / `PLAN_outstanding_followups.md`
+Per `PLAN_production_discipline.md` Tier 4 / `docs/done/PLAN_outstanding_followups.md`
 §6.2. These targets describe what "healthy" means for the live site
 (`levels.mousebrains.com`). Single operator, hobby project — these are
 internal thresholds for "should I look at this," not external SLAs.

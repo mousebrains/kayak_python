@@ -4,7 +4,7 @@
 Reads structured-event lines emitted by ``kayak.utils.struct_log`` —
 JSON envelopes lifted out of journald's ``MESSAGE=`` field — and
 produces a step-level run summary plus a short failure tally. Drives
-PLAN_outstanding_followups.md §6.1's "last 30 days recap" deliverable.
+docs/done/PLAN_outstanding_followups.md §6.1's "last 30 days recap" deliverable.
 
 Default: 30 days, all ``kayak-*`` units. Override either via flags.
 Healthchecks.io history integration is intentionally out of scope for

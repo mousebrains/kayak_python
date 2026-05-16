@@ -47,7 +47,7 @@ deferred).
 - **Single SQLite DB per instance.** Concurrency is solved within an
   instance (WAL + busy_timeout); separate instances get separate DB
   files.
-- **No GHA-driven SSH-into-host deploys** (per `PLAN_outstanding_followups`
+- **No GHA-driven SSH-into-host deploys** (per `docs/done/PLAN_outstanding_followups.md`
   §6.3 deferral rationale). Deploys are local: the operator (or bus-
   factor partner) SSHes to the host and runs `scripts/deploy.sh`.
 - **`KAYAK_HOME` indirection already exists** (T3.4). This plan extends
@@ -424,7 +424,7 @@ rollback with the runbook in front of them and notes every gap.
 - **Real CDN for static assets.** Nginx + content-hashed asset URLs
   are sufficient at this scale.
 - **Per-instance SSL certificates.** All three vhosts share the 3-SAN
-  Let's Encrypt cert (per Phase 0 of `PLAN_outstanding_followups`).
+  Let's Encrypt cert (per Phase 0 of `docs/done/PLAN_outstanding_followups.md`).
   Doesn't change with this plan.
 
 ## Reproduce

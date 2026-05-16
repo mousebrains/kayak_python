@@ -1,5 +1,19 @@
 # Plan — Outstanding follow-ups (closeout schedule)
 
+**Status:** Closed 2026-05-15. **Phase 0** (DNS cutover) and **Phase 1**
+(T1 closeout: schema SVG regen, timer-count update, archive-done-plans,
+stale-vhost cleanup) all landed. **Phase 2** (KAYAK_HOME + deploy.sh +
+release.sh) is functionally complete; the shipped scripts diverge from
+this plan's prescription in ways driven by feedback memories
+(`feedback_no_sudo`, `feedback_sudo_cp_clobbers_overrides`,
+`feedback_manual_deploys_ok`) that post-date the 2026-05-14 drafting.
+See iter 7 below for the divergence list. **Phase 6** (GHA promotion
++ tag-approval prod deploy) was always conditional and is reopened
+under `PLAN_three_instance_layout.md` for post-v1.0.0 work. **Phase
+1.4** (restore drill) and **Phase 2.4** (smoke deploy via tagged
+release) both await v1.0.0 and are tracked as T+30 follow-ups under
+`PLAN_production_discipline.md`'s deferred items.
+
 > **Cross-check:** plan drafted 2026-05-14 against `main` at `af9dab5` —
 > after Quick Wins + Tier 1 PRs (T1.1 / T1.2 / T1.4 / T1.5) landed. A
 > second Claude session should re-run §Reproduce to confirm the
@@ -12,6 +26,66 @@
 > - iter 4 (2026-05-14): 4 findings — (A) deploy.sh's `git checkout main` fails if the working tree has uncommitted changes; added a `git status --porcelain` precheck that refuses to deploy from a dirty tree. (B) `/etc/kayak/env` could supply `KAYAK_HOME=/some/other/path` and the `cd "$KAYAK_HOME/kayak"` would then fail noisily — that's correct behavior (clear blast radius), but worth a sentence in §2.0 "Before you start" so a future reader knows the file is the source of truth, not the script. (C) Phase 1.3 prose had a "wait, …" interjection that read like an unfinished thought; rewritten as a clean bullet. (D) Phase 6.3 effort line said "otherwise blocked" — "blocked" implies external; the default is a conscious skip. Rephrased as "otherwise not started" + cross-link to the explicit Out-of-scope entry.
 > - iter 5 (2026-05-14): 4 findings — (A) Phase 2.4 smoke-deploy expected nginx reload to be "skipped" — but the new deploy.sh forces a reload when `$PREV_VERSION` is empty (first deploy = unconditional reload). Corrected the smoke-deploy walkthrough. (B) Phase 6.3 listed "documented rollback procedure" as a *blocker* for Phase 6.3 even though the rollback procedure itself is part of Phase 6.3 (§3.4). Circular. Decoupled: rollback procedure moves into Phase 6.2 as an `operations.md` expansion; Phase 6.3 inherits it. (C) Phase 0.3 missed the `kayak-cert-renewal-test.service` artifact concern — the weekly `certbot renew --dry-run` may leave artifacts in any of the three vhost files; first post-cutover run on Mon should be inspected. Added. (D) Tier 1 completion check (per `PLAN_pre_release_followup.md` §481-489) is not explicitly tracked — the items are split across Phase 0/1/2/6 but the plan never asserts "after these phases, Tier 1 is closed." Added an explicit cross-reference to the end-to-end verification section.
 > - iter 6 (2026-05-14, stopping): 3 findings — (A) Effort tally row "Phase 6.1+6.2 — Production-discipline (always)" said ~3.5d but after the iter-5 rollback move it's 1.5d + 2.5d = 4d. Table updated; cumulative columns recomputed. (B) Phase 6 total-effort sentence said "~4-7 days" — same arithmetic gap; bumped to "~4-9 days." (C) `deploy.sh` log path was `$KAYAK_HOME/kayak/logs/` which is *inside* the repo working tree — logs would pollute `git status` and accumulate untracked. Moved to `$KAYAK_HOME/logs/deploy/` (outside the repo). Convergence: 7 → 8 → 6 → 4 → 4 → 3 — stopping.
+> - iter 7 (2026-05-15, **closeout audit**): Phase 2 landed between
+>   iter 6 and today but the shipped scripts diverge from the plan's
+>   prescription. Documenting the gaps so the closed plan stays
+>   honest:
+>   - **2.1 KAYAK_HOME** — done. The "63 references" audit grew to
+>     94 over the past week but ALL remaining `/home/pat` literals
+>     are legitimate: shell `${KAYAK_HOME:=/home/pat}` fallbacks,
+>     systemd `Environment=KAYAK_HOME=/home/pat` definitions,
+>     systemd directive paths (WorkingDirectory=, ExecStart=,
+>     ReadWritePaths=) which systemd does NOT variable-expand, and
+>     `Config::str('csp_log_path', '/home/pat/logs/csp.log')`
+>     defaults. The acceptance criterion "grep returns only
+>     KAYAK_HOME-style assignments" is met.
+>   - **2.2 `scripts/deploy.sh`** — done with a **more conservative
+>     design** than the plan envisioned. Divergences and reasons:
+>     (i) no `--tag`/`--head` flag — the script only ever pulls
+>     main, because per `project_pr_mode_after_v1` direct-to-main
+>     holds until v1.0.0; tag handling is deferred to a follow-up
+>     after v1.0.0 ships;
+>     (ii) does NOT auto-invoke `sudo systemctl daemon-reload` /
+>     `restart kayak-*.timer` / `nginx -s reload` — instead prints
+>     a NOTICE listing the changed `systemd/`/`conf/`/`deploy/`
+>     paths so the operator applies them manually after diffing.
+>     Driven by `feedback_sudo_cp_clobbers_overrides` (repo
+>     template can silently clobber prod-tuned values) and
+>     `feedback_systemd_in_tree_copy` (paired-edit invariant);
+>     (iii) uses `pip install -e .` (only when `pyproject.toml`
+>     diffs across the pull) rather than `uv sync --locked
+>     --all-extras` every run — pip is what's installed in the
+>     prod venv today;
+>     (iv) no `HC_DEPLOY_UUID` ping (env var not configured; a
+>     deploy event is rare enough that an explicit healthchecks
+>     check feels like noise vs signal);
+>     (v) no `/etc/kayak/VERSION` write — the plan used VERSION
+>     for conf-change detection across deploys, but `deploy.sh`'s
+>     "did this pull touch systemd/conf/deploy?" question is
+>     answered by `git diff --name-only "$old_sha" "$new_sha"`
+>     inside the same invocation, so persistent state isn't
+>     needed.
+>   - **2.3 `scripts/release.sh`** — done with **different
+>     argument shape**: takes a literal `X.Y.Z` instead of
+>     `patch|minor|major`. Does NOT create the git tag — only
+>     bumps `pyproject.toml`, flips `CHANGELOG.md`'s `[Unreleased]`
+>     → `[X.Y.Z] - DATE`, commits, and prints the tag-and-push
+>     commands for the operator. Driven by
+>     `project_pr_mode_after_v1` — the user controls when the
+>     v1.0.0 tag publishes.
+>   - **2.4 Smoke deploy** — **gated on v1.0.0**. The first
+>     `--tag` deploy was meant to retroactively tag current `main`
+>     as `v0.2.0`, but `project_pr_mode_after_v1` reserves the
+>     first tag for `v1.0.0`. When v1.0.0 lands, the operator
+>     adds the `--tag` flag handling to `deploy.sh`
+>     (~10-line patch) and runs the smoke deploy then.
+>   - **2.0 Prereqs** — `/etc/kayak/env` exists (✓); sudo NOPASSWD
+>     entries unnecessary given divergence (ii); `HC_DEPLOY_UUID`
+>     unnecessary given divergence (iv).
+>   - **Phase 6** — moved out of this plan entirely to
+>     `PLAN_three_instance_layout.md`, which reopens the
+>     staging-host question on a non-single-host basis post-v1.0.0.
+>   - Plan moved to `docs/done/`; this is the last edit.
 >
 > Dates absolute. References `file:line` against current `main`.
 
