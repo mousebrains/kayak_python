@@ -103,6 +103,7 @@ mechanics, more readable in the audit log.
 | Config drift | `kayak-config-drift.service` → `${HC_CONFIG_DRIFT}` | Weekly Sun 05:30 |
 | Mail-path liveness | `kayak-heartbeat.service` → `${HC_HEARTBEAT}` | Weekly Sun 06:00 |
 | Weekly recap | `kayak-recap.service` → `${HC_RECAP}` | Weekly Mon 07:00 |
+| Operator log analytics | `levels analyze-logs {release\|humans\|chunked}` | On-demand (no timer). Release post-mortem + visitor breakdown — see `docs/PLAN_logs_analyze_migration.md` |
 
 All HC_ URLs live in `~/.config/kayak/.env` (chmod 600). The
 `OnFailure=kayak-notify-failure@%n.service` template on every unit

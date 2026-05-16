@@ -4,8 +4,11 @@
 (heartbeats + push notifications, plus `kayak-fail-test.service`
 drill target). **Tier 2 partial** — 2.2 (synthetic content check) and
 2.3 (`status.mousebrains.com` Better Stack hosted page) live;
-**2.1 (`/status.json`) live as of 2026-05-15**; 2.4 (internal
-dashboard) and 2.5 (logs.analyze migration) still pending. **Tier 3
+**2.1 (`/status.json`) live as of 2026-05-15**;
+**2.5 (logs.analyze migration → `levels analyze-logs`) landed
+2026-05-15** (re-scoped to on-demand CLI; daily-anomaly variant
+deferred to ~T+30 per chat decision); 2.4 (internal dashboard)
+still pending. **Tier 3
 partial** — 3.1 (`scripts/deploy.sh`) and 3.4 (rollback runbook
 entry) done; 3.2/3.3 (GHA staging+prod deploy) pending. **Tier 4
 mostly done** — 4.1/4.2/4.3/4.5 in `docs/operations.md` +

@@ -4,6 +4,7 @@ import argparse
 import sys
 
 from kayak.cli import (
+    analyze_logs,
     assign_huc,
     build,
     calc_rating,
@@ -16,7 +17,6 @@ from kayak.cli import (
     fetch,
     fetch_usgs_ogc,
     init_db,
-    merge,
     migrate,
     orphan_check,
     pipeline,
@@ -44,7 +44,6 @@ def main() -> None:
     migrate.addArgs(subparsers)
     fetch.addArgs(subparsers)
     fetch_usgs_ogc.addArgs(subparsers)
-    merge.addArgs(subparsers)
     calc_rating.addArgs(subparsers)
     calculator.addArgs(subparsers)
     build.addArgs(subparsers)
@@ -59,6 +58,7 @@ def main() -> None:
     assign_huc.addArgs(subparsers)
     emit_config.addArgs(subparsers)
     validate_config.addArgs(subparsers)
+    analyze_logs.addArgs(subparsers)
 
     args = parser.parse_args()
     mkLogger(args)
