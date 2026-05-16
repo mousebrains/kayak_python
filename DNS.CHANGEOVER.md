@@ -282,6 +282,26 @@ sudo rm /etc/nginx/certs/levels.wkcc.org.privkey
    80 firewalled by accident, etc.). Not urgent; consider during a future
    ClubExpress ticket cycle.
 
+5. **Re-baseline bot vs human in `levels analyze-logs chunked` once a week
+   of post-cutover traffic has accumulated.** Pre-staged work (already on
+   `main` before cutover): `_BOT_RE` in `src/kayak/analytics/humans.py` was
+   expanded to catch `censys|internetmeasurement|infrawatch|validator|
+   sortsite|ct2ips`, which were leaking into the "human" bucket pre-cutover
+   and inflating the apparent reader count. After cutover, run
+   `levels analyze-logs chunked --hours 168 --bucket-hours 12` and confirm
+   the bot:human ratio reflects the real surge in paddler traffic (the
+   pre-cutover ratio was ~1.2:1 bot:human with most "humans" actually
+   uncaught scanners). If real-reader hits still look obviously
+   under-counted, the next pass is rdns-based classification in
+   `_classify_ip` (scanner hosts often have empty UAs but reveal in
+   reverse DNS, e.g. `*.censys-scanner.com`,
+   `*.monitoring.internet-measurement.com`, `*.shadowserver.org`,
+   `*.reposify.net`, `*.powermapper.com`). Decision point at the same
+   time: whether to nginx-block `Baiduspider` and `YandexBot` in
+   `conf/snippets/levels-common.conf` — they cost bandwidth and the
+   Oregon-paddler audience isn't there. Hold off until the ratio data
+   says it's worth the config churn.
+
 ## Rollback
 
 - **If Phase A's `nginx -t` fails:** the live nginx config is unchanged.

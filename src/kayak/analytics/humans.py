@@ -30,7 +30,8 @@ _BOT_RE = re.compile(
     r"applebot|baidu|yandex|petal|semrush|ahrefs|mj12|dotbot|seznam|duckduck|google|"
     r"sogou|exabot|coccoc|ia_archiver|mediapartners|telegram|whatsapp|skype|httpx|"
     r"python-requests|curl|wget|go-http|node-fetch|java/|okhttp|libwww|scrapy|"
-    r"headlesschrome|domain-audit|micromessenger|scan|fetch/|axios|aiohttp",
+    r"headlesschrome|domain-audit|micromessenger|scan|fetch/|axios|aiohttp|"
+    r"censys|internetmeasurement|infrawatch|validator|sortsite|ct2ips",
     re.I,
 )
 
