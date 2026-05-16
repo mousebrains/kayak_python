@@ -39,7 +39,7 @@ repo commit. The live host needs none of them.
 
 ## Context
 
-`docs/dev-env-followups.md` (committed as `9446e51`) catalogues five pre-existing dev-environment issues found during JS cleanup. The doc was written from a dev machine where the build target collides with the repo (`OUTPUT_DIR` unset); on the live host the symptoms are silent but the underlying inconsistencies remain. This plan converts the catalogue into a phased fix:
+The original catalogue (committed as `9446e51` under `docs/dev-env-followups.md`, removed once this plan closed) listed five pre-existing dev-environment issues found during JS cleanup. The doc was written from a dev machine where the build target collides with the repo (`OUTPUT_DIR` unset); on the live host the symptoms are silent but the underlying inconsistencies remain. This plan converts the catalogue into a phased fix:
 
 - **Phase 1 — Lint config cleanup (Issues 1, 2; partial 4):** drop stale `php/style.css` and `hardening/*.sh` refs, add gitignore patterns for stray `static/` build artifacts. Env-independent; trivial.
 - **Phase 2 — PHP doc-root fix (Issue 3):** narrow `css_head_block()` change so a symlinked-dev-server view of the site renders the styled nav bar. One PHP line; existing precedent at `php/includes/gauge_map.php:88`. Defensive after Phase 3 (see below) but worth doing in its own right.
