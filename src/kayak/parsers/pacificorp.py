@@ -7,6 +7,21 @@ Format: ``<Measurements>/<Measurement>/<MeasurementValue>`` with naive
 local timestamps (America/Los_Angeles). Localization is handled by
 ``BaseParser.dump_to_db`` via ``source_tz_map`` (set from sources.yaml's
 ``stations:`` block).
+
+Two upstream fragilities to watch for if the feed ever changes shape:
+
+* **XML namespaces.** The current feed is un-namespaced, so ``root.iter("Measurement")``
+  matches by local name. If PacifiCorp wraps the response in a SOAP envelope or
+  adds an ``xmlns`` to the root, the iterator returns nothing and the parser
+  silently drops every record. Switch to ``root.iter("{ns}Measurement")`` or
+  ``etree.iterwalk`` with a tag-stripper (cf. ``nwrfc_xml.py::_local_tag``) if
+  that happens.
+* **Timestamp suffix.** ``parse_datetime(..., assume_naive=True)`` returns a
+  naive datetime *only if* the parsed string had no tz hint. If PacifiCorp
+  starts appending ``Z`` or an offset, ``parse_datetime`` will produce a
+  tz-aware datetime, and ``BaseParser.dump_to_db`` will leave it alone
+  (no re-localize). That path is correct for UTC feeds. The current PT-naive
+  + tz_map flow only works because the feed publishes bare ``YYYY-MM-DD HH:MM:SS``.
 """
 
 import logging

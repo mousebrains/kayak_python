@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Measurements>
+    <Measurement>
+        <PowerSystemResourceId>PR2R.NFD_BYP_80FL_PI</PowerSystemResourceId>
+        <MeasurementUnit>csf</MeasurementUnit>
+        <MeasurementValue>
+            <timeStamp>2026-05-11 01:59:59</timeStamp>
+            <value>88</value>
+            <MeasurementValueQuality>
+                <validity>0</validity>
+            </MeasurementValueQuality>
+        </MeasurementValue>
+        <MeasurementValue>
+            <timeStamp>2026-05-11 02:59:59</timeStamp>
+            <value>89</value>
+            <MeasurementValueQuality>
+                <validity>0</validity>
+            </MeasurementValueQuality>
+        </MeasurementValue>
+        <MeasurementValue>
+            <timeStamp>2026-05-11 03:59:59</timeStamp>
+            <value>87</value>
+            <MeasurementValueQuality>
+                <validity>0</validity>
+            </MeasurementValueQuality>
+        </MeasurementValue>
+        <MeasurementValue>
+            <timeStamp>2026-05-17 08:59:59</timeStamp>
+            <value>n/a</value>
+            <MeasurementValueQuality>
+                <validity>-248</validity>
+            </MeasurementValueQuality>
+        </MeasurementValue>
+    </Measurement>
+    <RequestedStartDate>2026-05-11 00:59:59</RequestedStartDate>
+    <RequestedEndDate>2026-05-17 08:03:50</RequestedEndDate>
+</Measurements>
