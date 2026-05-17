@@ -73,11 +73,14 @@ function handle_gauge_detail(PDO $db, int $id, ?string $start_date, ?string $end
 
     $has_map = _render_gauge_map($gauge, $related['reaches'], $reach_status_by_id);
 
-    _render_gauge_regression($db, (string)$gauge['name'], $related['sources']);
-
     _render_gauge_details_table($gauge);
     _render_associated_sources($related['sources']);
     _render_associated_reaches($related['reaches'], $reach_status_by_id);
+
+    // Regression analysis (when present) sits below the primary content —
+    // most users don't care about fit diagnostics.
+    _render_gauge_regression($db, (string)$gauge['name'], $related['sources']);
+
     _render_gauge_footer($id, $has_map);
 
     include_footer();
