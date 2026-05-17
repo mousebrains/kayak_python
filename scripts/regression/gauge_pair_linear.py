@@ -217,6 +217,36 @@ def residual_percentiles(fit: Fit) -> dict[int, float]:
     return {p: r[max(0, min(n - 1, int(p / 100 * n)))] for p in (1, 5, 25, 50, 75, 95, 99)}
 
 
+def design_row(predictor_values: list[float], quadratic: bool) -> np.ndarray:
+    """Build the design-row vector for a single x* — same column layout as
+    `build_design_matrix`."""
+    cols = [1.0, *list(predictor_values)]
+    if quadratic:
+        cols += [v * v for v in predictor_values]
+    return np.array(cols)
+
+
+def predict(
+    fit: Fit,
+    predictor_values: list[float],
+    quadratic: bool,
+) -> tuple[float, float, float]:
+    """Return (y_hat, se_mean_response, se_prediction) at the given x*.
+
+    * `se_mean_response` = sqrt(X*' . Cov(beta) . X*) — uncertainty in the
+      *expected* y at x*. Use this for confidence bands around the fit line.
+    * `se_prediction` = sqrt(se_mean_response^2 + sigma_hat^2) — uncertainty
+      in a *single new observation* at x*. Use this for prediction intervals
+      around a new measurement; dominated by sigma_hat (residual scatter).
+    """
+    x = design_row(predictor_values, quadratic)
+    y_hat = float(x @ fit.coefs)
+    var_mean = float(x @ fit.cov @ x)
+    se_mean = math.sqrt(max(0.0, var_mean))
+    se_pred = math.sqrt(max(0.0, var_mean + fit.sigma_hat * fit.sigma_hat))
+    return y_hat, se_mean, se_pred
+
+
 def stability_windows(
     target: dict[str, float],
     predictor_dicts: list[dict[str, float]],
@@ -426,6 +456,79 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
             f"{q['mean_residual']:+.1f} | {q['std_residual']:.1f} | {q['n']} |"
         )
     L("")
+
+    L("## Predictions at example x values\n")
+    L(
+        "For each row, `y_hat` is the fitted value and the two CIs are 95% "
+        "two-sided bands. The **mean-response CI** is the uncertainty in "
+        "`E[y | x]` (use for plotting the fit line's confidence band). The "
+        "**prediction CI** is for a *single new observation* — bounded "
+        "below by `sigma_hat` regardless of how precisely the parameters "
+        "are estimated.\n"
+    )
+    # Pick example x* at p05/p25/p50/p75/p95 of the FIRST predictor.
+    # For multi-predictor, hold the other predictors at their means
+    # (visualizes the marginal effect of predictor 1).
+    sorted_p1 = sorted(pts_predictors[0])
+    n_p = len(sorted_p1)
+
+    def at(p: float) -> float:
+        return sorted_p1[max(0, min(n_p - 1, int(p * n_p)))]
+
+    example_x1 = [
+        ("p05 (low)", at(0.05)),
+        ("p25", at(0.25)),
+        ("p50 (median)", at(0.50)),
+        ("p75", at(0.75)),
+        ("p95 (high)", at(0.95)),
+    ]
+    header_cols = " | ".join(f"x ({site})" for site in predictor_sites)
+    L(f"| pred-1 position | {header_cols} | y_hat | 95% CI (mean resp.) | 95% CI (single obs.) |")
+    L("|---|" + "|".join("---" for _ in predictor_sites) + "|---|---|---|")
+    for label, x1 in example_x1:
+        # Hold predictors 2..N at their means (marginal view of predictor 1).
+        xs_all = [x1, *fit.x_means[1:].tolist()]
+        y_hat, se_mean, se_pred = predict(fit, xs_all, quadratic)
+        lo_mean = y_hat - 1.96 * se_mean
+        hi_mean = y_hat + 1.96 * se_mean
+        lo_pred = y_hat - 1.96 * se_pred
+        hi_pred = y_hat + 1.96 * se_pred
+        x_str = " | ".join(f"{v:.0f}" for v in xs_all)
+        L(
+            f"| {label} | {x_str} | {y_hat:.1f} | "
+            f"[{lo_mean:.1f}, {hi_mean:.1f}] (±{1.96 * se_mean:.1f}) | "
+            f"[{lo_pred:.1f}, {hi_pred:.1f}] (±{1.96 * se_pred:.1f}) |"
+        )
+    L("")
+    L("### Computing a CI at any other x*\n")
+    L(
+        "All the information needed to compute prediction CIs at any new "
+        "predictor value is in this document. With the design row "
+        "`X* = [1, x1*, x2*, ..., x1*^2, x2*^2, ...]` matching the column "
+        "order in the covariance matrix above:\n"
+    )
+    L("```")
+    L("y_hat = X* . coefs")
+    L("Var(mean response) = X* . Cov(beta) . X*'")
+    L("Var(single observation) = Var(mean response) + sigma_hat^2")
+    L("SE = sqrt(Var)")
+    L("95% CI = y_hat +/- 1.96 * SE     (n >> 30, large-sample z; use t_{n-p} for small n)")
+    L("```\n")
+    if len(predictor_sites) == 1 and not quadratic:
+        # Single-predictor linear: provide the closed-form formula too.
+        L("For this single-predictor linear fit, the equivalent closed form is:\n")
+        L("```")
+        L("Var(mean response at x*) = sigma_hat^2 * (1/n + (x* - mean_x)^2 / Sxx)")
+        L(
+            "                         where mean_x = "
+            f"{fit.x_means[0]:.4f}, "
+            f"sigma_hat = {fit.sigma_hat:.4f},"
+        )
+        L(
+            f"                         n = {fit.n}, "
+            f"Sxx = sigma_hat^2 / SE(slope)^2 = {fit.sigma_hat**2 / fit.se[1] ** 2:.4e}"
+        )
+        L("```\n")
 
     L("## SQL stub for `calc_expression`\n")
     L(
