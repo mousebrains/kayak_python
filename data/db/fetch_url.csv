@@ -104,3 +104,4 @@ id,url,parser,hours,is_active
 120,https://api.water.noaa.gov/nwps/v1/gauges/COCO3/stageflow/observed,nwps,,1
 121,https://api.water.noaa.gov/nwps/v1/gauges/IRGC1/stageflow/observed,nwps,,1
 122,https://api.water.noaa.gov/nwps/v1/gauges/RCBO3/stageflow/observed,nwps,,1
+123,https://www.pacificorp.com/etc/pcorp/datafiles/hydro/RogueRiverBypass.xml,pacificorp,,1

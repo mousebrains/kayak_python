@@ -15,3 +15,4 @@ id,data_type,expression,time_expression,note
 11,flow,al::Applegate_Lake::inflow,al::Applegate_Lake::inflow,MF Applegate flow = Applegate Lake inflow (single tributary at reservoir)
 12,flow,"round(greatest(0, jo::Johnson_Yellopine_merge::flow + st::EFSF_Stibnite::flow))",jo::Johnson_Yellopine_merge::flow st::EFSF_Stibnite::flow,EF of SF Salmon at 5349 put-in ≈ Johnson Cr + Stibnite EFSF headwater
 13,flow,"round(greatest(0, sm::Suislaw_Mapleton_merge::flow - lc::14307605::flow))",sm::Suislaw_Mapleton_merge::flow lc::14307605::flow,Siuslaw above Lake Creek = Siuslaw at Mapleton − Lake Creek at Swisshome
+14,flow,"round(greatest(0, 0.8285 * rp::14330000::flow - 292.72))",rp::14330000::flow,"Rogue above Prospect (14328000 retired 2024-06-09) estimated from 14330000 via linear fit. n=8599 daily means / ~23.5 yr overlap (non-contiguous 1985-01-01..2024-06-09), r2=0.9575, RMSE=117 cfs. Fit is stable across 1970-2024 sub-windows (slope 0.83-0.84, r2 0.96)."

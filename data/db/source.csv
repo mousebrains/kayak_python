@@ -284,3 +284,5 @@ id,name,agency,fetch_url_id,calc_expression_id,timezone
 309,14211010,USGS,,,
 310,RCBO3,nwps,122,,
 311,14330000,USGS,,,
+312,PR2R.NFD_BYP_80FL_PI,pacificorp,123,,America/Los_Angeles
+313,Rogue_Above_Prospect_calc,Calculation,,14,
