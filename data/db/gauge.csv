@@ -192,5 +192,5 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 192,Clackamas_Oregon_City_merge,,,Oregon City,45.379287,-122.577313,14211010,,,,COCO3,,14211010,,22.7,940.0,,0,Clackamas,Clackamas at Oregon City,clackamas|9|009977|000940,OR
 193,RCBO3,,,Vernonia,45.858611,-123.192222,RCBO3,,,RCBO3,RCBO3,,,,603.87,,,0,Rock Creek,Rock Creek at Vernonia,rock creek|9|000604|999999,OR
 194,14330000,,,Prospect,42.72957187,-122.516147,14330000,,,,,,14330000,,1964.56,379.0,17100307,0,NF Rogue,Rogue River below Prospect,rogue|9|008036|000379,OR
-195,NF_Rogue_Bypass,,,OR-62 Bridge below North Fork Diversion Dam,42.74008,-122.49605,,,,,,,,,,,171003070113,0,NF Rogue,NF Rogue Bypass below NF Dam,rogue|9|008100|999998,OR
-196,Rogue_Above_Prospect_calc,,,Above Prospect (estimated),42.77485,-122.49976,,,,,,,,,2620.0,,171003070113,0,Rogue River,Rogue above Prospect (calc),rogue|9|007380|999991,OR
+195,NF_Rogue_Bypass,,,OR-62 Bridge below North Fork Diversion Dam,42.74008,-122.49605,,,,,,,,,2199.6,,171003070113,0,NF Rogue,NF Rogue Bypass below NF Dam,rogue|9|007800|999998,OR
+196,Rogue_Above_Prospect_calc,,,Above Prospect (estimated),42.77485,-122.49976,,,,,,,,,2624.9,,171003070113,0,NF Rogue,Rogue above Prospect (calc),rogue|9|007375|999991,OR
