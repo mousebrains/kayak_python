@@ -1,6 +1,28 @@
 # Plan — PacifiCorp Rogue Bypass parser + Rogue-above-Prospect calc gauge
 
-**Status:** Open (2026-05-17). Ships in one PR: parser + sources.yaml + migration 0027.
+**Status:** Shipped 2026-05-17 (commit `b23836e` on `main`, rebased onto the same-day `2d03c9e` nightly metadata snapshot). Awaiting live-system review.
+
+## Implementation notes
+
+- Parser, registry, sources.yaml block, 9-case test file, migration 0027, and this doc landed as designed.
+- In-flight fix: the migration runner (`cli/migrate.py::_split_statements`) splits on `;` without parsing string literals, so the original `note` text on the new `calc_expression` row (which contained two semicolons) broke into multiple statements. The semicolons were replaced with `.` in the `note` string so the SQL parses cleanly. Any future calc_expression migration should avoid `;` inside quoted strings.
+- `mypy` flagged `child.text.strip()` as `Returning Any` (lxml types `.text` as `Any`); wrapped with `str(...)` to keep mypy happy without changing behavior.
+- Lint/typecheck/tests clean: ruff + mypy on the parser, 9/9 new parser tests pass, 157/157 parser tests overall.
+- End-to-end on a sandbox SQLite DB: PacifiCorp fetched 153 hourly bypass-flow observations, fetch-usgs-ogc landed 49 each of flow/gauge/temperature for 14330000, and the calc gauge evaluated to `round(0.8285 × 798 − 292.72) = 368` cfs on the live 14330000 reading, matching the formula. None of the three new sources appear in `levels orphan-check` output.
+
+## Post-rebase prod-state notes
+
+The nightly metadata snapshot taken just before this PR landed shows prod had already accumulated a stopgap that this migration overrides:
+
+- `gauge` id 194 already exists with `name='14330000'`, `usgs_id='14330000'`, coords matching this migration — added on prod between the plan being drafted and this PR landing. The Part B `INSERT OR IGNORE INTO gauge` + `WHERE NOT EXISTS` source guard + `INSERT OR IGNORE INTO gauge_source` all skip cleanly.
+- `source` id 311 (`14330000`, `agency='USGS'`) already exists with the gauge_source link to gauge 194.
+- **`reach` id 68 was re-pointed to gauge 194 as a stopgap.** Part A's `UPDATE reach SET gauge_id = (SELECT id FROM gauge WHERE name = 'NF_Rogue_Bypass') WHERE id = 68` OVERRIDES this, moving reach 68 from the full-Rogue total (~880 cfs at 14330000) to the bypass-only PacifiCorp gauge (~94 cfs). That matches the approved design; if the live-flow value drop on reach 68 is unwanted, revert via the editor UI.
+
+Effectively the migration is a no-op for Part B on prod (the rows it would create already exist). Parts A, C, and D do their full work.
+
+## Sort-name convention drift (cosmetic, follow-up candidate)
+
+Prod's `14330000` gauge uses sort_name `rogue|9|001964|000379` — elevation in feet directly. Older Rogue gauges (87/88/89) use `rogue|9|<10000−elev>|<drainage_area>` (e.g. gauge 88 = `rogue|9|007380|000312` for elev 2620 ft). The new gauges in this migration (`NF_Rogue_Bypass`, `Rogue_Above_Prospect_calc`) follow the older inverted-elevation pattern, so they may sort slightly off relative to gauge 194 on `gauges.html`. Cosmetic-only; normalize in a follow-up if it bothers anyone.
 
 ## Goal
 
