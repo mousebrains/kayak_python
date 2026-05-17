@@ -39,7 +39,9 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import json as _json
 import math
+import random
 import statistics
 import subprocess
 import sys
@@ -330,6 +332,10 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
         f"{', '.join(f'`{s}`' for s in predictor_sites)} "
         f"so a downstream `calc_expression` can replace the target gauge.\n"
     )
+    # GitHub renders the SVG inline when viewing the .md; the kayak build
+    # also pre-renders this .md → HTML and serves the same SVG sibling at
+    # /static/regression/<slug>.svg.
+    L(f"![Residuals scatter](./{name}.svg)\n")
     cmd_parts = (
         ["python3 scripts/regression/gauge_pair_linear.py"]
         + [f"--predictor {s}" for s in predictor_sites]
@@ -579,6 +585,241 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
     return "\n".join(lines) + "\n"
 
 
+def _nice_axis(data_min: float, data_max: float) -> tuple[float, float, float]:
+    """Compute (lo, hi, step) for round tick labels — Python port of
+    `php/includes/svg_plot.php::nice_axis`.
+
+    Targets 4-8 ticks; falls back to the candidate closest to 5 ticks.
+    """
+    rng = data_max - data_min
+    if rng < 1e-9:
+        rng = 1.0
+    mag = 10 ** math.floor(math.log10(rng))
+    candidates = [5 * mag, 2 * mag, 1 * mag, 0.5 * mag, 0.2 * mag, 0.1 * mag]
+    for step in candidates:
+        lo = math.floor(data_min / step) * step
+        hi = math.ceil(data_max / step) * step
+        n_ticks = round((hi - lo) / step)
+        if 4 <= n_ticks <= 8:
+            return lo, hi, step
+    step = candidates[0]
+    for s in candidates:
+        lo = math.floor(data_min / s) * s
+        hi = math.ceil(data_max / s) * s
+        n = round((hi - lo) / s)
+        if 3 <= n <= 10:
+            step = s
+            break
+    lo = math.floor(data_min / step) * step
+    hi = math.ceil(data_max / step) * step
+    return lo, hi, step
+
+
+def _format_tick(v: float, step: float) -> str:
+    """Pick a decimal precision that's "just enough" for the step size."""
+    if step >= 100:
+        return f"{v:.0f}"
+    if step >= 1:
+        return f"{v:.0f}" if abs(v - round(v)) < 1e-6 else f"{v:.1f}"
+    decimals = max(0, -math.floor(math.log10(step)))
+    return f"{v:.{decimals}f}"
+
+
+def _render_residuals_svg(
+    *,
+    slug: str,
+    fit: Fit,
+    pivot_predictor: list[float],
+    target_site: str,
+    predictor_site: str,
+    max_points: int = 1500,
+) -> str:
+    """Residuals scatter SVG: predictor flow on x, residual (y - y_hat) on y,
+    +/-1.96 * sigma_hat translucent band, y=0 line, ~max_points subsampled.
+
+    Standalone — no CSS or JS dependencies; serves as `<img src=…>`.
+    """
+    n_points = len(pivot_predictor)
+    rng = random.Random(slug)  # deterministic per-slug subsample
+    if n_points > max_points:
+        sample_idx = rng.sample(range(n_points), max_points)
+    else:
+        sample_idx = list(range(n_points))
+
+    xs = [pivot_predictor[i] for i in sample_idx]
+    ys = [float(fit.residuals[i]) for i in sample_idx]
+
+    x_data_min = min(pivot_predictor)
+    x_data_max = max(pivot_predictor)
+    r_min_full = float(fit.residuals.min())
+    r_max_full = float(fit.residuals.max())
+    band = 1.96 * fit.sigma_hat
+    # y-axis must include the full residual range AND the 95% band.
+    y_data_min = min(r_min_full, -band)
+    y_data_max = max(r_max_full, band)
+
+    x_lo, x_hi, x_step = _nice_axis(x_data_min, x_data_max)
+    y_lo, y_hi, y_step = _nice_axis(y_data_min, y_data_max)
+
+    # Layout: 600 x 400, with margins for titles and axis labels.
+    w_total, h_total = 600, 400
+    ml, mr, mt, mb = 70, 20, 50, 50
+    pw = w_total - ml - mr
+    ph = h_total - mt - mb
+
+    def x_to_px(x: float) -> float:
+        return ml + (x - x_lo) / (x_hi - x_lo) * pw
+
+    def y_to_px(y: float) -> float:
+        return mt + (y_hi - y) / (y_hi - y_lo) * ph
+
+    title = f"Residuals: USGS {target_site} vs USGS {predictor_site} (n={fit.n}, r²={fit.r2:.4f})"
+
+    parts: list[str] = []
+    parts.append(
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{w_total}" height="{h_total}" '
+        f'viewBox="0 0 {w_total} {h_total}" '
+        'font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif" '
+        'font-size="12">'
+    )
+    parts.append(f"<title>{title}</title>")
+
+    # White background.
+    parts.append(f'<rect x="0" y="0" width="{w_total}" height="{h_total}" fill="#fff"/>')
+
+    # Title.
+    parts.append(
+        f'<text x="{w_total / 2}" y="22" text-anchor="middle" '
+        f'font-size="14" font-weight="600">{title}</text>'
+    )
+
+    # 95% confidence band: rectangle at +/- 1.96 * sigma_hat around y=0.
+    band_top_px = y_to_px(band)
+    band_bot_px = y_to_px(-band)
+    parts.append(
+        f'<rect x="{ml}" y="{band_top_px:.1f}" width="{pw}" '
+        f'height="{band_bot_px - band_top_px:.1f}" '
+        'fill="#1b5591" fill-opacity="0.12"/>'
+    )
+    # Annotate the band on the right.
+    parts.append(
+        f'<text x="{ml + pw - 4}" y="{band_top_px - 4:.1f}" text-anchor="end" '
+        f'fill="#1b5591" font-size="10">±1.96 &#963;&#770; = ±{band:.0f} cfs</text>'
+    )
+
+    # Plot frame.
+    parts.append(
+        f'<rect x="{ml}" y="{mt}" width="{pw}" height="{ph}" '
+        'fill="none" stroke="#999" stroke-width="1"/>'
+    )
+
+    # X-axis ticks.
+    n_xticks = max(1, round((x_hi - x_lo) / x_step))
+    for i in range(n_xticks + 1):
+        v = x_lo + i * x_step
+        px = x_to_px(v)
+        parts.append(
+            f'<line x1="{px:.1f}" y1="{mt + ph}" x2="{px:.1f}" y2="{mt + ph + 5}" stroke="#999"/>'
+        )
+        parts.append(
+            f'<text x="{px:.1f}" y="{mt + ph + 18}" text-anchor="middle">'
+            f"{_format_tick(v, x_step)}</text>"
+        )
+
+    # Y-axis ticks.
+    n_yticks = max(1, round((y_hi - y_lo) / y_step))
+    for i in range(n_yticks + 1):
+        v = y_lo + i * y_step
+        py = y_to_px(v)
+        parts.append(f'<line x1="{ml - 5}" y1="{py:.1f}" x2="{ml}" y2="{py:.1f}" stroke="#999"/>')
+        parts.append(
+            f'<text x="{ml - 8}" y="{py + 4:.1f}" text-anchor="end">'
+            f"{_format_tick(v, y_step)}</text>"
+        )
+
+    # y=0 reference line.
+    zero_px = y_to_px(0.0)
+    parts.append(
+        f'<line x1="{ml}" y1="{zero_px:.1f}" x2="{ml + pw}" y2="{zero_px:.1f}" '
+        'stroke="#333" stroke-width="1" stroke-dasharray="2,2"/>'
+    )
+
+    # Scatter points.
+    for x, y in zip(xs, ys, strict=True):
+        cx = x_to_px(x)
+        cy = y_to_px(y)
+        parts.append(
+            f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="1.6" fill="#1b5591" fill-opacity="0.45"/>'
+        )
+
+    # Axis labels.
+    parts.append(
+        f'<text x="{ml + pw / 2}" y="{h_total - 12}" text-anchor="middle" '
+        f'font-size="12">USGS {predictor_site} flow (cfs)</text>'
+    )
+    parts.append(
+        f'<text x="{16}" y="{mt + ph / 2}" text-anchor="middle" '
+        f'font-size="12" transform="rotate(-90 16 {mt + ph / 2})">'
+        f"USGS {target_site} residual (cfs)</text>"
+    )
+
+    parts.append("</svg>")
+    return "".join(parts) + "\n"
+
+
+def _render_fit_json(
+    *,
+    slug: str,
+    fit: Fit,
+    target_site: str,
+    predictor_sites: list[str],
+    quadratic: bool,
+    window_start: str,
+    window_end: str,
+) -> str:
+    """Structured fit summary consumed by PHP gauge_detail.php.
+
+    Schema is uniform across single/multi/quadratic — coefs[] is the
+    iteration target for the fact-box, cov stays as a matrix so future
+    code can compute prediction CIs at a new x* without re-fetching data.
+    """
+    coefs_out: list[dict[str, object]] = []
+    for raw_name, est, se in zip(fit.coef_names, fit.coefs, fit.se, strict=False):
+        if raw_name == "intercept":
+            name = "intercept"
+        elif raw_name.startswith("x") and "^" not in raw_name:
+            # x1, x2 → label with the matching predictor site_no.
+            idx = int(raw_name[1:]) - 1
+            site = predictor_sites[idx] if 0 <= idx < len(predictor_sites) else raw_name
+            name = f"{raw_name} ({site})"
+        elif raw_name.endswith("^2"):
+            idx = int(raw_name[1:-2]) - 1
+            site = predictor_sites[idx] if 0 <= idx < len(predictor_sites) else raw_name
+            name = f"{raw_name} ({site})"
+        else:
+            name = raw_name
+        coefs_out.append({"name": name, "value": float(est), "se": float(se)})
+
+    payload = {
+        "slug": slug,
+        "target": target_site,
+        "predictors": predictor_sites,
+        "quadratic": bool(quadratic),
+        "n": fit.n,
+        "window": [window_start, window_end],
+        "coefs": coefs_out,
+        "cov": [[float(v) for v in row] for row in fit.cov],
+        "r2": float(fit.r2),
+        "rmse": float(fit.rmse),
+        "sigma_hat": float(fit.sigma_hat),
+        "x_mean": [float(v) for v in fit.x_means],
+        "y_mean": float(fit.y_mean),
+        "x_range": [[float(lo), float(hi)] for lo, hi in fit.x_ranges],
+        "y_range": [float(fit.y_range[0]), float(fit.y_range[1])],
+    }
+    return _json.dumps(payload, indent=2) + "\n"
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=(
@@ -717,6 +958,32 @@ def main() -> int:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(md)
         print(f"Wrote {args.out}", file=sys.stderr)
+        # Sibling artifacts (only when --out is given — stdout mode keeps the
+        # script usable as a quick pipe-target).
+        svg_path = args.out.with_suffix(".svg")
+        json_path = args.out.with_suffix(".json")
+        svg_path.write_text(
+            _render_residuals_svg(
+                slug=args.name,
+                fit=fit,
+                pivot_predictor=pts_predictors[0],
+                target_site=args.target,
+                predictor_site=predictors[0],
+            )
+        )
+        print(f"Wrote {svg_path}", file=sys.stderr)
+        json_path.write_text(
+            _render_fit_json(
+                slug=args.name,
+                fit=fit,
+                target_site=args.target,
+                predictor_sites=predictors,
+                quadratic=args.quadratic,
+                window_start=args.start,
+                window_end=args.end,
+            )
+        )
+        print(f"Wrote {json_path}", file=sys.stderr)
     else:
         print(md)
 

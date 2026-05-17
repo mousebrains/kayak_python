@@ -6,11 +6,12 @@
 -- Generated: 2026-05-15T01:00:04Z
 
 CREATE TABLE calc_expression (
-	id INTEGER NOT NULL, 
-	data_type VARCHAR(11) NOT NULL, 
-	expression VARCHAR(512) NOT NULL, 
-	time_expression TEXT, 
-	note TEXT, 
+	id INTEGER NOT NULL,
+	data_type VARCHAR(11) NOT NULL,
+	expression VARCHAR(512) NOT NULL,
+	time_expression TEXT,
+	note TEXT,
+	provenance_slug TEXT,
 	PRIMARY KEY (id)
 );
 CREATE TABLE change_request (

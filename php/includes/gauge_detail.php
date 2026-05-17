@@ -73,6 +73,8 @@ function handle_gauge_detail(PDO $db, int $id, ?string $start_date, ?string $end
 
     $has_map = _render_gauge_map($gauge, $related['reaches'], $reach_status_by_id);
 
+    _render_gauge_regression($db, (string)$gauge['name'], $related['sources']);
+
     _render_gauge_details_table($gauge);
     _render_associated_sources($related['sources']);
     _render_associated_reaches($related['reaches'], $reach_status_by_id);
@@ -148,9 +150,11 @@ function _load_gauge_associated(PDO $db, int $id): array
     $sources_stmt = $db->prepare(
         'SELECT s.id, s.name, s.agency,
                 (SELECT COUNT(*) FROM observation o WHERE o.source_id = s.id) AS obs_count,
-                (SELECT SUBSTR(MAX(o.observed_at), 1, 10) FROM observation o WHERE o.source_id = s.id) AS latest_at
+                (SELECT SUBSTR(MAX(o.observed_at), 1, 10) FROM observation o WHERE o.source_id = s.id) AS latest_at,
+                c.provenance_slug AS calc_provenance_slug
          FROM source s
          JOIN gauge_source gs ON s.id = gs.source_id
+         LEFT JOIN calc_expression c ON s.calc_expression_id = c.id
          WHERE gs.gauge_id = ?
          ORDER BY s.name'
     );
@@ -521,6 +525,157 @@ function _render_gauge_details_table(array $gauge): void
         }
     }
     echo '</table>';
+}
+
+/**
+ * Render the "Regression analysis" section when the current gauge is the
+ * output of a regression-derived calc gauge (target role), or is consumed
+ * as a predictor by one (predictor role). Calc gauges that are themselves
+ * predictors get both framings in a single section per slug.
+ *
+ * The .svg + .json artifacts are produced by
+ * scripts/regression/gauge_pair_linear.py and copied into
+ * /static/regression/<slug>.{svg,json,html} by the kayak build's
+ * _deploy_regression_artifacts(). We sanity-check the slug character
+ * class and use is_file() on the static path before emitting any markup
+ * — same defense-in-depth pattern as gauge_map.php's
+ * basename-whitelist approach.
+ *
+ * @param list<array<string, mixed>> $sources From _load_gauge_associated().
+ */
+function _render_gauge_regression(PDO $db, string $gauge_name, array $sources): void
+{
+    /** @var array<string, array<string, mixed>> $by_slug */
+    $by_slug = [];
+
+    // (A) Target role — this gauge is fed by a calc_expression with a
+    // provenance_slug. Read directly from $sources to avoid a re-query.
+    foreach ($sources as $s) {
+        $slug = $s['calc_provenance_slug'] ?? null;
+        if (!$slug) {
+            continue;
+        }
+        $by_slug[$slug] = ['slug' => $slug, 'target' => true, 'predictor_for' => []];
+    }
+
+    // (B) Predictor role — this gauge's name appears in a regression-derived
+    // calc's time_expression. INSTR (not LIKE) because gauge names can
+    // contain underscores, which LIKE would treat as single-char wildcards.
+    // The substring is bounded by '::' delimiters to avoid matching a
+    // shorter name as a prefix of a longer one (the calc-ref convention
+    // is `<prefix>::<gauge_name>::<data_type>`, enforced by
+    // kayak.cli.calculator._resolve_refs).
+    $pred_stmt = $db->prepare(
+        'SELECT ce.provenance_slug AS slug,
+                g.id AS calc_gauge_id,
+                COALESCE(NULLIF(g.display_name, \'\'), g.name) AS calc_gauge_name
+         FROM calc_expression ce
+         JOIN source s        ON s.calc_expression_id = ce.id
+         JOIN gauge_source gs ON gs.source_id = s.id
+         JOIN gauge g         ON g.id = gs.gauge_id
+         WHERE ce.provenance_slug IS NOT NULL
+           AND INSTR(ce.time_expression, :delim) > 0'
+    );
+    $pred_stmt->execute([':delim' => '::' . $gauge_name . '::']);
+    foreach ($pred_stmt->fetchAll() as $row) {
+        $slug = (string)$row['slug'];
+        if (!isset($by_slug[$slug])) {
+            $by_slug[$slug] = ['slug' => $slug, 'target' => false, 'predictor_for' => []];
+        }
+        $by_slug[$slug]['predictor_for'][] = [
+            'gauge_id'   => (int)$row['calc_gauge_id'],
+            'gauge_name' => (string)$row['calc_gauge_name'],
+        ];
+    }
+
+    if (!$by_slug) {
+        return;
+    }
+
+    $doc_root = $_SERVER['DOCUMENT_ROOT'] ?? '';
+    foreach ($by_slug as $entry) {
+        $slug = (string)$entry['slug'];
+        if (!preg_match('/^[A-Za-z0-9_-]+$/', $slug)) {
+            continue;
+        }
+        $base = $doc_root . '/static/regression/' . $slug;
+        $svg_path  = $base . '.svg';
+        $json_path = $base . '.json';
+        $html_rel  = '/static/regression/' . $slug . '.html';
+        if (!is_file($svg_path) || !is_file($json_path)) {
+            continue;
+        }
+        $raw = @file_get_contents($json_path);
+        if ($raw === false) {
+            continue;
+        }
+        $fit = json_decode($raw, true, 4);
+        if (!is_array($fit) || !isset($fit['coefs']) || !is_array($fit['coefs'])) {
+            continue;
+        }
+
+        $is_target    = !empty($entry['target']);
+        $predictor_of = $entry['predictor_for'] ?? [];
+
+        echo '<section class="regression-analysis">';
+        echo '<h3>Regression analysis</h3>';
+
+        // Framing sentence(s) — target / predictor / both.
+        $intro_parts = [];
+        if ($is_target) {
+            $preds = (array)($fit['predictors'] ?? []);
+            $pred_label = $preds
+                ? 'USGS ' . htmlspecialchars(implode(', USGS ', array_map('strval', $preds)))
+                : 'another gauge';
+            $intro_parts[] = 'Estimated from ' . $pred_label
+                . ' via a fitted linear relationship; the residuals diagnostic below '
+                . 'shows fit quality across the predictor flow range.';
+        }
+        if ($predictor_of) {
+            $links = [];
+            foreach ($predictor_of as $g) {
+                $links[] = '<a href="/gauge.php?id=' . (int)$g['gauge_id'] . '">'
+                    . htmlspecialchars($g['gauge_name']) . '</a>';
+            }
+            $intro_parts[] = 'Used as a predictor for ' . implode(', ', $links) . '.';
+        }
+        echo '<p>' . implode(' ', $intro_parts) . '</p>';
+
+        $svg_mtime = @filemtime($svg_path) ?: 1;
+        echo '<div class="regression-image">';
+        echo '<img src="/static/regression/' . htmlspecialchars($slug) . '.svg?v=' . $svg_mtime . '"'
+            . ' alt="Residuals (cfs) vs predictor flow for ' . htmlspecialchars($slug) . '"'
+            . ' width="600" height="400">';
+        echo '</div>';
+
+        echo '<dl class="regression-facts">';
+        foreach ($fit['coefs'] as $c) {
+            if (!is_array($c)) {
+                continue;
+            }
+            $name  = htmlspecialchars((string)($c['name'] ?? ''));
+            $value = (float)($c['value'] ?? 0.0);
+            $se    = (float)($c['se'] ?? 0.0);
+            $val_s = abs($value) >= 1 ? number_format($value, 4) : sprintf('%.6g', $value);
+            $se_s  = abs($se) >= 1 ? number_format($se, 4) : sprintf('%.4g', $se);
+            echo '<dt>' . $name . '</dt><dd>' . $val_s . ' ± ' . $se_s . '</dd>';
+        }
+        $r2    = (float)($fit['r2'] ?? 0.0);
+        $rmse  = (float)($fit['rmse'] ?? 0.0);
+        $n     = (int)($fit['n'] ?? 0);
+        $win   = (array)($fit['window'] ?? []);
+        $win_s = count($win) === 2
+            ? htmlspecialchars((string)$win[0]) . '..' . htmlspecialchars((string)$win[1])
+            : '';
+        echo '<dt>r²</dt><dd>' . number_format($r2, 4) . '</dd>';
+        echo '<dt>RMSE</dt><dd>' . number_format($rmse, 1) . ' cfs</dd>';
+        echo '<dt>n</dt><dd>' . number_format($n) . ' daily means'
+            . ($win_s !== '' ? ', ' . $win_s : '') . '</dd>';
+        echo '</dl>';
+
+        echo '<p><a href="' . htmlspecialchars($html_rel) . '">Full analysis →</a></p>';
+        echo '</section>';
+    }
 }
 
 /**

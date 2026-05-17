@@ -62,7 +62,20 @@ gauge pairs, a linear fit is sufficient.
 
 ## What you get
 
-For every run, the script writes a markdown report to `--out` with:
+For every run, the script writes three sibling files to `--out`'s directory:
+
+- `<slug>.md` — the markdown analysis report (described below).
+- `<slug>.svg` — a residuals scatter plot (predictor flow on x, residual
+  on y) with a ±1.96·σ̂ 95% band. Self-contained (no CSS / JS deps);
+  served as `<img src="/static/regression/<slug>.svg">` from PHP gauge
+  detail pages by the kayak build. Subsampled to ≤1500 points using a
+  slug-seeded RNG so the plot is deterministic across reruns.
+- `<slug>.json` — structured fit summary (coefs, full covariance matrix,
+  r²/RMSE/σ̂, window). Consumed by PHP `_render_gauge_regression()` to
+  render the per-gauge fact-box. Schema is uniform across single /
+  multi / quadratic — `coefs[]` is the iteration target.
+
+The markdown report contains:
 
 - **Coefficients with 1σ uncertainty** and 95% CIs.
 - **Full parameter variance-covariance matrix** plus the correlation

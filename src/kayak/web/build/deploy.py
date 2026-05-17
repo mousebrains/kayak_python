@@ -95,6 +95,12 @@ def _deploy_static_assets(output_dir: Path) -> None:
     ``sw.js`` lands at the output root (not under ``static/``) so the
     service worker controls scope ``/``. Directories under ``static/``
     propagate via ``copytree`` with ``dirs_exist_ok=True``.
+
+    Also publishes the regression-analysis artifacts: ``docs/regression/*.{svg,json}``
+    pass through verbatim into ``static/regression/`` for use by PHP
+    gauge_detail.php, and each ``docs/regression/*.md`` writeup is
+    rendered to a self-contained HTML page under the same directory so
+    the "Full analysis →" link works without exposing the repo.
     """
     static_dir = output_dir / "static"
     static_dir.mkdir(parents=True, exist_ok=True)
@@ -104,6 +110,63 @@ def _deploy_static_assets(output_dir: Path) -> None:
             shutil.copy2(path, dst / path.name)
         elif path.is_dir():
             shutil.copytree(path, static_dir / path.name, dirs_exist_ok=True)
+    _deploy_regression_artifacts(static_dir)
+
+
+def _deploy_regression_artifacts(static_dir: Path) -> None:
+    """Copy ``docs/regression/*.{svg,json}`` and render ``*.md`` → ``*.html``
+    into ``static_dir/regression/``.
+
+    The .md, .svg, and .json files are the authored output of
+    ``scripts/regression/gauge_pair_linear.py``. Build time, we pre-render
+    the markdown to HTML because the kayak repo is private — anonymous
+    GitHub viewers cannot read it, so a ``github.com/…md`` link would 404
+    for end users.
+    """
+    regression_src = BASE_DIR / "docs" / "regression"
+    if not regression_src.is_dir():
+        return
+    dst = static_dir / "regression"
+    dst.mkdir(parents=True, exist_ok=True)
+    # Pass-through artifacts (SVG plot + JSON fact-box source).
+    for ext in (".svg", ".json"):
+        for path in regression_src.glob(f"*{ext}"):
+            shutil.copy2(path, dst / path.name)
+    # Render each Markdown writeup to standalone HTML, kayak-styled. The
+    # README.md sits alongside slug docs but is for repo maintainers, not
+    # end users — skip it.
+    try:
+        import markdown as md_lib
+    except ImportError:
+        logger.warning("python-markdown not installed; skipping regression .md→.html render")
+        return
+    for path in regression_src.glob("*.md"):
+        if path.stem.lower() == "readme":
+            continue
+        html_body = md_lib.markdown(
+            path.read_text(),
+            extensions=["tables", "fenced_code"],
+        )
+        title = path.stem.replace("_", " ")
+        html = (
+            f'<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8">'
+            f"<title>{title} — Regression analysis</title>"
+            '<meta name="viewport" content="width=device-width, initial-scale=1">'
+            '<link rel="stylesheet" href="/style.css">'
+            "<style>main.regression-doc{max-width:920px;margin:1.5rem auto;padding:0 1rem}"
+            "main.regression-doc img{max-width:100%;height:auto}"
+            "main.regression-doc table{border-collapse:collapse;margin:.5rem 0}"
+            "main.regression-doc th,main.regression-doc td{border:1px solid var(--c-border);padding:4px 8px}"
+            "main.regression-doc pre{background:var(--c-stripe);padding:.6rem;overflow-x:auto;font-size:.85rem}"
+            "main.regression-doc code{background:var(--c-stripe);padding:0 .2rem;border-radius:2px}"
+            "main.regression-doc nav.crumbs{margin-bottom:1rem;color:var(--c-text-muted);font-size:.9rem}"
+            "</style></head><body>"
+            f'<main class="regression-doc">'
+            f'<nav class="crumbs"><a href="/index.html">← Back to river levels</a></nav>'
+            f"{html_body}"
+            "</main></body></html>\n"
+        )
+        (dst / f"{path.stem}.html").write_text(html)
 
 
 def _deploy_php_files(output_dir: Path) -> None:
