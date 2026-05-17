@@ -113,6 +113,31 @@ def _deploy_static_assets(output_dir: Path) -> None:
     _deploy_regression_artifacts(static_dir)
 
 
+_HTML_DROP_SECTIONS: tuple[str, ...] = ("## SQL stub", "## Future")
+
+
+def _filter_regression_md_for_html(md_text: str) -> str:
+    """Drop maintainer-only H2 sections before rendering to public HTML.
+
+    The markdown file in docs/regression/ is the source of truth and
+    keeps every section (SQL stub for the next maintainer, Future ideas
+    for the next iterator). Public viewers reaching the page via the
+    "Full analysis →" link on gauge.php only want the fit + diagnostics,
+    so chop any H2 whose heading starts with one of ``_HTML_DROP_SECTIONS``.
+    Each chop runs from the matching ``## `` line until the next ``## ``
+    line (or EOF), so subsequent non-dropped sections survive even when
+    they follow a dropped one.
+    """
+    out: list[str] = []
+    dropping = False
+    for line in md_text.split("\n"):
+        if line.startswith("## "):
+            dropping = any(line.startswith(h) for h in _HTML_DROP_SECTIONS)
+        if not dropping:
+            out.append(line)
+    return "\n".join(out)
+
+
 def _deploy_regression_artifacts(static_dir: Path) -> None:
     """Copy ``docs/regression/*.{svg,json}`` and render ``*.md`` → ``*.html``
     into ``static_dir/regression/``.
@@ -144,7 +169,7 @@ def _deploy_regression_artifacts(static_dir: Path) -> None:
         if path.stem.lower() == "readme":
             continue
         html_body = md_lib.markdown(
-            path.read_text(),
+            _filter_regression_md_for_html(path.read_text()),
             extensions=["tables", "fenced_code"],
         )
         title = path.stem.replace("_", " ")

@@ -13,7 +13,39 @@ from pathlib import Path
 import pytest
 
 import kayak.web.build.deploy as build_mod
-from kayak.web.build.deploy import _deploy_staging_to_live, _sweep_orphans
+from kayak.web.build.deploy import (
+    _deploy_staging_to_live,
+    _filter_regression_md_for_html,
+    _sweep_orphans,
+)
+
+
+def test_filter_regression_md_drops_sql_stub_and_future() -> None:
+    md = (
+        "# Title\n\n"
+        "## Data\n\ntable...\n\n"
+        "## Chosen fit\n\nstuff\n\n"
+        "## SQL stub for `calc_expression`\n\n"
+        "```sql\nINSERT INTO ...;\n```\n\n"
+        "## Future\n\n- piecewise idea\n"
+    )
+    out = _filter_regression_md_for_html(md)
+    assert "## Data" in out
+    assert "## Chosen fit" in out
+    assert "## SQL stub" not in out
+    assert "INSERT INTO" not in out
+    assert "## Future" not in out
+    assert "piecewise" not in out
+
+
+def test_filter_regression_md_chops_run_until_next_h2() -> None:
+    # A non-dropped H2 following a dropped one survives.
+    md = "## Drop me\n## SQL stub for X\n\nSQL goes here\n\n## Keep me\n\nthis section is fine\n"
+    out = _filter_regression_md_for_html(md)
+    assert "## SQL stub" not in out
+    assert "SQL goes here" not in out
+    assert "## Keep me" in out
+    assert "this section is fine" in out
 
 
 def _write(p: Path, content: str, mode: int = 0o644) -> None:
