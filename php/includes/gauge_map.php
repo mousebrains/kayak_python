@@ -92,12 +92,30 @@ function gm_render_map(
     $color_attr  = htmlspecialchars($track_color);
     $rt_attr     = htmlspecialchars($rt_json);
 
+    // OSMB overlay URLs — same /static/<file>?v=<mtime> contract used by
+    // map.html (deploy.py builds the equivalent URL for that page). Empty
+    // string when the nightly fetcher hasn't landed the file yet; the JS
+    // treats absent URLs as "no layer to register".
+    $osmb_url = static function (string $name): string {
+        $path = $_SERVER['DOCUMENT_ROOT'] . '/static/' . $name;
+        if (!is_file($path)) {
+            return '';
+        }
+        return '/static/' . $name . '?v=' . (string)filemtime($path);
+    };
+    $obs_attr = htmlspecialchars($osmb_url('osmb-obstructions.geojson'));
+    $dam_attr = htmlspecialchars($osmb_url('osmb-dams.geojson'));
+    $acc_attr = htmlspecialchars($osmb_url('osmb-access-sites.geojson'));
+
     echo '<div id="feature-map"'
         . ' style="height:350px;margin-top:1rem;border:1px solid #ccc"'
         . ' data-points="' . $points_attr . '"'
         . ' data-track="' . $track_attr . '"'
         . ' data-track-color="' . $color_attr . '"'
         . ' data-reach-tracks="' . $rt_attr . '"'
+        . ' data-osmb-obstructions-url="' . $obs_attr . '"'
+        . ' data-osmb-dams-url="' . $dam_attr . '"'
+        . ' data-osmb-access-url="' . $acc_attr . '"'
         . '></div>';
     return true;
 }
