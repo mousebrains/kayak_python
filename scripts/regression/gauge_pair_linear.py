@@ -625,6 +625,53 @@ def _format_tick(v: float, step: float) -> str:
     return f"{v:.{decimals}f}"
 
 
+def _lowess_sigma_band(
+    *,
+    x_values: list[float],
+    residuals: list[float],
+    x_min: float,
+    x_max: float,
+    n_eval: int = 100,
+    frac: float = 0.3,
+) -> list[tuple[float, float]]:
+    """Tricube-weighted local estimate of 1.96 * sigma(x).
+
+    Estimates sigma(x) by smoothing the squared residuals: for each
+    evaluation x*, take the k = round(frac * n) nearest points by |x_i - x*|,
+    weight each by the tricube of normalized distance, and return
+    sqrt(weighted mean of r_i^2). Variance is the right quantity to
+    smooth because E[r^2] = sigma^2 at each x (under the bias-zero
+    assumption that holds for OLS at the fitted x's), so the smoother
+    is locally unbiased.
+
+    Returns a list of (x_eval, 1.96 * sigma_eval) pairs for plotting.
+    """
+    n = len(x_values)
+    x_arr = np.asarray(x_values, dtype=float)
+    r2_arr = np.asarray(residuals, dtype=float) ** 2
+    k = max(round(frac * n), 5)
+    k = min(k, n)
+
+    out: list[tuple[float, float]] = []
+    for i in range(n_eval):
+        x_star = x_min + (x_max - x_min) * i / max(1, n_eval - 1)
+        d = np.abs(x_arr - x_star)
+        # k nearest neighbors by x.
+        nn = np.argpartition(d, k - 1)[:k]
+        d_nn = d[nn]
+        d_max = d_nn.max() if d_nn.max() > 0 else 1.0
+        # Tricube weights: (1 - (d/d_max)^3)^3, clamped to >= 0.
+        w = np.clip(1.0 - (d_nn / d_max) ** 3, 0.0, 1.0) ** 3
+        w_sum = float(w.sum())
+        if w_sum <= 0:
+            sigma_at = float(np.sqrt(r2_arr[nn].mean()))
+        else:
+            var_at = float((w * r2_arr[nn]).sum() / w_sum)
+            sigma_at = math.sqrt(max(var_at, 0.0))
+        out.append((x_star, 1.96 * sigma_at))
+    return out
+
+
 def _render_residuals_svg(
     *,
     slug: str,
@@ -635,52 +682,72 @@ def _render_residuals_svg(
     max_points: int = 1500,
 ) -> str:
     """Residuals scatter SVG: predictor flow on x, residual (y - y_hat) on y,
-    stepped +/-1.96 * sigma_q band per predictor quintile, y=0 line,
-    ~max_points subsampled.
+    lowess-smoothed +/-1.96 * sigma_hat(x) band, y=0 line, ~max_points
+    subsampled.
 
-    The band is drawn per-quintile (not as a single +/-1.96 * sigma_hat
-    rectangle) because daily-flow residuals are heteroscedastic -- std
-    grows with predictor magnitude (e.g. for the Rogue fit, Q1 std is
-    about 56 cfs while Q5 std is about 177 cfs). A constant pooled
-    band would under-state scatter at high flow and over-state it at
-    low flow.
+    The band is a lowess estimate of the local residual standard
+    deviation (continuous, not stepped) because daily-flow residuals
+    are heteroscedastic -- for the Rogue fit the local std runs from
+    about 55 cfs at low flow to 180 cfs at high flow. A constant
+    pooled band would under-state scatter at high flow and over-state
+    it at low flow.
 
-    Standalone — no CSS or JS dependencies; serves as `<img src=…>`.
+    Standalone -- no CSS or JS dependencies; serves as `<img src=...>`.
     """
     n_points = len(pivot_predictor)
-    rng = random.Random(slug)  # deterministic per-slug subsample
-    if n_points > max_points:
-        sample_idx = rng.sample(range(n_points), max_points)
+
+    # Cap the chart's x-axis at the 99th percentile of predictor flow so
+    # the lowess band reflects the well-sampled region. Rare extreme
+    # flood points (typically once-a-year events) get cropped — without
+    # this, the band balloons at the tail because the local sigma
+    # estimator picks up a handful of huge storm residuals with little
+    # supporting data.
+    x_data_min = min(pivot_predictor)
+    x_data_max_full = max(pivot_predictor)
+    if n_points >= 100:
+        sorted_x = sorted(pivot_predictor)
+        x_data_max = sorted_x[int(0.99 * (len(sorted_x) - 1))]
     else:
-        sample_idx = list(range(n_points))
+        x_data_max = x_data_max_full
+
+    rng = random.Random(slug)  # deterministic per-slug subsample
+    # Subsample only points within the displayed x-range.
+    in_range = [i for i, x in enumerate(pivot_predictor) if x <= x_data_max]
+    if len(in_range) > max_points:
+        sample_idx = rng.sample(in_range, max_points)
+    else:
+        sample_idx = in_range
 
     xs = [pivot_predictor[i] for i in sample_idx]
     ys = [float(fit.residuals[i]) for i in sample_idx]
 
-    # Per-quintile band geometry: 5 sequential (x_lo, x_hi, half_height) rows.
-    # Falls back to a single pooled band if there's < 5 datapoints (test fits)
-    # or if a quintile has < 2 points (stdev undefined).
-    sorted_idx = sorted(range(n_points), key=lambda i: pivot_predictor[i])
-    qsize = n_points // 5
-    band_segments: list[tuple[float, float, float]] = []
-    if qsize >= 2:
-        for q in range(5):
-            idx = sorted_idx[q * qsize : (q + 1) * qsize if q < 4 else n_points]
-            xq = [pivot_predictor[i] for i in idx]
-            rq = [float(fit.residuals[i]) for i in idx]
-            std_q = statistics.stdev(rq)
-            band_segments.append((min(xq), max(xq), 1.96 * std_q))
+    # Lowess-smoothed sigma(x): tricube-weighted local std of residuals.
+    # Returns one (x_eval, half_band) pair per grid point.
+    if n_points >= 20:
+        band_curve = _lowess_sigma_band(
+            x_values=pivot_predictor,
+            residuals=[float(r) for r in fit.residuals],
+            x_min=x_data_min,
+            x_max=x_data_max,
+            n_eval=100,
+            frac=0.3,
+        )
     else:
-        band_segments.append((min(pivot_predictor), max(pivot_predictor), 1.96 * fit.sigma_hat))
-    band_max = max(seg[2] for seg in band_segments)
+        # Fallback for tiny synthetic fits (test suite): flat band at pooled sigma.
+        band_curve = [
+            (x_data_min, 1.96 * fit.sigma_hat),
+            (x_data_max, 1.96 * fit.sigma_hat),
+        ]
+    band_max = max(half for _, half in band_curve)
 
-    x_data_min = min(pivot_predictor)
-    x_data_max = max(pivot_predictor)
-    r_min_full = float(fit.residuals.min())
-    r_max_full = float(fit.residuals.max())
-    # y-axis must include the full residual range AND the widest band.
-    y_data_min = min(r_min_full, -band_max)
-    y_data_max = max(r_max_full, band_max)
+    # y-axis range over residuals INSIDE the displayed x-window
+    # (extreme tail events live outside the chart now and shouldn't
+    # stretch the y-axis vertically).
+    visible_residuals = [float(fit.residuals[i]) for i in sample_idx] or [0.0]
+    r_min_visible = min(visible_residuals)
+    r_max_visible = max(visible_residuals)
+    y_data_min = min(r_min_visible, -band_max)
+    y_data_max = max(r_max_visible, band_max)
 
     x_lo, x_hi, x_step = _nice_axis(x_data_min, x_data_max)
     y_lo, y_hi, y_step = _nice_axis(y_data_min, y_data_max)
@@ -698,6 +765,13 @@ def _render_residuals_svg(
         return mt + (y_hi - y) / (y_hi - y_lo) * ph
 
     title = f"Residuals: USGS {target_site} vs USGS {predictor_site} (n={fit.n}, r²={fit.r2:.4f})"
+    cropped = x_data_max < x_data_max_full
+    subtitle = (
+        f"x-axis capped at p99 of predictor flow ({x_data_max:.0f} cfs); "
+        f"{n_points - len(in_range)} extreme points off-chart"
+        if cropped
+        else ""
+    )
 
     parts: list[str] = []
     parts.append(
@@ -716,26 +790,31 @@ def _render_residuals_svg(
         f'<text x="{w_total / 2}" y="22" text-anchor="middle" '
         f'font-size="14" font-weight="600">{title}</text>'
     )
-
-    # 95% confidence band: stepped rectangle per predictor quintile.
-    # Drawn first so the scatter points render on top.
-    for seg_x_lo, seg_x_hi, seg_half in band_segments:
-        seg_left = x_to_px(seg_x_lo)
-        seg_right = x_to_px(seg_x_hi)
-        seg_top = y_to_px(seg_half)
-        seg_bot = y_to_px(-seg_half)
+    if subtitle:
         parts.append(
-            f'<rect x="{seg_left:.1f}" y="{seg_top:.1f}" '
-            f'width="{seg_right - seg_left:.1f}" '
-            f'height="{seg_bot - seg_top:.1f}" '
-            'fill="#1b5591" fill-opacity="0.12"/>'
+            f'<text x="{w_total / 2}" y="38" text-anchor="middle" '
+            f'font-size="10" fill="#666">{subtitle}</text>'
         )
+
+    # 95% confidence band: lowess-smoothed sigma(x), drawn as a single
+    # closed polygon. Upper boundary traverses x_lo -> x_hi, lower
+    # boundary returns x_hi -> x_lo, then auto-close. Drawn first so
+    # the scatter points render on top.
+    upper_points = [(x_to_px(x), y_to_px(half)) for x, half in band_curve]
+    lower_points = [(x_to_px(x), y_to_px(-half)) for x, half in band_curve]
+    path_cmds = [f"M {upper_points[0][0]:.1f} {upper_points[0][1]:.1f}"]
+    path_cmds.extend(f"L {px:.1f} {py:.1f}" for px, py in upper_points[1:])
+    path_cmds.extend(f"L {px:.1f} {py:.1f}" for px, py in reversed(lower_points))
+    path_cmds.append("Z")
+    parts.append(
+        f'<path d="{" ".join(path_cmds)}" fill="#1b5591" fill-opacity="0.12" stroke="none"/>'
+    )
     # Annotate the widest band on the right.
     top_px_for_max = y_to_px(band_max)
     parts.append(
         f'<text x="{ml + pw - 4}" y="{top_px_for_max - 4:.1f}" text-anchor="end" '
-        f'fill="#1b5591" font-size="10">±1.96 &#963;&#770;(x) per quintile '
-        f"(max ±{band_max:.0f} cfs)</text>"
+        f'fill="#1b5591" font-size="10">'
+        f"±1.96 &#963;&#770;(x) lowess-smoothed (max ±{band_max:.0f} cfs)</text>"
     )
 
     # Plot frame.

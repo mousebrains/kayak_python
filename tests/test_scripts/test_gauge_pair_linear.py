@@ -122,9 +122,11 @@ def test_render_residuals_svg_well_formed(tmp_path: Path):
     # Parses as XML.
     root = ET.fromstring(svg)
     assert root.tag.endswith("svg")
-    # Has a scatter point per data point (n=1000 < max_points=1500 so all kept).
+    # Scatter shows all points within the displayed x-range. With n=1000
+    # the chart caps x at the 99th percentile of predictor flow, so
+    # roughly 1% of points end up off-chart and aren't drawn.
     n_circles = len(re.findall(r"<circle\b", svg))
-    assert n_circles == 1000
+    assert 980 <= n_circles <= 1000
     # Has the title and axis labels.
     assert "14328000" in svg
     assert "14330000" in svg
