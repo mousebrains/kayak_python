@@ -67,7 +67,7 @@ Items that require operator-side execution on the prod host before Tier 6 is ful
    - `sudo cp deploy/levels /etc/nginx/sites-available/levels`
    - `sudo cp deploy/kayak-log-format.conf /etc/nginx/conf.d/kayak-log-format.conf`
    - `sudo nginx -t && sudo systemctl reload nginx`
-   - `sudo cp deploy/kayak-pipeline.sudoers /etc/sudoers.d/kayak-pipeline` (then `visudo -cf`)
+   - `sudo cp deploy/sudoers.d/kayak-pipeline /etc/sudoers.d/kayak-pipeline` (then `visudo -cf`)
 
 2. **Install the new systemd units** via:
    - `sudo /home/pat/kayak/systemd/install.service.sh` (will pick up `kayak-editor-retention.{service,timer}` automatically since they're added to the install script).

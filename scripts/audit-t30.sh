@@ -264,7 +264,7 @@ done
 [ -f "$REPO/deploy/apt.conf.d/50unattended-upgrades" ] && diff_pair "$REPO/deploy/apt.conf.d/50unattended-upgrades" /etc/apt/apt.conf.d/50unattended-upgrades
 # sudoers drop-ins
 diff_pair "$REPO/deploy/sudoers.d/kayak-emit-config"  /etc/sudoers.d/kayak-emit-config
-diff_pair "$REPO/deploy/kayak-pipeline.sudoers"       /etc/sudoers.d/kayak-pipeline
+diff_pair "$REPO/deploy/sudoers.d/kayak-pipeline"     /etc/sudoers.d/kayak-pipeline
 # systemd units — all entries from UNITS[]. The .sh helper scripts are not
 # installed to /etc/systemd/system/ (the .service files' ExecStart points
 # directly at /home/pat/kayak/systemd/<script>.sh), so they're omitted.

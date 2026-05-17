@@ -13,7 +13,7 @@ Both scripts use compressed snapshots staged in `~/kayak/backups/` on the remote
 
 - Passwordless SSH to `pat@levels.mousebrains.com` (tested with `ssh pat@levels.mousebrains.com true`).
 - `sqlite3`, `rsync`, `gzip` on both hosts.
-- `sudo -n systemctl {start,stop} kayak-<unit>` usable non-interactively by `pat` on the server. See `deploy/kayak-pipeline.sudoers` for a sample drop-in.
+- `sudo -n systemctl {start,stop} kayak-<unit>` usable non-interactively by `pat` on the server. See `deploy/sudoers.d/kayak-pipeline` for a sample drop-in.
 - Enough free space in `~/kayak/backups/` on the remote for a few compressed DB snapshots (typically 50–200 MB each).
 
 ## Layout

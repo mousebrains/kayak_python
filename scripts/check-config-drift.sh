@@ -60,7 +60,7 @@ deploy/fail2ban/filter.d/nginx-malicious.conf	/etc/fail2ban/filter.d/nginx-malic
 # logrotate + misc
 deploy/logrotate-kayak-csp	/etc/logrotate.d/kayak-csp
 deploy/nftables.conf	/etc/nftables.conf
-deploy/kayak-pipeline.sudoers	/etc/sudoers.d/kayak-pipeline
+deploy/sudoers.d/kayak-pipeline	/etc/sudoers.d/kayak-pipeline
 deploy/sudoers.d/kayak-emit-config	/etc/sudoers.d/kayak-emit-config
 deploy/kayak-env.example	/etc/kayak/env
 deploy/msmtp-aliases	/etc/msmtp-aliases

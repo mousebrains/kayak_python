@@ -7,7 +7,7 @@
 # Install (on the live server, as root):
 #
 #     install -m 440 -o root -g root \
-#         /home/pat/kayak/deploy/kayak-pipeline.sudoers \
+#         /home/pat/kayak/deploy/sudoers.d/kayak-pipeline \
 #         /etc/sudoers.d/kayak-pipeline
 #     visudo -cf /etc/sudoers.d/kayak-pipeline   # validate
 #
