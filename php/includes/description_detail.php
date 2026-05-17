@@ -398,12 +398,23 @@ function _render_description_fields_and_map(array $reach, array $related, array 
     echo '<table class="desc-table">';
 
     $gauge = $related['gauge'];
+    $gauge_html = null;
+    if ($gauge) {
+        // Hyperlink the gauge name through to /gauge.php so users can
+        // reach the per-gauge readings table, plot, map, associated
+        // sources, and (for regression-derived calc gauges) the
+        // analysis writeup. Fall back to location text when the gauge
+        // has no location set.
+        $gauge_label = $gauge['location'] ?: ($gauge['display_name'] ?: $gauge['name']);
+        $gauge_html = '<a href="/gauge.php?id=' . (int)$gauge['id'] . '">'
+            . htmlspecialchars((string)$gauge_label) . '</a>';
+    }
     $fields = [
         'Class' => implode(', ', $related['classes']),
         'State' => implode(', ', $related['states']),
         'Watershed' => $reach['basin'],
         'Region' => $reach['region'],
-        'Gauge' => $gauge ? $gauge['location'] : null,
+        'Gauge' => $gauge_html,
         'Season' => $reach['season'],
         'Length' => $reach['length'] ? $reach['length'] . ' mi' : null,
         'Gradient' => $reach['gradient'] ? $reach['gradient'] . ' ft/mi' : null,
@@ -477,7 +488,7 @@ function _render_description_fields_and_map(array $reach, array $related, array 
         echo '<table class="desc-table">';
     }
 
-    $html_fields = ['Gauge Location', 'Put-in', 'Take-out'];
+    $html_fields = ['Gauge', 'Gauge Location', 'Put-in', 'Take-out'];
     $autolink_fields = ['Description', 'Notes'];
     foreach ($fields as $label => $value) {
         if ($value === null || trim((string)$value) === '') {
