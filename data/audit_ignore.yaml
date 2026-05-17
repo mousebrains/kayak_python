@@ -1,0 +1,37 @@
+# Audit ignore list — (gauge_id, reach_id) pairs to suppress from the
+# "NEW CANDIDATES near existing reaches" section of audit_gauges.py.
+#
+# Use when the audit's spatial-only proximity check produces a false
+# positive that won't go away on its own — e.g. a tributary candidate
+# matched against a mainstem reach, or a candidate in a different
+# watershed that happens to fall within the 15-mile radius.
+#
+# Schema:
+#   ignored_candidates:
+#     - kind: USGS | NWPS
+#       gauge_id: <site_no or lid>
+#       reach_id: <int>
+#       reason: short free-text — why this isn't a real candidate.
+#
+# Add entries by hand as you triage audit emails. The reach_id pins
+# the suppression to one reach (so a tributary that's wrong for the
+# mainstem might still be right for some other nearby reach). Use a
+# distinct entry per (gauge, reach) pair.
+
+ignored_candidates:
+  - kind: USGS
+    gauge_id: "14317600"
+    reach_id: 96
+    reason: Rock Creek (Glide) is a tributary of the North Umpqua, not the mainstem — different river.
+  - kind: USGS
+    gauge_id: "14317600"
+    reach_id: 196
+    reason: Rock Creek (Glide) is a tributary of the North Umpqua, not the mainstem — different river.
+  - kind: NWPS
+    gauge_id: "JWNO3"
+    reach_id: 279
+    reason: Nehalem River at Jewell — different river from Rock Creek (Nehalem).
+  - kind: USGS
+    gauge_id: "14205350"
+    reach_id: 279
+    reason: EF Dairy Creek — different watershed entirely from Rock Creek (Nehalem).

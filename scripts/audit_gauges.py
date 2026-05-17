@@ -108,8 +108,47 @@ def find_new_nwps_gauges(cache, kayak):
     return [r for r in new if r[0] not in known]
 
 
-def find_candidates_near_reaches(new_gauges, kayak, max_dist_miles=15):
-    """Find new gauges near reaches that have no gauge or a distant gauge."""
+def load_audit_ignore(path: Path | None = None) -> set[tuple[str, str, int]]:
+    """Load the (kind, gauge_id, reach_id) tuples to suppress from candidates.
+
+    See ``data/audit_ignore.yaml`` for the schema. Missing file is fine —
+    returns an empty set so the audit runs clean before any entries exist.
+    """
+    if path is None:
+        path = SCRIPT_DIR.parent / "data" / "audit_ignore.yaml"
+    if not path.is_file():
+        return set()
+    import yaml  # local import — only this code path needs PyYAML
+
+    with open(path) as f:
+        doc = yaml.safe_load(f) or {}
+    out: set[tuple[str, str, int]] = set()
+    for entry in doc.get("ignored_candidates", []) or []:
+        kind = str(entry.get("kind", "")).upper()
+        gid = str(entry.get("gauge_id", ""))
+        rid = entry.get("reach_id")
+        if kind in ("USGS", "NWPS") and gid and isinstance(rid, int):
+            out.add((kind, gid, rid))
+    return out
+
+
+def find_candidates_near_reaches(
+    new_gauges,
+    kayak,
+    max_dist_miles=15,
+    kind: str = "USGS",
+    ignore: set[tuple[str, str, int]] | None = None,
+):
+    """Find new gauges near reaches that have no gauge or a distant gauge.
+
+    ``kind`` is "USGS" or "NWPS" — used to key into ``ignore``, which
+    suppresses specific (kind, gauge_id, reach_id) pairs marked as
+    not-actually-useful in ``data/audit_ignore.yaml``. Suppression
+    happens before the per-gauge dedup so a gauge that's wrong for the
+    closest reach can still surface against a more-distant reach where
+    it'd actually fit.
+    """
+    ignore = ignore or set()
     reaches = kayak.execute("""
         SELECT r.id, r.display_name, r.name, r.river, r.gauge_id,
                r.latitude_start, r.longitude_start,
@@ -136,6 +175,8 @@ def find_candidates_near_reaches(new_gauges, kayak, max_dist_miles=15):
             label = dname or rname
 
             if slat is None or elat is None or slon is None or elon is None:
+                continue
+            if (kind, str(gid), rid) in ignore:
                 continue
 
             # Distance to midpoint of reach
@@ -432,10 +473,11 @@ def main():  # noqa: C901 — pre-existing complexity; tracked in task #45 refac
     print(f"Found {len(new_nwps)} NWPS sites not in DB")
 
     # --- Candidates near reaches ---
+    ignore = load_audit_ignore()
     print("\n" + "=" * 60)
     print("New USGS gauges within 15 miles of a reach")
     print("=" * 60)
-    usgs_candidates = find_candidates_near_reaches(new_usgs, kayak)
+    usgs_candidates = find_candidates_near_reaches(new_usgs, kayak, kind="USGS", ignore=ignore)
     if usgs_candidates:
         print(f"{'Dist':>5}  {'USGS ID':<12} {'Station':<45} {'Reach':<30} {'Gauged'}")
         print("-" * 105)
@@ -449,7 +491,7 @@ def main():  # noqa: C901 — pre-existing complexity; tracked in task #45 refac
     print("\n" + "=" * 60)
     print("New NWPS gauges within 15 miles of a reach")
     print("=" * 60)
-    nwps_candidates = find_candidates_near_reaches(new_nwps, kayak)
+    nwps_candidates = find_candidates_near_reaches(new_nwps, kayak, kind="NWPS", ignore=ignore)
     if nwps_candidates:
         print(f"{'Dist':>5}  {'LID':<12} {'Name':<45} {'Reach':<30} {'Gauged'}")
         print("-" * 105)
