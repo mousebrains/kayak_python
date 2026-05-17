@@ -144,7 +144,7 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 143,14153500,,,Cottage Grove Dam,43.7206778481042,-123.049799414876,14153500,COTO,,,,,14153500,,711.0,104.0,170900020305,0,Coast Fork Willamette,Coast Fork Willamette at Cottage Grove Dam,coast fork willamette|9|009289|000104,OR
 144,HARRISBURG_merge,,,Harrisburg,44.270401258546,-123.173703627243,14166000,UHARO,,,HARO3,,14166000,56,288.39,3420.0,170900030602,0,Willamette,Willamette at Harrisburg,willamette|9|009712|003420,OR
 145,Willamette_upper_falls_merge,,,above Falls at Oregon City,45.34805555555556,-122.62052777777777,14207740,ORC,,,OCUO3,,14207740,57,50.0,10000.0,170900070405,0,Willamette,Willamette above Falls at Oregon City,willamette|9|009950|010000,OR
-146,PORTLAND_merge,,,Portland,45.5175,-122.6691667,14211720,PRTO,,,PRTO3,,14211720,,2.0,11200.0,170900120202,0,Willamette,Willamette at Portland,willamette|9|009998|011200,OR
+146,PORTLAND_merge,,,Portland,45.5175,-122.6691667,14211720,PRTO,,,PRTO3,,14211720,,2.0,11200.0,170900120202,1,Willamette,Willamette at Portland,willamette|9|009998|011200,OR
 147,11493500,,,Klamath Agency,42.739925,-121.83451666666666,11493500,,,,,,11493500,,4487.42,1290.0,180102010602,0,Williamson,Williamson at Klamath Agency,williamson|9|005513|001290,OR
 148,WILSON_merge,,,Tillamook,45.4759399592551,-123.725120924774,14301500,TLMO,,,TLMO3,,14301500,58,42.0,161.0,171002030508,0,Wilson,Wilson at Tillamook,wilson|9|009958|000161,OR
 149,14150800,,,Lowell,43.9142924,-122.6886762,14150800,WCLO,,,,,14150800,,863.7,43.9,170900010905,0,Winberry Creek,Winberry Creek at Lowell,winberry creek|9|009136|000044,OR
