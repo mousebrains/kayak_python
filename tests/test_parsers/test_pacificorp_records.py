@@ -42,9 +42,7 @@ def test_parse_records_two_good_rows_csf_unit():
     payload = _wrap(
         _STATION,
         "csf",
-        _good_value("2026-05-11 01:59:59", "88")
-        + "\n"
-        + _good_value("2026-05-11 02:59:59", "89"),
+        _good_value("2026-05-11 01:59:59", "88") + "\n" + _good_value("2026-05-11 02:59:59", "89"),
     )
     records = _new_parser().parse_records(payload)
     assert records == [
@@ -89,9 +87,7 @@ def test_parse_records_skips_empty_value_and_timestamp():
     payload = _wrap(
         _STATION,
         "csf",
-        _good_value("2026-05-11 01:59:59", "")
-        + "\n"
-        + _good_value("", "88"),
+        _good_value("2026-05-11 01:59:59", "") + "\n" + _good_value("", "88"),
     )
     assert _new_parser().parse_records(payload) == []
 
