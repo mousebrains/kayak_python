@@ -1,0 +1,632 @@
+#!/usr/bin/env python3
+"""Fit a (multi-)linear regression of one USGS gauge against one or more others.
+
+Used to derive `calc_expression` formulas that replace a retired or
+intermittent gauge with an estimate from still-active gauges. Produces
+a markdown analysis report (window stability, parameter covariance,
+residual diagnostics) plus a SQL stub ready to paste into a migration.
+
+Common case is single-predictor linear:
+
+    python3 scripts/regression/gauge_pair_linear.py \\
+        --predictor 14330000 --target 14328000 \\
+        --start 1985-01-01 --end 2024-06-09 \\
+        --name rogue_14328000_from_14330000 \\
+        --out  docs/regression/rogue_14328000_from_14330000.md
+
+Multi-linear (use multiple --predictor flags). Each predictor adds a
+column to the design matrix:
+
+    python3 scripts/regression/gauge_pair_linear.py \\
+        --predictor 14330000 --predictor 14337600 \\
+        --target 14328000 --start 1985-01-01 --end 2024-06-09 \\
+        --name rogue_14328000_multi --out docs/regression/...md
+
+Add a quadratic term per predictor with --quadratic:
+
+    ... --predictor 14330000 --quadratic --target ...
+    # fits target = b0 + b1 * x + b2 * x^2
+
+Future: piecewise-linear by predictor flow regime (low/normal/high) is
+worth exploring if a single linear/quadratic fit leaves systematic
+residuals in the top or bottom quintiles; see "Future" in the writeup.
+
+Standalone — depends on numpy + curl + Python stdlib. No kayak imports,
+so future maintainers can run it without the project venv.
+"""
+
+from __future__ import annotations
+
+import argparse
+import contextlib
+import math
+import statistics
+import subprocess
+import sys
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import numpy as np
+
+
+@dataclass(frozen=True)
+class Fit:
+    """OLS fit with full parameter covariance.
+
+    Coefficients are in `coef_names` order; `coefs[0]` is the intercept
+    when an intercept is included (always the case here).
+    """
+
+    n: int
+    coef_names: list[str]
+    coefs: np.ndarray  # shape (p,) — intercept first
+    cov: np.ndarray  # shape (p, p)
+    r2: float
+    rmse: float  # plain sqrt(RSS/n)
+    sigma_hat: float  # sqrt(RSS/(n-p)) unbiased
+    residuals: np.ndarray  # shape (n,)
+    x_means: np.ndarray  # shape (p-1,) means of the raw predictor columns (no intercept, no quad)
+    x_ranges: list[tuple[float, float]] = field(default_factory=list)
+    y_mean: float = 0.0
+    y_range: tuple[float, float] = (0.0, 0.0)
+
+    @property
+    def se(self) -> np.ndarray:
+        return np.sqrt(np.diag(self.cov))
+
+    @property
+    def corr(self) -> np.ndarray:
+        s = self.se
+        return self.cov / np.outer(s, s)
+
+
+def fetch_daily_means(site_no: str) -> dict[str, float]:
+    """USGS daily-mean discharge (cfs) for one site, full period of record.
+
+    Caches to /tmp/<site_no>_dv.tsv so reruns don't re-download.
+    """
+    cache = Path(f"/tmp/{site_no}_dv.tsv")
+    if not cache.exists() or cache.stat().st_size < 1000:
+        url = (
+            "https://waterservices.usgs.gov/nwis/dv/"
+            f"?format=rdb&sites={site_no}"
+            "&startDT=1900-01-01&endDT=2099-12-31"
+            "&parameterCd=00060&statCd=00003"
+        )
+        subprocess.run(["curl", "-sL", url, "-o", str(cache)], check=True)
+    out: dict[str, float] = {}
+    for line in cache.read_text().splitlines():
+        if line.startswith("#") or not line.strip():
+            continue
+        parts = line.split("\t")
+        if parts[0] == "agency_cd" or parts[0].startswith("5s"):
+            continue
+        if len(parts) < 4:
+            continue
+        with contextlib.suppress(ValueError):
+            out[parts[2]] = float(parts[3])
+    if not out:
+        raise RuntimeError(f"No daily means parsed from {cache}")
+    return out
+
+
+def build_design_matrix(
+    predictors: list[list[float]],
+    quadratic: bool,
+) -> tuple[np.ndarray, list[str]]:
+    """Stack intercept, linear, and optional quadratic columns.
+
+    `predictors` is a list of length-n columns, one per predictor gauge.
+    Column order in the returned matrix: [1, x1, x2, ..., x1², x2², ...]
+    (quadratics last so they're easy to read off the coefficient vector).
+    """
+    n = len(predictors[0])
+    cols: list[np.ndarray] = [np.ones(n)]
+    names = ["intercept"]
+    for i, p in enumerate(predictors, start=1):
+        cols.append(np.asarray(p, dtype=float))
+        names.append(f"x{i}")
+    if quadratic:
+        for i, p in enumerate(predictors, start=1):
+            cols.append(np.asarray(p, dtype=float) ** 2)
+            names.append(f"x{i}^2")
+    X = np.column_stack(cols)
+    return X, names
+
+
+def fit_ols(
+    predictors: list[list[float]],
+    y_vec: list[float],
+    quadratic: bool,
+) -> Fit:
+    """OLS beta = (X'X)^-1 X'y with full covariance Cov = sigma^2 (X'X)^-1.
+
+    Uses np.linalg.lstsq for numerical stability over forming (X'X)^-1
+    directly, then computes the covariance from the inverse.
+    """
+    y = np.asarray(y_vec, dtype=float)
+    n = len(y)
+    X, names = build_design_matrix(predictors, quadratic)
+    p = X.shape[1]
+    if n <= p + 1:
+        raise ValueError(f"Need at least {p + 2} points, got {n}")
+
+    coefs, _residuals_sum_sq, _rank, _sv = np.linalg.lstsq(X, y, rcond=None)
+
+    residuals = y - X @ coefs
+    rss = float(residuals @ residuals)
+    tss = float(((y - y.mean()) ** 2).sum())
+    r2 = 1.0 - rss / tss if tss > 0 else float("nan")
+    rmse = math.sqrt(rss / n)
+    sigma2 = rss / (n - p)  # unbiased
+    sigma_hat = math.sqrt(sigma2)
+
+    # Cov(beta) = sigma^2 * (X'X)^-1.
+    XtX_inv = np.linalg.inv(X.T @ X)
+    cov = sigma2 * XtX_inv
+
+    x_means = np.array([np.mean(p) for p in predictors])
+    x_ranges = [(float(min(p)), float(max(p))) for p in predictors]
+
+    return Fit(
+        n=n,
+        coef_names=names,
+        coefs=coefs,
+        cov=cov,
+        r2=r2,
+        rmse=rmse,
+        sigma_hat=sigma_hat,
+        residuals=residuals,
+        x_means=x_means,
+        x_ranges=x_ranges,
+        y_mean=float(y.mean()),
+        y_range=(float(y.min()), float(y.max())),
+    )
+
+
+def quintile_residuals(
+    pivot_predictor: list[float],
+    fit: Fit,
+) -> list[dict]:
+    """Group residuals by quintile of the first predictor."""
+    n = len(pivot_predictor)
+    order = sorted(range(n), key=lambda i: pivot_predictor[i])
+    qsize = n // 5
+    out = []
+    for q in range(5):
+        idx = order[q * qsize : (q + 1) * qsize if q < 4 else n]
+        r = [float(fit.residuals[i]) for i in idx]
+        xmid = pivot_predictor[idx[len(idx) // 2]]
+        out.append(
+            {
+                "quintile": q + 1,
+                "x_median": xmid,
+                "mean_residual": statistics.mean(r),
+                "std_residual": statistics.stdev(r) if len(r) > 1 else 0.0,
+                "n": len(r),
+            }
+        )
+    return out
+
+
+def residual_percentiles(fit: Fit) -> dict[int, float]:
+    """Residual at p01/p05/p25/p50/p75/p95/p99."""
+    r = sorted(fit.residuals.tolist())
+    n = len(r)
+    return {p: r[max(0, min(n - 1, int(p / 100 * n)))] for p in (1, 5, 25, 50, 75, 95, 99)}
+
+
+def stability_windows(
+    target: dict[str, float],
+    predictor_dicts: list[dict[str, float]],
+    end: str,
+    starts: list[str],
+    quadratic: bool,
+) -> list[tuple[str, Fit | None]]:
+    """Re-fit at multiple start dates so coefficient drift is visible."""
+    keys = sorted(set(target) & set[str].intersection(*(set(d) for d in predictor_dicts)))
+    out: list[tuple[str, Fit | None]] = []
+    for start in starts:
+        window = [d for d in keys if start <= d <= end]
+        if len(window) < 10:
+            out.append((start, None))
+            continue
+        preds = [[d[k] for k in window] for d in predictor_dicts]
+        ys = [target[k] for k in window]
+        try:
+            out.append((start, fit_ols(preds, ys, quadratic)))
+        except (ValueError, np.linalg.LinAlgError):
+            out.append((start, None))
+    return out
+
+
+def render_markdown(  # noqa: C901 — assembly of many table sections; refactor not worth it
+    *,
+    name: str,
+    predictor_sites: list[str],
+    target_site: str,
+    window_start: str,
+    window_end: str,
+    quadratic: bool,
+    target_data: dict[str, float],
+    predictor_data: list[dict[str, float]],
+    overlap_keys: list[str],
+    pts_predictors: list[list[float]],
+    pts_y: list[float],
+    fit: Fit,
+    stab: list[tuple[str, Fit | None]],
+    calc_handles: list[str],
+) -> str:
+    """Build the markdown analysis report."""
+    pct = residual_percentiles(fit)
+    quins = quintile_residuals(pts_predictors[0], fit)
+
+    # Map coef_names → reference label for the table.
+    label_for: dict[str, str] = {"intercept": "intercept"}
+    for i, h in enumerate(calc_handles, start=1):
+        label_for[f"x{i}"] = f"{h} (predictor {i}: {predictor_sites[i - 1]})"
+        if quadratic:
+            label_for[f"x{i}^2"] = f"({predictor_sites[i - 1]})²"
+
+    # SQL stub
+    intercept = fit.coefs[0]
+    sql_terms = []
+    for i, h in enumerate(calc_handles, start=1):
+        coef = fit.coefs[1 + (i - 1)]
+        sql_terms.append(f"{coef:.6g} * {h}::flow")
+    if quadratic:
+        start_idx = 1 + len(calc_handles)
+        for i, h in enumerate(calc_handles, start=1):
+            coef = fit.coefs[start_idx + (i - 1)]
+            sql_terms.append(f"{coef:.6g} * {h}::flow * {h}::flow")
+    intercept_str = f"{intercept:+.4g}"
+    inner = " + ".join(sql_terms) + f" {intercept_str}"
+    expr_sql = f"round(greatest(0, {inner}))"
+    time_expr = " ".join(f"{h}::flow" for h in calc_handles)
+
+    lines: list[str] = []
+    L = lines.append
+
+    family = "linear"
+    if len(predictor_sites) > 1:
+        family = f"multi-{family}"
+    if quadratic:
+        family += "+quadratic"
+
+    L(f"# {family.title()} regression: USGS {target_site} from {', '.join(predictor_sites)}\n")
+    L(
+        f"**Goal**: estimate USGS `{target_site}` from "
+        f"{', '.join(f'`{s}`' for s in predictor_sites)} "
+        f"so a downstream `calc_expression` can replace the target gauge.\n"
+    )
+    cmd_parts = (
+        ["python3 scripts/regression/gauge_pair_linear.py"]
+        + [f"--predictor {s}" for s in predictor_sites]
+        + [
+            f"--target {target_site}",
+            f"--start {window_start}",
+            f"--end {window_end}",
+            f"--name {name}",
+        ]
+    )
+    if quadratic:
+        cmd_parts.append("--quadratic")
+    cmd = " \\\n    ".join(cmd_parts)
+    L(f"Generated by:\n\n```bash\n{cmd}\n```\n")
+
+    L("## Data\n")
+    L("All series are USGS daily-mean flow (`parameterCd=00060`, `statCd=00003`).\n")
+    L("| Gauge | Period of record | Daily means |")
+    L("|---|---|---|")
+    L(
+        f"| `{target_site}` (target) | {min(target_data)} → **{max(target_data)}** | {len(target_data)} |"
+    )
+    for site, d in zip(predictor_sites, predictor_data, strict=False):
+        L(f"| `{site}` (predictor) | {min(d)} → {max(d)} | {len(d)} |")
+    L(f"| **Overlap (full)** | {overlap_keys[0]} → {overlap_keys[-1]} | **{len(overlap_keys)}** |")
+    L("")
+    L("Note: USGS records can be **non-contiguous** (instrumentation outages).")
+    L("The chosen window is selected for *data points*, not calendar span.\n")
+
+    L("## Chosen fit\n")
+    L(
+        f"Window: **{window_start} → {window_end}**, n = **{fit.n}** "
+        f"daily means (~{fit.n / 365.25:.1f} years of data).\n"
+    )
+
+    L("### Coefficients (1-sigma uncertainty)\n")
+    L("| Term | Estimate | SE | 95% CI |")
+    L("|---|---|---|---|")
+    for name_, est, se in zip(fit.coef_names, fit.coefs, fit.se, strict=False):
+        label = label_for.get(name_, name_)
+        lo, hi = est - 1.96 * se, est + 1.96 * se
+        L(f"| {label} | {est:+.6g} | {se:.4g} | [{lo:+.4g}, {hi:+.4g}] |")
+    L("")
+    L(
+        f"r² = **{fit.r2:.4f}**, RMSE = **{fit.rmse:.2f} cfs** "
+        f"(sigma_hat = {fit.sigma_hat:.2f} cfs unbiased).\n"
+    )
+    L("Predictor / target summary:\n")
+    L("| Series | Mean | Range |")
+    L("|---|---|---|")
+    L(
+        f"| target `{target_site}` | {fit.y_mean:.2f} | [{fit.y_range[0]:.0f}, {fit.y_range[1]:.0f}] |"
+    )
+    for site, mean_, (lo, hi) in zip(predictor_sites, fit.x_means, fit.x_ranges, strict=False):
+        L(f"| predictor `{site}` | {mean_:.2f} | [{lo:.0f}, {hi:.0f}] |")
+    L("")
+
+    L("### Parameter covariance\n")
+    L("Full variance-covariance matrix (rows/cols in `coef_names` order):\n")
+    L("```")
+    header = "             " + "  ".join(f"{n:>12}" for n in fit.coef_names)
+    L(header)
+    for i, n in enumerate(fit.coef_names):
+        row = "  ".join(f"{fit.cov[i, j]:+.4e}" for j in range(len(fit.coef_names)))
+        L(f"{n:>12}  {row}")
+    L("```\n")
+    L("Correlation matrix:\n")
+    L("```")
+    L("             " + "  ".join(f"{n:>10}" for n in fit.coef_names))
+    corr = fit.corr
+    for i, n in enumerate(fit.coef_names):
+        row = "  ".join(f"{corr[i, j]:+.4f}    " for j in range(len(fit.coef_names)))
+        L(f"{n:>12}  {row}")
+    L("```\n")
+    L(
+        "**Caveat**: these uncertainties capture *parameter* precision only. "
+        "For a single-day prediction at new `x`, the prediction interval is "
+        "dominated by the residual scatter `sigma_hat` (about 117 cfs at 1-sigma here), "
+        "not by parameter SEs.\n"
+    )
+
+    L("## Window stability\n")
+    L(f"Re-fit at multiple start dates (endpoint fixed at `{window_end}`):\n")
+    if not quadratic and len(predictor_sites) == 1:
+        L("| Window start | n | data yr | slope | intercept | r² | RMSE | SE(slope) | SE(int) |")
+        L("|---|---|---|---|---|---|---|---|---|")
+        for start, f in stab:
+            if f is None:
+                L(f"| {start} | — | — | — | — | — | — | — | — |")
+                continue
+            L(
+                f"| {start} | {f.n} | {f.n / 365.25:.1f} | {f.coefs[1]:.4f} | "
+                f"{f.coefs[0]:+.2f} | {f.r2:.4f} | {f.rmse:.1f} | "
+                f"{f.se[1]:.4f} | {f.se[0]:.2f} |"
+            )
+    else:
+        # Compact: just show r²/RMSE/n for multi-predictor / quadratic.
+        L("| Window start | n | data yr | r² | RMSE |")
+        L("|---|---|---|---|---|")
+        for start, f in stab:
+            if f is None:
+                L(f"| {start} | — | — | — | — |")
+                continue
+            L(f"| {start} | {f.n} | {f.n / 365.25:.1f} | {f.r2:.4f} | {f.rmse:.1f} |")
+        L(
+            "\n(Multi-predictor coefficients in the stability table would be "
+            "wide; per-window coefficient drift can be inspected by re-running "
+            "the script with a different `--start`.)"
+        )
+    L("")
+
+    L("## Residual diagnostics\n")
+    L("**Percentile distribution** (residual = y - y_hat, cfs):\n")
+    L("| p01 | p05 | p25 | p50 | p75 | p95 | p99 |")
+    L("|---|---|---|---|---|---|---|")
+    L("| " + " | ".join(f"{pct[p]:+.1f}" for p in (1, 5, 25, 50, 75, 95, 99)) + " |")
+    L("")
+    L(f"**By predictor-1 quintile** (Q1 = lowest values of `{predictor_sites[0]}`):\n")
+    L("| Quintile | x median | mean residual | std residual | n |")
+    L("|---|---|---|---|---|")
+    for q in quins:
+        L(
+            f"| Q{q['quintile']} | {q['x_median']:.0f} | "
+            f"{q['mean_residual']:+.1f} | {q['std_residual']:.1f} | {q['n']} |"
+        )
+    L("")
+
+    L("## SQL stub for `calc_expression`\n")
+    L(
+        "Paste this into a `data/db/migrations/00NN_*.sql` file. The handles "
+        f"({', '.join(f'`{h}`' for h in calc_handles)}) follow the "
+        "`prefix::gauge_name` convention enforced by "
+        "`kayak.cli.calculator._resolve_refs`:\n"
+    )
+    L("```sql")
+    L("INSERT INTO calc_expression (data_type, expression, time_expression, note) SELECT")
+    L("    'flow',")
+    L(f"    '{expr_sql}',")
+    L(f"    '{time_expr}',")
+    note = (
+        f"{family} regression fit. n={fit.n} daily means, "
+        f"window {window_start}..{window_end}, r2={fit.r2:.4f}, "
+        f"RMSE={fit.rmse:.1f} cfs."
+    )
+    L(f"    '{note}'")
+    L("WHERE NOT EXISTS (")
+    L(f"    SELECT 1 FROM calc_expression WHERE time_expression = '{time_expr}'")
+    L(");")
+    L("```\n")
+    L(
+        "**Note**: the migration runner (`cli/migrate.py::_split_statements`) "
+        "splits SQL on `;` without understanding string literals, so make sure "
+        "no `;` appears inside the `note` text.\n"
+    )
+
+    L("## Future\n")
+    L(
+        "- **Piecewise-linear fit by predictor-1 quintile.** If the residual "
+        "table above shows systematic mean drift across quintiles (e.g., "
+        "consistently under-estimating at low flow and over-estimating at "
+        "high flow), splitting the predictor range into 2-3 regimes and "
+        "fitting one linear model per regime can halve RMSE without adding "
+        "free parameters beyond what `calc_expression` already supports via "
+        "`greatest(low_estimate, high_estimate)` or "
+        "`if(x < threshold, ..., ...)`-style composition. Worth trying when "
+        "RMSE > ~10% of the mean target value."
+    )
+    L(
+        "- **Re-running** when the active predictor's rating curve drifts. "
+        "USGS occasionally updates stage-discharge ratings; the `Reproduce` "
+        "snippet above re-pulls the full period of record on demand."
+    )
+
+    return "\n".join(lines) + "\n"
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(
+        description=(
+            "Fit OLS regression between USGS daily-mean series. Single "
+            "predictor + linear is the default; --predictor is repeatable "
+            "for multi-linear; --quadratic adds x² per predictor."
+        )
+    )
+    ap.add_argument(
+        "--predictor",
+        action="append",
+        required=True,
+        help="USGS site_no for an x column (repeatable for multi-linear)",
+    )
+    ap.add_argument("--target", required=True, help="USGS site_no for y")
+    ap.add_argument("--start", required=True, help="Window start (YYYY-MM-DD)")
+    ap.add_argument("--end", required=True, help="Window end (YYYY-MM-DD)")
+    ap.add_argument(
+        "--name",
+        required=True,
+        help="Short slug for output filename + heading (e.g. rogue_14328000_from_14330000)",
+    )
+    ap.add_argument(
+        "--quadratic",
+        action="store_true",
+        help="Include x² for every predictor in addition to x.",
+    )
+    ap.add_argument(
+        "--out",
+        type=Path,
+        help="Markdown output path. If omitted, prints to stdout.",
+    )
+    ap.add_argument(
+        "--calc-handle",
+        action="append",
+        default=None,
+        help=(
+            "Per-predictor reference handle for the SQL stub, of the form "
+            "PREFIX::GAUGE_NAME (e.g. rp::14330000). Repeat once per "
+            "predictor, in the same order as --predictor. "
+            "Default: pX::<predictor_site_no> with pX chosen from p1..p9."
+        ),
+    )
+    ap.add_argument(
+        "--stability-starts",
+        nargs="+",
+        default=None,
+        help=(
+            "Window-start dates for the stability sweep. "
+            "Default: {start-15y, start-10y, start-5y, start, start+5y, "
+            "earliest-overlap, 1990-01-01}."
+        ),
+    )
+    args = ap.parse_args()
+
+    predictors: list[str] = args.predictor
+    print(
+        f"Fetching target {args.target} and {len(predictors)} predictor(s) ...",
+        file=sys.stderr,
+    )
+    target_data = fetch_daily_means(args.target)
+    predictor_data = [fetch_daily_means(p) for p in predictors]
+
+    overlap_all = sorted(
+        set(target_data) & set[str].intersection(*(set(d) for d in predictor_data))
+    )
+    if not overlap_all:
+        print("No overlap across all gauges.", file=sys.stderr)
+        return 1
+
+    keys = [d for d in overlap_all if args.start <= d <= args.end]
+    if len(keys) < 10:
+        print(
+            f"Only {len(keys)} overlap points in window — need ≥10.",
+            file=sys.stderr,
+        )
+        return 1
+
+    pts_predictors = [[d[k] for k in keys] for d in predictor_data]
+    pts_y = [target_data[k] for k in keys]
+
+    fit = fit_ols(pts_predictors, pts_y, args.quadratic)
+
+    # Stability windows
+    if args.stability_starts is None:
+        anchor = datetime.fromisoformat(args.start)
+        defaults: list[str] = []
+        for years_back in (-5, 0, 5, 10, 15):
+            d_dt = anchor + timedelta(days=365 * years_back)
+            defaults.append(d_dt.strftime("%Y-%m-%d"))
+        defaults.append(overlap_all[0])
+        defaults.append("1990-01-01")
+        seen: set[str] = set()
+        sb: list[str] = []
+        for d_str in sorted(set(defaults)):
+            if d_str <= args.end and d_str not in seen:
+                seen.add(d_str)
+                sb.append(d_str)
+        args.stability_starts = sb
+
+    stab = stability_windows(
+        target_data, predictor_data, args.end, args.stability_starts, args.quadratic
+    )
+
+    # Calc handles
+    if args.calc_handle:
+        if len(args.calc_handle) != len(predictors):
+            print(
+                f"--calc-handle given {len(args.calc_handle)} times but "
+                f"there are {len(predictors)} predictors.",
+                file=sys.stderr,
+            )
+            return 1
+        calc_handles = args.calc_handle
+    else:
+        calc_handles = [f"p{i}::{p}" for i, p in enumerate(predictors, start=1)]
+
+    md = render_markdown(
+        name=args.name,
+        predictor_sites=predictors,
+        target_site=args.target,
+        window_start=args.start,
+        window_end=args.end,
+        quadratic=args.quadratic,
+        target_data=target_data,
+        predictor_data=predictor_data,
+        overlap_keys=overlap_all,
+        pts_predictors=pts_predictors,
+        pts_y=pts_y,
+        fit=fit,
+        stab=stab,
+        calc_handles=calc_handles,
+    )
+
+    if args.out:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(md)
+        print(f"Wrote {args.out}", file=sys.stderr)
+    else:
+        print(md)
+
+    # One-line summary to stderr
+    short = ", ".join(
+        f"{n}={c:+.4g}±{s:.4g}" for n, c, s in zip(fit.coef_names, fit.coefs, fit.se, strict=False)
+    )
+    print(
+        f"\nSUMMARY: {args.target} ~ {short}, r²={fit.r2:.4f}, RMSE={fit.rmse:.1f}, n={fit.n}",
+        file=sys.stderr,
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
