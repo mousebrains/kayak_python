@@ -53,6 +53,21 @@ const GAUGE_HIT_RADIUS=14;
 // 0.55 mirrors `.rp-stale` opacity in style.css for the reach popup.
 const GAUGE_STALE_OPACITY=0.55;
 
+// Oregon SMB overlay markers. Colors chosen to NOT collide with the
+// reach palette (orange/chartreuse/red/cyan) or the gauge color (which
+// reuses the reach palette): magenta for hazards, deep purple for
+// dams, dark green for access. Radius/stroke are larger than the
+// gauge markers so a clustered map remains legible.
+const OSMB_RADIUS=5;
+const OSMB_HIT_RADIUS=14;
+// Popup function refs are forward references — they're function
+// declarations later in this IIFE, which JS hoists to module top.
+const OSMB_LAYER_DEFS=[
+  {key:'obstructions',label:'Obstructions',color:'#ff00ff',defaultOn:true,attr:'osmbObstructionsUrl',popup:obstructionPopup},
+  {key:'dams',        label:'Dams / weirs',color:'#6a1b9a',defaultOn:true,attr:'osmbDamsUrl',        popup:damPopup},
+  {key:'access',      label:'Access sites',color:'#1b5e20',defaultOn:false,attr:'osmbAccessUrl',     popup:accessPopup},
+];
+
 function esc(s){const d=document.createElement('div');d.textContent=s==null?'':s;return d.innerHTML;}
 
 // reaches-state.json was once {id: "status"}; it's now {id: {s, t, v, u, d, ts}}.
@@ -93,8 +108,10 @@ const STALE_MS=24*3600*1000;
 function parseHash(){
   // gauges defaults to true (Decision §2 — gauges visible by default).
   // Only ?gauges=off persists in the hash; toggling back on clears it
-  // so the common-case URL stays short.
-  const out={s:null,c:null,gauges:true};
+  // so the common-case URL stays short. OSMB overlays follow the same
+  // rule, with each layer's default coming from OSMB_LAYER_DEFS.
+  const out={s:null,c:null,gauges:true,osmb:{}};
+  OSMB_LAYER_DEFS.forEach(function(d){out.osmb[d.key]=d.defaultOn;});
   const h=(location.hash||'').replace(/^#/,'');
   if(!h)return out;
   h.split('&').forEach(function(kv){
@@ -105,16 +122,24 @@ function parseHash(){
       out[k]=v===''?[]:decodeURIComponent(v).split(',').filter(Boolean);
     }else if(k==='gauges' && v==='off'){
       out.gauges=false;
+    }else if(k in out.osmb){
+      out.osmb[k]=(v==='on');
     }
   });
   return out;
 }
 
-function writeHash(sSet,cSet,showGauges){
+function writeHash(sSet,cSet,showGauges,osmbVisible){
   const parts=[];
   if(sSet.size!==STATUSES.length)parts.push('s='+Array.from(sSet).join(','));
   if(cSet.size!==CLASS_TIERS.length)parts.push('c='+Array.from(cSet).join(','));
   if(showGauges===false)parts.push('gauges=off');
+  if(osmbVisible){
+    OSMB_LAYER_DEFS.forEach(function(d){
+      const on=osmbVisible[d.key];
+      if(on!==d.defaultOn)parts.push(d.key+'='+(on?'on':'off'));
+    });
+  }
   const hash=parts.length?('#'+parts.join('&')):'';
   if(hash!==location.hash){
     history.replaceState(null,'',location.pathname+location.search+hash);
@@ -129,6 +154,9 @@ const stateUrl=mapEl.dataset.stateUrl;
 // either is missing, renderMap skips the gauge layer wholesale.
 const gaugesGeomUrl=mapEl.dataset.gaugesGeomUrl||'';
 const gaugesStateUrl=mapEl.dataset.gaugesStateUrl||'';
+// OSMB overlay URLs — empty until the nightly fetcher has landed a file.
+// Empty-string handling: fetchOptional short-circuits to null.
+const osmbUrls=OSMB_LAYER_DEFS.map(function(d){return mapEl.dataset[d.attr]||'';});
 
 const map=L.map('map');
 const topo=L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,attribution:'OpenTopoMap'});
@@ -166,14 +194,17 @@ Promise.all([
   fetch(stateUrl).then(function(r){if(!r.ok)throw new Error('state '+r.status);return r.json();}),
   fetchOptional(gaugesGeomUrl,'gauges-geom'),
   fetchOptional(gaugesStateUrl,'gauges-state'),
+  Promise.all(OSMB_LAYER_DEFS.map(function(d,i){
+    return fetchOptional(osmbUrls[i],'osmb-'+d.key);
+  })),
 ]).then(function(res){
-  renderMap(res[0],res[1],res[2],res[3]);
+  renderMap(res[0],res[1],res[2],res[3],res[4]);
 }).catch(function(e){
   console.error('map data load failed:',e);
   fail('Map data failed to load.');
 });
 
-function renderMap(geom,state,gaugesGeom,gaugesState){
+function renderMap(geom,state,gaugesGeom,gaugesState,osmbData){
   const initial=parseHash();
   const sSet=new Set(initial.s===null?STATUSES:initial.s);
   const cSet=new Set(initial.c===null?CLASS_TIERS:initial.c);
@@ -181,6 +212,15 @@ function renderMap(geom,state,gaugesGeom,gaugesState){
   // hasGaugeLayer gates the filter checkbox AND the fitBounds union.
   const hasGaugeLayer = !!(gaugesGeom && gaugesState);
   let showGauges = hasGaugeLayer && initial.gauges;
+  const osmbLayers={};
+  const osmbVisible={};
+  OSMB_LAYER_DEFS.forEach(function(d,i){
+    const data=osmbData?osmbData[i]:null;
+    if(!data)return;
+    osmbLayers[d.key]=buildOsmbLayer(data,d);
+    osmbVisible[d.key]=initial.osmb[d.key];
+    if(osmbVisible[d.key])osmbLayers[d.key].addTo(map);
+  });
 
   // Dark halo casing 2px wider than the colored line at 0.75 opacity.
   // Denser than the prior 0.5 because the line itself dropped from 4 to
@@ -544,7 +584,7 @@ function renderMap(geom,state,gaugesGeom,gaugesState){
     // the paths exist before we re-append them in the right z-order.
     for(let i=0;i<visible.length;i++)visible[i].bringToFront();
     for(let i=0;i<visible.length;i++)if(visible[i]._mfHit)visible[i]._mfHit.bringToFront();
-    writeHash(sSet,cSet,showGauges);
+    writeHash(sSet,cSet,showGauges,osmbVisible);
   }
 
   // Layer toggle: add/remove the gauge layerGroup without re-running
@@ -558,14 +598,107 @@ function renderMap(geom,state,gaugesGeom,gaugesState){
     }else if(map.hasLayer(gaugeLayer)){
       map.removeLayer(gaugeLayer);
     }
-    writeHash(sSet,cSet,showGauges);
+    writeHash(sSet,cSet,showGauges,osmbVisible);
   }
 
-  countEl=addFilterControl(sSet,cSet,refilter,hasGaugeLayer,showGauges,onGaugeToggle);
+  function onOsmbToggle(key,checked){
+    osmbVisible[key]=checked;
+    const lyr=osmbLayers[key];
+    if(!lyr)return;
+    if(checked){
+      if(!map.hasLayer(lyr))lyr.addTo(map);
+    }else if(map.hasLayer(lyr)){
+      map.removeLayer(lyr);
+    }
+    writeHash(sSet,cSet,showGauges,osmbVisible);
+  }
+
+  countEl=addFilterControl(
+    sSet,cSet,refilter,
+    hasGaugeLayer,showGauges,onGaugeToggle,
+    osmbLayers,osmbVisible,onOsmbToggle
+  );
   refilter();
 }
 
-function addFilterControl(sSet,cSet,onChange,hasGaugeLayer,showGauges,onLayerToggle){
+// Canvas renderer for OSMB layers. With 1816 access markers + 357
+// obstruction/dam markers + hit shapes, SVG would push the page past
+// 4000 path elements; canvas batches them into a single 2D draw.
+const OSMB_RENDERER=L.canvas();
+
+function buildOsmbLayer(data,def){
+  const group=L.layerGroup();
+  const features=(data&&data.features)||[];
+  for(let i=0;i<features.length;i++){
+    const f=features[i];
+    const coords=f.geometry&&f.geometry.coordinates;
+    if(!coords||coords.length<2)continue;
+    const ll=L.latLng(coords[1],coords[0]);
+    L.circleMarker(ll,{
+      renderer:OSMB_RENDERER,
+      radius:OSMB_RADIUS,
+      fillColor:def.color,
+      color:'#222',
+      weight:1,
+      fillOpacity:0.85,
+      interactive:false,
+    }).addTo(group);
+    const hit=L.circleMarker(ll,{
+      renderer:OSMB_RENDERER,
+      radius:OSMB_HIT_RADIUS,
+      opacity:0,
+      fillOpacity:0,
+      interactive:true,
+    }).addTo(group);
+    hit.bindPopup(def.popup.bind(null,f.properties||{}));
+  }
+  return group;
+}
+
+function obstructionPopup(p){
+  const title=esc(p.obslocation||p.waterbody||'Obstruction');
+  const sub=[p.waterbody,p.waterbodysec].filter(Boolean).map(esc).join(' · ');
+  const desc=esc(p.obsdescript||'');
+  const ageMs=p.recordtime?(Date.now()-Number(p.recordtime)):-1;
+  const age=ageMs>=0?'<span class="rp-time">'+esc(fmtAge(ageMs))+'</span>':'';
+  let html='<div class="reach-popup"><div class="rp-name">'+title+'</div>';
+  if(sub)html+='<div class="rp-sub">'+sub+'</div>';
+  if(desc)html+='<div class="rp-reading">'+desc+'</div>';
+  if(age)html+='<div class="rp-footer">'+age+'</div>';
+  html+='</div>';
+  return html;
+}
+
+function damPopup(p){
+  const title=esc(p.damname||'Dam');
+  const sub=esc(p.waterbody||'');
+  const sizeBits=[];
+  if(p.damheight)sizeBits.push(p.damheight+' ft tall');
+  if(p.damwidth)sizeBits.push(p.damwidth+' ft wide');
+  const portage=esc(p.portagedesc||p.navigate||'');
+  let html='<div class="reach-popup"><div class="rp-name">'+title+'</div>';
+  if(sub)html+='<div class="rp-sub">'+sub+'</div>';
+  if(sizeBits.length)html+='<div class="rp-reading">'+esc(sizeBits.join(' · '))+'</div>';
+  if(portage)html+='<div class="rp-sub">'+portage+'</div>';
+  html+='</div>';
+  return html;
+}
+
+function accessPopup(p){
+  const title=esc(p.name||'Access site');
+  const sub=esc(p.waterway_name||'');
+  const facility=esc([p.facility_type,p.launch_type].filter(Boolean).join(' · '));
+  const url=(typeof p.web_url==='string'&&/^https?:\/\//i.test(p.web_url))?p.web_url:'';
+  const wrapStart=url?'<a class="reach-popup" href="'+esc(url)+'" target="_blank" rel="noopener">':'<div class="reach-popup">';
+  const wrapEnd=url?'</a>':'</div>';
+  let html=wrapStart+'<div class="rp-name">'+title+'</div>';
+  if(sub)html+='<div class="rp-sub">'+sub+'</div>';
+  if(facility)html+='<div class="rp-reading">'+facility+'</div>';
+  html+=wrapEnd;
+  return html;
+}
+
+function addFilterControl(sSet,cSet,onChange,hasGaugeLayer,showGauges,onLayerToggle,osmbLayers,osmbVisible,onOsmbToggle){
   const ctl=L.control({position:'topright'});
   let countEl;
   ctl.onAdd=function(){
@@ -607,17 +740,30 @@ function addFilterControl(sSet,cSet,onChange,hasGaugeLayer,showGauges,onLayerTog
       lab.appendChild(document.createTextNode(' '+t));
     });
 
-    // Layers fieldset (Item 2c.5): only rendered when both gauge JSON
-    // files loaded. Default-ON state lives in renderMap; this
-    // checkbox is a thin view onto onLayerToggle.
-    if(hasGaugeLayer){
+    // Layers fieldset (Item 2c.5): rendered when at least one optional
+    // layer (gauges or OSMB) is available. Default-ON state lives in
+    // renderMap; these checkboxes are thin views onto their toggle
+    // handlers.
+    const osmbKeys=OSMB_LAYER_DEFS.filter(function(d){return osmbLayers&&osmbLayers[d.key];});
+    if(hasGaugeLayer || osmbKeys.length){
       const lFs=L.DomUtil.create('fieldset','',panel);
       L.DomUtil.create('legend','',lFs).textContent='Layers';
-      const lab=L.DomUtil.create('label','',lFs);
-      const cb=L.DomUtil.create('input','',lab);
-      cb.type='checkbox';cb.value='gauges';cb.checked=showGauges;
-      cb.addEventListener('change',function(){onLayerToggle(cb.checked);});
-      lab.appendChild(document.createTextNode(' Show gauges'));
+      if(hasGaugeLayer){
+        const lab=L.DomUtil.create('label','',lFs);
+        const cb=L.DomUtil.create('input','',lab);
+        cb.type='checkbox';cb.value='gauges';cb.checked=showGauges;
+        cb.addEventListener('change',function(){onLayerToggle(cb.checked);});
+        lab.appendChild(document.createTextNode(' Show gauges'));
+      }
+      osmbKeys.forEach(function(d){
+        const lab=L.DomUtil.create('label','',lFs);
+        const cb=L.DomUtil.create('input','',lab);
+        cb.type='checkbox';cb.value=d.key;cb.checked=!!(osmbVisible&&osmbVisible[d.key]);
+        cb.addEventListener('change',function(){onOsmbToggle(d.key,cb.checked);});
+        const sw=L.DomUtil.create('span','swatch',lab);
+        sw.style.background=d.color;
+        lab.appendChild(document.createTextNode(' '+d.label));
+      });
     }
 
     countEl=L.DomUtil.create('div','mf-count',panel);

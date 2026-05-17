@@ -72,6 +72,23 @@ def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -
     parser.set_defaults(func=build)
 
 
+def _osmb_url(static_dir: Path, filename: str) -> str:
+    """Build a /static/<file>?v=<mtime> URL, or "" if the file isn't there.
+
+    Source-of-truth for mtime is the staged copy under ``static_dir``;
+    ``shutil.copy2`` (called from ``_deploy_static_assets``) preserves
+    the upstream BASE_DIR/static mtime, and the per-file rename in
+    ``_deploy_staging_to_live`` skips identical content, so the live
+    file's mtime stays put across no-op nightly fetches.
+    """
+    path = static_dir / filename
+    try:
+        mtime = int(path.stat().st_mtime)
+    except FileNotFoundError:
+        return ""
+    return f"/static/{filename}?v={mtime}"
+
+
 def _deploy_static_assets(output_dir: Path) -> None:
     """Copy the in-repo ``static/`` tree into ``output_dir/static/``.
 
@@ -242,8 +259,21 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
         state_url = "/static/reaches-state.json"
         gauges_geom_url = f"/static/gauges-geom.json?v={gauges_geom_hash}"
         gauges_state_url = "/static/gauges-state.json"
+        # OSMB overlays: empty string when the nightly fetch hasn't landed
+        # the file yet — map.js treats absent attrs as "no layer to fetch".
+        osmb_obstructions_url = _osmb_url(static_dir, "osmb-obstructions.geojson")
+        osmb_dams_url = _osmb_url(static_dir, "osmb-dams.geojson")
+        osmb_access_url = _osmb_url(static_dir, "osmb-access-sites.geojson")
         map_html = _build_map_page(
-            css_link, states, geom_url, state_url, gauges_geom_url, gauges_state_url
+            css_link,
+            states,
+            geom_url,
+            state_url,
+            gauges_geom_url,
+            gauges_state_url,
+            osmb_obstructions_url,
+            osmb_dams_url,
+            osmb_access_url,
         )
         _atomic_write(output_dir / "map.html", map_html)
 

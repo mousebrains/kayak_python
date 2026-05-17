@@ -39,6 +39,7 @@ public_html/*.text
 static/reaches.geojson
 static/reaches-geom.json
 static/reaches-state.json
+static/osmb-*.geojson
 static/levels.js
 static/filters.js
 static/sparklines.json

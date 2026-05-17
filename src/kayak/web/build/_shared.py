@@ -95,11 +95,11 @@ def _og_meta(title: str, desc: str, path: str = "") -> str:
     )
 
 
-def _atomic_write(path: Path, content: str) -> None:
+def _atomic_write_bytes(path: Path, content: bytes) -> None:
     """Write *content* to *path* atomically via temp file + rename."""
     fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
     try:
-        os.write(fd, content.encode())
+        os.write(fd, content)
         os.close(fd)
         fd = -1
         os.chmod(tmp, 0o644)
@@ -110,6 +110,11 @@ def _atomic_write(path: Path, content: str) -> None:
         with suppress(OSError):
             os.unlink(tmp)
         raise
+
+
+def _atomic_write(path: Path, content: str) -> None:
+    """Write *content* to *path* atomically via temp file + rename."""
+    _atomic_write_bytes(path, content.encode())
 
 
 def _load_css() -> str:

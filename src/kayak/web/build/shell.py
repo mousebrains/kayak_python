@@ -55,6 +55,15 @@ _STATE_LINKS: dict[str, list[tuple[str, str]]] = {
         ("Willamette Kayak and Canoe Club", "https://wkcc.org"),
         ("Oregon Whitewater Association", "https://oregonwhitewater.org"),
         ("Oregon Weather — Windy", "https://www.windy.com/?44.0,-120.5,7"),
+        ("Oregon State Marine Board", "https://www.oregon.gov/osmb/pages/index.aspx"),
+        (
+            "Oregon Waterway Access Permits",
+            "https://www.oregon.gov/osmb/boater-info/pages/ais-faqs.aspx",
+        ),
+        (
+            "Report a boating obstruction (Oregon SMB)",
+            "https://oregon-boating-obstructions-geo.hub.arcgis.com",
+        ),
     ],
     "Washington": [
         (
@@ -332,6 +341,9 @@ def _build_map_page(
     state_url: str,
     gauges_geom_url: str = "",
     gauges_state_url: str = "",
+    osmb_obstructions_url: str = "",
+    osmb_dams_url: str = "",
+    osmb_access_url: str = "",
 ) -> str:
     """Build map.html with an interactive Leaflet map of all reaches.
 
@@ -340,6 +352,10 @@ def _build_map_page(
     build a gauge layer), the data attributes still render but
     static/map.js treats absent attrs as "no gauge layer to fetch".
     Defaulted for back-compat with the prior 4-arg signature.
+
+    ``osmb_*_url`` are the Oregon SMB hazard/access overlay GeoJSON URLs
+    (fetched nightly by ``levels fetch-osmb``). Same empty-string =
+    skip-fetch contract as the gauge layer.
     """
     nav_html = _build_nav(states, active_page="map")
 
@@ -404,7 +420,7 @@ main {{padding:0;max-width:none;}}
   {_build_right_cluster()}
 </header>
 <main>
-<div id="map" data-geom-url="{html_mod.escape(geom_url, quote=True)}" data-state-url="{html_mod.escape(state_url, quote=True)}" data-gauges-geom-url="{html_mod.escape(gauges_geom_url, quote=True)}" data-gauges-state-url="{html_mod.escape(gauges_state_url, quote=True)}"></div>
+<div id="map" data-geom-url="{html_mod.escape(geom_url, quote=True)}" data-state-url="{html_mod.escape(state_url, quote=True)}" data-gauges-geom-url="{html_mod.escape(gauges_geom_url, quote=True)}" data-gauges-state-url="{html_mod.escape(gauges_state_url, quote=True)}" data-osmb-obstructions-url="{html_mod.escape(osmb_obstructions_url, quote=True)}" data-osmb-dams-url="{html_mod.escape(osmb_dams_url, quote=True)}" data-osmb-access-url="{html_mod.escape(osmb_access_url, quote=True)}"></div>
 </main>
 {_build_footer_html()}
 <script src="/static/leaflet.js" defer></script>

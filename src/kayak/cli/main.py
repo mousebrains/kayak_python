@@ -15,6 +15,7 @@ from kayak.cli import (
     emit_config,
     export_editor,
     fetch,
+    fetch_osmb,
     fetch_usgs_ogc,
     init_db,
     migrate,
@@ -43,6 +44,7 @@ def main() -> None:
     init_db.addArgs(subparsers)
     migrate.addArgs(subparsers)
     fetch.addArgs(subparsers)
+    fetch_osmb.addArgs(subparsers)
     fetch_usgs_ogc.addArgs(subparsers)
     calc_rating.addArgs(subparsers)
     calculator.addArgs(subparsers)

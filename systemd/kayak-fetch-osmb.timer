@@ -1,0 +1,13 @@
+[Unit]
+Description=Fetch Oregon SMB overlays once a day
+
+[Timer]
+# 03:30 local with up to 30 min of jitter — staggers off the audit-gauges
+# 03:00 fire (2nd + 17th) so the two services don't contend for the same
+# network/CPU window when both happen to overlap.
+OnCalendar=*-*-* 03:30
+RandomizedDelaySec=1800
+Persistent=true
+
+[Install]
+WantedBy=timers.target
