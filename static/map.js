@@ -175,7 +175,10 @@ const topo=L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZo
 const street=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'OpenStreetMap'});
 const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,attribution:'Esri'});
 street.addTo(map);
-L.control.layers({Topo:topo,Street:street,Satellite:sat}).addTo(map);
+// Base tiles are constant; overlay layers (gauges + OSMB) are built
+// inside renderMap once their JSON loads, so the combined layer
+// control is constructed there too. BASE_LAYERS gets passed in.
+const BASE_LAYERS={Topo:topo,Street:street,Satellite:sat};
 
 // All overlays render into the default overlayPane in a single SVG.
 // iPhone Safari silently dropped overlays when they were split across
@@ -617,38 +620,37 @@ function renderMap(geom,state,gaugesGeom,gaugesState,osmbData){
     }
   }
 
-  // Layer toggle: add/remove the gauge layerGroup without re-running
-  // refilter — fitBounds is firstPaint-only, so toggling shouldn't
-  // jolt the user's current pan/zoom. URL hash updates so the toggle
-  // state is shareable.
-  function onGaugeToggle(checked){
-    showGauges=checked;
-    if(showGauges){
-      if(!map.hasLayer(gaugeLayer))gaugeLayer.addTo(map);
-    }else if(map.hasLayer(gaugeLayer)){
-      map.removeLayer(gaugeLayer);
-    }
+  // Combined base + overlay control — Leaflet's stock WMS-style layer
+  // picker handles the add/remove side; we only need to keep our
+  // shadow state (showGauges, osmbVisible) and the URL hash in sync.
+  // Empty swatches use inline style — CSP allows style-src 'unsafe-inline'.
+  const overlays={};
+  if(hasGaugeLayer)overlays['Gauges']=gaugeLayer;
+  OSMB_LAYER_DEFS.forEach(function(d){
+    const lyr=osmbLayers[d.key];
+    if(!lyr)return;
+    const swatch='<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:'+d.color+';border:1px solid rgba(0,0,0,.15);margin-right:6px;vertical-align:middle"></span>';
+    overlays[swatch+d.label]=lyr;
+  });
+  L.control.layers(BASE_LAYERS,overlays,{collapsed:true}).addTo(map);
+
+  map.on('overlayadd',function(e){
+    if(e.layer===gaugeLayer)showGauges=true;
+    OSMB_LAYER_DEFS.forEach(function(d){
+      if(e.layer===osmbLayers[d.key])osmbVisible[d.key]=true;
+    });
     applyZOrder();
     writeHash(sSet,cSet,showGauges,osmbVisible);
-  }
-
-  function onOsmbToggle(key,checked){
-    osmbVisible[key]=checked;
-    const lyr=osmbLayers[key];
-    if(!lyr)return;
-    if(checked){
-      if(!map.hasLayer(lyr))lyr.addTo(map);
-    }else if(map.hasLayer(lyr)){
-      map.removeLayer(lyr);
-    }
+  });
+  map.on('overlayremove',function(e){
+    if(e.layer===gaugeLayer)showGauges=false;
+    OSMB_LAYER_DEFS.forEach(function(d){
+      if(e.layer===osmbLayers[d.key])osmbVisible[d.key]=false;
+    });
     writeHash(sSet,cSet,showGauges,osmbVisible);
-  }
+  });
 
-  countEl=addFilterControl(
-    sSet,cSet,refilter,
-    hasGaugeLayer,showGauges,onGaugeToggle,
-    osmbLayers,osmbVisible,onOsmbToggle
-  );
+  countEl=addFilterControl(sSet,cSet,refilter);
   refilter();
 }
 
@@ -777,7 +779,7 @@ function accessPopup(p){
   return html;
 }
 
-function addFilterControl(sSet,cSet,onChange,hasGaugeLayer,showGauges,onLayerToggle,osmbLayers,osmbVisible,onOsmbToggle){
+function addFilterControl(sSet,cSet,onChange){
   const ctl=L.control({position:'topright'});
   let countEl;
   ctl.onAdd=function(){
@@ -818,32 +820,6 @@ function addFilterControl(sSet,cSet,onChange,hasGaugeLayer,showGauges,onLayerTog
       });
       lab.appendChild(document.createTextNode(' '+t));
     });
-
-    // Layers fieldset (Item 2c.5): rendered when at least one optional
-    // layer (gauges or OSMB) is available. Default-ON state lives in
-    // renderMap; these checkboxes are thin views onto their toggle
-    // handlers.
-    const osmbKeys=OSMB_LAYER_DEFS.filter(function(d){return osmbLayers&&osmbLayers[d.key];});
-    if(hasGaugeLayer || osmbKeys.length){
-      const lFs=L.DomUtil.create('fieldset','',panel);
-      L.DomUtil.create('legend','',lFs).textContent='Layers';
-      if(hasGaugeLayer){
-        const lab=L.DomUtil.create('label','',lFs);
-        const cb=L.DomUtil.create('input','',lab);
-        cb.type='checkbox';cb.value='gauges';cb.checked=showGauges;
-        cb.addEventListener('change',function(){onLayerToggle(cb.checked);});
-        lab.appendChild(document.createTextNode(' Show gauges'));
-      }
-      osmbKeys.forEach(function(d){
-        const lab=L.DomUtil.create('label','',lFs);
-        const cb=L.DomUtil.create('input','',lab);
-        cb.type='checkbox';cb.value=d.key;cb.checked=!!(osmbVisible&&osmbVisible[d.key]);
-        cb.addEventListener('change',function(){onOsmbToggle(d.key,cb.checked);});
-        const sw=L.DomUtil.create('span','swatch',lab);
-        sw.style.background=d.color;
-        lab.appendChild(document.createTextNode(' '+d.label));
-      });
-    }
 
     countEl=L.DomUtil.create('div','mf-count',panel);
     countEl.setAttribute('aria-live','polite');
