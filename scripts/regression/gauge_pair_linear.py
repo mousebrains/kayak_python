@@ -635,7 +635,15 @@ def _render_residuals_svg(
     max_points: int = 1500,
 ) -> str:
     """Residuals scatter SVG: predictor flow on x, residual (y - y_hat) on y,
-    +/-1.96 * sigma_hat translucent band, y=0 line, ~max_points subsampled.
+    stepped +/-1.96 * sigma_q band per predictor quintile, y=0 line,
+    ~max_points subsampled.
+
+    The band is drawn per-quintile (not as a single +/-1.96 * sigma_hat
+    rectangle) because daily-flow residuals are heteroscedastic -- std
+    grows with predictor magnitude (e.g. for the Rogue fit, Q1 std is
+    about 56 cfs while Q5 std is about 177 cfs). A constant pooled
+    band would under-state scatter at high flow and over-state it at
+    low flow.
 
     Standalone — no CSS or JS dependencies; serves as `<img src=…>`.
     """
@@ -649,14 +657,30 @@ def _render_residuals_svg(
     xs = [pivot_predictor[i] for i in sample_idx]
     ys = [float(fit.residuals[i]) for i in sample_idx]
 
+    # Per-quintile band geometry: 5 sequential (x_lo, x_hi, half_height) rows.
+    # Falls back to a single pooled band if there's < 5 datapoints (test fits)
+    # or if a quintile has < 2 points (stdev undefined).
+    sorted_idx = sorted(range(n_points), key=lambda i: pivot_predictor[i])
+    qsize = n_points // 5
+    band_segments: list[tuple[float, float, float]] = []
+    if qsize >= 2:
+        for q in range(5):
+            idx = sorted_idx[q * qsize : (q + 1) * qsize if q < 4 else n_points]
+            xq = [pivot_predictor[i] for i in idx]
+            rq = [float(fit.residuals[i]) for i in idx]
+            std_q = statistics.stdev(rq)
+            band_segments.append((min(xq), max(xq), 1.96 * std_q))
+    else:
+        band_segments.append((min(pivot_predictor), max(pivot_predictor), 1.96 * fit.sigma_hat))
+    band_max = max(seg[2] for seg in band_segments)
+
     x_data_min = min(pivot_predictor)
     x_data_max = max(pivot_predictor)
     r_min_full = float(fit.residuals.min())
     r_max_full = float(fit.residuals.max())
-    band = 1.96 * fit.sigma_hat
-    # y-axis must include the full residual range AND the 95% band.
-    y_data_min = min(r_min_full, -band)
-    y_data_max = max(r_max_full, band)
+    # y-axis must include the full residual range AND the widest band.
+    y_data_min = min(r_min_full, -band_max)
+    y_data_max = max(r_max_full, band_max)
 
     x_lo, x_hi, x_step = _nice_axis(x_data_min, x_data_max)
     y_lo, y_hi, y_step = _nice_axis(y_data_min, y_data_max)
@@ -693,18 +717,25 @@ def _render_residuals_svg(
         f'font-size="14" font-weight="600">{title}</text>'
     )
 
-    # 95% confidence band: rectangle at +/- 1.96 * sigma_hat around y=0.
-    band_top_px = y_to_px(band)
-    band_bot_px = y_to_px(-band)
+    # 95% confidence band: stepped rectangle per predictor quintile.
+    # Drawn first so the scatter points render on top.
+    for seg_x_lo, seg_x_hi, seg_half in band_segments:
+        seg_left = x_to_px(seg_x_lo)
+        seg_right = x_to_px(seg_x_hi)
+        seg_top = y_to_px(seg_half)
+        seg_bot = y_to_px(-seg_half)
+        parts.append(
+            f'<rect x="{seg_left:.1f}" y="{seg_top:.1f}" '
+            f'width="{seg_right - seg_left:.1f}" '
+            f'height="{seg_bot - seg_top:.1f}" '
+            'fill="#1b5591" fill-opacity="0.12"/>'
+        )
+    # Annotate the widest band on the right.
+    top_px_for_max = y_to_px(band_max)
     parts.append(
-        f'<rect x="{ml}" y="{band_top_px:.1f}" width="{pw}" '
-        f'height="{band_bot_px - band_top_px:.1f}" '
-        'fill="#1b5591" fill-opacity="0.12"/>'
-    )
-    # Annotate the band on the right.
-    parts.append(
-        f'<text x="{ml + pw - 4}" y="{band_top_px - 4:.1f}" text-anchor="end" '
-        f'fill="#1b5591" font-size="10">±1.96 &#963;&#770; = ±{band:.0f} cfs</text>'
+        f'<text x="{ml + pw - 4}" y="{top_px_for_max - 4:.1f}" text-anchor="end" '
+        f'fill="#1b5591" font-size="10">±1.96 &#963;&#770;(x) per quintile '
+        f"(max ±{band_max:.0f} cfs)</text>"
     )
 
     # Plot frame.
