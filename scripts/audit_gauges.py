@@ -171,22 +171,40 @@ def check_data_status(kayak, days=7):
     # earlier version filtered the WHERE clause to < cutoff as well, which
     # made HAVING trivially true and listed every gauge with any obs in the
     # window regardless of newer data.
+    #
+    # The HAVING also requires gauge-height to be stale: USGS routinely
+    # stops publishing flow when the rating table is deemed unreliable
+    # (e.g. Willamette at upper falls, USGS 14207740 after 2026-04-20)
+    # while the underlying gauge-height feed keeps working. That's not a
+    # broken feed — the gauge is still measurable, just not rated — so
+    # we only flag STOPPED when both flow AND gauge data have died.
     stopped = kayak.execute(
         """
         SELECT g.id, g.name, g.usgs_id,
-               max(o.observed_at) AS last_obs,
-               count(*) AS obs_count
+               max(CASE WHEN o.data_type='flow'  THEN o.observed_at END) AS last_flow,
+               max(CASE WHEN o.data_type='gauge' THEN o.observed_at END) AS last_gauge,
+               count(*) FILTER (WHERE o.data_type='flow') AS obs_count
         FROM gauge g
         JOIN gauge_source gs ON gs.gauge_id = g.id
         JOIN source s ON gs.source_id = s.id
         JOIN observation o ON o.source_id = s.id
-        WHERE o.data_type = 'flow'
+        WHERE o.data_type IN ('flow', 'gauge')
           AND o.observed_at > ?
         GROUP BY g.id
-        HAVING max(o.observed_at) < ?
+        HAVING max(CASE WHEN o.data_type='flow'  THEN o.observed_at END) < ?
+           AND (max(CASE WHEN o.data_type='gauge' THEN o.observed_at END) IS NULL
+                OR max(CASE WHEN o.data_type='gauge' THEN o.observed_at END) < ?)
     """,
-        (week_ago, cutoff_str),
+        (week_ago, cutoff_str, cutoff_str),
     ).fetchall()
+    # Output shape preserved (id, name, usgs_id, last_obs, obs_count) so the
+    # caller (text + JSON renderers, _group_stale_by_gauge consumers) is
+    # unchanged. last_obs is the flow timestamp since that's what STOPPED
+    # is fundamentally about.
+    stopped = [
+        (gid, gname, usgs_id, last_flow, count)
+        for gid, gname, usgs_id, last_flow, _last_gauge, count in stopped
+    ]
 
     # Gauges with flow obs since cutoff but none in the prior N-day window.
     # WHERE looks back 2*N days so the HAVING min > cutoff actually rules
