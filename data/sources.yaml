@@ -83,6 +83,8 @@ nwps:
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/BEAO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/BRTO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/WFHO3/stageflow/observed"
+    # Rock Creek (Nehalem) — replaces dead USGS 14300000 at Keasey.
+    - url: "https://api.water.noaa.gov/nwps/v1/gauges/RCBO3/stageflow/observed"
     # Idaho Salmon basin — NWRFC forecast points (USACE-piped) paired with USGS for outage redundancy.
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/SRYI1/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/MIDI1/stageflow/observed"
