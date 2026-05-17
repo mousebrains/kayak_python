@@ -2,16 +2,15 @@
 -- Snapshot of the live DB schema; checked in to gate schema/model parity.
 -- Regenerate after structural migrations land. Do not edit by hand.
 --
--- Source: /tmp/kayak-snapshot.p4taWw.db
--- Generated: 2026-05-15T01:00:04Z
+-- Source: /home/pat/DB/kayak.db
+-- Generated: 2026-05-17T21:31:46Z
 
 CREATE TABLE calc_expression (
-	id INTEGER NOT NULL,
-	data_type VARCHAR(11) NOT NULL,
-	expression VARCHAR(512) NOT NULL,
-	time_expression TEXT,
-	note TEXT,
-	provenance_slug TEXT,
+	id INTEGER NOT NULL, 
+	data_type VARCHAR(11) NOT NULL, 
+	expression VARCHAR(512) NOT NULL, 
+	time_expression TEXT, 
+	note TEXT, provenance_slug TEXT, 
 	PRIMARY KEY (id)
 );
 CREATE TABLE change_request (
