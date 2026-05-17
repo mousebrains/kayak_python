@@ -49,6 +49,16 @@ _LAYERS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
 # OSMB so we never tail-spin if the server keeps returning full pages.
 _MAX_PAGES = 50
 
+# Oregon bounding box (W, S, E, N) with a small margin for coastal
+# ramps + Columbia-border features. Used to drop features whose
+# coordinates fall outside any plausible Oregon waterway — OSMB pins
+# statewide grant-funded programs and orgs (facility_type=
+# "Statewide Regional Project") onto placeholder offshore coordinates
+# in the Pacific (~lon -125.5, lat 43.7) because they don't correspond
+# to a physical site. Applied to every layer defensively; obstructions
+# + dams are clean today but the same OSMB convention could spread.
+_OREGON_BBOX = (-124.7, 41.9, -116.4, 46.3)
+
 
 def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     """Register the 'fetch-osmb' subcommand."""
@@ -114,18 +124,33 @@ def _fetch_all_pages(base_url: str, out_fields: tuple[str, ...]) -> tuple[bytes,
         if not isinstance(page, dict) or page.get("type") != "FeatureCollection":
             raise RuntimeError(f"not a FeatureCollection at offset {offset}")
         features = page.get("features", [])
-        all_features.extend(features)
+        # Page-size check uses the raw (pre-filter) count so the
+        # "shorter than first page = last page" termination still
+        # works when intermediate pages happen to be mostly junk.
+        page_count = len(features)
+        all_features.extend(f for f in features if _in_oregon_bbox(f))
         if first_page_size is None:
-            first_page_size = len(features)
-        if not features or len(features) < first_page_size:
+            first_page_size = page_count
+        if not page_count or page_count < first_page_size:
             break
-        offset += len(features)
+        offset += page_count
     else:
         raise RuntimeError(f"pagination hit {_MAX_PAGES} pages without terminating")
 
     merged = {"type": "FeatureCollection", "features": all_features}
     body = json.dumps(merged, separators=(",", ":"), sort_keys=True).encode()
     return body, len(all_features)
+
+
+def _in_oregon_bbox(feature: dict) -> bool:
+    """True if *feature* is a Point inside the Oregon bbox; drops malformed too."""
+    geom = feature.get("geometry") or {}
+    coords = geom.get("coordinates")
+    if not isinstance(coords, list) or len(coords) < 2:
+        return False
+    lon, lat = coords[0], coords[1]
+    w, s, e, n = _OREGON_BBOX
+    return bool(w <= lon <= e and s <= lat <= n)
 
 
 def _query_url(base_url: str, out_fields: tuple[str, ...], offset: int) -> str:

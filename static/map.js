@@ -56,16 +56,28 @@ const GAUGE_STALE_OPACITY=0.55;
 // Oregon SMB overlay markers. Colors chosen to NOT collide with the
 // reach palette (orange/chartreuse/red/cyan) or the gauge color (which
 // reuses the reach palette): magenta for hazards, deep purple for
-// dams, dark green for access. Radius/stroke are larger than the
-// gauge markers so a clustered map remains legible.
-const OSMB_RADIUS=5;
+// dams, dark green for access.
+//
+// Shape distinguishes hazard tier at a glance — triangle (warning)
+// for obstructions sits above diamond (fixed structure) for dams sits
+// above circle (info) for access + gauges. Sizes step down to match:
+// 16 > 14 > 10 (diameter) > 6–14 (gauges, zoom-graded).
+//
+// Z-order top → bottom (per user request):
+//   1. obstructions  (markerPane, zIndexOffset 200)
+//   2. dams / weirs  (markerPane, zIndexOffset 100)
+//   3. access sites  (overlayPane, canvas — appends after SVG)
+//   4. gauges        (overlayPane, SVG — bringToFront after reaches)
+//   5. reaches       (overlayPane, SVG — bottom)
+// markerPane is a built-in pane stacked above overlayPane, so dams +
+// obstructions clear everything else regardless of add order.
 const OSMB_HIT_RADIUS=14;
 // Popup function refs are forward references — they're function
 // declarations later in this IIFE, which JS hoists to module top.
 const OSMB_LAYER_DEFS=[
-  {key:'obstructions',label:'Obstructions',color:'#ff00ff',defaultOn:true,attr:'osmbObstructionsUrl',popup:obstructionPopup},
-  {key:'dams',        label:'Dams / weirs',color:'#6a1b9a',defaultOn:true,attr:'osmbDamsUrl',        popup:damPopup},
-  {key:'access',      label:'Access sites',color:'#1b5e20',defaultOn:false,attr:'osmbAccessUrl',     popup:accessPopup},
+  {key:'obstructions',label:'Obstructions',color:'#ff00ff',defaultOn:false,attr:'osmbObstructionsUrl',popup:obstructionPopup,shape:'triangle',size:16,zIndex:200},
+  {key:'dams',        label:'Dams / weirs',color:'#6a1b9a',defaultOn:false,attr:'osmbDamsUrl',        popup:damPopup,        shape:'diamond', size:14,zIndex:100},
+  {key:'access',      label:'Access sites',color:'#1b5e20',defaultOn:false,attr:'osmbAccessUrl',      popup:accessPopup,     shape:'circle',  size:5, zIndex:0  },
 ];
 
 function esc(s){const d=document.createElement('div');d.textContent=s==null?'':s;return d.innerHTML;}
@@ -584,7 +596,25 @@ function renderMap(geom,state,gaugesGeom,gaugesState,osmbData){
     // the paths exist before we re-append them in the right z-order.
     for(let i=0;i<visible.length;i++)visible[i].bringToFront();
     for(let i=0;i<visible.length;i++)if(visible[i]._mfHit)visible[i]._mfHit.bringToFront();
+    applyZOrder();
     writeHash(sSet,cSet,showGauges,osmbVisible);
+  }
+
+  // Enforce within-SVG stacking: gauges above reaches. Reach paths get
+  // rebuilt every refilter() (status/class filter change), which appends
+  // them after the existing gauge paths in the SVG — so gauges sink
+  // below. Calling bringToFront on each visible gauge here re-appends
+  // each gauge marker as the last SVG child, restoring the desired
+  // order. Dams + obstructions live in markerPane (a built-in pane
+  // stacked above overlayPane) with zIndexOffset set at marker
+  // creation; access uses canvas in overlayPane and naturally appends
+  // above the SVG. So this function only has to handle gauges.
+  function applyZOrder(){
+    if(!hasGaugeLayer||!showGauges)return;
+    for(let i=0;i<gaugeMarkers.length;i++){
+      const m=gaugeMarkers[i];
+      if(typeof m.bringToFront==='function')m.bringToFront();
+    }
   }
 
   // Layer toggle: add/remove the gauge layerGroup without re-running
@@ -598,6 +628,7 @@ function renderMap(geom,state,gaugesGeom,gaugesState,osmbData){
     }else if(map.hasLayer(gaugeLayer)){
       map.removeLayer(gaugeLayer);
     }
+    applyZOrder();
     writeHash(sSet,cSet,showGauges,osmbVisible);
   }
 
@@ -621,10 +652,12 @@ function renderMap(geom,state,gaugesGeom,gaugesState,osmbData){
   refilter();
 }
 
-// Canvas renderer for OSMB layers. With 1816 access markers + 357
-// obstruction/dam markers + hit shapes, SVG would push the page past
-// 4000 path elements; canvas batches them into a single 2D draw.
-const OSMB_RENDERER=L.canvas();
+// Canvas renderer for the high-count access layer (1816 markers — SVG
+// would push the page past 3600 path elements). Obstructions + dams
+// (194 + 163) use L.marker + L.divIcon SVG: low enough counts that SVG
+// perf is fine, and L.marker auto-places them in markerPane (above
+// overlayPane) for the z-order the user requested.
+const OSMB_CANVAS_RENDERER=L.canvas();
 
 function buildOsmbLayer(data,def){
   const group=L.layerGroup();
@@ -634,26 +667,71 @@ function buildOsmbLayer(data,def){
     const coords=f.geometry&&f.geometry.coordinates;
     if(!coords||coords.length<2)continue;
     const ll=L.latLng(coords[1],coords[0]);
-    L.circleMarker(ll,{
-      renderer:OSMB_RENDERER,
-      radius:OSMB_RADIUS,
-      fillColor:def.color,
-      color:'#222',
-      weight:1,
-      fillOpacity:0.85,
-      interactive:false,
-    }).addTo(group);
-    const hit=L.circleMarker(ll,{
-      renderer:OSMB_RENDERER,
-      radius:OSMB_HIT_RADIUS,
-      opacity:0,
-      fillOpacity:0,
-      interactive:true,
-    }).addTo(group);
-    hit.bindPopup(def.popup.bind(null,f.properties||{}));
+    const props=f.properties||{};
+    if(def.shape==='circle'){
+      L.circleMarker(ll,{
+        renderer:OSMB_CANVAS_RENDERER,
+        radius:def.size,
+        fillColor:def.color,
+        color:'#222',
+        weight:1,
+        fillOpacity:0.85,
+        interactive:false,
+      }).addTo(group);
+      const hit=L.circleMarker(ll,{
+        renderer:OSMB_CANVAS_RENDERER,
+        radius:OSMB_HIT_RADIUS,
+        opacity:0,
+        fillOpacity:0,
+        interactive:true,
+      }).addTo(group);
+      hit.bindPopup(def.popup.bind(null,props));
+    }else{
+      const marker=L.marker(ll,{
+        icon:makeShapeIcon(def.shape,def.size,def.color),
+        zIndexOffset:def.zIndex||0,
+        keyboard:false,
+      }).addTo(group);
+      marker.bindPopup(def.popup.bind(null,props));
+    }
   }
   return group;
 }
+
+// Build an L.divIcon with inline SVG for the non-circle OSMB markers.
+// The visible shape sits inside a 28×28 hit box — matches the access
+// layer's hit-circle diameter so tap targets are uniform across shapes.
+// No external CSS needed: fill + stroke are SVG attrs (CSP-safe).
+function makeShapeIcon(shape,size,color){
+  const box=28;
+  const c=box/2;
+  const half=size/2;
+  let pts='';
+  if(shape==='triangle'){
+    // Equilateral, apex up. Width = size; height = size * sin(60°) ≈ 0.866.
+    const halfW=half*0.866;
+    pts=c+','+(c-half)+' '+(c+halfW)+','+(c+half*0.5)+' '+(c-halfW)+','+(c+half*0.5);
+  }else if(shape==='diamond'){
+    pts=c+','+(c-half)+' '+(c+half)+','+c+' '+c+','+(c+half)+' '+(c-half)+','+c;
+  }
+  const svg='<svg width="'+box+'" height="'+box+'" viewBox="0 0 '+box+' '+box+'" xmlns="http://www.w3.org/2000/svg">'+
+    '<polygon points="'+pts+'" fill="'+color+'" stroke="#222" stroke-width="1" stroke-linejoin="round"/>'+
+  '</svg>';
+  return L.divIcon({
+    className:'osmb-icon osmb-icon--'+shape,
+    html:svg,
+    iconSize:[box,box],
+    iconAnchor:[c,c],
+    popupAnchor:[0,-half],
+  });
+}
+
+// Static landing URLs for the dam + obstruction popups. Neither layer
+// carries a per-feature URL, so each popup links to the most relevant
+// OSMB-hosted page: dams → agency home, obstructions → the reporting
+// Hub (which also doubles as the authoritative obstruction registry).
+const OSMB_DAM_URL='https://www.oregon.gov/osmb/pages/index.aspx';
+const OSMB_OBSTRUCTION_URL='https://oregon-boating-obstructions-geo.hub.arcgis.com';
 
 function obstructionPopup(p){
   const title=esc(p.obslocation||p.waterbody||'Obstruction');
@@ -661,11 +739,12 @@ function obstructionPopup(p){
   const desc=esc(p.obsdescript||'');
   const ageMs=p.recordtime?(Date.now()-Number(p.recordtime)):-1;
   const age=ageMs>=0?'<span class="rp-time">'+esc(fmtAge(ageMs))+'</span>':'';
-  let html='<div class="reach-popup"><div class="rp-name">'+title+'</div>';
+  let html='<a class="reach-popup" href="'+OSMB_OBSTRUCTION_URL+'" target="_blank" rel="noopener">'+
+    '<div class="rp-name">'+title+'</div>';
   if(sub)html+='<div class="rp-sub">'+sub+'</div>';
   if(desc)html+='<div class="rp-reading">'+desc+'</div>';
   if(age)html+='<div class="rp-footer">'+age+'</div>';
-  html+='</div>';
+  html+='</a>';
   return html;
 }
 
@@ -676,11 +755,12 @@ function damPopup(p){
   if(p.damheight)sizeBits.push(p.damheight+' ft tall');
   if(p.damwidth)sizeBits.push(p.damwidth+' ft wide');
   const portage=esc(p.portagedesc||p.navigate||'');
-  let html='<div class="reach-popup"><div class="rp-name">'+title+'</div>';
+  let html='<a class="reach-popup" href="'+OSMB_DAM_URL+'" target="_blank" rel="noopener">'+
+    '<div class="rp-name">'+title+'</div>';
   if(sub)html+='<div class="rp-sub">'+sub+'</div>';
   if(sizeBits.length)html+='<div class="rp-reading">'+esc(sizeBits.join(' · '))+'</div>';
   if(portage)html+='<div class="rp-sub">'+portage+'</div>';
-  html+='</div>';
+  html+='</a>';
   return html;
 }
 

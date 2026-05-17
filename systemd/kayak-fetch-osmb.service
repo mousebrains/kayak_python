@@ -17,6 +17,11 @@ Environment=KAYAK_HOME=/home/pat
 EnvironmentFile=-/etc/kayak/env
 EnvironmentFile=/home/pat/.config/kayak/.env
 ExecStart=/home/pat/.venv/bin/levels fetch-osmb
+# Healthchecks.io heartbeat. Leading `-` so a ping failure (HC down,
+# DNS hiccup) doesn't mark the whole service failed — the fetch itself
+# already succeeded by this point. HC_FETCH_OSMB lives alongside the
+# other HC_* URLs in /home/pat/.config/kayak/.env (loaded above).
+ExecStartPost=-/usr/bin/curl -fsS -m 10 --retry 3 -o /dev/null ${HC_FETCH_OSMB}
 TimeoutStartSec=300
 Nice=15
 
