@@ -41,7 +41,7 @@ _LAYERS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (
         "osmb-access-sites.geojson",
         "https://services.arcgis.com/uUvqNMGPm7axC2dD/arcgis/rest/services/Boating_Access_Sites_OA/FeatureServer/0",
-        ("name", "waterway_name", "facility_type", "launch_type", "web_url"),
+        ("name", "waterway_name", "facility_type", "launch_type"),
     ),
 )
 

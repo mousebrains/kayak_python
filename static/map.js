@@ -726,12 +726,13 @@ function makeShapeIcon(shape,size,color){
   });
 }
 
-// Static landing URLs for the dam + obstruction popups. Neither layer
-// carries a per-feature URL, so each popup links to the most relevant
-// OSMB-hosted page: dams → agency home, obstructions → the reporting
-// Hub (which also doubles as the authoritative obstruction registry).
-const OSMB_DAM_URL='https://www.oregon.gov/osmb/pages/index.aspx';
-const OSMB_OBSTRUCTION_URL='https://oregon-boating-obstructions-geo.hub.arcgis.com';
+// Static landing URLs for the three OSMB popups. None of the layers
+// support per-feature deep-linking (the AGOL dashboards/experiences
+// don't update their URL on marker click), so each popup links to the
+// OSMB-hosted overview page for its layer.
+const OSMB_DAM_URL='https://www.oregon.gov/osmb/boating-facilities/Pages/Maps-and-Apps.aspx';
+const OSMB_OBSTRUCTION_URL='https://geo.maps.arcgis.com/apps/dashboards/59f4dfde321f447b9245a1451c83e054';
+const OSMB_ACCESS_URL='https://experience.arcgis.com/experience/72308dd6b893451690a14437cde89be8';
 
 function obstructionPopup(p){
   const title=esc(p.obslocation||p.waterbody||'Obstruction');
@@ -768,13 +769,11 @@ function accessPopup(p){
   const title=esc(p.name||'Access site');
   const sub=esc(p.waterway_name||'');
   const facility=esc([p.facility_type,p.launch_type].filter(Boolean).join(' · '));
-  const url=(typeof p.web_url==='string'&&/^https?:\/\//i.test(p.web_url))?p.web_url:'';
-  const wrapStart=url?'<a class="reach-popup" href="'+esc(url)+'" target="_blank" rel="noopener">':'<div class="reach-popup">';
-  const wrapEnd=url?'</a>':'</div>';
-  let html=wrapStart+'<div class="rp-name">'+title+'</div>';
+  let html='<a class="reach-popup" href="'+OSMB_ACCESS_URL+'" target="_blank" rel="noopener">'+
+    '<div class="rp-name">'+title+'</div>';
   if(sub)html+='<div class="rp-sub">'+sub+'</div>';
   if(facility)html+='<div class="rp-reading">'+facility+'</div>';
-  html+=wrapEnd;
+  html+='</a>';
   return html;
 }
 
