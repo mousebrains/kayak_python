@@ -135,6 +135,15 @@ nwrfc.textplot:
 #     # Northern California only (north of 40° latitude)
 #     - url: "https://waterservices.usgs.gov/nwis/iv/?format=rdb&bBox=-124.5,40.0,-119.5,42.1&period=PT12H&parameterCd=00060,00065,00010"
 
+pacificorp:
+  urls:
+    # Rogue River Bypass — North Fork Diversion Dam → Prospect No. 2 powerhouse.
+    # Single station today; gauge OR Hwy 62 bridge, ~0.3 mi below the dam.
+    # Naive timestamps published in America/Los_Angeles (PDT/PST DST-aware).
+    - url: "https://www.pacificorp.com/etc/pcorp/datafiles/hydro/RogueRiverBypass.xml"
+      stations:
+        PR2R.NFD_BYP_80FL_PI: America/Los_Angeles
+
 usbr:
   urls:
     # Narrowed 2026-04-17 from 87 → 8 stations (only the linked ones).

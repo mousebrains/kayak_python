@@ -48,6 +48,7 @@ def ensure_all_loaded() -> None:
         nwps,
         nwrfc_textplot,
         nwrfc_xml,
+        pacificorp,
         usace_cda,
         usbr,
         wa_gov,
