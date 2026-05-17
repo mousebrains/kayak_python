@@ -103,3 +103,4 @@ id,url,parser,hours,is_active
 118,https://api.water.noaa.gov/nwps/v1/gauges/ORCO3/stageflow/observed,nwps,,1
 120,https://api.water.noaa.gov/nwps/v1/gauges/COCO3/stageflow/observed,nwps,,1
 121,https://api.water.noaa.gov/nwps/v1/gauges/IRGC1/stageflow/observed,nwps,,1
+122,https://api.water.noaa.gov/nwps/v1/gauges/RCBO3/stageflow/observed,nwps,,1

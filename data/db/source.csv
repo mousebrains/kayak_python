@@ -282,3 +282,5 @@ id,name,agency,fetch_url_id,calc_expression_id,timezone
 307,14207770,USGS,,,
 308,14208000,USGS,,,
 309,14211010,USGS,,,
+310,RCBO3,nwps,122,,
+311,14330000,USGS,,,

@@ -190,3 +190,5 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 190,Willamette_lower_falls_merge,,,below Falls at Oregon City,45.357621,-122.610925,14207770,,,,ORCO3,,14207770,,23.4,10000.0,,0,Willamette,Willamette below Falls at Oregon City,willamette|9|009977|010000,OR
 191,Clackamas_Big_Bottom,,,Big Bottom,45.017083,-121.923528,14208000,,,,,,14208000,,2051.0,136.0,,0,Clackamas,Clackamas at Big Bottom,clackamas|9|007949|000136,OR
 192,Clackamas_Oregon_City_merge,,,Oregon City,45.379287,-122.577313,14211010,,,,COCO3,,14211010,,22.7,940.0,,0,Clackamas,Clackamas at Oregon City,clackamas|9|009977|000940,OR
+193,RCBO3,,,Vernonia,45.858611,-123.192222,RCBO3,,,RCBO3,RCBO3,,,,603.87,,,0,Rock Creek,Rock Creek at Vernonia,rock creek|9|000604|999999,OR
+194,14330000,,,Prospect,42.72957187,-122.516147,14330000,,,,,,14330000,,1964.56,379.0,17100307,0,NF Rogue,Rogue River below Prospect,rogue|9|001964|000379,OR
