@@ -1,5 +1,5 @@
 [Unit]
-Description=Kayak: weekly certbot renew --dry-run
+Description=Kayak: weekly certbot state sanity check
 After=network-online.target
 Wants=network-online.target
 OnFailure=kayak-notify-failure@%n.service
@@ -16,25 +16,27 @@ User=root
 Environment=KAYAK_HOME=/home/pat
 EnvironmentFile=-/etc/kayak/env
 EnvironmentFile=/home/pat/.config/kayak/.env
-ExecStart=/usr/bin/certbot renew --dry-run --quiet --non-interactive --no-random-sleep-on-renew
+# `certbot certificates` is read-only: parses /etc/letsencrypt/renewal/*.conf,
+# inspects each lineage's fullchain.pem, prints status. No ACME traffic, no
+# nginx mutation, no temp_checkpoint. Replaced `renew --dry-run` on 2026-05-18
+# after the --nginx plugin's revert step failed and left acme-challenge stubs
+# in /etc/nginx/sites-available/. Real renewals still run via the system
+# certbot.timer twice daily; kayak-cert-expiry.timer catches upcoming expiry
+# independently. Unit filename predates the purpose change.
+ExecStart=/usr/bin/certbot certificates
 ExecStartPost=-/usr/bin/curl -fsS -m 10 --retry 3 -o /dev/null ${HC_CERT_RENEWAL_TEST}
-TimeoutStartSec=300
+TimeoutStartSec=60
 Nice=15
 
-# certbot --nginx --dry-run needs to:
-#   - read /etc/letsencrypt (cert state)
-#   - write /var/log/letsencrypt + /var/lib/letsencrypt (certbot work)
-#   - run `nginx -t`, which opens /var/log/nginx/error.log for append
-#   - have the --nginx plugin insert/remove a temporary location block in
-#     /etc/nginx/ during ACME validation, even on dry-run
-#   - reload nginx via the pid in /run/nginx.pid
-# Plus /home/pat/.config/kayak/.env for HC_CERT_RENEWAL_TEST. ProtectHome
-# is read-only (matches every other kayak-* unit's pattern) so root can still
-# read the env file while /home is otherwise locked.
+# certbot certificates needs:
+#   - read+write /etc/letsencrypt — even the read-only `certificates`
+#     subcommand acquires .certbot.lock in the config dir on startup
+#   - write /var/log/letsencrypt (logs to letsencrypt.log on every invocation)
+#   - write /var/lib/letsencrypt (OCSP cache, etc.)
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
-ReadWritePaths=/etc/letsencrypt /var/log/letsencrypt /var/lib/letsencrypt /etc/nginx /var/log/nginx /run
+ReadWritePaths=/etc/letsencrypt /var/log/letsencrypt /var/lib/letsencrypt
 ProtectHome=read-only
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
