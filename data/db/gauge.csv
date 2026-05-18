@@ -10,7 +10,7 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 9,13168500,,,Hot Spring,42.7711111111111,-115.720277777778,13168500,HOTI,,,,,13168500,,2598.5,2686.0,170501021703,0,Bruneau,Bruneau at Hot Spring,bruneau|9|007402|002686,ID
 10,14140000,,,Bull Run (river Only),45.4373,-122.179655555556,14140000,RUNO,,,,,14140000,,567.9,107.0,170800010506,0,Bull Run,Bull Run at Bull Run (river Only),bull run|9|009432|000107,OR
 11,14201500,,,Monitor,45.1015099127356,-122.746201894857,14201500,MOTO,,,,,14201500,,155.0,58.7,170900090203,0,Butte Creek,Butte Creek at Monitor,butte creek|9|009845|000059,OR
-12,Calapooia_Holly_calc,,,Holly,44.35008567097594,-122.78626447930402,,,,,,,,,533.7,,170900030304,0,Calapooia,Calapooia at Holly,calapooia|9|009466|999999,OR
+12,Calapooia_Holly_calc,,,At Holley (estimated),44.351236,-122.787307,,,,,,,,,527.58,105.0,170900030304,0,Calapooia,Calapooia at Holley (calc),calapooia|9|009466|999999,OR
 13,14400000,,,Brookings,42.1234427753382,-124.187310699326,14400000,,,,,,14400000,,49.16,271.0,171003120109,0,Chetco,Chetco at Brookings,chetco|9|009951|000271,OR
 14,Clackamas_Three_Lynx_merge,,,Three Lynx Creek,45.1248432050366,-122.073413673786,14209500,TLYO,,,TLYO3,,14209500,6,1120.0,479.0,170900110401,0,Clackamas,Clackamas at Three Lynx Creek,clackamas|9|008880|000479,OR
 15,Clackamas_Estacada_merge,,,Estacada,45.2998434588304,-122.353974629983,14210000,ESTO,,,ESTO3,,14210000,7,286.93,671.0,170900110603,0,Clackamas,Clackamas at Estacada,clackamas|9|009713|000671,OR
@@ -27,7 +27,7 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 26,Deschutes_Wickiup_merge,,,La Pine,43.685953,-121.688083,14056500,WICO,,,WICO3,,14056500,12,4257.41,483.0,170703010301,0,Deschutes,Deschutes at La Pine,deschutes|9|005743|000483,OR
 27,14092500,,,Madras,44.7259522504172,-121.246993886344,14092500,PERO,,,,,14092500,,1390.25,7820.0,170703060304,0,Deschutes,Deschutes at Madras,deschutes|9|008610|007820,OR
 28,10396000,,,Frenchglen,42.79083333333333,-118.86749999999999,10396000,DONO,,,,,10396000,,4260.33,200.0,171200030108,0,Donner Und Blitzen,Donner Und Blitzen at Frenchglen,donner und blitzen|9|005740|000200,OR
-29,DRIFT_ALSEA_calc,,,Calculation,44.424908,-123.998399,,,,,,,,,2.6,,171002050303,0,Drift Creek (Alsea),Drift Creek (Alsea) at Calculation,drift creek (alsea)|9|009997|999999,OR
+29,DRIFT_ALSEA_calc,,,Calculation,44.424908,-123.998399,,,,,,,,,2.6,68.23,171002050303,0,Drift Creek (Alsea),Drift Creek (Alsea) at Calculation,drift creek (alsea)|9|009997|999999,OR
 30,DRIFT_SILETZ_calc,,,Calculation,44.916627,-123.981255,,,,,,,,,11.2,,171002040707,0,Drift Creek (Siletz),Drift Creek (Siletz) at Calculation,drift creek (siletz)|9|009989|999999,OR
 31,Elk_Trail_merge,,,Trail,42.6787364239436,-122.741986705027,14338000,ELKO,,,ELKO3,,14338000,,1493.91,129.0,171003070505,0,Elk Creek,Elk Creek at Trail,elk creek|9|008506|000129,OR
 32,Fall_Creek_Lowell_merge,,,"Winberry Creek, near Fall Creek",43.9442929906398,-122.774794014456,14151000,FCLO,,,FCLO3,,14151000,13,637.81,186.0,170900010906,0,Fall Creek,"Fall Creek at Winberry Creek, near Fall Creek",fall creek|9|009362|000186,OR
@@ -74,7 +74,7 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 73,Nehalem_Vernonia_merged,,,Vernonia,45.8070558557861,-123.283172182797,14299800,NRVO,,,VENO3,,14299800,26,640.0,69.78,171002020109,0,Nehalem,Nehalem at Vernonia,nehalem|9|009360|000070,OR
 74,FOSS_merge,,,Foss,45.7039986256055,-123.75540502767,14301000,FSSO,,,FSSO3,,14301000,26,32.6,667.0,171002020602,0,Nehalem,Nehalem at Foss,nehalem|9|009967|000667,OR
 75,Nestucca_Beaver_merge,,,Beaver,45.266494460755,-123.847060972396,14303600,BEAO,,,BEAO3,,14303600,27,43.0,180.0,171002030209,0,Nestucca,Nestucca at Beaver,nestucca|9|009957|000180,OR
-76,NF_ALSEA_calc,,,Calculation,44.416192,-123.561792,,,,,,,,,353.8,,171002050103,0,North Fork Alsea,North Fork Alsea at Calculation,alsea|0north|009646|999999,OR
+76,NF_ALSEA_calc,,,At Alsea (estimated),44.37901,-123.595661,,,,,,,,,272.31,63.0,171002050105,0,North Fork Alsea,NF Alsea at Alsea (calc),alsea|0north|009646|999999,OR
 77,Clearwater_Canyon_merge,,,Canyon Ranger Station,46.8405555555556,-115.621111111111,13340600,CRSI,,,,,13340600,,1706.15,1296.0,170603071002,0,North Fork Clearwater,North Fork Clearwater at Canyon Ranger Station,clearwater|0north|008294|001296,ID
 78,14147500,,,Oakridge,43.7567902423058,-122.505329201326,14147500,NWFO,,,NWFO,,14147500,,1029.6,246.0,170900010608,0,North Fork Middle Fork Willamette,North Fork Middle Fork Willamette at Oakridge,willamette|0north|008970|000246,OR
 79,Owyhee_Rome_merge,,,Rome,42.86638888888889,-117.64916666666667,13181000,ROMO,,,ROMO3,,13181000,28,3361.0,8000.0,170501070705,0,Owyhee,Owyhee at Rome,owyhee|9|006639|008000,OR
@@ -92,7 +92,7 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 91,Rogue_Ray_Gold_merge,,,Gold Ray Dam,42.4373459696809,-122.987267808388,14359000,RYGOX,,,RYGO3,,14359000,33,1121.78,2053.0,171003080202,0,Rogue,Rogue at Gold Ray Dam,rogue|9|008878|002053,OR
 92,14155500,,,Cottage Grove,43.7929012392659,-122.991465543832,14155500,DORO,,,,,14155500,,685.24,270.0,170900020205,0,Row,Row at Cottage Grove,row|9|009315|000270,OR
 93,14154500,,,"Pitcher Creek, near Dorena",43.73527777777778,-122.87444444444444,14154500,DRRO,,,,,14154500,,856.16,211.0,170900020204,0,Row,"Row at Pitcher Creek, near Dorena",row|9|009144|000211,OR
-94,SALMON_WILLAMETTE_calc,,,Oakridge,43.740821,-122.458827,,,,,,,,,1163.2,,170900010403,0,Salmon Creek,Salmon Creek at Oakridge,salmon creek|9|008837|999999,OR
+94,SALMON_WILLAMETTE_calc,,,Near Oakridge (estimated),43.762346,-122.372823,,,,,,,,,1462.36,117.0,170900010403,0,Salmon Creek,Salmon Cr near Oakridge (calc),salmon creek|9|008538|000117,OR
 95,Salmon_Whitebird_merge,,,White Bird,45.7502777777778,-116.323888888889,13317000,WHBI,,,WHBI1,,13317000,,1416.01,13421.0,170602090504,0,Salmon,Salmon at White Bird,salmon|9|008584|013421,ID
 96,SF_Salmon_Krassel_merge,,,Krassel Ranger Station,44.9869444,-115.725,13310700,KRSI,,,KRSI1,,13310700,,3750.0,330.0,170602080412,0,South Fork Salmon,South Fork Salmon at Krassel Ranger Station,salmon|0south|006250|000330,ID
 97,MF_Salmon_merge,,,Middle Fork Lodge,44.7215194444444,-115.014347222222,13309220,MIDI,,105897,MIDI1,,13309220,,4384.4,1042.0,170602050903,0,Middle Fork Salmon,Middle Fork Salmon at Middle Fork Lodge,salmon|0middle|005616|001042,ID
@@ -110,7 +110,7 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 109,14183000,,,Mehama,44.789249999999996,-122.61880555555555,14183000,UMEHO,,,MEHO3,,14183000,40,605.78,654.35,170900050601,0,North Santiam,North Santiam at Mehama,santiam|0north|009394|000654,OR
 110,14182500,,,Mehama,44.7915108355795,-122.578973849527,14182500,LSMO,,,LSMO3,,14182500,41,655.0,112.0,170900050505,0,Little North Santiam,Little North Santiam at Mehama,little north santiam|9|009345|000112,OR
 111,Selway_Lowell_merge,,,Lowell,46.0866666666667,-115.513888888889,13336500,SELI,,,SELI1,,13336500,,1533.45,1915.0,170603020403,0,Selway,Selway at Lowell,selway|9|008467|001915,ID
-112,SF_ALSEA_calc,,,Calculation,44.365887,-123.599478,,,,,,,,,290.0,,171002050104,0,South Fork Alsea,South Fork Alsea at Calculation,alsea|0south|009710|999999,OR
+112,SF_ALSEA_calc,,,Near Alsea (estimated),44.365121,-123.599827,,,,,,,,,300.0,49.5,171002050104,0,South Fork Alsea,SF Alsea near Alsea (calc),alsea|0south|009710|999999,OR
 113,Clearwater_Stites_merge,,,Stites,46.0863888888889,-115.976666666667,13338500,STII,,,STII1,,13338500,,1327.12,1168.0,170603050903,0,South Fork Clearwater,South Fork Clearwater at Stites,clearwater|0south|008673|001168,ID
 114,SF_Yamhill_McMinnville_merge,,,McMinnville,45.206944444444446,-123.18166666666667,14194150,MCMO,,14194150,MCMO3,,14194150,,61.7,528.0,170900080701,0,South Yamhill,South Yamhill at McMinnville,yamhill|0south|009938|000528,OR
 115,14093000,,,Warm Springs,44.7642856309693,-121.236439317859,14093000,,,,,,14093000,,1395.0,104.0,170703060302,0,Shitike Creek,Shitike Creek at Warm Springs,shitike creek|9|008605|000104,OR
@@ -120,7 +120,7 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 119,Smith_Crescent_City_merge,,,Crescent City,41.791476896737954,-124.07615146764506,11532500,,,,,,11532500,,82.75,614.0,180101010404,0,Smith,Smith at Crescent City,smith|9|009917|000614,CA
 120,Snake_Hells_Canyon_merge,,,Hells Canyon Dam Id-or State Line,45.2544444444444,-116.696944444444,13290450,HCDI,,,,,13290450,,1435.0,73300.0,170601010102,0,Snake,Snake at Hells Canyon Dam Id-or State Line,snake|9|008565|073300,OR
 121,Steamboat_merge,,,Glide,43.3498420203775,-122.728941540616,14316700,SCRO,,,SCRO3,,14316700,44,1128.55,227.0,171003010706,0,Steamboat Creek,Steamboat Creek at Glide,steamboat creek|9|008871|000227,OR
-122,Sunshine_calc,,,Confluence,44.815823,-123.764509,,,,,,,,,499.5,,171002040501,0,Sunshine Creek,Sunshine Creek at Confluence,sunshine creek|9|009500|999999,OR
+122,Sunshine_calc,,,At Sunshine confluence (estimated),44.815823,-123.764509,,,,,,,,,499.5,11.9,171002040501,0,Sunshine Creek,Sunshine Cr at confluence (calc),sunshine creek|9|009500|999999,OR
 123,14188800,,,Scio,44.7120668725711,-122.77008784099,14188800,TRSO,,,,,14188800,,370.0,109.73,170900060705,0,Thomas Creek,Thomas Creek at Scio,thomas creek|9|009630|000110,OR
 124,Tualatin_West_Linn_merge,,,West Linn,45.3506755926263,-122.676204437708,14207500,WSLO,,,WSLO3,,14207500,45,85.61,706.0,170900100504,0,Tualatin,Tualatin at West Linn,tualatin|9|009914|000706,OR
 125,Tualatin_Farmington_merge,,32.0,Farmington,45.4498391762694,-122.951213761155,14206500,FRMO,,,FRMO3,,14206500,46,100.0,706.0,170900100404,0,Tualatin,Tualatin at Farmington,tualatin|9|009900|000706,OR

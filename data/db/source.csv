@@ -118,7 +118,6 @@ id,name,agency,fetch_url_id,calc_expression_id,timezone
 121,WSNO3,NWS,19,,
 122,14097100,USGS,,,
 123,WFHO3,NWS,69,,
-124,White_Oregon_calc,Calculation,,8,
 125,UNDW1,NWS,56,,
 126,14187000,USGS,,,
 128,EUGO3,NWS,116,,
