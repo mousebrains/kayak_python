@@ -1,14 +1,18 @@
 # conf/sites/levels-mousebrains-com
 # Deployed to /etc/nginx/sites-available/levels-mousebrains-com.
 #
-# Legacy/transition hostname for the kayak project — the actual host
-# that levels.wkcc.org CNAMEs to. The cert primary CN remains
-# levels.mousebrains.com (subject of the shared 3-SAN cert at
-# /etc/letsencrypt/live/levels.mousebrains.com/). Eventually this
-# block will become a 301 redirect to levels.wkcc.org once the per-host
-# access log shows legacy traffic has decayed.
+# Historical hostname for the kayak project. Permanent 301 to the
+# canonical levels.wkcc.org as of 2026-05-19. The cert primary CN is
+# still levels.mousebrains.com (subject of the shared 3-SAN cert at
+# /etc/letsencrypt/live/levels.mousebrains.com/), so this vhost owns
+# the cert paths; the other two vhosts inherit the same files.
+#
+# Path + query are preserved so old bookmarks land on the matching
+# URL under levels.wkcc.org. After ~6-12 months of low legacy traffic
+# in /var/log/nginx/levels-mousebrains.access.log, the vhost can be
+# decommissioned entirely (return 410 or drop the vhost).
 
-# Redirect HTTP → HTTPS
+# Redirect HTTP → HTTPS so the 301 response carries HSTS.
 server {
     listen 80;
     listen [::]:80;
@@ -31,21 +35,14 @@ server {
 
     server_name levels.mousebrains.com;
 
-    # Per-host log only. fail2ban jails read the levels-*.{access,error}.log
-    # glob (jail.local + jail.d/kayak-edit*.conf), so adding a fourth vhost
-    # later needs no fail2ban edit. Watch this file shrink as users migrate
-    # to levels.wkcc.org after DNS cuts over.
+    # Per-host log only — watch this file shrink as users migrate to
+    # the canonical levels.wkcc.org URL.
     access_log /var/log/nginx/levels-mousebrains.access.log kayak_timed;
     error_log  /var/log/nginx/levels-mousebrains.error.log;
 
-    # /_internal/ lives on the wkcc hosts (docs/done/PLAN_internal_dashboard.md Phase 2.4).
-    # `SITE_URL` is levels.wkcc.org, so the magic-link login flow lands on that
-    # host post-auth — mounting the dashboard here would break the round-trip.
-    # `^~` overrides the regex \.php$ block from levels-common.conf, blocking
-    # direct /_internal/index.php access on this legacy hostname.
-    location ^~ /_internal/ {
-        return 404;
-    }
+    # HSTS (+ a few other defensive headers) on the redirect response so
+    # legacy first-time visitors still get pinned to HTTPS.
+    include /etc/nginx/snippets/security-headers.conf;
 
-    include /etc/nginx/snippets/levels-common.conf;
+    return 301 https://levels.wkcc.org$request_uri;
 }

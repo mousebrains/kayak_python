@@ -1,13 +1,12 @@
 # conf/sites/levels-test-wkcc-org
 # Deployed to /etc/nginx/sites-available/levels-test-wkcc-org.
 #
-# Test hostname for the kayak project. CNAMEs to levels.mousebrains.com
-# at the DNS layer; the cert is the shared 3-SAN cert at
-# /etc/letsencrypt/live/levels.mousebrains.com/. Currently shares the
-# same root as production; will get its own root when staging tests
-# need to diverge.
+# Permanent 301 to canonical levels.wkcc.org as of 2026-05-19. When a
+# separate test instance is stood up, it will use a different hostname
+# (not levels-test.wkcc.org) — see docs/PLAN_three_instance_layout.md.
+# Hostname kept reserved on the 3-SAN cert in case it's reclaimed later.
 
-# Redirect HTTP → HTTPS
+# Redirect HTTP → HTTPS so the 301 response carries HSTS.
 server {
     listen 80;
     listen [::]:80;
@@ -34,30 +33,12 @@ server {
 
     server_name levels-test.wkcc.org;
 
-    # Per-host log only. fail2ban jails read the levels-*.{access,error}.log
-    # glob (jail.local + jail.d/kayak-edit*.conf), so adding a fourth vhost
-    # later needs no fail2ban edit.
     access_log /var/log/nginx/levels-test.access.log kayak_timed;
     error_log  /var/log/nginx/levels-test.error.log;
 
-    # /_internal/ — maintainer-only operator dashboard (docs/done/PLAN_internal_dashboard.md
-    # Phase 2.4). PHP enforces auth via require_maintainer(); nginx routes the
-    # two URIs and adds noindex headers. Test mirror of levels.wkcc.org —
-    # also serves the dashboard so pre-DNS-cutover testing has a working
-    # round-trip (login lands here via SITE_URL during the staging window).
-    location = /_internal/ {
-        rewrite ^ /_internal/index.php last;
-    }
-    location = /_internal/index.php {
-        limit_req zone=php burst=10 nodelay;
-        try_files $uri =404;
-        fastcgi_pass unix:/run/php/php-fpm.sock;
-        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-        include fastcgi_params;
-        add_header X-Robots-Tag "noindex, nofollow" always;
-        add_header Cache-Control "no-store, private" always;
-        include /etc/nginx/snippets/security-headers.conf;
-    }
+    # HSTS (+ a few other defensive headers) on the redirect response so
+    # first-time visitors still get pinned to HTTPS.
+    include /etc/nginx/snippets/security-headers.conf;
 
-    include /etc/nginx/snippets/levels-common.conf;
+    return 301 https://levels.wkcc.org$request_uri;
 }
