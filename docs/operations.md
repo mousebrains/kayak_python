@@ -16,7 +16,7 @@ breaks, the steps shouldn't depend on a network round-trip to GitHub.
 | App | Python (`src/kayak/`) + PHP (`php/`); two-layer architecture, see `CLAUDE.md`. |
 | Database | SQLite at `/home/pat/DB/kayak.db` (WAL mode). |
 | Web | nginx + PHP-FPM 8.4. Three vhosts: `levels.mousebrains.com`, `levels-test.wkcc.org`, `levels.wkcc.org`. |
-| Cert | Let's Encrypt 2-SAN at `/etc/letsencrypt/live/levels.mousebrains.com/` + bridge cert at `/etc/nginx/certs/levels.wkcc.org.{cert,privkey}` (the latter only during the DNS cutover window; see `DNS.CHANGEOVER.md`). |
+| Cert | Let's Encrypt 3-SAN at `/etc/letsencrypt/live/levels.mousebrains.com/` covering `levels.mousebrains.com`, `levels-test.wkcc.org`, `levels.wkcc.org`. Renewed via certbot's nginx (HTTP-01) authenticator. |
 | Scheduled work | 12 systemd timers — pipeline, backups, cert health, decimation, etc. See `deploy/SETUP.md` §timer schedule. |
 | Monitoring | healthchecks.io (heartbeats), ntfy.sh (push), msmtp → Gmail (email). Public status page at <https://status.mousebrains.com> (Better Stack hosted, CNAME → `statuspage.betteruptime.com`). |
 | Backups | `/home/pat/kayak/backups/` (hourly + weekly local) + Google Drive crypt (weekly off-site). |
@@ -93,9 +93,9 @@ mechanics, more readable in the audit log.
 | Signal | Path / unit | Configured cadence |
 |---|---|---|
 | Public status page | <https://status.mousebrains.com> | Better Stack hosted; surfaces the uptime + content-keyword monitors |
-| Health snapshot JSON | `https://levels.mousebrains.com/status.json` (rewrites to `php/status.php`) | On-demand; `Cache-Control: no-cache, max-age=10`. Per-agency freshness rollup + per-status gauge counts |
+| Health snapshot JSON | `https://levels.wkcc.org/status.json` (rewrites to `php/status.php`; also served from the two other vhosts) | On-demand; `Cache-Control: no-cache, max-age=10`. Per-agency freshness rollup + per-status gauge counts |
 | Internal dashboard | `https://levels.wkcc.org/_internal/` (also `levels-test.wkcc.org/_internal/`; `php/_internal/index.php`) | On-demand; maintainer-only via `editor_session`. Per-source freshness, recent CSP violations, aggregate counts, build mtime, DB size. `levels.mousebrains.com` returns 404 (login flow targets `levels.wkcc.org` per `SITE_URL`, so the dashboard host has to match) |
-| Public homepage | Better Stack monitor on the user-facing host | HEAD/GET 3-min interval (today: `levels-test.wkcc.org`; flip to `levels.wkcc.org` post-cutover) |
+| Public homepage | Better Stack monitor on `https://levels.wkcc.org/` | HEAD/GET 3-min interval |
 | Pipeline heartbeat | `kayak-pipeline.service` → `${HC_PIPELINE}` | Every hour at :12 |
 | Hourly backup heartbeat | `kayak-backup-hourly.service` → `${HC_BACKUP_HOURLY}` | Every hour at :38 |
 | Data-freshness | `kayak-healthcheck.service` → `${HC_HEALTHCHECK}` | Every hour at :45 |

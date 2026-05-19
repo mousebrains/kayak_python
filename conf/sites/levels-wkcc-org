@@ -2,17 +2,9 @@
 # Deployed to /etc/nginx/sites-available/levels-wkcc-org.
 #
 # Primary public hostname for the kayak project. CNAMEs to
-# levels.mousebrains.com at the DNS layer.
-#
-# Cert state during the DNS cutover window (per DNS.CHANGEOVER.md):
-# bridge with the DreamHost-issued LE cert at /etc/nginx/certs/ until DNS
-# propagates (~T+3 from the A→CNAME flip), then run
-#     certbot --nginx --expand --cert-name levels.mousebrains.com \
-#         -d levels.mousebrains.com -d levels-test.wkcc.org -d levels.wkcc.org
-# and flip these ssl_certificate paths back to
-# /etc/letsencrypt/live/levels.mousebrains.com/fullchain.pem (+ privkey.pem).
-# That gives a single 3-SAN cert renewed via HTTP-01. No DNS-01 dance,
-# no _acme-challenge CNAMEs at ClubExpress.
+# levels.mousebrains.com at the DNS layer. Shares the 3-SAN cert at
+# /etc/letsencrypt/live/levels.mousebrains.com/ with the other two vhosts;
+# certbot renews via HTTP-01 (nginx authenticator).
 
 # Redirect HTTP → HTTPS
 server {
@@ -31,11 +23,8 @@ server {
     listen 443 ssl; # managed by Certbot
     http2 on;
 
-    # Bridge cert during DNS cutover window — see header comment.
-    # Post-cutover (~T+3): switch back to the certbot-managed 3-SAN cert at
-    # /etc/letsencrypt/live/levels.mousebrains.com/.
-    ssl_certificate /etc/nginx/certs/levels.wkcc.org.cert;
-    ssl_certificate_key /etc/nginx/certs/levels.wkcc.org.privkey;
+    ssl_certificate /etc/letsencrypt/live/levels.mousebrains.com/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/levels.mousebrains.com/privkey.pem; # managed by Certbot
     include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
 

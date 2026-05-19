@@ -122,5 +122,5 @@ def test_outputs_carry_license_meta(session) -> None:
     state = json.loads(_build_reaches_state([r], set(), {}))
     for doc in (static, state):
         assert doc["_meta"]["license"] == "CC BY-NC 4.0"
-        assert doc["_meta"]["attribution"] == "levels.mousebrains.com"
+        assert doc["_meta"]["attribution"] == "levels.wkcc.org"
         assert doc["_meta"]["license_url"].startswith("https://creativecommons.org/")

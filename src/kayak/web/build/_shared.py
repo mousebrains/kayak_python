@@ -30,7 +30,7 @@ BRAND_COLOR_DARK = "#0d3057"
 _LICENSE_META = {
     "license": "CC BY-NC 4.0",
     "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
-    "attribution": "levels.mousebrains.com",
+    "attribution": "levels.wkcc.org",
     "notice": (
         "Metadata + calculated values: CC BY-NC 4.0. Observations: public domain at source."
     ),

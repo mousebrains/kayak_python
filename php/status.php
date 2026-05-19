@@ -31,10 +31,11 @@ header('Content-Type: application/json');
 header('Cache-Control: no-cache, max-age=10');
 
 // CORS allow-list (status.mousebrains.com is the hosted status page;
-// levels.mousebrains.com is the future internal dashboard host —
-// both can fetch /status.json cross-origin).
+// levels.wkcc.org is the canonical site and hosts the internal
+// dashboard; levels.mousebrains.com is the historical alias).
 $allowed_origins = [
     'https://status.mousebrains.com',
+    'https://levels.wkcc.org',
     'https://levels.mousebrains.com',
 ];
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';

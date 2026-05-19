@@ -2,7 +2,8 @@
 
 Per `PLAN_production_discipline.md` Tier 4 / `docs/done/PLAN_outstanding_followups.md`
 §6.2. These targets describe what "healthy" means for the live site
-(`levels.mousebrains.com`). Single operator, hobby project — these are
+(`levels.wkcc.org`; `levels.mousebrains.com` and `levels-test.wkcc.org`
+share the same nginx + DB). Single operator, hobby project — these are
 internal thresholds for "should I look at this," not external SLAs.
 
 When an SLO trends red, file it as an issue in the next operator review
@@ -21,7 +22,7 @@ stays up); read the status page and this doc together.
 
 | # | SLO | Target | Measurement | Where the signal lives |
 |---|---|---|---|---|
-| **A** | Site availability | ≥ **99.5% / 30d** (~3.6 h/month error budget) | Better Stack uptime monitor on `https://levels.mousebrains.com/`, 3-min interval, HTTP 2xx | Better Stack dashboard `Uptime / kayak` |
+| **A** | Site availability | ≥ **99.5% / 30d** (~3.6 h/month error budget) | Better Stack uptime monitor on `https://levels.wkcc.org/`, 3-min interval, HTTP 2xx | Better Stack dashboard `Uptime / kayak` |
 | **F** | Pipeline freshness per source | ≤ **2 h** since `latest_observation.observed_at` for active sources during their feed's expected cadence | `scripts/health-check.sh` exits non-zero on stale; surfaced via `kayak-healthcheck.service` heartbeat | `journalctl -u kayak-healthcheck` + healthchecks.io `kayak-healthcheck` check |
 | **B** | Backup RPO | ≤ **1 h** confirmed by a successful hourly snapshot | `kayak-backup-hourly.service` (hourly `*:38`) pings healthchecks.io on success; backup files land at `/home/pat/kayak/backups/backup-<UTC>.db.gz` | healthchecks.io `kayak-backup-hourly` check + `ls -la /home/pat/kayak/backups/` |
 | **D** | Build-time freshness | New static HTML written within **75 min** of the hourly pipeline tick (`kayak-pipeline.timer` runs at `*:12`, ~30 min budget for fetch + calc + build, +headroom) | `kayak-pipeline.service` heartbeat ping fires only after the build step exits 0 | healthchecks.io `kayak-pipeline` check + `stat /home/pat/public_html/Oregon.html` |
