@@ -56,6 +56,18 @@ _ABBR_TO_STATE = {v: k for k, v in _STATE_ABBREVS.items()}
 # States shown in the nav bar (Oregon + adjacent states)
 _NAV_STATES = {"Oregon", "Washington", "Idaho", "Nevada", "California"}
 
+
+def _state_slug(state_full_name: str) -> str:
+    """Return the file-name slug for a state-scoped page.
+
+    ``state_full_name`` is the full state name (e.g. "Montana", "New Mexico").
+    Returns the slug used in ``gauges.<slug>.html`` and its sitemap entry.
+    Single source of truth for the filename rule — keeps deploy.py's sitemap
+    URL, gauges.py's output filename, and shell.py's cross-link href aligned.
+    """
+    return state_full_name.lower().replace(" ", "_")
+
+
 # CSS is read once from the source tree and inlined into every page.
 # Path arithmetic: __file__ is .../src/kayak/web/build/_shared.py, so
 # .parent.parent reaches .../src/kayak/web — append "static" to land at

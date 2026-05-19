@@ -13,6 +13,7 @@ from kayak.web.build._shared import (
     BRAND_COLOR_DARK,
     _editor_feature_on,
     _og_meta,
+    _state_slug,
 )
 
 # Windy.com center coords for the "Weather" nav link, per active state.
@@ -320,10 +321,9 @@ def _build_placeholder_page(
     )
     links_html = f"<ul>\n{link_items}\n</ul>" if links else ""
     if gauge_state_pages and state in gauge_state_pages:
-        slug = state.lower().replace(" ", "_")
         live_link_html = (
             f'<p style="font-size:1.1em;margin:0 0 1em 0">'
-            f'<a href="/gauges.{slug}.html" '
+            f'<a href="/gauges.{_state_slug(state)}.html" '
             f'style="display:inline-flex;align-items:center;min-height:44px;font-weight:600">'
             f"→ Live {state} gauge readings (table)</a></p>"
         )

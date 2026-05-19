@@ -35,6 +35,7 @@ from kayak.web.build._shared import (
     _atomic_write,
     _css_link_tag,
     _load_css,
+    _state_slug,
 )
 from kayak.web.build.gauges import _write_gauges_page
 from kayak.web.build.geojson import (
@@ -424,8 +425,9 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
             if _write_gauges_page(session, all_latest, states, css_link, output_dir, state=abbrev):
                 full = _ABBR_TO_STATE[abbrev]
                 gauge_state_pages.add(full)
-                slug = full.lower().replace(" ", "_")
-                extra_sitemap_urls.append((f"{site}/gauges.{slug}.html", "hourly", "0.8"))
+                extra_sitemap_urls.append(
+                    (f"{site}/gauges.{_state_slug(full)}.html", "hourly", "0.8")
+                )
 
         # Links pages for all nav states (including Oregon). When a state
         # also has a gauges.<state>.html page, the placeholder gets a

@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from kayak.db.models import DataType, Gauge, LatestGaugeObservation
+from kayak.web.build._shared import _state_slug
 from kayak.web.build.gauges import _write_gauges_page
 from kayak.web.build.shell import _build_placeholder_page
 
@@ -169,3 +170,24 @@ def test_placeholder_page_default_no_gauge_state_pages_kwarg() -> None:
     """Back-compat: omitting the kwarg behaves like an empty set."""
     html = _build_placeholder_page(css_link="", states=["Oregon"], state="Oregon")
     assert "/gauges.oregon.html" not in html
+
+
+# ---------------------------------------------------------------------------
+# _state_slug — single source of truth for the gauges.<slug>.html filename
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("state_full", "expected_slug"),
+    [
+        ("Montana", "montana"),
+        ("Oregon", "oregon"),
+        ("Washington", "washington"),
+        ("Idaho", "idaho"),
+        ("New Mexico", "new_mexico"),  # multi-word: space → underscore
+        ("California", "california"),
+    ],
+)
+def test_state_slug(state_full: str, expected_slug: str) -> None:
+    """Pin the slug rule. deploy.py, gauges.py, and shell.py all call this."""
+    assert _state_slug(state_full) == expected_slug

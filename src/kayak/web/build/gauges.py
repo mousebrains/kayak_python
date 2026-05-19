@@ -20,6 +20,7 @@ from kayak.web.build._shared import (
     DATA_EXPIRY_THRESHOLD,
     DATA_STALE_THRESHOLD,
     _atomic_write,
+    _state_slug,
 )
 from kayak.web.build.levels import _build_filter_bar, _get_row_data
 from kayak.web.build.shell import _build_page
@@ -549,7 +550,7 @@ def _write_gauges_page(
         if not rows:
             logger.info("No gauges to render for state=%s; skipping page", state)
             return False
-        filename = f"gauges.{state_full.lower().replace(' ', '_')}.html"
+        filename = f"gauges.{_state_slug(state_full)}.html"
         title = f"River Gauges — {state_full}"
         current_state = state_full
     else:
