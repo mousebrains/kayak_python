@@ -2,6 +2,7 @@
 
 import html as html_mod
 from datetime import UTC, datetime
+from urllib.parse import quote as _urlquote
 
 from kayak.web.build._shared import (
     _FILTERS_JS_VERSION,
@@ -160,7 +161,14 @@ def _build_nav(
         cls = ' class="active"' if s == active_state else ""
         links.append(f'<a href="/{s}.html"{cls}>{abbrev}</a>')
     if picker_kind == "gauge":
-        links.append('<a href="/gauge_picker.php">Gauge<br>Picker</a>')
+        # Pre-init the picker's state filter to the current page's state
+        # when arriving from gauges.<state>.html. State-scoped pages set
+        # active_state to the full state name; the all-pages /gauges.html
+        # passes active_state="" so no param is appended.
+        picker_href = "/gauge_picker.php"
+        if active_state:
+            picker_href += f"?state={_urlquote(active_state)}"
+        links.append(f'<a href="{picker_href}">Gauge<br>Picker</a>')
     else:
         links.append('<a href="/picker.php">Reach<br>Picker</a>')
     weather_url = _STATE_WEATHER_URL.get(active_state, _DEFAULT_WEATHER_URL)
