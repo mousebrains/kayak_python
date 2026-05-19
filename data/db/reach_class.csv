@@ -156,7 +156,7 @@ id,reach_id,name,low,low_data_type,high,high_data_type
 155,215,III+(IV),3000.0,flow,8000.0,flow
 156,216,III-IV,400.0,flow,2000.0,flow
 157,217,III+(V),400.0,flow,1650.0,flow
-158,218,II(III),900.0,flow,3000.0,flow
+158,218,II(III),540.0,flow,1800.0,flow
 159,220,III,900.0,flow,7000.0,flow
 160,221,V+,3.0,gauge,5.0,gauge
 161,223,IV(V),5.0,gauge,7.0,gauge
