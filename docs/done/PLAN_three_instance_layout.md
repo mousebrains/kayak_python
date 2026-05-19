@@ -1,10 +1,16 @@
 # Plan — Three-instance host layout (prod / test / tpw)
 
-**Status:** Skeleton drafted 2026-05-15 against `main` at `c1e9789` —
-post-v1.0.0-release work, scheduled to start around T+30 (≈ 2026-06-21
-if v1.0.0 tags on 2026-05-21). This is an **iteratable skeleton**, not
-a finished plan. Sections marked **TBD** are intentional placeholders
-to be filled in across the next ~month of iter passes.
+**Status: SUPERSEDED 2026-05-19.** The 2026-05-19 hostname-cutover
+session resolved the two open instance questions by permanent 301:
+`levels.mousebrains.com` and `levels-test.wkcc.org` both redirect to
+canonical `levels.wkcc.org` (commit `b0cc671`). Neither is a separate
+instance; "tpw" (levels.mousebrains.com) is now just a legacy alias on
+the way to decommissioning. If a future test instance is stood up, it
+will use a new hostname rather than reclaiming `levels-test.wkcc.org`.
+Atomic-deploy motivation (the second driver of this plan) survives as
+a smaller standalone problem, not a multi-instance project.
+
+(Original skeleton preserved below for reference.)
 
 > **Cross-check:** plan drafted 2026-05-15. Sequel to
 > `docs/done/PLAN_outstanding_followups.md` § 6.3 ("GHA staging

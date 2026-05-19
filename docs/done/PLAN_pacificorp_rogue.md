@@ -1,6 +1,6 @@
 # Plan — PacifiCorp Rogue Bypass parser + Rogue-above-Prospect calc gauge
 
-**Status:** Shipped 2026-05-17 (commit `b23836e` on `main`, rebased onto the same-day `2d03c9e` nightly metadata snapshot). Awaiting live-system review.
+**Status:** Shipped 2026-05-17 (commit `b23836e` on `main`, rebased onto the same-day `2d03c9e` nightly metadata snapshot). Live-system review passed 2026-05-19 — plan moved to `docs/done/`.
 
 ## Implementation notes
 
