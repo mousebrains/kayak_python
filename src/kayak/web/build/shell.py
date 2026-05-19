@@ -297,8 +297,21 @@ def _build_page(
 </html>"""
 
 
-def _build_placeholder_page(css_link: str, states: list[str], state: str) -> str:
-    """Build a links page for a non-primary state."""
+def _build_placeholder_page(
+    css_link: str,
+    states: list[str],
+    state: str,
+    *,
+    gauge_state_pages: set[str] | None = None,
+) -> str:
+    """Build a links page for a non-primary state.
+
+    ``gauge_state_pages`` is the set of full state names for which a
+    state-scoped ``gauges.<slug>.html`` was emitted on this build. When
+    *state* is in that set, a leading anchor links from this placeholder
+    to the corresponding live-data table — the natural cross-link from
+    the external-resource index to in-site gauge data.
+    """
     nav_html = _build_nav(states, active_state=state)
     links = _STATE_LINKS.get(state, [])
     link_items = "\n".join(
@@ -306,6 +319,16 @@ def _build_placeholder_page(css_link: str, states: list[str], state: str) -> str
         for label, url in links
     )
     links_html = f"<ul>\n{link_items}\n</ul>" if links else ""
+    if gauge_state_pages and state in gauge_state_pages:
+        slug = state.lower().replace(" ", "_")
+        live_link_html = (
+            f'<p style="font-size:1.1em;margin:0 0 1em 0">'
+            f'<a href="/gauges.{slug}.html" '
+            f'style="display:inline-flex;align-items:center;min-height:44px;font-weight:600">'
+            f"→ Live {state} gauge readings (table)</a></p>"
+        )
+    else:
+        live_link_html = ""
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -332,6 +355,7 @@ def _build_placeholder_page(css_link: str, states: list[str], state: str) -> str
 </header>
 <main>
 <h2>{state}</h2>
+{live_link_html}
 {links_html}
 </main>
 {_build_footer_html()}

@@ -26,6 +26,7 @@ from kayak.db.gauges import get_calculated_gauge_ids
 from kayak.db.models import DataType, Gauge, HucName, LatestGaugeObservation, Reach
 from kayak.db.reaches import all_state_names, reaches_query
 from kayak.web.build._shared import (
+    _ABBR_TO_STATE,
     _CSS_PATH,
     _FILTERS_JS_PATH,
     _JS_PATH,
@@ -407,20 +408,34 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
         # rather than re-querying.
         _write_gauges_page(session, all_latest, states, css_link, output_dir)
 
-        # State-scoped gauges pages for states without reaches (MT today).
-        # No `state in states` guard — `all_state_names()` only returns
-        # states with visible reaches, so MT-without-reaches is invisible
-        # to that list. The builder's internal row-count guard returns
-        # False (no page written) when the state has no recent gauge data.
+        # State-scoped gauges pages. The builder's internal row-count guard
+        # returns False (no page written) when the state has no recent
+        # gauge data, so this loop is safe to extend — adding a new state
+        # to the tuple is harmless if there's nothing to render.
+        #
+        # No `state in states` guard either: `all_state_names()` only
+        # returns states with *visible reaches*, so e.g. MT (gauges-only,
+        # no reaches in this PR) wouldn't appear there. The builder's
+        # internal guard handles it.
         site = SITE_URL.rstrip("/")
         extra_sitemap_urls: list[tuple[str, str, str]] = []
-        if _write_gauges_page(session, all_latest, states, css_link, output_dir, state="MT"):
-            extra_sitemap_urls.append((f"{site}/gauges.montana.html", "hourly", "0.8"))
+        gauge_state_pages: set[str] = set()  # full state names of pages written
+        for abbrev in ("MT", "OR", "WA", "ID"):
+            if _write_gauges_page(session, all_latest, states, css_link, output_dir, state=abbrev):
+                full = _ABBR_TO_STATE[abbrev]
+                gauge_state_pages.add(full)
+                slug = full.lower().replace(" ", "_")
+                extra_sitemap_urls.append((f"{site}/gauges.{slug}.html", "hourly", "0.8"))
 
-        # Links pages for all nav states (including Oregon)
+        # Links pages for all nav states (including Oregon). When a state
+        # also has a gauges.<state>.html page, the placeholder gets a
+        # leading "Live gauges (table)" anchor — discoverability for the
+        # state-scoped live-data view from the per-state landing page.
         for state in _NAV_STATES:
             if state in states:
-                links_page = _build_placeholder_page(css_link, states, state)
+                links_page = _build_placeholder_page(
+                    css_link, states, state, gauge_state_pages=gauge_state_pages
+                )
                 _atomic_write(output_dir / f"{state}.html", links_page)
 
         _emit_sitemap(output_dir, states, index_reaches, session, extra_urls=extra_sitemap_urls)
