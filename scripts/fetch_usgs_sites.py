@@ -1,8 +1,11 @@
 """Fetch USGS active stream gauge metadata via the OGC API.
 
 Downloads site metadata from api.waterdata.usgs.gov for OR, WA, ID, NV, CA,
-filters to sites north of 40° latitude and west of -111° longitude, and stores
-them in a 'usgs_site' table in the gauge metadata cache.
+MT, filters to sites north of 40° latitude and west of -111° longitude
+(skipped for MT, whose Pacific drainage extends east of -111° into Glacier
+NP and the Bob Marshall — the HUC filter applied downstream is the real
+boundary), and stores them in a 'usgs_site' table in the gauge metadata
+cache.
 
 Also queries time-series-metadata to record the most recent data date for
 each site (flow, gage height, or temperature).
@@ -16,7 +19,7 @@ import time
 
 import requests
 
-STATES = ["Oregon", "Washington", "Idaho", "Nevada", "California"]
+STATES = ["Oregon", "Washington", "Idaho", "Nevada", "California", "Montana"]
 OGC_BASE = "https://api.waterdata.usgs.gov/ogcapi/v0"
 
 CREATE_TABLE = """
@@ -98,7 +101,11 @@ def fetch_state(state_name, api_key=None):
             else:
                 continue
 
-            if lat < 40.0 or lon > -111.0:
+            # Geographic bounding box for the OR/WA/ID/NV/CA cluster.
+            # Skipped for MT because HUC4 1701 (Kootenai/Clark Fork/Flathead)
+            # extends east of -111° into Glacier NP and the Bob Marshall;
+            # the downstream HUC filter is the actual boundary for MT.
+            if state_name != "Montana" and (lat < 40.0 or lon > -111.0):
                 continue
 
             rows.append(
