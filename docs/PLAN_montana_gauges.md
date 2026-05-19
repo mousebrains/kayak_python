@@ -61,7 +61,7 @@ SELECT site_no, station_nm, latitude, longitude, huc_cd,
        drain_area_sq_mi, altitude_ft,
        last_flow_date, last_gage_date, last_temp_date
 FROM usgs_site
-WHERE state_cd = 'MT'
+WHERE state_cd = '30'  -- FIPS code for Montana (state_cd stores FIPS, not abbreviations)
   AND huc_cd LIKE '1701%'
   AND (
     last_flow_date >= date('now','-7 days')
