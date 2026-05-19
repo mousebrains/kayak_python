@@ -8,6 +8,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-05-19
+
 ### Added
 - **Cert-expiry monitor** (P0.2 of `docs/done/PLAN_pre_release_followup.md`):
   daily live TLS probe via `kayak-cert-expiry.timer` (User=pat, 3-attempt
