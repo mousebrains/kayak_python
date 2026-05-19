@@ -559,6 +559,9 @@ function _render_reach_map(array $reach, ?array $gauge): array
     $pts_json = htmlspecialchars(json_encode($map_points));
     echo '<div id="reach-map" style="height:400px;margin-top:1rem;border:1px solid #ccc"'
         . ' data-points="' . $pts_json . '"';
+    if ($gauge && isset($gauge['id'])) {
+        echo ' data-gauge-id="' . (int)$gauge['id'] . '"';
+    }
     if ($track) {
         $track_json = htmlspecialchars(json_encode($track));
         echo ' data-track="' . $track_json . '"';

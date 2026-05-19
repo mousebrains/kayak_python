@@ -185,14 +185,26 @@ function accessPopup(p){
 }
 const bounds=[];
 const colors={'Put-in':'#1a7a1a','Gauge':'#1b5591','Take-out':'#b30000'};
+const gaugeId=parseInt(el.dataset.gaugeId||'0',10);
 for(const k in pts){
   const c=pts[k].split(',');
   const ll=[parseFloat(c[0]),parseFloat(c[1])];
   const color=colors[k]||'#1b5591';
-  const ic=L.divIcon({className:'',html:'<div style="background:'+color+';color:#fff;padding:2px 6px;border-radius:3px;font:bold 12px sans-serif;white-space:nowrap;cursor:pointer">'+k+'</div>',iconAnchor:[0,12]});
-  const m=L.marker(ll,{icon:ic}).addTo(map);
+  const dot=L.circleMarker(ll,{radius:6,fillColor:color,color:'#222',weight:1,fillOpacity:0.95}).addTo(map);
+  dot.bindTooltip(k,{permanent:true,direction:'right',offset:[6,0],className:'map-label',interactive:true});
   bounds.push(ll);
-  (function(lat,lon){m.on('click',function(){window.open('https://www.google.com/maps?q='+lat+','+lon,'_blank')})})(ll[0],ll[1]);
+  (function(lat,lon,label){
+    const onClick=function(){
+      if(label==='Gauge' && gaugeId){
+        window.location.href='/gauge.php?id='+gaugeId;
+      }else{
+        window.open('https://www.google.com/maps?q='+lat+','+lon,'_blank');
+      }
+    };
+    dot.on('click',onClick);
+    const tt=dot.getTooltip();
+    if(tt)tt.on('click',onClick);
+  })(ll[0],ll[1],k);
 }
 if(track){
   L.polyline(track,{color:trackColor,weight:6,opacity:0.6}).addTo(map);

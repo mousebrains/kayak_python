@@ -484,7 +484,8 @@ function _render_description_fields_and_map(array $reach, array $related, array 
     $geom = $reach['geom'] ?? null;
     if (count($map_points) >= 1 || $geom) {
         echo '</table>';
-        $has_map = gm_render_map($map_points, $geom, $track_color);
+        $gauge_id_for_map = ($gauge && isset($gauge['id'])) ? (int)$gauge['id'] : null;
+        $has_map = gm_render_map($map_points, $geom, $track_color, [], $gauge_id_for_map);
         echo '<table class="desc-table">';
     }
 

@@ -39,6 +39,11 @@ function gm_head_links(): string
  *               only — Point reaches should be skipped by the caller).
  *               location/classes/status are popup-only metadata; status
  *               drives the polyline colour ('low'|'okay'|'high'|'unknown').
+ * @param ?int   $gauge_id  When set, emitted as data-gauge-id on the map
+ *               div; feature-map.js routes clicks on the 'Gauge' marker
+ *               to /gauge.php?id=N instead of Google Maps. Omit on pages
+ *               where the gauge marker should still open Google Maps
+ *               (e.g. gauge.php itself).
  * @return bool  True if a map was emitted. Caller uses this to decide whether
  *               to enqueue leaflet.js + feature-map.js at end of body.
  */
@@ -46,7 +51,8 @@ function gm_render_map(
     array $points,
     ?string $geom = null,
     string $track_color = '#2196F3',
-    array $reach_tracks = []
+    array $reach_tracks = [],
+    ?int $gauge_id = null
 ): bool {
     if (empty($points) && empty($geom) && empty($reach_tracks)) {
         return false;
@@ -107,6 +113,10 @@ function gm_render_map(
     $dam_attr = htmlspecialchars($osmb_url('osmb-dams.geojson'));
     $acc_attr = htmlspecialchars($osmb_url('osmb-access-sites.geojson'));
 
+    $gauge_id_attr = $gauge_id !== null
+        ? ' data-gauge-id="' . $gauge_id . '"'
+        : '';
+
     echo '<div id="feature-map"'
         . ' style="height:350px;margin-top:1rem;border:1px solid #ccc"'
         . ' data-points="' . $points_attr . '"'
@@ -116,6 +126,7 @@ function gm_render_map(
         . ' data-osmb-obstructions-url="' . $obs_attr . '"'
         . ' data-osmb-dams-url="' . $dam_attr . '"'
         . ' data-osmb-access-url="' . $acc_attr . '"'
+        . $gauge_id_attr
         . '></div>';
     return true;
 }
