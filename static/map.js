@@ -187,7 +187,11 @@ const BASE_LAYERS={Topo:topo,Street:street,Satellite:sat};
 function fail(msg){
   map.setView(DEFAULT_VIEW,DEFAULT_ZOOM);
   const ctl=L.control({position:'topright'});
-  ctl.onAdd=function(){const d=L.DomUtil.create('div','map-filter');d.innerHTML='<div class="mf-err">'+esc(msg)+'</div>';return d;};
+  ctl.onAdd=function(){
+    const d=L.DomUtil.create('div','map-error');
+    d.textContent=msg;
+    return d;
+  };
   ctl.addTo(map);
 }
 
@@ -620,37 +624,40 @@ function renderMap(geom,state,gaugesGeom,gaugesState,osmbData){
     }
   }
 
-  // Combined base + overlay control — Leaflet's stock WMS-style layer
-  // picker handles the add/remove side; we only need to keep our
-  // shadow state (showGauges, osmbVisible) and the URL hash in sync.
-  // Empty swatches use inline style — CSP allows style-src 'unsafe-inline'.
-  const overlays={};
-  if(hasGaugeLayer)overlays['Gauges']=gaugeLayer;
-  OSMB_LAYER_DEFS.forEach(function(d){
-    const lyr=osmbLayers[d.key];
-    if(!lyr)return;
-    const swatch='<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:'+d.color+';border:1px solid rgba(0,0,0,.15);margin-right:6px;vertical-align:middle"></span>';
-    overlays[swatch+d.label]=lyr;
-  });
-  L.control.layers(BASE_LAYERS,overlays,{collapsed:true}).addTo(map);
-
-  map.on('overlayadd',function(e){
-    if(e.layer===gaugeLayer)showGauges=true;
-    OSMB_LAYER_DEFS.forEach(function(d){
-      if(e.layer===osmbLayers[d.key])osmbVisible[d.key]=true;
-    });
+  // Base map + overlay toggles live in the unified filter panel (built by
+  // addFilterControl). The panel owns its own state via these callbacks —
+  // we mutate outer-scope showGauges / osmbVisible and feed writeHash so
+  // the URL hash stays in sync.
+  function onBaseChange(name){
+    for(const k in BASE_LAYERS){
+      if(k!==name && map.hasLayer(BASE_LAYERS[k]))map.removeLayer(BASE_LAYERS[k]);
+    }
+    BASE_LAYERS[name].addTo(map);
+  }
+  function onOverlayToggle(key,on){
+    if(key==='gauges'){
+      showGauges=on;
+      if(on)gaugeLayer.addTo(map);else map.removeLayer(gaugeLayer);
+    }else{
+      osmbVisible[key]=on;
+      const lyr=osmbLayers[key];
+      if(!lyr)return;
+      if(on)lyr.addTo(map);else map.removeLayer(lyr);
+    }
     applyZOrder();
     writeHash(sSet,cSet,showGauges,osmbVisible);
-  });
-  map.on('overlayremove',function(e){
-    if(e.layer===gaugeLayer)showGauges=false;
-    OSMB_LAYER_DEFS.forEach(function(d){
-      if(e.layer===osmbLayers[d.key])osmbVisible[d.key]=false;
-    });
-    writeHash(sSet,cSet,showGauges,osmbVisible);
-  });
+  }
 
-  countEl=addFilterControl(sSet,cSet,refilter);
+  countEl=addFilterControl(sSet,cSet,refilter,{
+    baseLayers:BASE_LAYERS,
+    currentBase:'Street',
+    onBaseChange:onBaseChange,
+    hasGaugeLayer:hasGaugeLayer,
+    showGauges:showGauges,
+    osmbLayers:osmbLayers,
+    osmbVisible:osmbVisible,
+    onOverlayToggle:onOverlayToggle,
+  });
   refilter();
 }
 
@@ -779,24 +786,69 @@ function accessPopup(p){
   return html;
 }
 
-function addFilterControl(sSet,cSet,onChange){
+function addFilterControl(sSet,cSet,onChange,opts){
   const ctl=L.control({position:'topright'});
   let countEl;
   ctl.onAdd=function(){
-    const wrap=L.DomUtil.create('div','');
+    const wrap=L.DomUtil.create('div','map-filter-wrap');
     const toggle=L.DomUtil.create('button','map-filter-toggle',wrap);
     toggle.type='button';
-    toggle.textContent='Filters';
     toggle.setAttribute('aria-expanded','false');
+    toggle.setAttribute('aria-label','Map layers and filters');
+    const t1=L.DomUtil.create('span','mft-line',toggle);t1.textContent='Layers';
+    const t2=L.DomUtil.create('span','mft-line',toggle);t2.textContent='Filters';
+    const tch=L.DomUtil.create('span','mft-chevron',toggle);
+    tch.setAttribute('aria-hidden','true');
+    tch.textContent='▾';
 
     const panel=L.DomUtil.create('div','map-filter',wrap);
     panel.setAttribute('role','region');
-    panel.setAttribute('aria-label','Map filters');
+    panel.setAttribute('aria-label','Map layers and filters');
 
+    // Base map — single-select pill row.
+    const bFs=L.DomUtil.create('fieldset','',panel);
+    L.DomUtil.create('legend','',bFs).textContent='Base map';
+    const bPills=L.DomUtil.create('div','filter-pills',bFs);
+    Object.keys(opts.baseLayers).forEach(function(name){
+      const lab=L.DomUtil.create('label','',bPills);
+      const r=L.DomUtil.create('input','',lab);
+      r.type='radio';r.name='map-base';r.value=name;
+      r.checked=(name===opts.currentBase);
+      r.addEventListener('change',function(){
+        if(r.checked)opts.onBaseChange(name);
+      });
+      lab.appendChild(document.createTextNode(name));
+    });
+
+    // Overlays — stacked checkboxes; skip layers that failed to load.
+    const ovFs=L.DomUtil.create('fieldset','mf-stacked',panel);
+    L.DomUtil.create('legend','',ovFs).textContent='Overlays';
+    if(opts.hasGaugeLayer){
+      const lab=L.DomUtil.create('label','',ovFs);
+      const cb=L.DomUtil.create('input','',lab);
+      cb.type='checkbox';cb.checked=opts.showGauges;
+      cb.addEventListener('change',function(){opts.onOverlayToggle('gauges',cb.checked);});
+      const sw=L.DomUtil.create('span','swatch',lab);
+      sw.style.background=COLORS.unknown;
+      lab.appendChild(document.createTextNode('Gauges'));
+    }
+    OSMB_LAYER_DEFS.forEach(function(d){
+      if(!opts.osmbLayers[d.key])return;
+      const lab=L.DomUtil.create('label','',ovFs);
+      const cb=L.DomUtil.create('input','',lab);
+      cb.type='checkbox';cb.checked=!!opts.osmbVisible[d.key];
+      cb.addEventListener('change',function(){opts.onOverlayToggle(d.key,cb.checked);});
+      const sw=L.DomUtil.create('span','swatch',lab);
+      sw.style.background=d.color;
+      lab.appendChild(document.createTextNode(d.label));
+    });
+
+    // Status — pill row with colored swatch.
     const sFs=L.DomUtil.create('fieldset','',panel);
     L.DomUtil.create('legend','',sFs).textContent='Status';
+    const sPills=L.DomUtil.create('div','filter-pills',sFs);
     STATUSES.forEach(function(s){
-      const lab=L.DomUtil.create('label','',sFs);
+      const lab=L.DomUtil.create('label','',sPills);
       const cb=L.DomUtil.create('input','',lab);
       cb.type='checkbox';cb.value=s;cb.checked=sSet.has(s);
       cb.addEventListener('change',function(){
@@ -808,25 +860,38 @@ function addFilterControl(sSet,cSet,onChange){
       lab.appendChild(document.createTextNode(s.charAt(0).toUpperCase()+s.slice(1)));
     });
 
+    // Class — pill row, label only.
     const cFs=L.DomUtil.create('fieldset','',panel);
     L.DomUtil.create('legend','',cFs).textContent='Class';
+    const cPills=L.DomUtil.create('div','filter-pills',cFs);
     CLASS_TIERS.forEach(function(t){
-      const lab=L.DomUtil.create('label','',cFs);
+      const lab=L.DomUtil.create('label','',cPills);
       const cb=L.DomUtil.create('input','',lab);
       cb.type='checkbox';cb.value=t;cb.checked=cSet.has(t);
       cb.addEventListener('change',function(){
         if(cb.checked)cSet.add(t);else cSet.delete(t);
         onChange();
       });
-      lab.appendChild(document.createTextNode(' '+t));
+      lab.appendChild(document.createTextNode(t));
     });
 
     countEl=L.DomUtil.create('div','mf-count',panel);
     countEl.setAttribute('aria-live','polite');
 
+    // Sticky-chevron overflow indicator — toggled via .has-overflow when
+    // panel content exceeds visible height. iOS scrollbars stay hidden
+    // until the user touches the panel, so this is the discoverable cue.
+    function updateOverflowHint(){
+      panel.classList.toggle('has-overflow', panel.scrollHeight - panel.clientHeight > 4);
+    }
+    if(typeof ResizeObserver==='function'){
+      new ResizeObserver(updateOverflowHint).observe(panel);
+    }
+
     toggle.addEventListener('click',function(){
       const open=panel.classList.toggle('is-open');
       toggle.setAttribute('aria-expanded',open?'true':'false');
+      if(open)requestAnimationFrame(updateOverflowHint);
     });
 
     L.DomEvent.disableClickPropagation(wrap);

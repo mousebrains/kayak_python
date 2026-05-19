@@ -383,21 +383,30 @@ def _build_map_page(
 <style>
 #map {{height:calc(100vh - 5rem);width:100%;}}
 main {{padding:0;max-width:none;}}
-.map-filter{{background:var(--c-surface);padding:6px 10px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.3);font-size:.85rem;color:var(--c-text);max-width:13rem}}
-.map-filter fieldset{{border:0;padding:0;margin:0 0 .35rem}}
-.map-filter legend{{font-weight:700;font-size:.75rem;text-transform:uppercase;letter-spacing:.02em;color:var(--c-text-muted);padding:0 0 2px}}
-.map-filter label{{display:flex;align-items:center;gap:6px;padding:2px 0;min-height:1.6rem;cursor:pointer}}
-.map-filter input[type=checkbox]{{margin:0;flex:0 0 auto}}
-.map-filter .swatch{{display:inline-block;width:10px;height:10px;border-radius:2px;border:1px solid rgba(0,0,0,.15)}}
-.map-filter .mf-count{{font-size:.75rem;color:var(--c-text-muted);padding-top:2px;border-top:1px solid var(--c-border-light);margin-top:.35rem}}
-.map-filter .mf-err{{color:var(--c-low);font-size:.75rem}}
-.map-filter-toggle{{display:none;background:var(--c-surface);padding:6px 10px;border:0;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.3);font-size:.85rem;cursor:pointer}}
-@media(max-width:640px){{
-  .map-filter-toggle{{display:block}}
-  .map-filter{{display:none}}
-  .map-filter.is-open{{display:block}}
-  .map-filter label{{min-height:44px}}
-}}
+/* Unified Layers/Filters control. Pill visuals come from .filter-pills
+   in style.css (shared with picker.php + state filter bars); only
+   map-specific chrome lives here. Wrap is a flex column with stretch
+   so the toggle hugs its content when collapsed and grows to panel
+   width when expanded. */
+.map-filter-wrap{{display:flex;flex-direction:column;background:var(--c-surface);border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.3);overflow:hidden;max-width:16rem}}
+.map-filter-toggle{{display:flex;flex-direction:column;align-items:center;background:transparent;border:0;padding:6px 12px;font-size:.8rem;cursor:pointer;color:var(--c-text);line-height:1.2;font-family:inherit}}
+.map-filter-toggle .mft-line{{display:block}}
+.map-filter-toggle .mft-chevron{{font-size:.75rem;color:var(--c-text-muted);margin-top:2px;transition:transform .15s}}
+.map-filter-toggle[aria-expanded="true"] .mft-chevron{{transform:rotate(180deg)}}
+.map-filter{{display:none;border-top:1px solid var(--c-border-light);padding:8px 12px;font-size:.85rem;color:var(--c-text);max-height:calc(100dvh - 6rem);overflow-y:auto;scrollbar-width:thin;position:relative}}
+.map-filter.is-open{{display:block}}
+.map-filter fieldset{{border:0;padding:0;margin:0 0 .5rem}}
+.map-filter legend{{font-weight:700;font-size:.7rem;text-transform:uppercase;letter-spacing:.02em;color:var(--c-text-muted);padding:0 0 3px}}
+.map-filter .mf-stacked label{{display:flex;align-items:center;gap:6px;padding:2px 0;min-height:1.6rem;cursor:pointer}}
+.map-filter .mf-stacked input{{margin:0;flex:0 0 auto}}
+.map-filter .mf-count{{font-size:.75rem;color:var(--c-text-muted);padding-top:4px;border-top:1px solid var(--c-border-light);margin-top:.35rem}}
+/* Sticky overflow indicator — added by JS when content exceeds panel
+   height; iOS scrollbars stay hidden until touched, so this is the
+   primary affordance. Native scrollbar still appears on top of this. */
+.map-filter::after{{content:'▾';display:none;position:sticky;bottom:0;text-align:center;font-size:.85rem;line-height:1;color:var(--c-text-muted);background:linear-gradient(to top,var(--c-surface) 75%,rgba(0,0,0,0));padding:6px 0 3px;pointer-events:none;margin-top:-8px}}
+.map-filter.has-overflow::after{{display:block}}
+.map-error{{background:var(--c-surface);padding:8px 12px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.3);color:var(--c-low);font-size:.85rem;max-width:14rem}}
+@media(max-width:640px){{.map-filter .mf-stacked label{{min-height:36px}}}}
 /* Whole-popup link: zero leaflet's default content margin and move the
    spacing into the anchor's padding instead, so every visible pixel of
    the popup body is inside the <a> and tappable. */
