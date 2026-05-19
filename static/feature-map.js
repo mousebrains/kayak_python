@@ -76,6 +76,7 @@ L.control.layers(
   overlays,
   {collapsed:true}
 ).addTo(map);
+L.control.scale({imperial:true,metric:false}).addTo(map);
 
 // Lazy-fetch on first toggle. Markers stream in after the layer is
 // already on the map; the brief "empty layer for a second" gap is

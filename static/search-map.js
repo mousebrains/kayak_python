@@ -17,6 +17,7 @@ const satellite=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/service
   attribution:'Esri',maxZoom:19});
 topo.addTo(map);
 L.control.layers({'Topo':topo,'Street':street,'Satellite':satellite}).addTo(map);
+L.control.scale({imperial:true,metric:false}).addTo(map);
 function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 const bounds=[];
 reaches.forEach(function(r){

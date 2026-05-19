@@ -175,6 +175,7 @@ const topo=L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZo
 const street=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'OpenStreetMap'});
 const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,attribution:'Esri'});
 street.addTo(map);
+L.control.scale({imperial:true,metric:false}).addTo(map);
 // Base tiles are constant; overlay layers (gauges + OSMB) are built
 // inside renderMap once their JSON loads, so the combined layer
 // control is constructed there too. BASE_LAYERS gets passed in.

@@ -14,6 +14,7 @@ const satellite=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/service
   attribution:'Esri',maxZoom:19});
 topo.addTo(map);
 L.control.layers({'Topo':topo,'Street':street,'Satellite':satellite}).addTo(map);
+L.control.scale({imperial:true,metric:false}).addTo(map);
 const bounds=[];
 const colors={'Put-in':'#1a7a1a','Gauge':'#1b5591','Take-out':'#b30000'};
 const gaugeId=parseInt(el.dataset.gaugeId||'0',10);
