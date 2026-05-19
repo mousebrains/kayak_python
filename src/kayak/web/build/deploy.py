@@ -414,12 +414,8 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
         # False (no page written) when the state has no recent gauge data.
         site = SITE_URL.rstrip("/")
         extra_sitemap_urls: list[tuple[str, str, str]] = []
-        if _write_gauges_page(
-            session, all_latest, states, css_link, output_dir, state="MT"
-        ):
-            extra_sitemap_urls.append(
-                (f"{site}/gauges.montana.html", "hourly", "0.8")
-            )
+        if _write_gauges_page(session, all_latest, states, css_link, output_dir, state="MT"):
+            extra_sitemap_urls.append((f"{site}/gauges.montana.html", "hourly", "0.8"))
 
         # Links pages for all nav states (including Oregon)
         for state in _NAV_STATES:
@@ -427,9 +423,7 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
                 links_page = _build_placeholder_page(css_link, states, state)
                 _atomic_write(output_dir / f"{state}.html", links_page)
 
-        _emit_sitemap(
-            output_dir, states, index_reaches, session, extra_urls=extra_sitemap_urls
-        )
+        _emit_sitemap(output_dir, states, index_reaches, session, extra_urls=extra_sitemap_urls)
     finally:
         session.close()
 

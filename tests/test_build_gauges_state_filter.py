@@ -42,8 +42,7 @@ def _seed_obs(session, gauge_id: int, value: float = 500.0) -> None:
 def _all_latest(session) -> dict:
     """Mirror the build's all_latest dict shape — keyed by (gauge_id, data_type)."""
     return {
-        (row.gauge_id, row.data_type): row
-        for row in session.query(LatestGaugeObservation).all()
+        (row.gauge_id, row.data_type): row for row in session.query(LatestGaugeObservation).all()
     }
 
 
@@ -56,8 +55,12 @@ def test_state_scoped_page_filters_rows(session, tmp_path: Path) -> None:
     _seed_obs(session, orr.id)
 
     written = _write_gauges_page(
-        session, _all_latest(session), states=["Oregon"], css_link="",
-        output_dir=tmp_path, state="MT",
+        session,
+        _all_latest(session),
+        states=["Oregon"],
+        css_link="",
+        output_dir=tmp_path,
+        state="MT",
     )
 
     assert written is True
@@ -72,33 +75,36 @@ def test_state_scoped_page_filters_rows(session, tmp_path: Path) -> None:
     assert 'data-group="state"' not in page
 
 
-def test_state_scoped_page_returns_false_when_empty(
-    session, tmp_path: Path
-) -> None:
+def test_state_scoped_page_returns_false_when_empty(session, tmp_path: Path) -> None:
     """No matching gauges -> returns False, no file written."""
     (tmp_path / "static").mkdir()
     orr = _seed_gauge(session, name="14306500", state="OR", huc="17090011")
     _seed_obs(session, orr.id)
 
     written = _write_gauges_page(
-        session, _all_latest(session), states=["Oregon"], css_link="",
-        output_dir=tmp_path, state="MT",
+        session,
+        _all_latest(session),
+        states=["Oregon"],
+        css_link="",
+        output_dir=tmp_path,
+        state="MT",
     )
 
     assert written is False
     assert not (tmp_path / "gauges.montana.html").exists()
 
 
-def test_all_states_page_unchanged_when_state_unset(
-    session, tmp_path: Path
-) -> None:
+def test_all_states_page_unchanged_when_state_unset(session, tmp_path: Path) -> None:
     """Default call (state=None) still writes gauges.html, returns True."""
     (tmp_path / "static").mkdir()
     orr = _seed_gauge(session, name="14306500", state="OR", huc="17090011")
     _seed_obs(session, orr.id)
 
     written = _write_gauges_page(
-        session, _all_latest(session), states=["Oregon"], css_link="",
+        session,
+        _all_latest(session),
+        states=["Oregon"],
+        css_link="",
         output_dir=tmp_path,
     )
 

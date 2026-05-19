@@ -454,9 +454,7 @@ def test_build_gauges_filter_bar_omits_state_when_not_all_page() -> None:
     huc6_names = {"170102": "Pend Oreille"}
     huc8_names = {"17010205": "Bitterroot"}
     all_html = _build_gauges_filter_bar(rows, huc6_names, huc8_names)
-    scoped_html = _build_gauges_filter_bar(
-        rows, huc6_names, huc8_names, is_all_page=False
-    )
+    scoped_html = _build_gauges_filter_bar(rows, huc6_names, huc8_names, is_all_page=False)
     assert 'data-group="state"' in all_html
     assert 'data-group="state"' not in scoped_html
     # Watershed group still renders on a state-scoped page.
