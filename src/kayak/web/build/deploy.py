@@ -407,13 +407,29 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
         # rather than re-querying.
         _write_gauges_page(session, all_latest, states, css_link, output_dir)
 
+        # State-scoped gauges pages for states without reaches (MT today).
+        # No `state in states` guard — `all_state_names()` only returns
+        # states with visible reaches, so MT-without-reaches is invisible
+        # to that list. The builder's internal row-count guard returns
+        # False (no page written) when the state has no recent gauge data.
+        site = SITE_URL.rstrip("/")
+        extra_sitemap_urls: list[tuple[str, str, str]] = []
+        if _write_gauges_page(
+            session, all_latest, states, css_link, output_dir, state="MT"
+        ):
+            extra_sitemap_urls.append(
+                (f"{site}/gauges.montana.html", "hourly", "0.8")
+            )
+
         # Links pages for all nav states (including Oregon)
         for state in _NAV_STATES:
             if state in states:
                 links_page = _build_placeholder_page(css_link, states, state)
                 _atomic_write(output_dir / f"{state}.html", links_page)
 
-        _emit_sitemap(output_dir, states, index_reaches, session)
+        _emit_sitemap(
+            output_dir, states, index_reaches, session, extra_urls=extra_sitemap_urls
+        )
     finally:
         session.close()
 
@@ -423,6 +439,7 @@ def _emit_sitemap(
     states: list[str],
     reaches: list[Reach],
     session: Session,
+    extra_urls: list[tuple[str, str, str]] | None = None,
 ) -> None:
     """Emit a sitemap.xml covering every public landing URL.
 
@@ -430,6 +447,11 @@ def _emit_sitemap(
     the static prose pages, every visible reach's description page, and
     every gauge.php detail page. Dynamic search and account endpoints are
     deliberately omitted (already Disallow'd in robots.txt).
+
+    ``extra_urls`` lets the caller append entries (loc, changefreq, priority)
+    for pages that aren't part of the default set — e.g. state-scoped
+    ``gauges.<state>.html`` variants whose existence is conditional on
+    data being present.
     """
     site = SITE_URL.rstrip("/")
     urls: list[tuple[str, str, str]] = []  # (loc, changefreq, priority)
@@ -450,6 +472,9 @@ def _emit_sitemap(
 
     for gid in session.scalars(select(Gauge.id).order_by(Gauge.id)).all():
         urls.append((f"{site}/gauge.php?id={gid}", "hourly", "0.6"))
+
+    if extra_urls:
+        urls.extend(extra_urls)
 
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',

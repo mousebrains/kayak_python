@@ -470,6 +470,8 @@ def _build_gauges_filter_bar(
     rows: list[dict[str, Any]],
     huc6_names: dict[str, str],
     huc8_names: dict[str, str],
+    *,
+    is_all_page: bool = True,
 ) -> str:
     """Filter bar for gauges page: State + Watershed + Status (no class tier).
 
@@ -513,7 +515,7 @@ def _build_gauges_filter_bar(
         "status": [s for s in ("low", "okay", "high", "unknown") if s in statuses],
         "tier": [],
     }
-    return _build_filter_bar(filter_data, is_all_page=True)
+    return _build_filter_bar(filter_data, is_all_page=is_all_page)
 
 
 def _write_gauges_page(
@@ -522,14 +524,41 @@ def _write_gauges_page(
     states: list[str],
     css_link: str,
     output_dir: Path,
-) -> None:
-    """Render gauges.html and ensure sparklines.json covers every shown gauge."""
+    *,
+    state: str | None = None,
+) -> bool:
+    """Render gauges.html (or a state-scoped variant) and merge sparklines.
+
+    ``state`` is a state abbreviation ("MT", "OR", ...) — when set, filter
+    rows to that state and emit ``gauges.<state-lower>.html``. Returns
+    True when a page was written, False when the state filter produced
+    no rows (e.g. the migration landed but the first fetch hasn't run yet).
+    """
     metadata = _load_station_metadata()
     gauge_ids_with_data = list({gid for gid, _ in all_latest})
     calc_ids = get_calculated_gauge_ids(session, gauge_ids_with_data)
     rows = _collect_gauge_rows(session, all_latest, metadata, calc_ids)
-    logger.info("Building gauges.html: %d gauges", len(rows))
-    print(f"Building gauges.html: {len(rows)} gauges")
+
+    if state is not None:
+        # _apply_gauge_metadata stores the FULL state name on the row
+        # (`row["state"] = _ABBR_TO_STATE.get(...)`), not the abbreviation.
+        # Match against the full name so the public API takes the postal
+        # abbreviation ("MT") and the internal filter still lines up.
+        state_full = _ABBR_TO_STATE.get(state, state)
+        rows = [r for r in rows if r.get("state") == state_full]
+        if not rows:
+            logger.info("No gauges to render for state=%s; skipping page", state)
+            return False
+        filename = f"gauges.{state_full.lower().replace(' ', '_')}.html"
+        title = f"River Gauges — {state_full}"
+        current_state = state_full
+    else:
+        filename = "gauges.html"
+        title = "River Gauges"
+        current_state = ""
+
+    logger.info("Building %s: %d gauges", filename, len(rows))
+    print(f"Building {filename}: {len(rows)} gauges")
 
     table_html, letters = _build_gauges_table(rows)
     huc6_names: dict[str, str] = {
@@ -538,20 +567,22 @@ def _write_gauges_page(
     huc8_names: dict[str, str] = {
         r.code: r.name for r in session.scalars(select(HucName).where(HucName.level == 8))
     }
-    filter_bar_html = _build_gauges_filter_bar(rows, huc6_names, huc8_names)
+    filter_bar_html = _build_gauges_filter_bar(
+        rows, huc6_names, huc8_names, is_all_page=(state is None)
+    )
     page_html = _build_page(
         table_html,
         css_link,
         states,
-        current_state="",
-        title="River Gauges",
+        current_state=current_state,
+        title=title,
         letters=letters,
         filter_bar_html=filter_bar_html,
         active_page="gauges",
         picker_kind="gauge",
-        path="/gauges.html",
+        path=f"/{filename}",
     )
-    _atomic_write(output_dir / "gauges.html", page_html)
+    _atomic_write(output_dir / filename, page_html)
 
     # Merge sparklines for any gauges the index build didn't already cover.
     sparklines_path = output_dir / "static" / "sparklines.json"
@@ -568,3 +599,4 @@ def _write_gauges_page(
                 existing[str(gid)] = svg
         sparklines_path.parent.mkdir(parents=True, exist_ok=True)
         _atomic_write(sparklines_path, json.dumps(existing))
+    return True
