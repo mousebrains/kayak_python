@@ -50,7 +50,12 @@ function handle_description_detail(
         $nav['position'],
         $nav['total'],
     );
-    echo '<h2>' . htmlspecialchars($name) . '</h2>';
+    $h2 = htmlspecialchars($name);
+    $location = trim((string)($reach['description'] ?? ''));
+    if ($location !== '') {
+        $h2 .= ' -- ' . htmlspecialchars($location);
+    }
+    echo '<h2>' . $h2 . '</h2>';
 
     _render_current_readings($readings);
 

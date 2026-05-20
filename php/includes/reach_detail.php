@@ -66,7 +66,12 @@ function handle_reach_detail(
         $nav['total'],
     );
 
-    echo '<h2><a href="/description.php?id=' . $id . '">' . htmlspecialchars($name) . '</a></h2>';
+    $h2_text = htmlspecialchars($name);
+    $location = trim((string)($reach['description'] ?? ''));
+    if ($location !== '') {
+        $h2_text .= ' -- ' . htmlspecialchars($location);
+    }
+    echo '<h2><a href="/description.php?id=' . $id . '">' . $h2_text . '</a></h2>';
 
     _render_reach_details_table($reach, $related['states'], $related['classes']);
     _render_reach_class_ranges($related['classes']);
