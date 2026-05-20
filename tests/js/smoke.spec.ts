@@ -44,14 +44,39 @@ test('/reach.php?st=OR loads with no JS errors', async ({ page }) => {
 });
 
 test('/Oregon.html loads with no JS errors', async ({ page }) => {
-  // Per-state HTML emitted by `levels build` — exercises levels.js +
-  // filters.js + plot-hover.js. With zero observations in the init-db'd
-  // test DB, the levels table is empty but the filter-bar UI still
-  // renders and binds event handlers (the path that historically broke
-  // under the `var → let` refactor in docs/done/PLAN_js_cleanup.md Phase 3).
+  // Per-state landing page emitted by `levels build` — a curated
+  // index of external resources (American Whitewater, Dreamflows,
+  // USGS state water data, …) plus top-of-page cross-link anchors
+  // into the filtered all-states views (`gauges.html#st=Oregon`,
+  // `picker.php?state=Oregon`, etc.). No internal levels table,
+  // so no filter-bar — those live on /gauges.html and /index.html.
+  // The page does pull in `scroll-indicator.js`; assert the page
+  // loads + cross-link anchor renders + no JS errors fire.
   const errors = captureJsErrors(page);
 
   const resp = await page.goto('/Oregon.html');
+  expect(resp?.status()).toBe(200);
+  // The "Live Oregon gauges" cross-link is one of the four anchors
+  // _build_placeholder_page emits — its presence confirms both that
+  // the landing-page builder ran and that the link points at the
+  // fragment-filtered all-states gauges view.
+  await expect(page.locator('a[href="/gauges.html#st=Oregon"]')).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
+
+test('/gauges.html#st=Oregon loads with the filter-bar UI', async ({ page }) => {
+  // The fragment-filter entry point that replaces the previous
+  // gauges.oregon.html artifact. filters.js reads the #st= fragment
+  // on load, the State filter pill is data-driven (so any state with
+  // visible gauges auto-appears), and the all-states gauges table
+  // renders the filter-bar UI that this test pins. With zero
+  // observations in the init-db'd test DB the gauges table is empty
+  // but the filter-bar still binds event handlers — the path that
+  // historically broke under the `var → let` refactor in
+  // docs/done/PLAN_js_cleanup.md Phase 3.
+  const errors = captureJsErrors(page);
+
+  const resp = await page.goto('/gauges.html#st=Oregon');
   expect(resp?.status()).toBe(200);
   await expect(page.locator('#filter-bar')).toHaveCount(1);
   expect(errors).toEqual([]);
