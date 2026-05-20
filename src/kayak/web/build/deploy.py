@@ -26,7 +26,6 @@ from kayak.db.gauges import get_calculated_gauge_ids
 from kayak.db.models import DataType, Gauge, HucName, LatestGaugeObservation, Reach
 from kayak.db.reaches import all_state_names, reaches_query
 from kayak.web.build._shared import (
-    _ABBR_TO_STATE,
     _CSS_PATH,
     _FILTERS_JS_PATH,
     _JS_PATH,
@@ -35,7 +34,6 @@ from kayak.web.build._shared import (
     _atomic_write,
     _css_link_tag,
     _load_css,
-    _state_slug,
 )
 from kayak.web.build.gauges import _write_gauges_page
 from kayak.web.build.geojson import (
@@ -406,41 +404,22 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
         # gauges.html — supplemental all-gauges listing. all_latest (loaded
         # above with the full all_gauge_ids_with_obs set) already covers
         # every gauge with observations including orphans, so reuse it
-        # rather than re-querying.
+        # rather than re-querying. State-scoped filtered views are served
+        # via /gauges.html#st=<state> (filters.js honors the fragment),
+        # so no per-state gauges.<slug>.html artifact is generated.
         _write_gauges_page(session, all_latest, states, css_link, output_dir)
 
-        # State-scoped gauges pages. The builder's internal row-count guard
-        # returns False (no page written) when the state has no recent
-        # gauge data, so this loop is safe to extend — adding a new state
-        # to the tuple is harmless if there's nothing to render.
-        #
-        # No `state in states` guard either: `all_state_names()` only
-        # returns states with *visible reaches*, so e.g. MT (gauges-only,
-        # no reaches in this PR) wouldn't appear there. The builder's
-        # internal guard handles it.
-        site = SITE_URL.rstrip("/")
-        extra_sitemap_urls: list[tuple[str, str, str]] = []
-        gauge_state_pages: set[str] = set()  # full state names of pages written
-        for abbrev in ("MT", "OR", "WA", "ID"):
-            if _write_gauges_page(session, all_latest, states, css_link, output_dir, state=abbrev):
-                full = _ABBR_TO_STATE[abbrev]
-                gauge_state_pages.add(full)
-                extra_sitemap_urls.append(
-                    (f"{site}/gauges.{_state_slug(full)}.html", "hourly", "0.8")
-                )
+        # Per-state landing pages — generated for every state in
+        # _NAV_STATES, independent of reach presence. Montana has no
+        # reaches yet but does have gauges, so the landing page exists
+        # and links to the filtered /gauges.html view; reach-related
+        # anchors are suppressed inside _build_placeholder_page when
+        # the state has no entry in `states` (the reach-states list).
+        for state in sorted(_NAV_STATES):
+            links_page = _build_placeholder_page(css_link, states, state)
+            _atomic_write(output_dir / f"{state}.html", links_page)
 
-        # Links pages for all nav states (including Oregon). When a state
-        # also has a gauges.<state>.html page, the placeholder gets a
-        # leading "Live gauges (table)" anchor — discoverability for the
-        # state-scoped live-data view from the per-state landing page.
-        for state in _NAV_STATES:
-            if state in states:
-                links_page = _build_placeholder_page(
-                    css_link, states, state, gauge_state_pages=gauge_state_pages
-                )
-                _atomic_write(output_dir / f"{state}.html", links_page)
-
-        _emit_sitemap(output_dir, states, index_reaches, session, extra_urls=extra_sitemap_urls)
+        _emit_sitemap(output_dir, states, index_reaches, session)
     finally:
         session.close()
 
@@ -450,19 +429,13 @@ def _emit_sitemap(
     states: list[str],
     reaches: list[Reach],
     session: Session,
-    extra_urls: list[tuple[str, str, str]] | None = None,
 ) -> None:
     """Emit a sitemap.xml covering every public landing URL.
 
-    Includes the index, each state's letter page, the gauges/map listings,
+    Includes the index, each state's landing page, the gauges/map listings,
     the static prose pages, every visible reach's description page, and
     every gauge.php detail page. Dynamic search and account endpoints are
     deliberately omitted (already Disallow'd in robots.txt).
-
-    ``extra_urls`` lets the caller append entries (loc, changefreq, priority)
-    for pages that aren't part of the default set — e.g. state-scoped
-    ``gauges.<state>.html`` variants whose existence is conditional on
-    data being present.
     """
     site = SITE_URL.rstrip("/")
     urls: list[tuple[str, str, str]] = []  # (loc, changefreq, priority)
@@ -471,7 +444,10 @@ def _emit_sitemap(
     urls.append((f"{site}/gauges.html", "hourly", "0.8"))
     urls.append((f"{site}/map.html", "daily", "0.8"))
     urls.append((f"{site}/custom_gauges.php", "daily", "0.6"))
-    for state in states:
+    # State landing pages exist for every _NAV_STATES entry — including
+    # gauges-only states like Montana — so list all of them, not just
+    # the reach-states.
+    for state in sorted(_NAV_STATES):
         urls.append((f"{site}/{state}.html", "hourly", "0.9"))
     urls.append((f"{site}/about.php", "monthly", "0.4"))
     urls.append((f"{site}/disclaimer.php", "monthly", "0.4"))
@@ -483,9 +459,6 @@ def _emit_sitemap(
 
     for gid in session.scalars(select(Gauge.id).order_by(Gauge.id)).all():
         urls.append((f"{site}/gauge.php?id={gid}", "hourly", "0.6"))
-
-    if extra_urls:
-        urls.extend(extra_urls)
 
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
