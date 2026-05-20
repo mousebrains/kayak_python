@@ -1,240 +1,462 @@
-# Plan — Montana USGS gauges (HUC4 1701, west of Continental Divide)
+# Plan — Montana USGS gauges (curated list, 13 sites)
 
-**Status:** Drafted 2026-05-19. Iterated through five self-review passes; no new findings on the last pass. Not yet implemented.
+**Status:** Revised 2026-05-19 (third revision). Two scope changes from
+the previous draft:
+
+1. Original site scope (HUC4 1701, 62 auto-discovered sites) narrowed to
+   a hand-picked list of 13 USGS gauges from
+   [`montana/mt.list`](../montana/mt.list).
+2. The Phase-3 `gauges.<state>.html` builder (already merged for OR/WA/ID
+   on this branch) is being **reverted** in favor of the existing
+   fragment-filter mechanism (`filters.js` honors `#st=<state>` on
+   `gauges.html` and `index.html`; `gauge_picker.php` honors
+   `?state=<full-name>`; `picker.php` gets a matching HTML-entry parser
+   as part of this PR). State landing pages (`Oregon.html`, the new
+   `Montana.html`, etc.) become the canonical entry points to filtered
+   views.
+
+Phase 1 (discovery-script edit) stays merged. Phase 2 migration
+`0036_montana_usgs_gauges.sql` needs **regeneration** from mt.list
+before merge. Not yet applied to any DB.
 
 ## Goal
 
-Add USGS continuous gauges in the Columbia drainage portion of Montana
-(HUC4 1701 ∩ state=MT) to the database, fetched by the existing
-`fetch-usgs-ogc` pipeline, and surface them on a new state-scoped
-`gauges.montana.html` page. Reaches are explicitly **out of scope** for
-this pass; we want the raw gauge data first.
+Add 13 hand-picked USGS continuous gauges across Montana — spanning both
+the Pacific drainage (HUC4 1701) and the Missouri drainage (HUC4 1002/1003) —
+to the database, fetched by the existing `fetch-usgs-ogc` pipeline, and
+surface them via:
 
-## Scope decisions (locked)
+- `gauges.html#st=Montana` — filtered view of the all-states gauges
+  page; Montana auto-appears as a State pill once Phase 2 lands (the
+  pill list is data-driven from the row set).
+- `Montana.html` — new state landing page with cross-links to the
+  filtered `gauges.html`, the filtered `index.html` (when reaches
+  exist — out of scope this PR), and the `gauge_picker.php` /
+  `picker.php` pages with the Montana state pre-checked via the
+  existing query-param machinery.
+
+No `gauges.montana.html`. No state-scoped page builder.
+
+Reaches remain **out of scope** for this pass. AW reaches that pair with
+these gauges — both cache-recorded matches and Pat-curated proxies —
+are documented in § AW reach associations below as input for a
+follow-up reach-import PR.
+
+## Curated list
+
+[`montana/mt.list`](../montana/mt.list) — transcribed by Pat 2026-05-19
+from the entries circled on
+<https://levels-legacy.wkcc.org/?P=Montana.html>. Two-column TSV (third
+column is a human-readable label, ignored by tooling):
+
+```
+<row#>\t<usgs_site_no>\t<label>
+```
+
+Recap of the 13 sites (metadata from `Gauge-metadata-cache/gauges.db::usgs_site`):
+
+| # | USGS ID | Station name | HUC8 | Basin | Last flow obs |
+|---|---|---|---|---|---|
+| 1 | 06090500 | Belt Creek near Monarch MT | 10030105 | Missouri | 2026-05-19 |
+| 2 | 06025500 | Big Hole River near Melrose MT | 10020004 | Missouri | 2026-05-19 |
+| 3 | 06025250 | Big Hole River at Maiden Rock nr Divide | 10020004 | Missouri | 2026-05-19 |
+| 4 | 12340000 | Blackfoot River near Bonner MT | 17010203 | Columbia | 2026-05-19 |
+| 5 | 12354500 | Clark Fork at St. Regis MT | 17010204 | Columbia | 2026-05-19 |
+| 6 | 06073500 | Dearborn River near Craig MT | 10030102 | Missouri | 2026-05-19 |
+| 7 | 12359800 | S F Flathead R ab Twin C nr Hungry Horse | 17010209 | Columbia | 2026-05-19 |
+| 8 | 06036650 | Jefferson River near Three Forks MT | 10020005 | Missouri | 2026-05-19 |
+| 9 | 06038800 | Madison River at Kirby Ranch nr Cameron | 10020007 | Missouri | 2026-05-19 |
+| 10 | 06066500 | Missouri River bl Holter Dam nr Wolf Cr | 10030102 | Missouri | 2026-05-19 |
+| 11 | 06077200 | Smith River bl Eagle Cr nr Fort Logan MT | 10030103 | Missouri | 2026-05-19 |
+| 12 | 06077500 | Smith River near Eden MT | 10030103 | Missouri | 2026-05-19 (temp dormant since 2017-07) |
+| 13 | 06085800 | Sun River at Simms MT | 10030104 | Missouri | 2026-05-19 |
+
+10/13 are east of the Continental Divide. The HUC4 1701 boundary that
+justified the original discovery sweep is **no longer the scope** —
+mt.list is the source of truth.
+
+## Scope decisions (revised)
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Geographic boundary | **HUC4 1701 ∩ state=MT** | Matches NWRFC's Pacific drainage footprint cleanly; sidesteps the messy "what does west-of-Helena mean" question. Covers Kootenai (170101), Pend Oreille / Clark Fork / Flathead / Bitterroot / Blackfoot (170102), and a thin slice of Spokane HUC6 (170103) in MT's far-NW corner where the Pend Oreille leaves the state. |
-| Source mix | **USGS continuous only** (NWIS OGC: params 00060, 00065, 00010) | Already auto-discovered via `gauge.usgs_id`; zero `sources.yaml` changes. NWPS/NWRFC deferred — can layer in later without rework. |
-| Active cutoff | **≥1 of flow/stage/temp reported within last 7 days** | Filters dormant/retired sites without dropping seasonal ones. Aligns with `_collect_gauge_rows` expired-row rule (>7 d stale → excluded from page anyway). |
-| Discovery model | **Script + human review** | Pat eyeballs the candidate CSV and trims before commit; keeps maintenance surface small. |
-| Output URL | `gauges.montana.html` | State-scoped variant of `gauges.html`. Builder is parameterized so future states get the same treatment for ~zero extra code. |
+| Site source | **Curated list — `montana/mt.list` (13 sites)** | Replaces the HUC4 discovery sweep. Pat picked these from the legacy site's Montana page. |
+| Geographic boundary | **None** | The list spans Columbia + Missouri drainages. Boundary was a discovery aid, not a product requirement. |
+| Source mix | **USGS continuous only** (NWIS OGC: params 00060, 00065, 00010) | Same as before — auto-discovered via `gauge.usgs_id`. Zero `sources.yaml` change. |
+| Active cutoff | **Implicit** — manual curation already filtered for active sites | All 13 sites have flow obs within the last 24 h per the cache. |
+| Output URL | `gauges.html#st=Montana` (filtered) + new `Montana.html` landing page | Replaces the planned `gauges.montana.html`. The fragment filter is already wired (`filters.js`); the landing page hosts cross-links to filtered views + curated external resources, matching the existing Oregon/Washington/Idaho/Nevada/California pattern. |
+| Reaches | **Out of scope** | Same as before. AW IDs documented for follow-up. |
 
-## Architecture overview
+## Commits on this branch + disposition
 
-Three independent landings, each reviewable on its own:
+| Commit | Disposition |
+|---|---|
+| `ce6f2d3` docs: plan Montana USGS gauge harvest + gauges.montana.html page | superseded by this revision |
+| `0d1d4b1` scripts: add Montana to USGS site discovery, skip lon filter for MT | **keep** — cache covers MT; useful for future expansions |
+| `fff0bf8` build: state-scoped gauges page (gauges.<state>.html) | **revert** — see Phase 3 below |
+| `2e18e14` data/db: migrate 0036 — Montana USGS gauges (HUC4 1701, 62 sites) | **rewrite** — see Phase 2 below |
+| `db82e3b` style: ruff format the Phase 3 changes | absorbed in the revert (ruff will reformat what's left) |
+| `7a42220` build: state-scoped gauges pages for OR / WA / ID | **revert** — Phase 3 |
+| `17f9efe` refactor: extract _state_slug, single source of truth for filename rule | **revert** — `_state_slug` has four call sites, all tied to `gauges.<state>.html` generation (`deploy.py:429`, `shell.py:334`, `gauges.py:553`, plus the `_shared.py:60` definition + imports). All four go away with Phase 3. State landing pages use `f"{state}.html"` (preserves capitalization — `Montana.html`, not `montana.html`), so `_state_slug` finds no consumer post-revert. |
+| `df6581e` picker: pre-initialize state filter from gauges.<state>.html | **rework** — `gauge_picker.php?state=<full-name>` parser stays intact; the trigger moves from "arriving from gauges.<state>.html nav-bar" (now gone) to "arriving from `<State>.html` landing-page link". This PR also adds the matching `?state=<full-name>` parser to `picker.php` (which didn't have one — the existing `?states=<comma>` on line 22 is AJAX-only). |
 
-1. **Discovery** — extend `scripts/fetch_usgs_sites.py` to cover Montana, then emit a candidate CSV filtered by HUC4 = 1701 and the 7-day-active rule.
-2. **Migration** — hand-reviewed CSV → idempotent `data/db/migrations/0036_montana_usgs_gauges.sql` (pattern from `0027` Part B).
-3. **Build code** — parameterize `_write_gauges_page(state=None)` so it can emit `gauges.<state-lower>.html`; call it once for `state="MT"` in `deploy.py`; add the URL to `_emit_sitemap`.
+`0036` has not been applied to any DB (the local Mac dev DB shows 0035 as
+the latest applied row in `schema_migrations`). Safe to **rewrite in
+place** on this feature branch rather than chaining a 0037 to delete +
+re-insert.
 
-No `sources.yaml` change. No new parser. No new systemd unit. First hourly `fetch-usgs-ogc` after the migration populates observations; the next `levels build` writes the page.
+The Phase-3 reverts are also safe to do in-branch by adding a new
+commit that undoes them — the feature branch hasn't shipped to
+production. The single dependency to keep an eye on is any
+`gauges.<state>.html` already generated in a local `public_html/`
+checkout: those will linger until the next clean deploy or a manual
+`rm`. None are tracked in git.
 
-## Phase 1: Discovery script
+## What's left to do
 
-### Approach
+### Phase 2 (revised): Regenerate `0036_montana_usgs_gauges.sql`
 
-`scripts/fetch_usgs_sites.py` already does ~90% of the work: it queries the USGS OGC site service per state, stores rows in `Gauge-metadata-cache/gauges.db` (table `usgs_site`), and back-fills `last_flow_date` / `last_gage_date` / `last_temp_date` from the time-series-metadata endpoint.
+#### Generator change
 
-Changes:
+`scripts/generate_mt_migration.py` currently reads
+`data/discover/montana_candidates.csv` (the gitignored discovery output).
+Switch it to read `montana/mt.list` directly and pull metadata from
+`Gauge-metadata-cache/gauges.db::usgs_site`:
 
-- Add `"Montana"` to `STATES` in `scripts/fetch_usgs_sites.py:19`.
-- **Skip the geographic post-filter for MT rows.** `fetch_usgs_sites.py:101` currently drops any site with `lat < 40 OR lon > -111`. The `lat < 40` check is moot in MT (whole state is north of 44°), but `lon > -111` would drop the eastern fringe of HUC 1701 (Glacier NP / Bob Marshall / North Fork Flathead headwaters all sit east of -111). Cleanest: skip the geographic filter entirely when `state_cd == 'MT'` — the HUC filter applied later is the real boundary.
-- Add a candidate-pull SQL query (inlined in this plan, no new script needed): rows from `usgs_site` where `state_cd='MT'` AND `huc_cd LIKE '1701%'` AND any of `last_flow_date`/`last_gage_date`/`last_temp_date` is within 7 days of today.
-- **Collision check before commit:** for each candidate `site_no`, verify it doesn't already exist in `gauge.name` in the live DB. `gauge.name` is `UNIQUE` (`models.py:122`), and the migration's `INSERT OR IGNORE` would *silently* skip a collision — masking the fact that an existing OR/WA/ID gauge is shadowing the new MT row. Existing usgs_ids start with 10/11/13/14; MT uses 12*, so a clash is unlikely but worth confirming.
+- Parse mt.list: skip blank lines, take column 2 (USGS site number) of
+  each remaining row. The third column (label) is a human readability
+  aid — ignored by the generator. The first column (row index) is also
+  ignored.
+- For each site_no, `SELECT station_nm, latitude, longitude, huc_cd,
+  drain_area_sq_mi, altitude_ft FROM usgs_site WHERE site_no = ?` on
+  the gauges.db cache. Error out if any site_no is missing (curated
+  list should match the cache; missing rows mean the cache is stale —
+  re-run `scripts/fetch_usgs_sites.py`).
+- Emit SQL in the order they appear in mt.list (stable diff if the
+  list is reordered).
+- Drop the `_REVIEW_HINTS` heuristic and "REVIEW:" comments — the
+  curated list has already been hand-screened, so flagging is noise.
+- Update the migration's leading comment block from "HUC4 1701 …
+  candidate CSV" to "curated list — `montana/mt.list`".
 
-Output: `data/discover/montana_candidates.csv` (gitignored — under `data/discover/` rather than `data/db/` to stay clear of the metadata-snapshot service's tree). Columns: `site_no, station_nm, latitude, longitude, huc_cd, drain_area_sq_mi, altitude_ft, last_flow_date, last_gage_date, last_temp_date`.
+Per-site SQL pattern unchanged — three idempotent inserts (`source`,
+`gauge`, `gauge_source`). Field-derivation rules unchanged (see § Field
+derivation below).
 
-Pat reviews; deletes rows that are industrial monitoring / well sites / not paddler-relevant; the trimmed CSV feeds Phase 2.
+#### Field derivation (unchanged from earlier revisions)
 
-### Reproduce
+- `name` / `station_id` / `usgs_id`: `{site_no}` — editors fill in human-readable names later via the UI.
+- `display_name`: parsed from station_nm using the existing
+  `parse_station_name` helper (handles `bl`/`nr`/`ab`/`abv` expansion,
+  strips trailing `, MT`). Falls back to raw station_nm when no
+  position word is found.
+- `river` / `location`: same parser as `display_name`. Curated list
+  parses cleanly for all 13 sites (verified — no `zz_unparsed` rows).
+- `sort_name`: `"<basin>|9|<10000−elev_ft, 6-digit zero-padded>|<drain_area_sq_mi, 6-digit zero-padded>"`. Drives A–Z letter nav on the state page (`gauges.py:381`). Basin = lowercase-with-spaces-stripped river name.
+- `huc`: store whatever USGS returns (typically 12-digit; one site has 8-digit).
+- `allow_negative_flow`: 0 (no tidal sites in MT).
+- **No `;` in any string field** (defensive — `cli/migrate.py::_split_statements` splits on `;` without parsing string literals).
+
+#### Reproduce
+
+All `levels …` commands assume the project venv is on PATH (Mac
+dev box: `~/.venv/bin/levels` or wherever Pat keeps it; Linux dev/prod:
+`/home/pat/.venv/bin/levels`). Adjust the `KDB` variable for whichever
+DB you're verifying against — `/Users/pat/tpw/DB/kayak.db` on Mac,
+`/home/pat/DB/kayak.db` on Linux.
 
 ```bash
-# Refresh the metadata cache including Montana
-# (after the fetch_usgs_sites.py edits: add "Montana" + skip lon filter for MT)
-python3 scripts/fetch_usgs_sites.py
+KDB=/Users/pat/tpw/DB/kayak.db   # or /home/pat/DB/kayak.db
 
-# Pull the candidate list
-mkdir -p data/discover
-sqlite3 -header -csv Gauge-metadata-cache/gauges.db <<'SQL' > data/discover/montana_candidates.csv
-SELECT site_no, station_nm, latitude, longitude, huc_cd,
-       drain_area_sq_mi, altitude_ft,
-       last_flow_date, last_gage_date, last_temp_date
-FROM usgs_site
-WHERE state_cd = '30'  -- FIPS code for Montana (state_cd stores FIPS, not abbreviations)
-  AND huc_cd LIKE '1701%'
-  AND (
-    last_flow_date >= date('now','-7 days')
-    OR last_gage_date >= date('now','-7 days')
-    OR last_temp_date >= date('now','-7 days')
-  )
-ORDER BY huc_cd, site_no;
+# Confirm the cache has all 13 sites
+sqlite3 Gauge-metadata-cache/gauges.db \
+  "SELECT COUNT(*) FROM usgs_site WHERE site_no IN
+   ('06090500','06025500','06025250','12340000','12354500',
+    '06073500','12359800','06036650','06038800','06066500',
+    '06077200','06077500','06085800');"
+# Expected: 13. If less, refresh: python3 scripts/fetch_usgs_sites.py
+
+# Regenerate the migration from mt.list
+python3 scripts/generate_mt_migration.py
+
+# Sanity: 13 of each insert
+grep -c "INSERT INTO source"               data/db/migrations/0036_montana_usgs_gauges.sql  # 13
+grep -c "INSERT OR IGNORE INTO gauge "     data/db/migrations/0036_montana_usgs_gauges.sql  # 13
+grep -c "INSERT OR IGNORE INTO gauge_source" data/db/migrations/0036_montana_usgs_gauges.sql # 13
+
+# Collision check vs the live DB (none of the 13 should already exist)
+sqlite3 -header "$KDB" <<SQL
+SELECT g.id, g.name, g.state FROM gauge g
+WHERE g.name IN ('06090500','06025500','06025250','12340000','12354500',
+                 '06073500','12359800','06036650','06038800','06066500',
+                 '06077200','06077500','06085800');
 SQL
+# Expected: no rows.
 
-wc -l data/discover/montana_candidates.csv  # row count for load estimate
+# Dry run on a sandbox DB
+cp "$KDB" /tmp/kayak-sandbox.db
+DATABASE_URL=sqlite:////tmp/kayak-sandbox.db levels migrate
 
-# Collision check against the live DB
-sqlite3 -header /home/pat/DB/kayak.db <<SQL
-SELECT g.id, g.name, g.state
-FROM gauge g
-WHERE g.name IN ($(awk -F, 'NR>1 {printf "%s\"%s\",", sep, $1; sep=""}' data/discover/montana_candidates.csv | sed 's/,$//'));
-SQL
-# Expected: no rows. Any hit is a manual-review case (almost certainly an
-# existing ID gauge with the same number that needs special handling).
-```
-
-Cross-check the count against a direct USGS query (no DB involvement):
-
-```bash
-curl -s 'https://waterservices.usgs.gov/nwis/site/?format=rdb&stateCd=mt&hucCd=170101,170102,170103&siteType=ST&siteStatus=active&parameterCd=00060,00065,00010' \
-  | awk '!/^#/ && NR>2 && $0!~/^5s/ {print $2}' | sort -u | wc -l
-```
-
-## Phase 2: Migration
-
-### File: `data/db/migrations/0036_montana_usgs_gauges.sql`
-
-Auto-generated from the trimmed CSV via a one-shot generator script (`scripts/generate_mt_migration.py`, gitignored — it's a build artifact, the SQL is the source of truth). The generator reads `data/discover/montana_candidates.csv`, applies the field-derivation rules below, and emits one `0036_montana_usgs_gauges.sql` file. Three idempotent inserts per site (pattern lifted from `0027` Part B):
-
-```sql
--- 1. Source row: name = usgs_id, agency = 'USGS', no fetch_url
-INSERT INTO source (name, agency, fetch_url_id, calc_expression_id, timezone)
-SELECT '{site_no}', 'USGS', NULL, NULL, ''
-WHERE NOT EXISTS (
-    SELECT 1 FROM source WHERE name = '{site_no}' AND agency = 'USGS'
-);
-
--- 2. Gauge row: usgs_id populated → picked up by fetch-usgs-ogc
-INSERT OR IGNORE INTO gauge (
-    name, location, latitude, longitude, usgs_id, station_id,
-    river, display_name, sort_name, drainage_area, elevation,
-    huc, allow_negative_flow, state
-) VALUES (
-    '{site_no}', '{location_parsed}', {lat}, {lon},
-    '{site_no}', '{site_no}',
-    '{river_parsed}', '{display_name_parsed}',
-    '{sort_name}',
-    {drain_area_sq_mi}, {altitude_ft},
-    '{huc_cd}', 0, 'MT'
-);
-
--- 3. gauge_source link
-INSERT OR IGNORE INTO gauge_source (gauge_id, source_id)
-SELECT g.id, s.id FROM gauge g, source s
-WHERE g.name = '{site_no}' AND s.name = '{site_no}' AND s.agency = 'USGS';
-```
-
-### Field-derivation rules (gauge row)
-
-- `name` / `station_id` / `usgs_id` / `display_name`: all `{site_no}` initially — editors can fill in human-readable names later via the UI.
-- `river` / `location`: best-effort parse of USGS `station_nm`. The convention `"<RIVER> AT <LOCATION>, MT"` or `"<RIVER> NEAR <LOCATION>, MT"` is the dominant USGS format; the generator splits on " AT " / " NEAR " / " ABOVE " / " BELOW " and strips the trailing `, MT`. Sites that don't parse cleanly land in the migration with `river=''` / `location=station_nm` / `display_name=station_nm` (raw USGS name as fallback so the page row isn't blank) and get a `-- REVIEW:` comment in the migration.
-- `sort_name`: `"<basin>|9|<10000−elev_ft, 6-digit zero-padded>|<drain_area_sq_mi, 6-digit zero-padded>"`. Basin = lowercase river-stem with internal spaces stripped (e.g. `clarkfork`, `bitterroot`, `flathead`, `kootenai`, `northforkflathead`). Mirrors the Oregon/Idaho pattern in `data/db/gauge.csv`. `_build_gauges_table` uses the first `|`-segment for the letter nav (`gauges.py:381`), so basin choice drives the A–Z grouping. **Must be non-empty for every row** — `_resolve_gauge_display` (`gauges.py:222-225`) returns `g.sort_name or river.lower()`; if both are empty the row sorts under "" and the letter index loses the entry. Fallback when `river` parse fails: `sort_name='zz_unparsed|9|999999|999999'` so unparseable rows sort *last* under "Z" and are visually distinct from real basins.
-- **Avoid `;` in any string field** (location, river, display_name, sort_name). `cli/migrate.py::_split_statements` splits on `;` without parsing string literals — a semicolon in the SQL would split mid-statement and corrupt the migration. USGS station names use commas and parentheses, not semicolons, so this is a defensive guard for the generator rather than an observed problem.
-- `huc`: store whatever USGS returns (typically 8-digit, occasionally less). The filter bar slices to HUC6 / HUC8 via prefix (`gauges.py:290-291`), so 8 digits is sufficient; no need to pad to 12. Column is `TEXT NULL` with no length constraint.
-- `allow_negative_flow`: 0 (default; flip on per-site if the site is tidal — unlikely in HUC 1701).
-
-### Verify before commit
-
-```bash
-# Dry-run on a sandbox DB copy
-cp /home/pat/DB/kayak.db /tmp/kayak-sandbox.db
-DATABASE_URL=sqlite:////tmp/kayak-sandbox.db /home/pat/.venv/bin/levels migrate
-
-# Confirm gauges landed and gauge_source links are populated
+# Confirm 13 MT gauges + 13 gauge_source links
 sqlite3 /tmp/kayak-sandbox.db <<'SQL'
-SELECT COUNT(*) AS mt_gauges FROM gauge WHERE state = 'MT';
+SELECT COUNT(*) AS mt_gauges FROM gauge WHERE state = 'MT';   -- 13
 SELECT COUNT(*) AS mt_linked FROM gauge g
   JOIN gauge_source gs ON gs.gauge_id = g.id
   JOIN source s ON s.id = gs.source_id
-  WHERE g.state = 'MT' AND s.agency = 'USGS';
--- mt_gauges and mt_linked must match; mismatch = a gauge missed its gauge_source insert
-SELECT id, name, river, display_name FROM gauge WHERE state = 'MT' LIMIT 10;
+  WHERE g.state = 'MT' AND s.agency = 'USGS';                  -- 13
+SELECT id, name, river, display_name, huc FROM gauge WHERE state = 'MT' ORDER BY sort_name;
 SQL
 
 # Confirm fetch-usgs-ogc picks up the new sites
-DATABASE_URL=sqlite:////tmp/kayak-sandbox.db /home/pat/.venv/bin/levels fetch-usgs-ogc --dry-run --hours 12 2>&1 | tail -20
+DATABASE_URL=sqlite:////tmp/kayak-sandbox.db levels fetch-usgs-ogc \
+    --dry-run --hours 12 2>&1 | tail -20
 ```
 
-**Re-run safety:** `schema_migrations` records completion, so once 0036 lands you can't re-apply it with `levels migrate` alone. If you need to redo the verification on the same sandbox, `DELETE FROM schema_migrations WHERE version='0036'` first and then re-run. The `INSERT OR IGNORE` / `WHERE NOT EXISTS` guards make the SQL itself safe to re-execute; only the bookkeeping needs the manual reset.
+**Re-run safety:** `schema_migrations` records completion; if you need
+to re-verify on the same sandbox, delete the row first (`DELETE FROM
+schema_migrations WHERE version='0036';`). The migration's `INSERT OR
+IGNORE` / `WHERE NOT EXISTS` guards keep the SQL re-executable; only
+the bookkeeping row needs the manual reset.
 
-`levels orphan-check` is intentionally **not** part of the verification: it
-filters to sources with `fetch_url_id IS NOT NULL` (`src/kayak/db/sources.py:105`),
-and our new USGS sources have `fetch_url_id = NULL` (USGS-OGC writes via the
-gauge join, not a fetch_url). The migration cannot create orphans.
+`levels orphan-check` is intentionally not part of verification — these
+sources have `fetch_url_id = NULL`, which the orphan-check filter
+excludes (`src/kayak/db/sources.py:105`).
 
-## Phase 3: State-scoped page builder
+### Phase 1 retirement
 
-### Files touched
+The Phase 1 discovery work (extending `fetch_usgs_sites.py` to cover MT)
+stays merged. The cache it builds remains useful: the Phase 2 generator
+reads it for metadata, and a future "extend MT coverage" PR can pull
+from the same cache without re-running the USGS site service. The
+`data/discover/montana_candidates.csv` artifact is now superseded by
+mt.list and can be deleted from local working trees (it's gitignored —
+nothing to commit).
 
-| Path | Change |
+### Phase 3 (revised): Revert `gauges.<state>.html`, route state views through fragment filter + landing pages
+
+#### Why this changes
+
+The Phase-3 commits on this branch generated `gauges.<state>.html` as
+state-scoped duplicates of `gauges.html`. The same view is already
+available via `gauges.html#st=<state>` — `filters.js` reads the
+`#st=` fragment, the State filter pill is data-driven from the
+visible rows, and Montana's pill auto-appears once Phase 2 lands.
+The same fragment pattern works on `index.html`. The pickers
+already support pre-filtering: `gauge_picker.php?state=<full-name>`
+is wired (per `df6581e`), and `picker.php` gets a matching
+HTML-entry parser as part of this PR (small PHP edit; see § Picker
+pre-fill). Generating a separate state-scoped page is redundant.
+
+The cleaner architecture: a state landing page (`Oregon.html`, the
+new `Montana.html`, etc.) owns the cross-links into filtered views.
+Users arriving at `Oregon.html` see top-of-page anchors for
+"Oregon Reaches", "Oregon Gauges", "Reach picker — Oregon", and
+"Gauge picker — Oregon" — all pre-filtered to OR. Montana, gauges-
+only this PR, gets the two gauge-flavored anchors (Gauges + Gauge
+picker) and the reach anchors are suppressed until reaches land.
+No new HTML artifacts per state; all filtering happens on existing
+pages via existing JS/PHP.
+
+#### Code changes
+
+| File | Change |
 |---|---|
-| `src/kayak/web/build/gauges.py` | `_write_gauges_page` gains a `state: str \| None = None` kwarg and returns `bool` (True if it wrote a page, False if the filtered row list was empty). When `state` is set: filter `rows` to `r["state"] == state` before building the table; if empty, return False without writing; otherwise pass `current_state=state`, `title=f"River Gauges — {state_full_name}"` (e.g. "River Gauges — Montana", looked up via `_ABBR_TO_STATE` in `_shared.py:54`), `path=f"/gauges.{state_lower}.html"`, write to `output_dir / f"gauges.{state_lower}.html"`. |
-| `src/kayak/web/build/gauges.py` | `_build_gauges_filter_bar` gains an `is_all_page: bool = True` kwarg (currently hardcoded `True` at line 516); pass `False` from the state-scoped call. The existing `_build_filter_bar` mechanism (`levels.py:466`) already suppresses the state row when `is_all_page=False` — verified by `tests/test_build_filters.py::test_build_filter_bar_omits_state_on_single_state_page`. **No new flag needed.** |
-| `src/kayak/web/build/deploy.py` | One additional call after the existing all-gauges call: `mt_written = _write_gauges_page(session, all_latest, states, css_link, output_dir, state="MT")`. **No `"MT" in states` guard** — `all_state_names()` returns only reach-states (`src/kayak/db/reaches.py:16`), and MT will have no reaches in this scope. The builder's internal row-count guard handles "nothing to write." |
-| `src/kayak/web/build/deploy.py` | `_emit_sitemap` signature becomes `_emit_sitemap(output_dir, states, reaches, session, extra_urls: list[tuple[str, str, str]] \| None = None)`. The extra tuples are appended to the `urls` list before the XML render. Caller builds `extra_urls=[(f"{site}/gauges.montana.html", "hourly", "0.8")] if mt_written else None`. |
+| `src/kayak/web/build/deploy.py` | Drop the `_state_slug` import (line 38) and the `for abbrev in ("MT", "OR", "WA", "ID"):` loop at lines 422–430 along with the `extra_sitemap_urls` accumulator. `_emit_sitemap` reverts to no `extra_urls` kwarg (or kwarg kept but always-None caller). **Also**: change the landing-page loop (lines 436–441) from `for state in _NAV_STATES: if state in states:` to plain `for state in sorted(_NAV_STATES):` — drop the reach-presence guard so Montana (gauges only) still gets `Montana.html`. **Also**: change the sitemap loop at line 475 from `for state in states:` to `for state in sorted(_NAV_STATES):` so Montana.html ends up in `sitemap.xml`. |
+| `src/kayak/web/build/gauges.py` | Remove the `state: str \| None = None` kwarg on `_write_gauges_page` and the state-filter branch in its body (~lines 543–570). Function returns to its pre-Phase-3 signature. Drop the `_state_slug` import (line 23) — no remaining consumers in this module. The `_build_gauges_filter_bar(..., is_all_page=True)` call at line 572 also reverts to no `is_all_page` kwarg (becomes a positional default). |
+| `src/kayak/web/build/shell.py` | Drop the `_state_slug` import (line 17). `_build_placeholder_page` rewritten: drop the `gauge_state_pages` param and the "→ Live {state} gauge readings" anchor. Replace with an unconditional 3- or 4-anchor block near the top: `[Reaches in {state}]`, `[Live {state} gauges]`, `[Reach picker — {state}]`, `[Gauge picker — {state}]`. Conditionally suppress the reach anchor + reach-picker anchor when the state has zero reaches (Montana for this PR — gate on `state in states` since `states` is the reach-states list from `all_state_names()`). URL-encode multi-word state names via `urllib.parse.quote` (e.g. `New%20Mexico`) — pattern already in use in `df6581e`. The "Gauges" link on the nav-bar (line 331-336) also reverts to the unconditional `/gauges.html` — no state-scoped variant exists to pre-fill against. **Also**: `_build_nav` (line 157) currently iterates `for s in states: if s not in _NAV_STATES: continue` — switch to `for s in sorted(_NAV_STATES):` (drop the reach-presence filter) so the header nav shows Montana even though MT has no reaches yet. **Also**: nav-bar Reach Picker link (line 173, in the `else` branch) — add `?state={_urlquote(active_state)}` when `active_state` is set, mirroring the gauge-picker logic at lines 168–170. The `picker.php` parser added in this PR (see file row below) makes this pre-fill effective. Update the picker-pre-fill docstring comment (lines 164–167) to drop the "arriving from gauges.<state>.html" wording — the trigger source is now landing pages. |
+| `src/kayak/web/build/_shared.py` | Add `"Montana"` to `_NAV_STATES` (line 57). Header nav (CA/ID/NV/OR/WA + new MT) is built from this set. **Delete** the `_state_slug` helper (lines 60–68) — no remaining consumers post-revert. `_STATE_ABBREVS` already contains `"Montana": "MT"` (line 46), so the nav-bar abbrev rendering works with zero further change. |
+| `src/kayak/web/build/shell.py` | Add `"Montana"` entry to `_STATE_LINKS`. Initial list paralleling Oregon/Washington/Idaho — concrete URLs TBD; placeholder set: American Whitewater MT, Dreamflows (Pacific NW), USGS Montana water data, NWRFC, USBR Hydromet, Montana Whitewater Association (if applicable), Montana Weather → Windy. Pat to confirm the list before commit. |
+| `php/picker.php` | **add `?state=<full-name>` parser** mirroring the `gauge_picker.php` pattern from `df6581e`. Currently `$primary_state = 'Oregon';` is hardcoded at line 113. Add an override after `$all_states` is built (~line 121): if `?state=` is present and the name is in `$all_states`, use it as `$primary_state`. ~10 lines. Pre-fill now works on both pickers — the user's `<State>.html` landing-page anchor lands in a state-focused view either way. |
+| `tests/test_build_gauges_state_filter.py` | **Delete** — pinned the reverted Phase-3 builder. |
+| `tests/test_build_filters.py` | Keep `is_all_page=False` tests if any state-scoped *reach* page still uses the flag; otherwise the flag becomes unused and the test can be retired in a follow-up. |
+| `tests/test_placeholder_state_links.py` (new) | For each `_NAV_STATES` entry, assert the generated `<State>.html` contains `href="/gauges.html#st=<State>"`, the picker anchors with the correct `?states=` / `?state=` query string, and (for states with reaches) the reaches anchor. One parametrized test that catches a missing-state-link regression. |
+| `public_html/gauges.oregon.html`, `gauges.washington.html`, `gauges.idaho.html` | Untracked — leftover from the Phase-3 builder run. Manual `rm` after the revert, or rely on the next clean deploy (deploy job's `find … -delete` pre-step, if it has one — check `deploy/` scripts). |
 
-### Sparklines
+#### Picker pre-fill
 
-`_write_gauges_page` already merges sparklines for any gauge not previously covered by the index build (gauges.py:556-570). The state-scoped call runs after the all-states call, so MT sparklines will already be in `sparklines.json` from that run. The merge is a defensive no-op in the steady state.
+Two pickers; their pre-fill parsers diverge today and we're normalizing
+them in this PR:
 
-### Startup transient
+- **`gauge_picker.php`** — already has `?state=<full-name>` pre-fill on
+  the HTML entry (added in `df6581e`, lines 144–148). Stays intact.
+- **`picker.php`** — only has `?states=<comma>` on the **AJAX** endpoint
+  (line 22). The HTML entry hardcodes `$primary_state = 'Oregon'`
+  (line 113), so a landing-page link to `picker.php?state=Montana`
+  wouldn't actually pre-check Montana — Oregon would still be the
+  primary. **Add** the `?state=<full-name>` HTML-entry parser
+  mirroring `gauge_picker.php`'s implementation (see the file row
+  above).
 
-First `levels build` after the migration but **before the first `fetch-usgs-ogc` run** will have zero MT entries in `all_latest`. `_collect_gauge_rows` returns an empty list → `_write_gauges_page(..., state="MT")` returns False → no page, no sitemap entry. The page materializes on the first build that follows a successful fetch run (typically within 1 hour of merging the migration).
+After the picker.php edit, both pickers accept `?state=<full-name>` on
+the HTML entry. Landing-page anchors carry that param, so arriving at
+a picker from `Montana.html` (or any `<State>.html`) lands the user
+in a state-focused view — the same UX that arriving from
+`gauges.<state>.html` used to give before Phase 3 was reverted.
 
-### Letter nav edge case
+The `?states=<comma>` AJAX param is unchanged on both files; client-
+side filter scripts continue to use it for multi-state queries.
 
-The state-scoped page will have a small `letters` list (one per basin: K Kootenai, C Clark Fork, B Bitterroot/Blackfoot, F Flathead, ...). The existing `_build_gauges_table` builder needs no changes — it derives letters from sort_name basin prefixes per row. Confirm visually after the first build that the letter row isn't crowded into a single column.
-
-### Test coverage to add
+#### Test coverage
 
 | Test | What it pins |
 |---|---|
-| `tests/test_build_gauges_state_filter.py::test_state_scoped_page_filters_rows` | Seed MT + OR gauges, call `_write_gauges_page(..., state="MT")`, assert the written `gauges.montana.html` contains the MT gauge id and not the OR one. |
-| `tests/test_build_gauges_state_filter.py::test_state_scoped_page_returns_false_when_empty` | With no MT gauges in `all_latest`, the call returns False and no file is written. |
-| `tests/test_build_filters.py` (extend) | `_build_gauges_filter_bar(rows, ..., is_all_page=False)` omits the `data-group="state"` block. Mirrors the existing `test_build_filter_bar_omits_state_on_single_state_page`. |
+| `tests/test_placeholder_state_links.py::test_landing_page_has_filter_anchors` (new) | Each `<State>.html` contains the three (or four) cross-link anchors with correctly URL-encoded `#st=` and `?state=` / `?states=` query strings. Catches a missing anchor or a typo in the encoder. |
+| `tests/test_placeholder_state_links.py::test_montana_landing_omits_reach_anchors` (new) | Montana (no reaches) has the gauges + gauge-picker anchors but not the reaches + reach-picker anchors. |
+| `tests/test_placeholder_state_links.py::test_nav_bar_reach_picker_carries_active_state` (new) | A landing page's nav-bar Reach Picker link carries `?state=<active_state>` once `_build_nav`'s symmetric pre-fill lands. |
+| `tests/php/test_picker_state_param.php` (new) | PHP integration test: GET `picker.php?state=Oregon` — assert the `Oregon` checkbox is rendered with `checked`, other state pills are not. Seed via `seedDatabase()` per the existing `IntegrationTestCase.php` pattern. Mirrors any existing test for `gauge_picker.php?state=`. |
+| `tests/test_build_filters.py::test_build_filter_bar_omits_state_on_single_state_page` | Currently exercises the `is_all_page=False` path. With Phase 3 reverted there's no state-scoped *gauges* page; the `is_all_page` flag survives only for state-scoped reach pages if those still exist. If not, the test gets retired in the revert commit. |
+| Existing `tests/test_build_gauges_state_filter.py` | **Removed** alongside the builder. |
 
-### State filter on gauges.html
+No tests needed for the migration regeneration — the sanity counts in §
+Phase 2 Reproduce verify that.
 
-The unfiltered `gauges.html` will start showing a Montana pill in its state filter once MT gauges are present (the filter is data-driven, see `_build_gauges_filter_bar` at gauges.py:482-516). That's the intended cross-link to the all-page experience.
+## AW reach associations
 
-### Discoverability gap
+Two flavors of association are tracked. The reach-import follow-up PR
+will land both, but proxy rows need MT-boater sign-off before they
+ship to paddlers.
 
-`gauges.montana.html` has **no inbound link** from the generated nav: `_NAV_STATES` (`src/kayak/web/build/_shared.py:57`) is `{Oregon, Washington, Idaho, Nevada, California}` and we're not adding MT to it (per the "reaches deferred" scope). The page lives as a deep URL — discoverable via direct entry or by clicking the Montana pill on `gauges.html` (which filters in-place but doesn't link out). If we want a cross-link, the lightest option is a small "view as standalone page" anchor inside the gauges-page filter bar that becomes visible when a single state pill is active; deferred to a follow-up unless the user wants it now.
+1. **Cache-recorded** — `Gauge-metadata-cache/gauges.db::aw_reach.gauges`
+   JSON references our USGS site number directly. AW considers this
+   gauge the canonical reading for the reach.
+2. **Paddler-curated proxy (pending MT-boater verification)** — AW's
+   canonical gauge for the reach is *not* in our 13-site list (either
+   AW lists no gauge at all, or AW lists a gauge we deliberately
+   skipped per the curated-list scope). Pat has nominated a nearby
+   in-list gauge as a usable proxy and will confirm with Montana
+   boaters before the reach-import lands. The AW-canonical gauges are
+   intentionally **not** being added to mt.list.
+
+### Cache-recorded (11 reaches across 6 gauges)
+
+| USGS ID | Station | AW reach IDs | Reaches |
+|---|---|---|---|
+| 06090500 | Belt Creek nr Monarch | 981 | "2. Monarch to Riceville" (II–III, 16 mi, 250–1000 cfs) |
+| 12340000 | Blackfoot nr Bonner | 984 | "Scotty Brown Bridge → Johnsrud Park" (II–III) |
+| 12354500 | Clark Fork at St. Regis | 995, 996 | "Cyr to Tarkio" (III–IV); "Tarkio to Forest Grove" (II) |
+| 06073500 | Dearborn nr Craig | 998, 4358, 4359 | Dearborn upper canyon (III–V+); Dearborn Rd → Hwy 287 (I–II); Falls Creek tributary (III–V+) |
+| 12359800 | SF Flathead ab Twin C | 1005, 3778, 10916 | "Youngs Creek → Mid Creek" (II+); "Cedar Flats → Upper Twin Creek" (II); Upper Twin Creek hike-in (III+ to V+) |
+| 06077200 | Smith bl Eagle Cr | 1021 | "Camp Baker to Eden Bridge" (I–II) |
+
+### Paddler-curated proxy — pending MT-boater verification (5 reaches across 4 gauges)
+
+| USGS ID | Proxy station | AW reach | AW canonical gauge | Geographic note |
+|---|---|---|---|---|
+| 06025250 | Big Hole at Maiden Rock | 983 — Big Hole "Dewey to Divide Bridge" (II/III, 53.4 mi, level-ft 2.0–7.0) | 06026210 Big Hole nr Glen | Maiden Rock is **at Divide** (right at the reach takeout). Both AW's canonical Glen gauge **and** our other Big Hole gauge (Melrose) sit downstream of Divide; Maiden Rock is the closest in-list reading to this reach by far. |
+| 06038800 | Madison at Kirby Ranch | 1012 — Madison "3) Beartrap Canyon: Madison Dam → Route 84" (I–IV, 12 mi, 600–4000 cfs) | 06041000 Madison bl Ennis Lake nr McAllister | Kirby Ranch is upstream of Ennis Lake; Madison Dam (the reach put-in) is the Ennis Lake outlet. Kirby tracks lake *inflow*. |
+| 06038800 | Madison at Kirby Ranch | 1013 — Madison "2) Quake Lake → 1.5 mi downstream" (IV–V, 1.5 mi, 700–2700 cfs) | 06038500 Madison bl Hebgen Lake | Kirby Ranch is downstream of Quake Lake. Hebgen-outflow gauge is AW canonical; Kirby is the next mainstem gauge below Quake. |
+| 06066500 | Missouri blw Holter Dam | 3227 — Missouri "Great Falls" (II/V, 5.8 mi, no AW runnable range) | — (AW lists no gauge) | Holter Dam is upstream of Great Falls; the Dearborn, Smith, and Sun join the Missouri between Holter and Great Falls (and the Black Eagle / Rainbow / Cochrane / Ryan / Morony dam chain is in between). Holter reads dam outflow. |
+| 06085800 | Sun at Simms | 10730 — Sun River **South Fork** "Wilderness Run" (II–III/V, 12.4 mi, no AW runnable range) | — (AW lists no gauge) | Simms is on the mainstem Sun River, downstream of the North/South Fork confluence. The SF Wilderness reach drains a fraction of the basin Simms reads. |
+
+### Coverage summary
+
+| | Gauges | AW reaches |
+|---|---|---|
+| Cache-recorded | 6 | 11 |
+| Paddler-curated proxy | 4 | 5 |
+| **Total** | **10 of 13** | **16 distinct AW IDs** |
+
+Three gauges in mt.list have no AW association of either flavor:
+06025500 (Big Hole nr Melrose), 06036650 (Jefferson nr Three Forks),
+06077500 (Smith nr Eden). They stand as raw flow monitors only.
+
+The `reach` table has an `aw_id INTEGER` column ready for traceability.
+For proxy associations the follow-up reach-import will need to record
+that our gauge is not the AW-canonical one — simplest carrier is a
+short explanatory line in `reach.notes` so paddlers know they're
+reading a proxy, not the AW-recommended gauge.
 
 ## Load estimate
 
-Current state: **150 gauges with `usgs_id`** in the DB (`data/db/gauge.csv`, NR>1, col 14 non-empty). `fetch-usgs-ogc` issues **ceil(N / 150) × 3 base HTTP calls** per hourly run (params 00060/00065/00010), plus 0–N pagination hops per batch where each page returns up to 10,000 features. Pagination is rarely hit in practice — 12 hours × ~96 readings × 150 sites = ~14 k obs per param-batch, which sometimes spills to a second page.
+13 sites instead of 62 — current DB has 150 USGS gauges, so the total
+goes 150 → 163. Still in the 2-batch range for `fetch-usgs-ogc`
+(150-site batch limit, ~3 base calls per batch per param) — the same
+"+3 base calls/hour" estimate from the earlier revisions applies, and is
+effectively unchanged.
 
-So today's load is ~3 base calls/hour, occasionally 4–6 with pagination.
+Audit noise on first run is now 13 newly-data-providing gauges instead
+of 62 (still trips `scripts/audit_gauges.py`'s "started providing data
+in the last week" detector once per run). Mention in the PR description.
 
-| MT sites added | Total sites | Batches | Extra base calls/hour |
-|---|---|---|---|
-| +1 to +135 | 151–285 | 1 → 2 | **+3** |
-| +136 to +285 | 286–435 | 2 → 3 | **+6** |
+## Files touched (final list, revised)
 
-NWIS-OGC's quota is generous (hundreds per hour). At realistic MT counts (50–150 active sites), the worst case is +3 base calls/hour — a doubling of the OGC budget that's still well under the rate limit. Build-time cost scales linearly with row count and is dominated by sparkline rendering — single-digit seconds added.
+### Phase 2 (data)
 
-Maintenance overhead is the real cost: each new gauge becomes another row that `scripts/audit_gauges.py` and the nightly audit eyeball. The 7-day filter keeps that small. `levels orphan-check` is unaffected (sources have `fetch_url_id IS NULL`).
-
-**Expected first-run audit noise:** `scripts/audit_gauges.py` looks for "gauges that started providing data in the last week" (one of its four detector categories). Every newly-landed MT gauge will trip this on its first run after the migration. Mention in the PR description so the reviewer doesn't mistake the alert for a regression; subsequent runs settle.
-
-## Files touched (final list)
-
-| Path | Type |
+| Path | Change |
 |---|---|
-| `scripts/fetch_usgs_sites.py` | edit — add `"Montana"` to `STATES`; relax/document the geographic post-filter |
-| `data/discover/montana_candidates.csv` | new — gitignored, output of Phase 1 |
-| `data/db/migrations/0036_montana_usgs_gauges.sql` | new — generated from trimmed CSV |
-| `src/kayak/web/build/gauges.py` | edit — `state` kwarg on `_write_gauges_page` + filter-bar suppression |
-| `src/kayak/web/build/deploy.py` | edit — extra `_write_gauges_page(..., state="MT")` call + sitemap entry |
-| `tests/test_build_gauges_state_filter.py` | new — state-scoped page tests (see Phase 3 § Test coverage) |
-| `tests/test_build_filters.py` | edit — extend with `_build_gauges_filter_bar(is_all_page=False)` assertion |
-| `docs/PLAN_montana_gauges.md` | this file |
-| `.gitignore` | edit — add `data/discover/` if not already covered |
+| `montana/mt.list` | new — curated 13-site list, source of truth |
+| `scripts/generate_mt_migration.py` | **edit** — read `montana/mt.list` + `Gauge-metadata-cache/gauges.db` instead of `data/discover/montana_candidates.csv`; drop REVIEW-hint heuristic; refresh leading comment |
+| `data/db/migrations/0036_montana_usgs_gauges.sql` | **rewrite** — regenerate from mt.list (13 sites; was 62 HUC4-1701 sites) |
+
+### Phase 3 (revert state-scoped pages + landing-page cross-links)
+
+| Path | Change |
+|---|---|
+| `src/kayak/web/build/deploy.py` | drop the state-scoped gauges-page loop + `extra_sitemap_urls`; switch landing-page loop + sitemap loop from `states` (reach-presence) to `sorted(_NAV_STATES)` |
+| `src/kayak/web/build/gauges.py` | remove `state` kwarg + filter branch on `_write_gauges_page`; drop `_state_slug` import |
+| `src/kayak/web/build/_shared.py` | add `"Montana"` to `_NAV_STATES`; **delete** `_state_slug` helper (no remaining consumers) |
+| `src/kayak/web/build/shell.py` | rewrite `_build_placeholder_page` (cross-link anchors); add `_STATE_LINKS["Montana"]`; revert nav-bar gauges link to unconditional `/gauges.html`; switch `_build_nav` state iteration to `sorted(_NAV_STATES)`; **add `?state=<active_state>` to the nav-bar Reach Picker link** when `active_state` is set, mirroring the existing gauge-picker case at lines 168–170 (symmetric pre-fill now that `picker.php` supports the parser) |
+| `php/picker.php` | new — add HTML-entry `?state=<full-name>` parser mirroring `gauge_picker.php` |
+| `tests/test_build_gauges_state_filter.py` | **delete** |
+| `tests/test_placeholder_state_links.py` | new — pins the cross-link anchors on every `<State>.html` + nav-bar Reach Picker pre-fill |
+| `tests/php/test_picker_state_param.php` | new — PHP integration test for `picker.php?state=<full-name>` |
+
+### Docs
+
+| Path | Change |
+|---|---|
+| `docs/PLAN_montana_gauges.md` | this revision |
+
+### Local cleanup (not committed)
+
+| Path | Action |
+|---|---|
+| `public_html/gauges.oregon.html`, `public_html/gauges.washington.html`, `public_html/gauges.idaho.html` | `rm` after the revert lands. Not tracked in git; will not be regenerated. |
+| `data/discover/montana_candidates.csv` | `rm` — superseded by `montana/mt.list`. Gitignored. |
+
+Untouched by this revision (kept from earlier commits):
+`scripts/fetch_usgs_sites.py` (Montana coverage stays merged),
+`src/kayak/web/static/filters.js` (already handles `#st=` correctly),
+`php/gauge_picker.php` (its `?state=` parser stays intact —
+`picker.php` is the only one needing the new parser).
 
 ## Follow-ups (deliberately not in this PR)
 
-- **NWPS observed for MT forecast points.** A second pass can layer `nwps:` URLs for any MT LID that pairs with a kept USGS site (outage redundancy) or covers a gauge that has no USGS equivalent. Adds 1 HTTP call per LID, default concurrency 8 — trivial.
-- **NWRFC textPlot / XML.** Only worth it for stations where USGS is dead/dropped a parameter and NWRFC computes flow via its local rating curve. Defer until a specific need appears.
-- **Reaches + Montana.html.** If/when paddler-facing run pages are wanted, add reach rows, `reach_state` links, optionally `reach_class` and `reach_guidebook`, and add `"Montana"` to `_NAV_STATES` in `src/kayak/web/build/_shared.py:57`. That's a much bigger lift (descriptions, trace data, putin/takeout coords).
-- **Generalize to other states.** Once `_write_gauges_page(state=...)` exists, `gauges.oregon.html`, `gauges.washington.html`, etc. cost one line each in `deploy.py`. Whether they add user value vs. the existing state filter on `gauges.html` is a separate UX question.
+- **Import the 16 AW reaches above** for the 10 gauges that have them.
+  Adds `reach` rows (with `aw_id` populated for traceability),
+  `reach_state` MT links, and `reach_class` rows. Montana is already
+  in `_NAV_STATES` (added in this PR), so the reaches surface in the
+  nav and the existing `Montana.html` landing page automatically
+  un-hides its "Reaches in Montana" + "Reach picker — Montana"
+  cross-links once any `reach_state` row links a reach to MT (the
+  landing-page suppression rule keys on reach presence; see
+  `_build_placeholder_page`). All metadata (river, section, class,
+  putin/takeout coords, length, runnable flow range, flow_metric) is
+  already in `aw_reach`. Split into two PRs / commits:
+   1. **Cache-recorded matches (11 reaches, 6 gauges)** — straightforward;
+      `reach.gauge_id` points to the cache-listed gauge.
+   2. **Proxy matches (5 reaches, 4 gauges)** — blocked on MT-boater
+      sign-off (Pat will confirm). Once confirmed, `reach.gauge_id`
+      points to the proxy gauge from mt.list, and `reach.notes`
+      records the divergence — e.g. *"Flow shown is from USGS
+      06038800 (Kirby Ranch) — upstream of Ennis Lake. AW's canonical
+      gauge for this reach is 06041000 (below Ennis Lake)."* — so
+      paddlers know they're reading a proxy. If the boaters reject a
+      proxy, drop the reach from the import (or revisit the
+      curated-list scope to add the AW-canonical gauge).
+  Bigger lift than the gauges-only pass either way — separate PR.
+- **NWPS observed for MT forecast points.** Layer NWPS URLs onto any of
+  the 13 USGS sites that pair with a NWPS LID for outage redundancy.
+  1 HTTP call per LID, trivial.
+- **NWRFC textPlot / XML.** Only worth it for stations where USGS drops
+  a parameter and NWRFC computes flow via its local rating curve.
+  Defer until a specific need appears.
+- **Belt Creek water-temp gap.** `06090500.last_temp_date` is NULL —
+  USGS doesn't publish temp here. Display layer already handles
+  missing-param gracefully; verify after first build.
+- **Smith River nr Eden temp dormant since 2017.** Same handling —
+  flow + stage will show, temp column will be blank.
+- **Extending the MT list.** If/when Pat circles more entries, append
+  to mt.list and re-run the generator; the migration is keyed on
+  site_no with `INSERT OR IGNORE`, so re-applying after appending is
+  idempotent. A new migration file (0037+) is only needed if existing
+  sites' field values change.
