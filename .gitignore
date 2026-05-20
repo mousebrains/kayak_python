@@ -63,6 +63,9 @@ OSM-cache/
 NHD-cache/
 Trace-cache/
 
+# Discovery artifacts — candidate CSVs feeding migration generators
+data/discover/
+
 # Ad-hoc research / analysis scratch
 tpw/
 

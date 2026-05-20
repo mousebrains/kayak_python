@@ -141,14 +141,23 @@ uksort($huc6_to_huc8s, fn($a, $b) => strcmp(
     $huc6_names[(string)$b] ?? (string)$b
 ));
 
+// Optional ?state=<full name> — pre-checks only that pill so users arriving
+// from gauges.<state>.html land focused on their current state. Falls back
+// to "all checked" when missing, empty, or not in $all_states.
+$state_param = filter_input(INPUT_GET, 'state', FILTER_DEFAULT);
+$initial_state = (is_string($state_param) && in_array($state_param, $all_states, true))
+    ? $state_param
+    : null;
+
 include_header('Build Your Own Gauges Page', 'picker', '', '', ['picker_kind' => 'gauge']);
 ?>
 <h2>Build Your Own Gauges Page</h2>
 <p style="margin:.5rem 0;font-size:.85rem">Pick gauges, then view a custom gauges page you can bookmark and share.</p>
 
 <div class="picker-states" id="state-pills">
-<?php foreach ($all_states as $name): ?>
-  <label><input type="checkbox" value="<?= htmlspecialchars($name) ?>" checked><span><?= htmlspecialchars($name) ?></span></label>
+<?php foreach ($all_states as $name):
+  $checked = ($initial_state === null || $name === $initial_state) ? ' checked' : ''; ?>
+  <label><input type="checkbox" value="<?= htmlspecialchars($name) ?>"<?= $checked ?>><span><?= htmlspecialchars($name) ?></span></label>
 <?php endforeach; ?>
 </div>
 

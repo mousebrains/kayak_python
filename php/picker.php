@@ -110,8 +110,6 @@ require_once __DIR__ . '/includes/footer.php';
 // Server-render pill lists so filters.js can wire them up without an
 // additional round trip. Also keep the auto-checked primary state so the
 // picker table populates immediately on first load.
-$primary_state = 'Oregon';
-
 $all_states = array_column(
     $db->query('SELECT DISTINCT st.name FROM state st
                 JOIN reach_state rs ON st.id = rs.state_id
@@ -119,6 +117,15 @@ $all_states = array_column(
                 WHERE r.no_show = 0 ORDER BY st.name')->fetchAll(),
     'name'
 );
+
+// Optional ?state=<full name> — when present and valid, that state becomes
+// the auto-checked primary so users arriving from a state landing page
+// (e.g. Oregon.html) land in a picker focused on their current state.
+// Falls back to Oregon when missing, empty, or not in $all_states.
+$state_param = filter_input(INPUT_GET, 'state', FILTER_DEFAULT);
+$primary_state = (is_string($state_param) && in_array($state_param, $all_states, true))
+    ? $state_param
+    : 'Oregon';
 $all_basins = array_column(
     $db->query("SELECT DISTINCT basin FROM reach
                 WHERE no_show = 0 AND basin IS NOT NULL AND basin != ''

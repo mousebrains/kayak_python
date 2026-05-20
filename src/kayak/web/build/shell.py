@@ -2,6 +2,7 @@
 
 import html as html_mod
 from datetime import UTC, datetime
+from urllib.parse import quote as _urlquote
 
 from kayak.web.build._shared import (
     _FILTERS_JS_VERSION,
@@ -26,6 +27,7 @@ _STATE_WEATHER_URL: dict[str, str] = {
     "Idaho": "https://www.windy.com/?44.4,-114.7,7",
     "Nevada": "https://www.windy.com/?39.5,-116.9,7",
     "California": "https://www.windy.com/?37.2,-119.5,6",
+    "Montana": "https://www.windy.com/?46.9,-110.4,6",
 }
 _DEFAULT_WEATHER_URL = "https://www.windy.com/?43.0,-118.0,6"
 
@@ -125,6 +127,18 @@ _STATE_LINKS: dict[str, list[tuple[str, str]]] = {
         ("Gold Country Paddlers", "https://goldcountrypaddlers.org"),
         ("California Weather — Windy", "https://www.windy.com/?37.2,-119.5,6"),
     ],
+    "Montana": [
+        (
+            "American Whitewater — Montana",
+            "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-MNT",
+        ),
+        ("USGS Montana Water Data", "https://waterdata.usgs.gov/state/montana/"),
+        ("USGS StreamStats", "https://streamstats.usgs.gov/ss/"),
+        ("NW River Forecast Center", "https://www.nwrfc.noaa.gov/rfc/"),
+        ("Missouri Basin River Forecast Center", "https://www.weather.gov/mbrfc/"),
+        ("USBR Hydromet", "https://www.usbr.gov/gp/hydromet/"),
+        ("Montana Weather — Windy", "https://www.windy.com/?46.9,-110.4,6"),
+    ],
 }
 
 
@@ -152,16 +166,24 @@ def _build_nav(
     gauges_cls = ' class="active"' if active_page == "gauges" else ""
     links.append(f'<a href="/map.html"{map_cls}>Map</a>')
     links.append(f'<a href="/gauges.html"{gauges_cls}>Gauges</a>')
-    for s in states:
-        if s not in _NAV_STATES:
-            continue
+    for s in sorted(_NAV_STATES):
         abbrev = _STATE_ABBREVS.get(s, s)
         cls = ' class="active"' if s == active_state else ""
         links.append(f'<a href="/{s}.html"{cls}>{abbrev}</a>')
+    # Picker links carry ?state=<full-name> when active_state is set,
+    # so a user arriving from a state landing page (e.g. Oregon.html) lands
+    # in a picker pre-focused on that state. picker.php / gauge_picker.php
+    # both parse ?state= on the HTML entry — empty active_state means no
+    # query string is appended.
     if picker_kind == "gauge":
-        links.append('<a href="/gauge_picker.php">Gauge<br>Picker</a>')
+        picker_href = "/gauge_picker.php"
+        label = "Gauge<br>Picker"
     else:
-        links.append('<a href="/picker.php">Reach<br>Picker</a>')
+        picker_href = "/picker.php"
+        label = "Reach<br>Picker"
+    if active_state:
+        picker_href += f"?state={_urlquote(active_state)}"
+    links.append(f'<a href="{picker_href}">{label}</a>')
     weather_url = _STATE_WEATHER_URL.get(active_state, _DEFAULT_WEATHER_URL)
     weather_label = (
         f"{_STATE_ABBREVS.get(active_state, '')}<br>Weather"
@@ -297,15 +319,48 @@ def _build_page(
 </html>"""
 
 
-def _build_placeholder_page(css_link: str, states: list[str], state: str) -> str:
-    """Build a links page for a non-primary state."""
+def _build_placeholder_page(
+    css_link: str,
+    states: list[str],
+    state: str,
+) -> str:
+    """Build the per-state landing page (e.g. Oregon.html, Montana.html).
+
+    Renders cross-link anchors to the filtered all-states views and the
+    pre-filtered pickers, then a curated external-resource list from
+    ``_STATE_LINKS``. Reach-related anchors are suppressed when the state
+    has no entry in ``states`` (the reach-states list from
+    ``all_state_names()``) — e.g. Montana has gauges only in the first
+    pass, so the "Reaches in Montana" + "Reach picker — Montana" links
+    don't render until reaches land.
+    """
     nav_html = _build_nav(states, active_state=state)
+    state_qs = _urlquote(state)
+    has_reaches = state in states
+    cross_links: list[tuple[str, str]] = []
+    if has_reaches:
+        cross_links.append((f"Reaches in {state}", f"/index.html#st={state_qs}"))
+    cross_links.append((f"Live {state} gauges", f"/gauges.html#st={state_qs}"))
+    if has_reaches:
+        cross_links.append((f"Reach picker — {state}", f"/picker.php?state={state_qs}"))
+    cross_links.append((f"Gauge picker — {state}", f"/gauge_picker.php?state={state_qs}"))
+    cross_link_items = "\n".join(
+        f'<li><a href="{url}" '
+        f'style="display:inline-flex;align-items:center;min-height:44px;font-weight:600">'
+        f"→ {label}</a></li>"
+        for label, url in cross_links
+    )
+    cross_links_html = (
+        f'<ul style="margin:0 0 1.5em 0;padding-left:1.2em">\n{cross_link_items}\n</ul>'
+    )
+
     links = _STATE_LINKS.get(state, [])
     link_items = "\n".join(
         f'<li><a href="{url}" style="display:inline-flex;align-items:center;min-height:44px">{label}</a></li>'
         for label, url in links
     )
     links_html = f"<ul>\n{link_items}\n</ul>" if links else ""
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -332,6 +387,7 @@ def _build_placeholder_page(css_link: str, states: list[str], state: str) -> str
 </header>
 <main>
 <h2>{state}</h2>
+{cross_links_html}
 {links_html}
 </main>
 {_build_footer_html()}

@@ -470,6 +470,8 @@ def _build_gauges_filter_bar(
     rows: list[dict[str, Any]],
     huc6_names: dict[str, str],
     huc8_names: dict[str, str],
+    *,
+    is_all_page: bool = True,
 ) -> str:
     """Filter bar for gauges page: State + Watershed + Status (no class tier).
 
@@ -513,7 +515,7 @@ def _build_gauges_filter_bar(
         "status": [s for s in ("low", "okay", "high", "unknown") if s in statuses],
         "tier": [],
     }
-    return _build_filter_bar(filter_data, is_all_page=True)
+    return _build_filter_bar(filter_data, is_all_page=is_all_page)
 
 
 def _write_gauges_page(
@@ -523,13 +525,17 @@ def _write_gauges_page(
     css_link: str,
     output_dir: Path,
 ) -> None:
-    """Render gauges.html and ensure sparklines.json covers every shown gauge."""
+    """Render gauges.html and merge sparklines."""
     metadata = _load_station_metadata()
     gauge_ids_with_data = list({gid for gid, _ in all_latest})
     calc_ids = get_calculated_gauge_ids(session, gauge_ids_with_data)
     rows = _collect_gauge_rows(session, all_latest, metadata, calc_ids)
-    logger.info("Building gauges.html: %d gauges", len(rows))
-    print(f"Building gauges.html: {len(rows)} gauges")
+
+    filename = "gauges.html"
+    title = "River Gauges"
+
+    logger.info("Building %s: %d gauges", filename, len(rows))
+    print(f"Building {filename}: {len(rows)} gauges")
 
     table_html, letters = _build_gauges_table(rows)
     huc6_names: dict[str, str] = {
@@ -544,14 +550,14 @@ def _write_gauges_page(
         css_link,
         states,
         current_state="",
-        title="River Gauges",
+        title=title,
         letters=letters,
         filter_bar_html=filter_bar_html,
         active_page="gauges",
         picker_kind="gauge",
-        path="/gauges.html",
+        path=f"/{filename}",
     )
-    _atomic_write(output_dir / "gauges.html", page_html)
+    _atomic_write(output_dir / filename, page_html)
 
     # Merge sparklines for any gauges the index build didn't already cover.
     sparklines_path = output_dir / "static" / "sparklines.json"

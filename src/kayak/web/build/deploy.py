@@ -404,14 +404,20 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
         # gauges.html — supplemental all-gauges listing. all_latest (loaded
         # above with the full all_gauge_ids_with_obs set) already covers
         # every gauge with observations including orphans, so reuse it
-        # rather than re-querying.
+        # rather than re-querying. State-scoped filtered views are served
+        # via /gauges.html#st=<state> (filters.js honors the fragment),
+        # so no per-state gauges.<slug>.html artifact is generated.
         _write_gauges_page(session, all_latest, states, css_link, output_dir)
 
-        # Links pages for all nav states (including Oregon)
-        for state in _NAV_STATES:
-            if state in states:
-                links_page = _build_placeholder_page(css_link, states, state)
-                _atomic_write(output_dir / f"{state}.html", links_page)
+        # Per-state landing pages — generated for every state in
+        # _NAV_STATES, independent of reach presence. Montana has no
+        # reaches yet but does have gauges, so the landing page exists
+        # and links to the filtered /gauges.html view; reach-related
+        # anchors are suppressed inside _build_placeholder_page when
+        # the state has no entry in `states` (the reach-states list).
+        for state in sorted(_NAV_STATES):
+            links_page = _build_placeholder_page(css_link, states, state)
+            _atomic_write(output_dir / f"{state}.html", links_page)
 
         _emit_sitemap(output_dir, states, index_reaches, session)
     finally:
@@ -426,7 +432,7 @@ def _emit_sitemap(
 ) -> None:
     """Emit a sitemap.xml covering every public landing URL.
 
-    Includes the index, each state's letter page, the gauges/map listings,
+    Includes the index, each state's landing page, the gauges/map listings,
     the static prose pages, every visible reach's description page, and
     every gauge.php detail page. Dynamic search and account endpoints are
     deliberately omitted (already Disallow'd in robots.txt).
@@ -438,7 +444,10 @@ def _emit_sitemap(
     urls.append((f"{site}/gauges.html", "hourly", "0.8"))
     urls.append((f"{site}/map.html", "daily", "0.8"))
     urls.append((f"{site}/custom_gauges.php", "daily", "0.6"))
-    for state in states:
+    # State landing pages exist for every _NAV_STATES entry — including
+    # gauges-only states like Montana — so list all of them, not just
+    # the reach-states.
+    for state in sorted(_NAV_STATES):
         urls.append((f"{site}/{state}.html", "hourly", "0.9"))
     urls.append((f"{site}/about.php", "monthly", "0.4"))
     urls.append((f"{site}/disclaimer.php", "monthly", "0.4"))

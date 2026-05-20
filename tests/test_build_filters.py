@@ -442,3 +442,20 @@ def test_build_gauges_filter_bar_falls_back_to_huc8_code() -> None:
         huc8_names={},
     )
     assert 'value="17090099" checked>17090099' in html
+
+
+def test_build_gauges_filter_bar_omits_state_when_not_all_page() -> None:
+    """State-scoped gauges page suppresses the redundant single-state row.
+
+    Mirrors test_build_filter_bar_omits_state_on_single_state_page for the
+    gauges-page variant — confirms is_all_page=False threads through.
+    """
+    rows = [_gauge_row("Montana", "17010205")]
+    huc6_names = {"170102": "Pend Oreille"}
+    huc8_names = {"17010205": "Bitterroot"}
+    all_html = _build_gauges_filter_bar(rows, huc6_names, huc8_names)
+    scoped_html = _build_gauges_filter_bar(rows, huc6_names, huc8_names, is_all_page=False)
+    assert 'data-group="state"' in all_html
+    assert 'data-group="state"' not in scoped_html
+    # Watershed group still renders on a state-scoped page.
+    assert 'data-group="huc8"' in scoped_html
