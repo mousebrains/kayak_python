@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
-"""Generate 0036_montana_usgs_gauges.sql from data/discover/montana_candidates.csv.
+"""Generate 0036_montana_usgs_gauges.sql from montana/mt.list.
 
 Build artifact — gitignored. The committed SQL is the source of truth;
-re-run this to regenerate after trimming the candidate CSV.
+re-run this to regenerate after editing the curated mt.list.
+
+Inputs:
+  montana/mt.list                              (curated USGS site numbers)
+  Gauge-metadata-cache/gauges.db::usgs_site    (station metadata)
 
 Outputs:
   data/db/migrations/0036_montana_usgs_gauges.sql
@@ -11,12 +15,13 @@ Field-derivation rules — see docs/PLAN_montana_gauges.md § Phase 2.
 """
 from __future__ import annotations
 
-import csv
 import re
+import sqlite3
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-CSV_PATH = REPO / "data" / "discover" / "montana_candidates.csv"
+MT_LIST_PATH = REPO / "montana" / "mt.list"
+CACHE_DB_PATH = REPO / "Gauge-metadata-cache" / "gauges.db"
 SQL_PATH = REPO / "data" / "db" / "migrations" / "0036_montana_usgs_gauges.sql"
 
 # USGS station-name abbreviations to expand into full English.
@@ -45,24 +50,6 @@ _SPLIT_RE = re.compile(
 
 # Strip a trailing state suffix from a location string.
 _TAIL_STATE_RE = re.compile(r",?\s*MT\.?\s*$", re.IGNORECASE)
-
-# Tokens in station_nm that mark a site as not paddler-relevant. Sites
-# matching get a -- REVIEW: comment so Pat can decide whether to keep them.
-_REVIEW_HINTS = (
-    "wetland",
-    "spillway",
-    "canal",
-    "diversion",
-    "reservoir",
-    "lake como",
-    "silver bow",  # Berkeley Pit / Anaconda Superfund area
-    "mill creek nr anaconda",
-    "warm springs creek",
-    "willow creek nr anaconda",
-    "willow creek at opportunity",
-    "lost creek",
-    "blacktail creek",
-)
 
 
 def _expand_abbrevs(text: str) -> str:
@@ -120,13 +107,29 @@ def sort_name(river: str, elev_ft: float | None, drain_sq_mi: float | None) -> s
     return f"{basin_slug(river)}|9|{elev_key}|{da_key}"
 
 
-def needs_review(station_nm: str, river: str) -> bool:
-    blob = f"{station_nm} {river}".lower()
-    if any(h in blob for h in _REVIEW_HINTS):
-        return True
-    # Site numbers >9 digits (USGS extended IDs) are usually well/spring
-    # monitoring rather than streams.
-    return False
+def parse_mt_list(path: Path) -> list[str]:
+    """Return USGS site numbers in the order they appear in mt.list.
+
+    Format: tab-separated `<row#>\\t<usgs_site_no>\\t<label>`. Blank lines
+    and `#`-prefixed comment lines are skipped. The first and third
+    columns are for human review only; tooling reads column 2.
+    """
+    site_nos: list[str] = []
+    for raw in path.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split("\t")
+        if len(parts) < 2:
+            # Tolerate space-separated rows too — column 2 is what matters.
+            parts = line.split()
+        if len(parts) < 2:
+            raise SystemExit(f"mt.list: cannot parse row {raw!r}")
+        site_no = parts[1].strip()
+        if not site_no.isdigit():
+            raise SystemExit(f"mt.list: column 2 not a USGS site number: {raw!r}")
+        site_nos.append(site_no)
+    return site_nos
 
 
 def sql_escape(s: str) -> str:
@@ -135,53 +138,46 @@ def sql_escape(s: str) -> str:
 
 def emit_sql() -> str:
     out: list[str] = []
-    out.append(
-        "-- Migration 0036: Montana USGS gauges in HUC4 1701 (Pacific drainage)."
-    )
+    out.append("-- Migration 0036: Montana USGS gauges (curated list).")
     out.append("--")
-    out.append(
-        "-- Pulled from data/discover/montana_candidates.csv (7-day-active sites,"
-    )
-    out.append(
-        "-- HUC4 1701 ∩ state=MT). See docs/PLAN_montana_gauges.md."
-    )
+    out.append("-- Site numbers pulled from montana/mt.list (hand-curated by Pat from")
+    out.append("-- the entries circled on https://levels-legacy.wkcc.org/?P=Montana.html).")
+    out.append("-- Per-site metadata pulled from Gauge-metadata-cache/gauges.db::usgs_site.")
+    out.append("-- See docs/PLAN_montana_gauges.md.")
     out.append("--")
     out.append("-- Idempotent: re-running is safe (INSERT OR IGNORE / WHERE NOT EXISTS).")
     out.append("")
 
-    with CSV_PATH.open() as fh:
-        reader = csv.DictReader(fh)
-        for row in reader:
-            site_no = row["site_no"]
+    site_nos = parse_mt_list(MT_LIST_PATH)
+
+    with sqlite3.connect(CACHE_DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        for site_no in site_nos:
+            row = conn.execute(
+                "SELECT station_nm, latitude, longitude, huc_cd, "
+                "drain_area_sq_mi, altitude_ft FROM usgs_site WHERE site_no = ?",
+                (site_no,),
+            ).fetchone()
+            if row is None:
+                raise SystemExit(
+                    f"USGS {site_no} not in {CACHE_DB_PATH}. "
+                    f"Refresh the cache: python3 scripts/fetch_usgs_sites.py"
+                )
             station_nm = row["station_nm"]
-            try:
-                lat = float(row["latitude"])
-                lon = float(row["longitude"])
-            except ValueError:
-                continue
-            try:
-                drain = float(row["drain_area_sq_mi"]) if row["drain_area_sq_mi"] else None
-            except ValueError:
-                drain = None
-            try:
-                elev = float(row["altitude_ft"]) if row["altitude_ft"] else None
-            except ValueError:
-                elev = None
+            lat = row["latitude"]
+            lon = row["longitude"]
+            drain = row["drain_area_sq_mi"]
+            elev = row["altitude_ft"]
             huc = row["huc_cd"]
 
             river, location, display = parse_station_name(station_nm)
             srt = sort_name(river, elev, drain)
-            review = " -- REVIEW: industrial / monitoring site?" if needs_review(station_nm, river) else ""
 
+            out.append("-- " + sql_escape(station_nm))
             out.append(
-                "-- " + sql_escape(station_nm) + review
+                "INSERT INTO source (name, agency, fetch_url_id, calc_expression_id, timezone)"
             )
-            out.append(
-                f"INSERT INTO source (name, agency, fetch_url_id, calc_expression_id, timezone)"
-            )
-            out.append(
-                f"SELECT '{site_no}', 'USGS', NULL, NULL, ''"
-            )
+            out.append(f"SELECT '{site_no}', 'USGS', NULL, NULL, ''")
             out.append(
                 f"WHERE NOT EXISTS (SELECT 1 FROM source WHERE name = '{site_no}' AND agency = 'USGS');"
             )
@@ -211,10 +207,8 @@ def main() -> None:
     SQL_PATH.parent.mkdir(parents=True, exist_ok=True)
     sql = emit_sql()
     SQL_PATH.write_text(sql)
-    print(f"Wrote {SQL_PATH} ({len(sql.splitlines())} lines)")
-    review_count = sum(1 for line in sql.splitlines() if "REVIEW:" in line)
     insert_count = sql.count("INSERT INTO source")
-    print(f"  {insert_count} source rows, {review_count} flagged for REVIEW")
+    print(f"Wrote {SQL_PATH} ({len(sql.splitlines())} lines, {insert_count} source rows)")
 
 
 if __name__ == "__main__":
