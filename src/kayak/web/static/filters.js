@@ -243,11 +243,6 @@
       bar.querySelectorAll('details.filter-group').forEach(function(d){ d.open = true; });
     }
 
-    // Bar default-hidden; nav gets a "Filter" toggle. If the URL has
-    // explicit filter state, auto-reveal so users see why rows are missing.
-    const hashHas = Object.keys(readHash()).length > 0;
-    if (hashHas) bar.hidden = false;
-
     injectNavToggle(bar);
 
     refilter(ctx);
