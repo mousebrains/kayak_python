@@ -201,7 +201,7 @@ def _format_cell_value(col: dict[str, Any], row: dict, reach_id: int, gauge_id: 
 
 def _row_filter_attrs(reach: Reach, row: dict) -> str:
     """Build the data-state/basin/huc8/status/tier attr block for one <tr>."""
-    state = reach.states[0].name if reach.states else ""
+    state = ",".join(s.name for s in reach.states)
     basin = reach.basin or ""
     huc8 = (reach.huc or "")[:8]
     status = row.get("status") or "unknown"
@@ -464,7 +464,9 @@ def _build_filter_bar(data: dict[str, Any], *, is_all_page: bool) -> str:
 
     groups: list[str] = []
     if is_all_page:
-        groups.append(group_html("state", "State", data["state"], lambda v: v))
+        # State emits as CSV on data-state (e.g. "Idaho,Nevada") for reaches
+        # that cross state lines, so filters.js must split before matching.
+        groups.append(group_html("state", "State", data["state"], lambda v: v, split_csv=True))
     groups.append(basin_group_html(data["huc6_groups"], data["has_no_huc"]))
     groups.append(
         group_html(
