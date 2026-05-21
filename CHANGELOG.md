@@ -8,6 +8,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-05-21
+
 ### Added
 - **Montana coverage** (#10): USGS gauges for the Montana basins, plus a
   per-state gauges page reachable via `/gauges/<state>.html` so the
