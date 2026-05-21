@@ -256,4 +256,17 @@ jobs:
           cache: 'pip'
           cache-dependency-path: pyproject.toml
       - run: pip install pip-audit
-      - run: pip-audit --strict .
+      # Ignore PYSEC-2026-89 / CVE-2025-69534 against markdown 3.10.2 —
+      # a DoS via unhandled AssertionError in html.parser.HTMLParser on
+      # malformed input. Two reasons to suppress:
+      #   1. kayak's only `import markdown` is at build time in
+      #      src/kayak/web/build/deploy.py, rendering repo-controlled
+      #      docs/regression/*.md → static HTML. No untrusted input ever
+      #      reaches the library, so the DoS surface is nil.
+      #   2. The OSV record has a malformed affected-range (introduced=0
+      #      with an empty closing event), so pip-audit treats every
+      #      markdown version as affected and reports "Fix Versions"
+      #      empty — even though the advisory body says 3.8.1 patched
+      #      it, and 3.10.2 is the current PyPI release.
+      # Revisit when the OSV record is amended or 3.10.x ships a patch.
+      - run: pip-audit --strict --ignore-vuln PYSEC-2026-89 .
