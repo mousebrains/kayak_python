@@ -14,6 +14,7 @@ emit Markdown to stdout via the CLI wrapper.
 from __future__ import annotations
 
 import collections
+import concurrent.futures
 import datetime as dt
 import re
 import socket
@@ -56,16 +57,48 @@ SCANNER_ONLY_PATHS = frozenset(
 
 _rdns_cache: dict[str, str] = {}
 
+# socket.gethostbyaddr is a blocking C call that ignores socket.setdefaulttimeout;
+# a single unreachable resolver can hang it indefinitely. Resolve the whole IP set
+# in parallel with a wall-clock budget — anything past the deadline becomes "".
+_RDNS_WORKERS = 32
+_RDNS_TOTAL_BUDGET_S = 10.0
+
+
+def _rdns_lookup(ip: str) -> str:
+    try:
+        return socket.gethostbyaddr(ip)[0]
+    except OSError:
+        return ""
+
+
+def warm_rdns(ips: Iterable[str]) -> None:
+    """Pre-resolve reverse DNS for the given IPs in parallel under a total budget.
+
+    IPs not resolved by the deadline are cached as ``""``. Subsequent ``rdns()``
+    calls hit the cache and return immediately.
+    """
+    targets = sorted({ip for ip in ips if ip not in _rdns_cache})
+    if not targets:
+        return
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=_RDNS_WORKERS, thread_name_prefix="rdns")
+    futures = {ip: ex.submit(_rdns_lookup, ip) for ip in targets}
+    done, _pending = concurrent.futures.wait(futures.values(), timeout=_RDNS_TOTAL_BUDGET_S)
+    for ip, fut in futures.items():
+        if fut in done:
+            try:
+                _rdns_cache[ip] = fut.result()
+            except Exception:
+                _rdns_cache[ip] = ""
+        else:
+            _rdns_cache[ip] = ""
+    ex.shutdown(wait=False, cancel_futures=True)
+
 
 def rdns(ip: str) -> str:
     if ip in _rdns_cache:
         return _rdns_cache[ip]
-    try:
-        name = socket.gethostbyaddr(ip)[0]
-    except OSError:
-        name = ""
-    _rdns_cache[ip] = name
-    return name
+    _rdns_cache[ip] = _rdns_lookup(ip)
+    return _rdns_cache[ip]
 
 
 def _is_uptrends(ip: str, paths: set[str], ua: str) -> bool:
@@ -157,6 +190,7 @@ def run_humans(
     events = iter_access_events(since=cutoff, log_glob=access_log_glob)
     per_ip = _build_per_ip(events)
 
+    warm_rdns(per_ip.keys())
     classifications = {ip: _classify_ip(ip, rec.ua, set(rec.paths)) for ip, rec in per_ip.items()}
     humans = [(ip, rec) for ip, rec in per_ip.items() if classifications[ip] == "human"]
     dropped: dict[str, int] = collections.Counter()
@@ -222,6 +256,7 @@ def run_chunked(
             rec.first = ev.ts
         rec.last = ev.ts
 
+    warm_rdns(per_ip.keys())
     classifications = {ip: _classify_ip(ip, rec.ua, set(rec.paths)) for ip, rec in per_ip.items()}
     buckets = _bucket_events(raw, classifications, now, bucket_hours)
 

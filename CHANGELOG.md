@@ -8,6 +8,46 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-05-21
+
+### Added
+- **Montana coverage** (#10): USGS gauges for the Montana basins, plus a
+  per-state gauges page reachable via `/gauges/<state>.html` so the
+  state filter on the reaches index has a sibling for gauge-first
+  browsing.
+- **MT AW reach importer** (`df9c99c`): one-off seed of the 16
+  curated American Whitewater reaches that anchor the Montana rollout.
+- **Reach location in page headings** (#11): `description.php` and
+  `reach.php` now append the river segment + nearest town to the H1
+  heading, so a bookmarked reach is identifiable at a glance.
+
+### Changed
+- **Multi-state reaches appear under every linked state** (`2a6a7a8`):
+  `reach_state.data_state` is emitted as a CSV list so the client-side
+  filter renders the reach under each state, not just the first.
+- **Filter bar stays collapsed on hash-filter arrival** (`40c49c0`):
+  arriving via `#filter=…` no longer auto-opens the filter drawer — the
+  intent of the fragment is to apply, not to invite further editing.
+
+### Fixed
+- **`analyze-logs chunked`/`humans` no longer hangs on slow rDNS**
+  (`6405da5`): `socket.gethostbyaddr` is a blocking C call that ignores
+  `socket.setdefaulttimeout`. Pre-resolve the IP set in parallel under
+  a 10 s wall-clock budget; misses fall back to `""`.
+- **CSP-report filter drops modern Chrome/Edge extension noise**
+  (`ee82bed`): newer browsers truncate the `source-file` value to the
+  bare scheme (`chrome-extension`) rather than the full
+  `chrome-extension://<id>/…`. Accept either form so extension-only
+  reports stop polluting `csp.log`.
+- **Safari/iOS `/apple-touch-icon*.png` probes** (`232778b`): the six
+  root-path variants WebKit probes for Home Screen + share previews now
+  alias to the existing `/static/icon-180.png` (1,113 hits / 270 unique
+  iOS+macOS clients over the post-cutover 48 h were 404ing).
+
+### CI / maintenance
+- **pip-audit allowlist for PYSEC-2026-89** (#12): markdown 3.10.2
+  false positive — the affected code path isn't exercised by our usage.
+
 ## [1.0.0] - 2026-05-19
 
 ### Added
