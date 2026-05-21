@@ -185,12 +185,25 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 184,28B080,,,Washougal,45.5835856510001,-122.34569456,,WASW,,,WASW1,,,,51.9,,170800010606,0,Washougal,Washougal at Washougal,washougal|9|009948|999999,WA
 185,CORVALLIS_merge,,,Corvallis,44.566361,-123.256806,,,,,CORO3,,14171600,,180.0,4420.0,170900030609,0,Willamette,Willamette at Corvallis,willamette|9|009820|004420,OR
 186,14158850,,,Trail Br Dam nr Belknap Springs,44.2679001,-122.0497826,,,,,,,14158850,,1980.0,184.0,170900040206,0,Mckenzie,Mckenzie at Trail Br Dam nr Belknap Springs,mckenzie|9|008020|000184,OR
-187,14307605,,,Swisshome,44.0565,-123.7946889,,,,,,,14307605,,115.0,223.0,17100206,0,Lake Creek,Lake Creek at Swisshome,lake creek|9|009885|000223,OR
-188,Siuslaw_above_LakeCreek_calc,,,above Lake Creek,44.05501612351312,-123.79482873628976,,,,,,,,,50.0,365.0,17100206,0,Siuslaw,Siuslaw at above Lake Creek,siuslaw|9|009950|000365,OR
-190,Willamette_lower_falls_merge,,,below Falls at Oregon City,45.357621,-122.610925,14207770,,,,ORCO3,,14207770,,23.4,10000.0,,0,Willamette,Willamette below Falls at Oregon City,willamette|9|009977|010000,OR
-191,Clackamas_Big_Bottom,,,Big Bottom,45.017083,-121.923528,14208000,,,,,,14208000,,2051.0,136.0,,0,Clackamas,Clackamas at Big Bottom,clackamas|9|007949|000136,OR
-192,Clackamas_Oregon_City_merge,,,Oregon City,45.379287,-122.577313,14211010,,,,COCO3,,14211010,,22.7,940.0,,0,Clackamas,Clackamas at Oregon City,clackamas|9|009977|000940,OR
-193,RCBO3,,,Vernonia,45.858611,-123.192222,RCBO3,,,RCBO3,RCBO3,,,,603.87,,,0,Rock Creek,Rock Creek at Vernonia,rock creek|9|000604|999999,OR
-194,14330000,,,Prospect,42.72957187,-122.516147,14330000,,,,,,14330000,,1964.56,379.0,17100307,0,NF Rogue,Rogue River below Prospect,rogue|9|008036|000379,OR
+187,14307605,,,Swisshome,44.0565,-123.7946889,,,,,,,14307605,,115.0,223.0,171002060604,0,Lake Creek,Lake Creek at Swisshome,lake creek|9|009885|000223,OR
+188,Siuslaw_above_LakeCreek_calc,,,above Lake Creek,44.05501612351312,-123.79482873628976,,,,,,,,,50.0,365.0,171002060801,0,Siuslaw,Siuslaw at above Lake Creek,siuslaw|9|009950|000365,OR
+190,Willamette_lower_falls_merge,,,below Falls at Oregon City,45.357621,-122.610925,14207770,,,,ORCO3,,14207770,,23.4,10000.0,170900070405,0,Willamette,Willamette below Falls at Oregon City,willamette|9|009977|010000,OR
+191,Clackamas_Big_Bottom,,,Big Bottom,45.017083,-121.923528,14208000,,,,,,14208000,,2051.0,136.0,170900110205,0,Clackamas,Clackamas at Big Bottom,clackamas|9|007949|000136,OR
+192,Clackamas_Oregon_City_merge,,,Oregon City,45.379287,-122.577313,14211010,,,,COCO3,,14211010,,22.7,940.0,170900110607,0,Clackamas,Clackamas at Oregon City,clackamas|9|009977|000940,OR
+193,RCBO3,,,Vernonia,45.858611,-123.192222,RCBO3,,,RCBO3,RCBO3,,,,603.87,,171002020106,0,Rock Creek,Rock Creek at Vernonia,rock creek|9|000604|999999,OR
+194,14330000,,,Prospect,42.72957187,-122.516147,14330000,,,,,,14330000,,1964.56,379.0,171003070113,0,NF Rogue,Rogue River below Prospect,rogue|9|008036|000379,OR
 195,NF_Rogue_Bypass,,,OR-62 Bridge below North Fork Diversion Dam,42.74008,-122.49605,,,,,,,,,2199.6,,171003070113,0,NF Rogue,NF Rogue Bypass below NF Dam,rogue|9|007800|999998,OR
 196,Rogue_Above_Prospect_calc,,,Above Prospect (estimated),42.77485,-122.49976,,,,,,,,,2624.9,,171003070113,0,NF Rogue,Rogue above Prospect (calc),rogue|9|007375|999991,OR
+197,06090500,,,near Monarch,47.20859444444445,-110.93174722222223,06090500,,,,,,06090500,,3980.0,355.0,100301050306,0,Belt Creek,Belt Creek near Monarch,beltcreek|9|006020|000355,MT
+198,06025500,,,near Melrose,45.5265805555556,-112.701725,06025500,,,,,,06025500,,5032.87,2472.0,100200041209,0,Big Hole,Big Hole near Melrose,bighole|9|004967|002472,MT
+199,06025250,,,at Maiden Rock near Divide,45.7012694444444,-112.735969444444,06025250,,,,,,06025250,,5300.0,2199.0,100200041104,0,Big Hole,Big Hole at Maiden Rock near Divide,bighole|9|004700|002199,MT
+200,12340000,,,near Bonner,46.899411111111114,-113.75631944444444,12340000,,,,,,12340000,,3344.76,2287.0,170102031308,0,Blackfoot,Blackfoot near Bonner,blackfoot|9|006655|002287,MT
+201,12354500,,,at St. Regis,47.3016388888889,-115.086869444444,12354500,,,,,,12354500,,2600.37,10728.0,170102040805,0,Clark Fork,Clark Fork at St. Regis,clarkfork|9|007400|010728,MT
+202,06073500,,,near Craig,47.199025,-112.095905555556,06073500,,,,,,06073500,,3800.0,322.0,100301020404,0,Dearborn,Dearborn near Craig,dearborn|9|006200|000322,MT
+203,12359800,,,above Twin C near Hungry Horse,47.9790972222222,-113.560683333333,12359800,,,,,,12359800,,3575.0,1159.0,170102090509,0,South Fork Flathead R,South Fork Flathead R above Twin C near Hungry Horse,southforkflatheadr|9|006425|001159,MT
+204,06036650,,,near Three Forks,45.89713611111111,-111.59567222222222,06036650,,,,,,06036650,,4079.5,9558.0,100200050805,0,Jefferson,Jefferson near Three Forks,jefferson|9|005920|009558,MT
+205,06038800,,,at Kirby Ranch near Cameron,44.88865555555555,-111.58088611111111,06038800,,,,,,06038800,,5872.92,1093.0,100200070703,0,Madison,Madison at Kirby Ranch near Cameron,madison|9|004127|001093,MT
+206,06066500,,,below Holter Dam near Wolf Creek,46.9947388888889,-112.010666666667,06066500,,,,,,06066500,,3464.11,16924.0,100301012008,0,Missouri,Missouri below Holter Dam near Wolf Creek,missouri|9|006536|016924,MT
+207,06077200,,,below Eagle Creek near Fort Logan,46.8279805555556,-111.192238888889,06077200,,,,,,06077200,,4350.0,1087.0,100301030705,0,Smith,Smith below Eagle Creek near Fort Logan,smith|9|005650|001087,MT
+208,06077500,,,near Eden,47.1892916666667,-111.386238888889,06077500,,,,,,06077500,,3520.0,1588.0,100301030906,0,Smith,Smith near Eden,smith|9|006480|001588,MT
+209,06085800,,,at Simms,47.50162777777778,-111.9319138888889,06085800,,,,,,06085800,,3551.08,1296.0,100301040708,0,Sun,Sun at Simms,sun|9|006449|001296,MT

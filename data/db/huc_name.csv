@@ -1,4 +1,1238 @@
 code,level,name,states
+0904,4,Saskatchewan River,"CN,MT"
+090400,6,Upper South Saskatchewan River,"CN,MT"
+1002,4,Missouri Headwaters,"ID,MT,WY"
+100200,6,Missouri Headwaters,"ID,MT,WY"
+10020001,8,Red Rock,"ID,MT"
+1002000101,10,Red Rock Lakes,"ID,MT"
+100200010101,12,Red Rock Creek,"ID,MT"
+100200010102,12,Elk Creek,MT
+100200010103,12,Teepee Creek,MT
+100200010104,12,Upper Red Rock Lake,"ID,MT"
+100200010105,12,Odell Creek,"ID,MT"
+100200010106,12,Lower Red Rock Lake,"ID,MT"
+1002000102,10,Lima Reservoir,"ID,MT"
+100200010201,12,Metzel Creek,MT
+100200010202,12,Headwaters Red Rock River,"ID,MT"
+100200010203,12,Winslow Creek,"ID,MT"
+100200010204,12,Bean Creek-Red Rock River,"ID,MT"
+100200010205,12,Long Creek,MT
+100200010206,12,Peet Creek,"ID,MT"
+100200010207,12,West Creek,MT
+100200010208,12,Wolverine Creek,MT
+100200010209,12,Upper Lima Reservoir,"ID,MT"
+100200010210,12,Lower Lima Reservoir,"ID,MT"
+1002000103,10,Junction Creek,"ID,MT"
+100200010301,12,Big Beaver Creek,"ID,MT"
+100200010302,12,Town of Monida,"ID,MT"
+100200010303,12,Upper Junction Creek,"ID,MT"
+100200010304,12,Lower Junction Creek,MT
+1002000104,10,Little Sheep Creek,"ID,MT"
+100200010401,12,Upper Little Sheep Creek,"ID,MT"
+100200010402,12,Lower Little Sheep Creek,MT
+1002000105,10,Nicholia Creek,"ID,MT"
+100200010501,12,Upper Nicholia Creek,"ID,MT"
+100200010502,12,Lower Nicholia Creek,"ID,MT"
+1002000106,10,Cabin Creek,"ID,MT"
+100200010601,12,Tex Creek,"ID,MT"
+100200010602,12,Cabin Creek,"ID,MT"
+1002000107,10,Muddy Creek,MT
+100200010701,12,Upper Muddy Creek,MT
+100200010702,12,Lower Muddy Creek,MT
+1002000108,10,Big Sheep Creek,"ID,MT"
+100200010801,12,Deadman Creek,"ID,MT"
+100200010802,12,Upper Big Sheep Creek,MT
+100200010803,12,Lower Big Sheep Creek,MT
+1002000109,10,Sage Creek,MT
+100200010901,12,Long Creek,MT
+100200010902,12,Upper Sage Creek,MT
+100200010903,12,East Sage Creek,MT
+100200010904,12,Middle Sage Creek,MT
+100200010905,12,Little Sage Creek,MT
+100200010906,12,Little Basin Creek,MT
+100200010907,12,Basin Creek,MT
+100200010908,12,Lower Sage Creek,MT
+1002000110,10,Bloody Dick Creek,"ID,MT"
+100200011001,12,Selway Creek,MT
+100200011002,12,Upper Bloody Dick Creek,"ID,MT"
+100200011003,12,Middle Bloody Dick Creek,"ID,MT"
+100200011004,12,Lower Bloody Dick Creek,MT
+1002000111,10,Upper Horse Prairie Creek,"ID,MT"
+100200011101,12,Headwaters Horse Prairie Creek,"ID,MT"
+100200011102,12,Maiden Creek,MT
+100200011103,12,Jeff Davis Creek-Horse Prairie Creek,"ID,MT"
+100200011104,12,Black Canyon Creek,"ID,MT"
+100200011105,12,Bear Creek,"ID,MT"
+100200011106,12,Trail Creek,"ID,MT"
+100200011107,12,Spring Creek-Horse Prairie Creek,MT
+1002000112,10,Medicine Lodge Creek,"ID,MT"
+100200011201,12,Headwaters Medicine Lodge Creek,"ID,MT"
+100200011202,12,Dad Creek-Medicine Lodge Creek,"ID,MT"
+100200011203,12,Deer Canyon Creek,MT
+100200011204,12,Kate Creek-Medicine Lodge Creek,MT
+100200011205,12,Schwartz Creek,MT
+100200011206,12,Hansen Creek-Medicine Lodge Creek,MT
+100200011207,12,Poole Creek-Medicine Lodge Creek,MT
+1002000113,10,Lower Horse Prairie Creek,MT
+100200011301,12,Painter Creek,MT
+100200011302,12,Rape Creek-Horse Prairie Creek,MT
+100200011303,12,Watson Creek,MT
+100200011304,12,Dunlap Creek-Horse Prairie Creek,MT
+100200011305,12,Barrett Creek,MT
+100200011306,12,Cedar Creek,MT
+100200011307,12,Hans Peterson Flats-Horse Prairie Creek,MT
+100200011308,12,Garfield Canyon-Horse Prairie Creek,MT
+1002000114,10,Red Rock River,MT
+100200011401,12,Lima Dam-Red Rock River,MT
+100200011402,12,Red Butte-Red Rock River,MT
+100200011403,12,Ashbough Canyon-Red Rock River,MT
+100200011404,12,Kelmbeck Creek-Red Rock River,MT
+100200011405,12,Bell Canyon-Red Rock River,MT
+100200011406,12,Clark Canyon Reservoir,MT
+10020002,8,Beaverhead,MT
+1002000201,10,Grasshopper Creek,MT
+100200020101,12,Headwaters Grasshopper Creek,MT
+100200020102,12,Lake Creek-Grasshopper Creek,MT
+100200020103,12,Divide Creek-Grasshopper Creek,MT
+100200020104,12,Swamp Creek-Grasshopper Creek,MT
+100200020105,12,Buffalo Creek,MT
+100200020106,12,Dyce Creek-Grasshopper Creek,MT
+100200020107,12,Taylor Creek,MT
+100200020108,12,Reservoir Creek-Grasshopper Creek,MT
+100200020109,12,Cold Spring Creek-Grasshopper Creek,MT
+100200020110,12,Frenchie Place-Grasshopper Creek,MT
+1002000202,10,Rattlesnake Creek,MT
+100200020201,12,Upper Rattlesnake Creek,MT
+100200020202,12,Middle Rattlesnake Creek,MT
+100200020203,12,Ermont Gulch,MT
+100200020204,12,Lower Rattlesnake Creek,MT
+1002000203,10,Blacktail Deer Creek,MT
+100200020301,12,Middle Fork Blacktail Deer Creek,MT
+100200020302,12,West Fork Blacktail Deer Creek,MT
+100200020303,12,East Fork Blacktail Deer Creek,MT
+100200020304,12,Price Creek,MT
+100200020305,12,Rock Creek,MT
+100200020306,12,Cottonwood Creek-Blacktail Deer Creek,MT
+100200020307,12,Brock Creek,MT
+100200020308,12,Jake Canyon Creek-Blacktail Deer Creek,MT
+100200020309,12,Ashbough Canyon-Blacktail Deer Creek,MT
+100200020310,12,Axes Canyon-Blacktail Deer Creek,MT
+100200020311,12,Town of Dillon-Blacktail Deer Creek,MT
+1002000204,10,Upper Beaverhead River,MT
+100200020401,12,Clark Canyon,MT
+100200020402,12,Henneberry Creek-Beaverhead River,MT
+100200020403,12,Sheep Creek,MT
+100200020404,12,Gallagher Creek-Beaverhead River,MT
+100200020405,12,Poindexter Slough-Beaverhead Rive,MT
+1002000205,10,Albers Slough,MT
+100200020501,12,Cave Gulch,MT
+100200020502,12,Willard Slough,MT
+100200020503,12,Frying Pan Gulch,MT
+100200020504,12,Albers Slough,MT
+1002000206,10,Middle Beaverhead River,MT
+100200020601,12,Hoffman Gulch,MT
+100200020602,12,Carter Creek,MT
+100200020603,12,Stodden Slough-Beaverhead River,MT
+100200020604,12,Stone Creek,MT
+100200020605,12,Charlton Slough-Beaverhead River,MT
+1002000207,10,Lower Beaverhead River,MT
+100200020701,12,Spring Creek,MT
+100200020702,12,McHessor Creek,MT
+100200020703,12,Big Dry Gulch-Beaverhead River,MT
+100200020704,12,Spring Canyon,MT
+100200020705,12,California Slough-Beaverhead River,MT
+100200020706,12,Owsley Slough-Beaverhead River,MT
+10020003,8,Ruby,MT
+1002000301,10,Upper Ruby River,MT
+100200030101,12,West Fork Ruby River,MT
+100200030102,12,Headwaters Ruby River,MT
+100200030103,12,East Fork Ruby River,MT
+100200030104,12,Burnt Creek-Ruby River,MT
+100200030105,12,Cottonwood Creek,MT
+100200030106,12,Lazyman Creek-Ruby River,MT
+1002000302,10,Sweetwater Creek,MT
+100200030201,12,Upper Sweetwater Creek,MT
+100200030202,12,Middle Sweetwater Creek,MT
+100200030203,12,Sage Creek,MT
+100200030204,12,Lower Sweetwater Creek,MT
+1002000303,10,Middle Ruby River,MT
+100200030301,12,South Fork Warm Springs Creek,MT
+100200030302,12,Warm Springs Creek,MT
+100200030303,12,Ledford Creek,MT
+100200030304,12,Dry Hollow,MT
+100200030305,12,Robb Creek,MT
+100200030306,12,Cream Creek-Ruby River,MT
+100200030307,12,Greenhorn Creek,MT
+100200030308,12,Puller Hot Springs-Ruby River,MT
+100200030309,12,Ruby River Reservoir,MT
+1002000304,10,Alder Gulch,MT
+100200030401,12,Granite Creek,MT
+100200030402,12,Upper Alder Gulch,MT
+100200030403,12,Lower Alder Gulch,MT
+1002000305,10,Lower Ruby River,MT
+100200030501,12,Hinch Creek-Ruby River,MT
+100200030502,12,California Creek,MT
+100200030503,12,Clear Creek-Ruby River,MT
+100200030504,12,Ramshorn Creek,MT
+100200030505,12,Mill Creek,MT
+100200030506,12,Indian Creek,MT
+100200030507,12,Wisconsin Creek,MT
+100200030508,12,Silver Spring-Ruby River,MT
+10020004,8,Big Hole,"ID,MT"
+1002000401,10,Governor Creek,MT
+100200040101,12,Andrus Creek,MT
+100200040102,12,Upper Governor Creek,MT
+100200040103,12,Bull Creek,MT
+100200040104,12,Lower Governor Creek,MT
+1002000402,10,Warm Springs Creek,MT
+100200040201,12,Upper Warm Springs Creek,MT
+100200040202,12,Old Tim Creek,MT
+100200040203,12,Lower Warm Springs Creek,MT
+1002000403,10,Headwaters Big Hole River,"ID,MT"
+100200040301,12,Headwaters Big Hole River,"ID,MT"
+100200040302,12,Saginaw Creek-Big Hole River,MT
+100200040303,12,Berry Creek,"ID,MT"
+100200040304,12,Englejard Creek,"ID,MT"
+100200040305,12,Spring Creek-Big Hole River,MT
+100200040306,12,Miner Creek,"ID,MT"
+100200040307,12,Little Lake Creek,"ID,MT"
+100200040308,12,Big Swamp Creek,"ID,MT"
+100200040309,12,North Branch Big Swamp Creek-Big Hole River,MT
+1002000404,10,Swamp Creek-Big Hole River,"ID,MT"
+100200040401,12,Stanley Creek,MT
+100200040402,12,Francis Creek,MT
+100200040403,12,Steel Creek,MT
+100200040404,12,Big Lake Creek,"ID,MT"
+100200040405,12,Upper Rock Creek,"ID,MT"
+100200040406,12,Lower Rock Creek,MT
+100200040407,12,Town of Wisdom-Big Hole River,MT
+100200040408,12,Swamp Creek,"ID,MT"
+100200040409,12,McVey Homestead-Big Hole River,MT
+1002000405,10,North Fork Bighole River,"ID,MT"
+100200040501,12,Upper Trail Creek,"ID,MT"
+100200040502,12,May Creek,"ID,MT"
+100200040503,12,Lower Trail Creek,MT
+100200040504,12,Upper Ruby Creek,"ID,MT"
+100200040505,12,Lower Ruby Creek,"ID,MT"
+100200040506,12,Tie Creek,MT
+100200040507,12,Johnson Creek,MT
+100200040508,12,Mussigbrod Creek,MT
+100200040509,12,North Fork Bighole River,MT
+1002000406,10,Christiansen Creek-Big Hole River,MT
+100200040601,12,McVey Creek,MT
+100200040602,12,Howell Creek,MT
+100200040603,12,Plimpton Creek,MT
+100200040604,12,Doolittle Creek,MT
+100200040605,12,Pintler Creek,MT
+100200040606,12,Christiansen Creek,MT
+100200040607,12,Mudd Creek,MT
+100200040608,12,Salefsky Creek-Big Hole River,MT
+1002000407,10,Deep Creek,MT
+100200040701,12,California Creek,MT
+100200040702,12,French Creek,MT
+100200040703,12,Deep Creek,MT
+1002000408,10,Fishtrap Creek-Big Hole River,MT
+100200040801,12,Fishtrap Creek,MT
+100200040802,12,LaMarche Creek,MT
+100200040803,12,Toomey Creek-Big Hole River,MT
+100200040804,12,Seymour Creek,MT
+100200040805,12,Bryant Creek,MT
+100200040806,12,Alder Creek,MT
+100200040807,12,Bear Creek-Big Hole River,MT
+100200040808,12,Meadow Creek-Big Hole River,MT
+1002000409,10,Wise River,MT
+100200040901,12,Headwaters Wise River,MT
+100200040902,12,Wyman Creek,MT
+100200040903,12,Lacy Creek,MT
+100200040904,12,Upper Wise River,MT
+100200040905,12,Upper Pettengill Creek,MT
+100200040906,12,Middle Pettengill Creek,MT
+100200040907,12,Lower Pettengill Creek,MT
+100200040908,12,Middle Wise River,MT
+100200040909,12,Lower Wise River,MT
+1002000410,10,Divide Creek,MT
+100200041001,12,North Fork Divide Creek,MT
+100200041002,12,Upper Divide Creek,MT
+100200041003,12,Lower Divide Creek,MT
+1002000411,10,Canyon Creek-Big Hole River,MT
+100200041101,12,Jerry Creek,MT
+100200041102,12,Quartz Hill Gulch-Big Hole River,MT
+100200041103,12,Canyon Creek,MT
+100200041104,12,Charcoal Creek-Big Hole River,MT
+1002000412,10,Camp Creek-Big Hole River,MT
+100200041201,12,Moose Creek,MT
+100200041202,12,Town of Melrose-Big Hole River,MT
+100200041203,12,Camp Creek,MT
+100200041204,12,Trapper Creek,MT
+100200041205,12,Cherry Creek,MT
+100200041206,12,McCartney Creek,MT
+100200041207,12,Brownes Gulch-Big Hole River,MT
+100200041208,12,Rock Creek,MT
+100200041209,12,Lost Creek-Big Hole River,MT
+1002000413,10,Willow Creek-Big Hole River,MT
+100200041301,12,Upper Willow Creek,MT
+100200041302,12,Lower Willow Creek,MT
+100200041303,12,Birch Creek,MT
+100200041304,12,Stevens Slough-Big Hole River,MT
+100200041305,12,Biltmore Hot Springs-Big Hole River,MT
+100200041306,12,Nez Perce Creek,MT
+100200041307,12,Rochester Creek,MT
+100200041308,12,Twin Bridges-Big Hole River,MT
+10020005,8,Jefferson,MT
+1002000501,10,Upper Jefferson River,MT
+100200050101,12,Hells Canyon Creek,MT
+100200050102,12,Cottonwood Creek-Jefferson River,MT
+100200050103,12,Dry Boulder Creek-Jefferson River,MT
+100200050104,12,Cherry Creek-Jefferson River,MT
+100200050105,12,Dry Creek,MT
+100200050106,12,Mill Creek-Jefferson River,MT
+1002000502,10,Big Pipestone Creek,MT
+100200050201,12,Upper Big Pipestone Creek,MT
+100200050202,12,Homestake Creek,MT
+100200050203,12,Little Pipestone Creek,MT
+100200050204,12,Lower Big Pipestone Creek,MT
+1002000503,10,Little Whitetail Creek,MT
+100200050301,12,Upper Little Whitetail Creek,MT
+100200050302,12,Middle Little Whitetail Creek,MT
+100200050303,12,Lower Little Whitetail Creek,MT
+1002000504,10,Whitetail Creek,MT
+100200050401,12,Whitetail Reservoir,MT
+100200050402,12,Upper Whitetail Creek,MT
+100200050403,12,Lower Whitetail Creek,MT
+1002000505,10,Middle Jefferson River,MT
+100200050501,12,Fish Creek,MT
+100200050502,12,Piedmont Swamp,MT
+100200050503,12,Jefferson Slough,MT
+100200050504,12,Mayflower Creek-Jefferson River,MT
+1002000506,10,South Boulder Creek,MT
+100200050601,12,Upper South Boulder Creek,MT
+100200050602,12,Middle South Boulder Creek,MT
+100200050603,12,Lower South Boulder Creek,MT
+1002000507,10,Willow Creek,MT
+100200050701,12,South Willow Creek,MT
+100200050702,12,North Willow Creek,MT
+100200050703,12,Dry Hollow Creek,MT
+100200050704,12,Norwegian Creek,MT
+100200050705,12,Willow Creek,MT
+1002000508,10,Lower Jefferson River,MT
+100200050801,12,Antelope Creek,MT
+100200050802,12,Sand Creek-Jefferson River,MT
+100200050803,12,Milligan Creek,MT
+100200050804,12,Mud Spring Gulch,MT
+100200050805,12,City of Three Forks-Jefferson River,MT
+10020006,8,Boulder,MT
+1002000601,10,Headwaters Boulder River,MT
+100200060101,12,Upper Lowland Creek,MT
+100200060102,12,Headwaters Boulder River,MT
+100200060103,12,Lower Lowland Creek,MT
+100200060104,12,Rock Creek-Boulder River,MT
+1002000602,10,Upper Boulder ,MT
+100200060201,12,Upper Bison Creek,MT
+100200060202,12,Lower Bison Creek,MT
+100200060203,12,Red Rock Creek,MT
+100200060204,12,Mormon Gulch-Boulder River,MT
+1002000603,10,Middle Boulder River,MT
+100200060301,12,Basin Creek,MT
+100200060302,12,Cataract Creek,MT
+100200060303,12,High Ore Creek-Boulder River,MT
+1002000604,10,Little Boulder River,MT
+100200060401,12,North Fork Little Boulder River,MT
+100200060402,12,Little Boulder River,MT
+1002000605,10,Lower Boulder River,MT
+100200060501,12,Muskrat Creek,MT
+100200060502,12,Elkhorn Creek,MT
+100200060503,12,McCarty Creek-Boulder River,MT
+100200060504,12,Dry Creek,MT
+100200060505,12,Quinn Creek-Boulder River,MT
+100200060506,12,Cabin Gulch-Boulder River,MT
+100200060507,12,Dunn Creek-Boulder River,MT
+100200060508,12,Negro Hollow,MT
+100200060509,12,Conrow Creek-Boulder River,MT
+10020007,8,Madison,"ID,MT,WY"
+1002000701,10,Firehole River,WY
+100200070101,12,Little Firehole River,WY
+100200070102,12,Upper Firehole River,WY
+100200070103,12,Spruce Creek,WY
+100200070104,12,Nez Perce Creek,WY
+100200070105,12,Upper Gibbon River,WY
+100200070106,12,Lower Gibbon River,WY
+100200070107,12,Lower Firehole River,WY
+1002000702,10,Headwaters Madison River,"ID,MT,WY"
+100200070201,12,Harlequin Lake-Madison River,WY
+100200070202,12,Upper South Fork Madison River,"ID,MT,WY"
+100200070203,12,Middle South Fork Madison River,"ID,MT"
+100200070204,12,Lower South Fork Madison River,"ID,MT,WY"
+100200070205,12,Madison Arm-Madison River,"MT,WY"
+1002000703,10,Duck Creek-Hebgen Lake,"ID,MT,WY"
+100200070301,12,Maple Creek,WY
+100200070302,12,Cougar Creek,"MT,WY"
+100200070303,12,Gneiss Creek-Duck Creek,"MT,WY"
+100200070304,12,Tepee Creek,MT
+100200070305,12,Grayling Creek,"MT,WY"
+100200070306,12,Duck Creek-Hebgen Lake,MT
+100200070307,12,Hebgen Lake,"ID,MT"
+1002000704,10,Earthquake Lake-Madison River,MT
+100200070401,12,Cabin Creek,MT
+100200070402,12,Upper Beaver Creek,MT
+100200070403,12,Lower Beaver Creek,MT
+100200070404,12,Earthquake Lake,MT
+1002000705,10,Lake Creek,"ID,MT"
+100200070501,12,Antelope Creek,"ID,MT"
+100200070502,12,Lake Creek,"ID,MT"
+1002000706,10,West Fork Madison River,MT
+100200070601,12,Upper West Fork Madison River,MT
+100200070602,12,Middle West Fork Madison River,MT
+100200070603,12,Elk River,MT
+100200070604,12,Lower West Fork Madison River,MT
+1002000707,10,Standard Creek-Madison River,"ID,MT"
+100200070701,12,Mile Creek-Madison River,"ID,MT"
+100200070702,12,Sun Creek,MT
+100200070703,12,Papoose Creek-Madison River,MT
+100200070704,12,Standard Creek,MT
+100200070705,12,Horse Creek,MT
+100200070706,12,Moose Creek-Madison River,MT
+1002000708,10,Indian Creek-Madison River,MT
+100200070801,12,Wolf Creek,MT
+100200070802,12,Wall Creek-Madison River,MT
+100200070803,12,Ruby Creek,MT
+100200070804,12,Corral Creek-Madison River,MT
+100200070805,12,Indian Creek,MT
+100200070806,12,Cherry Creek,MT
+100200070807,12,Morgan Gulch,MT
+100200070808,12,Cameron Bench-Madison River,MT
+1002000709,10,Bear Creek,MT
+100200070901,12,Upper Bear Creek,MT
+100200070902,12,Middle Bear Creek,MT
+100200070903,12,Burger Creek,MT
+100200070904,12,Lower Bear Creek,MT
+1002000710,10,Jack Creek,MT
+100200071001,12,Upper Jack Creek,MT
+100200071002,12,Middle Jack Creek,MT
+100200071003,12,Lower Jack Creek,MT
+1002000711,10,Meadow Creek,MT
+100200071101,12,Upper North Meadow Creek,MT
+100200071102,12,South Meadow Creek,MT
+100200071103,12,Lower North Meadow Creek,MT
+1002000712,10,Madison River-Ennis Lake,MT
+100200071201,12,Wigwam Creek,MT
+100200071202,12,Upper O'Dell Creek-Madison River,MT
+100200071203,12,Moran Creek,MT
+100200071204,12,Cedar Creek,MT
+100200071205,12,Lower O'Dell Creek-Madison River,MT
+100200071206,12,Moore Creek,MT
+100200071207,12,Jourdain Creek,MT
+100200071208,12,Ennis Lake,MT
+1002000713,10,Hot Springs Creek,MT
+100200071301,12,Upper Hot Springs Creek,MT
+100200071302,12,Burnt Creek,MT
+100200071303,12,Lower Hot Springs Creek,MT
+1002000714,10,Cherry Creek,MT
+100200071401,12,Upper Cherry Creek,MT
+100200071402,12,Middle Cherry Creek,MT
+100200071403,12,Pole Creek,MT
+100200071404,12,Lower Cherry Creek,MT
+1002000715,10,Elk Creek-Madison River,MT
+100200071501,12,Bear Trap Creek-Madison River,MT
+100200071502,12,Cold Spring Creek-Madison River,MT
+100200071503,12,Elk Creek,MT
+100200071504,12,Willow Springs-Madison River,MT
+100200071505,12,City of Three Forks-Madison River,MT
+10020008,8,Gallatin,"MT,WY"
+1002000801,10,Headwaters Gallatin River,"MT,WY"
+100200080101,12,Fan Creek,"MT,WY"
+100200080102,12,Crowfoot Ridge-Gallatin River,"MT,WY"
+100200080103,12,Bacon Rind Creek,MT
+100200080104,12,Specimen Creek,"MT,WY"
+100200080105,12,Sage Creek,MT
+100200080106,12,Upper Taylor Creek,MT
+100200080107,12,Lower Taylor Creek,MT
+100200080108,12,Snowslide Creek-Gallatin River,"MT,WY"
+1002000802,10,West Fork Gallatin River,MT
+100200080201,12,South Fork West Fork Gallatin River,MT
+100200080202,12,West Fork Gallatin River,MT
+1002000803,10,Porcupine Creek-Gallatin River,MT
+100200080301,12,Buffalo Horn Creek,MT
+100200080302,12,Elkhorn Creek-Gallatin River,MT
+100200080303,12,Buck Creek,MT
+100200080304,12,Beaver Creek-Gallatin River,MT
+100200080305,12,Porcupine Creek,MT
+100200080306,12,Deer Creek-Gallatin River,MT
+1002000804,10,Spanish Creek,MT
+100200080401,12,North Fork Spanish Creek,MT
+100200080402,12,South Fork Spanish Creek,MT
+100200080403,12,Spanish Creek,MT
+1002000805,10,Lava Lake-Gallatin River,MT
+100200080501,12,Portal Creek,MT
+100200080502,12,Moose Creek-Gallatin River,MT
+100200080503,12,Swan Creek,MT
+100200080504,12,Storm Castle Creek,MT
+100200080505,12,Hell Roaring Creek,MT
+100200080506,12,Cascade Creek-Gallatin River,MT
+100200080507,12,Logger Creek-Gallatin River,MT
+1002000806,10,Camp Creek,MT
+100200080601,12,Upper Camp Creek,MT
+100200080602,12,Lower Camp Creek,MT
+1002000807,10,Big Bear Creek-Gallatin River,MT
+100200080701,12,Wilson Creek-Gallatin River,MT
+100200080702,12,Big Bear Creek,MT
+100200080703,12,South Cottonwood Creek,MT
+100200080704,12,Goose Creek-Gallatin River,MT
+100200080705,12,Godfrey Creek-Gallatin River,MT
+1002000808,10,Bridger Creek,MT
+100200080801,12,Upper Bridger Creek,MT
+100200080802,12,Lower Bridger Creek,MT
+1002000809,10,Upper East Gallatin River,MT
+100200080901,12,Jackson Creek,MT
+100200080902,12,Rocky Creek,MT
+100200080903,12,Bear Creek,MT
+100200080904,12,Bozeman Creek,MT
+100200080905,12,Kelly Creek-East Gallatin River,MT
+1002000810,10,Hyalite Creek,MT
+100200081001,12,Upper Hyalite Creek,MT
+100200081002,12,Lower Hyalite Creek,MT
+1002000811,10,Smith Creek,MT
+100200081101,12,Ross Creek,MT
+100200081102,12,Smith Creek,MT
+1002000812,10,Dry Creek,MT
+100200081201,12,Upper Dry Creek,MT
+100200081202,12,Pass Creek,MT
+100200081203,12,Lower Dry Creek,MT
+1002000813,10,Lower East Gallatin River,MT
+100200081301,12,Middle Cottonwood Creek-East Gallatin River,MT
+100200081302,12,Bostwick Creek-East Gallatin River,MT
+100200081303,12,Nixon Gulch-East Gallatin River,MT
+1002000814,10,Gallatin River,MT
+100200081401,12,City of Manhattan-Gallatin River,MT
+100200081402,12,Rey Creek,MT
+100200081403,12,Cottonwood Gulch-Gallatin River,MT
+1003,4,Missouri-Marias,MT
+100301,6,Upper Missouri,MT
+10030101,8,Upper Missouri,MT
+1003010101,10,Battle Creek,MT
+100301010101,12,Upper Battle Creek,MT
+100301010102,12,Mike Day Creek,MT
+100301010103,12,Faulkner Creek,MT
+100301010104,12,Hay Creek,MT
+100301010105,12,Lower Battle Creek,MT
+1003010102,10,South Fork Sixteenmile Creek,MT
+100301010201,12,Upper South Fork Sixteenmile Creek,MT
+100301010202,12,Lower South Fork Sixteenmile Creek,MT
+1003010103,10,Middle Fork Sixteenmile Creek,MT
+100301010301,12,Upper Middle Fork Sixteenmile Creek,MT
+100301010302,12,Lower Middle Fork Sixteenmile Creek,MT
+1003010104,10,Sixteenmile Creek,MT
+100301010401,12,Sixteenmile Creek Headwaters,MT
+100301010402,12,Woodson Creek,MT
+100301010403,12,Higgins Reservoir-Sixteenmile Creek,MT
+100301010404,12,Lost Creek-Sixteenmile Creek,MT
+100301010405,12,Meadow Creek,MT
+100301010406,12,Adkison Ranch-Sixteenmile Creek,MT
+100301010407,12,Rye Grass Creek-Sixteenmile Creek,MT
+100301010408,12,Sherlock Creek,MT
+100301010409,12,Indian Creek-Sixteenmile Creek,MT
+100301010410,12,Paddys Run-Sixteenmile Creek,MT
+100301010411,12,Haw Gulch-Sixteenmile Creek,MT
+100301010412,12,Bean Canyon-Sixteenmile Creek,MT
+100301010413,12,Roy Gulch-Sixteenmile Creek,MT
+1003010105,10,Headwaters Missouri River,MT
+100301010501,12,Town of Trident-Missouri River,MT
+100301010502,12,Town of Clarkston-Missouri River,MT
+100301010503,12,Lone Pine Gulch-Missouri River,MT
+100301010504,12,Sixmile Creek,MT
+100301010505,12,City of Toston-Missouri River,MT
+1003010106,10,WarmSprings Creek,MT
+100301010601,12,Rattlesnake Creek,MT
+100301010602,12,Spring Creek,MT
+100301010603,12,Johnny Gulch,MT
+100301010604,12,Marsh Creek,MT
+100301010605,12,Warm Springs Creek,MT
+1003010107,10,Crow Creek-Missouri River,MT
+100301010701,12,Headwaters Crow Creek,MT
+100301010702,12,Upper Crow Creek,MT
+100301010703,12,South Fork Crow Creek,MT
+100301010704,12,Slim Sam Creek,MT
+100301010705,12,Middle Crow Creek,MT
+100301010706,12,Dry Hollow,MT
+100301010707,12,Lower Crow Creek-Missouri River,MT
+1003010108,10,Deep Creek,MT
+100301010801,12,Upper Deep Creek,MT
+100301010802,12,Cabin Gulch,MT
+100301010803,12,North Fork Deep Creek,MT
+100301010804,12,Middle Deep Creek,MT
+100301010805,12,Lower Deep Creek,MT
+1003010109,10,Dry Creek-Missouri River,MT
+100301010901,12,Dry Creek,MT
+100301010902,12,Greyson Creek,MT
+100301010903,12,Boone Run,MT
+100301010904,12,Town of Holker-Missouri River,MT
+100301010905,12,Indian Creek,MT
+100301010906,12,City of Townsend-Missouri River,MT
+1003010110,10,Upper Canyon Ferry Lake-Missouri River,MT
+100301011001,12,Cottonwood Creek,MT
+100301011002,12,Little Cottonwood Creek,MT
+100301011003,12,Ray Creek,MT
+100301011004,12,Dry Gulch,MT
+100301011005,12,Gurnett Creek,MT
+100301011006,12,Whitehorse Creek-Canyon Ferry Lake,MT
+1003010111,10,Middle Canyon Ferry Lake-Missouri River,MT
+100301011101,12,Duck Creek,MT
+100301011102,12,Kelly Springs Gulch-Canyon Ferry Lake,MT
+100301011103,12,Cottonwood Gulch,MT
+100301011104,12,Upper Beaver Creek,MT
+100301011105,12,Lower Beaver Creek,MT
+100301011106,12,White Creek,MT
+100301011107,12,Goose Bay-Canyon Ferry Lake,MT
+1003010112,10,Lower Canyon Ferry Lake-Missouri River,MT
+100301011201,12,Canyon Ferry Lake-Bilk Gulch,MT
+100301011202,12,Avalanche Creek,MT
+100301011203,12,Hellgate Gulch,MT
+100301011204,12,Magpie Creek,MT
+100301011205,12,Cave Bay-Canyon Ferry Lake,MT
+1003010113,10,Prickley Pear Creek,MT
+100301011301,12,Headwaters Prickley Pear Creek,MT
+100301011302,12,Spring Creek,MT
+100301011303,12,Warm Springs Creek,MT
+100301011304,12,Clancy Creek,MT
+100301011305,12,Lump Gulch,MT
+100301011306,12,Upper Prickley Pear Creek,MT
+100301011307,12,McClellan Creek,MT
+100301011308,12,Middle Prickley Pear Creek,MT
+100301011309,12,Last Chance Gulch,MT
+100301011310,12,Lower Prickley Pear Gulch,MT
+1003010114,10,Tenmile Creek,MT
+100301011401,12,Upper Tenmile Creek,MT
+100301011402,12,Middle Tenmile Creek,MT
+100301011403,12,Greenhorn Creek,MT
+100301011404,12,Skelly Gulch,MT
+100301011405,12,Sevenmile Creek,MT
+100301011406,12,Lower Tenmile Creek,MT
+1003010115,10,Silver Creek,MT
+100301011501,12,Threemile Creek,MT
+100301011502,12,Upper Silver Creek,MT
+100301011503,12,Lower Silver Creek,MT
+100301011504,12,Lake Helena,MT
+1003010116,10,Missouri River-Hauser Lake,MT
+100301011601,12,Oregon Gulch,MT
+100301011602,12,Upper Spokane Creek,MT
+100301011603,12,Lower Spokane Creek,MT
+100301011604,12,Upper Trout Creek,MT
+100301011605,12,Lower Trout Creek,MT
+100301011606,12,Soup Creek,MT
+100301011607,12,Missouri River-Hauser Lake,MT
+1003010117,10,Beaver Creek,MT
+100301011701,12,Upper Beaver Creek,MT
+100301011702,12,Big Log Gulch,MT
+100301011703,12,Lower Beaver Creek,MT
+1003010118,10,Upper Little Prickley Pear Creek,MT
+100301011801,12,Iron Horse Creek,MT
+100301011802,12,Headwaters Little Prickley Pear Creek,MT
+100301011803,12,Marsh Creek-Little Prickley Pear Creek,MT
+100301011804,12,Virginia Creek,MT
+100301011805,12,Upper Canyon Creek,MT
+100301011806,12,Cottonwood Creek,MT
+100301011807,12,Lower Canyon Creek,MT
+100301011808,12,Trinity Creek,MT
+100301011809,12,Little Prickley Pear Creek-Little Sheep Creek,MT
+1003010119,10,Lower Little Prickley Pear Creek,MT
+100301011901,12,Big Sheep Creek,MT
+100301011902,12,Clark Creek,MT
+100301011903,12,Lyong Creek,MT
+100301011904,12,Medicine Rock Creek-Little Prickley Pear Creek,MT
+100301011905,12,Wolf Creek,MT
+100301011906,12,Little Creek-Little Prickley Pear Creek,MT
+1003010120,10,Rattlesnake Gulch-Missouri River,MT
+100301012001,12,American Bar Gulch-Missouri River,MT
+100301012002,12,Rattlesnake Gulch,MT
+100301012003,12,Missouri River-Upper Holter Lake,MT
+100301012004,12,Elkhorn Creek,MT
+100301012005,12,Willow Creek,MT
+100301012006,12,Cottonwood Creek,MT
+100301012007,12,Beartooth Mountain-Missouri River,MT
+100301012008,12,Log Gulch-Missouri River,MT
+10030102,8,Upper Missouri-Dearborn,MT
+1003010201,10,Upper Dearborn River,MT
+100301020101,12,Headwaters Dearborn River,MT
+100301020102,12,Blacktail Creek-Dearborn River,MT
+100301020103,12,Falls Creek,MT
+100301020104,12,Cuniff Creek,MT
+100301020105,12,Bean Lake-Dearborn River,MT
+1003010202,10,Middle Fork Dearborn River,MT
+100301020201,12,Green Creek,MT
+100301020202,12,Big Skunk Creek,MT
+100301020203,12,Middle Fork Dearborn River,MT
+1003010203,10,Flat Creek,MT
+100301020301,12,Upper Flat Creek,MT
+100301020302,12,Hogan Creek,MT
+100301020303,12,Middle Flat Creek,MT
+100301020304,12,Lower Flat Creek,MT
+1003010204,10,Lower Dearborn River,MT
+100301020401,12,Upper South Fork Dearborn River,MT
+100301020402,12,Lower South Fork Dearborn River,MT
+100301020403,12,Auchard Creek,MT
+100301020404,12,Deadman Creek-Dearborn River,MT
+100301020405,12,Sullivan Creek,MT
+100301020406,12,Sawmill Creek-Dearborn River,MT
+1003010205,10,Stickney Creek-Missouri River,MT
+100301020501,12,Rock Creek,MT
+100301020502,12,Wegner Creek,MT
+100301020503,12,Stickney Creek,MT
+100301020504,12,Dog Creek-Missouri River,MT
+1003010206,10,Bird Creek-Missouri River,MT
+100301020601,12,Prewett Creek-Missouri River,MT
+100301020602,12,Sheep Creek,MT
+100301020603,12,Finigan Creek-Missouri River,MT
+100301020604,12,Antelope Creek-Missouri River,MT
+100301020605,12,Knapp Creek-Missouri River,MT
+100301020606,12,Upper Bird Creek,MT
+100301020607,12,Lower Bird Creek,MT
+100301020608,12,Lower Chestnut Valley-Missouri River,MT
+1003010207,10,Little Muddy Creek,MT
+100301020701,12,Birdtail Creek,MT
+100301020702,12,Crown Butte Creek,MT
+100301020703,12,St. Johns Creek,MT
+100301020704,12,Upper Little Muddy Creek,MT
+100301020705,12,Hunters Creek,MT
+100301020706,12,Rocky Gap Creek,MT
+100301020707,12,Dry Fork,MT
+100301020708,12,Lower Little Muddy Creek,MT
+1003010208,10,Castner Coulee-Missouri River,MT
+100301020801,12,Castner Coulee,MT
+100301020802,12,Ulm Flats,MT
+100301020803,12,Nelson Island-Missouri River,MT
+100301020804,12,City of Ulm-Sun River Bench,MT
+100301020805,12,Wilson Butte-Missouri River,MT
+1003010209,10,Sand Coulee Creek,MT
+100301020901,12,Headwaters Sand Creek Coulee,MT
+100301020902,12,Cottonwood Creek,MT
+100301020903,12,Upper Sand Coulee Creek,MT
+100301020904,12,Middle Sand Coulee Creek,MT
+100301020905,12,Lower Sand Coulee Creek,MT
+1003010210,10,Box Elder Creek,MT
+100301021001,12,Upper Box Elder Creek,MT
+100301021002,12,Spring Creek,MT
+100301021003,12,Lower Box Elder Creek,MT
+1003010211,10,Benton Lake,MT
+100301021101,12,Upper Lake Creek,MT
+100301021102,12,Lower Lake Creek,MT
+100301021103,12,Benton Lake,MT
+1003010212,10,City of Great Falls-Missouri River,MT
+100301021201,12,City of Great Falls-Missouri River,MT
+100301021202,12,Blackhorse Lake,MT
+100301021203,12,Portage Coulee,MT
+100301021204,12,Rainbow Dam-Missouri River,MT
+1003010213,10,Highwood Creek,MT
+100301021301,12,Headwaters Highwood Creek,MT
+100301021302,12,Upper Highwood Creek,MT
+100301021303,12,Middle Highwood Creek,MT
+100301021304,12,Lower Highwood Creek,MT
+1003010214,10,Huntley Coulee-Missouri River,MT
+100301021401,12,Ryan Coulee,MT
+100301021402,12,Widow Coulee-Missouri River,MT
+100301021403,12,Huntley Coulee,MT
+100301021404,12,Black Coulee-Missouri River,MT
+100301021405,12,Cherry Coulee,MT
+100301021406,12,Bullhead Coulee-Missouri River,MT
+1003010215,10,Shonkin Creek,MT
+100301021501,12,Keaster Creek,MT
+100301021502,12,Upper Shonkin Creek,MT
+100301021503,12,Spring Coulee,MT
+100301021504,12,Middle Shonkin Creek,MT
+100301021505,12,Lower Shonkin Creek,MT
+1003010216,10,Rowe Coulee-Missouri River,MT
+100301021601,12,Bird Coulee-Missouri River,MT
+100301021602,12,Fort Benton-Missouri River,MT
+100301021603,12,O'Hanlon Coulee,MT
+100301021604,12,Rowe Coulee,MT
+100301021605,12,Rowe Bench-Missouri River,MT
+10030103,8,Smith,MT
+1003010301,10,North Fork Smith River,MT
+100301030101,12,Eightmile Creek,MT
+100301030102,12,Stud Horse Creek-North Fork Smith River,MT
+100301030103,12,Lake Sutherlin-North Fork Smith River,MT
+100301030104,12,Fourmile Creek,MT
+100301030105,12,Trout Creek-North Fork Smith River,MT
+1003010302,10,South Fork Smith River,MT
+100301030201,12,Headwaters South Fork Smith River,MT
+100301030202,12,Agate Creek-South Fork Smith River,MT
+100301030203,12,Cottonwood Creek,MT
+100301030204,12,Mayns Creek-South Fork Smith River,MT
+100301030205,12,Spring Creek-South Fork Smith River,MT
+100301030206,12,Hot Springs Creek,MT
+100301030207,12,Woods Gulch Creek,MT
+100301030208,12,Little Birch Creek,MT
+100301030209,12,Big Birch Creek,MT
+100301030210,12,Cooks Creek-South Fork Smith River,MT
+1003010303,10,Newlan Creek-Smith River,MT
+100301030301,12,Upper Newlan Creek,MT
+100301030302,12,Lower Newlan Creek,MT
+100301030303,12,Thompson Gulch,MT
+100301030304,12,Spring Creek,MT
+100301030305,12,Rabbit Creek,MT
+100301030306,12,Rock Springs Creek-Smith River,MT
+1003010304,10,Sheep Creek,MT
+100301030401,12,Headwaters Sheep Creek,MT
+100301030402,12,Moose Creek,MT
+100301030403,12,Upper Sheep Creek,MT
+100301030404,12,Middle Sheep Creek,MT
+100301030405,12,Butte Creek,MT
+100301030406,12,Lower Sheep Creek,MT
+1003010305,10,Camas Creek-Smith River,MT
+100301030501,12,Upper Camas Creek,MT
+100301030502,12,Lower Camas Creek,MT
+100301030503,12,Thomas Creek,MT
+100301030504,12,Cottonwood Creek,MT
+100301030505,12,Whitetail Deer Creek,MT
+100301030506,12,Beaver Creek,MT
+100301030507,12,Cottonwood Creek-Smith River,MT
+1003010306,10,Rock Creek,MT
+100301030601,12,North Fork Rock Creek,MT
+100301030602,12,Upper Rock Creek,MT
+100301030603,12,Buffalo Canyon,MT
+100301030604,12,Freeman Creek,MT
+100301030605,12,Ellis Canyon,MT
+100301030606,12,Lower Rock Creek,MT
+1003010307,10,Eagle Creek-Smith River,MT
+100301030701,12,Upper Eagle Creek,MT
+100301030702,12,Lower Eagle Creek,MT
+100301030703,12,Spring Creek,MT
+100301030704,12,Black Canyon,MT
+100301030705,12,Blacktail Creek-Smith River,MT
+1003010308,10,Tenderfoot Creek,MT
+100301030801,12,Upper Tenderfoot Creek,MT
+100301030802,12,Middle Tenderfoot Creek,MT
+100301030803,12,Lower Tenderfoot Creek,MT
+1003010309,10,Deep Creek-Smith River,MT
+100301030901,12,Two Creek-Smith River,MT
+100301030902,12,Trout Creek,MT
+100301030903,12,Upper Deep Creek,MT
+100301030904,12,Lower Deep Creek,MT
+100301030905,12,Bear Gulch-Smith River,MT
+100301030906,12,Rocky Coulee-Smith River,MT
+1003010310,10,Hound Creek,MT
+100301031001,12,Elk Creek,MT
+100301031002,12,Middle Creek,MT
+100301031003,12,Headwaters Hound Creek,MT
+100301031004,12,Upper Hound Creek,MT
+100301031005,12,Pine Coulee,MT
+100301031006,12,West Fork Hound Creek,MT
+100301031007,12,Middle Hound Creek,MT
+100301031008,12,Lower Hound Creek,MT
+1003010311,10,Ming Coulee-Smith River,MT
+100301031101,12,Clark Creek,MT
+100301031102,12,Spanish Coulee,MT
+100301031103,12,Boston Coulee-Smith River,MT
+100301031104,12,Upper Ming Coulee,MT
+100301031105,12,Lower Ming Coulee,MT
+100301031106,12,Goodman Coulee-Smith River,MT
+10030104,8,Sun,MT
+1003010401,10,North Fork Sun River,MT
+100301040101,12,Open Creek,MT
+100301040102,12,Lick Creek,MT
+100301040103,12,Headwaters North Fork Sun River,MT
+100301040104,12,Route Creek,MT
+100301040105,12,Gates Creek,MT
+100301040106,12,Rock Creek,MT
+100301040107,12,Upper North Fork Sun River,MT
+100301040108,12,Biggs Creek,MT
+100301040109,12,Moose Creek,MT
+100301040110,12,Middle North Fork Sun River,MT
+100301040111,12,Lower North Fork Sun River,MT
+1003010402,10,South Fork Sun River,MT
+100301040201,12,Straight Creek,MT
+100301040202,12,Wood Creek,MT
+100301040203,12,Upper South Fork Sun River,MT
+100301040204,12,Middle South Fork Sun River,MT
+100301040205,12,Ahorn Creek,MT
+100301040206,12,Upper West Fork South Fork Sun River,MT
+100301040207,12,Lower West Fork South Fork Sun River,MT
+100301040208,12,Lower South Fork Sun River,MT
+1003010403,10,Willow Creek,MT
+100301040301,12,North Fork Willow Creek,MT
+100301040302,12,Little Willow Creek-Willow Creek,MT
+100301040303,12,North Fork Willow Creek-Willow Creek,MT
+100301040304,12,Willow Creek Reservoir-Willow Creek,MT
+1003010404,10,Gibson Reservoir-Sun River,MT
+100301040401,12,Gibson Reservoir,MT
+100301040402,12,Beaver Creek,MT
+100301040403,12,Hannah Gulch-Sun River,MT
+100301040404,12,Richardson Creek-Sun River,MT
+100301040405,12,Split Rock Lake-Sun River,MT
+100301040406,12,Pishkun Reservoir-Sun River,MT
+1003010405,10,Elk Creek,MT
+100301040501,12,Ford Creek,MT
+100301040502,12,Upper Smith Creek,MT
+100301040503,12,Blubber Creek,MT
+100301040504,12,Upper Elk Creek,MT
+100301040505,12,Lower Smith Creek,MT
+100301040506,12,Lower Elk Creek,MT
+1003010406,10,Dry Creek-Sun River,MT
+100301040601,12,Cutting Shed Coulee-Sun River,MT
+100301040602,12,Spring Creek,MT
+100301040603,12,Upper Dry Creek,MT
+100301040604,12,Lower Dry Creek,MT
+100301040605,12,Bickle Burke Ditch-Sun River,MT
+1003010407,10,Big Coulee-Sun River,MT
+100301040701,12,School Section Coulee,MT
+100301040702,12,North Fork Simms Creek,MT
+100301040703,12,Simms Creek,MT
+100301040704,12,Loomis Coulee-Sun River,MT
+100301040705,12,Upper Big Coulee,MT
+100301040706,12,Lower Big Coulee,MT
+100301040707,12,Adobe Creek,MT
+100301040708,12,City of Simms-Sun River,MT
+1003010408,10,Muddy Creek,MT
+100301040801,12,North Fork Muddy Creek,MT
+100301040802,12,Headwaters Muddy Creek,MT
+100301040803,12,Town of Power,MT
+100301040804,12,Upper Muddy Creek,MT
+100301040805,12,Third Bench,MT
+100301040806,12,Spring Coulee,MT
+100301040807,12,Tank Coulee,MT
+100301040808,12,Middle Muddy Creek,MT
+100301040809,12,Lower Muddy Creek,MT
+1003010409,10,Fourmile Creek-Sun River,MT
+100301040901,12,Mill Coulee Creek,MT
+100301040902,12,Fourmile Creek,MT
+100301040903,12,Sun River Valley-Sun River,MT
+100301040904,12,Neuman Ridge,MT
+100301040905,12,Town of Manchester-Sun River,MT
+100301040906,12,100301040906,MT
+100301040907,12,Wadsworth Park-Sun River,MT
+10030105,8,Belt,MT
+1003010501,10,Upper Belt Creek,MT
+100301050101,12,Jefferson Creek-Belt Creek,MT
+100301050102,12,Carpenter Creek-Belt Creek,MT
+100301050103,12,Upper Dry Fork Belt Creek,MT
+100301050104,12,Lower Dry Fork Belt Creek,MT
+100301050105,12,Hoover Creek-Belt Creek,MT
+1003010502,10,Big Otter Creek,MT
+100301050201,12,Headwaters Big Otter Creek,MT
+100301050202,12,Williams Creek,MT
+100301050203,12,Upper Big Otter Creek,MT
+100301050204,12,Little Otter Creek,MT
+100301050205,12,Middle Big Otter Creek,MT
+100301050206,12,Cora Creek,MT
+100301050207,12,Lower Big Otter Creek,MT
+1003010503,10,Middle Belt Creek,MT
+100301050301,12,Tillinghast Creek,MT
+100301050302,12,Pilgrim Creek,MT
+100301050303,12,Logging Creek,MT
+100301050304,12,Iron Creek-Belt Creek,MT
+100301050305,12,Nasen Coulee-Belt Creek,MT
+100301050306,12,Town of Riceville-Belt Creek,MT
+1003010504,10,Lower Belt Creek,MT
+100301050401,12,Nell Creek-Belt Creek,MT
+100301050402,12,Little Belt Creek,MT
+100301050403,12,Big Willow Creek,MT
+100301050404,12,North Willow Creek,MT
+100301050405,12,Town of Four Corners-Belt Creek,MT
+100301050406,12,Red Coulee,MT
+100301050407,12,Rogers Coulee,MT
+100301050408,12,Red Coulee-Belt Creek,MT
+100302,6,Marias,MT
+10030201,8,Two Medicine,MT
+1003020101,10,Upper Two Medicine River,MT
+100302010101,12,Two Medicine Lake-Two Medicine River,MT
+100302010102,12,Midvail Creek-Two Medicine River,MT
+100302010103,12,Upper South Fork Two Medicine River,MT
+100302010104,12,Lower South Fork Two Medicine River,MT
+100302010105,12,Little Badger Creek,MT
+100302010106,12,Elk Creek-Two Medicine River,MT
+1003020102,10,Badger Creek,MT
+100302010201,12,North Badger Creek,MT
+100302010202,12,Lonesome Creek-Badger Creek,MT
+100302010203,12,Mitten Lake-Badger Creek,MT
+100302010204,12,Whitetail Creek,MT
+100302010205,12,Hay Coulee-Badger Creek,MT
+100302010206,12,Whitecalf Coulee-Badger Creek,MT
+1003020103,10,Middle Two Medicine River,MT
+100302010301,12,Big Nose Coulee-Two Medicine River,MT
+100302010302,12,Hagan Flat-Two Medicine River,MT
+1003020104,10,Blacktail Creek,MT
+100302010401,12,Upper Blacktail Creek,MT
+100302010402,12,Lower Blacktail Creek,MT
+1003020105,10,Dupuyer Creek,MT
+100302010501,12,Upper Dupuyer Creek,MT
+100302010502,12,Sheep Creek,MT
+100302010503,12,Middle Dupuyer Creek,MT
+100302010504,12,Lower Dupuyer Creek,MT
+1003020106,10,Birch Creek,MT
+100302010601,12,Middle Fork Birch Creek,MT
+100302010602,12,South Fork Birch Creek,MT
+100302010603,12,North Fork Birch Creek,MT
+100302010604,12,Upper Birch Creek,MT
+100302010605,12,Cartwright Coulee,MT
+100302010606,12,Middle Birch Creek,MT
+100302010607,12,Rocky Ridge Coulee,MT
+100302010608,12,Lower Birch Creek,MT
+1003020107,10,Lower Two Medicine River,MT
+100302010701,12,Kipps Coulee,MT
+100302010702,12,Shields Crossing-Two Medicine River,MT
+10030202,8,Cut Bank,MT
+1003020201,10,Upper Cut Bank Creek,MT
+100302020101,12,North Fork Cut Bank Creek,MT
+100302020102,12,South Fork Cut Bank Creek,MT
+100302020103,12,Greasewood Creek,MT
+100302020104,12,Sharp Lake-Cut Bank Creek,MT
+1003020202,10,Willow Creek,MT
+100302020201,12,Depot Creek,MT
+100302020202,12,Upper Willow Creek,MT
+100302020203,12,Middle Willow Creek,MT
+100302020204,12,Lower Willow Creek,MT
+1003020203,10,Middle Cut Bank Creek,MT
+100302020301,12,Trail Coulee,MT
+100302020302,12,Cut Bank John Coulee,MT
+100302020303,12,Cobell Coulee,MT
+100302020304,12,Powell Coulee,MT
+100302020305,12,Cobell Ditch-Cut Bank Creek,MT
+1003020204,10,Little Rock Coulee,MT
+100302020401,12,Buffalo Lake,MT
+100302020402,12,Upper Little Rock Coulee,MT
+100302020403,12,South Fork Little Rock Coulee,MT
+100302020404,12,Lower Little Rock Coulee,MT
+1003020205,10,Big Rock Coulee,MT
+100302020501,12,East Fork Big Rock Coulee,MT
+100302020502,12,Headwaters Big Rock Coulee,MT
+100302020503,12,Upper Big Rock Coulee,MT
+100302020504,12,Middle Big Rock Coulee,MT
+100302020505,12,Lower Big Rock Coulee,MT
+1003020206,10,Spring Creek,MT
+100302020601,12,Guardipee Lake,MT
+100302020602,12,Mission Lake,MT
+100302020603,12,Upper Spring Creek,MT
+100302020604,12,Lower Spring Creek,MT
+1003020207,10,Lower Cut Bank Creek,MT
+100302020701,12,Gillam Coulee,MT
+100302020702,12,Wasteway Coulee-Cut Bank Creek,MT
+100302020703,12,Snake Coulee,MT
+100302020704,12,Old Maids Coulee,MT
+100302020705,12,Hope Lake-Cut Bank Creek,MT
+100302020706,12,Cut Bank Creek,MT
+10030203,8,Marias,MT
+1003020301,10,Schultz Coulee-Marias River,MT
+100302030101,12,Abbott Coulee-Marias River,MT
+100302030102,12,Bullhead Creek,MT
+100302030103,12,Schultz Coulee,MT
+100302030104,12,Millar Coulee-Marias River,MT
+1003020302,10,Town of Sunburst,MT
+100302030201,12,Buckley Coulee,MT
+100302030202,12,Sunburst Coulee,MT
+100302030203,12,100302030203,MT
+100302030204,12,Town of Sunburst,MT
+100302030205,12,Willshaw Flats,MT
+1003020303,10,Rocky Spring Coulee,MT
+100302030301,12,Goeddertz Reservoir,MT
+100302030302,12,Healy Coulee,MT
+100302030303,12,Upper Rocky Spring Coulee,MT
+100302030304,12,Lower Rocky Spring Coulee,MT
+1003020304,10,Spring Coulee,MT
+100302030401,12,Sand Coulee,MT
+100302030402,12,Upper Spring Coulee,MT
+100302030403,12,Lower Spring Coulee,MT
+1003020305,10,Aloe Lake,MT
+100302030501,12,Aloe Lake,MT
+100302030502,12,Mead Coulee,MT
+1003020306,10,Upper Dry Fork Marias River,MT
+100302030601,12,South Fork Dry Fork Marias River,MT
+100302030602,12,Middle Fork Dry Fork Marias River,MT
+100302030603,12,North Fork Dry Fork Marias River,MT
+100302030604,12,Lone Man Coulee,MT
+100302030605,12,Lake Frances,MT
+100302030606,12,New Miami Colony-Dry Fork Marias River,MT
+1003020307,10,Lower Dry Fork Marias River,MT
+100302030701,12,Spring Creek,MT
+100302030702,12,Town of Williams-Dry Fork Marias River,MT
+100302030703,12,Big Flat Coulee,MT
+100302030704,12,Little Flat Coulee,MT
+100302030705,12,Letz Lake-Dry Fork Marias River,MT
+100302030706,12,Town of Fowler-Dry Fork Marias River,MT
+1003020308,10,Pearson Coulee-Marias River,MT
+100302030801,12,Pearson Coulee,MT
+100302030802,12,City of Shelby,MT
+100302030803,12,Williamson Park-Marias River,MT
+100302030804,12,Wilson Reservoir-Marias River,MT
+100302030805,12,Hoffman Coulee-Marias River,MT
+1003020309,10,Upper Pondera Coulee,MT
+100302030901,12,Smith Ranch-Pondera Coulee,MT
+100302030902,12,Boucher Coulee-Pondera Coulee,MT
+100302030903,12,Favot Coulee,MT
+100302030904,12,Railroad Coulee-Pondera Coulee,MT
+1003020310,10,South Pondera Coulee,MT
+100302031001,12,Upper South Pondera Coulee,MT
+100302031002,12,Lower South Pondera Coulee,MT
+1003020311,10,Rocky Coulee,MT
+100302031101,12,Upper Rocky Coulee,MT
+100302031102,12,Lower Rocky Coulee,MT
+1003020312,10,Powder Coulee,MT
+100302031201,12,Upper Powder Coulee,MT
+100302031202,12,Lower Powder Coulee,MT
+1003020313,10,Lower Pondera Coulee,MT
+100302031301,12,Just Barely Dam-Flat Coulee,MT
+100302031302,12,Romain Dam-Dead Indian Coulee,MT
+100302031303,12,Hall Community Well-Pondera Coulee,MT
+100302031304,12,Shotgun Slough-Pondera Coulee,MT
+100302031305,12,Timber Coulee,MT
+100302031306,12,Carson Coulee-Pondera Coulee,MT
+1003020314,10,Basin Coulee,MT
+100302031401,12,Upper Basin Coulee,MT
+100302031402,12,Middle Basin Coulee,MT
+100302031403,12,Lower Basin Coulee,MT
+1003020315,10,Dugout Coulee,MT
+100302031501,12,North Fork Dugout Coulee,MT
+100302031502,12,Upper Dugout Coulee,MT
+100302031503,12,East Fork Dugout Coulee,MT
+100302031504,12,Lower Dugout Coulee,MT
+1003020316,10,Upper Cottonwood Creek,MT
+100302031601,12,Corral Creek,MT
+100302031602,12,Government Creek,MT
+100302031603,12,Horse Creek,MT
+100302031604,12,Headwaters Cottonwood Creek,MT
+1003020317,10,Middle Cottonwood Creek,MT
+100302031701,12,Badger Coulee-Cottonwood Creek,MT
+100302031702,12,Tiber Coulee,MT
+100302031703,12,City of Chester-Cottonwood Creek,MT
+1003020318,10,Lower Cottonwood Creek,MT
+100302031801,12,Cox Coulee,MT
+100302031802,12,Twelvemile Coulee,MT
+100302031803,12,Sixmile Coulee,MT
+100302031804,12,Larson Coulee-Cottonwood Creek,MT
+1003020319,10,East Fork Black Coulee,MT
+100302031901,12,Headwaters East Fork Black Coulee,MT
+100302031902,12,Town of Joplin-East Fork Black Coulee,MT
+100302031903,12,Town of Inverness-East Fork Black Coulee,MT
+100302031904,12,Peebles Dam,MT
+100302031905,12,Ean School-East Fork Black Coulee,MT
+100302031906,12,G Twedt Dam-East Fork Black Coulee,MT
+1003020320,10,Black Coulee,MT
+100302032001,12,Headwaters Black Coulee,MT
+100302032002,12,Upper Black Coulee,MT
+100302032003,12,Rocky Coulee,MT
+100302032004,12,Middle Black Coulee,MT
+100302032005,12,Flat Coulee,MT
+100302032006,12,Lower Black Coulee,MT
+1003020321,10,Dead Indian Coulee-Marias River,MT
+100302032101,12,Marias River-Tiber Reservoir,MT
+100302032102,12,Tiber Reservoir,MT
+100302032103,12,Spring Coulee-Marias River,MT
+100302032104,12,Hay Coulee,MT
+100302032105,12,Horse Coulee-Marias River,MT
+100302032106,12,Dead Indian Coulee,MT
+100302032107,12,Eightmile Coulee-Marias River,MT
+100302032108,12,Fourmile Coulee-Marias River,MT
+1003020322,10,Chip Creek-Marias River,MT
+100302032201,12,Sheep Coulee,MT
+100302032202,12,Lone Tree Coulee,MT
+100302032203,12,Joe Vielleux Dam-Dry Fork Coulee,MT
+100302032204,12,Chip Creek,MT
+100302032205,12,Tye Dam-Dry Fork Coulee,MT
+100302032206,12,Town of Loma-Marias River,MT
+10030204,8,Willow,MT
+1003020401,10,Black Coulee,MT
+100302040101,12,Fifteenmile Coulee,MT
+100302040102,12,Black Coulee,MT
+1003020402,10,Trail Creek,MT
+100302040201,12,Upper Trail Creek,MT
+100302040202,12,Lower Trail Creek,MT
+1003020403,10,Upper Willow Creek,MT
+100302040301,12,Upper Miners Coulee,MT
+100302040302,12,Lower Miners Coulee,MT
+100302040303,12,Simmons Creek-Willow Creek,MT
+100302040304,12,Fivemile Coulee-Willow Creek,MT
+100302040305,12,Sheep Creek,MT
+100302040306,12,Black Butte-Willow Creek,MT
+1003020404,10,West Fork Willow Creek,MT
+100302040401,12,Upper Dunkirk Coulee,MT
+100302040402,12,Lower Dunkirk Coulee,MT
+100302040403,12,Upper West Fork Willow Creek,MT
+100302040404,12,Antelope Coulee,MT
+100302040405,12,Crooked Coulee,MT
+100302040406,12,Lower West Fork Willow Creek,MT
+1003020405,10,Eagle Creek,MT
+100302040501,12,Upper Eagle Creek,MT
+100302040502,12,Lower Eagle Creek,MT
+1003020406,10,Lower Willow Creek,MT
+100302040601,12,Willow Creek-Mc Carters Lake,MT
+100302040602,12,Kinyon Coulee,MT
+100302040603,12,Cameron Coulee-Willow Creek,MT
+100302040604,12,Willow Creek-Tiber Reservoir,MT
+10030205,8,Teton,MT
+1003020501,10,North Fork Teton River-Teton River,MT
+100302050101,12,Upper North Fork Teton River,MT
+100302050102,12,Middle North Fork Teton River,MT
+100302050103,12,South Fork Teton River,MT
+100302050104,12,Lower North Fork Teton River,MT
+100302050105,12,McDonald Creek-Teton River,MT
+1003020502,10,Willow Creek,MT
+100302050201,12,South Fork Willow Creek,MT
+100302050202,12,North Fork Willow Creek,MT
+100302050203,12,Upper Willow Creek,MT
+100302050204,12,Lower Willow Creek,MT
+1003020503,10,Deep Creek,MT
+100302050301,12,Upper Deep Creek,MT
+100302050302,12,Hay Coulee,MT
+100302050303,12,Wolf Coulee,MT
+100302050304,12,Dog Creek,MT
+100302050305,12,Middle Deep Creek,MT
+100302050306,12,Lower Deep Creek,MT
+1003020504,10,City of Choteau-Teton River,MT
+100302050401,12,Hod Main Coulee-Teton River,MT
+100302050402,12,Upper Freezeout Lake,MT
+100302050403,12,Roundup Coulee,MT
+100302050404,12,Lower Freezeout Lake,MT
+100302050405,12,Spring Creek-Teton River,MT
+100302050406,12,Gamble Coulee-Teton River,MT
+1003020505,10,Spring Coulee,MT
+100302050501,12,Upper Spring Coulee,MT
+100302050502,12,Lower Spring Coulee,MT
+1003020506,10,Upper Muddy Creek,MT
+100302050601,12,Clark Fork Muddy Creek,MT
+100302050602,12,Rinker Creek-Muddy Creek,MT
+100302050603,12,Blacktail Creek,MT
+100302050604,12,Blackleaf Creek,MT
+100302050605,12,Miller Creek-Muddy Creek,MT
+1003020507,10,Middle Muddy Creek,MT
+100302050701,12,Foster Creek,MT
+100302050702,12,Town of Bynum-Muddy Creek,MT
+1003020508,10,Lower Muddy Creek,MT
+100302050801,12,Jones Creek,MT
+100302050802,12,Farmer Coulee,MT
+100302050803,12,Kropp Coulee,MT
+100302050804,12,Eyraud Lakes-Muddy Creek,MT
+100302050805,12,Muddy Creek,MT
+1003020509,10,Hunt Coulee-Teton River,MT
+100302050901,12,Alkali Flat-Teton River,MT
+100302050902,12,Government Coulee-Teton River,MT
+100302050903,12,Railroad Coulee,MT
+100302050904,12,Hunt Coulee,MT
+100302050905,12,Kerr Bridge-Teton River,MT
+1003020510,10,Timber Coulee-Teton River,MT
+100302051001,12,Kinnerely Coulee,MT
+100302051002,12,Flat Coulee,MT
+100302051003,12,Rye Coulee-Teton River,MT
+100302051004,12,Rye Coulee,MT
+100302051005,12,Timber Coulee,MT
+100302051006,12,Berry Coulee,MT
+100302051007,12,Sheep Coulee-Teton River,MT
+1003020511,10,Weatherwax Coulee-Teton River,MT
+100302051101,12,East-West Knee,MT
+100302051102,12,100302051102,MT
+100302051103,12,Dent Bridge-Teton River,MT
+100302051104,12,Antelope Coulee,MT
+100302051105,12,Weatherwax Coulee,MT
+100302051106,12,Frank Gilbert Coulee-Teton River,MT
+1003020512,10,Dry Fork Coulee-Teton River,MT
+100302051201,12,Chimney Rock Coulee,MT
+100302051202,12,West Dry Fork Coulee,MT
+100302051203,12,Dry Fork Coulee,MT
+100302051204,12,Eightmile Coulee-Teton River,MT
+100302051205,12,Rowe Bench-Teton River,MT
+1004,4,Missouri-Musselshell,MT
+100401,6,Fort Peck Lake,MT
+100402,6,Musselshell,MT
+1005,4,Milk,"CN,MT"
+100500,6,Milk,"CN,MT"
+1007,4,Upper Yellowstone,"MT,WY"
+100700,6,Upper Yellowstone,"MT,WY"
 1404,4,Great Divide-Upper Green,"CO,UT,WY"
 140401,6,Upper Green,"CO,UT,WY"
 1406,4,Lower Green,"CO,UT"

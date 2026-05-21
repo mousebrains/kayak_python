@@ -401,3 +401,17 @@ id,reach_id,name,low,low_data_type,high,high_data_type
 400,60,V,3000.0,flow,,
 401,389,II+,900.0,flow,2000.0,flow
 402,390,III,500.0,flow,3000.0,flow
+403,391,II-III,250.0,flow,1000.0,flow
+404,392,II-III,200.0,flow,10000.0,flow
+405,393,II,1800.0,flow,15000.0,flow
+406,394,III-IV,1200.0,flow,20000.0,flow
+407,395,I-II,200.0,flow,5000.0,flow
+408,396,II+,5.0,flow,15.0,flow
+409,397,I-II,250.0,flow,1500.0,flow
+410,398,II,1000.0,flow,10000.0,flow
+411,399,III-V(V+),420.0,flow,1500.0,flow
+412,400,III-V(V+),500.0,flow,1500.0,flow
+413,401,III+(V+),4500.0,flow,12000.0,flow
+414,402,II(III),2.0,flow,7.0,flow
+415,403,I-IV,600.0,flow,4000.0,flow
+416,404,IV-V,700.0,flow,2700.0,flow
