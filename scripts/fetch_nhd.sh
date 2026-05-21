@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Download NHD (National Hydrography Dataset) state GeoPackage files
-# and NHDPlus HR HUC4 files for OR, WA, ID, NV, and northern CA.
+# and NHDPlus HR HUC4 files for OR, WA, ID, NV, northern CA, and western MT.
 #
 # Run on a machine with sufficient RAM and disk (files are ~200MB-1GB each).
 #
@@ -57,10 +57,13 @@ done
 #   1801 - Klamath-Trinity-Smith (NorCal)
 #   1802 - Klamath (OR/CA)
 #   1803 - NorCal (north of 40°)
+#   1002 - Missouri Headwaters (MT: Big Hole, Jefferson, Madison)
+#   1003 - Missouri-Marias (MT: Missouri, Dearborn, Smith, Sun, Belt Creek)
 HR_HUCS=(
     1701 1702 1703 1704 1705 1706 1707 1708 1709 1710 1711 1712
     1601 1602 1603 1604
     1801 1802 1803
+    1002 1003
 )
 
 echo ""
