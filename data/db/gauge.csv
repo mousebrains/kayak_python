@@ -200,7 +200,7 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 200,12340000,,,near Bonner,46.899411111111114,-113.75631944444444,12340000,,,,,,12340000,,3344.76,2287.0,170102031308,0,Blackfoot,Blackfoot near Bonner,blackfoot|9|006655|002287,MT
 201,12354500,,,at St. Regis,47.3016388888889,-115.086869444444,12354500,,,,,,12354500,,2600.37,10728.0,170102040805,0,Clark Fork,Clark Fork at St. Regis,clarkfork|9|007400|010728,MT
 202,06073500,,,near Craig,47.199025,-112.095905555556,06073500,,,,,,06073500,,3800.0,322.0,100301020404,0,Dearborn,Dearborn near Craig,dearborn|9|006200|000322,MT
-203,12359800,,,above Twin C near Hungry Horse,47.9790972222222,-113.560683333333,12359800,,,,,,12359800,,3575.0,1159.0,170102090509,0,South Fork Flathead R,South Fork Flathead R above Twin C near Hungry Horse,southforkflatheadr|9|006425|001159,MT
+203,12359800,,,above Twin C near Hungry Horse,47.9790972222222,-113.560683333333,12359800,,,,,,12359800,,3575.0,1159.0,170102090509,0,SF Flathead,SF Flathead above Twin C near Hungry Horse,sflathead|9|006425|001159,MT
 204,06036650,,,near Three Forks,45.89713611111111,-111.59567222222222,06036650,,,,,,06036650,,4079.5,9558.0,100200050805,0,Jefferson,Jefferson near Three Forks,jefferson|9|005920|009558,MT
 205,06038800,,,at Kirby Ranch near Cameron,44.88865555555555,-111.58088611111111,06038800,,,,,,06038800,,5872.92,1093.0,100200070703,0,Madison,Madison at Kirby Ranch near Cameron,madison|9|004127|001093,MT
 206,06066500,,,below Holter Dam near Wolf Creek,46.9947388888889,-112.010666666667,06066500,,,,,,06066500,,3464.11,16924.0,100301012008,0,Missouri,Missouri below Holter Dam near Wolf Creek,missouri|9|006536|016924,MT
