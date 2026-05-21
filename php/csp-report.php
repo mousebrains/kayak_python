@@ -57,10 +57,12 @@ $lines = [];
 foreach ($reports as $r) {
     $source_file = $r['source-file'] ?? $r['sourceFile'] ?? null;
     // Drop reports injected by browser extensions / sandboxed eval — those
-    // come from code outside our pages and aren't actionable.
+    // come from code outside our pages and aren't actionable. Modern Chrome
+    // / Edge truncate the source-file value to the bare scheme (no `://…`),
+    // so accept either form.
     if (is_string($source_file) && (
         $source_file === 'sandbox eval code'
-        || preg_match('#^(?:chrome|moz|safari|safari-web|edge|ms-browser)-extension://#', $source_file)
+        || preg_match('#^(?:chrome|moz|safari|safari-web|edge|ms-browser)-extension(?://|$)#', $source_file)
     )) {
         continue;
     }
