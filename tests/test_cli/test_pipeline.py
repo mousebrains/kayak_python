@@ -54,6 +54,7 @@ def test_pipeline_step_order():
         "calculator",
         "build",
         "orphan-check",
+        "check-reaches",
     ]
 
 
@@ -67,6 +68,7 @@ def test_pipeline_skip_fetch_drops_fetch_step():
         "calculator",
         "build",
         "orphan-check",
+        "check-reaches",
     ]
 
 
@@ -87,6 +89,7 @@ def test_pipeline_dag_dependencies():
         "calculator": ("update-gauge-cache",),
         "build": ("update-gauge-cache", "calculator"),
         "orphan-check": ("build",),
+        "check-reaches": ("build",),
     }
 
 

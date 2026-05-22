@@ -12,7 +12,7 @@ Default DAG:
 
   fetch ─────────┐
   fetch-usgs-ogc ┤
-                 ├──> calc-rating ──> update-gauge-cache ──> calculator ──> build ──> orphan-check
+                 ├──> calc-rating ──> update-gauge-cache ──> calculator ──> build ──> orphan-check ──> check-reaches
 """
 
 import argparse
@@ -25,7 +25,7 @@ from enum import Enum
 
 from sqlalchemy import text
 
-from kayak.cli import build, calc_rating, calculator, fetch, fetch_usgs_ogc
+from kayak.cli import build, calc_rating, calculator, check_reaches, fetch, fetch_usgs_ogc
 from kayak.db.engine import get_engine
 from kayak.db.sources import find_orphan_sources
 from kayak.utils.struct_log import emit as struct_emit
@@ -98,6 +98,31 @@ def _update_gauge_cache(args: argparse.Namespace) -> None:
         session.close()
 
 
+def _check_reaches(args: argparse.Namespace) -> None:
+    """Soft-fail if any reach.geom fails the format / endpoint validator.
+
+    Same shape as :func:`_orphan_check`: runs *after* build so a fresh
+    geometry issue never blocks the public site from updating, but
+    raises ``RuntimeError`` so the pipeline records the failure and
+    systemd's ``OnFailure=kayak-notify-failure@%n.service`` chain
+    fires its existing email + ntfy. Wraps
+    :func:`kayak.cli.check_reaches.scan_for_issues` rather than
+    invoking the CLI directly so the per-step ``SystemExit`` handler
+    in the pipeline orchestrator doesn't swallow validator-1 exits.
+    """
+    total, flagged = check_reaches.scan_for_issues()
+    if not flagged:
+        print(f"Check-reaches: clean ({total} reaches scanned).")
+        return
+
+    logger.error("Check-reaches flagged %d reach(es):", len(flagged))
+    for label, issues in flagged:
+        logger.error("  %s", label)
+        for issue in issues:
+            logger.error("    %s", issue)
+    raise RuntimeError(f"{len(flagged)} reach(es) with geometry issues — see ERROR logs above")
+
+
 def _orphan_check(args: argparse.Namespace) -> None:
     """Soft-fail if any fetch-active source has no gauge_source link.
 
@@ -155,6 +180,7 @@ def _build_steps(skip_fetch: bool) -> list[_Step]:
             _Step("calculator", calculator.calculator, requires=("update-gauge-cache",)),
             _Step("build", build.build, requires=("update-gauge-cache", "calculator")),
             _Step("orphan-check", _orphan_check, requires=("build",)),
+            _Step("check-reaches", _check_reaches, requires=("build",)),
         ]
     )
     return steps

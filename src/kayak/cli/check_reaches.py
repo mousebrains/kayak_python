@@ -46,17 +46,17 @@ from kayak.db.engine import get_session
 from kayak.db.models import Reach
 from kayak.tracing.format import has_wkt_wrapper, parse_geom_string
 
-# ~0.009° lat ≈ 1 km on the ground. Set wide enough to absorb NHD's
-# normal stop-short-of-the-take-out behaviour at tidal mouths and
-# reservoir inflows (the Rogue at Foster Bar terminates ~550 m short
-# of the tidal take-out, the South Santiam ends at the Foster
-# Reservoir entry, etc.) — these are valid traces, just not vertex-
-# coincident with the documented landing. Tight enough to still
-# catch real bugs like Horse Creek's 12000-km-drift WKT-wrapper bug
-# (migration 0041) or the Klickitat's 5-km mis-traced put-in
-# (migration 0042). Override with --endpoint-tolerance when you want
-# stricter inspection.
-_ENDPOINT_TOL_DEG = 0.01
+# ~0.003° lat ≈ 333 m on the ground; matches the worst-case NHD HR
+# snap distance we've observed in practice (Horse Creek endpoint
+# alignment was ~21 m, well inside this). A drift larger than this
+# almost certainly means a manually-typed endpoint column doesn't
+# match the trace — either the column is wrong (the Horse Creek,
+# Klickitat, South Santiam, SF Owyhee, and Rogue cases caught
+# during the initial validator rollout, all fixed by 0041-0044) or
+# the trace overshot. Override with --endpoint-tolerance for a
+# wider scan if you're inspecting reaches whose take-out you know
+# is intentionally off-network.
+_ENDPOINT_TOL_DEG = 0.003
 
 
 def _addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -154,25 +154,49 @@ def _check_one(reach: Reach, *, endpoint_tol_deg: float) -> list[str]:
     return issues
 
 
-def check_reaches(args: argparse.Namespace) -> None:
-    """Entry point for ``levels check-reaches``."""
-    with get_session(args.database_url) as session:
+def scan_for_issues(
+    *,
+    database_url: str | None = None,
+    endpoint_tolerance: float = _ENDPOINT_TOL_DEG,
+) -> tuple[int, list[tuple[str, list[str]]]]:
+    """Scan every reach.geom row and return ``(total_reaches, flagged)``.
+
+    ``flagged`` is a list of ``(label, issues)`` pairs — label includes
+    the reach id + AW id + display name when available, issues is the
+    list of human-readable problems found. An empty ``flagged`` means
+    the DB is clean.
+
+    Separated from the CLI wrapper so the pipeline orchestrator can
+    drive the same scan without going through ``sys.exit`` (which the
+    pipeline's per-step ``SystemExit`` handler would otherwise swallow,
+    masking validator failures).
+    """
+    flagged: list[tuple[str, list[str]]] = []
+    with get_session(database_url) as session:
         reaches = session.query(Reach).all()
-        total = len(reaches)
-        flagged = 0
         for r in reaches:
-            issues = _check_one(r, endpoint_tol_deg=args.endpoint_tolerance)
+            issues = _check_one(r, endpoint_tol_deg=endpoint_tolerance)
             if not issues:
                 continue
-            flagged += 1
             label = f"reach {r.id}"
             if getattr(r, "aw_id", None):
                 label += f" (aw_{r.aw_id})"
             if r.display_name:
                 label += f" — {r.display_name}"
-            print(label)
-            for issue in issues:
-                print(f"  • {issue}")
-        print()
-        print(f"checked {total} reaches; {flagged} with issues")
-        sys.exit(0 if flagged == 0 else 1)
+            flagged.append((label, issues))
+    return len(reaches), flagged
+
+
+def check_reaches(args: argparse.Namespace) -> None:
+    """Entry point for ``levels check-reaches``."""
+    total, flagged = scan_for_issues(
+        database_url=args.database_url,
+        endpoint_tolerance=args.endpoint_tolerance,
+    )
+    for label, issues in flagged:
+        print(label)
+        for issue in issues:
+            print(f"  • {issue}")
+    print()
+    print(f"checked {total} reaches; {len(flagged)} with issues")
+    sys.exit(0 if not flagged else 1)
