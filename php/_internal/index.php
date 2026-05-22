@@ -247,6 +247,15 @@ tr[data-age-bucket="none"]    td.age-cell { background: var(--none); }
 .summary-grid dd { margin: 0; font-variant-numeric: tabular-nums; }
 details.csp { margin-top: .5rem; }
 details.csp summary { cursor: pointer; color: var(--muted); }
+details.collapsible { margin: .5rem 0 1.25rem; }
+details.collapsible > summary { cursor: pointer; color: #0066cc; font-weight: 600;
+    padding: .35rem 0; user-select: none; font-size: 1.05rem; }
+details.collapsible > summary:hover { text-decoration: underline; }
+details.collapsible[open] > summary { margin-bottom: .4rem; }
+details.collapsible > summary .meta { color: var(--muted); font-weight: normal;
+    font-size: .9rem; margin-left: .5rem; }
+details.collapsible table th { cursor: pointer; }
+details.collapsible table th .sort-indicator { color: var(--muted); margin-left: .25rem; }
 pre { font-size: 12px; background: #f5f5f5; padding: .5rem; overflow-x: auto; margin: .25rem 0; }
 .quick-links a { display: inline-block; margin-right: 1rem; }
 </style>
@@ -289,9 +298,12 @@ pre { font-size: 12px; background: #f5f5f5; padding: .5rem; overflow-x: auto; ma
     <dd><?= number_format($counts['observations']) ?></dd>
 </dl>
 
-<h2>Per-source freshness
-    (<?= count($source_rows) ?> sources;
-    thresholds: fresh &lt; <?= STALE_THRESHOLD_HOURS ?>h, stale &lt; <?= EXPIRED_THRESHOLD_DAYS ?>d)</h2>
+<h2>Per-source freshness</h2>
+<details class="collapsible">
+    <summary>
+        <?= count($source_rows) ?> sources
+        <span class="meta">thresholds: fresh &lt; <?= STALE_THRESHOLD_HOURS ?>h, stale &lt; <?= EXPIRED_THRESHOLD_DAYS ?>d — click column headings to sort</span>
+    </summary>
 <table>
     <thead>
         <tr><th>ID</th><th>Source</th><th>Agency</th><th>Latest observation</th><th>Age</th></tr>
@@ -309,14 +321,18 @@ pre { font-size: 12px; background: #f5f5f5; padding: .5rem; overflow-x: auto; ma
 <?php endforeach ?>
     </tbody>
 </table>
+</details>
 
-<h2>Recent CSP violations
-    (last <?= CSP_RECENT_LIMIT ?> in <?= CSP_RECENT_WINDOW_DAYS ?> days;
-    <?= count($csp_recent) ?> shown)</h2>
+<h2>Recent CSP violations</h2>
 <?php if (count($csp_recent) === 0): ?>
     <p style="color: var(--muted)">No CSP violations in the window. Log path:
         <code><?= htmlspecialchars($csp_log_path) ?></code></p>
 <?php else: ?>
+<details class="collapsible">
+    <summary>
+        <?= count($csp_recent) ?> shown
+        <span class="meta">last <?= CSP_RECENT_LIMIT ?> in <?= CSP_RECENT_WINDOW_DAYS ?> days — click column headings to sort</span>
+    </summary>
     <table>
         <thead>
             <tr><th>Time</th><th>Document</th><th>Violated</th><th>Blocked</th></tr>
@@ -337,6 +353,7 @@ pre { font-size: 12px; background: #f5f5f5; padding: .5rem; overflow-x: auto; ma
 <?php endforeach ?>
         </tbody>
     </table>
+</details>
 <?php endif ?>
 
 <h2>Quick links</h2>
@@ -349,5 +366,6 @@ pre { font-size: 12px; background: #f5f5f5; padding: .5rem; overflow-x: auto; ma
     <a href="https://uptime.betterstack.com" rel="noopener">Better Stack</a>
 </p>
 
+<script src="/static/internal-sort.js" defer></script>
 </body>
 </html>
