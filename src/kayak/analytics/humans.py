@@ -23,7 +23,7 @@ import socket
 from collections.abc import Iterable
 from pathlib import Path
 
-from . import geoip, monitors, privacy_relays
+from . import geoip, ip_reputation, monitors, privacy_relays
 from ._log_sources import AccessEvent, iter_access_events
 
 # ----------------------------------------------------------------------
@@ -274,6 +274,31 @@ def _is_scanner(ua: str, paths: set[str]) -> bool:
 _NO_ASSETS_MIN_HITS = 2
 
 
+def _is_data_feed_only(paths_counter: collections.Counter[str], hits: int) -> bool:
+    """An IP that fetches only the sparklines JSON feed is a data-feed scraper.
+
+    ``/static/sparklines.json`` is loaded by every kayak HTML page via a
+    ``<script>`` reference; a real browser never reaches that endpoint
+    without first fetching the page that referenced it. So an IP whose
+    entire path-set is ``{sparklines.json}`` (plus optionally
+    ``/favicon.ico`` — browsers and some scrapers auto-probe favicon) is
+    unambiguously a scraper pulling the feed directly for the river-level
+    data inside.
+
+    Strict subset on the path-set: if the IP ALSO hit ``/`` or any other
+    HTML/PHP page, the rule doesn't fire and the IP falls through to
+    no-assets / human as appropriate. ``hits >= 1`` is enough — even a
+    single sparklines-only hit is bot-shaped (real users don't bookmark
+    raw JSON feeds).
+    """
+    if hits < 1:
+        return False
+    allowed = {"/static/sparklines.json", "/favicon.ico"}
+    if not set(paths_counter).issubset(allowed):
+        return False
+    return "/static/sparklines.json" in paths_counter
+
+
 def _is_no_browser_assets(paths_counter: collections.Counter[str], hits: int) -> bool:
     """An IP with ≥2 hits but no ``.css`` or ``.js`` fetch is bot-shaped.
 
@@ -341,12 +366,25 @@ def _classify_ip(
     # privacy_relays.is_apple_private_relay().
     if privacy_relays.is_apple_private_relay(ip):
         return "human"
+    # FireHOL Level 1 community blocklist (dshield / spamhaus DROP / feodo /
+    # fullbogons). High-confidence known-bad — bogons and known abuse IPs
+    # have no legitimate reason to hit a regional kayak site. Checked AFTER
+    # private_relay so a real Safari user via a Fastly egress that's
+    # coincidentally on a list doesn't get blocklisted.
+    if ip_reputation.is_firehol_blocked(ip):
+        return "blocklisted"
     if _BOT_RE.search(ua):
         return "bot"
     if _is_uptrends(ip, paths, ua):
         return "uptrends"
     if _is_scanner(ua, paths):
         return "scanner"
+    if paths_counter is not None and _is_data_feed_only(paths_counter, hits):
+        # Tighter than no-assets: IPs that hit ONLY the sparklines JSON
+        # feed (and optionally favicon) — real browsers never reach
+        # /static/sparklines.json directly without loading the HTML page
+        # that references it.
+        return "data-feed"
     if paths_counter is not None and _is_no_browser_assets(paths_counter, hits):
         # Catches the "lazy bot": fetches HTML / JSON / PHP endpoints but
         # never loads a single .css or .js file, so no real browser was on

@@ -22,6 +22,7 @@ def _no_external_lookups(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(humans, "rdns", lambda _ip: "")
     monkeypatch.setattr(humans.monitors, "is_betterstack", lambda _ip: False)
     monkeypatch.setattr(humans.privacy_relays, "is_apple_private_relay", lambda _ip: False)
+    monkeypatch.setattr(humans.ip_reputation, "is_firehol_blocked", lambda _ip: False)
     monkeypatch.setattr(humans.geoip, "lookup", lambda ip, **_kw: "-")
 
 
@@ -141,6 +142,37 @@ def test_known_bot_ua_still_bot_even_if_no_assets() -> None:
         hits=50,
     )
     assert cls == "bot"
+
+
+def test_firehol_ip_flagged_as_blocklisted(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Override the default fixture: this specific IP IS on the FireHOL list.
+    monkeypatch.setattr(humans.ip_reputation, "is_firehol_blocked", lambda ip: ip == "1.10.16.5")
+    paths = _paths({"/": 1, "/style.css": 1, "/static/levels.js": 1})
+    cls = humans._classify_ip("1.10.16.5", _REAL_CHROME, set(paths), paths_counter=paths, hits=3)
+    # FireHOL precedes BOT_RE / scanner / no-assets — even a hit with full
+    # asset load reads as bot-shaped if the IP is community-blocklisted.
+    assert cls == "blocklisted"
+
+
+def test_sparklines_only_flagged_as_data_feed() -> None:
+    paths = _paths({"/static/sparklines.json": 1})
+    cls = humans._classify_ip("203.0.113.30", _REAL_CHROME, set(paths), paths_counter=paths, hits=1)
+    assert cls == "data-feed"
+
+
+def test_sparklines_plus_favicon_flagged_as_data_feed() -> None:
+    paths = _paths({"/static/sparklines.json": 2, "/favicon.ico": 1})
+    cls = humans._classify_ip("203.0.113.31", _REAL_SAFARI, set(paths), paths_counter=paths, hits=3)
+    assert cls == "data-feed"
+
+
+def test_sparklines_plus_root_falls_through_to_no_assets() -> None:
+    # When the path-set escapes the {sparklines, favicon} subset (here by
+    # also hitting /), data-feed doesn't fire — falls through to no-assets
+    # since the IP still loaded no .css/.js.
+    paths = _paths({"/static/sparklines.json": 1, "/": 1})
+    cls = humans._classify_ip("203.0.113.32", _REAL_CHROME, set(paths), paths_counter=paths, hits=2)
+    assert cls == "no-assets"
 
 
 def test_classifier_callable_without_paths_counter() -> None:

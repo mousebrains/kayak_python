@@ -97,10 +97,12 @@ def _hermetic(monkeypatch: pytest.MonkeyPatch) -> None:
     # calls is_betterstack().
     monkeypatch.setattr(monitors, "is_betterstack", lambda _ip: False)
     # Apple Private Relay would otherwise try to fetch Apple's CSV.
-    from kayak.analytics import privacy_relays
+    from kayak.analytics import ip_reputation, privacy_relays
 
     monkeypatch.setattr(privacy_relays, "is_apple_private_relay", lambda _ip: False)
     monkeypatch.setattr(privacy_relays, "apple_relay_region", lambda _ip: None)
+    # FireHOL would otherwise try to fetch the netset.
+    monkeypatch.setattr(ip_reputation, "is_firehol_blocked", lambda _ip: False)
     # GeoIP — return canned country / subdivision / ASN for the test IPs so
     # the run_countries / run_subdivisions / run_asns tables have something
     # to render. Shape: (cc, country_name, subdivision_name, asn, asn_org).
