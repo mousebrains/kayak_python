@@ -158,11 +158,19 @@ $counts = [
 // ---------------------------------------------------------------------------
 // Section 3: Per-source freshness
 // ---------------------------------------------------------------------------
+// All 299 production sources link to exactly one gauge via gauge_source,
+// so a simple LEFT JOIN g (via gs) does the right thing here — no
+// GROUP_CONCAT or DISTINCT needed.
 $source_rows = dash_query($db,
-    'SELECT s.id, s.name, s.agency, MAX(lo.observed_at) AS latest_at
+    'SELECT s.id, s.name, s.agency,
+            MAX(lo.observed_at) AS latest_at,
+            g.river   AS river,
+            g.location AS location
      FROM source s
      LEFT JOIN latest_observation lo ON lo.source_id = s.id
-     GROUP BY s.id, s.name, s.agency
+     LEFT JOIN gauge_source gs       ON gs.source_id = s.id
+     LEFT JOIN gauge g               ON g.id         = gs.gauge_id
+     GROUP BY s.id, s.name, s.agency, g.river, g.location
      ORDER BY (latest_at IS NULL), latest_at ASC'
 )->fetchAll();
 
@@ -306,7 +314,7 @@ pre { font-size: 12px; background: #f5f5f5; padding: .5rem; overflow-x: auto; ma
     </summary>
 <table>
     <thead>
-        <tr><th>ID</th><th>Source</th><th>Agency</th><th>Latest observation</th><th>Age</th></tr>
+        <tr><th>ID</th><th>Source</th><th>Agency</th><th>River</th><th>Location</th><th>Latest observation</th><th>Age</th></tr>
     </thead>
     <tbody>
 <?php foreach ($source_rows as $r): ?>
@@ -315,6 +323,8 @@ pre { font-size: 12px; background: #f5f5f5; padding: .5rem; overflow-x: auto; ma
             <td class="num"><?= (int)$r['id'] ?></td>
             <td><?= htmlspecialchars((string)$r['name']) ?></td>
             <td><?= htmlspecialchars($r['agency'] === null ? '—' : (string)$r['agency']) ?></td>
+            <td><?= htmlspecialchars(is_string($r['river']) && $r['river'] !== '' ? $r['river'] : '—') ?></td>
+            <td><?= htmlspecialchars(is_string($r['location']) && $r['location'] !== '' ? $r['location'] : '—') ?></td>
             <td><?= htmlspecialchars(is_string($r['latest_at']) ? $r['latest_at'] : '—') ?></td>
             <td class="age-cell"><?= htmlspecialchars(age_phrase(is_string($r['latest_at']) ? $r['latest_at'] : null)) ?></td>
         </tr>
