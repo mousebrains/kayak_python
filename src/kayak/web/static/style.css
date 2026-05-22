@@ -167,6 +167,14 @@ tr.stale td{color:var(--c-text-faint);font-style:italic}
     border-bottom:2px solid var(--c-primary);
     background:var(--c-surface);
   }
+  /* Filter JS uses the [hidden] HTML attribute to remove non-matching rows.
+     The UA default `[hidden]{display:none}` is at specificity (0,1,0); the
+     `table.levels tr{display:grid}` rule above is at (0,1,1) and wins, so
+     filtered rows stay visible on mobile. Restore the hide with an equal-
+     or-higher-specificity rule. Same pattern as `.plot-tooltip[hidden]`
+     further down — author rules need to re-assert hidden when they set
+     a non-default display. */
+  table.levels tr[hidden]{display:none}
   table.levels tr:nth-child(even){background:var(--c-surface)}
   table.levels td{padding:0;border:none;white-space:normal}
   /* Suppress the data-label "Status:/Location:/..." prefixes the desktop
