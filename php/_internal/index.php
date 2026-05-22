@@ -341,6 +341,7 @@ pre { font-size: 12px; background: #f5f5f5; padding: .5rem; overflow-x: auto; ma
 
 <h2>Quick links</h2>
 <p class="quick-links">
+    <a href="/_internal/status">Operator status (24h)</a>
     <a href="/status.json">/status.json</a>
     <a href="/gauges.html">/gauges.html</a>
     <a href="/map.html">/map.html</a>

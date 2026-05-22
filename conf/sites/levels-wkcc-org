@@ -61,5 +61,25 @@ server {
         include /etc/nginx/snippets/security-headers.conf;
     }
 
+    # /_internal/status — nightly-regenerated operator status page. Same
+    # auth as /_internal/ (require_maintainer in PHP); same exact-match
+    # `=` pattern so the noindex + cache-control + rate-limit headers
+    # actually apply, instead of the generic .php$ regex in
+    # levels-common.conf catching it. The HTML cache lives outside
+    # docroot at /home/pat/kayak/var/status.html; PHP readfile()s it.
+    location = /_internal/status {
+        rewrite ^ /_internal/status.php last;
+    }
+    location = /_internal/status.php {
+        limit_req zone=php burst=10 nodelay;
+        try_files $uri =404;
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+        add_header X-Robots-Tag "noindex, nofollow" always;
+        add_header Cache-Control "no-store, private" always;
+        include /etc/nginx/snippets/security-headers.conf;
+    }
+
     include /etc/nginx/snippets/levels-common.conf;
 }

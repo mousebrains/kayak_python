@@ -8,6 +8,28 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Operator status page at `/_internal/status`**: nightly-regenerated HTML
+  summary of host + project health — traffic 24h (humans/bots/other +
+  per-IP detail via `kayak.analytics.humans`), disk + RAM + swap with
+  threshold-driven WARN/FAIL flags, per-`kayak-*.service` state with
+  recent journald errors, backup ages (hourly/weekly/offsite), and the
+  TLS leaf expiry (fetched via `openssl s_client`, sidestepping the
+  root-only `/etc/letsencrypt/live/` perms). Served behind
+  `require_maintainer()` via a tiny PHP wrapper; HTML cache lives at
+  `/home/pat/kayak/var/status.html` outside the document root.
+  Rendered by `kayak-status.timer` at 03:30 daily.
+- **Low-disk warning** in `scripts/health-check.sh`: `df -P /home`
+  thresholded at WARN ≥70% / FAIL ≥85% (env-overridable). Trips the
+  existing hourly `OnFailure=kayak-notify-failure@%n.service` cascade,
+  so a near-full disk now pages instead of only showing in the weekly
+  heartbeat email.
+- **Swap-usage warning** in `scripts/health-check.sh`: WARN when swap
+  ≥10% used **and** MemAvailable <400 MB (conjunction prevents false
+  alarms on an idle host that briefly touched swap). Required relaxing
+  `ProcSubset=pid` → `ProcSubset=all` on `kayak-healthcheck.service`
+  so the script can read `/proc/meminfo`.
+
 ## [1.1.0] - 2026-05-21
 
 ### Added

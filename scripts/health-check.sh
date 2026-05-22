@@ -18,6 +18,15 @@ set -euo pipefail
 MAX_AGE_HOURS="${1:-3}"
 DB="${SQLITE_PATH:-${HOME}/DB/kayak.db}"
 
+# Disk + swap warning thresholds. Override via env in the unit file or shell.
+# "Aggressive" defaults — disk WARN well before the recap heartbeat reports it,
+# swap WARN only when the swap _and_ free-RAM signals both fire (conjunction),
+# so a one-off swap touch on an idle host doesn't page.
+DISK_WARN_PCT="${DISK_WARN_PCT:-70}"
+DISK_FAIL_PCT="${DISK_FAIL_PCT:-85}"
+SWAP_USED_PCT_WARN="${SWAP_USED_PCT_WARN:-10}"
+MEM_FREE_MB_WARN="${MEM_FREE_MB_WARN:-400}"
+
 if [ ! -f "$DB" ]; then
     echo "CRITICAL: Database not found at $DB"
     exit 2
@@ -60,5 +69,35 @@ RECENT_COUNT=$(sqlite3 "$DB" "
     WHERE observed_at > datetime('now', '-2 hours');
 ")
 
-echo "OK: Latest observation ${AGE_HOURS}h ago ($LATEST), ${RECENT_COUNT} observations in last 2h"
+# Disk-usage check on /home (where ~/DB and ~/kayak/backups live).
+DISK_PCT=$(df -P /home | tail -1 | awk '{print $5}' | tr -d '%')
+if [ "$DISK_PCT" -ge "$DISK_FAIL_PCT" ]; then
+    DISK_HUMAN=$(df -h /home | tail -1 | awk '{print $3"/"$2" — "$4" free"}')
+    echo "CRITICAL: /home at ${DISK_PCT}% (fail threshold ${DISK_FAIL_PCT}%) — ${DISK_HUMAN}"
+    exit 2
+fi
+if [ "$DISK_PCT" -ge "$DISK_WARN_PCT" ]; then
+    DISK_HUMAN=$(df -h /home | tail -1 | awk '{print $3"/"$2" — "$4" free"}')
+    echo "WARNING: /home at ${DISK_PCT}% (warn threshold ${DISK_WARN_PCT}%) — ${DISK_HUMAN}"
+    exit 1
+fi
+
+# Swap-usage check. Requires /proc/meminfo (the unit needs ProcSubset=all).
+# Conjunction: (swap_used% high) AND (MemAvailable low) — either alone is fine.
+if [ -r /proc/meminfo ]; then
+    SWAP_TOTAL_KB=$(awk '/^SwapTotal:/ {print $2}' /proc/meminfo)
+    SWAP_FREE_KB=$(awk '/^SwapFree:/ {print $2}' /proc/meminfo)
+    MEM_AVAIL_KB=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)
+    if [ "${SWAP_TOTAL_KB:-0}" -gt 0 ]; then
+        SWAP_USED_KB=$((SWAP_TOTAL_KB - SWAP_FREE_KB))
+        SWAP_USED_PCT=$((SWAP_USED_KB * 100 / SWAP_TOTAL_KB))
+        MEM_AVAIL_MB=$((MEM_AVAIL_KB / 1024))
+        if [ "$SWAP_USED_PCT" -ge "$SWAP_USED_PCT_WARN" ] && [ "$MEM_AVAIL_MB" -lt "$MEM_FREE_MB_WARN" ]; then
+            echo "WARNING: swap ${SWAP_USED_PCT}% used (${SWAP_USED_KB}/${SWAP_TOTAL_KB} kB) AND only ${MEM_AVAIL_MB} MB MemAvailable (<${MEM_FREE_MB_WARN} MB)"
+            exit 1
+        fi
+    fi
+fi
+
+echo "OK: Latest observation ${AGE_HOURS}h ago ($LATEST), ${RECENT_COUNT} observations in last 2h, disk ${DISK_PCT}%"
 exit 0

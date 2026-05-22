@@ -18,6 +18,7 @@ dependencies = [
     "pydantic[email]>=2.7,<3",       # T3.3 typed config — 2.7 is first 3.13-supporting release; [email] pulls email-validator for EmailStr
     "pydantic-settings>=2.4,<3",      # T3.3 typed config — env-driven BaseSettings; 2.4 ships 3.13 wheels
     "markdown>=3.5",                  # Renders docs/regression/*.md → /static/regression/*.html at build time; pure-Python, no transitive deps
+    "maxminddb>=2.5",                 # GeoIP country lookup for the status page; reads DB-IP Lite mmdb lazily downloaded to var/geoip/
 ]
 
 [project.optional-dependencies]
@@ -102,6 +103,11 @@ ignore_missing_imports = true
 # Python-Markdown ships no type stubs (PyPI: types-Markdown lives at a
 # stale 3.7 — current `markdown` package has no inline annotations).
 module = "markdown.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# maxminddb (DB-IP / MaxMind mmdb reader) ships no inline type stubs.
+module = "maxminddb.*"
 ignore_missing_imports = true
 
 [tool.hatch.envs.default]
