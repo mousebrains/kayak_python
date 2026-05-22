@@ -49,6 +49,10 @@ static/style.css.hash
 # DB backups
 backups
 
+# Runtime-generated state (status page render, future cache files)
+var/*
+!var/.gitkeep
+
 # Ad-hoc audit dumps (often contain secrets from nginx -T or similar)
 *.log
 

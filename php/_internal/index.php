@@ -158,11 +158,19 @@ $counts = [
 // ---------------------------------------------------------------------------
 // Section 3: Per-source freshness
 // ---------------------------------------------------------------------------
+// All 299 production sources link to exactly one gauge via gauge_source,
+// so a simple LEFT JOIN g (via gs) does the right thing here — no
+// GROUP_CONCAT or DISTINCT needed.
 $source_rows = dash_query($db,
-    'SELECT s.id, s.name, s.agency, MAX(lo.observed_at) AS latest_at
+    'SELECT s.id, s.name, s.agency,
+            MAX(lo.observed_at) AS latest_at,
+            g.river   AS river,
+            g.location AS location
      FROM source s
      LEFT JOIN latest_observation lo ON lo.source_id = s.id
-     GROUP BY s.id, s.name, s.agency
+     LEFT JOIN gauge_source gs       ON gs.source_id = s.id
+     LEFT JOIN gauge g               ON g.id         = gs.gauge_id
+     GROUP BY s.id, s.name, s.agency, g.river, g.location
      ORDER BY (latest_at IS NULL), latest_at ASC'
 )->fetchAll();
 
@@ -247,6 +255,15 @@ tr[data-age-bucket="none"]    td.age-cell { background: var(--none); }
 .summary-grid dd { margin: 0; font-variant-numeric: tabular-nums; }
 details.csp { margin-top: .5rem; }
 details.csp summary { cursor: pointer; color: var(--muted); }
+details.collapsible { margin: .5rem 0 1.25rem; }
+details.collapsible > summary { cursor: pointer; color: #0066cc; font-weight: 600;
+    padding: .35rem 0; user-select: none; font-size: 1.05rem; }
+details.collapsible > summary:hover { text-decoration: underline; }
+details.collapsible[open] > summary { margin-bottom: .4rem; }
+details.collapsible > summary .meta { color: var(--muted); font-weight: normal;
+    font-size: .9rem; margin-left: .5rem; }
+details.collapsible table th { cursor: pointer; }
+details.collapsible table th .sort-indicator { color: var(--muted); margin-left: .25rem; }
 pre { font-size: 12px; background: #f5f5f5; padding: .5rem; overflow-x: auto; margin: .25rem 0; }
 .quick-links a { display: inline-block; margin-right: 1rem; }
 </style>
@@ -289,12 +306,15 @@ pre { font-size: 12px; background: #f5f5f5; padding: .5rem; overflow-x: auto; ma
     <dd><?= number_format($counts['observations']) ?></dd>
 </dl>
 
-<h2>Per-source freshness
-    (<?= count($source_rows) ?> sources;
-    thresholds: fresh &lt; <?= STALE_THRESHOLD_HOURS ?>h, stale &lt; <?= EXPIRED_THRESHOLD_DAYS ?>d)</h2>
+<h2>Per-source freshness</h2>
+<details class="collapsible">
+    <summary>
+        <?= count($source_rows) ?> sources
+        <span class="meta">thresholds: fresh &lt; <?= STALE_THRESHOLD_HOURS ?>h, stale &lt; <?= EXPIRED_THRESHOLD_DAYS ?>d — click column headings to sort</span>
+    </summary>
 <table>
     <thead>
-        <tr><th>ID</th><th>Source</th><th>Agency</th><th>Latest observation</th><th>Age</th></tr>
+        <tr><th>ID</th><th>Source</th><th>Agency</th><th>River</th><th>Location</th><th>Latest observation</th><th>Age</th></tr>
     </thead>
     <tbody>
 <?php foreach ($source_rows as $r): ?>
@@ -303,20 +323,26 @@ pre { font-size: 12px; background: #f5f5f5; padding: .5rem; overflow-x: auto; ma
             <td class="num"><?= (int)$r['id'] ?></td>
             <td><?= htmlspecialchars((string)$r['name']) ?></td>
             <td><?= htmlspecialchars($r['agency'] === null ? '—' : (string)$r['agency']) ?></td>
+            <td><?= htmlspecialchars(is_string($r['river']) && $r['river'] !== '' ? $r['river'] : '—') ?></td>
+            <td><?= htmlspecialchars(is_string($r['location']) && $r['location'] !== '' ? $r['location'] : '—') ?></td>
             <td><?= htmlspecialchars(is_string($r['latest_at']) ? $r['latest_at'] : '—') ?></td>
             <td class="age-cell"><?= htmlspecialchars(age_phrase(is_string($r['latest_at']) ? $r['latest_at'] : null)) ?></td>
         </tr>
 <?php endforeach ?>
     </tbody>
 </table>
+</details>
 
-<h2>Recent CSP violations
-    (last <?= CSP_RECENT_LIMIT ?> in <?= CSP_RECENT_WINDOW_DAYS ?> days;
-    <?= count($csp_recent) ?> shown)</h2>
+<h2>Recent CSP violations</h2>
 <?php if (count($csp_recent) === 0): ?>
     <p style="color: var(--muted)">No CSP violations in the window. Log path:
         <code><?= htmlspecialchars($csp_log_path) ?></code></p>
 <?php else: ?>
+<details class="collapsible">
+    <summary>
+        <?= count($csp_recent) ?> shown
+        <span class="meta">last <?= CSP_RECENT_LIMIT ?> in <?= CSP_RECENT_WINDOW_DAYS ?> days — click column headings to sort</span>
+    </summary>
     <table>
         <thead>
             <tr><th>Time</th><th>Document</th><th>Violated</th><th>Blocked</th></tr>
@@ -337,10 +363,12 @@ pre { font-size: 12px; background: #f5f5f5; padding: .5rem; overflow-x: auto; ma
 <?php endforeach ?>
         </tbody>
     </table>
+</details>
 <?php endif ?>
 
 <h2>Quick links</h2>
 <p class="quick-links">
+    <a href="/_internal/status">Operator status (24h)</a>
     <a href="/status.json">/status.json</a>
     <a href="/gauges.html">/gauges.html</a>
     <a href="/map.html">/map.html</a>
@@ -348,5 +376,6 @@ pre { font-size: 12px; background: #f5f5f5; padding: .5rem; overflow-x: auto; ma
     <a href="https://uptime.betterstack.com" rel="noopener">Better Stack</a>
 </p>
 
+<script src="/static/internal-sort.js" defer></script>
 </body>
 </html>
