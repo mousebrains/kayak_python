@@ -701,7 +701,8 @@ function _render_associated_sources(array $sources): void
         $sagency = htmlspecialchars($s['agency'] ?? '');
         $cnt = number_format((int)$s['obs_count']);
         $latest = htmlspecialchars($s['latest_at'] ?? '');
-        echo "<tr><td>{$s['id']}</td><td><a href=\"/source.php?id={$s['id']}\">$sname</a></td><td>$sagency</td><td>$cnt</td><td>$latest</td></tr>\n";
+        $shref = "/source.php?id={$s['id']}";
+        echo "<tr><td><a href=\"$shref\">{$s['id']}</a></td><td><a href=\"$shref\">$sname</a></td><td>$sagency</td><td>$cnt</td><td>$latest</td></tr>\n";
     }
     echo '</table>';
 }
@@ -744,9 +745,10 @@ function _render_associated_reaches(array $reaches, array $reach_status_by_id): 
         $status_html = $status === 'unknown'
             ? '<span style="color:var(--c-text-muted)">unknown</span>'
             : '<span class="level-' . $status . '">' . $status . '</span>';
+        $rhref = "/description.php?id={$r['id']}";
         echo "<tr data-status=\"$status_attr\">"
-            . "<td class=\"td-name\" data-label=\"Name\"><a href=\"/description.php?id={$r['id']}\">$rname</a></td>"
-            . "<td data-label=\"Location\">$location</td>"
+            . "<td class=\"td-name\" data-label=\"Name\"><a href=\"$rhref\">$rname</a></td>"
+            . "<td data-label=\"Location\"><a href=\"$rhref\">$location</a></td>"
             . "<td class=\"secondary\" data-label=\"River\">$river</td>"
             . "<td data-label=\"Class\">$classes</td>"
             . "<td data-label=\"Length\">$len</td>"

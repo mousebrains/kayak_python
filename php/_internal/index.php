@@ -320,7 +320,7 @@ pre { font-size: 12px; background: #f5f5f5; padding: .5rem; overflow-x: auto; ma
 <?php foreach ($source_rows as $r): ?>
     <?php $bucket = age_bucket(is_string($r['latest_at']) ? $r['latest_at'] : null); ?>
         <tr data-age-bucket="<?= $bucket ?>">
-            <td class="num"><?= (int)$r['id'] ?></td>
+            <td class="num"><a href="/source.php?id=<?= (int)$r['id'] ?>"><?= (int)$r['id'] ?></a></td>
             <td><?= htmlspecialchars((string)$r['name']) ?></td>
             <td><?= htmlspecialchars($r['agency'] === null ? '—' : (string)$r['agency']) ?></td>
             <td><?= htmlspecialchars(is_string($r['river']) && $r['river'] !== '' ? $r['river'] : '—') ?></td>
