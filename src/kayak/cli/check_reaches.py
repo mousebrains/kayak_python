@@ -46,12 +46,17 @@ from kayak.db.engine import get_session
 from kayak.db.models import Reach
 from kayak.tracing.format import has_wkt_wrapper, parse_geom_string
 
-# ~0.0027° lat ≈ 300 m on the ground; matches the worst-case NHD HR
-# snap distance we've observed in practice (Horse Creek endpoint
-# alignment was ~21 m, well inside this). A drift larger than this
-# almost certainly means a manually-typed endpoint column doesn't
-# match the trace.
-_ENDPOINT_TOL_DEG = 0.003
+# ~0.009° lat ≈ 1 km on the ground. Set wide enough to absorb NHD's
+# normal stop-short-of-the-take-out behaviour at tidal mouths and
+# reservoir inflows (the Rogue at Foster Bar terminates ~550 m short
+# of the tidal take-out, the South Santiam ends at the Foster
+# Reservoir entry, etc.) — these are valid traces, just not vertex-
+# coincident with the documented landing. Tight enough to still
+# catch real bugs like Horse Creek's 12000-km-drift WKT-wrapper bug
+# (migration 0041) or the Klickitat's 5-km mis-traced put-in
+# (migration 0042). Override with --endpoint-tolerance when you want
+# stricter inspection.
+_ENDPOINT_TOL_DEG = 0.01
 
 
 def _addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
