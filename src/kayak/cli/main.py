@@ -9,6 +9,7 @@ from kayak.cli import (
     build,
     calc_rating,
     calculator,
+    check_reaches,
     decimate,
     delete_editor,
     editor_retention,
@@ -52,6 +53,7 @@ def main() -> None:
     build.addArgs(subparsers)
     decimate.addArgs(subparsers)
     orphan_check.addArgs(subparsers)
+    check_reaches.addArgs(subparsers)
     pipeline.addArgs(subparsers)
     seed_maintainer.addArgs(subparsers)
     delete_editor.addArgs(subparsers)

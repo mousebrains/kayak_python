@@ -67,6 +67,13 @@ def trace(args: argparse.Namespace) -> None:
     impl.write_csv(coords, csv_file)
     print(f"Wrote {csv_file}")
 
+    # SQL-ready geom string for the migration author to paste into the
+    # reach row's `geom` column. Canonical format per kayak.tracing.format —
+    # no LINESTRING wrapper, lon-first pairs, comma-separated.
+    geom_file = f"{base}.geom.sql.txt"
+    impl.write_geom_sql(coords, geom_file)
+    print(f"Wrote {geom_file}")
+
     if not args.csv_only:
         png_file = f"{base}.png"
         impl.make_map(coords, putin, takeout, args.name, miles, png_file)

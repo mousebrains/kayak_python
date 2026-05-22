@@ -324,6 +324,27 @@ def write_csv(coords, filename):
             f.write(f"{lat:.6f},{lon:.6f}\n")
 
 
+def write_geom_sql(coords, filename):
+    """Write the canonical reach.geom string for SQL insertion.
+
+    Output is exactly what should go into a migration's ``geom``
+    column — no LINESTRING wrapper, lon-first pairs, comma-separated
+    (see :mod:`kayak.tracing.format` for the rationale). The file is
+    a single line; a migration author can paste its contents directly
+    inside the column's string literal.
+
+    Each coordinate is validated against the ``[-90, 90]`` / ``[-180,
+    180]`` spherical bounds — out-of-range coordinates raise
+    ``ValueError`` before any bytes are written.
+    """
+    from kayak.tracing.format import format_geom_for_sql
+
+    geom = format_geom_for_sql(coords)
+    with open(filename, "w") as f:
+        f.write(geom)
+        f.write("\n")
+
+
 def make_map(coords, putin, takeout, name, miles, filename):
     try:
         import contextily as cx

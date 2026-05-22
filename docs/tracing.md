@@ -15,8 +15,27 @@ levels trace \
     --name "Battle Creek"
 ```
 
-Outputs `battle_creek_trace.csv` (lat/lon coordinates) and `battle_creek_trace.png`
-(trace on OpenTopoMap). Use `--csv-only` to skip the map.
+Outputs three files:
+
+* `battle_creek_trace.csv` — `latitude,longitude` per row (debug / inspection).
+* `battle_creek_trace.geom.sql.txt` — single-line **SQL-ready geom string**
+  in the canonical `"lon lat,lon lat,…"` format for pasting directly
+  into a migration's `reach.geom` column. **Do not wrap in
+  `LINESTRING(…)`** — the PHP map parser at
+  `php/includes/gauge_map.php:61-70` splits on commas and float-casts
+  each side; a wrapper produces a `(0°, lat)` first vertex (somewhere
+  in the Atlantic) and the polyline draws a long horizontal line.
+  See migration `0041` for the original bug; the format helper at
+  `kayak.tracing.format.format_geom_for_sql` is what `levels trace`
+  uses to emit the file correctly.
+* `battle_creek_trace.png` — trace rendered on OpenTopoMap. Use
+  `--csv-only` to skip the map.
+
+After landing a trace-fed migration, run `levels check-reaches` —
+it scans every `reach.geom` for WKT wrappers, out-of-range
+coordinates, malformed pairs, and >300m drift between the first/last
+vertex and the `latitude_start` / `longitude_start` / `latitude_end` /
+`longitude_end` columns. Returns exit code 1 on any issue.
 
 ## Data Source
 
