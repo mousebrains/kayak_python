@@ -23,6 +23,10 @@ class _FakeReach:
         longitude_end: float | None = None,
         display_name: str | None = None,
         aw_id: int | None = None,
+        length: float | None = None,
+        elevation: float | None = None,
+        elevation_lost: float | None = None,
+        gradient: float | None = None,
     ) -> None:
         self.id = id
         self.geom = geom
@@ -32,6 +36,10 @@ class _FakeReach:
         self.longitude_end = longitude_end
         self.display_name = display_name
         self.aw_id = aw_id
+        self.length = length
+        self.elevation = elevation
+        self.elevation_lost = elevation_lost
+        self.gradient = gradient
 
 
 _DEFAULT_TOL = 0.003
@@ -133,6 +141,93 @@ def test_check_one_continues_through_wrapper_to_find_more() -> None:
     # also expected.
     assert any("wrapper" in i.lower() for i in issues)
     assert len(issues) >= 1
+
+
+def test_elevation_complete_reach_has_no_elevation_issue() -> None:
+    r = _FakeReach(
+        latitude_start=44.1, longitude_start=-122.0,
+        latitude_end=44.2, longitude_end=-122.1,
+        length=11.22,
+        elevation=2197.0, elevation_lost=867.0, gradient=77.3,
+    )
+    assert check_reaches._check_one(r, endpoint_tol_deg=_DEFAULT_TOL) == []
+
+
+def test_missing_elevation_is_flagged() -> None:
+    r = _FakeReach(
+        id=407,
+        latitude_start=44.1, longitude_start=-122.0,
+        latitude_end=44.2, longitude_end=-122.1,
+        length=11.22,
+        elevation=None, elevation_lost=867.0, gradient=77.3,
+    )
+    issues = check_reaches._check_one(r, endpoint_tol_deg=_DEFAULT_TOL)
+    assert len(issues) == 1
+    assert "elevation" in issues[0]
+    assert "elevation_lost" not in issues[0]
+    assert "--reach-ids 407" in issues[0]
+
+
+def test_all_three_elevation_columns_null_lists_them_together() -> None:
+    r = _FakeReach(
+        latitude_start=44.1, longitude_start=-122.0,
+        latitude_end=44.2, longitude_end=-122.1,
+        length=11.22,
+        elevation=None, elevation_lost=None, gradient=None,
+    )
+    issues = check_reaches._check_one(r, endpoint_tol_deg=_DEFAULT_TOL)
+    assert len(issues) == 1
+    assert "elevation, elevation_lost, gradient" in issues[0]
+
+
+def test_no_length_skips_elevation_check() -> None:
+    # No length means we can't derive gradient anyway — no point flagging.
+    r = _FakeReach(
+        latitude_start=44.1, longitude_start=-122.0,
+        latitude_end=44.2, longitude_end=-122.1,
+        length=None,
+        elevation=None, elevation_lost=None, gradient=None,
+    )
+    assert check_reaches._check_one(r, endpoint_tol_deg=_DEFAULT_TOL) == []
+
+
+def test_no_endpoints_skips_elevation_check() -> None:
+    # Endpoints missing — refresh_reach_elevations.py has nothing to
+    # query, so the elevation gap isn't actionable.
+    r = _FakeReach(
+        latitude_start=None, longitude_start=None,
+        length=11.22,
+        elevation=None,
+    )
+    assert check_reaches._check_one(r, endpoint_tol_deg=_DEFAULT_TOL) == []
+
+
+def test_elevation_check_runs_even_without_geom() -> None:
+    # The elevation gap is independent of geom — should still fire.
+    r = _FakeReach(
+        id=42,
+        geom=None,
+        latitude_start=44.1, longitude_start=-122.0,
+        latitude_end=44.2, longitude_end=-122.1,
+        length=11.22,
+        elevation=None, elevation_lost=None, gradient=None,
+    )
+    issues = check_reaches._check_one(r, endpoint_tol_deg=_DEFAULT_TOL)
+    assert len(issues) == 1
+    assert "NULL despite endpoints + length present" in issues[0]
+
+
+def test_elevation_check_coexists_with_geom_checks() -> None:
+    # Both issues should surface — wrapper + elevation gap.
+    r = _FakeReach(
+        geom="LINESTRING(-122.0 44.0,-122.1 44.1)",
+        latitude_start=44.0, longitude_start=-122.0,
+        latitude_end=44.1, longitude_end=-122.1,
+        length=11.22,
+    )
+    issues = check_reaches._check_one(r, endpoint_tol_deg=_DEFAULT_TOL)
+    assert any("wrapper" in i.lower() for i in issues)
+    assert any("NULL despite endpoints" in i for i in issues)
 
 
 def test_addargs_registers_subcommand() -> None:

@@ -23,6 +23,12 @@ Catches:
   ``longitude_end``. NHD trace snapping introduces some slop (we've
   seen ~20 m), but a hard miss usually means the start/end columns
   were copied wrong.
+* **Elevation gap** — reach has full endpoints + a non-zero ``length``
+  but ``elevation`` / ``elevation_lost`` / ``gradient`` columns are
+  NULL. This was the original Horse Creek miss in migration 0039 — the
+  reach was inserted with NULL elevation columns and stayed that way
+  until ``scripts/refresh_reach_elevations.py`` was run manually. The
+  check fires regardless of whether ``geom`` is present.
 
 Exit codes:
 
@@ -107,6 +113,36 @@ def _endpoint_drift_deg(
 def _check_one(reach: Reach, *, endpoint_tol_deg: float) -> list[str]:
     """Return a list of human-readable issues found for *reach*."""
     issues: list[str] = []
+
+    # Elevation completeness — fires independent of geom. A reach with full
+    # endpoint coords and a non-zero length should have its elevation
+    # triple populated; if not, ``scripts/refresh_reach_elevations.py``
+    # never ran for it.
+    needs_elevation = (
+        reach.latitude_start is not None
+        and reach.longitude_start is not None
+        and reach.latitude_end is not None
+        and reach.longitude_end is not None
+        and reach.length is not None
+        and reach.length > 0
+    )
+    if needs_elevation:
+        missing = [
+            col
+            for col, val in (
+                ("elevation", reach.elevation),
+                ("elevation_lost", reach.elevation_lost),
+                ("gradient", reach.gradient),
+            )
+            if val is None
+        ]
+        if missing:
+            issues.append(
+                f"{', '.join(missing)} NULL despite endpoints + length present "
+                f"— run scripts/refresh_reach_elevations.py "
+                f"--reach-ids {reach.id} --apply"
+            )
+
     geom = reach.geom or ""
     if not geom:
         return issues  # geom is optional; empty is fine
