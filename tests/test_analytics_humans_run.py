@@ -96,20 +96,37 @@ def _hermetic(monkeypatch: pytest.MonkeyPatch) -> None:
     # Better Stack fetch — no IPs in our test set, but the classifier still
     # calls is_betterstack().
     monkeypatch.setattr(monitors, "is_betterstack", lambda _ip: False)
-    # GeoIP — return canned country/subdivision for the test IPs so the
-    # run_countries / run_subdivisions tables have something to render.
+    # GeoIP — return canned country / subdivision / ASN for the test IPs so
+    # the run_countries / run_subdivisions / run_asns tables have something
+    # to render. Shape: (cc, country_name, subdivision_name, asn, asn_org).
     fake = {
-        "203.0.113.5": ("US", "United States", "Oregon"),
-        "203.0.113.6": ("CA", "Canada", "Ontario"),
-        "203.0.113.7": ("US", "United States", "Washington"),
-        "198.51.100.10": ("DE", "Germany", ""),
-        "198.51.100.20": ("AD", "Andorra", ""),
+        "203.0.113.5": ("US", "United States", "Oregon", 7922, "Comcast Cable"),
+        "203.0.113.6": ("CA", "Canada", "Ontario", 577, "Bell Canada"),
+        "203.0.113.7": ("US", "United States", "Washington", 7922, "Comcast Cable"),
+        "198.51.100.10": ("DE", "Germany", "", 24940, "Hetzner Online GmbH"),
+        "198.51.100.20": ("AD", "Andorra", "", 48090, "TECHOFF SRV LIMITED"),
     }
-    monkeypatch.setattr(geoip, "lookup", lambda ip, **_kw: fake.get(ip, ("-", "", ""))[0])
-    monkeypatch.setattr(geoip, "lookup_name", lambda ip, **_kw: fake.get(ip, ("-", "", ""))[1])
-    monkeypatch.setattr(
-        geoip, "lookup_subdivision", lambda ip, **_kw: fake.get(ip, ("-", "", ""))[2]
-    )
+
+    def _fake_lookup(ip, **_kw):
+        return fake.get(ip, ("-", "", "", 0, ""))[0]
+
+    def _fake_lookup_name(ip, **_kw):
+        return fake.get(ip, ("-", "", "", 0, ""))[1]
+
+    def _fake_lookup_subdivision(ip, **_kw):
+        return fake.get(ip, ("-", "", "", 0, ""))[2]
+
+    def _fake_lookup_asn(ip, **_kw):
+        return fake.get(ip, ("-", "", "", 0, ""))[3]
+
+    def _fake_lookup_asn_org(ip, **_kw):
+        return fake.get(ip, ("-", "", "", 0, ""))[4]
+
+    monkeypatch.setattr(geoip, "lookup", _fake_lookup)
+    monkeypatch.setattr(geoip, "lookup_name", _fake_lookup_name)
+    monkeypatch.setattr(geoip, "lookup_subdivision", _fake_lookup_subdivision)
+    monkeypatch.setattr(geoip, "lookup_asn", _fake_lookup_asn)
+    monkeypatch.setattr(geoip, "lookup_asn_org", _fake_lookup_asn_org)
     monkeypatch.setattr(geoip, "flush_cache", lambda: None)
 
 
@@ -127,9 +144,21 @@ def test_run_humans_includes_geo_and_per_ip_lines() -> None:
     # Country column populated for our human IPs.
     assert "| `203.0.113.5` | US |" in out
     assert "| `203.0.113.6` | CA |" in out
-    # Bot + root-only IPs are filtered out.
+    # Org / AS column shows the per-IP ASN.
+    assert "Comcast Cable (AS7922)" in out
+    # Bot + no-assets IPs are filtered out.
     assert "198.51.100.10" not in out
     assert "198.51.100.20" not in out
+
+
+def test_run_asns_groups_by_organization() -> None:
+    out = humans.run_asns(hours=24, tz=_TZ)
+    assert "# Hits by autonomous system" in out
+    # The two synthetic humans (203.0.113.5 + 203.0.113.7) are both Comcast,
+    # so they collapse into a single AS7922 row with their hits summed.
+    assert "Comcast Cable (AS7922)" in out
+    # Canada Bell only has one synthetic human.
+    assert "Bell Canada (AS577)" in out
 
 
 def test_run_paths_filters_assets_and_strips_query() -> None:

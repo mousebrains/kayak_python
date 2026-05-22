@@ -163,11 +163,13 @@ def _render_traffic(hours: int, bucket_hours: int, tz: dt.tzinfo, log_glob: str)
     )
     countries_md = humans.run_countries(hours=hours, tz=tz, access_log_glob=log_glob)
     subdivisions_md = humans.run_subdivisions(hours=hours, tz=tz, access_log_glob=log_glob)
+    asns_md = humans.run_asns(hours=hours, tz=tz, access_log_glob=log_glob)
     paths_md = humans.run_paths(hours=hours, tz=tz, access_log_glob=log_glob)
     humans_md = humans.run_humans(hours=hours, tz=tz, access_log_glob=log_glob)
     chunked_html = markdown.markdown(chunked_md, extensions=["tables"])
     countries_html = markdown.markdown(countries_md, extensions=["tables"])
     subdivisions_html = markdown.markdown(subdivisions_md, extensions=["tables"])
+    asns_html = markdown.markdown(asns_md, extensions=["tables"])
     paths_html = markdown.markdown(paths_md, extensions=["tables"])
     humans_html = markdown.markdown(humans_md, extensions=["tables"])
     return (
@@ -183,6 +185,10 @@ def _render_traffic(hours: int, bucket_hours: int, tz: dt.tzinfo, log_glob: str)
         f'<details class="collapsible">\n'
         f"<summary>US states &amp; Canadian provinces</summary>\n"
         f"{subdivisions_html}\n"
+        f"</details>\n"
+        f'<details class="collapsible">\n'
+        f"<summary>Hits by autonomous system</summary>\n"
+        f"{asns_html}\n"
         f"</details>\n"
         f'<details class="collapsible">\n'
         f"<summary>Hits by URL</summary>\n"

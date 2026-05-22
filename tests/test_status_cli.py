@@ -131,6 +131,15 @@ def _fake_humans(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     monkeypatch.setattr(
         status.humans,
+        "run_asns",
+        lambda **kw: (
+            "# Hits by autonomous system\n\n"
+            "| organization | human hits | human IPs | bot | other | total |\n"
+            "|---|---|---|---|---|---|\n| Comcast Cable (AS7922) | 80 | 5 | 0 | 0 | 80 |\n"
+        ),
+    )
+    monkeypatch.setattr(
+        status.humans,
         "run_subdivisions",
         lambda **kw: (
             "# CA / US states & provinces\n\n"
@@ -293,6 +302,7 @@ def test_humans_markdown_flows_into_html(
     monkeypatch.setattr(status.humans, "run_paths", lambda **kw: "")
     monkeypatch.setattr(status.humans, "run_countries", lambda **kw: "")
     monkeypatch.setattr(status.humans, "run_subdivisions", lambda **kw: "")
+    monkeypatch.setattr(status.humans, "run_asns", lambda **kw: "")
     out = tmp_path / "status.html"
     status.run(_ns(out))
     body = out.read_text()

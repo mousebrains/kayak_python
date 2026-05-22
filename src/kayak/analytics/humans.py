@@ -428,15 +428,18 @@ def run_humans(
         f"- Filtered out: {dict(dropped)} "
         f"({sum(dropped.values())} hits across {len(per_ip) - len(humans)} IPs)",
         "",
-        "| IP | country | hits | paths | span (h) | rdns | UA |",
-        "|---|---|---|---|---|---|---|",
+        "| IP | country | org (AS) | hits | paths | span (h) | rdns | UA |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for ip, rec in sorted(humans, key=lambda kv: -kv[1].hits):
         span = (rec.last - rec.first).total_seconds() / 3600.0 if rec.first and rec.last else 0.0
         name = rdns(ip) or "-"
         country = geoip.lookup(ip)
+        asn = geoip.lookup_asn(ip)
+        org = geoip.lookup_asn_org(ip) or "-"
+        org_label = f"{org} (AS{asn})" if asn else org
         lines.append(
-            f"| `{ip}` | {country} | {rec.hits} | {len(rec.paths)} | "
+            f"| `{ip}` | {country} | {org_label} | {rec.hits} | {len(rec.paths)} | "
             f"{span:.1f} | {name} | {_ua_tag(rec.ua)} |"
         )
     geoip.flush_cache()
@@ -746,6 +749,105 @@ def run_subdivisions(
     ]
     for (cc, sub), h, hips, b, o in rows:
         lines.append(f"| {sub} ({cc}) | {h} | {hips} | {b} | {o} | {h + b + o} |")
+    return "\n".join(lines) + "\n"
+
+
+def run_asns(
+    hours: int,
+    tz: dt.tzinfo,
+    access_log_glob: str = "/var/log/nginx/*access.log*",
+    *,
+    top: int = 25,
+) -> str:
+    """Markdown table of top-N autonomous systems by hits, human/bot/other.
+
+    Mirrors :func:`run_countries` but keyed off the ASN owner from
+    :mod:`kayak.analytics.geoip` (DB-IP ASN Lite mmdb). Each row shows
+    the organization name followed by the AS number — Alibaba (US)
+    Technology Co., Ltd. (AS45102), Hetzner Online GmbH (AS213230), etc.
+    IPs that can't be resolved to an ASN collapse into a single "(no ASN)"
+    row. Useful for spotting datacenter-hosted scraper traffic the per-
+    country view masks: a country like SG might look like a real
+    audience until you see 90 % of its hits come from Alibaba Cloud.
+    """
+    now = dt.datetime.now(tz)
+    cutoff = now - dt.timedelta(hours=hours)
+
+    per_ip: dict[str, _IpRecord] = {}
+    for ev in iter_access_events(since=cutoff, log_glob=access_log_glob):
+        rec = per_ip.setdefault(ev.client, _IpRecord())
+        rec.hits += 1
+        route = (ev.path or "").split("?", 1)[0]
+        rec.paths[route] += 1
+        if not rec.ua:
+            rec.ua = ev.ua
+        if rec.first is None or ev.ts < rec.first:
+            rec.first = ev.ts
+        rec.last = ev.ts
+
+    warm_rdns(per_ip.keys())
+    classifications = {
+        ip: _classify_ip(ip, rec.ua, set(rec.paths), paths_counter=rec.paths, hits=rec.hits)
+        for ip, rec in per_ip.items()
+    }
+
+    # Key: (asn_number, asn_org). Same ASN can have multiple org-name spellings
+    # in edge cases, so the org name is part of the key for display fidelity.
+    human_hits: collections.Counter[tuple[int, str]] = collections.Counter()
+    bot_hits: collections.Counter[tuple[int, str]] = collections.Counter()
+    other_hits: collections.Counter[tuple[int, str]] = collections.Counter()
+    human_ips: dict[tuple[int, str], set[str]] = collections.defaultdict(set)
+    for ip, rec in per_ip.items():
+        key = (geoip.lookup_asn(ip), geoip.lookup_asn_org(ip))
+        cls = classifications.get(ip, "human")
+        if cls == "human":
+            human_hits[key] += rec.hits
+            human_ips[key].add(ip)
+        elif cls == "bot":
+            bot_hits[key] += rec.hits
+        else:
+            other_hits[key] += rec.hits
+
+    geoip.flush_cache()
+
+    all_keys = set(human_hits) | set(bot_hits) | set(other_hits)
+    rows = sorted(
+        (
+            (
+                key,
+                human_hits[key],
+                len(human_ips[key]),
+                bot_hits[key],
+                other_hits[key],
+            )
+            for key in all_keys
+        ),
+        key=lambda r: -(r[1] + r[3] + r[4]),
+    )[:top]
+
+    total_h = sum(human_hits.values())
+    total_b = sum(bot_hits.values())
+    total_o = sum(other_hits.values())
+
+    lines = [
+        f"# Hits by autonomous system ({hours}h, top {top})",
+        "",
+        (
+            f"Window: {cutoff:%Y-%m-%d %H:%M %z} → {now:%Y-%m-%d %H:%M %z}. "
+            f"ASN data from DB-IP ASN Lite. Totals: "
+            f"{total_h + total_b + total_o} hits "
+            f"({total_h} human, {total_b} bot, {total_o} other)."
+        ),
+        "",
+        "| organization | human hits | human IPs | bot | other | total |",
+        "|---|---|---|---|---|---|",
+    ]
+    for (asn, org), h, hips, b, o in rows:
+        if asn:
+            label = f"{org} (AS{asn})" if org else f"AS{asn}"
+        else:
+            label = "(no ASN)"
+        lines.append(f"| {label} | {h} | {hips} | {b} | {o} | {h + b + o} |")
     return "\n".join(lines) + "\n"
 
 
