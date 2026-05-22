@@ -74,7 +74,7 @@ id,url,parser,hours,is_active
 73,https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_WTM_FM.TXT,wa.gov,,1
 79,"https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22FAL.Flow-Out.Inst.0.0.Best%22,%22FAL.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d",usace.cda,,1
 80,https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=APLO3&pe=QI,nwrfc.textplot,,1
-81,https://api.water.noaa.gov/nwps/v1/gauges/BRBO3/stageflow/observed,nwps,,0
+81,https://api.water.noaa.gov/nwps/v1/gauges/BRBO3/stageflow/observed,nwps,,1
 82,https://api.water.noaa.gov/nwps/v1/gauges/NMFO3/stageflow/observed,nwps,,1
 83,https://www.nwrfc.noaa.gov/xml/xml.cgi?id=CMRO3&pe=HG&dtype=b&numdays=1,nwrfc.xml,,1
 84,https://www.nwrfc.noaa.gov/xml/xml.cgi?id=LOCO3&pe=HG&dtype=b&numdays=1,nwrfc.xml,,1
