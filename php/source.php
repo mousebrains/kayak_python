@@ -209,7 +209,9 @@ if ($obs_summary) {
     foreach ($obs_summary as $o) {
         $dtype = htmlspecialchars($o['data_type']);
         $cnt = number_format((int)$o['cnt']);
-        $latest = htmlspecialchars($o['latest'] ?? '');
+        // observed_at comes back as 'YYYY-MM-DD HH:MM:SS.000000'; the microsecond
+        // tail is always zero (parsers store at second precision) so trim it.
+        $latest = htmlspecialchars(substr((string)($o['latest'] ?? ''), 0, 19));
         echo "<tr><td>$dtype</td><td>$cnt</td><td>$latest</td></tr>\n";
     }
     echo '</table>';
