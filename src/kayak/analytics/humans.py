@@ -271,25 +271,52 @@ def _is_scanner(ua: str, paths: set[str]) -> bool:
     return paths == {"/robots.txt"}
 
 
-_ROOT_HAMMER_MIN_HITS = 3
+_NO_ASSETS_MIN_HITS = 2
 
 
-def _is_root_hammer(paths_counter: collections.Counter[str], hits: int) -> bool:
-    """An IP that hits only ``/`` and never touches an asset is bot-shaped.
+def _is_no_browser_assets(paths_counter: collections.Counter[str], hits: int) -> bool:
+    """An IP with ≥2 hits but no ``.css`` or ``.js`` fetch is bot-shaped.
 
-    Real browsers fetch ``/style.css``, ``/static/*.js``, sparklines etc.
-    along with the HTML, and revisits show up as conditional GETs (304s)
-    in the access log too — so seeing ``paths == {"/"}`` after multiple
-    hits means no real browser was on the other end. The threshold (3)
-    leaves enough headroom for an odd lynx user or a deep-bookmarked
-    refresh while still catching the IPv6-datacenter and 45.148.* scanners
-    that hammer ``/`` hundreds-to-thousands of times in 24h.
+    Real browsers — even returning users with warm caches — almost always
+    end up logging at least one ``.css`` or ``.js`` hit per 24 h window,
+    because the kayak project cache-busts those files via query strings
+    (``/static/levels.js?v=<mtime>``) and content-hashed filenames
+    (``/static/style-<hash>.css``); any deploy that changes either bumps
+    the URL and forces a re-fetch. Plus heavier pages (gauge.php,
+    description.php, reach.php) pull in additional JS the home page
+    doesn't (feature-map.js, plot-hover.js, leaflet.js), so a user who
+    explores beyond ``/`` will keep producing fresh JS hits.
+
+    Scrapers, by contrast, fetch the HTML/JSON they want and skip the
+    browser scaffolding. The observed Singapore + Vietnam + Alibaba-
+    Cloud botnet pattern is exactly this shape: hit ``/`` + maybe
+    ``/static/sparklines.json`` once or twice, never a single ``.css``
+    or ``.js`` byte. Same goes for the ``/cgi/png`` legacy-URL probers
+    from Google Cloud US-Central.
+
+    Threshold of 2 hits is low enough to catch the doubleton scrapers
+    while still letting single-hit bouncing visitors through (we can't
+    distinguish a one-hit bot from a real one-page bouncer).
 
     Don't use a UA-shape heuristic: modern privacy modes (iCloud Private
     Relay, Firefox RFP) deliberately strip UA tokens, so a "truncated"
     UA isn't a reliable bot indicator.
+
+    Subsumes the earlier ``_is_root_hammer`` rule (paths == {"/"} and
+    hits >= 3): that exact pattern still triggers under this broader
+    check, plus the multi-path, gauge.php-only, and sparklines-only
+    scrapers it used to miss.
     """
-    return set(paths_counter) == {"/"} and hits >= _ROOT_HAMMER_MIN_HITS
+    if hits < _NO_ASSETS_MIN_HITS:
+        return False
+    for path in paths_counter:
+        lower = path.lower().rstrip("/")
+        if "." not in lower:
+            continue
+        ext = lower[lower.rfind(".") :]
+        if ext in (".css", ".js"):
+            return False
+    return True
 
 
 def _classify_ip(
@@ -310,11 +337,13 @@ def _classify_ip(
         return "uptrends"
     if _is_scanner(ua, paths):
         return "scanner"
-    if paths_counter is not None and _is_root_hammer(paths_counter, hits):
-        # Catches the "lazy bot": only hits ``/`` repeatedly, never fetches an
-        # asset. Distinct from "scanner" (which probes /.env, /wp-login.php,
-        # …) and from "monitor" (which would be in the betterstack IP list).
-        return "root-only"
+    if paths_counter is not None and _is_no_browser_assets(paths_counter, hits):
+        # Catches the "lazy bot": fetches HTML / JSON / PHP endpoints but
+        # never loads a single .css or .js file, so no real browser was on
+        # the other end. Distinct from "scanner" (which probes /.env,
+        # /wp-login.php, …) and from "monitor" (in the Better Stack IP
+        # list). Subsumes the earlier "root-only" bucket.
+        return "no-assets"
     return "human"
 
 

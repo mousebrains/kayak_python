@@ -51,7 +51,7 @@ def test_real_browser_hitting_assets_is_human() -> None:
     assert cls == "human"
 
 
-def test_root_hammer_flagged_as_root_only() -> None:
+def test_root_hammer_flagged_as_no_assets() -> None:
     paths = _paths({"/": 1650})
     cls = humans._classify_ip(
         "2a09:bac2:b089:119::1c:339",
@@ -60,24 +60,58 @@ def test_root_hammer_flagged_as_root_only() -> None:
         paths_counter=paths,
         hits=1650,
     )
-    assert cls == "root-only"
+    assert cls == "no-assets"
 
 
-def test_post_hammer_flagged_as_root_only() -> None:
+def test_post_hammer_flagged_as_no_assets() -> None:
     # 45.148.10.205 in production: 361 POSTs to / with a truncated Chrome UA.
     # We don't track method explicitly, but the path-set still gives the signal.
     paths = _paths({"/": 361})
     cls = humans._classify_ip(
         "45.148.10.205", _REAL_CHROME, set(paths), paths_counter=paths, hits=361
     )
-    assert cls == "root-only"
+    assert cls == "no-assets"
 
 
-def test_two_hits_to_root_is_not_root_hammer() -> None:
-    # Threshold is _ROOT_HAMMER_MIN_HITS=3 so a bookmark-refresh pattern at
-    # the low end stays "human" — a real user might land twice in a day.
-    paths = _paths({"/": 2})
-    cls = humans._classify_ip("203.0.113.10", _REAL_SAFARI, set(paths), paths_counter=paths, hits=2)
+def test_alibaba_singapore_botnet_flagged_as_no_assets() -> None:
+    # The SG botnet pattern: hit homepage + sparklines.json a couple times
+    # using a random recent Chrome UA, never load .css / .js. Sparklines is
+    # an asset extension (.json) but not browser-mandatory — scrapers fetch
+    # it directly for the data without ever pulling levels.js / style.css.
+    paths = _paths({"/": 1, "/static/sparklines.json": 1})
+    cls = humans._classify_ip("47.82.10.78", _REAL_CHROME, set(paths), paths_counter=paths, hits=2)
+    assert cls == "no-assets"
+
+
+def test_gauge_only_no_browser_flagged_as_no_assets() -> None:
+    # Bot hitting only /gauge.php a few times, no JS / CSS — bot-shaped.
+    paths = _paths({"/gauge.php": 3})
+    cls = humans._classify_ip("47.82.10.80", _REAL_CHROME, set(paths), paths_counter=paths, hits=3)
+    assert cls == "no-assets"
+
+
+def test_one_hit_to_root_is_not_no_assets() -> None:
+    # Threshold is _NO_ASSETS_MIN_HITS=2: a single-hit visitor could be a
+    # one-page bouncer (real user reading then leaving) — we can't tell
+    # the difference from one hit alone, so leave it as human.
+    paths = _paths({"/": 1})
+    cls = humans._classify_ip("203.0.113.10", _REAL_SAFARI, set(paths), paths_counter=paths, hits=1)
+    assert cls == "human"
+
+
+def test_paths_with_js_kept_as_human() -> None:
+    # A real browser fetches at least one .js — even with everything else
+    # cached, gauge.php / description.php pull in feature-map.js / etc.
+    paths = _paths({"/": 1, "/static/levels.js": 1})
+    cls = humans._classify_ip("203.0.113.20", _REAL_CHROME, set(paths), paths_counter=paths, hits=2)
+    assert cls == "human"
+
+
+def test_paths_with_css_kept_as_human() -> None:
+    # Symmetric to the .js case — any .css hit is enough to convince the
+    # classifier a real browser is on the other end.
+    paths = _paths({"/": 1, "/static/style-8680f4b53a.css": 1})
+    cls = humans._classify_ip("203.0.113.21", _REAL_SAFARI, set(paths), paths_counter=paths, hits=2)
     assert cls == "human"
 
 
@@ -95,8 +129,8 @@ def test_truncated_safari_with_asset_hits_is_human() -> None:
     assert cls == "human"
 
 
-def test_known_bot_ua_still_bot_even_if_only_root() -> None:
-    # Bot UAs are caught by _BOT_RE before _is_root_hammer can fire.
+def test_known_bot_ua_still_bot_even_if_no_assets() -> None:
+    # Bot UAs are caught by _BOT_RE before _is_no_browser_assets can fire.
     paths = _paths({"/": 50})
     cls = humans._classify_ip(
         "203.0.113.42",
