@@ -1,6 +1,10 @@
-// /_internal/status sortable-table glue. CSP-safe: no inline handlers, no eval.
-// Attaches a click-to-sort behavior to every <table> inside <details.per-ip>;
+// /_internal/ sortable-table glue. CSP-safe: no inline handlers, no eval.
+// Attaches a click-to-sort behavior to every <table> inside <details.collapsible>;
 // click a column heading to sort ascending, click again for descending.
+//
+// The page tag should be cache-busted with ?v=<mtime> because nginx serves
+// /static/ as immutable max-age=1y. Without that the browser pins the
+// first download for a year and ignores selector updates.
 //
 // Sort kind is inferred per column from the first body row:
 //   - "3.2 days", "12 GB" etc.    → leading number, numeric sort

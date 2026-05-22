@@ -465,6 +465,12 @@ def _render_page(
         _render_backups_cert(now),
     ]
     body = "\n".join(sections)
+    # Cache-bust the JS — nginx serves /static/ as immutable max-age=1y, so
+    # without a ?v= the browser pins the first download forever and silently
+    # keeps a stale selector after we ship a fix. mtime is monotonic across
+    # deploys so it does the job without a content-hash pipeline.
+    js_path = Path("/home/pat/public_html/static/internal-sort.js")
+    js_v = int(js_path.stat().st_mtime) if js_path.exists() else 0
     return (
         "<!doctype html>\n"
         '<html lang="en">\n'
@@ -476,7 +482,7 @@ def _render_page(
         f"<style>{_INLINE_CSS}</style>\n"
         "</head>\n<body>\n"
         f"{body}\n"
-        '<script src="/static/internal-sort.js" defer></script>\n'
+        f'<script src="/static/internal-sort.js?v={js_v}" defer></script>\n'
         "</body>\n</html>\n"
     )
 

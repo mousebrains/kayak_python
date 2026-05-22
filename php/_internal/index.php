@@ -53,6 +53,57 @@ function age_phrase(?string $ts): string {
     return (int)($secs / 86400) . 'd ago';
 }
 
+/**
+ * Classify a CSP-report payload into a coarse "likely source" bucket so the
+ * dashboard table can hint at the cause at a glance. Returns one of:
+ *   "Firefox extension", "Chrome/Edge extension", "Ad blocker",
+ *   "Same-origin (our code)", "Browser internal", "Other".
+ *
+ * Heuristics match the production CSP log shape: source_file and blocked_uri
+ * are the two main signals; the chrome- / moz-extension URIs land in their
+ * own buckets, abu.js (AdBlock Ultimate) and similar ad-blocker patterns get
+ * a dedicated bucket, bare wasm-eval / data / eval blocks (no source_file)
+ * are browser internals, and anything under our own origin is flagged
+ * separately so it stands out.
+ *
+ * @param array<string, mixed> $data Decoded CSP report payload.
+ */
+function csp_classify(array $data): string {
+    $src     = strtolower((string)($data['source_file'] ?? $data['sourceFile'] ?? ''));
+    $blocked = strtolower((string)($data['blocked_uri'] ?? $data['blockedURL'] ?? ''));
+    $doc     = strtolower((string)($data['document_uri'] ?? $data['documentURL'] ?? ''));
+    $hay     = $src . ' ' . $blocked;
+
+    if (str_contains($hay, 'moz-extension'))    { return 'Firefox extension'; }
+    if (str_contains($hay, 'chrome-extension')) { return 'Chrome/Edge extension'; }
+    if (str_contains($hay, 'safari-extension')) { return 'Safari extension'; }
+    if (str_contains($hay, 'adblock')
+        || str_contains($hay, 'ublock')
+        || str_contains($hay, 'ghostery')
+        || str_contains($hay, 'privacy-badger')) {
+        return 'Ad blocker';
+    }
+    // Anything under our own origin = real on-page code (rare but worth
+    // surfacing). Same-host check before the empty-source bucket so a
+    // legitimate inline-eval from one of our scripts doesn't get
+    // mis-bucketed as "Browser internal".
+    if ($src !== '' && (str_starts_with($src, 'https://levels.')
+                        || str_starts_with($src, 'http://levels.'))) {
+        return 'Same-origin (our code)';
+    }
+    if ($src === '') {
+        // No source path reported — usually a browser-internal eval/wasm
+        // probe (Chrome incognito + extensions are big offenders). The
+        // blocked-URI value names what was blocked: wasm-eval, eval, data,
+        // inline, blob, …
+        if ($blocked !== '') {
+            return 'Browser internal (' . $blocked . ')';
+        }
+        return 'Browser internal';
+    }
+    return 'Other';
+}
+
 /** Bucket a source's freshness against the 48h / 7d thresholds. */
 function age_bucket(?string $ts): string {
     if ($ts === null || $ts === '') {
@@ -345,7 +396,7 @@ pre { font-size: 12px; background: #f5f5f5; padding: .5rem; overflow-x: auto; ma
     </summary>
     <table>
         <thead>
-            <tr><th>Time</th><th>Document</th><th>Violated</th><th>Blocked</th></tr>
+            <tr><th>Time</th><th>Likely source</th><th>Document</th><th>Violated</th><th>Blocked</th></tr>
         </thead>
         <tbody>
 <?php foreach ($csp_recent as $e):
@@ -353,9 +404,11 @@ pre { font-size: 12px; background: #f5f5f5; padding: .5rem; overflow-x: auto; ma
     $doc        = (string)($data['document_uri'] ?? $data['documentURL'] ?? '—');
     $violated   = (string)($data['violated_directive'] ?? $data['effectiveDirective'] ?? '—');
     $blocked    = (string)($data['blocked_uri'] ?? $data['blockedURL'] ?? '—');
+    $cause      = csp_classify($data);
 ?>
             <tr>
                 <td><?= htmlspecialchars((string)$e['ts']) ?></td>
+                <td><?= htmlspecialchars($cause) ?></td>
                 <td><?= htmlspecialchars($doc) ?></td>
                 <td><?= htmlspecialchars($violated) ?></td>
                 <td><?= htmlspecialchars($blocked) ?></td>
@@ -376,6 +429,14 @@ pre { font-size: 12px; background: #f5f5f5; padding: .5rem; overflow-x: auto; ma
     <a href="https://uptime.betterstack.com" rel="noopener">Better Stack</a>
 </p>
 
-<script src="/static/internal-sort.js" defer></script>
+<?php
+// Cache-bust the JS against the nginx `Cache-Control: …immutable` policy on
+// /static/. Without the ?v= the browser pins last download for a year and
+// silently keeps a stale selector after we ship a fix. mtime is monotonic
+// and changes every deploy so it does the job without a hash pipeline.
+$js_path  = __DIR__ . '/../../public_html/static/internal-sort.js';
+$js_mtime = file_exists($js_path) ? (int)filemtime($js_path) : 0;
+?>
+<script src="/static/internal-sort.js?v=<?= $js_mtime ?>" defer></script>
 </body>
 </html>
