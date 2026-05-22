@@ -371,6 +371,124 @@ $flow_line
 SVG;
 }
 
+/**
+ * Render a gradient profile as a continuous SVG line chart.
+ *
+ * Reads the JSON produced by scripts/compute_reach_gradient.py
+ * (shape documented in data/db/migrations/0045_*.sql header). Draws
+ * one pale full-opacity polyline for all samples, then overlays
+ * disjoint full-color polylines for each contiguous "significant: true"
+ * run, so insignificant stretches show as dimmed. Embeds the sample
+ * array as a data-profile attribute for static/gradient-profile.js to
+ * read at hydration time (cursor sync with the reach map dot).
+ *
+ * Returns '' if the profile JSON is empty, malformed, or has fewer than
+ * 2 samples.
+ */
+function generate_gradient_profile_svg(
+    string $profile_json,
+    int $reach_id,
+    int $width = 480,
+    int $height = 120
+): string {
+    if ($profile_json === '') return '';
+    $data = json_decode($profile_json, true);
+    if (!is_array($data) || !isset($data['samples']) || !is_array($data['samples'])) {
+        return '';
+    }
+    $samples = $data['samples'];
+    if (count($samples) < 2) return '';
+
+    // Margins (tighter than generate_svg_plot since this is a sub-widget)
+    $ml = 50; $mr = 10; $mt = 18; $mb = 22;
+    $pw = $width - $ml - $mr;
+    $ph = $height - $mt - $mb;
+
+    // Ranges
+    $x_min = (float)$samples[0]['d_mi'];
+    $x_max = (float)$samples[count($samples) - 1]['d_mi'];
+    $x_range = $x_max - $x_min ?: 1;
+    $y_vals = array_map(fn($s) => (float)$s['grad_ft_per_mi'], $samples);
+    [$y_min_raw, $y_max, $y_step] = nice_axis(min($y_vals), max($y_vals));
+    $y_min = max(0.0, $y_min_raw);   // gradient is non-negative
+    $y_range = $y_max - $y_min ?: 1;
+
+    // Project samples to pixel coords + classify by significance
+    $px_points = [];
+    foreach ($samples as $i => $s) {
+        $px = $ml + (((float)$s['d_mi'] - $x_min) / $x_range * $pw);
+        $py = $mt + (($y_max - (float)$s['grad_ft_per_mi']) / $y_range * $ph);
+        $px_points[] = [$px, $py, !empty($s['significant'])];
+    }
+
+    // All-samples pale polyline
+    $all_pts = '';
+    foreach ($px_points as [$px, $py, $_sig]) {
+        $all_pts .= sprintf('%.1f,%.1f ', $px, $py);
+    }
+    $all_pts = rtrim($all_pts);
+
+    // Disjoint significant-only runs
+    $sig_polylines = '';
+    $run = '';
+    foreach ($px_points as [$px, $py, $sig]) {
+        if ($sig) {
+            $run .= sprintf('%.1f,%.1f ', $px, $py);
+        } elseif ($run !== '') {
+            $sig_polylines .= "<polyline fill=\"none\" stroke=\"#2060A0\" stroke-width=\"1.5\" stroke-linejoin=\"round\" points=\"" . rtrim($run) . "\"/>\n";
+            $run = '';
+        }
+    }
+    if ($run !== '') {
+        $sig_polylines .= "<polyline fill=\"none\" stroke=\"#2060A0\" stroke-width=\"1.5\" stroke-linejoin=\"round\" points=\"" . rtrim($run) . "\"/>\n";
+    }
+
+    // Y-axis grid + labels
+    $grid = '';
+    for ($yv = $y_min; $yv <= $y_max + $y_step * 0.01; $yv += $y_step) {
+        $py = $mt + (($y_max - $yv) / $y_range * $ph);
+        $label = number_format($yv, 0);
+        $grid .= "<line x1=\"$ml\" y1=\"$py\" x2=\"" . ($ml + $pw) . "\" y2=\"$py\" stroke=\"#ddd\" stroke-width=\"0.5\"/>\n";
+        $grid .= "<text x=\"" . ($ml - 5) . "\" y=\"" . ($py + 4) . "\" text-anchor=\"end\" font-size=\"11\" fill=\"#666\">$label</text>\n";
+    }
+
+    // X-axis ticks (every ~5 ticks)
+    $n_xticks = 5;
+    for ($i = 0; $i <= $n_xticks; $i++) {
+        $xv = $x_min + ($x_range * $i / $n_xticks);
+        $px = $ml + (($xv - $x_min) / $x_range * $pw);
+        $label = number_format($xv, 1);
+        $grid .= "<line x1=\"$px\" y1=\"$mt\" x2=\"$px\" y2=\"" . ($mt + $ph) . "\" stroke=\"#ddd\" stroke-width=\"0.5\"/>\n";
+        $grid .= "<text x=\"$px\" y=\"" . ($height - 6) . "\" text-anchor=\"middle\" font-size=\"11\" fill=\"#666\">$label</text>\n";
+    }
+
+    // Hydration payload (static/gradient-profile.js reads this)
+    $payload = json_encode([
+        'samples' => $samples,
+        'x_min' => $x_min,
+        'x_max' => $x_max,
+        'y_min' => $y_min,
+        'y_max' => $y_max,
+        'margins' => ['ml' => $ml, 'mr' => $mr, 'mt' => $mt, 'mb' => $mb,
+                      'pw' => $pw, 'ph' => $ph, 'w' => $width, 'h' => $height],
+    ], JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION);
+    if ($payload === false) {
+        $payload = '{}';
+    }
+    $payload_attr = htmlspecialchars($payload);
+
+    return <<<SVG
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 $width $height" width="$width" height="$height" class="gradient-profile-chart" data-reach-id="$reach_id" data-profile="$payload_attr">
+<text x="{$ml}" y="14" font-size="11" font-weight="bold" fill="#333">Gradient (ft/mi)</text>
+<text x="$width" y="14" text-anchor="end" font-size="10" fill="#999">river mile →</text>
+$grid
+<rect x="$ml" y="$mt" width="$pw" height="$ph" fill="none" stroke="#ccc" stroke-width="0.5"/>
+<polyline fill="none" stroke="#2060A0" stroke-opacity="0.25" stroke-width="1.5" stroke-linejoin="round" points="$all_pts"/>
+$sig_polylines
+</svg>
+SVG;
+}
+
 function _empty_svg(string $title, int $width, int $height): string {
     $cx = (int)($width / 2);
     $cy = (int)($height / 2);

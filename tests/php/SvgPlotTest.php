@@ -155,6 +155,65 @@ final class SvgPlotTest extends TestCase
         $this->assertSame('', $payload['unit']);
     }
 
+    public function test_generate_gradient_profile_svg_empty_string_returns_empty(): void
+    {
+        $this->assertSame('', generate_gradient_profile_svg('', 1));
+    }
+
+    public function test_generate_gradient_profile_svg_invalid_json_returns_empty(): void
+    {
+        $this->assertSame('', generate_gradient_profile_svg('not-json', 1));
+        $this->assertSame('', generate_gradient_profile_svg('{}', 1));
+        $this->assertSame('', generate_gradient_profile_svg('{"samples": []}', 1));
+        $this->assertSame('', generate_gradient_profile_svg('{"samples": [{"d_mi":0}]}', 1));
+    }
+
+    public function test_generate_gradient_profile_svg_emits_chart(): void
+    {
+        $profile = json_encode([
+            'step_mi' => 0.05,
+            'rmse_m' => 2.4,
+            'min_drop_ft_for_significance' => 33.4,
+            'samples' => [
+                ['d_mi' => 0.0, 'lat' => 44.1, 'lon' => -122.0, 'grad_ft_per_mi' => 80.0, 'w_mi' => 0.5, 'significant' => true],
+                ['d_mi' => 0.5, 'lat' => 44.11, 'lon' => -122.01, 'grad_ft_per_mi' => 120.0, 'w_mi' => 0.25, 'significant' => true],
+                ['d_mi' => 1.0, 'lat' => 44.12, 'lon' => -122.02, 'grad_ft_per_mi' => 50.0, 'w_mi' => 1.0, 'significant' => true],
+                ['d_mi' => 1.5, 'lat' => 44.13, 'lon' => -122.03, 'grad_ft_per_mi' => 10.0, 'w_mi' => 5.0, 'significant' => false],
+            ],
+        ]);
+        assert($profile !== false);
+
+        $svg = generate_gradient_profile_svg($profile, 407, 480, 120);
+        $this->assertStringContainsString('<svg', $svg);
+        $this->assertStringContainsString('gradient-profile-chart', $svg);
+        $this->assertStringContainsString('data-reach-id="407"', $svg);
+        $this->assertStringContainsString('data-profile=', $svg);
+        // Pale all-samples polyline
+        $this->assertStringContainsString('stroke-opacity="0.25"', $svg);
+        // At least one significant polyline (the first 3 samples are sig)
+        $sigCount = substr_count($svg, '<polyline fill="none" stroke="#2060A0" stroke-width="1.5"');
+        $this->assertGreaterThanOrEqual(1, $sigCount);
+    }
+
+    public function test_generate_gradient_profile_svg_splits_runs_on_insignificance(): void
+    {
+        // Two contiguous significant runs separated by an insignificant
+        // sample → two foreground polylines plus the all-samples pale one.
+        $profile = json_encode([
+            'samples' => [
+                ['d_mi' => 0.0, 'lat' => 0, 'lon' => 0, 'grad_ft_per_mi' => 80.0, 'w_mi' => 0.5, 'significant' => true],
+                ['d_mi' => 0.5, 'lat' => 0, 'lon' => 0, 'grad_ft_per_mi' => 90.0, 'w_mi' => 0.5, 'significant' => true],
+                ['d_mi' => 1.0, 'lat' => 0, 'lon' => 0, 'grad_ft_per_mi' => 10.0, 'w_mi' => 5.0, 'significant' => false],
+                ['d_mi' => 1.5, 'lat' => 0, 'lon' => 0, 'grad_ft_per_mi' => 75.0, 'w_mi' => 0.5, 'significant' => true],
+                ['d_mi' => 2.0, 'lat' => 0, 'lon' => 0, 'grad_ft_per_mi' => 70.0, 'w_mi' => 0.5, 'significant' => true],
+            ],
+        ]);
+        assert($profile !== false);
+        $svg = generate_gradient_profile_svg($profile, 1, 480, 120);
+        $sigCount = substr_count($svg, '<polyline fill="none" stroke="#2060A0" stroke-width="1.5"');
+        $this->assertSame(2, $sigCount, 'expected exactly 2 significant-only polylines');
+    }
+
     /** Extract the JSON payload from the <svg data-series="..."> attribute. */
     private static function parse_data_series(string $svg): array
     {

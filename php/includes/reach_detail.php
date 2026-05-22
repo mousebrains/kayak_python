@@ -17,6 +17,7 @@ require_once __DIR__ . '/header.php';
 require_once __DIR__ . '/footer.php';
 require_once __DIR__ . '/html.php';
 require_once __DIR__ . '/gauge_map.php';
+require_once __DIR__ . '/svg_plot.php';
 
 /**
  * Dispatch detail mode and write the full HTTP response.
@@ -329,6 +330,9 @@ function _render_reach_details_table(array $reach, array $states, array $classes
         'Length' => $reach['length'] ? number_format((float)$reach['length'], 1) . ' mi' : null,
         'Gradient' => $reach['gradient'] ? number_format((float)$reach['gradient'], 0) . ' ft/mi' : null,
         'Max Gradient' => $reach['max_gradient'] ? number_format((float)$reach['max_gradient'], 0) . ' ft/mi' : null,
+        'Gradient Profile' => !empty($reach['gradient_profile'])
+            ? generate_gradient_profile_svg((string)$reach['gradient_profile'], (int)$reach['id'])
+            : null,
         'Elevation' => $reach['elevation'] ? number_format((float)$reach['elevation'], 0) . ' ft' : null,
         'Elevation Lost' => $reach['elevation_lost'] ? number_format((float)$reach['elevation_lost'], 0) . ' ft' : null,
         'Optimal Flow' => $reach['optimal_flow'] ? number_format((float)$reach['optimal_flow'], 0) . ' CFS' : null,
@@ -357,7 +361,7 @@ function _render_reach_details_table(array $reach, array $states, array $classes
         'Notes' => $reach['notes'],
     ];
 
-    $html_fields = ['Put-in', 'Take-out'];
+    $html_fields = ['Put-in', 'Take-out', 'Gradient Profile'];
     $autolink_fields = ['Description', 'Notes'];
     foreach ($fields as $label => $value) {
         if ($value === null || trim((string)$value) === '') {
@@ -573,9 +577,14 @@ function _render_reach_map(array $reach, ?array $gauge): array
     }
     echo '></div>';
 
+    $gp_mtime = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/gradient-profile.js') ?: 1;
     return [
         true,
         '<script src="/static/leaflet.js" defer></script>'
-        . '<script src="/static/reach-map.js" defer></script>',
+        . '<script src="/static/reach-map.js" defer></script>'
+        // gradient-profile.js degrades to chart-only tooltip if the map
+        // handle isn't there, so it's safe to ship on any reach page —
+        // no-op when the page has no .gradient-profile-chart elements.
+        . '<script src="/static/gradient-profile.js?v=' . $gp_mtime . '" defer></script>',
     ];
 }

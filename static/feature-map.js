@@ -277,4 +277,9 @@ if(reachTracks.length){
 
 if(bounds.length>1){map.fitBounds(bounds,{padding:[40,40]})}
 else if(bounds.length===1){map.setView(bounds[0],13)}
+
+// Expose the map instance on the element so siblings (e.g.
+// static/gradient-profile.js) can drop a hover marker. Convention
+// only — no other code in the project should poke at this.
+el._kayakMap=map;
 })();

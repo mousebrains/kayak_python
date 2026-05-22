@@ -81,6 +81,11 @@ function handle_description_detail(
         echo '<script src="/static/leaflet.js" defer></script>';
         echo '<script src="/static/feature-map.js?v=' . $fm_mtime . '" defer></script>';
     }
+    // gradient-profile.js is independent of the map (degrades to chart-only
+    // tooltip if the map isn't there), so we ship it regardless of $has_map.
+    // It's a no-op when the page has no .gradient-profile-chart elements.
+    $gp_mtime = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/gradient-profile.js') ?: 1;
+    echo '<script src="/static/gradient-profile.js?v=' . $gp_mtime . '" defer></script>';
     include_footer();
 }
 
@@ -423,6 +428,12 @@ function _render_description_fields_and_map(array $reach, array $related, array 
         'Season' => $reach['season'],
         'Length' => $reach['length'] ? $reach['length'] . ' mi' : null,
         'Gradient' => $reach['gradient'] ? $reach['gradient'] . ' ft/mi' : null,
+        'Max Gradient' => $reach['max_gradient']
+            ? number_format((float)$reach['max_gradient'], 0) . ' ft/mi'
+            : null,
+        'Gradient Profile' => !empty($reach['gradient_profile'])
+            ? generate_gradient_profile_svg((string)$reach['gradient_profile'], (int)$reach['id'])
+            : null,
         'Elevation Loss' => $reach['elevation_lost'] ? $reach['elevation_lost'] . ' ft' : null,
         'Scenery' => $reach['scenery'],
         'Features' => $reach['features'],
@@ -494,7 +505,7 @@ function _render_description_fields_and_map(array $reach, array $related, array 
         echo '<table class="desc-table">';
     }
 
-    $html_fields = ['Gauge', 'Gauge Location', 'Put-in', 'Take-out'];
+    $html_fields = ['Gauge', 'Gauge Location', 'Put-in', 'Take-out', 'Gradient Profile'];
     $autolink_fields = ['Description', 'Notes'];
     foreach ($fields as $label => $value) {
         if ($value === null || trim((string)$value) === '') {
