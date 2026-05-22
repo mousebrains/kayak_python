@@ -29,6 +29,7 @@ nwps:
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/BCKO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/BCLO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/BLUO3/stageflow/observed"
+    - url: "https://api.water.noaa.gov/nwps/v1/gauges/BRBO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/CANO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/COCO3/stageflow/observed"
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/ESTO3/stageflow/observed"
