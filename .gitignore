@@ -67,6 +67,10 @@ OSM-cache/
 NHD-cache/
 Trace-cache/
 
+# DEM/LIDAR tile cache + per-reach elevation profiles (Phase 2 gradient work)
+DEM-cache/
+Elevation-cache/
+
 # Discovery artifacts — candidate CSVs feeding migration generators
 data/discover/
 

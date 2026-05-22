@@ -487,6 +487,7 @@ class Reach(Base):
     aw_id: Mapped[int | None] = mapped_column()
     river: Mapped[str | None] = mapped_column(Text)
     max_gradient: Mapped[float | None] = mapped_column()
+    gradient_profile: Mapped[str | None] = mapped_column(Text)
     geom: Mapped[str | None] = mapped_column(Text)
     huc: Mapped[str | None] = mapped_column(Text)
 
