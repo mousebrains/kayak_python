@@ -205,14 +205,21 @@ echo '</table>';
 if ($obs_summary) {
     echo '<h3 style="margin-top:1rem">Observations</h3>';
     echo '<table class="readings-table">';
-    echo '<tr><th>Data Type</th><th>Count</th><th>Latest</th></tr>';
+    echo '<tr><th>Data Type</th><th>Count</th><th>Latest</th><th>View</th></tr>';
     foreach ($obs_summary as $o) {
-        $dtype = htmlspecialchars($o['data_type']);
+        $dtype_raw = (string)$o['data_type'];
+        $dtype = htmlspecialchars($dtype_raw);
         $cnt = number_format((int)$o['cnt']);
         // observed_at comes back as 'YYYY-MM-DD HH:MM:SS.000000'; the microsecond
         // tail is always zero (parsers store at second precision) so trim it.
         $latest = htmlspecialchars(substr((string)($o['latest'] ?? ''), 0, 19));
-        echo "<tr><td>$dtype</td><td>$cnt</td><td>$latest</td></tr>\n";
+        $plot_url = '/source_plot.php?id=' . (int)$source['id']
+                  . '&type=' . urlencode($dtype_raw)
+                  . '&embed=1';
+        $data_url = '/source_data.php?id=' . (int)$source['id'];
+        $links = '<a href="' . htmlspecialchars($plot_url) . '">plot</a>'
+               . ' · <a href="' . htmlspecialchars($data_url) . '">data</a>';
+        echo "<tr><td>$dtype</td><td>$cnt</td><td>$latest</td><td>$links</td></tr>\n";
     }
     echo '</table>';
 } else {
