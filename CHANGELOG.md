@@ -8,27 +8,63 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-05-21
+
 ### Added
 - **Operator status page at `/_internal/status`**: nightly-regenerated HTML
-  summary of host + project health — traffic 24h (humans/bots/other +
-  per-IP detail via `kayak.analytics.humans`), disk + RAM + swap with
-  threshold-driven WARN/FAIL flags, per-`kayak-*.service` state with
-  recent journald errors, backup ages (hourly/weekly/offsite), and the
-  TLS leaf expiry (fetched via `openssl s_client`, sidestepping the
-  root-only `/etc/letsencrypt/live/` perms). Served behind
-  `require_maintainer()` via a tiny PHP wrapper; HTML cache lives at
-  `/home/pat/kayak/var/status.html` outside the document root.
-  Rendered by `kayak-status.timer` at 03:30 daily.
-- **Low-disk warning** in `scripts/health-check.sh`: `df -P /home`
-  thresholded at WARN ≥70% / FAIL ≥85% (env-overridable). Trips the
-  existing hourly `OnFailure=kayak-notify-failure@%n.service` cascade,
-  so a near-full disk now pages instead of only showing in the weekly
-  heartbeat email.
-- **Swap-usage warning** in `scripts/health-check.sh`: WARN when swap
-  ≥10% used **and** MemAvailable <400 MB (conjunction prevents false
-  alarms on an idle host that briefly touched swap). Required relaxing
-  `ProcSubset=pid` → `ProcSubset=all` on `kayak-healthcheck.service`
-  so the script can read `/proc/meminfo`.
+  with six collapsible sections — 4 h human/bot buckets, hits by country
+  (full English names + ISO codes, geoIP via DB-IP City Lite), US states &
+  Canadian provinces (subdivisions from the same mmdb), hits by URL (query
+  strings stripped, assets filtered, log glob narrowed to `levels-*` so
+  the default-vhost `blocked-access.log` port-scanner noise stays out),
+  per-IP detail with rDNS + country + click-to-sort columns, and systemd
+  job status that auto-opens with a red `N failed` badge when any
+  `kayak-*.service` has a non-zero exit. Plus disk + memory (df +
+  /proc/meminfo with WARN/FAIL flags) and backups + TLS-cert expiry.
+  Served behind the existing `require_maintainer()` via a PHP wrapper
+  that `readfile()`s `/home/pat/kayak/var/status.html`. Rendered by
+  `kayak-status.timer` at 03:30 daily.
+- **Bot classifier — `_is_root_hammer`**: `paths == {"/"}` AND
+  `hits >= 3` → `root-only`. Real browsers always pull `/style.css` +
+  `/static/*.js` + sparklines on first visit (and emit conditional
+  GETs on revisits), so IPs hitting only `/` many times are bot-shaped.
+  Catches ~5 000 hits / ~1 800 IPs per day that previously inflated
+  the human count (data-center IPv6 ranges and bare-Chrome scanners).
+- **Better Stack monitor classification**: new
+  `kayak.analytics.monitors` consumes the published IP list at
+  `uptime.betterstack.com/ips-by-cluster.json` (weekly disk cache,
+  fail-open on fetch error). Probes from those 34 IPs now land in a
+  `monitor` bucket rather than mixing with attack scanners.
+- **rDNS + geoIP persistent caches**: `var/rdns_cache.json` and
+  `var/geoip/lookup_cache.json` hold `[name, last_seen]` tuples with
+  a 60-day TTL, so subsequent renders only touch the network / mmdb
+  for newly-seen IPs.
+- **Legacy `/cgi/*` redirects**: `/cgi/picker/`, `/cgi/png?…`,
+  `/cgi/makePage?…` (from the old C++ site) now 301 to `/` with the
+  legacy query string stripped, mirroring the existing pre-2026
+  `/?P=`/`/?D=`/`/?f=` redirect block in
+  `conf/snippets/levels-common.conf`. Real users hitting stale
+  bookmarks / RSS links land on the homepage instead of a 404.
+- **Low-disk + swap warnings** in `scripts/health-check.sh`: disk
+  WARN ≥70 % / FAIL ≥85 %; swap WARN if used ≥10 % AND
+  MemAvailable <400 MB (conjunction prevents false alarms on idle
+  hosts that briefly touched swap). Trips the existing hourly
+  `OnFailure=kayak-notify-failure@%n.service` cascade. Required
+  relaxing `ProcSubset=pid` → `ProcSubset=all` on
+  `kayak-healthcheck.service` so the script can read `/proc/meminfo`.
+
+### Fixed
+- **rDNS no longer blocks the main thread**: `rdns()` previously fell
+  through to a synchronous `socket.gethostbyaddr` for any IP that
+  didn't make it into the `warm_rdns` cache — ~10 s of blocking per
+  unwarmed IP turned a first-time render with thousands of unresolved
+  addresses into an hours-long stall. Now strictly cache-only;
+  uncached IPs render as `-` and are retried on the next run.
+- **PHP-FPM `open_basedir`** in `deploy/kayak-fpm-pool.conf` extended
+  with `/home/pat/kayak/var` so the status-page wrapper can
+  `readfile()` the cached HTML. Without it the wrapper failed
+  `is_readable()` silently and rendered the "not yet generated"
+  fallback even when the file was on disk and ACL-readable.
 
 ## [1.1.0] - 2026-05-21
 
