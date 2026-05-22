@@ -204,7 +204,7 @@ echo '</table>';
 // Observation summary
 if ($obs_summary) {
     echo '<h3 style="margin-top:1rem">Observations</h3>';
-    echo '<table class="desc-table">';
+    echo '<table class="readings-table">';
     echo '<tr><th>Data Type</th><th>Count</th><th>Latest</th></tr>';
     foreach ($obs_summary as $o) {
         $dtype = htmlspecialchars($o['data_type']);
@@ -220,13 +220,14 @@ if ($obs_summary) {
 // Associated gauges
 if ($gauges) {
     echo '<h3 style="margin-top:1rem">Associated Gauges</h3>';
-    echo '<table class="desc-table">';
+    echo '<table class="readings-table">';
     echo '<tr><th>ID</th><th>Name</th><th>Location</th><th>USGS ID</th></tr>';
     foreach ($gauges as $g) {
         $gname = htmlspecialchars($g['name']);
         $gloc = htmlspecialchars($g['location'] ?? '');
         $gusgs = htmlspecialchars($g['usgs_id'] ?? '');
-        echo "<tr><td>{$g['id']}</td><td><a href=\"/gauge.php?id={$g['id']}\">$gname</a></td><td>$gloc</td><td>$gusgs</td></tr>\n";
+        $ghref = "/gauge.php?id={$g['id']}";
+        echo "<tr><td><a href=\"$ghref\">{$g['id']}</a></td><td><a href=\"$ghref\">$gname</a></td><td>$gloc</td><td>$gusgs</td></tr>\n";
     }
     echo '</table>';
 } else {
