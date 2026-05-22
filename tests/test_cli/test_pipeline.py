@@ -93,6 +93,7 @@ def test_pipeline_dag_dependencies():
     }
 
 
+@patch("kayak.cli.pipeline._check_reaches")
 @patch("kayak.cli.pipeline._orphan_check")
 @patch("kayak.cli.pipeline.get_engine")
 @patch("kayak.cli.pipeline.build.build")
@@ -110,6 +111,7 @@ def test_pipeline_exits_nonzero_on_failure(
     mock_build,
     mock_engine,
     mock_orphan_check,
+    mock_check_reaches,
 ):
     """A fetch failure short-circuits downstream and raises SystemExit(1).
 
@@ -140,6 +142,7 @@ def test_pipeline_exits_nonzero_on_failure(
     mock_build.assert_not_called()
 
 
+@patch("kayak.cli.pipeline._check_reaches")
 @patch("kayak.cli.pipeline._orphan_check")
 @patch("kayak.cli.pipeline.get_engine")
 @patch("kayak.cli.pipeline.build.build")
@@ -157,6 +160,7 @@ def test_pipeline_continue_on_error_suppresses_exit(
     mock_build,
     mock_engine,
     mock_orphan_check,
+    mock_check_reaches,
 ):
     """--continue-on-error: run all steps regardless of fetch failure, exit 0.
 
@@ -182,6 +186,7 @@ def test_pipeline_continue_on_error_suppresses_exit(
     mock_build.assert_called_once()
 
 
+@patch("kayak.cli.pipeline._check_reaches")
 @patch("kayak.cli.pipeline._orphan_check")
 @patch("kayak.cli.pipeline.get_engine")
 @patch("kayak.cli.pipeline.build.build")
@@ -199,6 +204,7 @@ def test_pipeline_runs_downstream_when_only_usgs_ogc_fails(
     mock_build,
     mock_engine,
     mock_orphan_check,
+    mock_check_reaches,
 ):
     """fetch-usgs-ogc failing also short-circuits — both fetches are 'fetch steps'."""
     conn = MagicMock()
@@ -219,6 +225,7 @@ def test_pipeline_runs_downstream_when_only_usgs_ogc_fails(
     mock_build.assert_not_called()
 
 
+@patch("kayak.cli.pipeline._check_reaches")
 @patch("kayak.cli.pipeline.find_orphan_sources")
 @patch("kayak.cli.pipeline.get_engine")
 @patch("kayak.cli.pipeline.build.build")
@@ -236,6 +243,7 @@ def test_orphan_check_soft_fail(
     mock_build,
     mock_engine,
     mock_find_orphans,
+    mock_check_reaches,
 ):
     """Orphan-check at end of pipeline: soft-fail.
 
@@ -279,6 +287,7 @@ def test_orphan_check_soft_fail(
     mock_find_orphans.assert_called_once()
 
 
+@patch("kayak.cli.pipeline._check_reaches")
 @patch("kayak.cli.pipeline.find_orphan_sources")
 @patch("kayak.cli.pipeline.get_engine")
 @patch("kayak.cli.pipeline.build.build")
@@ -296,6 +305,7 @@ def test_orphan_check_clean_run_exits_zero(
     mock_build,
     mock_engine,
     mock_find_orphans,
+    mock_check_reaches,
 ):
     """No orphans → pipeline exits 0 normally."""
     conn = MagicMock()
