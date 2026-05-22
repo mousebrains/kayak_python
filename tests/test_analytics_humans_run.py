@@ -96,6 +96,11 @@ def _hermetic(monkeypatch: pytest.MonkeyPatch) -> None:
     # Better Stack fetch — no IPs in our test set, but the classifier still
     # calls is_betterstack().
     monkeypatch.setattr(monitors, "is_betterstack", lambda _ip: False)
+    # Apple Private Relay would otherwise try to fetch Apple's CSV.
+    from kayak.analytics import privacy_relays
+
+    monkeypatch.setattr(privacy_relays, "is_apple_private_relay", lambda _ip: False)
+    monkeypatch.setattr(privacy_relays, "apple_relay_region", lambda _ip: None)
     # GeoIP — return canned country / subdivision / ASN for the test IPs so
     # the run_countries / run_subdivisions / run_asns tables have something
     # to render. Shape: (cc, country_name, subdivision_name, asn, asn_org).

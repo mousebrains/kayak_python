@@ -21,6 +21,7 @@ def _no_external_lookups(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     monkeypatch.setattr(humans, "rdns", lambda _ip: "")
     monkeypatch.setattr(humans.monitors, "is_betterstack", lambda _ip: False)
+    monkeypatch.setattr(humans.privacy_relays, "is_apple_private_relay", lambda _ip: False)
     monkeypatch.setattr(humans.geoip, "lookup", lambda ip, **_kw: "-")
 
 

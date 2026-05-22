@@ -23,7 +23,7 @@ import socket
 from collections.abc import Iterable
 from pathlib import Path
 
-from . import geoip, monitors
+from . import geoip, monitors, privacy_relays
 from ._log_sources import AccessEvent, iter_access_events
 
 # ----------------------------------------------------------------------
@@ -331,6 +331,16 @@ def _classify_ip(
         return "self"
     if monitors.is_betterstack(ip):
         return "monitor"
+    # Apple Private Relay egress IPs run real Safari users (verified via the
+    # UA distribution + Apple's published country/region hint). Short-circuit
+    # to "human" before any of the bot / scanner / no-assets heuristics fire,
+    # because relay rotates the egress IP per request — a single browsing
+    # session's HTML, CSS, and JS hits split across different IPs, making
+    # individual ones look incomplete (~11 % FP rate on no-assets before
+    # this gate). The relay list is sourced from Apple's published CSV via
+    # privacy_relays.is_apple_private_relay().
+    if privacy_relays.is_apple_private_relay(ip):
+        return "human"
     if _BOT_RE.search(ua):
         return "bot"
     if _is_uptrends(ip, paths, ua):
@@ -434,10 +444,24 @@ def run_humans(
     for ip, rec in sorted(humans, key=lambda kv: -kv[1].hits):
         span = (rec.last - rec.first).total_seconds() / 3600.0 if rec.first and rec.last else 0.0
         name = rdns(ip) or "-"
-        country = geoip.lookup(ip)
-        asn = geoip.lookup_asn(ip)
-        org = geoip.lookup_asn_org(ip) or "-"
-        org_label = f"{org} (AS{asn})" if asn else org
+        # Apple Private Relay egress IPs are real Safari users — show
+        # Apple's reported region (the user's actual location) and a
+        # readable org label, since the DB-IP entry would just say
+        # Fastly / Cloudflare which is the egress hop, not who's there.
+        relay = privacy_relays.apple_relay_region(ip)
+        if relay is not None:
+            cc, region, city = relay
+            country = cc or "-"
+            org_label = (
+                f"iCloud Private Relay — {city}, {region}"
+                if region or city
+                else "iCloud Private Relay"
+            )
+        else:
+            country = geoip.lookup(ip)
+            asn = geoip.lookup_asn(ip)
+            org = geoip.lookup_asn_org(ip) or "-"
+            org_label = f"{org} (AS{asn})" if asn else org
         lines.append(
             f"| `{ip}` | {country} | {org_label} | {rec.hits} | {len(rec.paths)} | "
             f"{span:.1f} | {name} | {_ua_tag(rec.ua)} |"
