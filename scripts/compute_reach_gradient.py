@@ -41,6 +41,17 @@ M_TO_FT = 3.28083989501
 # through to 0.25+.
 WINDOW_SET_MI = [0.0625, 0.125, 0.25, 0.5, 1.0, 2.0, 5.0]
 
+# Per-source vertical RMSE in meters, used for the 3-sigma significance test.
+# Each window's drop is compared against 3 * sqrt(sigma_lo^2 + sigma_hi^2)
+# converted to feet, where sigma_lo and sigma_hi come from the endpoint
+# samples' DEM source. This replaces the global --rmse-m hand-tune so a
+# mixed-source reach (some 1m LIDAR, some 1/3 arc-second) gets the
+# appropriate threshold per window without per-reach config.
+SRC_RMSE_M = {
+    "1arc3": 2.4,    # USGS 3DEP 1/3 arc-second seamless
+    "1m": 0.15,      # OPR DEM 1 meter (typical Pacific NW project accuracy)
+}
+
 
 def _smooth(values: list[float], window_points: int) -> list[float]:
     """Centered rolling-mean smoothing. Edge handling: mean over the
@@ -139,17 +150,38 @@ def compute_max_gradient(d_mi: list[float], elev_ft: list[float], window_mi: flo
     return round(best, 1)
 
 
+def _min_drop_ft_for_endpoints(
+    srcs: list[str], i_lo: int, i_hi: int, default_rmse_m: float
+) -> float:
+    """3-sigma drop threshold (ft) for a window spanning samples i_lo to i_hi.
+
+    Uses the endpoint samples' DEM source to pick the per-point sigma — a
+    LIDAR-to-LIDAR window has ~14 cm noise, while a 1arc3 endpoint pulls
+    the threshold up to the 1arc3 dominated value regardless of the other
+    endpoint. (DEM error compounds as sqrt(sum of squares).)"""
+    sigma_lo = SRC_RMSE_M.get(srcs[i_lo], default_rmse_m) if srcs else default_rmse_m
+    sigma_hi = SRC_RMSE_M.get(srcs[i_hi], default_rmse_m) if srcs else default_rmse_m
+    sigma_diff_m = math.sqrt(sigma_lo**2 + sigma_hi**2)
+    return 3.0 * sigma_diff_m * M_TO_FT
+
+
 def build_profile(
     d_mi: list[float],
     elev_ft: list[float],
     lat: list[float],
     lon: list[float],
+    srcs: list[str],
     step_mi: float,
-    min_drop_ft: float,
     window_set: list[float],
+    default_rmse_m: float,
 ) -> list[dict]:
     """For each output point at step_mi spacing, find the smallest window in
-    `window_set` whose descending drop >= min_drop_ft and emit the gradient.
+    `window_set` whose descending drop >= per-window 3-sigma threshold and
+    emit the gradient.
+
+    The threshold is computed per-window from the endpoint samples' src
+    tags via SRC_RMSE_M — so a LIDAR-sampled reach picks much finer windows
+    than a 1arc3-sampled one without per-reach config.
 
     Gradient is clamped at 0 — an upstream-pointing windowed slope is a
     DEM/canopy artifact (rivers flow downhill), not a real feature."""
@@ -162,7 +194,8 @@ def build_profile(
             res = _drop_over_window(d_mi, elev_ft, x, w)
             if res is None:
                 continue
-            drop, actual_w, _i_lo, _i_hi = res
+            drop, actual_w, i_lo, i_hi = res
+            min_drop_ft = _min_drop_ft_for_endpoints(srcs, i_lo, i_hi, default_rmse_m)
             # Only descending drops count toward significance — uphill
             # noise of similar magnitude doesn't reflect channel reality.
             if drop >= min_drop_ft:
@@ -211,26 +244,32 @@ def process_cache_file(
     lat = [p["lat"] for p in pts]
     lon = [p["lon"] for p in pts]
     elev_ft = [p["elev_ft"] for p in pts]
+    srcs = [p.get("src", "1arc3") for p in pts]
 
     smoothed = _smooth(elev_ft, args.smooth_points)
 
     max_grad = compute_max_gradient(d_mi, smoothed, args.max_window_mi)
 
-    rmse_ft = args.rmse_m * M_TO_FT
-    min_drop_ft = 3.0 * math.sqrt(2.0) * rmse_ft
     samples = build_profile(
         d_mi,
         smoothed,
         lat,
         lon,
+        srcs,
         step_mi=args.profile_step_mi,
-        min_drop_ft=min_drop_ft,
         window_set=WINDOW_SET_MI,
+        default_rmse_m=args.rmse_m,
     )
+    # Report the source mix in the profile JSON so the renderer (or
+    # debugging humans) can see which DEM tier drove the threshold picks.
+    src_hist: dict[str, int] = {}
+    for s in srcs:
+        src_hist[s] = src_hist.get(s, 0) + 1
     profile = {
         "step_mi": args.profile_step_mi,
-        "rmse_m": args.rmse_m,
-        "min_drop_ft_for_significance": round(min_drop_ft, 1),
+        "default_rmse_m": args.rmse_m,
+        "src_rmse_m": SRC_RMSE_M,
+        "src_histogram": src_hist,
         "samples": samples,
     }
     return cache["reach_id"], max_grad, profile
@@ -252,7 +291,10 @@ def main() -> int:
         "--rmse-m",
         type=float,
         default=2.4,
-        help="DEM vertical RMSE in meters (default 2.4 = 3DEP 1/3 arc-second)",
+        help="Default vertical RMSE in meters used when a sample's 'src' tag "
+        "is unrecognized (default 2.4 = 3DEP 1/3 arc-second). Per-source RMSE "
+        "lives in SRC_RMSE_M and is applied automatically based on each "
+        "sample's source tag.",
     )
     ap.add_argument(
         "--smooth-points", type=int, default=5, help="Rolling-mean window for elevation smoothing"
@@ -273,9 +315,11 @@ def main() -> int:
     if not cache_files:
         return 0
 
-    rmse_ft = args.rmse_m * M_TO_FT
-    min_drop_ft = 3.0 * math.sqrt(2.0) * rmse_ft
-    print(f"3 sigma noise-floor drop: {min_drop_ft:.1f} ft (rmse={args.rmse_m} m)")
+    print("Per-source 3-sigma noise floor (ft):")
+    for src, sigma_m in SRC_RMSE_M.items():
+        sd_m = math.sqrt(2.0) * sigma_m
+        print(f"  {src}: rmse={sigma_m} m, threshold={3 * sd_m * M_TO_FT:.1f} ft")
+    print(f"  fallback (--rmse-m): {args.rmse_m} m")
     print()
 
     # Connect to DB to compare old vs. new

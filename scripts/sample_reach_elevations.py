@@ -203,23 +203,22 @@ def _wgs84_to_native_transformer(epsg: int):
     return Transformer.from_crs("EPSG:4326", f"EPSG:{epsg}", always_xy=True)
 
 
-def find_tile(index: list[dict], lon: float, lat: float, prefer_src: str = "1m") -> dict | None:
-    """Return the index entry whose WGS84 bounds contain (lon, lat).
+def find_tiles(index: list[dict], lon: float, lat: float, prefer_src: str = "1m") -> list[dict]:
+    """Return all index entries whose WGS84 bounds contain (lon, lat),
+    sorted by preference (``prefer_src`` first).
 
-    Preference order: 1 m LIDAR first (if any tile covers the point),
-    then 1/3 arc-second. Returns None if no tile covers.
+    Caller tries them in order — LIDAR tiles can have NoData over river
+    channels (laser hits water, no clean ground return), so we want to
+    fall back to 1/3 arc-second at those spots rather than count the
+    point as missed.
     """
-    cand_1m = None
-    cand_other = None
+    candidates = []
     for tile in index:
         left, bot, right, top = tile["bounds_wgs84"]
         if left <= lon <= right and bot <= lat <= top:
-            if tile["src"] == prefer_src:
-                cand_1m = tile
-                break
-            elif cand_other is None:
-                cand_other = tile
-    return cand_1m or cand_other
+            candidates.append(tile)
+    candidates.sort(key=lambda t: 0 if t["src"] == prefer_src else 1)
+    return candidates
 
 
 def sample_bilinear(tile: dict, lon: float, lat: float) -> float | None:
@@ -282,11 +281,22 @@ def process_reach(
     sources: dict[str, int] = {"1arc3": 0, "1m": 0}
     missed = 0
     for d_mi, lat, lon in walk_reach(reach["geom"], interval_m):
-        tile = find_tile(index, lon, lat)
-        if tile is None:
+        candidates = find_tiles(index, lon, lat)
+        if not candidates:
             missed += 1
             continue
-        elev_m = sample_bilinear(tile, lon, lat)
+        # Try each candidate in preference order — LIDAR first, then
+        # 1arc3 fallback. LIDAR tiles often have NoData over river
+        # channels themselves; the 1/3 arc-second tile underneath
+        # usually has a valid value there.
+        elev_m = None
+        tile = None
+        for cand in candidates:
+            v = sample_bilinear(cand, lon, lat)
+            if v is not None:
+                elev_m = v
+                tile = cand
+                break
         if elev_m is None:
             missed += 1
             continue
