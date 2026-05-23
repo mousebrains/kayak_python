@@ -36,9 +36,12 @@ M_TO_FT = 3.28083989501
 
 # Bin width for the cumsum + binning algorithm. Each bin holds the mean
 # of all elevation samples whose d_mi falls within [b*DL_MI, (b+1)*DL_MI).
-# With 25 m along-channel sampling, DL_MI=0.0625 (~100 m) gives ~4
-# samples per bin, enough for the bin-mean noise reduction to bite.
-DL_MI = 0.0625
+# With 25 m along-channel sampling, DL_MI=0.2 (~322 m) gives ~13 samples
+# per bin — strong bin-mean noise reduction (sigma_bin = sigma_raw / sqrt(13),
+# threshold tightens accordingly). Also caps the minimum reportable
+# window at 0.2 mi so the chart never shows sub-quarter-mile spikes
+# that are dominated by raw-DEM noise.
+DL_MI = 0.2
 
 # Cap on the search window for finding a significant drop. If no
 # significant drop is found within MAX_WINDOW_MI of the current bin,
