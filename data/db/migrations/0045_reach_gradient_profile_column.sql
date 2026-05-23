@@ -9,21 +9,22 @@
 -- (no geom or no DEM coverage). Populated rows look like:
 --
 --   {
---     "step_mi": 0.05,
 --     "default_rmse_m": 2.4,
 --     "src_rmse_m": {"1arc3": 2.4, "1m": 0.15},
 --     "src_histogram": {"1arc3": 540, "1m": 0},
 --     "samples": [
---       {"d_mi": 0.00, "lat": 44.10478, "lon": -122.02183,
+--       {"d_mi": 0.25, "lat": 44.10478, "lon": -122.02183,
 --        "grad_ft_per_mi": 41.2, "w_mi": 0.5, "significant": true},
 --       ...
 --     ]
 --   }
 --
--- The sample density (step_mi) is fine enough (0.05 mi default) that the
--- PHP renderer can draw a smooth continuous line without further
--- client-side smoothing. Per-sample lat/lon piggy-back so the chart can
--- sync a cursor-position map marker.
+-- Samples are non-overlapping: each sample's window (d_mi ± w_mi/2)
+-- abuts the next without overlap (build_profile in compute_reach_gradient
+-- tiles the reach). Variable-width tiles cover the reach end-to-end.
+-- The renderer draws each sample as a rect of width w_mi at height
+-- grad_ft_per_mi. Per-sample lat/lon piggy-back so the chart can sync
+-- a cursor-position map marker.
 --
 -- Per-source RMSE drives the 3-sigma significance test per window:
 -- min_drop_ft = 3 * sqrt(SRC_RMSE_M[src_lo]^2 + SRC_RMSE_M[src_hi]^2)

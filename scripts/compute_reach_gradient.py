@@ -88,34 +88,23 @@ def _index_at_or_after(d_mi: list[float], target: float, lo: int = 0) -> int:
     return lo_i
 
 
-def _drop_over_window(
-    d_mi: list[float], elev_ft: list[float], x: float, w_mi: float
+def _drop_over_window_start(
+    d_mi: list[float], elev_ft: list[float], start_mi: float, w_mi: float
 ) -> tuple[float, float, int, int] | None:
-    """Return (drop_ft, actual_w_mi, i_lo, i_hi) for a window centered on x
-    of nominal width w_mi. Returns None if the window doesn't fit within
-    the reach (clamped to ends instead — see below)."""
-    half = w_mi / 2.0
-    lo_target = x - half
-    hi_target = x + half
-    if hi_target > d_mi[-1] or lo_target < d_mi[0]:
-        # Shift the window so it fits, preserving width if possible.
-        if lo_target < d_mi[0] and hi_target > d_mi[-1]:
-            # Window is wider than the reach — span the whole thing.
-            i_lo, i_hi = 0, len(d_mi) - 1
-        elif lo_target < d_mi[0]:
-            i_lo = 0
-            i_hi = _index_at_or_after(d_mi, d_mi[0] + w_mi)
-        else:
-            i_hi = len(d_mi) - 1
-            target = d_mi[-1] - w_mi
-            i_lo = _index_at_or_after(d_mi, target)
-    else:
-        i_lo = _index_at_or_after(d_mi, lo_target)
-        i_hi = _index_at_or_after(d_mi, hi_target)
+    """Return (drop_ft, actual_w_mi, i_lo, i_hi) for a window STARTING at
+    start_mi of nominal width w_mi. Used by the tiled-window profile
+    builder — each emitted sample's window is non-overlapping with its
+    neighbours because the next start equals this end. Returns None if
+    the window doesn't fit (start past the end of the reach)."""
+    if start_mi >= d_mi[-1]:
+        return None
+    i_lo = _index_at_or_after(d_mi, start_mi)
+    end_mi = min(start_mi + w_mi, d_mi[-1])
+    i_hi = _index_at_or_after(d_mi, end_mi, lo=i_lo)
     actual_w = d_mi[i_hi] - d_mi[i_lo]
     if actual_w <= 0:
         return None
-    drop = elev_ft[i_lo] - elev_ft[i_hi]  # signed: positive when descending downstream
+    drop = elev_ft[i_lo] - elev_ft[i_hi]
     return drop, actual_w, i_lo, i_hi
 
 
@@ -171,61 +160,64 @@ def build_profile(
     lat: list[float],
     lon: list[float],
     srcs: list[str],
-    step_mi: float,
     window_set: list[float],
     default_rmse_m: float,
 ) -> list[dict]:
-    """For each output point at step_mi spacing, find the smallest window in
-    `window_set` whose descending drop >= per-window 3-sigma threshold and
-    emit the gradient.
+    """Walk the reach in non-overlapping tiles. At each tile start, pick
+    the smallest window in `window_set` whose descending drop >=
+    per-window 3-sigma threshold and emit one sample for that window.
+    Advance by the window's actual width — so the next sample starts
+    where this one ended. Result: variable-width bars covering the reach
+    with no overlap.
 
     The threshold is computed per-window from the endpoint samples' src
-    tags via SRC_RMSE_M — so a LIDAR-sampled reach picks much finer windows
-    than a 1arc3-sampled one without per-reach config.
+    tags via SRC_RMSE_M — so a LIDAR-sampled reach picks much finer
+    windows than a 1arc3-sampled one without per-reach config.
 
     Gradient is clamped at 0 — an upstream-pointing windowed slope is a
     DEM/canopy artifact (rivers flow downhill), not a real feature."""
     samples = []
     total_mi = d_mi[-1]
-    x = 0.0
-    while x <= total_mi + 1e-9:
+    start = d_mi[0]
+    while start < total_mi - 1e-9:
         chosen = None
         for w in window_set:
-            res = _drop_over_window(d_mi, elev_ft, x, w)
+            res = _drop_over_window_start(d_mi, elev_ft, start, w)
             if res is None:
                 continue
             drop, actual_w, i_lo, i_hi = res
             min_drop_ft = _min_drop_ft_for_endpoints(srcs, i_lo, i_hi, default_rmse_m)
-            # Only descending drops count toward significance — uphill
-            # noise of similar magnitude doesn't reflect channel reality.
             if drop >= min_drop_ft:
-                chosen = (drop, actual_w, w, True)
+                chosen = (drop, actual_w, w, True, i_lo, i_hi)
                 break
         if chosen is None:
-            # Use the maximum window even if not significant
-            res = _drop_over_window(d_mi, elev_ft, x, window_set[-1])
+            # Use the max window even if not significant
+            res = _drop_over_window_start(d_mi, elev_ft, start, window_set[-1])
             if res is None:
-                x += step_mi
-                continue
-            drop, actual_w, _, _ = res
-            chosen = (drop, actual_w, window_set[-1], False)
+                break
+            drop, actual_w, i_lo, i_hi = res
+            chosen = (drop, actual_w, window_set[-1], False, i_lo, i_hi)
 
-        drop, actual_w, _nominal_w, significant = chosen
+        drop, actual_w, _nominal_w, significant, i_lo, i_hi = chosen
         grad = max(0.0, drop / actual_w) if actual_w > 0 else 0.0
 
-        # Per-sample lat/lon: pick the nearest cached point
-        i_nearest = _index_at_or_after(d_mi, x)
+        d_mi_center = start + actual_w / 2
+        # Pick lat/lon of the cache sample closest to the window center
+        i_center = (i_lo + i_hi) // 2
         samples.append(
             {
-                "d_mi": round(x, 4),
-                "lat": round(lat[i_nearest], 6),
-                "lon": round(lon[i_nearest], 6),
+                "d_mi": round(d_mi_center, 4),
+                "lat": round(lat[i_center], 6),
+                "lon": round(lon[i_center], 6),
                 "grad_ft_per_mi": round(grad, 1),
                 "w_mi": round(actual_w, 4),
                 "significant": bool(significant),
             }
         )
-        x += step_mi
+        # Next window starts where this one ended — strictly no overlap.
+        # Guard against zero-advance by min-stepping the smallest window.
+        advance = max(actual_w, window_set[0])
+        start += advance
     return samples
 
 
@@ -256,7 +248,6 @@ def process_cache_file(
         lat,
         lon,
         srcs,
-        step_mi=args.profile_step_mi,
         window_set=WINDOW_SET_MI,
         default_rmse_m=args.rmse_m,
     )
@@ -266,7 +257,6 @@ def process_cache_file(
     for s in srcs:
         src_hist[s] = src_hist.get(s, 0) + 1
     profile = {
-        "step_mi": args.profile_step_mi,
         "default_rmse_m": args.rmse_m,
         "src_rmse_m": SRC_RMSE_M,
         "src_histogram": src_hist,
@@ -283,9 +273,6 @@ def main() -> int:  # noqa: C901 — sequential I/O orchestration, splitting fra
     ap.add_argument("--apply", action="store_true")
     ap.add_argument(
         "--max-window-mi", type=float, default=1.0, help="Window for max_gradient (default 1.0)"
-    )
-    ap.add_argument(
-        "--profile-step-mi", type=float, default=0.05, help="Profile sample density (default 0.05)"
     )
     ap.add_argument(
         "--rmse-m",
