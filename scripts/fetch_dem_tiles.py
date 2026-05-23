@@ -50,7 +50,7 @@ from pathlib import Path
 
 import httpx
 
-DEFAULT_DB = os.environ.get("KAYAK_DB", "/Users/pat/tpw/DB/kayak.db")
+DEFAULT_DB = os.environ.get("KAYAK_DB", "")
 DEFAULT_CACHE_DIR = Path("DEM-cache")
 TNM_PRODUCTS_URL = "https://tnmaccess.nationalmap.gov/api/v1/products"
 
@@ -318,6 +318,8 @@ def main() -> int:
     args = ap.parse_args()
 
     if args.emit_manifest:
+        if not args.db:
+            sys.exit("error: --emit-manifest needs --db /path/to/kayak.db or KAYAK_DB in env")
         emit_manifest(args.db, args.pad_deg, args.emit_manifest)
         return 0
 

@@ -10,8 +10,9 @@
 --
 --   {
 --     "step_mi": 0.05,
---     "rmse_m": 2.4,
---     "min_drop_ft_for_significance": 33.5,
+--     "default_rmse_m": 2.4,
+--     "src_rmse_m": {"1arc3": 2.4, "1m": 0.15},
+--     "src_histogram": {"1arc3": 540, "1m": 0},
 --     "samples": [
 --       {"d_mi": 0.00, "lat": 44.10478, "lon": -122.02183,
 --        "grad_ft_per_mi": 41.2, "w_mi": 0.5, "significant": true},
@@ -23,6 +24,12 @@
 -- PHP renderer can draw a smooth continuous line without further
 -- client-side smoothing. Per-sample lat/lon piggy-back so the chart can
 -- sync a cursor-position map marker.
+--
+-- Per-source RMSE drives the 3-sigma significance test per window:
+-- min_drop_ft = 3 * sqrt(SRC_RMSE_M[src_lo]^2 + SRC_RMSE_M[src_hi]^2)
+-- in feet. So a LIDAR-to-LIDAR window qualifies at much smaller drops
+-- than a 1arc3-to-1arc3 one. src_histogram + src_rmse_m make the
+-- threshold-pick auditable per reach.
 --
 -- The matching SQLAlchemy column declaration lands in
 -- src/kayak/db/models.py in the same commit — without that, fresh

@@ -40,7 +40,7 @@ from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 
-DEFAULT_DB = os.environ.get("KAYAK_DB", "/Users/pat/tpw/DB/kayak.db")
+DEFAULT_DB = os.environ.get("KAYAK_DB", "")
 DEFAULT_DEM_CACHE = Path("DEM-cache")
 DEFAULT_OUT_CACHE = Path("Elevation-cache")
 M_TO_FT = 3.28083989501
@@ -122,12 +122,14 @@ def walk_reach(geom: str, interval_m: float) -> Iterator[tuple[float, float, flo
             next_emit_m += interval_m
         cum_m += seg_len_m
 
-    # Always emit the take-out as the final point if the loop fell short
+    # Always emit the take-out as the final point unless the last
+    # interpolated emit already landed within 1 m of it. (Last emit
+    # fired at next_emit_m - interval_m; cum_m is the polyline total.)
     last_lat = verts[-1][1]
     last_lon = verts[-1][0]
     final_mi = cum_m / 1609.344
-    # Avoid emitting twice if the spacing landed exactly on the take-out
-    if next_emit_m - interval_m < cum_m - 1.0:
+    last_emit_m = next_emit_m - interval_m
+    if cum_m - last_emit_m > 1.0:
         yield (final_mi, last_lat, last_lon)
 
 
@@ -136,7 +138,10 @@ def walk_reach(geom: str, interval_m: float) -> Iterator[tuple[float, float, flo
 # -------------------------------------------------------------------------
 
 
-_GEOGRAPHIC_CRS = (4269, 4326, 4267)
+_GEOGRAPHIC_CRS = (4269, 4326)  # NAD83 + WGS84; NAD27 (4267) intentionally
+# omitted — its ~50-100 m horizontal offset from WGS84 across the lower 48
+# would silently sample the wrong cell. If a tile shows up tagged 4267,
+# fall through to the pyproj-transform path so the offset is corrected.
 
 
 def build_tile_index(dem_cache: Path) -> list[dict]:
@@ -352,6 +357,8 @@ def main() -> int:
     ap.add_argument("--dem-cache", default=str(DEFAULT_DEM_CACHE), type=Path)
     ap.add_argument("--force", action="store_true")
     args = ap.parse_args()
+    if not args.db:
+        sys.exit("error: pass --db /path/to/kayak.db or set KAYAK_DB in env")
 
     args.cache_dir.mkdir(parents=True, exist_ok=True)
 

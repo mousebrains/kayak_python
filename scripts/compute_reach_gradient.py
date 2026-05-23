@@ -30,7 +30,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
-DEFAULT_DB = os.environ.get("KAYAK_DB", "/Users/pat/tpw/DB/kayak.db")
+DEFAULT_DB = os.environ.get("KAYAK_DB", "")
 DEFAULT_CACHE = Path("Elevation-cache")
 M_TO_FT = 3.28083989501
 
@@ -300,6 +300,8 @@ def main() -> int:
         "--smooth-points", type=int, default=5, help="Rolling-mean window for elevation smoothing"
     )
     args = ap.parse_args()
+    if not args.db:
+        sys.exit("error: pass --db /path/to/kayak.db or set KAYAK_DB in env")
 
     if args.reach_ids:
         wanted_ids = set(int(x) for x in args.reach_ids.split(","))

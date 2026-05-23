@@ -481,7 +481,7 @@ function generate_gradient_profile_svg(
 
     $title_x = (int)($width / 2);
     return <<<SVG
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 $width $height" class="gradient-profile-chart" data-reach-id="$reach_id" data-profile="$payload_attr">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 $width $height" class="gradient-profile-chart" data-reach-id="$reach_id" data-profile="$payload_attr" role="img" aria-label="Gradient profile chart">
 <text class="gp-title" x="{$title_x}" y="16" text-anchor="middle">Gradient (ft/mi) vs. river mile</text>
 $grid
 <rect class="gp-frame" x="$ml" y="$mt" width="$pw" height="$ph"/>
