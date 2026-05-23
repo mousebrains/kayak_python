@@ -34,23 +34,31 @@ DEFAULT_DB = os.environ.get("KAYAK_DB", "")
 DEFAULT_CACHE = Path("Elevation-cache")
 M_TO_FT = 3.28083989501
 
-# Adaptive window set. 0.0625 mi ≈ 100m, only meaningful with LIDAR-level
-# vertical accuracy + dense (≤ 25 m) sample interval. 1/3 arc-second reaches
-# will naturally skip past 0.0625/0.125 because the 33 ft 3-sigma threshold
-# requires steeper-than-real gradients to qualify at those sizes; they fall
-# through to 0.25+.
-WINDOW_SET_MI = [0.0625, 0.125, 0.25, 0.5, 1.0, 2.0, 5.0]
+# Bin width for the cumsum + binning algorithm. Each bin holds the mean
+# of all elevation samples whose d_mi falls within [b*DL_MI, (b+1)*DL_MI).
+# With 25 m along-channel sampling, DL_MI=0.0625 (~100 m) gives ~4
+# samples per bin, enough for the bin-mean noise reduction to bite.
+DL_MI = 0.0625
 
-# Per-source vertical RMSE in meters, used for the 3-sigma significance test.
-# Each window's drop is compared against 3 * sqrt(sigma_lo^2 + sigma_hi^2)
-# converted to feet, where sigma_lo and sigma_hi come from the endpoint
-# samples' DEM source. This replaces the global --rmse-m hand-tune so a
-# mixed-source reach (some 1m LIDAR, some 1/3 arc-second) gets the
-# appropriate threshold per window without per-reach config.
+# Cap on the search window for finding a significant drop. If no
+# significant drop is found within MAX_WINDOW_MI of the current bin,
+# we emit a non-significant sample for the max-window segment and
+# advance.
+MAX_WINDOW_MI = 5.0
+
+# Per-source vertical RMSE in meters. Each bin's elevation noise is
+# (per-source RMSE) / sqrt(N_per_bin). For mixed-source bins we combine
+# the per-sample sigmas correctly: sigma(bin_mean) = sqrt(sum sigma_i^2) / N.
+# The threshold for a significant drop between bin i and bin j is
+# m_sigma * sqrt(sigma(bin_i)^2 + sigma(bin_j)^2) — a constant in n,
+# since the cumsum telescopes to bin_mean[j] - bin_mean[i].
 SRC_RMSE_M = {
     "1arc3": 2.4,    # USGS 3DEP 1/3 arc-second seamless
     "1m": 0.15,      # OPR DEM 1 meter (typical Pacific NW project accuracy)
 }
+
+# Significance threshold in standard deviations. 3 = 99.7% confidence.
+M_SIGMA = 3.0
 
 
 def _smooth(values: list[float], window_points: int) -> list[float]:
@@ -88,24 +96,51 @@ def _index_at_or_after(d_mi: list[float], target: float, lo: int = 0) -> int:
     return lo_i
 
 
-def _drop_over_window_start(
-    d_mi: list[float], elev_ft: list[float], start_mi: float, w_mi: float
-) -> tuple[float, float, int, int] | None:
-    """Return (drop_ft, actual_w_mi, i_lo, i_hi) for a window STARTING at
-    start_mi of nominal width w_mi. Used by the tiled-window profile
-    builder — each emitted sample's window is non-overlapping with its
-    neighbours because the next start equals this end. Returns None if
-    the window doesn't fit (start past the end of the reach)."""
-    if start_mi >= d_mi[-1]:
-        return None
-    i_lo = _index_at_or_after(d_mi, start_mi)
-    end_mi = min(start_mi + w_mi, d_mi[-1])
-    i_hi = _index_at_or_after(d_mi, end_mi, lo=i_lo)
-    actual_w = d_mi[i_hi] - d_mi[i_lo]
-    if actual_w <= 0:
-        return None
-    drop = elev_ft[i_lo] - elev_ft[i_hi]
-    return drop, actual_w, i_lo, i_hi
+def _bin_elevations(
+    d_mi: list[float],
+    elev_ft: list[float],
+    lat: list[float],
+    lon: list[float],
+    srcs: list[str],
+    dl_mi: float,
+    default_rmse_m: float,
+) -> tuple[list[float | None], list[float | None], list[float | None], list[float | None]]:
+    """Bucket the cache samples into dl_mi-wide bins and return
+    (bin_means_ft, bin_sigmas_ft, bin_lats, bin_lons).
+
+    bin_sigmas[i] is the noise on bin_means[i] computed as
+    sqrt(sum(sigma_sample^2)) / N_per_bin, where sigma_sample is the
+    per-source RMSE looked up via SRC_RMSE_M. None entries indicate
+    bins with no samples (unusual — sample interval should be smaller
+    than dl_mi)."""
+    total_mi = d_mi[-1]
+    n_bins = int(total_mi / dl_mi) + 1
+    means: list[float | None] = []
+    sigmas: list[float | None] = []
+    lats: list[float | None] = []
+    lons: list[float | None] = []
+    for b in range(n_bins):
+        bin_start = b * dl_mi
+        bin_end = (b + 1) * dl_mi
+        i_lo = _index_at_or_after(d_mi, bin_start)
+        i_hi_exc = _index_at_or_after(d_mi, bin_end)
+        if i_hi_exc > i_lo and d_mi[i_hi_exc] < bin_end + 1e-9:
+            i_hi_exc += 1   # _index_at_or_after returns the last sample if past end
+        if i_hi_exc <= i_lo or i_lo >= len(d_mi):
+            means.append(None)
+            sigmas.append(None)
+            lats.append(None)
+            lons.append(None)
+            continue
+        n = i_hi_exc - i_lo
+        means.append(sum(elev_ft[i_lo:i_hi_exc]) / n)
+        sigmas_m = [SRC_RMSE_M.get(srcs[k], default_rmse_m) for k in range(i_lo, i_hi_exc)]
+        sigma_bin_m = math.sqrt(sum(s * s for s in sigmas_m)) / n
+        sigmas.append(sigma_bin_m * M_TO_FT)
+        i_mid = (i_lo + i_hi_exc - 1) // 2
+        lats.append(lat[i_mid])
+        lons.append(lon[i_mid])
+    return means, sigmas, lats, lons
 
 
 def compute_max_gradient(d_mi: list[float], elev_ft: list[float], window_mi: float) -> float | None:
@@ -139,85 +174,92 @@ def compute_max_gradient(d_mi: list[float], elev_ft: list[float], window_mi: flo
     return round(best, 1)
 
 
-def _min_drop_ft_for_endpoints(
-    srcs: list[str], i_lo: int, i_hi: int, default_rmse_m: float
-) -> float:
-    """3-sigma drop threshold (ft) for a window spanning samples i_lo to i_hi.
-
-    Uses the endpoint samples' DEM source to pick the per-point sigma — a
-    LIDAR-to-LIDAR window has ~14 cm noise, while a 1arc3 endpoint pulls
-    the threshold up to the 1arc3 dominated value regardless of the other
-    endpoint. (DEM error compounds as sqrt(sum of squares).)"""
-    sigma_lo = SRC_RMSE_M.get(srcs[i_lo], default_rmse_m) if srcs else default_rmse_m
-    sigma_hi = SRC_RMSE_M.get(srcs[i_hi], default_rmse_m) if srcs else default_rmse_m
-    sigma_diff_m = math.sqrt(sigma_lo**2 + sigma_hi**2)
-    return 3.0 * sigma_diff_m * M_TO_FT
-
-
-def build_profile(
+def build_profile(  # noqa: C901 — sequential bin walk with multiple guards; splitting fragments the loop
     d_mi: list[float],
     elev_ft: list[float],
     lat: list[float],
     lon: list[float],
     srcs: list[str],
-    window_set: list[float],
     default_rmse_m: float,
+    dl_mi: float = DL_MI,
+    max_window_mi: float = MAX_WINDOW_MI,
+    m_sigma: float = M_SIGMA,
 ) -> list[dict]:
-    """Walk the reach in non-overlapping tiles. At each tile start, pick
-    the smallest window in `window_set` whose descending drop >=
-    per-window 3-sigma threshold and emit one sample for that window.
-    Advance by the window's actual width — so the next sample starts
-    where this one ended. Result: variable-width bars covering the reach
-    with no overlap.
+    """Bin elevations into dl_mi-wide chunks, take the bin mean, then
+    walk forward to find the smallest n such that the bin_mean drop
+    from bin i to bin i+n exceeds the m_sigma threshold.
 
-    The threshold is computed per-window from the endpoint samples' src
-    tags via SRC_RMSE_M — so a LIDAR-sampled reach picks much finer
-    windows than a 1arc3-sampled one without per-reach config.
+    Telescoping: CS[i+n] - CS[i] = bin_mean[i+n] - bin_mean[i], so the
+    noise on the cumsum is sigma(bin_mean[i+n] - bin_mean[i]) =
+    sqrt(sigma_i^2 + sigma_{i+n}^2). The threshold is constant in n
+    (independent-noise assumption), letting long shallow runs and
+    short steep ones both find their smallest significant window.
 
-    Gradient is clamped at 0 — an upstream-pointing windowed slope is a
-    DEM/canopy artifact (rivers flow downhill), not a real feature."""
-    samples = []
-    total_mi = d_mi[-1]
-    start = d_mi[0]
-    while start < total_mi - 1e-9:
-        chosen = None
-        for w in window_set:
-            res = _drop_over_window_start(d_mi, elev_ft, start, w)
-            if res is None:
+    Emits one sample per non-overlapping window; advances to bin i+n.
+    Gradient is clamped at 0 (rivers flow downhill; uphill windows
+    are DEM artifacts)."""
+    means, sigmas, lats, lons = _bin_elevations(
+        d_mi, elev_ft, lat, lon, srcs, dl_mi, default_rmse_m
+    )
+    n_bins = len(means)
+    max_n = max(1, int(max_window_mi / dl_mi))
+
+    samples: list[dict] = []
+    i = 0
+    while i < n_bins - 1:
+        if means[i] is None:
+            i += 1
+            continue
+        chosen_n = None
+        chosen_drop = 0.0
+        for n in range(1, min(max_n, n_bins - i)):
+            j = i + n
+            if means[j] is None:
                 continue
-            drop, actual_w, i_lo, i_hi = res
-            min_drop_ft = _min_drop_ft_for_endpoints(srcs, i_lo, i_hi, default_rmse_m)
-            if drop >= min_drop_ft:
-                chosen = (drop, actual_w, w, True, i_lo, i_hi)
+            drop = means[i] - means[j]   # signed: positive when descending
+            sigma_drop = math.sqrt((sigmas[i] or 0) ** 2 + (sigmas[j] or 0) ** 2)
+            if drop >= m_sigma * sigma_drop:
+                chosen_n = n
+                chosen_drop = drop
                 break
-        if chosen is None:
-            # Use the max window even if not significant
-            res = _drop_over_window_start(d_mi, elev_ft, start, window_set[-1])
-            if res is None:
+
+        significant = chosen_n is not None
+        if not significant:
+            # No significant drop within max_window — emit one sample
+            # for the max-window segment (or up to the end of the reach).
+            n = min(max_n, n_bins - 1 - i)
+            j = i + n
+            while j > i and means[j] is None:
+                j -= 1
+            if j <= i:
                 break
-            drop, actual_w, i_lo, i_hi = res
-            chosen = (drop, actual_w, window_set[-1], False, i_lo, i_hi)
+            chosen_n = j - i
+            chosen_drop = max(0.0, means[i] - means[j])
 
-        drop, actual_w, _nominal_w, significant, i_lo, i_hi = chosen
-        grad = max(0.0, drop / actual_w) if actual_w > 0 else 0.0
+        w_mi = chosen_n * dl_mi
+        d_mi_center = (i + chosen_n / 2) * dl_mi
+        grad = max(0.0, chosen_drop / w_mi) if w_mi > 0 else 0.0
+        center_bin = i + chosen_n // 2
+        # Find a non-None lat/lon near the center
+        lat_v, lon_v = lats[center_bin], lons[center_bin]
+        if lat_v is None:
+            for off in range(1, chosen_n):
+                if center_bin - off >= 0 and lats[center_bin - off] is not None:
+                    lat_v, lon_v = lats[center_bin - off], lons[center_bin - off]
+                    break
+                if center_bin + off < n_bins and lats[center_bin + off] is not None:
+                    lat_v, lon_v = lats[center_bin + off], lons[center_bin + off]
+                    break
 
-        d_mi_center = start + actual_w / 2
-        # Pick lat/lon of the cache sample closest to the window center
-        i_center = (i_lo + i_hi) // 2
-        samples.append(
-            {
-                "d_mi": round(d_mi_center, 4),
-                "lat": round(lat[i_center], 6),
-                "lon": round(lon[i_center], 6),
-                "grad_ft_per_mi": round(grad, 1),
-                "w_mi": round(actual_w, 4),
-                "significant": bool(significant),
-            }
-        )
-        # Next window starts where this one ended — strictly no overlap.
-        # Guard against zero-advance by min-stepping the smallest window.
-        advance = max(actual_w, window_set[0])
-        start += advance
+        samples.append({
+            "d_mi": round(d_mi_center, 4),
+            "lat": round(lat_v, 6) if lat_v is not None else None,
+            "lon": round(lon_v, 6) if lon_v is not None else None,
+            "grad_ft_per_mi": round(grad, 1),
+            "w_mi": round(w_mi, 4),
+            "significant": bool(significant),
+        })
+        i += chosen_n
     return samples
 
 
@@ -238,25 +280,27 @@ def process_cache_file(
     elev_ft = [p["elev_ft"] for p in pts]
     srcs = [p.get("src", "1arc3") for p in pts]
 
+    # No upstream smoothing — bin-mean averaging in build_profile is the
+    # noise reduction. max_gradient still uses lightly-smoothed elevations
+    # for stability of the steepest-mile statistic.
     smoothed = _smooth(elev_ft, args.smooth_points)
-
     max_grad = compute_max_gradient(d_mi, smoothed, args.max_window_mi)
 
     samples = build_profile(
-        d_mi,
-        smoothed,
-        lat,
-        lon,
-        srcs,
-        window_set=WINDOW_SET_MI,
+        d_mi, elev_ft, lat, lon, srcs,
         default_rmse_m=args.rmse_m,
+        dl_mi=args.dl_mi,
+        max_window_mi=args.profile_max_window_mi,
+        m_sigma=args.m_sigma,
     )
-    # Report the source mix in the profile JSON so the renderer (or
-    # debugging humans) can see which DEM tier drove the threshold picks.
+    # Report the source mix + algorithm params so the JSON is self-describing.
     src_hist: dict[str, int] = {}
     for s in srcs:
         src_hist[s] = src_hist.get(s, 0) + 1
     profile = {
+        "dl_mi": args.dl_mi,
+        "max_window_mi": args.profile_max_window_mi,
+        "m_sigma": args.m_sigma,
         "default_rmse_m": args.rmse_m,
         "src_rmse_m": SRC_RMSE_M,
         "src_histogram": src_hist,
@@ -272,7 +316,20 @@ def main() -> int:  # noqa: C901 — sequential I/O orchestration, splitting fra
     ap.add_argument("--reach-ids", help="Comma-separated reach IDs (default: all with caches)")
     ap.add_argument("--apply", action="store_true")
     ap.add_argument(
-        "--max-window-mi", type=float, default=1.0, help="Window for max_gradient (default 1.0)"
+        "--max-window-mi", type=float, default=1.0,
+        help="Window for max_gradient sliding-window scalar (default 1.0 mi)"
+    )
+    ap.add_argument(
+        "--dl-mi", type=float, default=DL_MI,
+        help=f"Bin width for the profile builder (default {DL_MI} mi)",
+    )
+    ap.add_argument(
+        "--profile-max-window-mi", type=float, default=MAX_WINDOW_MI,
+        help=f"Cap on the search-for-significance window (default {MAX_WINDOW_MI} mi)",
+    )
+    ap.add_argument(
+        "--m-sigma", type=float, default=M_SIGMA,
+        help=f"Significance threshold in std devs (default {M_SIGMA} = 99.7%%)",
     )
     ap.add_argument(
         "--rmse-m",
@@ -284,7 +341,9 @@ def main() -> int:  # noqa: C901 — sequential I/O orchestration, splitting fra
         "sample's source tag.",
     )
     ap.add_argument(
-        "--smooth-points", type=int, default=5, help="Rolling-mean window for elevation smoothing"
+        "--smooth-points", type=int, default=5,
+        help="Rolling-mean window for max_gradient elevation smoothing only "
+        "(the profile builder uses bin-mean averaging — no rolling smoothing).",
     )
     args = ap.parse_args()
     if not args.db:
@@ -304,10 +363,20 @@ def main() -> int:  # noqa: C901 — sequential I/O orchestration, splitting fra
     if not cache_files:
         return 0
 
-    print("Per-source 3-sigma noise floor (ft):")
+    # dl=DL_MI bin holds ~4 samples at 25 m along-channel spacing;
+    # bin_mean noise is RMSE_raw / sqrt(N_per_bin), drop noise is
+    # sqrt(2) * bin_mean_noise. Per-bin threshold below is the
+    # m_sigma * drop_noise for a pure-source bin pair at the listed N.
+    n_per_bin_est = max(1, int(args.dl_mi / 0.025))
+    print(f"dl={args.dl_mi} mi (~{n_per_bin_est} samples/bin at 25 m), "
+          f"max search {args.profile_max_window_mi} mi, "
+          f"m_sigma={args.m_sigma}")
+    print(f"Per-source {args.m_sigma}-sigma drop threshold (ft) for a "
+          f"pure-source bin pair at N={n_per_bin_est}:")
     for src, sigma_m in SRC_RMSE_M.items():
-        sd_m = math.sqrt(2.0) * sigma_m
-        print(f"  {src}: rmse={sigma_m} m, threshold={3 * sd_m * M_TO_FT:.1f} ft")
+        sigma_bin_m = sigma_m / math.sqrt(n_per_bin_est)
+        sigma_drop_m = math.sqrt(2.0) * sigma_bin_m
+        print(f"  {src}: rmse={sigma_m} m, threshold={args.m_sigma * sigma_drop_m * M_TO_FT:.2f} ft")
     print(f"  fallback (--rmse-m): {args.rmse_m} m")
     print()
 

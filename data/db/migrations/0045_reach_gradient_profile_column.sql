@@ -9,28 +9,35 @@
 -- (no geom or no DEM coverage). Populated rows look like:
 --
 --   {
+--     "dl_mi": 0.0625,
+--     "max_window_mi": 5.0,
+--     "m_sigma": 3.0,
 --     "default_rmse_m": 2.4,
 --     "src_rmse_m": {"1arc3": 2.4, "1m": 0.15},
 --     "src_histogram": {"1arc3": 540, "1m": 0},
 --     "samples": [
---       {"d_mi": 0.25, "lat": 44.10478, "lon": -122.02183,
---        "grad_ft_per_mi": 41.2, "w_mi": 0.5, "significant": true},
+--       {"d_mi": 0.0312, "lat": 44.10478, "lon": -122.02183,
+--        "grad_ft_per_mi": 41.2, "w_mi": 0.0625, "significant": true},
 --       ...
 --     ]
 --   }
 --
--- Samples are non-overlapping: each sample's window (d_mi ± w_mi/2)
--- abuts the next without overlap (build_profile in compute_reach_gradient
--- tiles the reach). Variable-width tiles cover the reach end-to-end.
--- The renderer draws each sample as a rect of width w_mi at height
--- grad_ft_per_mi. Per-sample lat/lon piggy-back so the chart can sync
--- a cursor-position map marker.
+-- Algorithm (compute_reach_gradient.build_profile):
+--   * Bin elevation samples into dl_mi-wide chunks; bin_mean per bin.
+--   * Walk forward from bin i: for n = 1, 2, ..., test whether the
+--     drop bin_mean[i] - bin_mean[i+n] >= m_sigma * sqrt(sigma_i^2 +
+--     sigma_{i+n}^2), where sigma_bin = sqrt(sum sigma_sample^2) / N
+--     (per-source RMSE looked up via SRC_RMSE_M).
+--   * Cumsum telescopes: noise on the drop is sqrt(2) * sigma_bin,
+--     constant in n — long shallow runs and short steep ones both
+--     find their smallest significant window.
+--   * Emit one sample per non-overlapping window of width n*dl_mi.
+--   * If no n <= max_window_mi/dl_mi qualifies, emit a sample for the
+--     max-window segment with significant=false.
 --
--- Per-source RMSE drives the 3-sigma significance test per window:
--- min_drop_ft = 3 * sqrt(SRC_RMSE_M[src_lo]^2 + SRC_RMSE_M[src_hi]^2)
--- in feet. So a LIDAR-to-LIDAR window qualifies at much smaller drops
--- than a 1arc3-to-1arc3 one. src_histogram + src_rmse_m make the
--- threshold-pick auditable per reach.
+-- Samples are non-overlapping; renderer draws each as a rect of
+-- width w_mi at height grad_ft_per_mi. Per-sample lat/lon piggy-back
+-- so the chart can sync a cursor-position map marker.
 --
 -- The matching SQLAlchemy column declaration lands in
 -- src/kayak/db/models.py in the same commit — without that, fresh
