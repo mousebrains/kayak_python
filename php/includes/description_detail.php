@@ -480,10 +480,24 @@ function _render_description_fields_and_map(array $reach, array $related, array 
         $map_points['Take-out'] = "$elat,$elon";
     }
 
-    foreach ($coord_fields as $label => $coords) {
-        $url = "https://www.google.com/maps?q={$coords[0]},{$coords[1]}";
-        $fields[$label] = "<a href=\"" . htmlspecialchars($url)
-            . "\" target=\"_blank\" rel=\"noopener\">{$coords[0]}, {$coords[1]}</a>";
+    // Coord fields render as a single flex-wrap row instead of three
+    // separate rows so on a wide screen they sit side-by-side. The CSS
+    // (.coord-trio) wraps to vertical stack when the container is narrow.
+    $coord_row_html = '';
+    if ($coord_fields) {
+        $items = '';
+        foreach ($coord_fields as $label => $coords) {
+            $url = "https://www.google.com/maps?q={$coords[0]},{$coords[1]}";
+            $items .= '<div class="coord-item">'
+                . '<span class="coord-label">' . htmlspecialchars($label) . ':</span> '
+                . '<a href="' . htmlspecialchars($url)
+                . '" target="_blank" rel="noopener">'
+                . htmlspecialchars("{$coords[0]}, {$coords[1]}") . '</a>'
+                . '</div>';
+        }
+        $coord_row_html = '<tr><td colspan="2"><div class="coord-trio">'
+            . $items
+            . '</div></td></tr>';
     }
 
     $fields += [
@@ -512,7 +526,7 @@ function _render_description_fields_and_map(array $reach, array $related, array 
         echo '<table class="desc-table">';
     }
 
-    $html_fields = ['Gauge', 'Gauge Location', 'Put-in', 'Take-out'];
+    $html_fields = ['Gauge'];
     $autolink_fields = ['Description', 'Notes'];
     foreach ($fields as $label => $value) {
         if ($value === null || trim((string)$value) === '') {
@@ -526,6 +540,9 @@ function _render_description_fields_and_map(array $reach, array $related, array 
             $esc = htmlspecialchars((string)$value);
             echo "<tr><td>$label</td><td>$esc</td></tr>\n";
         }
+    }
+    if ($coord_row_html) {
+        echo $coord_row_html;
     }
 
     echo '</table>';
