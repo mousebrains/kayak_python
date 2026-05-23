@@ -30,12 +30,13 @@ Catches:
   until ``scripts/refresh_reach_elevations.py`` was run manually. The
   check fires regardless of whether ``geom`` is present.
 * **Extreme gradient peak** — any ``gradient_profile`` sample whose
-  ``grad_ft_per_mi`` exceeds 1500. Real waterfalls hit the 1000-1500
-  ft/mi range at sub-100m windows; values above that usually mean the
-  trace is sampling a cliff face / dam / road cut instead of the
-  channel. Surfaced as a warning so the operator can triage by
-  inspecting the (lat, lon) of the peak sample against satellite
-  imagery or guidebook.
+  ``grad_ft_per_mi`` exceeds 1000. Real waterfall drops at the 100 m
+  window scale rarely exceed this (60 ft / 100 m ≈ 965 ft/mi);
+  values above usually mean the trace is sampling a cliff face / dam
+  / road cut instead of the channel. Surfaced as a warning so the
+  operator can triage by inspecting the (lat, lon) of the peak sample
+  against satellite imagery, or by flipping the ``gradient_unreliable``
+  flag (migration pattern: 0051) when the trace can't be fixed.
 
 Exit codes:
 
@@ -62,12 +63,12 @@ from kayak.tracing.format import has_wkt_wrapper, parse_geom_string
 
 # Profile samples above this gradient (ft/mi) get flagged for manual
 # review. Class V creeks rarely sustain > 500 ft/mi over a whole mile,
-# and even waterfall drops at the 100 m window scale top out around
-# 1000-1500 ft/mi (100 ft / 100 m = 1610 ft/mi). Sample values above
-# this threshold typically indicate the trace is sampling a cliff
-# face, dam, road cut, or other non-channel feature rather than a
-# real river feature.
-_EXTREME_PEAK_FT_PER_MI = 1500
+# and even single-drop waterfalls at the 100 m window scale rarely
+# exceed 1000 ft/mi (e.g. ~60 ft / 100 m = 965 ft/mi). Sample values
+# above this threshold typically indicate the trace is sampling a
+# cliff face, dam, road cut, or other non-channel feature rather than
+# a real river feature.
+_EXTREME_PEAK_FT_PER_MI = 1000
 
 # ~0.003° lat ≈ 333 m on the ground; matches the worst-case NHD HR
 # snap distance we've observed in practice (Horse Creek endpoint
@@ -160,10 +161,10 @@ def _check_one(reach: Reach, *, endpoint_tol_deg: float) -> list[str]:  # noqa: 
                 f"--reach-ids {reach.id} --apply"
             )
 
-    # Extreme gradient peak — fires independent of geom. Real waterfalls
-    # hit 1000-1500 ft/mi at sub-100m windows; values above that usually
-    # mean the trace is sampling a cliff face / dam / road cut instead
-    # of the channel.
+    # Extreme gradient peak — fires independent of geom. Real waterfall
+    # drops at the 100 m window scale rarely exceed ~1000 ft/mi
+    # (60 ft / 100 m); values above usually mean the trace is sampling
+    # a cliff face / dam / road cut instead of the channel.
     gp_raw = getattr(reach, "gradient_profile", None)
     if gp_raw:
         try:

@@ -247,11 +247,13 @@ def test_extreme_peak_in_gradient_profile_is_flagged() -> None:
 
 
 def test_normal_gradient_profile_is_not_flagged() -> None:
+    # Both samples stay under the 1000 ft/mi extreme-peak threshold —
+    # 800 is a steep but plausible Class V drop, 900 likewise.
     import json
     profile = json.dumps({
         "samples": [
             {"d_mi": 0.0, "lat": 44.1, "lon": -122.0, "grad_ft_per_mi": 800, "w_mi": 0.25, "significant": True},
-            {"d_mi": 0.25, "lat": 44.11, "lon": -122.01, "grad_ft_per_mi": 1200, "w_mi": 0.0625, "significant": True},
+            {"d_mi": 0.25, "lat": 44.11, "lon": -122.01, "grad_ft_per_mi": 900, "w_mi": 0.0625, "significant": True},
         ],
     })
     r = _FakeReach(gradient_profile=profile)
