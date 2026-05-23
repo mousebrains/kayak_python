@@ -519,7 +519,8 @@ function _render_description_fields_and_map(array $reach, array $related, array 
             echo '<div class="gradient-profile-container">'
                 . generate_gradient_profile_svg(
                     (string)$reach['gradient_profile'],
-                    (int)$reach['id']
+                    (int)$reach['id'],
+                    length_mi: $reach['length'] !== null ? (float)$reach['length'] : null
                 )
                 . '</div>';
         }

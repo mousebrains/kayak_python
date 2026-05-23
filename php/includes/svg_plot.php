@@ -390,7 +390,8 @@ function generate_gradient_profile_svg(
     string $profile_json,
     int $reach_id,
     int $width = 900,
-    int $height = 180
+    int $height = 180,
+    ?float $length_mi = null
 ): string {
     if ($profile_json === '') return '';
     $data = json_decode($profile_json, true);
@@ -407,9 +408,15 @@ function generate_gradient_profile_svg(
     $pw = $width - $ml - $mr;
     $ph = $height - $mt - $mb;
 
-    // Ranges
-    $x_min = (float)$samples[0]['d_mi'];
-    $x_max = (float)$samples[count($samples) - 1]['d_mi'];
+    // Ranges. X-axis spans the whole reach (0 = put-in, length = take-out)
+    // so the chart is comparable across reaches and the bar layout makes
+    // visual sense — sample d_mi values are bin centres, the first bin
+    // starts at 0 (centre = dl_mi/2) and the last ends at the take-out.
+    // Fall back to sample extents when length isn't provided.
+    $x_min = 0.0;
+    $x_max = $length_mi !== null && $length_mi > 0
+        ? (float)$length_mi
+        : (float)$samples[count($samples) - 1]['d_mi'];
     $x_range = $x_max - $x_min ?: 1;
     $y_vals = array_map(fn($s) => (float)$s['grad_ft_per_mi'], $samples);
     // Anchor y-axis at zero so a short bar (low gradient) reads short

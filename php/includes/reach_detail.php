@@ -84,7 +84,8 @@ function handle_reach_detail(
         echo '<div class="gradient-profile-container">'
             . generate_gradient_profile_svg(
                 (string)$reach['gradient_profile'],
-                (int)$reach['id']
+                (int)$reach['id'],
+                length_mi: $reach['length'] !== null ? (float)$reach['length'] : null
             )
             . '</div>';
     }
