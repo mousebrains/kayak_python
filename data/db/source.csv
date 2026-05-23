@@ -298,3 +298,5 @@ id,name,agency,fetch_url_id,calc_expression_id,timezone
 324,06077200,USGS,,,
 325,06077500,USGS,,,
 326,06085800,USGS,,,
+327,McKenzie_McKenzie_Bridge_calc,Calculation,,15,
+328,Horse_Creek_calc,Calculation,,16,

@@ -207,3 +207,5 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 207,06077200,,,below Eagle Creek near Fort Logan,46.8279805555556,-111.192238888889,06077200,,,,,,06077200,,4350.0,1087.0,100301030705,0,Smith,Smith below Eagle Creek near Fort Logan,smith|9|005650|001087,MT
 208,06077500,,,near Eden,47.1892916666667,-111.386238888889,06077500,,,,,,06077500,,3520.0,1588.0,100301030906,0,Smith,Smith near Eden,smith|9|006480|001588,MT
 209,06085800,,,at Simms,47.50162777777778,-111.9319138888889,06085800,,,,,,06085800,,3551.08,1296.0,100301040708,0,Sun,Sun at Simms,sun|9|006449|001296,MT
+210,McKenzie_McKenzie_Bridge_calc,,,Near McKenzie Bridge (estimated),44.179012,-122.130335,,,,,,,,,1419.04,348.0,170900040209,0,McKenzie,McKenzie at McKenzie Bridge (calc),mckenzie|9|008581|000348,OR
+211,Horse_Creek_calc,,,Near McKenzie Bridge (estimated),44.162694,-122.154,,,,,,,,,,149.6,170900040105,0,Horse Creek,Horse Creek near McKenzie Bridge (calc),horse creek|9|999999|000150,OR

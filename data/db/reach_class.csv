@@ -288,7 +288,7 @@ id,reach_id,name,low,low_data_type,high,high_data_type
 287,79,III-V,600.0,flow,3000.0,flow
 288,81,II,900.0,flow,3000.0,flow
 289,219,III-IV(V),3.0,gauge,5.5,gauge
-290,173,III-IV,699.0,gauge,710.0,gauge
+290,173,III-IV,900.0,flow,4000.0,flow
 291,169,III-IV,1500.0,flow,5000.0,flow
 292,213,II+(III),2000.0,flow,5000.0,flow
 293,251,V+,500.0,flow,1500.0,flow
@@ -415,3 +415,4 @@ id,reach_id,name,low,low_data_type,high,high_data_type
 414,402,II(III),2.0,flow,7.0,flow
 415,403,I-IV,600.0,flow,4000.0,flow
 416,404,IV-V,700.0,flow,2700.0,flow
+417,407,III,,,,
