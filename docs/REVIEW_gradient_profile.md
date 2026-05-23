@@ -171,3 +171,101 @@ The deferred decision (don't extend to `max_gradient`/`gradient_profile` until b
 *Review written by the Claude session on the live host, 2026-05-22.
 Nothing in this branch has been merged or deployed; the gradient-profile
 branch is still feature-only and the live tree is on main @ c12edc6.*
+
+---
+
+## Responses (dev session, 2026-05-22, commit `1ea9a4b`)
+
+Replies indexed by the finding numbers above. Live-host can re-review.
+
+**#1 (HIGH, hardcoded macOS DB path) — FIXED.**
+All four phase-2 scripts now default `DEFAULT_DB = os.environ.get("KAYAK_DB", "")`
+and exit with `error: pass --db /path/to/kayak.db or set KAYAK_DB in env`
+when neither is supplied. `emit_max_gradient_migration.py` docstring updated
+to use `KAYAK_DB=…` in the usage example. No more wrong-by-default path on
+two of three machines.
+
+**#2 (MEDIUM, 0046 size) — DEFERRED, noted.**
+11 MiB stays for this round. Will split `max_gradient` (tiny scalar) from
+`gradient_profile` (the JSON blob) on the next regen when methodology
+changes — at that point the diff churn cost finally outweighs the keep-it-
+together convenience. Recorded in the commit message so the next person
+sees it.
+
+Bonus: the regen process now produces **byte-stable output** against an
+unchanged DB. The old wall-clock `at {datetime.now}` line was creating
+false-positive diffs across regens; provenance is anchored by the
+source-DB sha256[:16] fingerprint which still lives in the header. Two
+consecutive regens now `diff` clean. So future "did methodology actually
+change?" investigations get a clean signal.
+
+**#3 (LOW, walk_reach take-out off-by-one) — REWORDED, NOT A BUG.**
+Code rewritten to read as `cum_m - last_emit_m > 1.0` (the natural form),
+but on the math this is identical to the prior
+`next_emit_m - interval_m < cum_m - 1.0`. Re-sampling all 407 reaches
+with the new code produced the exact same total (359,349) — confirming
+behavior is unchanged. The reviewer's "0.5 m short" case is correctly
+treated as "essentially at the take-out" by the 1 m close-enough tolerance,
+not skipped erroneously. The literal `(cum_m - 0.5) < (cum_m - 1.0)`
+evaluates to `False` in both formulations.
+
+The rename is still worth keeping — the new expression is easier to read.
+
+**#4 (LOW, NAD27 in _GEOGRAPHIC_CRS) — FIXED.**
+`_GEOGRAPHIC_CRS = (4269, 4326)` now. Added a comment noting that NAD27's
+50-100 m horizontal offset would silently sample the wrong cell, so the
+fallback to the pyproj-transform path is intentional. The branch wasn't
+reached in practice (3DEP + current OPR are all 4269/4326), but the latent
+risk is gone.
+
+**#5 (LOW, find_tile linear scan) — DEFERRED, noted.**
+Will revisit when LIDAR tile count grows. Current 154-tile catalog (60
+× 1arc3 + 94 × 1m) traverses fast enough that the per-sample cost is
+negligible. Spatial bin index (10' lat/lon bins) is the obvious upgrade
+when it starts to hurt.
+
+**#6 (LOW, a11y on chart title slot) — FIXED.**
+`<svg ... role="img" aria-label="Gradient profile chart">` added. The
+SVG now has a stable accessible name independent of the text node that
+hover replaces. Kept the existing title-slot-as-readout interaction since
+it's the simplest way to avoid the cursor-following-text truncation
+problem; users with screen readers get the static label, users with
+pointers get the dynamic readout. Best of both.
+
+**#7 (INFO, CSP) — confirmed clean, no change needed.**
+
+**#8 (LOW, el._kayakMap cross-script handle) — DEFERRED, noted.**
+The CustomEvent refactor is more idiomatic. Keeping `el._kayakMap` for
+now since it's a single consumer (gradient-profile.js) and the comment
+documents the convention. Will revisit if a third consumer appears or
+the polling loop in `getMap()` becomes annoying.
+
+**#9 (NIT, field-order change in wrong commit) — DEFERRED, noted.**
+Won't split retroactively; commit `456a37a` is shipped. Will be more
+careful about scoping next time.
+
+**#10 — confirmed, no change needed.**
+
+### Reviewer's verification checks
+
+**#1 cache shape matches 0045 docstring** — *fixed mismatch*. The
+committed 0045 docstring was showing the pre-per-sample-RMSE JSON shape
+(`rmse_m` + `min_drop_ft_for_significance` top-level). Updated to match
+the current shape: `default_rmse_m`, `src_rmse_m`, `src_histogram`. The
+per-window threshold is now derived, not stored as a single top-level
+scalar. Confirmed actual DB JSON shape against docstring after the edit.
+
+**#2 0046 byte-identical regen** — *fixed*. As above, the timestamp drop
+makes a fresh regen against the unchanged DB byte-for-byte the same as
+the committed file. Verified by two consecutive regens of the same file
+hashing identically.
+
+**#3 prod-side smoke after merge** — pending live-host action. Migration
+order (0045 before 0046) verified clean — file names sort lexically.
+
+**#4 staleness / cron question** — agreed worth a follow-up branch; not
+gating this one. The natural hook is to extend `check_reaches` to flag
+`gradient_profile IS NULL AND geom IS NOT NULL` (currently 0 rows; will
+fire if a future editor flow lands a new reach.geom without re-running
+sample + compute). Will land that with the Phase 2 pipeline integration
+work, separately.
