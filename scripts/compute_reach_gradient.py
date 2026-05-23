@@ -34,7 +34,12 @@ DEFAULT_DB = os.environ.get("KAYAK_DB", "/Users/pat/tpw/DB/kayak.db")
 DEFAULT_CACHE = Path("Elevation-cache")
 M_TO_FT = 3.28083989501
 
-WINDOW_SET_MI = [0.25, 0.5, 1.0, 2.0, 5.0]
+# Adaptive window set. 0.0625 mi ≈ 100m, only meaningful with LIDAR-level
+# vertical accuracy + dense (≤ 25 m) sample interval. 1/3 arc-second reaches
+# will naturally skip past 0.0625/0.125 because the 33 ft 3-sigma threshold
+# requires steeper-than-real gradients to qualify at those sizes; they fall
+# through to 0.25+.
+WINDOW_SET_MI = [0.0625, 0.125, 0.25, 0.5, 1.0, 2.0, 5.0]
 
 
 def _smooth(values: list[float], window_points: int) -> list[float]:
@@ -104,12 +109,16 @@ def _drop_over_window(
 
 
 def compute_max_gradient(d_mi: list[float], elev_ft: list[float], window_mi: float) -> float | None:
-    """Slide a fixed-width window over the profile, return max |drop|/window."""
+    """Slide a fixed-width window over the profile, return max descending
+    drop / window. Rivers flow downhill; a windowed segment whose
+    end-elevation is *higher* than its start is a DEM/canopy artifact,
+    not a real upstream-pointing rapid — clamp those to 0 so they don't
+    inflate max_gradient as |drop|."""
     if len(d_mi) < 2 or d_mi[-1] < window_mi:
         # Reach shorter than window — fall back to total drop / length
         if len(d_mi) < 2:
             return None
-        total_drop = abs(elev_ft[0] - elev_ft[-1])
+        total_drop = max(0.0, elev_ft[0] - elev_ft[-1])
         return round(total_drop / d_mi[-1], 1)
     best = 0.0
     i_lo = 0
@@ -122,8 +131,7 @@ def compute_max_gradient(d_mi: list[float], elev_ft: list[float], window_mi: flo
         if actual_w <= 0:
             i_lo += 1
             continue
-        # Linear interpolation for the final point inside the window
-        drop = abs(elev_ft[i_lo] - elev_ft[i_hi])
+        drop = max(0.0, elev_ft[i_lo] - elev_ft[i_hi])
         grad = drop / actual_w
         if grad > best:
             best = grad
@@ -141,7 +149,10 @@ def build_profile(
     window_set: list[float],
 ) -> list[dict]:
     """For each output point at step_mi spacing, find the smallest window in
-    `window_set` that yields drop ≥ min_drop_ft and emit the gradient."""
+    `window_set` whose descending drop >= min_drop_ft and emit the gradient.
+
+    Gradient is clamped at 0 — an upstream-pointing windowed slope is a
+    DEM/canopy artifact (rivers flow downhill), not a real feature."""
     samples = []
     total_mi = d_mi[-1]
     x = 0.0
@@ -152,7 +163,9 @@ def build_profile(
             if res is None:
                 continue
             drop, actual_w, _i_lo, _i_hi = res
-            if abs(drop) >= min_drop_ft:
+            # Only descending drops count toward significance — uphill
+            # noise of similar magnitude doesn't reflect channel reality.
+            if drop >= min_drop_ft:
                 chosen = (drop, actual_w, w, True)
                 break
         if chosen is None:
@@ -165,7 +178,7 @@ def build_profile(
             chosen = (drop, actual_w, window_set[-1], False)
 
         drop, actual_w, _nominal_w, significant = chosen
-        grad = drop / actual_w if actual_w > 0 else 0.0
+        grad = max(0.0, drop / actual_w) if actual_w > 0 else 0.0
 
         # Per-sample lat/lon: pick the nearest cached point
         i_nearest = _index_at_or_after(d_mi, x)

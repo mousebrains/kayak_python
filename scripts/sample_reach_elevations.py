@@ -136,13 +136,22 @@ def walk_reach(geom: str, interval_m: float) -> Iterator[tuple[float, float, flo
 # -------------------------------------------------------------------------
 
 
-def build_tile_index(dem_cache: Path) -> list[dict]:
-    """Scan DEM-cache/1arc3/ (and later /1m/) for available tiles.
+_GEOGRAPHIC_CRS = (4269, 4326, 4267)
 
-    Returns a list of records with keys: ``path``, ``src``, ``bounds``
-    (left, bottom, right, top in WGS84).
+
+def build_tile_index(dem_cache: Path) -> list[dict]:
+    """Scan DEM-cache/1arc3/ and /1m/ for available tiles.
+
+    Each index entry has keys: ``path``, ``src``, ``crs_epsg``, and
+    ``bounds_wgs84`` (left, bottom, right, top in WGS84 lon/lat so the
+    fast in-bounds check at sample time stays in geographic coords
+    regardless of the tile's native projection). 1 m OPR LIDAR tiles
+    are typically in UTM (EPSG:269xx) — at sample time we transform
+    the sample point from WGS84 to the tile's CRS via pyproj before
+    looking up the cell.
     """
     import rasterio
+    from rasterio.warp import transform_bounds
 
     index: list[dict] = []
     for src_tier in ("1arc3", "1m"):
@@ -152,21 +161,26 @@ def build_tile_index(dem_cache: Path) -> list[dict]:
         for path in sorted(tile_dir.rglob("*.tif")):
             try:
                 with rasterio.open(path) as ds:
-                    b = ds.bounds
-                    # Verify CRS is geographic (lat/lon) — 3DEP tiles
-                    # should be EPSG:4269 (NAD83) or 4326 (WGS84); the
-                    # difference at our latitudes is < 1 m.
-                    if not ds.crs or ds.crs.to_epsg() not in (4269, 4326, 4267):
-                        print(
-                            f"  skip {path}: non-geographic CRS {ds.crs}",
-                            file=sys.stderr,
-                        )
+                    if ds.crs is None:
+                        print(f"  skip {path}: no CRS", file=sys.stderr)
                         continue
+                    epsg = ds.crs.to_epsg()
+                    b = ds.bounds
+                    if epsg in _GEOGRAPHIC_CRS:
+                        bounds_wgs84 = (b.left, b.bottom, b.right, b.top)
+                    else:
+                        # Reproject the tile bbox to WGS84 once so find_tile
+                        # can do a cheap lon/lat in-bounds check. The actual
+                        # sample uses the native projection (see sample_bilinear).
+                        bounds_wgs84 = transform_bounds(
+                            ds.crs, "EPSG:4326", b.left, b.bottom, b.right, b.top
+                        )
                     index.append(
                         {
                             "path": str(path),
                             "src": src_tier,
-                            "bounds": (b.left, b.bottom, b.right, b.top),
+                            "crs_epsg": epsg,
+                            "bounds_wgs84": bounds_wgs84,
                         }
                     )
             except Exception as exc:
@@ -181,8 +195,16 @@ def _open_dataset(path: str):
     return rasterio.open(path)
 
 
+@lru_cache(maxsize=32)
+def _wgs84_to_native_transformer(epsg: int):
+    """pyproj Transformer cached per target EPSG."""
+    from pyproj import Transformer
+
+    return Transformer.from_crs("EPSG:4326", f"EPSG:{epsg}", always_xy=True)
+
+
 def find_tile(index: list[dict], lon: float, lat: float, prefer_src: str = "1m") -> dict | None:
-    """Return the index entry whose bounds contain (lon, lat).
+    """Return the index entry whose WGS84 bounds contain (lon, lat).
 
     Preference order: 1 m LIDAR first (if any tile covers the point),
     then 1/3 arc-second. Returns None if no tile covers.
@@ -190,7 +212,7 @@ def find_tile(index: list[dict], lon: float, lat: float, prefer_src: str = "1m")
     cand_1m = None
     cand_other = None
     for tile in index:
-        left, bot, right, top = tile["bounds"]
+        left, bot, right, top = tile["bounds_wgs84"]
         if left <= lon <= right and bot <= lat <= top:
             if tile["src"] == prefer_src:
                 cand_1m = tile
@@ -200,19 +222,29 @@ def find_tile(index: list[dict], lon: float, lat: float, prefer_src: str = "1m")
     return cand_1m or cand_other
 
 
-def sample_bilinear(tile_path: str, lon: float, lat: float) -> float | None:
-    """Sample a single tile at (lon, lat) using bilinear interpolation.
+def sample_bilinear(tile: dict, lon: float, lat: float) -> float | None:
+    """Sample a tile at (lon, lat) using bilinear interpolation.
+
+    Takes the full tile index entry so it can transform the sample
+    point from WGS84 into the tile's native CRS when needed (UTM for
+    1 m OPR LIDAR; geographic for 3DEP 1/3 arc-second).
 
     Returns elevation in the tile's native vertical unit (meters for
-    3DEP), or None if the sample falls inside but the cell is a NoData
-    pixel.
+    both 3DEP and OPR), or None if the sample falls inside but the
+    cell is a NoData pixel.
     """
     import numpy as np
     from rasterio.windows import Window
 
-    ds = _open_dataset(tile_path)
-    # Convert (lon, lat) to fractional (row, col)
-    col_f, row_f = ~ds.transform * (lon, lat)
+    ds = _open_dataset(tile["path"])
+    # Project the sample into the tile's native CRS when the tile isn't
+    # already in WGS84 / NAD83 geographic. UTM tiles need (lon,lat) -> (x_m, y_m).
+    if tile["crs_epsg"] in _GEOGRAPHIC_CRS:
+        x_native, y_native = lon, lat
+    else:
+        x_native, y_native = _wgs84_to_native_transformer(tile["crs_epsg"]).transform(lon, lat)
+    # Convert native (x,y) to fractional (row, col)
+    col_f, row_f = ~ds.transform * (x_native, y_native)
     col_i = math.floor(col_f)
     row_i = math.floor(row_f)
     if not (0 <= col_i < ds.width - 1 and 0 <= row_i < ds.height - 1):
@@ -254,7 +286,7 @@ def process_reach(
         if tile is None:
             missed += 1
             continue
-        elev_m = sample_bilinear(tile["path"], lon, lat)
+        elev_m = sample_bilinear(tile, lon, lat)
         if elev_m is None:
             missed += 1
             continue
