@@ -443,6 +443,18 @@ function generate_gradient_profile_svg(
     $plot_right = $ml + $pw;
     $plot_bottom = $mt + $ph;
 
+    // Identify the first + last bar (by d_mi) so we can stretch their
+    // outer edges to the put-in / take-out. The cumsum algorithm bins
+    // in dl_mi chunks and exits when fewer than 2 bins remain, leaving
+    // a small unbarred tail when reach length isn't a multiple of
+    // dl_mi (e.g. 4.9 mi with dl_mi=0.2 → bars end at 4.6 or 4.8).
+    // Same for the leading edge if the first bar's centre isn't at
+    // dl_mi/2. Stretch the outer edges visually so the chart covers
+    // the full reach domain; the bar's gradient + significant flag
+    // stay as the algorithm computed them.
+    $first_d_mi = (float)$samples[0]['d_mi'];
+    $last_d_mi = (float)$samples[count($samples) - 1]['d_mi'];
+
     $ordered = $samples;
     usort($ordered, fn($a, $b) => (float)$b['w_mi'] <=> (float)$a['w_mi']);
 
@@ -454,10 +466,14 @@ function generate_gradient_profile_svg(
         $grad = max(0.0, (float)$s['grad_ft_per_mi']);
         $sig = !empty($s['significant']);
 
-        $left_x = $ml + (($d_mi - $w_mi / 2) - $x_min) * $xPx_per_mi;
-        $right_x = $ml + (($d_mi + $w_mi / 2) - $x_min) * $xPx_per_mi;
-        $left_x = max($ml, $left_x);
-        $right_x = min($plot_right, $right_x);
+        $left_x = $d_mi === $first_d_mi
+            ? (float)$ml
+            : $ml + (($d_mi - $w_mi / 2) - $x_min) * $xPx_per_mi;
+        $right_x = $d_mi === $last_d_mi
+            ? (float)$plot_right
+            : $ml + (($d_mi + $w_mi / 2) - $x_min) * $xPx_per_mi;
+        $left_x = max((float)$ml, $left_x);
+        $right_x = min((float)$plot_right, $right_x);
         $bar_w = $right_x - $left_x;
         if ($bar_w < 0.1) continue;
 
