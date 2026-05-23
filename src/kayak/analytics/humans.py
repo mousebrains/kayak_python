@@ -14,12 +14,14 @@ emit Markdown to stdout via the CLI wrapper.
 from __future__ import annotations
 
 import collections
-import concurrent.futures
 import datetime as dt
 import json
 import os
+import queue
 import re
 import socket
+import threading
+import time
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -99,36 +101,92 @@ _rdns_cache: dict[str, str] = {}
 # IPs touched in this process (logs OR fresh lookup). Used to refresh the
 # last-seen stamp before saving so a steady-state IP doesn't expire.
 _rdns_last_seen: dict[str, int] = {}
-# IPs we've already taken a swing at this process. If a lookup timed out
-# under one warm_rdns call's budget, subsequent calls in the same process
-# don't waste budget retrying it — we just leave it uncached for this run
-# and the next render can have another go.
+# IPs we've already taken a swing at this process. The status render calls
+# warm_rdns six times (one per traffic report); this stops an IP from costing a
+# fresh budget on each — only the first call sees it as a target.
+# (Across processes, the negative cache + backoff below handles re-suppression.)
 _rdns_attempted: set[str] = set()
+# Epoch after which a negative (black-holed) cache entry becomes eligible for a
+# fresh lookup, and the count of consecutive black-holes driving the backoff.
+# Both are populated only for timed-out IPs; a confirmed result clears them.
+_rdns_retry_after: dict[str, int] = {}
+_rdns_fail_count: dict[str, int] = {}
 
 # socket.gethostbyaddr is a blocking C call that ignores socket.setdefaulttimeout;
 # a single unreachable resolver can hang it indefinitely. Resolve the whole IP set
-# in parallel with a wall-clock budget — anything past the deadline gets retried
-# next run (uncached). Defaults sized for the nightly status render: ~4k IPs/day,
-# of which ~60% have no PTR and stall ~10s before NXDOMAIN. The on-disk cache
-# means only NEW IPs need a lookup on subsequent runs, so steady-state is fast.
+# in parallel on *daemon* threads under a wall-clock budget: lookups still stuck
+# at the deadline are abandoned (daemon threads don't block interpreter exit), and
+# their IPs are negative-cached with a backed-off retry (see _RDNS_NEG_RETRY_BASE_S)
+# so we don't re-stall on them every run. The budget MUST stay well under
+# kayak-status.service's TimeoutStartSec, or systemd kills the render mid-sweep.
+# Defaults sized for the nightly status render: ~4k IPs/day, of which ~60% have no
+# PTR. The on-disk cache means only NEW IPs need a lookup on subsequent runs.
 _RDNS_WORKERS = 128
-_RDNS_TOTAL_BUDGET_S = 180.0
+_RDNS_TOTAL_BUDGET_S = 45.0
+# Black-holed lookups (no answer within the budget) get a negative cache entry so
+# they're skipped on the nightly render. The retry window backs off exponentially
+# per consecutive failure — 7d, 14d, 28d, 56d, 112d — capped at ~26 weeks, so a
+# transient resolver/IPv6 outage self-heals on the next attempt while a chronically
+# unresolvable IP is probed ever less often instead of every run. A confirmed
+# result (PTR or fast NXDOMAIN) resets the backoff and gets the full cache TTL.
+_RDNS_NEG_RETRY_BASE_S = 7 * 86400
+_RDNS_NEG_RETRY_MAX_S = 182 * 86400  # ~26 weeks
 
 # Persistent on-disk rdns cache: subsequent renders only have to look up the
 # IPs that are new since the last run. Path is overridable via env so tests
 # don't pollute the real cache.
 _RDNS_CACHE_PATH = Path(os.environ.get("KAYAK_RDNS_CACHE", "/home/pat/kayak/var/rdns_cache.json"))
-# Drop cache entries whose last-seen is older than this. Keeps the file
-# bounded by recent activity instead of growing forever.
-_RDNS_CACHE_TTL_DAYS = 60
+# Drop cache entries whose last-seen is older than this (~26 weeks). Bounds the
+# file by recent activity, and is long enough that a fully backed-off negative
+# entry (retry up to ~26 weeks out) isn't evicted before its retry comes due, for
+# an IP that keeps reappearing in the logs.
+_RDNS_CACHE_TTL_DAYS = 182  # ~26 weeks
 _rdns_cache_loaded: bool = False
 
 
-def _load_rdns_cache_from_disk() -> None:
-    """Load `{ip: [name, last_seen_epoch]}` entries from disk, evicting stale.
+def _parse_rdns_entry(value: object) -> tuple[str, int, int, int] | None:
+    """Parse one on-disk cache value into ``(name, last_seen, retry_after,
+    fail_count)``, or ``None`` for an unrecognized shape.
 
-    Tolerates the legacy `{ip: name_string}` shape too (treat as last-seen
-    now, will get pruned in due course if not re-seen).
+    ``retry_after``/``fail_count`` are 0 for confirmed (2-element) and legacy
+    string entries. A legacy entry reports ``last_seen == 0`` so the caller can
+    substitute "just seen"; a real entry always has a positive epoch.
+    """
+    if isinstance(value, str):
+        return value, 0, 0, 0  # legacy name-only shape
+    if isinstance(value, list) and len(value) >= 2:
+        name, ts = value[0], value[1]
+        if not (isinstance(name, str) and isinstance(ts, int)):
+            return None
+        retry_after = value[2] if len(value) >= 3 and isinstance(value[2], int) else 0
+        fail_count = value[3] if len(value) >= 4 and isinstance(value[3], int) else 0
+        # A negative entry implies >=1 failure; keep the pair coherent so a later
+        # re-fail escalates the backoff instead of resetting to tier 1.
+        if retry_after and not fail_count:
+            fail_count = 1
+        return name, ts, retry_after, fail_count
+    return None
+
+
+def _store_rdns_entry(ip: str, name: str, ts: int, retry_after: int, fail_count: int) -> None:
+    """Hydrate the in-memory rdns dicts from one parsed cache entry."""
+    _rdns_cache.setdefault(ip, name)
+    _rdns_last_seen.setdefault(ip, ts)
+    if retry_after:
+        _rdns_retry_after.setdefault(ip, retry_after)
+    if fail_count:
+        _rdns_fail_count.setdefault(ip, fail_count)
+
+
+def _load_rdns_cache_from_disk() -> None:
+    """Load cached rDNS entries from disk, evicting only TTL-expired ones.
+
+    On-disk value is ``[name, last_seen_epoch]`` for a confirmed result, or
+    ``[name, last_seen_epoch, retry_after_epoch, fail_count]`` for a negative
+    (black-holed) entry. ``warm_rdns`` re-probes a negative once
+    ``retry_after_epoch`` passes; ``fail_count`` drives the backoff escalation.
+    Tolerates the legacy ``{ip: name_string}`` shape too (treated as just-seen so
+    it isn't evicted immediately).
     """
     global _rdns_cache_loaded
     if _rdns_cache_loaded:
@@ -146,37 +204,36 @@ def _load_rdns_cache_from_disk() -> None:
     for ip, value in data.items():
         if not isinstance(ip, str):
             continue
-        name = ""
-        ts = now_ts
-        if isinstance(value, list) and len(value) == 2:
-            n, t = value
-            if isinstance(n, str) and isinstance(t, int):
-                name, ts = n, t
-            else:
-                continue
-        elif isinstance(value, str):
-            # Legacy shape: assume just-seen so we don't immediately evict.
-            name = value
-        else:
+        parsed = _parse_rdns_entry(value)
+        if parsed is None:
             continue
+        name, ts, retry_after, fail_count = parsed
+        if ts == 0:
+            ts = now_ts  # legacy entry: treat as just-seen so we don't evict it
         if ts < cutoff:
             continue
-        _rdns_cache.setdefault(ip, name)
-        _rdns_last_seen.setdefault(ip, ts)
+        # Load negatives (incl. expired ones) so their backoff state survives;
+        # warm_rdns decides whether the retry window has opened.
+        _store_rdns_entry(ip, name, ts, retry_after, fail_count)
 
 
 def _save_rdns_cache_to_disk() -> None:
     try:
         _RDNS_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        out = {
-            ip: [name, _rdns_last_seen.get(ip, 0)]
-            for ip, name in _rdns_cache.items()
-            if ip in _rdns_last_seen  # don't persist what we haven't seen this run *or* last
-            or _rdns_last_seen.get(ip, 0) > 0
-        }
-        # The filter above keeps last-seen from disk (loaded into _rdns_last_seen)
-        # plus anything we touched this run. Anything not in _rdns_last_seen at all
-        # is an in-process-only artefact and not worth persisting.
+        # Persist entries we've seen this run or loaded from disk (anything in
+        # _rdns_last_seen). A negative (black-holed) entry carries its retry-after
+        # + fail_count so the backoff survives restarts; a confirmed entry stays
+        # the compact [name, ts] shape.
+        out: dict[str, list[str | int]] = {}
+        for ip, name in _rdns_cache.items():
+            if ip not in _rdns_last_seen:
+                continue
+            ts = _rdns_last_seen[ip]
+            ra = _rdns_retry_after.get(ip, 0)
+            if ra:
+                out[ip] = [name, ts, ra, _rdns_fail_count.get(ip, 1)]
+            else:
+                out[ip] = [name, ts]
         tmp = _RDNS_CACHE_PATH.with_suffix(_RDNS_CACHE_PATH.suffix + ".tmp")
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(out, f, separators=(",", ":"), sort_keys=True)
@@ -192,6 +249,58 @@ def _rdns_lookup(ip: str) -> str:
         return ""
 
 
+def _resolve_parallel(
+    targets: list[str], workers: int, budget_s: float
+) -> tuple[dict[str, str], set[str]]:
+    """Resolve PTRs for *targets* on daemon threads under a wall-clock budget.
+
+    Returns ``(resolved, started)``: ``resolved`` maps each IP that *completed*
+    within the budget to its name (``""`` for a confirmed no-PTR); ``started`` is
+    every IP a worker actually began looking up. So ``started - resolved`` is the
+    set that black-holed (a worker is still blocked in ``socket.gethostbyaddr`` at
+    the deadline), while ``targets - started`` were never pulled off the queue
+    because the pool saturated on black-holes — the caller must NOT penalize those
+    or it would negative-cache valid PTRs it never tried. Workers are daemon
+    threads, so a stuck lookup is abandoned at the deadline and can't pin
+    interpreter exit (the bug that timed out kayak-status.service).
+    """
+    work: queue.SimpleQueue[str] = queue.SimpleQueue()
+    for ip in targets:
+        work.put(ip)
+    resolved: dict[str, str] = {}
+    started: set[str] = set()
+    lock = threading.Lock()
+
+    def _worker() -> None:
+        while True:
+            try:
+                ip = work.get_nowait()
+            except queue.Empty:
+                return
+            with lock:
+                started.add(ip)
+            name = _rdns_lookup(ip)  # may block past the deadline; we're daemon
+            with lock:
+                resolved[ip] = name
+
+    threads = [
+        threading.Thread(target=_worker, name=f"rdns-{i}", daemon=True)
+        for i in range(min(workers, len(targets)))
+    ]
+    for t in threads:
+        t.start()
+    deadline = time.monotonic() + budget_s
+    for t in threads:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        t.join(timeout=remaining)
+    # Atomic snapshot of both — daemon workers stuck past the deadline may still
+    # be mutating them; anything that lands after this copy is simply ignored.
+    with lock:
+        return dict(resolved), set(started)
+
+
 def warm_rdns(
     ips: Iterable[str],
     *,
@@ -200,43 +309,54 @@ def warm_rdns(
 ) -> None:
     """Pre-resolve reverse DNS for the given IPs in parallel under a total budget.
 
-    Hydrates from an on-disk JSON cache first so daily renders only need to
-    look up newly-seen IPs. Unresolved IPs (timed out) are NOT cached — only
-    confirmed lookups (success or OSError, both via _rdns_lookup) get persisted,
-    so a timeout this run gets re-tried next run. Updates a last-seen stamp
-    on every IP we see so entries don't expire while the IP keeps appearing.
+    Hydrates from the on-disk cache first so daily renders only look up IPs that
+    are new or whose negative-cache backoff has expired. Lookups run on *daemon*
+    threads, so any that black-hole inside ``socket.gethostbyaddr`` (a blocking C
+    call that ignores socket timeouts) are abandoned at the budget deadline and
+    never block interpreter exit — the bug that timed out kayak-status.service.
+    Every attempted IP is then cached: a confirmed result (PTR or fast NXDOMAIN)
+    persists for the full TTL and clears any backoff; a black-hole gets a negative
+    entry whose retry window backs off exponentially (``_RDNS_NEG_RETRY_BASE_S`` ..
+    ``_RDNS_NEG_RETRY_MAX_S``), so we stop re-stalling on the same dead IPs.
     """
     _load_rdns_cache_from_disk()
     now_ts = int(dt.datetime.now(dt.UTC).timestamp())
     ip_list = list({ip for ip in ips})
-    # Refresh last-seen for every IP in this run, cached or not. Lookups for
-    # uncached IPs happen below; cached IPs just need their stamp bumped.
+    # Refresh last-seen for every IP in this run, cached or not, so entries don't
+    # expire while the IP keeps appearing.
     for ip in ip_list:
         _rdns_last_seen[ip] = now_ts
-    # Targets = IPs we haven't cached AND haven't already tried this process.
-    # The "already tried" filter matters because the render calls warm_rdns
-    # three times (one from each of run_chunked/run_paths/run_humans). Without
-    # it, IPs that timed out on call #1 would cost another full budget on
-    # call #2 and #3.
-    targets = sorted([ip for ip in ip_list if ip not in _rdns_cache and ip not in _rdns_attempted])
+    # Targets = IPs that are uncached, or negative-cached past their retry window,
+    # AND not already tried this process. The "already tried" filter matters
+    # because the status render calls warm_rdns six times (chunked/countries/
+    # subdivisions/asns/paths/humans); without it, IPs that stalled on call #1
+    # would cost another full budget on every later call.
+    targets = sorted(
+        ip
+        for ip in ip_list
+        if ip not in _rdns_attempted
+        and (ip not in _rdns_cache or (ip in _rdns_retry_after and now_ts >= _rdns_retry_after[ip]))
+    )
     if not targets:
         _save_rdns_cache_to_disk()
         return
     _rdns_attempted.update(targets)
-    ex = concurrent.futures.ThreadPoolExecutor(max_workers=workers, thread_name_prefix="rdns")
-    futures = {ip: ex.submit(_rdns_lookup, ip) for ip in targets}
-    done, _pending = concurrent.futures.wait(futures.values(), timeout=budget_s)
-    for ip, fut in futures.items():
-        if fut in done:
-            try:
-                _rdns_cache[ip] = fut.result()
-            except Exception:
-                # _rdns_lookup itself catches OSError; this branch is reachable
-                # only on truly unexpected errors. Treat as "no PTR" and cache.
-                _rdns_cache[ip] = ""
-        # Else: future didn't finish before the budget expired. Leave it OUT
-        # of the cache so next run takes another swing.
-    ex.shutdown(wait=False, cancel_futures=True)
+
+    resolved, started = _resolve_parallel(targets, workers, budget_s)
+    for ip, name in resolved.items():
+        _rdns_cache[ip] = name
+        _rdns_retry_after.pop(ip, None)
+        _rdns_fail_count.pop(ip, None)
+    # Negative-cache only IPs a worker actually started but that didn't finish
+    # (genuine black-holes), with an exponentially backed-off retry. IPs never
+    # pulled off the queue (pool saturated) are left uncached so next run retries
+    # them without a backoff penalty — they may well have valid PTRs.
+    for ip in started - resolved.keys():
+        n = _rdns_fail_count.get(ip, 0) + 1
+        interval = min(_RDNS_NEG_RETRY_BASE_S * 2 ** (n - 1), _RDNS_NEG_RETRY_MAX_S)
+        _rdns_cache[ip] = ""
+        _rdns_retry_after[ip] = now_ts + interval
+        _rdns_fail_count[ip] = n
     _save_rdns_cache_to_disk()
 
 
