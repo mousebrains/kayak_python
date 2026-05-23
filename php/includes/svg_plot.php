@@ -372,15 +372,16 @@ SVG;
 }
 
 /**
- * Render a gradient profile as a continuous SVG line chart.
+ * Render a gradient profile as an SVG bar chart.
  *
  * Reads the JSON produced by scripts/compute_reach_gradient.py
- * (shape documented in data/db/migrations/0045_*.sql header). Draws
- * one pale full-opacity polyline for all samples, then overlays
- * disjoint full-color polylines for each contiguous "significant: true"
- * run, so insignificant stretches show as dimmed. Embeds the sample
- * array as a data-profile attribute for static/gradient-profile.js to
- * read at hydration time (cursor sync with the reach map dot).
+ * (shape documented in data/db/migrations/0045_*.sql header). Each
+ * sample draws as a <rect> spanning its 3σ analysis window
+ * (d_mi ± w_mi/2) at height = grad_ft_per_mi. Bars are split into two
+ * groups (gp-bars-pale for insignificant, gp-bars-sig for significant)
+ * so CSS can dim the below-noise-floor bars. Embeds the sample array
+ * as a data-profile attribute for static/gradient-profile.js to read
+ * at hydration time (cursor sync with the reach map dot).
  *
  * Returns '' if the profile JSON is empty, malformed, or has fewer than
  * 2 samples.
@@ -466,11 +467,14 @@ function generate_gradient_profile_svg(
         }
     }
 
-    // Y-axis grid + labels
+    // Y-axis grid + labels. Pick label decimal precision from the
+    // nice_axis step so low-relief reaches (sub-1.0 step) don't print
+    // duplicate labels at every gridline.
+    $y_decimals = $y_step >= 1 ? 0 : ($y_step >= 0.1 ? 1 : ($y_step >= 0.01 ? 2 : 3));
     $grid = '';
     for ($yv = $y_min; $yv <= $y_max + $y_step * 0.01; $yv += $y_step) {
         $py = $mt + (($y_max - $yv) / $y_range * $ph);
-        $label = number_format($yv, 0);
+        $label = number_format($yv, $y_decimals);
         $grid .= "<line class=\"gp-grid\" x1=\"$ml\" y1=\"$py\" x2=\"" . ($ml + $pw) . "\" y2=\"$py\"/>\n";
         $grid .= "<text class=\"gp-axis\" x=\"" . ($ml - 5) . "\" y=\"" . ($py + 4) . "\" text-anchor=\"end\">$label</text>\n";
     }

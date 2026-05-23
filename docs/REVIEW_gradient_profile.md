@@ -34,7 +34,7 @@ if a value turns out wrong"). Good call.
 
 | Check | Result |
 |---|---|
-| `data/db/migrations/00{45,46}` would land cleanly | Yes — latest applied is 0044 (2026-05-22 19:17 UTC) |
+| `data/db/migrations/00{45,46}` would land cleanly | ~~Yes — latest applied is 0044 (2026-05-22 19:17 UTC)~~ **CORRECTION:** this check only confirmed `0044` was latest; it never actually ran `0046` through the migration runner. The end-to-end re-review on 2026-05-23 caught that 0046 was rejected by `levels migrate` — SQLAlchemy `text()` parses `:` in the JSON literals as bind-param markers, raising `InvalidRequestError` on the first UPDATE. Fixed by adding `-- @no_transaction` to the migration header (commit `3a4ae28`) so the runner takes the raw-cursor branch, which uses SQLite's own parser. **Lesson: "latest-applied is N" is not a substitute for actually applying N+1 in a sandbox.** |
 | `reach.gradient_profile` already on live DB | **No** — column is added by 0045, must run `levels migrate` |
 | `reach.max_gradient` on live DB | Yes (existing column 32) — 0046 backfills only |
 | `scripts/refresh_reach_elevations.py` exists | Yes — `check_reaches` error message points to it correctly |

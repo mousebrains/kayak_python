@@ -10,10 +10,11 @@
 //   * a hover marker on the companion Leaflet map (#feature-map) jumps
 //     to the matching (lat, lon).
 //
-// Loose-coupled to feature-map.js via a non-public convention: the map
-// IIFE stashes its Leaflet instance on el._kayakMap. If the map isn't
-// initialised yet at chart-hydration time we poll briefly; if it never
-// shows up we degrade silently to chart-only behavior.
+// Loose-coupled to feature-map.js and reach-map.js via a non-public
+// convention: each map IIFE stashes its Leaflet instance on
+// el._kayakMap. Resolved lazily on first mousemove (not at hydration)
+// so the map IIFE has had a chance to run; if neither map is present
+// we degrade silently to chart-only behavior.
 (function () {
 'use strict';
 
@@ -51,9 +52,9 @@ function hydrate(chart) {
   dot.style.display = 'none';
   chart.appendChild(dot);
 
-  // Locate the Leaflet map exposed by static/feature-map.js. Wait briefly
-  // since the map IIFE runs after `defer`-loaded scripts, which may not
-  // have executed by the time this chart's mousemove fires.
+  // Locate the Leaflet map exposed by static/feature-map.js (gauge page)
+  // or static/reach-map.js (reach page) on the first mousemove — by then
+  // the map IIFE has run, even if both scripts were `defer`-loaded.
   let leafletMap = null;
   let mapHoverMarker = null;
   function getMap() {
@@ -90,11 +91,18 @@ function hydrate(chart) {
   }
 
   function findSampleIndex(dMi) {
+    // Binary search for the lowest index with d_mi >= dMi, then snap
+    // to the actually-nearest of (idx-1, idx). Without the snap, hover
+    // always picks the right-hand neighbor — visible jitter at bar
+    // boundaries.
     let lo = 0, hi = samples.length - 1;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
       if (samples[mid].d_mi < dMi) lo = mid + 1;
       else hi = mid;
+    }
+    if (lo > 0 && (dMi - samples[lo - 1].d_mi) < (samples[lo].d_mi - dMi)) {
+      return lo - 1;
     }
     return lo;
   }
@@ -127,10 +135,18 @@ function hydrate(chart) {
     dot.style.display = '';
 
     if (titleEl) {
-      const sig = s.significant ? '' : ', below noise floor';
+      // For significant samples, w_mi is the smallest window where the
+      // drop cleared the 3σ threshold — "window" reads as a fixed-
+      // resolution claim. For insignificant samples, w_mi is the
+      // clamped walk distance until the algorithm gave up (often the
+      // whole remaining reach), so "integrated over" avoids implying
+      // it's a chosen scale.
+      const windowText = s.significant
+        ? '(window ' + s.w_mi.toFixed(2) + ' mi)'
+        : '(integrated over ' + s.w_mi.toFixed(2) + ' mi, below noise floor)';
       titleEl.textContent = 'mi ' + s.d_mi.toFixed(2)
-        + ': ' + Math.round(s.grad_ft_per_mi) + ' ft/mi'
-        + ' (window ' + s.w_mi.toFixed(2) + ' mi' + sig + ')';
+        + ': ' + Math.round(s.grad_ft_per_mi) + ' ft/mi '
+        + windowText;
     }
 
     placeMapDot(s.lat, s.lon);

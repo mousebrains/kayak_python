@@ -397,7 +397,6 @@ svg.gradient-profile-chart .gp-grid{stroke:var(--c-border-light);stroke-width:.5
 svg.gradient-profile-chart .gp-frame{fill:none;stroke:var(--c-border);stroke-width:.5}
 svg.gradient-profile-chart .gp-cursor{stroke:var(--c-text);stroke-width:1;stroke-dasharray:3,2;pointer-events:none}
 svg.gradient-profile-chart .gp-dot{fill:#d32f2f;stroke:#fff;stroke-width:1;pointer-events:none}
-svg.gradient-profile-chart .gp-readout{fill:var(--c-text);font-size:12px;font-weight:600;pointer-events:none}
 /* Bar plot: one rect per sample, width = w_mi (the 3-sigma analysis
    window). Tiled non-overlapping coverage of the reach. Uses
    var(--c-link) so dark mode picks up the brighter #6ab0f3 blue —
