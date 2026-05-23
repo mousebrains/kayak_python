@@ -78,9 +78,11 @@ _EXTREME_PEAK_FT_PER_MI = 1000
 # in the DB (suppresses chart + max_gradient). This set is for
 # reaches where the steep gradient is plausibly real and worth
 # keeping visible.
-_KNOWN_REAL_EXTREME_PEAKS = frozenset({
-    253,  # Henline — avg gradient 607 ft/mi, peak 1124 plausibly real
-})
+_KNOWN_REAL_EXTREME_PEAKS = frozenset(
+    {
+        253,  # Henline — avg gradient 607 ft/mi, peak 1124 plausibly real
+    }
+)
 
 # ~0.003° lat ≈ 333 m on the ground; matches the worst-case NHD HR
 # snap distance we've observed in practice (Horse Creek endpoint
@@ -183,7 +185,8 @@ def _check_one(reach: Reach, *, endpoint_tol_deg: float) -> list[str]:  # noqa: 
             prof = json.loads(gp_raw)
             samples = prof.get("samples", []) if isinstance(prof, dict) else []
             extreme = [
-                s for s in samples
+                s
+                for s in samples
                 if isinstance(s, dict) and s.get("grad_ft_per_mi", 0) > _EXTREME_PEAK_FT_PER_MI
             ]
             if extreme:

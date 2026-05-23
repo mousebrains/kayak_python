@@ -147,10 +147,14 @@ def test_check_one_continues_through_wrapper_to_find_more() -> None:
 
 def test_elevation_complete_reach_has_no_elevation_issue() -> None:
     r = _FakeReach(
-        latitude_start=44.1, longitude_start=-122.0,
-        latitude_end=44.2, longitude_end=-122.1,
+        latitude_start=44.1,
+        longitude_start=-122.0,
+        latitude_end=44.2,
+        longitude_end=-122.1,
         length=11.22,
-        elevation=2197.0, elevation_lost=867.0, gradient=77.3,
+        elevation=2197.0,
+        elevation_lost=867.0,
+        gradient=77.3,
     )
     assert check_reaches._check_one(r, endpoint_tol_deg=_DEFAULT_TOL) == []
 
@@ -158,10 +162,14 @@ def test_elevation_complete_reach_has_no_elevation_issue() -> None:
 def test_missing_elevation_is_flagged() -> None:
     r = _FakeReach(
         id=407,
-        latitude_start=44.1, longitude_start=-122.0,
-        latitude_end=44.2, longitude_end=-122.1,
+        latitude_start=44.1,
+        longitude_start=-122.0,
+        latitude_end=44.2,
+        longitude_end=-122.1,
         length=11.22,
-        elevation=None, elevation_lost=867.0, gradient=77.3,
+        elevation=None,
+        elevation_lost=867.0,
+        gradient=77.3,
     )
     issues = check_reaches._check_one(r, endpoint_tol_deg=_DEFAULT_TOL)
     assert len(issues) == 1
@@ -172,10 +180,14 @@ def test_missing_elevation_is_flagged() -> None:
 
 def test_all_three_elevation_columns_null_lists_them_together() -> None:
     r = _FakeReach(
-        latitude_start=44.1, longitude_start=-122.0,
-        latitude_end=44.2, longitude_end=-122.1,
+        latitude_start=44.1,
+        longitude_start=-122.0,
+        latitude_end=44.2,
+        longitude_end=-122.1,
         length=11.22,
-        elevation=None, elevation_lost=None, gradient=None,
+        elevation=None,
+        elevation_lost=None,
+        gradient=None,
     )
     issues = check_reaches._check_one(r, endpoint_tol_deg=_DEFAULT_TOL)
     assert len(issues) == 1
@@ -185,10 +197,14 @@ def test_all_three_elevation_columns_null_lists_them_together() -> None:
 def test_no_length_skips_elevation_check() -> None:
     # No length means we can't derive gradient anyway — no point flagging.
     r = _FakeReach(
-        latitude_start=44.1, longitude_start=-122.0,
-        latitude_end=44.2, longitude_end=-122.1,
+        latitude_start=44.1,
+        longitude_start=-122.0,
+        latitude_end=44.2,
+        longitude_end=-122.1,
         length=None,
-        elevation=None, elevation_lost=None, gradient=None,
+        elevation=None,
+        elevation_lost=None,
+        gradient=None,
     )
     assert check_reaches._check_one(r, endpoint_tol_deg=_DEFAULT_TOL) == []
 
@@ -197,7 +213,8 @@ def test_no_endpoints_skips_elevation_check() -> None:
     # Endpoints missing — refresh_reach_elevations.py has nothing to
     # query, so the elevation gap isn't actionable.
     r = _FakeReach(
-        latitude_start=None, longitude_start=None,
+        latitude_start=None,
+        longitude_start=None,
         length=11.22,
         elevation=None,
     )
@@ -209,10 +226,14 @@ def test_elevation_check_runs_even_without_geom() -> None:
     r = _FakeReach(
         id=42,
         geom=None,
-        latitude_start=44.1, longitude_start=-122.0,
-        latitude_end=44.2, longitude_end=-122.1,
+        latitude_start=44.1,
+        longitude_start=-122.0,
+        latitude_end=44.2,
+        longitude_end=-122.1,
         length=11.22,
-        elevation=None, elevation_lost=None, gradient=None,
+        elevation=None,
+        elevation_lost=None,
+        gradient=None,
     )
     issues = check_reaches._check_one(r, endpoint_tol_deg=_DEFAULT_TOL)
     assert len(issues) == 1
@@ -223,8 +244,10 @@ def test_elevation_check_coexists_with_geom_checks() -> None:
     # Both issues should surface — wrapper + elevation gap.
     r = _FakeReach(
         geom="LINESTRING(-122.0 44.0,-122.1 44.1)",
-        latitude_start=44.0, longitude_start=-122.0,
-        latitude_end=44.1, longitude_end=-122.1,
+        latitude_start=44.0,
+        longitude_start=-122.0,
+        latitude_end=44.1,
+        longitude_end=-122.1,
         length=11.22,
     )
     issues = check_reaches._check_one(r, endpoint_tol_deg=_DEFAULT_TOL)
@@ -237,12 +260,29 @@ def test_known_real_extreme_peak_is_not_flagged() -> None:
     # bypassed even when samples exceed the threshold (operator-confirmed
     # real terrain).
     import json
-    profile = json.dumps({
-        "samples": [
-            {"d_mi": 0.5, "lat": 44.1, "lon": -122.0, "grad_ft_per_mi": 800, "w_mi": 0.0625, "significant": True},
-            {"d_mi": 0.55, "lat": 44.11, "lon": -122.01, "grad_ft_per_mi": 2200, "w_mi": 0.0625, "significant": True},
-        ],
-    })
+
+    profile = json.dumps(
+        {
+            "samples": [
+                {
+                    "d_mi": 0.5,
+                    "lat": 44.1,
+                    "lon": -122.0,
+                    "grad_ft_per_mi": 800,
+                    "w_mi": 0.0625,
+                    "significant": True,
+                },
+                {
+                    "d_mi": 0.55,
+                    "lat": 44.11,
+                    "lon": -122.01,
+                    "grad_ft_per_mi": 2200,
+                    "w_mi": 0.0625,
+                    "significant": True,
+                },
+            ],
+        }
+    )
     known_id = next(iter(check_reaches._KNOWN_REAL_EXTREME_PEAKS))
     r = _FakeReach(id=known_id, gradient_profile=profile)
     assert check_reaches._check_one(r, endpoint_tol_deg=_DEFAULT_TOL) == []
@@ -250,12 +290,29 @@ def test_known_real_extreme_peak_is_not_flagged() -> None:
 
 def test_extreme_peak_in_gradient_profile_is_flagged() -> None:
     import json
-    profile = json.dumps({
-        "samples": [
-            {"d_mi": 0.5, "lat": 44.1, "lon": -122.0, "grad_ft_per_mi": 800, "w_mi": 0.0625, "significant": True},
-            {"d_mi": 0.55, "lat": 44.11, "lon": -122.01, "grad_ft_per_mi": 2200, "w_mi": 0.0625, "significant": True},
-        ],
-    })
+
+    profile = json.dumps(
+        {
+            "samples": [
+                {
+                    "d_mi": 0.5,
+                    "lat": 44.1,
+                    "lon": -122.0,
+                    "grad_ft_per_mi": 800,
+                    "w_mi": 0.0625,
+                    "significant": True,
+                },
+                {
+                    "d_mi": 0.55,
+                    "lat": 44.11,
+                    "lon": -122.01,
+                    "grad_ft_per_mi": 2200,
+                    "w_mi": 0.0625,
+                    "significant": True,
+                },
+            ],
+        }
+    )
     r = _FakeReach(gradient_profile=profile)
     issues = check_reaches._check_one(r, endpoint_tol_deg=_DEFAULT_TOL)
     assert any("2200 ft/mi" in i for i in issues)
@@ -266,12 +323,29 @@ def test_normal_gradient_profile_is_not_flagged() -> None:
     # Both samples stay under the 1000 ft/mi extreme-peak threshold —
     # 800 is a steep but plausible Class V drop, 900 likewise.
     import json
-    profile = json.dumps({
-        "samples": [
-            {"d_mi": 0.0, "lat": 44.1, "lon": -122.0, "grad_ft_per_mi": 800, "w_mi": 0.25, "significant": True},
-            {"d_mi": 0.25, "lat": 44.11, "lon": -122.01, "grad_ft_per_mi": 900, "w_mi": 0.0625, "significant": True},
-        ],
-    })
+
+    profile = json.dumps(
+        {
+            "samples": [
+                {
+                    "d_mi": 0.0,
+                    "lat": 44.1,
+                    "lon": -122.0,
+                    "grad_ft_per_mi": 800,
+                    "w_mi": 0.25,
+                    "significant": True,
+                },
+                {
+                    "d_mi": 0.25,
+                    "lat": 44.11,
+                    "lon": -122.01,
+                    "grad_ft_per_mi": 900,
+                    "w_mi": 0.0625,
+                    "significant": True,
+                },
+            ],
+        }
+    )
     r = _FakeReach(gradient_profile=profile)
     assert check_reaches._check_one(r, endpoint_tol_deg=_DEFAULT_TOL) == []
 
