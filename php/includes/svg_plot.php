@@ -411,8 +411,10 @@ function generate_gradient_profile_svg(
     $x_max = (float)$samples[count($samples) - 1]['d_mi'];
     $x_range = $x_max - $x_min ?: 1;
     $y_vals = array_map(fn($s) => (float)$s['grad_ft_per_mi'], $samples);
-    [$y_min_raw, $y_max, $y_step] = nice_axis(min($y_vals), max($y_vals));
-    $y_min = max(0.0, $y_min_raw);   // gradient is non-negative
+    // Anchor y-axis at zero so a short bar (low gradient) reads short
+    // and a tall bar reads tall. nice_axis() handles only the top end.
+    [, $y_max, $y_step] = nice_axis(0.0, max($y_vals));
+    $y_min = 0.0;
     $y_range = $y_max - $y_min ?: 1;
 
     // Bar plot: each sample renders as a rect spanning its 3-sigma
