@@ -188,17 +188,20 @@ final class SvgPlotTest extends TestCase
         $this->assertStringContainsString('gradient-profile-chart', $svg);
         $this->assertStringContainsString('data-reach-id="407"', $svg);
         $this->assertStringContainsString('data-profile=', $svg);
-        // Pale all-samples polyline
-        $this->assertStringContainsString('stroke-opacity="0.25"', $svg);
-        // At least one significant polyline (the first 3 samples are sig)
-        $sigCount = substr_count($svg, '<polyline fill="none" stroke="#2060A0" stroke-width="1.5"');
-        $this->assertGreaterThanOrEqual(1, $sigCount);
+        // Two bar groups (sig + below-floor), each emitted regardless
+        $this->assertStringContainsString('class="gp-bars-pale"', $svg);
+        $this->assertStringContainsString('class="gp-bars-sig"', $svg);
+        // First 3 samples are sig, last is not — expect 3 sig rects + 1 pale
+        $sigGroupHtml = preg_match('!<g class="gp-bars-sig">(.*?)</g>!', $svg, $m) ? $m[1] : '';
+        $paleGroupHtml = preg_match('!<g class="gp-bars-pale">(.*?)</g>!', $svg, $m) ? $m[1] : '';
+        $this->assertSame(3, substr_count($sigGroupHtml, '<rect'));
+        $this->assertSame(1, substr_count($paleGroupHtml, '<rect'));
     }
 
     public function test_generate_gradient_profile_svg_splits_runs_on_insignificance(): void
     {
-        // Two contiguous significant runs separated by an insignificant
-        // sample → two foreground polylines plus the all-samples pale one.
+        // 5 samples: 4 sig + 1 insig → 4 sig rects + 1 pale rect, regardless
+        // of whether the sig runs are contiguous (every sample = one bar now).
         $profile = json_encode([
             'samples' => [
                 ['d_mi' => 0.0, 'lat' => 0, 'lon' => 0, 'grad_ft_per_mi' => 80.0, 'w_mi' => 0.5, 'significant' => true],
@@ -210,8 +213,10 @@ final class SvgPlotTest extends TestCase
         ]);
         assert($profile !== false);
         $svg = generate_gradient_profile_svg($profile, 1, 480, 120);
-        $sigCount = substr_count($svg, '<polyline fill="none" stroke="#2060A0" stroke-width="1.5"');
-        $this->assertSame(2, $sigCount, 'expected exactly 2 significant-only polylines');
+        $sigGroupHtml = preg_match('!<g class="gp-bars-sig">(.*?)</g>!', $svg, $m) ? $m[1] : '';
+        $paleGroupHtml = preg_match('!<g class="gp-bars-pale">(.*?)</g>!', $svg, $m) ? $m[1] : '';
+        $this->assertSame(4, substr_count($sigGroupHtml, '<rect'));
+        $this->assertSame(1, substr_count($paleGroupHtml, '<rect'));
     }
 
     /** Extract the JSON payload from the <svg data-series="..."> attribute. */

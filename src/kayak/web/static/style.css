@@ -398,6 +398,14 @@ svg.gradient-profile-chart .gp-frame{fill:none;stroke:var(--c-border);stroke-wid
 svg.gradient-profile-chart .gp-cursor{stroke:var(--c-text);stroke-width:1;stroke-dasharray:3,2;pointer-events:none}
 svg.gradient-profile-chart .gp-dot{fill:#d32f2f;stroke:#fff;stroke-width:1;pointer-events:none}
 svg.gradient-profile-chart .gp-readout{fill:var(--c-text);font-size:12px;font-weight:600;pointer-events:none}
+/* Bar plot: one rect per sample, width = w_mi (the 3-sigma analysis
+   window). Bars overlap — narrow windows (steep peaks) draw on top
+   of wider windows (averaged shallow zones) thanks to PHP sorting by
+   w_mi descending. Semi-transparent fill lets overlaps darken to
+   build up density information. */
+svg.gradient-profile-chart .gp-bars-pale rect{fill:#2060A0;fill-opacity:0.06}
+svg.gradient-profile-chart .gp-bars-sig rect{fill:#2060A0;fill-opacity:0.18}
+svg.gradient-profile-chart .gp-bar-hover{fill:#d32f2f;fill-opacity:0.55;stroke:#d32f2f;stroke-width:1;pointer-events:none}
 
 /* Shared filter bar — index/state/picker/custom pages */
 .filter-bar{margin:.5rem 0 1rem;font-size:.85rem;border:1px solid var(--c-border-light);border-radius:4px;background:var(--c-surface)}

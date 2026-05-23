@@ -415,34 +415,53 @@ function generate_gradient_profile_svg(
     $y_min = max(0.0, $y_min_raw);   // gradient is non-negative
     $y_range = $y_max - $y_min ?: 1;
 
-    // Project samples to pixel coords + classify by significance
-    $px_points = [];
-    foreach ($samples as $i => $s) {
-        $px = $ml + (((float)$s['d_mi'] - $x_min) / $x_range * $pw);
-        $py = $mt + (($y_max - (float)$s['grad_ft_per_mi']) / $y_range * $ph);
-        $px_points[] = [$px, $py, !empty($s['significant'])];
-    }
+    // Bar plot: each sample renders as a rect spanning its 3-sigma
+    // ANALYSIS window (d_mi ± w_mi/2) at height = grad_ft_per_mi.
+    // Bars overlap when consecutive samples have wider windows than
+    // step_mi (the usual case). Semi-transparent fill makes overlap
+    // density visible — narrow windows (0.0625 mi, where the gradient
+    // is steep enough that fine resolution is statistically meaningful)
+    // render as crisp distinct bars; wide windows (0.5-5 mi, where
+    // the algorithm had to integrate further to clear the noise floor)
+    // render as broader semi-transparent rectangles whose overlaps
+    // build up darker regions.
+    //
+    // Bars sorted by w_mi descending so wider bars draw first
+    // (background), narrower windows draw on top — peaks read clearly.
+    $xPx_per_mi = $pw / $x_range;
+    $yPx_per_grad = $ph / $y_range;
+    $plot_right = $ml + $pw;
+    $plot_bottom = $mt + $ph;
 
-    // All-samples pale polyline
-    $all_pts = '';
-    foreach ($px_points as [$px, $py, $_sig]) {
-        $all_pts .= sprintf('%.1f,%.1f ', $px, $py);
-    }
-    $all_pts = rtrim($all_pts);
+    $ordered = $samples;
+    usort($ordered, fn($a, $b) => (float)$b['w_mi'] <=> (float)$a['w_mi']);
 
-    // Disjoint significant-only runs
-    $sig_polylines = '';
-    $run = '';
-    foreach ($px_points as [$px, $py, $sig]) {
+    $bars_pale = '';
+    $bars_sig = '';
+    foreach ($ordered as $s) {
+        $d_mi = (float)$s['d_mi'];
+        $w_mi = (float)$s['w_mi'];
+        $grad = max(0.0, (float)$s['grad_ft_per_mi']);
+        $sig = !empty($s['significant']);
+
+        $left_x = $ml + (($d_mi - $w_mi / 2) - $x_min) * $xPx_per_mi;
+        $right_x = $ml + (($d_mi + $w_mi / 2) - $x_min) * $xPx_per_mi;
+        $left_x = max($ml, $left_x);
+        $right_x = min($plot_right, $right_x);
+        $bar_w = $right_x - $left_x;
+        if ($bar_w < 0.1) continue;
+
+        $top_y = $mt + ($y_max - $grad) * $yPx_per_grad;
+        $top_y = max((float)$mt, min((float)$plot_bottom, $top_y));
+        $bar_h = $plot_bottom - $top_y;
+        if ($bar_h < 0.1) continue;
+
+        $rect = sprintf('<rect x="%.2f" y="%.2f" width="%.2f" height="%.2f"/>', $left_x, $top_y, $bar_w, $bar_h);
         if ($sig) {
-            $run .= sprintf('%.1f,%.1f ', $px, $py);
-        } elseif ($run !== '') {
-            $sig_polylines .= "<polyline fill=\"none\" stroke=\"#2060A0\" stroke-width=\"1.5\" stroke-linejoin=\"round\" points=\"" . rtrim($run) . "\"/>\n";
-            $run = '';
+            $bars_sig .= $rect;
+        } else {
+            $bars_pale .= $rect;
         }
-    }
-    if ($run !== '') {
-        $sig_polylines .= "<polyline fill=\"none\" stroke=\"#2060A0\" stroke-width=\"1.5\" stroke-linejoin=\"round\" points=\"" . rtrim($run) . "\"/>\n";
     }
 
     // Y-axis grid + labels
@@ -485,8 +504,8 @@ function generate_gradient_profile_svg(
 <text class="gp-title" x="{$title_x}" y="16" text-anchor="middle">Gradient (ft/mi) vs. river mile</text>
 $grid
 <rect class="gp-frame" x="$ml" y="$mt" width="$pw" height="$ph"/>
-<polyline fill="none" stroke="#2060A0" stroke-opacity="0.25" stroke-width="1.5" stroke-linejoin="round" points="$all_pts"/>
-$sig_polylines
+<g class="gp-bars-pale">$bars_pale</g>
+<g class="gp-bars-sig">$bars_sig</g>
 </svg>
 SVG;
 }
