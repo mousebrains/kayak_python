@@ -27,6 +27,7 @@ class _FakeReach:
         elevation: float | None = None,
         elevation_lost: float | None = None,
         gradient: float | None = None,
+        gradient_profile: str | None = None,
     ) -> None:
         self.id = id
         self.geom = geom
@@ -40,6 +41,7 @@ class _FakeReach:
         self.elevation = elevation
         self.elevation_lost = elevation_lost
         self.gradient = gradient
+        self.gradient_profile = gradient_profile
 
 
 _DEFAULT_TOL = 0.003
@@ -228,6 +230,38 @@ def test_elevation_check_coexists_with_geom_checks() -> None:
     issues = check_reaches._check_one(r, endpoint_tol_deg=_DEFAULT_TOL)
     assert any("wrapper" in i.lower() for i in issues)
     assert any("NULL despite endpoints" in i for i in issues)
+
+
+def test_extreme_peak_in_gradient_profile_is_flagged() -> None:
+    import json
+    profile = json.dumps({
+        "samples": [
+            {"d_mi": 0.5, "lat": 44.1, "lon": -122.0, "grad_ft_per_mi": 800, "w_mi": 0.0625, "significant": True},
+            {"d_mi": 0.55, "lat": 44.11, "lon": -122.01, "grad_ft_per_mi": 2200, "w_mi": 0.0625, "significant": True},
+        ],
+    })
+    r = _FakeReach(gradient_profile=profile)
+    issues = check_reaches._check_one(r, endpoint_tol_deg=_DEFAULT_TOL)
+    assert any("2200 ft/mi" in i for i in issues)
+    assert any("review for trace/waterfall realism" in i for i in issues)
+
+
+def test_normal_gradient_profile_is_not_flagged() -> None:
+    import json
+    profile = json.dumps({
+        "samples": [
+            {"d_mi": 0.0, "lat": 44.1, "lon": -122.0, "grad_ft_per_mi": 800, "w_mi": 0.25, "significant": True},
+            {"d_mi": 0.25, "lat": 44.11, "lon": -122.01, "grad_ft_per_mi": 1200, "w_mi": 0.0625, "significant": True},
+        ],
+    })
+    r = _FakeReach(gradient_profile=profile)
+    assert check_reaches._check_one(r, endpoint_tol_deg=_DEFAULT_TOL) == []
+
+
+def test_malformed_gradient_profile_is_flagged() -> None:
+    r = _FakeReach(gradient_profile="not-json")
+    issues = check_reaches._check_one(r, endpoint_tol_deg=_DEFAULT_TOL)
+    assert any("not valid JSON" in i for i in issues)
 
 
 def test_addargs_registers_subcommand() -> None:

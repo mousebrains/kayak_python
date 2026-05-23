@@ -29,6 +29,13 @@ Catches:
   reach was inserted with NULL elevation columns and stayed that way
   until ``scripts/refresh_reach_elevations.py`` was run manually. The
   check fires regardless of whether ``geom`` is present.
+* **Extreme gradient peak** — any ``gradient_profile`` sample whose
+  ``grad_ft_per_mi`` exceeds 1500. Real waterfalls hit the 1000-1500
+  ft/mi range at sub-100m windows; values above that usually mean the
+  trace is sampling a cliff face / dam / road cut instead of the
+  channel. Surfaced as a warning so the operator can triage by
+  inspecting the (lat, lon) of the peak sample against satellite
+  imagery or guidebook.
 
 Exit codes:
 
@@ -44,6 +51,7 @@ import chain), which keeps this command fast to load.
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import sys
 from decimal import Decimal
@@ -51,6 +59,15 @@ from decimal import Decimal
 from kayak.db.engine import get_session
 from kayak.db.models import Reach
 from kayak.tracing.format import has_wkt_wrapper, parse_geom_string
+
+# Profile samples above this gradient (ft/mi) get flagged for manual
+# review. Class V creeks rarely sustain > 500 ft/mi over a whole mile,
+# and even waterfall drops at the 100 m window scale top out around
+# 1000-1500 ft/mi (100 ft / 100 m = 1610 ft/mi). Sample values above
+# this threshold typically indicate the trace is sampling a cliff
+# face, dam, road cut, or other non-channel feature rather than a
+# real river feature.
+_EXTREME_PEAK_FT_PER_MI = 1500
 
 # ~0.003° lat ≈ 333 m on the ground; matches the worst-case NHD HR
 # snap distance we've observed in practice (Horse Creek endpoint
@@ -110,7 +127,7 @@ def _endpoint_drift_deg(
     return math.hypot(geom_lon - float(col_lon), geom_lat - float(col_lat))
 
 
-def _check_one(reach: Reach, *, endpoint_tol_deg: float) -> list[str]:
+def _check_one(reach: Reach, *, endpoint_tol_deg: float) -> list[str]:  # noqa: C901 — five independent checks, one per branch; splitting fragments the issue list
     """Return a list of human-readable issues found for *reach*."""
     issues: list[str] = []
 
@@ -142,6 +159,31 @@ def _check_one(reach: Reach, *, endpoint_tol_deg: float) -> list[str]:
                 f"— run scripts/refresh_reach_elevations.py "
                 f"--reach-ids {reach.id} --apply"
             )
+
+    # Extreme gradient peak — fires independent of geom. Real waterfalls
+    # hit 1000-1500 ft/mi at sub-100m windows; values above that usually
+    # mean the trace is sampling a cliff face / dam / road cut instead
+    # of the channel.
+    gp_raw = getattr(reach, "gradient_profile", None)
+    if gp_raw:
+        try:
+            prof = json.loads(gp_raw)
+            samples = prof.get("samples", []) if isinstance(prof, dict) else []
+            extreme = [
+                s for s in samples
+                if isinstance(s, dict) and s.get("grad_ft_per_mi", 0) > _EXTREME_PEAK_FT_PER_MI
+            ]
+            if extreme:
+                top = max(extreme, key=lambda s: s["grad_ft_per_mi"])
+                issues.append(
+                    f"gradient_profile has {len(extreme)} sample(s) > "
+                    f"{_EXTREME_PEAK_FT_PER_MI} ft/mi — peak "
+                    f"{top['grad_ft_per_mi']:.0f} ft/mi at mile {top['d_mi']} "
+                    f"({top.get('lat'):.5f}, {top.get('lon'):.5f}) — review "
+                    f"for trace/waterfall realism"
+                )
+        except (json.JSONDecodeError, TypeError, ValueError):
+            issues.append("gradient_profile is not valid JSON")
 
     geom = reach.geom or ""
     if not geom:
