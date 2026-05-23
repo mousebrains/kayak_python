@@ -275,7 +275,7 @@ def process_cache_file(
     return cache["reach_id"], max_grad, profile
 
 
-def main() -> int:
+def main() -> int:  # noqa: C901 — sequential I/O orchestration, splitting fragments the read/process/write loop
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--db", default=DEFAULT_DB)
     ap.add_argument("--cache-dir", default=str(DEFAULT_CACHE), type=Path)
@@ -328,6 +328,18 @@ def main() -> int:
     conn = sqlite3.connect(args.db)
     conn.row_factory = sqlite3.Row
 
+    # Suppression list: reaches whose trace-derived gradient is unreliable
+    # (canyon-wall artifacts, dam/falls between endpoints, etc.). Set by
+    # migration 0051 onward via the reach.gradient_unreliable column.
+    suppressed = {
+        r[0] for r in conn.execute(
+            "SELECT id FROM reach WHERE gradient_unreliable = 1"
+        ).fetchall()
+    }
+    if suppressed:
+        print(f"Suppressed reaches (gradient_unreliable=1): {sorted(suppressed)}")
+        print()
+
     updates: list[tuple[float | None, str | None, int]] = []
     print(f"{'rid':>5}  {'name':<22}  {'old_max':>8} -> {'new_max':>8}  {'sig_frac':>8}")
     print("-" * 70)
@@ -335,6 +347,8 @@ def main() -> int:
     for cache_path in cache_files:
         rid, max_grad, profile = process_cache_file(cache_path, args)
         if profile is None:
+            continue
+        if rid in suppressed:
             continue
         row = conn.execute(
             "SELECT display_name, max_gradient FROM reach WHERE id = ?", (rid,)
