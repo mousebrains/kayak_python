@@ -262,7 +262,10 @@ def _resolve_parallel(
     because the pool saturated on black-holes — the caller must NOT penalize those
     or it would negative-cache valid PTRs it never tried. Workers are daemon
     threads, so a stuck lookup is abandoned at the deadline and can't pin
-    interpreter exit (the bug that timed out kayak-status.service).
+    interpreter exit (the bug that timed out kayak-status.service). "Abandoned"
+    means we stop joining: the OS thread keeps blocking in ``gethostbyaddr``
+    until the interpreter exits and the runtime kills it, so this resolver is
+    safe for a one-shot CLI render but would leak threads in a long-lived process.
     """
     work: queue.SimpleQueue[str] = queue.SimpleQueue()
     for ip in targets:
@@ -287,9 +290,12 @@ def _resolve_parallel(
         threading.Thread(target=_worker, name=f"rdns-{i}", daemon=True)
         for i in range(min(workers, len(targets)))
     ]
+    # Set the deadline BEFORE start() so the budget is wall-clock from this
+    # point, not "wall-clock once every worker has been kicked off". The diff is
+    # only milliseconds at 128 threads, but the docstring promises wall clock.
+    deadline = time.monotonic() + budget_s
     for t in threads:
         t.start()
-    deadline = time.monotonic() + budget_s
     for t in threads:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
