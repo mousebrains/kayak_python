@@ -23,6 +23,20 @@ Catches:
   ``longitude_end``. NHD trace snapping introduces some slop (we've
   seen ~20 m), but a hard miss usually means the start/end columns
   were copied wrong.
+* **Elevation gap** — reach has full endpoints + a non-zero ``length``
+  but ``elevation`` / ``elevation_lost`` / ``gradient`` columns are
+  NULL. This was the original Horse Creek miss in migration 0039 — the
+  reach was inserted with NULL elevation columns and stayed that way
+  until ``scripts/refresh_reach_elevations.py`` was run manually. The
+  check fires regardless of whether ``geom`` is present.
+* **Extreme gradient peak** — any ``gradient_profile`` sample whose
+  ``grad_ft_per_mi`` exceeds 1000. Real waterfall drops at the 100 m
+  window scale rarely exceed this (60 ft / 100 m ≈ 965 ft/mi);
+  values above usually mean the trace is sampling a cliff face / dam
+  / road cut instead of the channel. Surfaced as a warning so the
+  operator can triage by inspecting the (lat, lon) of the peak sample
+  against satellite imagery, or by flipping the ``gradient_unreliable``
+  flag (migration pattern: 0051) when the trace can't be fixed.
 
 Exit codes:
 
@@ -38,6 +52,7 @@ import chain), which keeps this command fast to load.
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import sys
 from decimal import Decimal
@@ -45,6 +60,29 @@ from decimal import Decimal
 from kayak.db.engine import get_session
 from kayak.db.models import Reach
 from kayak.tracing.format import has_wkt_wrapper, parse_geom_string
+
+# Profile samples above this gradient (ft/mi) get flagged for manual
+# review. Class V creeks rarely sustain > 500 ft/mi over a whole mile,
+# and even single-drop waterfalls at the 100 m window scale rarely
+# exceed 1000 ft/mi (e.g. ~60 ft / 100 m = 965 ft/mi). Sample values
+# above this threshold typically indicate the trace is sampling a
+# cliff face, dam, road cut, or other non-channel feature rather than
+# a real river feature.
+_EXTREME_PEAK_FT_PER_MI = 1000
+
+# Reaches whose extreme-peak warning has been operator-reviewed and
+# confirmed as real terrain (Class V drops, real waterfalls, etc.).
+# Adding here suppresses the warning without touching the gradient
+# data — the chart still renders, just doesn't trip check-reaches.
+# Use sparingly; the typical disposition is gradient_unreliable = 1
+# in the DB (suppresses chart + max_gradient). This set is for
+# reaches where the steep gradient is plausibly real and worth
+# keeping visible.
+_KNOWN_REAL_EXTREME_PEAKS = frozenset(
+    {
+        253,  # Henline — avg gradient 607 ft/mi, peak 1124 plausibly real
+    }
+)
 
 # ~0.003° lat ≈ 333 m on the ground; matches the worst-case NHD HR
 # snap distance we've observed in practice (Horse Creek endpoint
@@ -104,9 +142,65 @@ def _endpoint_drift_deg(
     return math.hypot(geom_lon - float(col_lon), geom_lat - float(col_lat))
 
 
-def _check_one(reach: Reach, *, endpoint_tol_deg: float) -> list[str]:
+def _check_one(reach: Reach, *, endpoint_tol_deg: float) -> list[str]:  # noqa: C901 — five independent checks, one per branch; splitting fragments the issue list
     """Return a list of human-readable issues found for *reach*."""
     issues: list[str] = []
+
+    # Elevation completeness — fires independent of geom. A reach with full
+    # endpoint coords and a non-zero length should have its elevation
+    # triple populated; if not, ``scripts/refresh_reach_elevations.py``
+    # never ran for it.
+    needs_elevation = (
+        reach.latitude_start is not None
+        and reach.longitude_start is not None
+        and reach.latitude_end is not None
+        and reach.longitude_end is not None
+        and reach.length is not None
+        and reach.length > 0
+    )
+    if needs_elevation:
+        missing = [
+            col
+            for col, val in (
+                ("elevation", reach.elevation),
+                ("elevation_lost", reach.elevation_lost),
+                ("gradient", reach.gradient),
+            )
+            if val is None
+        ]
+        if missing:
+            issues.append(
+                f"{', '.join(missing)} NULL despite endpoints + length present "
+                f"— run scripts/refresh_reach_elevations.py "
+                f"--reach-ids {reach.id} --apply"
+            )
+
+    # Extreme gradient peak — fires independent of geom. Real waterfall
+    # drops at the 100 m window scale rarely exceed ~1000 ft/mi
+    # (60 ft / 100 m); values above usually mean the trace is sampling
+    # a cliff face / dam / road cut instead of the channel.
+    gp_raw = getattr(reach, "gradient_profile", None)
+    if gp_raw and reach.id not in _KNOWN_REAL_EXTREME_PEAKS:
+        try:
+            prof = json.loads(gp_raw)
+            samples = prof.get("samples", []) if isinstance(prof, dict) else []
+            extreme = [
+                s
+                for s in samples
+                if isinstance(s, dict) and s.get("grad_ft_per_mi", 0) > _EXTREME_PEAK_FT_PER_MI
+            ]
+            if extreme:
+                top = max(extreme, key=lambda s: s["grad_ft_per_mi"])
+                issues.append(
+                    f"gradient_profile has {len(extreme)} sample(s) > "
+                    f"{_EXTREME_PEAK_FT_PER_MI} ft/mi — peak "
+                    f"{top['grad_ft_per_mi']:.0f} ft/mi at mile {top['d_mi']} "
+                    f"({top.get('lat'):.5f}, {top.get('lon'):.5f}) — review "
+                    f"for trace/waterfall realism"
+                )
+        except (json.JSONDecodeError, TypeError, ValueError):
+            issues.append("gradient_profile is not valid JSON")
+
     geom = reach.geom or ""
     if not geom:
         return issues  # geom is optional; empty is fine

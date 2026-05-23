@@ -2,8 +2,8 @@
 -- Snapshot of the live DB schema; checked in to gate schema/model parity.
 -- Regenerate after structural migrations land. Do not edit by hand.
 --
--- Source: /home/pat/DB/kayak.db
--- Generated: 2026-05-17T21:31:46Z
+-- Source: /Users/pat/tpw/DB/kayak.db
+-- Generated: 2026-05-23T20:49:27Z
 
 CREATE TABLE calc_expression (
 	id INTEGER NOT NULL, 
@@ -239,7 +239,7 @@ CREATE TABLE "reach" (
     geom TEXT,
     huc TEXT,
     map_only BOOLEAN NOT NULL DEFAULT 0,
-    no_flow_range BOOLEAN DEFAULT 0 NOT NULL,
+    no_flow_range BOOLEAN DEFAULT 0 NOT NULL, gradient_profile TEXT, gradient_unreliable BOOLEAN DEFAULT 0 NOT NULL,
     PRIMARY KEY (id),
     FOREIGN KEY(gauge_id) REFERENCES gauge (id) ON DELETE SET NULL
 );

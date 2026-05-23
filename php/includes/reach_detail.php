@@ -17,6 +17,7 @@ require_once __DIR__ . '/header.php';
 require_once __DIR__ . '/footer.php';
 require_once __DIR__ . '/html.php';
 require_once __DIR__ . '/gauge_map.php';
+require_once __DIR__ . '/svg_plot.php';
 
 /**
  * Dispatch detail mode and write the full HTTP response.
@@ -79,6 +80,23 @@ function handle_reach_detail(
     _render_reach_guidebooks($reach, $related['guidebooks']);
     _render_reach_linked_gauge($related['gauge']);
     [$has_map, $map_scripts] = _render_reach_map($reach, $related['gauge']);
+    if (!empty($reach['gradient_profile'])) {
+        // Capture first: generate_gradient_profile_svg returns '' for a
+        // profile with < 2 samples (very short reaches). Skip the wrapper
+        // in that case so we don't emit an empty container div.
+        $gp_svg = generate_gradient_profile_svg(
+            (string)$reach['gradient_profile'],
+            (int)$reach['id'],
+            length_mi: $reach['length'] !== null ? (float)$reach['length'] : null,
+            putin_lat: $reach['latitude_start'] !== null ? (float)$reach['latitude_start'] : null,
+            putin_lon: $reach['longitude_start'] !== null ? (float)$reach['longitude_start'] : null,
+            takeout_lat: $reach['latitude_end'] !== null ? (float)$reach['latitude_end'] : null,
+            takeout_lon: $reach['longitude_end'] !== null ? (float)$reach['longitude_end'] : null
+        );
+        if ($gp_svg !== '') {
+            echo '<div class="gradient-profile-container">' . $gp_svg . '</div>';
+        }
+    }
 
     echo '<p style="margin-top:1rem">';
     echo '<a href="/description.php?id=' . $id . '">Description</a>';
@@ -573,9 +591,14 @@ function _render_reach_map(array $reach, ?array $gauge): array
     }
     echo '></div>';
 
+    $gp_mtime = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/gradient-profile.js') ?: 1;
     return [
         true,
         '<script src="/static/leaflet.js" defer></script>'
-        . '<script src="/static/reach-map.js" defer></script>',
+        . '<script src="/static/reach-map.js" defer></script>'
+        // gradient-profile.js degrades to chart-only tooltip if the map
+        // handle isn't there, so it's safe to ship on any reach page —
+        // no-op when the page has no .gradient-profile-chart elements.
+        . '<script src="/static/gradient-profile.js?v=' . $gp_mtime . '" defer></script>',
     ];
 }

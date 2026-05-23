@@ -371,6 +371,203 @@ $flow_line
 SVG;
 }
 
+/**
+ * Render a gradient profile as an SVG bar chart.
+ *
+ * Reads the JSON produced by scripts/compute_reach_gradient.py
+ * (shape documented in data/db/migrations/0045_*.sql header). Each
+ * sample draws as a <rect> spanning its 3σ analysis window
+ * (d_mi ± w_mi/2) at height = grad_ft_per_mi. Bars are split into two
+ * groups (gp-bars-pale for insignificant, gp-bars-sig for significant)
+ * so CSS can dim the below-noise-floor bars. Embeds the sample array
+ * as a data-profile attribute for static/gradient-profile.js to read
+ * at hydration time (cursor sync with the reach map dot).
+ *
+ * Returns '' if the profile JSON is empty, malformed, or has fewer than
+ * 2 samples.
+ */
+function generate_gradient_profile_svg(
+    string $profile_json,
+    int $reach_id,
+    int $width = 900,
+    int $height = 180,
+    ?float $length_mi = null,
+    ?float $putin_lat = null,
+    ?float $putin_lon = null,
+    ?float $takeout_lat = null,
+    ?float $takeout_lon = null
+): string {
+    if ($profile_json === '') return '';
+    $data = json_decode($profile_json, true);
+    if (!is_array($data) || !isset($data['samples']) || !is_array($data['samples'])) {
+        return '';
+    }
+    $samples = $data['samples'];
+    if (count($samples) < 2) return '';
+
+    // Drop a trailing insignificant bar if the previous bar is
+    // significant. The cumsum walker emits an insig tail when it
+    // runs out of bins to chain — usually correctly (e.g. non-
+    // monotonic elevation from a bridge/road/dam DEM artifact near
+    // the take-out) — but visually it looks like the chart "trails
+    // off" at the end of an otherwise solid reach. Suppressing it
+    // here lets the previous significant bar visually stretch to
+    // the take-out (via the first/last edge logic below). The
+    // underlying gradient_profile JSON keeps both bars.
+    $n = count($samples);
+    if (empty($samples[$n - 1]['significant']) && !empty($samples[$n - 2]['significant'])) {
+        array_pop($samples);
+        if (count($samples) < 2) return '';
+    }
+
+    // viewBox dimensions (responsive — CSS sets actual rendered width to 100%
+    // of container). Margins (tighter than generate_svg_plot since this is a
+    // sub-widget).
+    $ml = 50; $mr = 10; $mt = 22; $mb = 26;
+    $pw = $width - $ml - $mr;
+    $ph = $height - $mt - $mb;
+
+    // Ranges. X-axis spans the whole reach (0 = put-in, length = take-out)
+    // so the chart is comparable across reaches and the bar layout makes
+    // visual sense — sample d_mi values are bin centres, the first bin
+    // starts at 0 (centre = dl_mi/2) and the last ends at the take-out.
+    // Fall back to sample extents when length isn't provided.
+    $x_min = 0.0;
+    $x_max = $length_mi !== null && $length_mi > 0
+        ? (float)$length_mi
+        : (float)$samples[count($samples) - 1]['d_mi'];
+    $x_range = $x_max - $x_min ?: 1;
+    $y_vals = array_map(fn($s) => (float)$s['grad_ft_per_mi'], $samples);
+    // Anchor y-axis at zero so a short bar (low gradient) reads short
+    // and a tall bar reads tall. nice_axis() handles only the top end.
+    [, $y_max, $y_step] = nice_axis(0.0, max($y_vals));
+    $y_min = 0.0;
+    $y_range = $y_max - $y_min ?: 1;
+
+    // Bar plot: each sample renders as a rect spanning its 3-sigma
+    // ANALYSIS window (d_mi ± w_mi/2) at height = grad_ft_per_mi.
+    // Bars overlap when consecutive samples have wider windows than
+    // step_mi (the usual case). Semi-transparent fill makes overlap
+    // density visible — narrow windows (0.0625 mi, where the gradient
+    // is steep enough that fine resolution is statistically meaningful)
+    // render as crisp distinct bars; wide windows (0.5-5 mi, where
+    // the algorithm had to integrate further to clear the noise floor)
+    // render as broader semi-transparent rectangles whose overlaps
+    // build up darker regions.
+    //
+    // Bars sorted by w_mi descending so wider bars draw first
+    // (background), narrower windows draw on top — peaks read clearly.
+    $xPx_per_mi = $pw / $x_range;
+    $yPx_per_grad = $ph / $y_range;
+    $plot_right = $ml + $pw;
+    $plot_bottom = $mt + $ph;
+
+    // Identify the first + last bar (by d_mi) so we can stretch their
+    // outer edges to the put-in / take-out. The cumsum algorithm bins
+    // in dl_mi chunks and exits when fewer than 2 bins remain, leaving
+    // a small unbarred tail when reach length isn't a multiple of
+    // dl_mi (e.g. 4.9 mi with dl_mi=0.2 → bars end at 4.6 or 4.8).
+    // Same for the leading edge if the first bar's centre isn't at
+    // dl_mi/2. Stretch the outer edges visually so the chart covers
+    // the full reach domain; the bar's gradient + significant flag
+    // stay as the algorithm computed them.
+    $first_d_mi = (float)$samples[0]['d_mi'];
+    $last_d_mi = (float)$samples[count($samples) - 1]['d_mi'];
+
+    $ordered = $samples;
+    usort($ordered, fn($a, $b) => (float)$b['w_mi'] <=> (float)$a['w_mi']);
+
+    $bars_pale = '';
+    $bars_sig = '';
+    foreach ($ordered as $s) {
+        $d_mi = (float)$s['d_mi'];
+        $w_mi = (float)$s['w_mi'];
+        $grad = max(0.0, (float)$s['grad_ft_per_mi']);
+        $sig = !empty($s['significant']);
+
+        $left_x = $d_mi === $first_d_mi
+            ? (float)$ml
+            : $ml + (($d_mi - $w_mi / 2) - $x_min) * $xPx_per_mi;
+        $right_x = $d_mi === $last_d_mi
+            ? (float)$plot_right
+            : $ml + (($d_mi + $w_mi / 2) - $x_min) * $xPx_per_mi;
+        $left_x = max((float)$ml, $left_x);
+        $right_x = min((float)$plot_right, $right_x);
+        $bar_w = $right_x - $left_x;
+        if ($bar_w < 0.1) continue;
+
+        $top_y = $mt + ($y_max - $grad) * $yPx_per_grad;
+        $top_y = max((float)$mt, min((float)$plot_bottom, $top_y));
+        $bar_h = $plot_bottom - $top_y;
+        if ($bar_h < 0.1) continue;
+
+        $rect = sprintf('<rect x="%.2f" y="%.2f" width="%.2f" height="%.2f"/>', $left_x, $top_y, $bar_w, $bar_h);
+        if ($sig) {
+            $bars_sig .= $rect;
+        } else {
+            $bars_pale .= $rect;
+        }
+    }
+
+    // Y-axis grid + labels. Pick label decimal precision from the
+    // nice_axis step so low-relief reaches (sub-1.0 step) don't print
+    // duplicate labels at every gridline.
+    $y_decimals = $y_step >= 1 ? 0 : ($y_step >= 0.1 ? 1 : ($y_step >= 0.01 ? 2 : 3));
+    $grid = '';
+    for ($yv = $y_min; $yv <= $y_max + $y_step * 0.01; $yv += $y_step) {
+        $py = $mt + (($y_max - $yv) / $y_range * $ph);
+        $label = number_format($yv, $y_decimals);
+        $grid .= "<line class=\"gp-grid\" x1=\"$ml\" y1=\"$py\" x2=\"" . ($ml + $pw) . "\" y2=\"$py\"/>\n";
+        $grid .= "<text class=\"gp-axis\" x=\"" . ($ml - 5) . "\" y=\"" . ($py + 4) . "\" text-anchor=\"end\">$label</text>\n";
+    }
+
+    // X-axis ticks (every ~5 ticks). Pick label decimal precision from
+    // the tick step so short reaches (Henline at 0.6 mi) don't repeat
+    // their labels at 1-decimal rounding (0.0, 0.1, 0.2, 0.4, 0.5, 0.6).
+    $n_xticks = 5;
+    $x_tick_step = $x_range / $n_xticks;
+    $x_decimals = $x_tick_step >= 1 ? 0 : ($x_tick_step >= 0.1 ? 1 : ($x_tick_step >= 0.01 ? 2 : 3));
+    for ($i = 0; $i <= $n_xticks; $i++) {
+        $xv = $x_min + ($x_range * $i / $n_xticks);
+        $px = $ml + (($xv - $x_min) / $x_range * $pw);
+        $label = number_format($xv, $x_decimals);
+        $grid .= "<line class=\"gp-grid\" x1=\"$px\" y1=\"$mt\" x2=\"$px\" y2=\"" . ($mt + $ph) . "\"/>\n";
+        $grid .= "<text class=\"gp-axis\" x=\"$px\" y=\"" . ($height - 8) . "\" text-anchor=\"middle\">$label</text>\n";
+    }
+
+    // Hydration payload (static/gradient-profile.js reads this).
+    // putin/takeout coords let the JS interpolate the map dot all
+    // the way to mile 0 / mile length, not just between bin centres.
+    $payload = json_encode([
+        'samples' => $samples,
+        'x_min' => $x_min,
+        'x_max' => $x_max,
+        'y_min' => $y_min,
+        'y_max' => $y_max,
+        'putin' => ($putin_lat !== null && $putin_lon !== null)
+            ? ['lat' => $putin_lat, 'lon' => $putin_lon] : null,
+        'takeout' => ($takeout_lat !== null && $takeout_lon !== null)
+            ? ['lat' => $takeout_lat, 'lon' => $takeout_lon] : null,
+        'margins' => ['ml' => $ml, 'mr' => $mr, 'mt' => $mt, 'mb' => $mb,
+                      'pw' => $pw, 'ph' => $ph, 'w' => $width, 'h' => $height],
+    ], JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION);
+    if ($payload === false) {
+        $payload = '{}';
+    }
+    $payload_attr = htmlspecialchars($payload);
+
+    $title_x = (int)($width / 2);
+    return <<<SVG
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 $width $height" class="gradient-profile-chart" data-reach-id="$reach_id" data-profile="$payload_attr" role="img" aria-label="Gradient profile chart">
+<text class="gp-title" x="{$title_x}" y="16" text-anchor="middle">Gradient (ft/mi) vs. river mile</text>
+$grid
+<rect class="gp-frame" x="$ml" y="$mt" width="$pw" height="$ph"/>
+<g class="gp-bars-pale">$bars_pale</g>
+<g class="gp-bars-sig">$bars_sig</g>
+</svg>
+SVG;
+}
+
 function _empty_svg(string $title, int $width, int $height): string {
     $cx = (int)($width / 2);
     $cy = (int)($height / 2);
