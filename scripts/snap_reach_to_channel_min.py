@@ -118,6 +118,11 @@ def snap_vertex(
     if trace_elev is None:
         return lon, lat, None, None, 0.0
 
+    # NOTE: _sample_elev_ft mixes DEM tiers (1 m LIDAR preferred, 1/3 arc-second
+    # fallback per cell). The raw min across tiers ignores cross-source vertical
+    # offset, so a noisy 1arc3 cell (~7.9 ft RMSE) can occasionally win the min
+    # where coverage switches. Bounded by the smoothing pass in snap_reach; if it
+    # bites, gate acceptance on drop > a cross-source noise margin (operator's call).
     best_offset = 0.0
     best_elev = trace_elev
     offset = -search_m
@@ -131,8 +136,11 @@ def snap_vertex(
 
     drop = trace_elev - best_elev
     if drop > max_drop_ft:
-        # Probable bridge / cliff — refuse to snap
-        return lon, lat, trace_elev, trace_elev, 0.0
+        # Probable bridge / cliff — refuse to move the vertex, but report the
+        # real best_elev so snap_reach classifies this as a bridge-skip. (Returning
+        # trace_elev here would collapse into the "within noise" branch and the
+        # bridge counter would never increment.)
+        return lon, lat, trace_elev, best_elev, 0.0
 
     if best_offset == 0.0:
         return lon, lat, trace_elev, best_elev, 0.0

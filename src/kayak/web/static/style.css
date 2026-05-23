@@ -403,7 +403,6 @@ svg.gradient-profile-chart .gp-dot{fill:#d32f2f;stroke:#fff;stroke-width:1;point
    the original #2060A0 was nearly invisible on the dark background. */
 svg.gradient-profile-chart .gp-bars-pale rect{fill:var(--c-link);fill-opacity:0.35}
 svg.gradient-profile-chart .gp-bars-sig rect{fill:var(--c-link);fill-opacity:1}
-svg.gradient-profile-chart .gp-bar-hover{fill:#d32f2f;fill-opacity:0.55;stroke:#d32f2f;stroke-width:1;pointer-events:none}
 
 /* Shared filter bar — index/state/picker/custom pages */
 .filter-bar{margin:.5rem 0 1rem;font-size:.85rem;border:1px solid var(--c-border-light);border-radius:4px;background:var(--c-surface)}

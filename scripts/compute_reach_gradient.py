@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Phase 2B: compute max_gradient and the continuous gradient profile.
+"""Phase 2B: compute max_gradient and the binned gradient profile.
 
 Reads the per-reach elevation cache produced by sample_reach_elevations.py,
 applies a light rolling-mean smoothing, then derives:
@@ -7,15 +7,21 @@ applies a light rolling-mean smoothing, then derives:
   * ``max_gradient`` — the steepest 1-mile drop (ft/mi). Fixed window
     width to keep the value comparable across reaches.
 
-  * ``gradient_profile`` — a JSON document with the continuous gradient
-    sampled every 0.05 mi along the reach. For each output point, the
-    *smallest* window in {0.25, 0.5, 1.0, 2.0, 5.0} mi whose drop
-    exceeds the 3 sigma noise floor is selected; if even 5 mi doesn't reach
-    it, the value is reported anyway with ``significant: false``.
+  * ``gradient_profile`` — a JSON document of non-overlapping bars. The
+    reach is binned into ``DL_MI`` (0.2 mi) chunks and each bin's mean
+    elevation is taken; the walker then finds, for each starting bin, the
+    *smallest* window of n bins (up to ``MAX_WINDOW_MI`` = 5 mi) whose
+    bin-mean drop clears the per-window noise floor, emits one sample for
+    that window, and advances n bins. If no window up to MAX_WINDOW_MI
+    qualifies, the max-window segment is emitted with ``significant: false``.
 
-The noise floor is `3 · √2 · rmse_m` converted to feet — the minimum
-drop two independent DEM samples can be distinguished by at 99.7%.
-With the 1/3 arc-second default RMSE of 2.4 m, that's ≈ 33.5 ft.
+The noise floor is statistical, not a single scalar: each bin carries
+``sigma_bin = sqrt(Σ sigma_sample²) / N`` from the per-sample DEM RMSE
+(``SRC_RMSE_M``: 2.4 m for 1/3 arc-second, 0.15 m for 1 m LIDAR), and a
+window's drop is significant when it exceeds ``M_SIGMA`` (3) ·
+sqrt(sigma_i² + sigma_j²). So a window over noisier 3DEP samples needs a
+larger drop than one over LIDAR. Reaches flagged ``gradient_unreliable``
+are skipped (NULL profile).
 
 Idempotent: dry-run by default. ``--apply`` writes back to the DB.
 """

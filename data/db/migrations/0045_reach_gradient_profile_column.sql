@@ -9,15 +9,15 @@
 -- (no geom or no DEM coverage). Populated rows look like:
 --
 --   {
---     "dl_mi": 0.0625,
+--     "dl_mi": 0.2,
 --     "max_window_mi": 5.0,
 --     "m_sigma": 3.0,
 --     "default_rmse_m": 2.4,
 --     "src_rmse_m": {"1arc3": 2.4, "1m": 0.15},
 --     "src_histogram": {"1arc3": 540, "1m": 0},
 --     "samples": [
---       {"d_mi": 0.0312, "lat": 44.10478, "lon": -122.02183,
---        "grad_ft_per_mi": 41.2, "w_mi": 0.0625, "significant": true},
+--       {"d_mi": 0.1, "lat": 44.10478, "lon": -122.02183,
+--        "grad_ft_per_mi": 41.2, "w_mi": 0.2, "significant": true},
 --       ...
 --     ]
 --   }

@@ -516,17 +516,20 @@ function _render_description_fields_and_map(array $reach, array $related, array 
         if (!empty($reach['gradient_profile'])) {
             // Sits directly below the map, full container width, so the
             // cursor-linked map dot tracks visually with chart position.
-            echo '<div class="gradient-profile-container">'
-                . generate_gradient_profile_svg(
-                    (string)$reach['gradient_profile'],
-                    (int)$reach['id'],
-                    length_mi: $reach['length'] !== null ? (float)$reach['length'] : null,
-                    putin_lat: $reach['latitude_start'] !== null ? (float)$reach['latitude_start'] : null,
-                    putin_lon: $reach['longitude_start'] !== null ? (float)$reach['longitude_start'] : null,
-                    takeout_lat: $reach['latitude_end'] !== null ? (float)$reach['latitude_end'] : null,
-                    takeout_lon: $reach['longitude_end'] !== null ? (float)$reach['longitude_end'] : null
-                )
-                . '</div>';
+            // Capture first and skip the wrapper when the SVG is '' (a
+            // profile with < 2 samples) so we don't emit an empty div.
+            $gp_svg = generate_gradient_profile_svg(
+                (string)$reach['gradient_profile'],
+                (int)$reach['id'],
+                length_mi: $reach['length'] !== null ? (float)$reach['length'] : null,
+                putin_lat: $reach['latitude_start'] !== null ? (float)$reach['latitude_start'] : null,
+                putin_lon: $reach['longitude_start'] !== null ? (float)$reach['longitude_start'] : null,
+                takeout_lat: $reach['latitude_end'] !== null ? (float)$reach['latitude_end'] : null,
+                takeout_lon: $reach['longitude_end'] !== null ? (float)$reach['longitude_end'] : null
+            );
+            if ($gp_svg !== '') {
+                echo '<div class="gradient-profile-container">' . $gp_svg . '</div>';
+            }
         }
         echo '<table class="desc-table">';
     }
