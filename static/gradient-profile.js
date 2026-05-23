@@ -102,27 +102,45 @@ function hydrate(chart) {
     return samples.length - 1;
   }
 
+  // Build an "anchor list" of (d_mi, lat, lon) covering the full reach.
+  // Put-in (d_mi = 0) and take-out (d_mi = xMax) come from payload.putin /
+  // payload.takeout so the map dot tracks all the way to the endpoints,
+  // not just between bin centres. Intermediate anchors are sample bin
+  // centres. Without the endpoint anchors, hovering in the first or last
+  // half-bar would clamp the dot to the nearest bin centre — looked like
+  // the dot stopped moving.
+  const anchors = [];
+  if (payload.putin && payload.putin.lat != null) {
+    anchors.push({ d_mi: 0, lat: payload.putin.lat, lon: payload.putin.lon });
+  }
+  for (const s of samples) {
+    if (s.lat != null && s.lon != null) {
+      anchors.push({ d_mi: s.d_mi, lat: s.lat, lon: s.lon });
+    }
+  }
+  if (payload.takeout && payload.takeout.lat != null) {
+    anchors.push({ d_mi: xMax, lat: payload.takeout.lat, lon: payload.takeout.lon });
+  }
+
   function interpolateLatLon(dMi) {
-    // Linear-interpolate the (lat, lon) of the cursor position from the
-    // bin-centre lat/lon of adjacent samples. The river path between
-    // bin centres isn't a straight line on the map, but the samples are
-    // dense enough that linear interp tracks the channel closely; this
-    // makes the map dot glide smoothly with the cursor rather than
-    // jumping between bar centres.
-    if (samples.length === 0) return null;
-    const first = samples[0];
-    const last = samples[samples.length - 1];
-    if (dMi <= first.d_mi) return first.lat != null ? { lat: first.lat, lon: first.lon } : null;
-    if (dMi >= last.d_mi) return last.lat != null ? { lat: last.lat, lon: last.lon } : null;
-    let lo = 0, hi = samples.length - 1;
+    // Linear-interpolate (lat, lon) between adjacent anchors. The river
+    // path between anchors isn't a straight line on the map, but anchors
+    // are dense enough (every dl_mi ≈ 0.2 mi) that interp tracks the
+    // channel closely; at the endpoints we anchor on the true put-in /
+    // take-out so the dot reaches all the way to mile 0 and mile length.
+    if (anchors.length === 0) return null;
+    if (anchors.length === 1) return { lat: anchors[0].lat, lon: anchors[0].lon };
+    if (dMi <= anchors[0].d_mi) return { lat: anchors[0].lat, lon: anchors[0].lon };
+    const last = anchors[anchors.length - 1];
+    if (dMi >= last.d_mi) return { lat: last.lat, lon: last.lon };
+    let lo = 0, hi = anchors.length - 1;
     while (lo + 1 < hi) {
       const mid = (lo + hi) >> 1;
-      if (samples[mid].d_mi <= dMi) lo = mid;
+      if (anchors[mid].d_mi <= dMi) lo = mid;
       else hi = mid;
     }
-    const a = samples[lo];
-    const b = samples[lo + 1] || samples[lo];
-    if (a.lat == null || b.lat == null) return a.lat != null ? { lat: a.lat, lon: a.lon } : null;
+    const a = anchors[lo];
+    const b = anchors[lo + 1];
     const span = b.d_mi - a.d_mi;
     const t = span > 0 ? (dMi - a.d_mi) / span : 0;
     return {

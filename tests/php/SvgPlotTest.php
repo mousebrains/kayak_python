@@ -170,15 +170,19 @@ final class SvgPlotTest extends TestCase
 
     public function test_generate_gradient_profile_svg_emits_chart(): void
     {
+        // Insig sample is in the MIDDLE — keeps the pale-bar assertion
+        // honest without tripping the "drop trailing insig after sig"
+        // logic. See test_generate_gradient_profile_svg_drops_trailing_insig
+        // for that case.
         $profile = json_encode([
             'step_mi' => 0.05,
             'rmse_m' => 2.4,
             'min_drop_ft_for_significance' => 33.4,
             'samples' => [
                 ['d_mi' => 0.0, 'lat' => 44.1, 'lon' => -122.0, 'grad_ft_per_mi' => 80.0, 'w_mi' => 0.5, 'significant' => true],
-                ['d_mi' => 0.5, 'lat' => 44.11, 'lon' => -122.01, 'grad_ft_per_mi' => 120.0, 'w_mi' => 0.25, 'significant' => true],
+                ['d_mi' => 0.5, 'lat' => 44.11, 'lon' => -122.01, 'grad_ft_per_mi' => 10.0, 'w_mi' => 5.0, 'significant' => false],
                 ['d_mi' => 1.0, 'lat' => 44.12, 'lon' => -122.02, 'grad_ft_per_mi' => 50.0, 'w_mi' => 1.0, 'significant' => true],
-                ['d_mi' => 1.5, 'lat' => 44.13, 'lon' => -122.03, 'grad_ft_per_mi' => 10.0, 'w_mi' => 5.0, 'significant' => false],
+                ['d_mi' => 1.5, 'lat' => 44.13, 'lon' => -122.03, 'grad_ft_per_mi' => 120.0, 'w_mi' => 0.25, 'significant' => true],
             ],
         ]);
         assert($profile !== false);
@@ -191,11 +195,33 @@ final class SvgPlotTest extends TestCase
         // Two bar groups (sig + below-floor), each emitted regardless
         $this->assertStringContainsString('class="gp-bars-pale"', $svg);
         $this->assertStringContainsString('class="gp-bars-sig"', $svg);
-        // First 3 samples are sig, last is not — expect 3 sig rects + 1 pale
+        // 3 sig + 1 pale (insig is in the middle, not trailing)
         $sigGroupHtml = preg_match('!<g class="gp-bars-sig">(.*?)</g>!', $svg, $m) ? $m[1] : '';
         $paleGroupHtml = preg_match('!<g class="gp-bars-pale">(.*?)</g>!', $svg, $m) ? $m[1] : '';
         $this->assertSame(3, substr_count($sigGroupHtml, '<rect'));
         $this->assertSame(1, substr_count($paleGroupHtml, '<rect'));
+    }
+
+    public function test_generate_gradient_profile_svg_drops_trailing_insig(): void
+    {
+        // Trailing insig after a sig bar — algorithm artifact (e.g.
+        // non-monotonic DEM near the take-out). Renderer drops it so
+        // the previous sig bar visually stretches to the take-out.
+        $profile = json_encode([
+            'samples' => [
+                ['d_mi' => 0.0, 'lat' => 44.1, 'lon' => -122.0, 'grad_ft_per_mi' => 80.0, 'w_mi' => 0.5, 'significant' => true],
+                ['d_mi' => 0.5, 'lat' => 44.11, 'lon' => -122.01, 'grad_ft_per_mi' => 120.0, 'w_mi' => 0.25, 'significant' => true],
+                ['d_mi' => 1.0, 'lat' => 44.12, 'lon' => -122.02, 'grad_ft_per_mi' => 50.0, 'w_mi' => 1.0, 'significant' => true],
+                ['d_mi' => 1.5, 'lat' => 44.13, 'lon' => -122.03, 'grad_ft_per_mi' => 10.0, 'w_mi' => 5.0, 'significant' => false],
+            ],
+        ]);
+        assert($profile !== false);
+        $svg = generate_gradient_profile_svg($profile, 1, 480, 120);
+        $sigGroupHtml = preg_match('!<g class="gp-bars-sig">(.*?)</g>!', $svg, $m) ? $m[1] : '';
+        $paleGroupHtml = preg_match('!<g class="gp-bars-pale">(.*?)</g>!', $svg, $m) ? $m[1] : '';
+        // 3 sig kept, trailing pale dropped
+        $this->assertSame(3, substr_count($sigGroupHtml, '<rect'));
+        $this->assertSame(0, substr_count($paleGroupHtml, '<rect'));
     }
 
     public function test_generate_gradient_profile_svg_splits_runs_on_insignificance(): void

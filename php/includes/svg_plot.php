@@ -391,7 +391,11 @@ function generate_gradient_profile_svg(
     int $reach_id,
     int $width = 900,
     int $height = 180,
-    ?float $length_mi = null
+    ?float $length_mi = null,
+    ?float $putin_lat = null,
+    ?float $putin_lon = null,
+    ?float $takeout_lat = null,
+    ?float $takeout_lon = null
 ): string {
     if ($profile_json === '') return '';
     $data = json_decode($profile_json, true);
@@ -400,6 +404,21 @@ function generate_gradient_profile_svg(
     }
     $samples = $data['samples'];
     if (count($samples) < 2) return '';
+
+    // Drop a trailing insignificant bar if the previous bar is
+    // significant. The cumsum walker emits an insig tail when it
+    // runs out of bins to chain — usually correctly (e.g. non-
+    // monotonic elevation from a bridge/road/dam DEM artifact near
+    // the take-out) — but visually it looks like the chart "trails
+    // off" at the end of an otherwise solid reach. Suppressing it
+    // here lets the previous significant bar visually stretch to
+    // the take-out (via the first/last edge logic below). The
+    // underlying gradient_profile JSON keeps both bars.
+    $n = count($samples);
+    if (empty($samples[$n - 1]['significant']) && !empty($samples[$n - 2]['significant'])) {
+        array_pop($samples);
+        if (count($samples) < 2) return '';
+    }
 
     // viewBox dimensions (responsive — CSS sets actual rendered width to 100%
     // of container). Margins (tighter than generate_svg_plot since this is a
@@ -516,13 +535,19 @@ function generate_gradient_profile_svg(
         $grid .= "<text class=\"gp-axis\" x=\"$px\" y=\"" . ($height - 8) . "\" text-anchor=\"middle\">$label</text>\n";
     }
 
-    // Hydration payload (static/gradient-profile.js reads this)
+    // Hydration payload (static/gradient-profile.js reads this).
+    // putin/takeout coords let the JS interpolate the map dot all
+    // the way to mile 0 / mile length, not just between bin centres.
     $payload = json_encode([
         'samples' => $samples,
         'x_min' => $x_min,
         'x_max' => $x_max,
         'y_min' => $y_min,
         'y_max' => $y_max,
+        'putin' => ($putin_lat !== null && $putin_lon !== null)
+            ? ['lat' => $putin_lat, 'lon' => $putin_lon] : null,
+        'takeout' => ($takeout_lat !== null && $takeout_lon !== null)
+            ? ['lat' => $takeout_lat, 'lon' => $takeout_lon] : null,
         'margins' => ['ml' => $ml, 'mr' => $mr, 'mt' => $mt, 'mb' => $mb,
                       'pw' => $pw, 'ph' => $ph, 'w' => $width, 'h' => $height],
     ], JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION);
