@@ -232,6 +232,22 @@ def test_elevation_check_coexists_with_geom_checks() -> None:
     assert any("NULL despite endpoints" in i for i in issues)
 
 
+def test_known_real_extreme_peak_is_not_flagged() -> None:
+    # Reaches in _KNOWN_REAL_EXTREME_PEAKS get the extreme-peak check
+    # bypassed even when samples exceed the threshold (operator-confirmed
+    # real terrain).
+    import json
+    profile = json.dumps({
+        "samples": [
+            {"d_mi": 0.5, "lat": 44.1, "lon": -122.0, "grad_ft_per_mi": 800, "w_mi": 0.0625, "significant": True},
+            {"d_mi": 0.55, "lat": 44.11, "lon": -122.01, "grad_ft_per_mi": 2200, "w_mi": 0.0625, "significant": True},
+        ],
+    })
+    known_id = next(iter(check_reaches._KNOWN_REAL_EXTREME_PEAKS))
+    r = _FakeReach(id=known_id, gradient_profile=profile)
+    assert check_reaches._check_one(r, endpoint_tol_deg=_DEFAULT_TOL) == []
+
+
 def test_extreme_peak_in_gradient_profile_is_flagged() -> None:
     import json
     profile = json.dumps({

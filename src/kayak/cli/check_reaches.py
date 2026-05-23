@@ -70,6 +70,18 @@ from kayak.tracing.format import has_wkt_wrapper, parse_geom_string
 # a real river feature.
 _EXTREME_PEAK_FT_PER_MI = 1000
 
+# Reaches whose extreme-peak warning has been operator-reviewed and
+# confirmed as real terrain (Class V drops, real waterfalls, etc.).
+# Adding here suppresses the warning without touching the gradient
+# data — the chart still renders, just doesn't trip check-reaches.
+# Use sparingly; the typical disposition is gradient_unreliable = 1
+# in the DB (suppresses chart + max_gradient). This set is for
+# reaches where the steep gradient is plausibly real and worth
+# keeping visible.
+_KNOWN_REAL_EXTREME_PEAKS = frozenset({
+    253,  # Henline — avg gradient 607 ft/mi, peak 1124 plausibly real
+})
+
 # ~0.003° lat ≈ 333 m on the ground; matches the worst-case NHD HR
 # snap distance we've observed in practice (Horse Creek endpoint
 # alignment was ~21 m, well inside this). A drift larger than this
@@ -166,7 +178,7 @@ def _check_one(reach: Reach, *, endpoint_tol_deg: float) -> list[str]:  # noqa: 
     # (60 ft / 100 m); values above usually mean the trace is sampling
     # a cliff face / dam / road cut instead of the channel.
     gp_raw = getattr(reach, "gradient_profile", None)
-    if gp_raw:
+    if gp_raw and reach.id not in _KNOWN_REAL_EXTREME_PEAKS:
         try:
             prof = json.loads(gp_raw)
             samples = prof.get("samples", []) if isinstance(prof, dict) else []
