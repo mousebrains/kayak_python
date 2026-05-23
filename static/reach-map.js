@@ -6,6 +6,7 @@ const pts=JSON.parse(el.dataset.points);
 const track=el.dataset.track?JSON.parse(el.dataset.track):null;
 const trackColor=el.dataset.trackColor||'#2196F3';
 const map=L.map('reach-map');
+el._kayakMap=map;
 const street=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
   attribution:'OpenStreetMap',maxZoom:19});
 const topo=L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{

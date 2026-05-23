@@ -429,7 +429,7 @@ function _render_description_fields_and_map(array $reach, array $related, array 
         'Season' => $reach['season'],
         'Length' => $reach['length'] ? number_format((float)$reach['length'], 1) . ' mi' : null,
         'Gradient' => $reach['gradient'] ? number_format((float)$reach['gradient'], 0) . ' ft/mi' : null,
-        'Max Gradient' => $reach['max_gradient']
+        'Max Gradient' => $reach['max_gradient'] !== null
             ? number_format((float)$reach['max_gradient'], 0) . ' ft/mi'
             : null,
         'Elevation Loss' => $reach['elevation_lost'] ? number_format((float)$reach['elevation_lost'], 0) . ' ft' : null,

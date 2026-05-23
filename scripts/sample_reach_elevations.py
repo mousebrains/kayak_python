@@ -260,7 +260,11 @@ def sample_bilinear(tile: dict, lon: float, lat: float) -> float | None:
         return None
 
     nodata = ds.nodata
-    if nodata is not None and np.any(block == nodata):
+    # NaN-NoData needs an isnan check — `block == NaN` is always False, so
+    # the sentinel comparison alone misses void cells in 1m LIDAR tiles.
+    if np.isnan(block).any():
+        return None
+    if nodata is not None and not np.isnan(nodata) and np.any(block == nodata):
         return None
     # Bilinear weights
     dx = col_f - col_i
@@ -333,6 +337,33 @@ def process_reach(
     return len(points), sources, missed
 
 
+def _parse_dt(s: str) -> datetime | None:
+    """Best-effort parse of either an ISO-T or sqlite 'YYYY-MM-DD HH:MM:SS' timestamp.
+
+    The two formats live side by side: cache files write
+    ``datetime.now(UTC).isoformat()`` ("2026-05-22T22:00:00+00:00") while
+    sqlite's ``datetime('now')`` (used by review_logic.php on edit) writes
+    "2026-05-22 22:00:00" with a space separator and no zone. A naive
+    string compare puts 'T' (84) > ' ' (32) at index 10, which falsely
+    makes any same-UTC-date cache look newer than a same-day edit. Parse
+    both, treat naive as UTC.
+    """
+    if not s:
+        return None
+    s = s.strip()
+    # Normalise the legacy sqlite "YYYY-MM-DD HH:MM:SS" form to ISO so
+    # fromisoformat can parse it.
+    if len(s) >= 19 and s[10] == " ":
+        s = s[:10] + "T" + s[11:]
+    try:
+        dt = datetime.fromisoformat(s)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt
+
+
 def should_skip(cache_path: Path, reach_updated_at: str | None, force: bool) -> bool:
     """Skip re-sampling if the cache is fresher than reach.updated_at."""
     if force or not cache_path.exists():
@@ -343,9 +374,13 @@ def should_skip(cache_path: Path, reach_updated_at: str | None, force: bool) -> 
         with open(cache_path) as fh:
             existing = json.load(fh)
         sampled_at = existing.get("sampled_at", "")
-        return sampled_at >= reach_updated_at
     except (OSError, json.JSONDecodeError):
         return False
+    sampled_dt = _parse_dt(sampled_at)
+    reach_dt = _parse_dt(reach_updated_at)
+    if sampled_dt is None or reach_dt is None:
+        return False  # can't compare — be safe, re-sample
+    return sampled_dt >= reach_dt
 
 
 def main() -> int:
