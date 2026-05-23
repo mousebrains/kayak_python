@@ -90,21 +90,45 @@ function hydrate(chart) {
     }
   }
 
-  function findSampleIndex(dMi) {
-    // Binary search for the lowest index with d_mi >= dMi, then snap
-    // to the actually-nearest of (idx-1, idx). Without the snap, hover
-    // always picks the right-hand neighbor — visible jitter at bar
-    // boundaries.
+  function findActiveWindow(dMi) {
+    // Pick the bar whose [d_mi - w_mi/2, d_mi + w_mi/2] span contains dMi.
+    // Bars are non-overlapping (the analysis emits one sample per
+    // non-overlapping window), so this is unambiguous in the interior.
+    // Outside the union of spans (rare — before first bar's left edge
+    // or after the last bar's right edge), clamp to the nearest end.
+    for (let i = 0; i < samples.length; i++) {
+      if (dMi < samples[i].d_mi + samples[i].w_mi / 2) return i;
+    }
+    return samples.length - 1;
+  }
+
+  function interpolateLatLon(dMi) {
+    // Linear-interpolate the (lat, lon) of the cursor position from the
+    // bin-centre lat/lon of adjacent samples. The river path between
+    // bin centres isn't a straight line on the map, but the samples are
+    // dense enough that linear interp tracks the channel closely; this
+    // makes the map dot glide smoothly with the cursor rather than
+    // jumping between bar centres.
+    if (samples.length === 0) return null;
+    const first = samples[0];
+    const last = samples[samples.length - 1];
+    if (dMi <= first.d_mi) return first.lat != null ? { lat: first.lat, lon: first.lon } : null;
+    if (dMi >= last.d_mi) return last.lat != null ? { lat: last.lat, lon: last.lon } : null;
     let lo = 0, hi = samples.length - 1;
-    while (lo < hi) {
+    while (lo + 1 < hi) {
       const mid = (lo + hi) >> 1;
-      if (samples[mid].d_mi < dMi) lo = mid + 1;
+      if (samples[mid].d_mi <= dMi) lo = mid;
       else hi = mid;
     }
-    if (lo > 0 && (dMi - samples[lo - 1].d_mi) < (samples[lo].d_mi - dMi)) {
-      return lo - 1;
-    }
-    return lo;
+    const a = samples[lo];
+    const b = samples[lo + 1] || samples[lo];
+    if (a.lat == null || b.lat == null) return a.lat != null ? { lat: a.lat, lon: a.lon } : null;
+    const span = b.d_mi - a.d_mi;
+    const t = span > 0 ? (dMi - a.d_mi) / span : 0;
+    return {
+      lat: a.lat + t * (b.lat - a.lat),
+      lon: a.lon + t * (b.lon - a.lon),
+    };
   }
 
   function onMove(evt) {
@@ -119,22 +143,26 @@ function hydrate(chart) {
       return;
     }
     const dMi = xMin + ((xView - m.ml) / m.pw) * (xMax - xMin);
-    const idx = findSampleIndex(dMi);
+    const idx = findActiveWindow(dMi);
     const s = samples[idx];
     if (!s) return;
 
-    const xPx = m.ml + ((s.d_mi - xMin) / (xMax - xMin)) * m.pw;
+    // Cursor follows the mouse smoothly across the whole reach (not
+    // snapped to bar centres). The dot sits on the active bar's top
+    // (gradient is a step function across windows, so y stays constant
+    // within a bar and steps as the cursor crosses into the next one).
     const yRange = (yMax - yMin) || 1;
     const yPx = m.mt + ((yMax - s.grad_ft_per_mi) / yRange) * m.ph;
 
-    cursor.setAttribute('x1', String(xPx));
-    cursor.setAttribute('x2', String(xPx));
+    cursor.setAttribute('x1', String(xView));
+    cursor.setAttribute('x2', String(xView));
     cursor.style.display = '';
-    dot.setAttribute('cx', String(xPx));
+    dot.setAttribute('cx', String(xView));
     dot.setAttribute('cy', String(yPx));
     dot.style.display = '';
 
     if (titleEl) {
+      // Readout reflects the active bar's value at the cursor mile.
       // For significant samples, w_mi is the smallest window where the
       // drop cleared the 3σ threshold — "window" reads as a fixed-
       // resolution claim. For insignificant samples, w_mi is the
@@ -144,12 +172,13 @@ function hydrate(chart) {
       const windowText = s.significant
         ? '(window ' + s.w_mi.toFixed(2) + ' mi)'
         : '(integrated over ' + s.w_mi.toFixed(2) + ' mi, below noise floor)';
-      titleEl.textContent = 'mi ' + s.d_mi.toFixed(2)
+      titleEl.textContent = 'mi ' + dMi.toFixed(2)
         + ': ' + Math.round(s.grad_ft_per_mi) + ' ft/mi '
         + windowText;
     }
 
-    placeMapDot(s.lat, s.lon);
+    const ll = interpolateLatLon(dMi);
+    if (ll) placeMapDot(ll.lat, ll.lon);
   }
 
   function onLeave() {
