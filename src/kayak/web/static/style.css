@@ -381,6 +381,19 @@ tr.stale td{color:var(--c-text-faint);font-style:italic}
 .plot-marker-flow{fill:#2060A0;stroke:#fff;stroke-width:1;pointer-events:none}
 .plot-marker-gauge{fill:#C04020;stroke:#fff;stroke-width:1;pointer-events:none}
 
+/* Gradient profile chart (php/includes/svg_plot.php :: generate_gradient_profile_svg).
+   Responsive width to match the reach map above it; colors via CSS vars
+   so dark mode picks them up (hardcoded greys read as illegible in dark). */
+.gradient-profile-container{margin-top:.5rem}
+svg.gradient-profile-chart{display:block;width:100%;height:auto;max-width:100%}
+svg.gradient-profile-chart .gp-title{fill:var(--c-text);font-weight:700;font-size:13px}
+svg.gradient-profile-chart .gp-axis{fill:var(--c-text-muted);font-size:12px}
+svg.gradient-profile-chart .gp-grid{stroke:var(--c-border-light);stroke-width:.5}
+svg.gradient-profile-chart .gp-frame{fill:none;stroke:var(--c-border);stroke-width:.5}
+svg.gradient-profile-chart .gp-cursor{stroke:var(--c-text);stroke-width:1;stroke-dasharray:3,2;pointer-events:none}
+svg.gradient-profile-chart .gp-dot{fill:#d32f2f;stroke:#fff;stroke-width:1;pointer-events:none}
+svg.gradient-profile-chart .gp-readout{fill:var(--c-text);font-size:12px;font-weight:600;pointer-events:none}
+
 /* Shared filter bar — index/state/picker/custom pages */
 .filter-bar{margin:.5rem 0 1rem;font-size:.85rem;border:1px solid var(--c-border-light);border-radius:4px;background:var(--c-surface)}
 .filter-group{border-bottom:1px solid var(--c-border-light)}

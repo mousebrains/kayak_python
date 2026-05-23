@@ -420,21 +420,19 @@ function _render_description_fields_and_map(array $reach, array $related, array 
             . htmlspecialchars((string)$gauge_label) . '</a>';
     }
     $fields = [
+        'Description' => $reach['description'],
         'Class' => implode(', ', $related['classes']),
         'State' => implode(', ', $related['states']),
         'Watershed' => $reach['basin'],
         'Region' => $reach['region'],
         'Gauge' => $gauge_html,
         'Season' => $reach['season'],
-        'Length' => $reach['length'] ? $reach['length'] . ' mi' : null,
-        'Gradient' => $reach['gradient'] ? $reach['gradient'] . ' ft/mi' : null,
+        'Length' => $reach['length'] ? number_format((float)$reach['length'], 1) . ' mi' : null,
+        'Gradient' => $reach['gradient'] ? number_format((float)$reach['gradient'], 0) . ' ft/mi' : null,
         'Max Gradient' => $reach['max_gradient']
             ? number_format((float)$reach['max_gradient'], 0) . ' ft/mi'
             : null,
-        'Gradient Profile' => !empty($reach['gradient_profile'])
-            ? generate_gradient_profile_svg((string)$reach['gradient_profile'], (int)$reach['id'])
-            : null,
-        'Elevation Loss' => $reach['elevation_lost'] ? $reach['elevation_lost'] . ' ft' : null,
+        'Elevation Loss' => $reach['elevation_lost'] ? number_format((float)$reach['elevation_lost'], 0) . ' ft' : null,
         'Scenery' => $reach['scenery'],
         'Features' => $reach['features'],
         'Remoteness' => $reach['remoteness'],
@@ -490,7 +488,6 @@ function _render_description_fields_and_map(array $reach, array $related, array 
 
     $fields += [
         'Difficulties' => $reach['difficulties'],
-        'Description' => $reach['description'],
         'Notes' => $reach['notes'],
     ];
 
@@ -502,10 +499,20 @@ function _render_description_fields_and_map(array $reach, array $related, array 
         echo '</table>';
         $gauge_id_for_map = ($gauge && isset($gauge['id'])) ? (int)$gauge['id'] : null;
         $has_map = gm_render_map($map_points, $geom, $track_color, [], $gauge_id_for_map);
+        if (!empty($reach['gradient_profile'])) {
+            // Sits directly below the map, full container width, so the
+            // cursor-linked map dot tracks visually with chart position.
+            echo '<div class="gradient-profile-container">'
+                . generate_gradient_profile_svg(
+                    (string)$reach['gradient_profile'],
+                    (int)$reach['id']
+                )
+                . '</div>';
+        }
         echo '<table class="desc-table">';
     }
 
-    $html_fields = ['Gauge', 'Gauge Location', 'Put-in', 'Take-out', 'Gradient Profile'];
+    $html_fields = ['Gauge', 'Gauge Location', 'Put-in', 'Take-out'];
     $autolink_fields = ['Description', 'Notes'];
     foreach ($fields as $label => $value) {
         if ($value === null || trim((string)$value) === '') {

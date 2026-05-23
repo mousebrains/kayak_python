@@ -80,6 +80,14 @@ function handle_reach_detail(
     _render_reach_guidebooks($reach, $related['guidebooks']);
     _render_reach_linked_gauge($related['gauge']);
     [$has_map, $map_scripts] = _render_reach_map($reach, $related['gauge']);
+    if (!empty($reach['gradient_profile'])) {
+        echo '<div class="gradient-profile-container">'
+            . generate_gradient_profile_svg(
+                (string)$reach['gradient_profile'],
+                (int)$reach['id']
+            )
+            . '</div>';
+    }
 
     echo '<p style="margin-top:1rem">';
     echo '<a href="/description.php?id=' . $id . '">Description</a>';
@@ -330,9 +338,6 @@ function _render_reach_details_table(array $reach, array $states, array $classes
         'Length' => $reach['length'] ? number_format((float)$reach['length'], 1) . ' mi' : null,
         'Gradient' => $reach['gradient'] ? number_format((float)$reach['gradient'], 0) . ' ft/mi' : null,
         'Max Gradient' => $reach['max_gradient'] ? number_format((float)$reach['max_gradient'], 0) . ' ft/mi' : null,
-        'Gradient Profile' => !empty($reach['gradient_profile'])
-            ? generate_gradient_profile_svg((string)$reach['gradient_profile'], (int)$reach['id'])
-            : null,
         'Elevation' => $reach['elevation'] ? number_format((float)$reach['elevation'], 0) . ' ft' : null,
         'Elevation Lost' => $reach['elevation_lost'] ? number_format((float)$reach['elevation_lost'], 0) . ' ft' : null,
         'Optimal Flow' => $reach['optimal_flow'] ? number_format((float)$reach['optimal_flow'], 0) . ' CFS' : null,
@@ -361,7 +366,7 @@ function _render_reach_details_table(array $reach, array $states, array $classes
         'Notes' => $reach['notes'],
     ];
 
-    $html_fields = ['Put-in', 'Take-out', 'Gradient Profile'];
+    $html_fields = ['Put-in', 'Take-out'];
     $autolink_fields = ['Description', 'Notes'];
     foreach ($fields as $label => $value) {
         if ($value === null || trim((string)$value) === '') {

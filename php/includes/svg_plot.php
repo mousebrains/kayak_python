@@ -388,8 +388,8 @@ SVG;
 function generate_gradient_profile_svg(
     string $profile_json,
     int $reach_id,
-    int $width = 480,
-    int $height = 120
+    int $width = 900,
+    int $height = 180
 ): string {
     if ($profile_json === '') return '';
     $data = json_decode($profile_json, true);
@@ -399,8 +399,10 @@ function generate_gradient_profile_svg(
     $samples = $data['samples'];
     if (count($samples) < 2) return '';
 
-    // Margins (tighter than generate_svg_plot since this is a sub-widget)
-    $ml = 50; $mr = 10; $mt = 18; $mb = 22;
+    // viewBox dimensions (responsive — CSS sets actual rendered width to 100%
+    // of container). Margins (tighter than generate_svg_plot since this is a
+    // sub-widget).
+    $ml = 50; $mr = 10; $mt = 22; $mb = 26;
     $pw = $width - $ml - $mr;
     $ph = $height - $mt - $mb;
 
@@ -448,8 +450,8 @@ function generate_gradient_profile_svg(
     for ($yv = $y_min; $yv <= $y_max + $y_step * 0.01; $yv += $y_step) {
         $py = $mt + (($y_max - $yv) / $y_range * $ph);
         $label = number_format($yv, 0);
-        $grid .= "<line x1=\"$ml\" y1=\"$py\" x2=\"" . ($ml + $pw) . "\" y2=\"$py\" stroke=\"#ddd\" stroke-width=\"0.5\"/>\n";
-        $grid .= "<text x=\"" . ($ml - 5) . "\" y=\"" . ($py + 4) . "\" text-anchor=\"end\" font-size=\"11\" fill=\"#666\">$label</text>\n";
+        $grid .= "<line class=\"gp-grid\" x1=\"$ml\" y1=\"$py\" x2=\"" . ($ml + $pw) . "\" y2=\"$py\"/>\n";
+        $grid .= "<text class=\"gp-axis\" x=\"" . ($ml - 5) . "\" y=\"" . ($py + 4) . "\" text-anchor=\"end\">$label</text>\n";
     }
 
     // X-axis ticks (every ~5 ticks)
@@ -458,8 +460,8 @@ function generate_gradient_profile_svg(
         $xv = $x_min + ($x_range * $i / $n_xticks);
         $px = $ml + (($xv - $x_min) / $x_range * $pw);
         $label = number_format($xv, 1);
-        $grid .= "<line x1=\"$px\" y1=\"$mt\" x2=\"$px\" y2=\"" . ($mt + $ph) . "\" stroke=\"#ddd\" stroke-width=\"0.5\"/>\n";
-        $grid .= "<text x=\"$px\" y=\"" . ($height - 6) . "\" text-anchor=\"middle\" font-size=\"11\" fill=\"#666\">$label</text>\n";
+        $grid .= "<line class=\"gp-grid\" x1=\"$px\" y1=\"$mt\" x2=\"$px\" y2=\"" . ($mt + $ph) . "\"/>\n";
+        $grid .= "<text class=\"gp-axis\" x=\"$px\" y=\"" . ($height - 8) . "\" text-anchor=\"middle\">$label</text>\n";
     }
 
     // Hydration payload (static/gradient-profile.js reads this)
@@ -477,12 +479,12 @@ function generate_gradient_profile_svg(
     }
     $payload_attr = htmlspecialchars($payload);
 
+    $title_x = (int)($width / 2);
     return <<<SVG
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 $width $height" width="$width" height="$height" class="gradient-profile-chart" data-reach-id="$reach_id" data-profile="$payload_attr">
-<text x="{$ml}" y="14" font-size="11" font-weight="bold" fill="#333">Gradient (ft/mi)</text>
-<text x="$width" y="14" text-anchor="end" font-size="10" fill="#999">river mile →</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 $width $height" class="gradient-profile-chart" data-reach-id="$reach_id" data-profile="$payload_attr">
+<text class="gp-title" x="{$title_x}" y="16" text-anchor="middle">Gradient (ft/mi) vs. river mile</text>
 $grid
-<rect x="$ml" y="$mt" width="$pw" height="$ph" fill="none" stroke="#ccc" stroke-width="0.5"/>
+<rect class="gp-frame" x="$ml" y="$mt" width="$pw" height="$ph"/>
 <polyline fill="none" stroke="#2060A0" stroke-opacity="0.25" stroke-width="1.5" stroke-linejoin="round" points="$all_pts"/>
 $sig_polylines
 </svg>
