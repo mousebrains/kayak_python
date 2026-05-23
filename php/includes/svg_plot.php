@@ -475,12 +475,16 @@ function generate_gradient_profile_svg(
         $grid .= "<text class=\"gp-axis\" x=\"" . ($ml - 5) . "\" y=\"" . ($py + 4) . "\" text-anchor=\"end\">$label</text>\n";
     }
 
-    // X-axis ticks (every ~5 ticks)
+    // X-axis ticks (every ~5 ticks). Pick label decimal precision from
+    // the tick step so short reaches (Henline at 0.6 mi) don't repeat
+    // their labels at 1-decimal rounding (0.0, 0.1, 0.2, 0.4, 0.5, 0.6).
     $n_xticks = 5;
+    $x_tick_step = $x_range / $n_xticks;
+    $x_decimals = $x_tick_step >= 1 ? 0 : ($x_tick_step >= 0.1 ? 1 : ($x_tick_step >= 0.01 ? 2 : 3));
     for ($i = 0; $i <= $n_xticks; $i++) {
         $xv = $x_min + ($x_range * $i / $n_xticks);
         $px = $ml + (($xv - $x_min) / $x_range * $pw);
-        $label = number_format($xv, 1);
+        $label = number_format($xv, $x_decimals);
         $grid .= "<line class=\"gp-grid\" x1=\"$px\" y1=\"$mt\" x2=\"$px\" y2=\"" . ($mt + $ph) . "\"/>\n";
         $grid .= "<text class=\"gp-axis\" x=\"$px\" y=\"" . ($height - 8) . "\" text-anchor=\"middle\">$label</text>\n";
     }
