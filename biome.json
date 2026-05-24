@@ -2,17 +2,11 @@
   "$schema": "https://biomejs.dev/schemas/2.4.11/schema.json",
   "files": {
     "includes": [
-      "static/sw.js",
-      "static/map.js",
-      "static/picker.js",
-      "static/reach-map.js",
-      "static/search-map.js",
-      "static/feature-map.js",
-      "static/gauge_picker.js",
-      "static/plot-hover.js",
-      "src/kayak/web/static/levels.js",
-      "src/kayak/web/static/filters.js",
-      "src/kayak/web/static/style.css"
+      "static/**/*.js",
+      "static/**/*.css",
+      "src/kayak/web/static/**/*.js",
+      "src/kayak/web/static/**/*.css",
+      "!static/leaflet.*"
     ]
   },
   "formatter": {

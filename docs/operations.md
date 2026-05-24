@@ -17,9 +17,10 @@ breaks, the steps shouldn't depend on a network round-trip to GitHub.
 | Database | SQLite at `/home/pat/DB/kayak.db` (WAL mode). |
 | Web | nginx + PHP-FPM 8.4. Three vhosts: `levels.mousebrains.com`, `levels-test.wkcc.org`, `levels.wkcc.org`. |
 | Cert | Let's Encrypt 3-SAN at `/etc/letsencrypt/live/levels.mousebrains.com/` covering `levels.mousebrains.com`, `levels-test.wkcc.org`, `levels.wkcc.org`. Renewed via certbot's nginx (HTTP-01) authenticator. |
-| Scheduled work | 12 systemd timers — pipeline, backups, cert health, decimation, etc. See `deploy/SETUP.md` §timer schedule. |
+| Scheduled work | 15 systemd timers — pipeline, backups, cert health, decimation, status page, OSMB fetch, etc. See `deploy/SETUP.md` §timer schedule. |
 | Monitoring | healthchecks.io (heartbeats), ntfy.sh (push), msmtp → Gmail (email). Public status page at <https://status.mousebrains.com> (Better Stack hosted, CNAME → `statuspage.betteruptime.com`). |
 | Backups | `/home/pat/kayak/backups/` (hourly + weekly local) + Google Drive crypt (weekly off-site). |
+| Operator dashboard | `/_internal/status` (maintainer-only) — disk/memory, backups, TLS-cert expiry, failed `kayak-*` jobs, and 4 h traffic buckets. Regenerated nightly by `kayak-status.timer` (03:30) into `var/status.html`. |
 
 ## Routine code deploy
 

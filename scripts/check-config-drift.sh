@@ -25,8 +25,8 @@ REPO="${REPO:-${KAYAK_HOME}/kayak}"
 
 # Manifest of (repo_path, install_path) pairs. Tab-separated; lines starting
 # with # are comments. Files NOT in this manifest:
-#   - conf/levels.nginx, deploy/levels — retired; the three-vhost split
-#     under conf/sites/ replaces these.
+#   - conf/levels.nginx, deploy/levels — removed (the three-vhost split under
+#     conf/sites/ + conf/snippets/ replaced these monoliths).
 #   - deploy/secrets.env.example, deploy/msmtprc.example — example templates,
 #     not deployed.
 #   - deploy/install-config.sh, deploy/SETUP.md, systemd/install.service.sh —

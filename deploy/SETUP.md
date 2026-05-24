@@ -1,166 +1,12 @@
 # VPS Deployment Setup
 
-Deploy kayak on a Hetzner CPX21 (3 vCPU AMD, 4 GB RAM, 80 GB disk) running
+Deploy kayak on a Hetzner CPX11 (2 vCPU AMD, 2 GB RAM, 40 GB disk) running
 Debian 13 (Trixie) with nginx, PHP-FPM, and Let's Encrypt SSL.
 
 Hostnames: `levels.mousebrains.com`, `levels.wkcc.org`
 
-### Alternative: Oracle Cloud Free Tier
-
-Oracle Cloud's Always Free tier provides an ARM VM (4 OCPU Ampere, 24 GB RAM,
-200 GB disk, 10 TB/month egress) at no cost — not a trial, it runs indefinitely.
-US West regions are San Jose (us-sanjose-1) and Phoenix (us-phoenix-1); San Jose
-is closest to Oregon (~10-15ms latency). Debian 13 is not available as a platform
-image but can be imported as a custom image (arm64 qcow2 from cloud.debian.org).
-
-#### Oracle Cloud account setup
-
-1. Go to https://cloud.oracle.com and click **Sign Up**.
-2. A credit card is required for identity verification but will not be charged
-   for Always Free resources.
-3. For **Home Region**, choose **US West (San Jose)** for lowest latency to
-   Oregon. Phoenix is the other US West option.
-
-#### Import Debian 13 custom image
-
-1. Download the Debian 13 arm64 cloud image:
-   ```bash
-   curl -LO https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-arm64.qcow2
-   ```
-2. Create an Object Storage bucket: hamburger menu > **Storage** > **Buckets** >
-   **Create Bucket** > name it `images` > **Create**.
-3. Upload the qcow2 file: click into the bucket > **Upload** > select the file.
-4. Import as a custom image: hamburger menu > **Compute** > **Custom images** >
-   **Import image**:
-   - **Import from:** Object Storage bucket
-   - **Bucket:** `images`
-   - **Object name:** `debian-13-generic-arm64.qcow2`
-   - **Image name:** `debian-13-arm64`
-   - **Image type:** QCOW2
-   - **Launch mode:** Paravirtualized
-   - **Operating system:** Linux
-   - **Compatible shapes:** Ampere
-5. Wait for status to change from **Importing** to **Available** (~5-10 minutes).
-   Refresh the Custom images page to check.
-
-#### Networking (VCN)
-
-Networking is created automatically when you create the instance (see below).
-After the instance is running, open firewall ports for HTTP/HTTPS:
-
-1. Go to the instance details page > click the **Subnet** link > click the
-   **Default Security List**.
-2. **Add Ingress Rules**:
-
-   | Source CIDR | Protocol | Dest Port | Description |
-   |-------------|----------|-----------|-------------|
-   | `0.0.0.0/0` | TCP | 80 | HTTP |
-   | `0.0.0.0/0` | TCP | 443 | HTTPS |
-
-   SSH (port 22) is open by default.
-
-#### SSH key
-
-Generate a key for the instance (or use an existing one):
-
-```bash
-ssh-keygen -t ed25519 -C "oracle-kayak" -f ~/.ssh/id_oracle
-```
-
-#### Create the compute instance
-
-1. Hamburger menu > **Compute** > **Instances** > **Create instance**.
-2. **Name:** `kayak`
-3. **Image and shape:**
-   - Click **Change image** > **My images** > select `debian-13-arm64` >
-     **Select image**.
-   - Click **Change shape** > **Ampere** > **VM.Standard.A1.Flex**.
-   - Set **OCPUs: 4**, **Memory: 24 GB** (full Always Free allowance).
-   - Confirm it shows **Always Free eligible**.
-4. **Networking:** Leave defaults — OCI creates a VCN with public subnet and
-   internet gateway automatically. Ensure **Assign a public IPv4 address**
-   is checked.
-5. **SSH keys:** Paste the contents of `~/.ssh/id_oracle.pub`.
-6. **Boot volume:** Click **Specify a custom boot volume size** > set to
-   **200 GB** (Always Free maximum).
-7. Click **Create**.
-
-#### Capacity issues
-
-ARM instances are frequently out of capacity in popular regions. If you get an
-"Out of capacity" error:
-
-- Retry manually every few minutes — capacity opens unpredictably.
-- Try early morning US time when capacity is more available.
-- Try a different region.
-- Use the OCI CLI to retry in a loop:
-
-  ```bash
-  # Install OCI CLI: https://docs.oracle.com/en-us/iaas/Content/API/SDKDocs/cliinstall.htm
-  while true; do
-      oci compute instance launch \
-          --availability-domain "YOUR_AD" \
-          --compartment-id "YOUR_COMPARTMENT_OCID" \
-          --shape "VM.Standard.A1.Flex" \
-          --shape-config '{"ocpus":4,"memoryInGBs":24}' \
-          --image-id "YOUR_DEBIAN_IMAGE_OCID" \
-          --subnet-id "YOUR_SUBNET_OCID" \
-          --ssh-authorized-keys-file ~/.ssh/id_oracle.pub \
-          --boot-volume-size-in-gbs 200 \
-          --assign-public-ip true && break
-      echo "Out of capacity, retrying in 60s..."
-      sleep 60
-  done
-  ```
-
-#### Connect and verify
-
-Once the instance shows **Running**, find the public IP on the instance details
-page:
-
-```bash
-ssh -i ~/.ssh/id_oracle debian@<PUBLIC_IP>
-uname -m        # aarch64
-cat /etc/os-release  # Debian 13 (Trixie)
-free -h         # ~24 GB
-nproc           # 4
-df -h /         # ~200 GB
-```
-
-#### OS firewall (Oracle-specific)
-
-The Debian cloud image may ship with iptables rules that block ports 80/443
-even after opening them in the security list. Check and open if needed:
-
-```bash
-sudo iptables -L INPUT -n --line-numbers  # check current rules
-sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT
-sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT
-sudo apt install -y iptables-persistent
-sudo netfilter-persistent save
-```
-
-#### Create the application user
-
-The default user is `debian`. Create the `pat` user before proceeding:
-
-```bash
-sudo adduser pat
-sudo -u pat mkdir -p /home/pat/.ssh
-```
-
-Then continue with **section 1** below — the setup is identical to Hetzner
-since both run Debian 13.
-
-#### Oracle Cloud gotchas
-
-- **Do not terminate the instance** — if you delete an Always Free instance,
-  you may not be able to provision a new one due to capacity.
-- **Set a budget alert** — OCI console > **Billing** > **Budgets** > create a
-  $1 alert to catch anything that leaves the free tier.
-- **Idle reclamation** — Oracle emails after 60 days of inactivity on idle
-  Always Free instances, threatening to reclaim them. The hourly pipeline timer
-  counts as activity, so this is not an issue once deployed.
+Provision a CPX11 with the Debian 13 image in the Hetzner Cloud Console, add
+your SSH key, and connect as `root@<IP>`. All steps below run on that box.
 
 ## 1. System packages
 
@@ -186,6 +32,10 @@ sudo ln -sf /run/php/php8.4-fpm.sock /run/php/php-fpm.sock
 ## 2. Application user and code
 
 ```bash
+# Create the application user (the Hetzner cloud image logs in as root)
+sudo adduser pat
+sudo -u pat mkdir -p /home/pat/.ssh
+
 # Clone as the pat user
 sudo -u pat git clone git@github.com:mousebrains/kayak_python.git /home/pat/kayak
 
@@ -196,23 +46,39 @@ python3 -m venv .venv
 
 ## 3. Environment file
 
-Create `/home/pat/kayak/.env`:
+Create the database directory and `/home/pat/kayak/.env`. `levels` (Python)
+reads **`DATABASE_URL`**; PHP reads `SQLITE_PATH` (passed by nginx via
+`fastcgi_param` on the live host — set here too so the CLI and PHP agree). Both
+must point at the **same** file, `/home/pat/DB/kayak.db` (outside the repo,
+matching the nginx config). The directory must exist before `init-db` or SQLite
+fails with "unable to open database file":
 
 ```bash
-SQLITE_PATH=/home/pat/kayak/kayak.db
+mkdir -p /home/pat/DB
+
+cat > /home/pat/kayak/.env <<'EOF'
+DATABASE_URL=sqlite:////home/pat/DB/kayak.db
+SQLITE_PATH=/home/pat/DB/kayak.db
 EDITOR_FEATURE=1
+EOF
 ```
 
-The pipeline, systemd services, and PHP all read from this file or its
-variables. Maintainer access to `/edit.php` uses the `ed_sess` editor-session
-cookie — sign in via `/login.php` with an email that has been promoted to
-`status='maintainer'` (see `levels seed-maintainer`).
+Maintainer access to `/edit.php` uses the `ed_sess` editor-session cookie —
+sign in via `/login.php` with an email promoted to `status='maintainer'` (see
+`levels seed-maintainer`).
 
 ## 4. Initialize the database
 
+`init-db --no-seed` creates the schema and stamps migrations without the
+`sources.yaml` seed; `import_metadata.py` then loads the gauges, reaches,
+sources, and `gauge_source` links from the tracked `data/db/*.csv` snapshots.
+Without those links the pipeline's `orphan-check` fails and the site renders
+empty, so this order matters:
+
 ```bash
 cd /home/pat/kayak
-.venv/bin/levels init-db
+.venv/bin/levels init-db --no-seed
+.venv/bin/python scripts/import_metadata.py
 .venv/bin/levels pipeline    # first run — fetches data and generates HTML
 ```
 
@@ -265,35 +131,48 @@ systemctl list-timers certbot.timer
 
 ## 6. Nginx configuration
 
-`deploy/levels` is the canonical server-block config. Install it into
-`sites-available/` and symlink from `sites-enabled/` so future updates only
-need a copy + reload.
+The live config is the three-vhost split under `conf/sites/` plus the shared
+`conf/snippets/levels-common.conf` (PHP location, rate-limit bindings, logging,
+`security.txt`). `scripts/check-config-drift.sh` holds the authoritative
+repo→`/etc/` manifest; `deploy.sh` deliberately never touches `/etc/nginx/`, so
+nginx config is installed and updated by hand.
 
 ```bash
-# Install the full config
-sudo cp /home/pat/kayak/deploy/levels /etc/nginx/sites-available/levels
-sudo ln -sf /etc/nginx/sites-available/levels /etc/nginx/sites-enabled/levels
-sudo rm -f /etc/nginx/sites-enabled/kayak-acme.conf
+cd /home/pat/kayak
 
-# Test and reload
+# Snippets — included by the vhosts, so install these first
+sudo cp conf/security-headers.conf           /etc/nginx/snippets/
+sudo cp conf/security-headers-turnstile.conf /etc/nginx/snippets/
+sudo cp conf/snippets/levels-common.conf     /etc/nginx/snippets/
+
+# http-scope conf.d (rate-limit zones, log format, editor $site_url) — must
+# load before the vhosts that reference them
+sudo cp deploy/ratelimit.conf        /etc/nginx/conf.d/ratelimit.conf
+sudo cp deploy/kayak-log-format.conf /etc/nginx/conf.d/kayak-log-format.conf
+sudo cp deploy/nginx-editor-env.conf /etc/nginx/conf.d/editor-env.conf
+sudo cp deploy/nginx-default-server  /etc/nginx/sites-available/default  # stock sites-enabled/default symlink picks this up
+
+# Server blocks
+sudo cp conf/sites/levels-mousebrains-com /etc/nginx/sites-available/
+sudo cp conf/sites/levels-wkcc-org        /etc/nginx/sites-available/
+sudo cp conf/sites/levels-test-wkcc-org   /etc/nginx/sites-available/   # soak host only
+
+# Enable the production vhosts (on the soak/test box, enable levels-test-wkcc-org instead)
+sudo ln -sf /etc/nginx/sites-available/levels-mousebrains-com /etc/nginx/sites-enabled/
+sudo ln -sf /etc/nginx/sites-available/levels-wkcc-org        /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/levels  # drop the retired monolith if present
+
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-Subsequent updates (same pattern):
+To update a config file later, `sudo cp` the changed repo file to its `/etc/`
+path (run `scripts/check-config-drift.sh` to see exactly what differs), then
+`sudo nginx -t && sudo systemctl reload nginx`.
 
-```bash
-sudo cp /home/pat/kayak/deploy/levels /etc/nginx/sites-available/levels
-sudo nginx -t && sudo systemctl reload nginx
-```
-
-The nginx config assumes:
+The config assumes:
 - Document root: `/home/pat/public_html` (symlink → `/home/pat/kayak/public_html`)
 - Database: `/home/pat/DB/kayak.db` (passed to PHP via `fastcgi_param SQLITE_PATH`)
-- Cert path: `/etc/letsencrypt/live/levels.mousebrains.com/`
-- Snippets: `/etc/nginx/snippets/security-headers.conf`, `security-headers-turnstile.conf`
-- Rate-limit zones: `/etc/nginx/conf.d/ratelimit.conf` (see `deploy/ratelimit.conf`)
-
-Edit `deploy/levels` to match actual paths if they differ.
+- Per-vhost certs under `/etc/letsencrypt/live/<hostname>/`
 
 ## 7. PHP-FPM configuration
 
@@ -409,13 +288,15 @@ Verify:
 systemctl list-timers 'kayak-*' --all
 ```
 
-Expected schedule (13 timers; most jittered via `RandomizedDelaySec=`):
+Expected schedule (15 timers; most jittered via `RandomizedDelaySec=`):
 - **kayak-pipeline.timer** — every hour at `:12` (fetches data, builds HTML)
 - **kayak-backup-hourly.timer** — every hour at `:38` (sqlite `.backup` + WAL checkpoint; 24-copy retention; RPO ≤ 1h)
 - **kayak-healthcheck.timer** — every hour at `:45` (data-freshness check)
 - **kayak-decimate.timer** — daily at 02:32 (thins old observations, VACUUM)
 - **kayak-editor-retention.timer** — daily at 03:45 (prunes expired editor sessions + magic links)
 - **kayak-metadata-snapshot.timer** — daily at 04:30 (commits metadata-table drift to `data/db/*.csv`)
+- **kayak-status.timer** — daily at 03:30 (renders the `/_internal/status` operator dashboard to `var/status.html`)
+- **kayak-fetch-osmb.timer** — daily at 03:30 (fetches Oregon State Marine Board hazard/access GeoJSON overlays)
 - **kayak-cert-expiry.timer** — daily at 06:30 (Let's Encrypt cert health probe; pages on <21 days remaining)
 - **kayak-cert-renewal-test.timer** — weekly Monday at 04:15 (`certbot renew --dry-run`)
 - **kayak-recap.timer** — weekly Monday at 07:00 (pipeline-activity recap email; reads structured events from journald)
@@ -446,7 +327,7 @@ journalctl -u kayak-pipeline.service --since "1 hour ago" --no-pager
 
 ## 10. HSTS
 
-HSTS is already enabled at the server level in `deploy/levels` (the directive immediately follows the `include /etc/nginx/snippets/security-headers.conf;` line). After deploying a fresh `deploy/levels`, verify:
+HSTS is set in the `security-headers.conf` / `security-headers-turnstile.conf` snippets (`add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;`), which every vhost includes — there is no separate per-server directive. After installing the snippets (§6), verify:
 
 ```bash
 sudo nginx -t && sudo systemctl reload nginx
@@ -455,8 +336,6 @@ curl -sI https://levels.wkcc.org/ | grep -i strict-transport
 ```
 
 `preload` is intentionally OFF — submitting to hstspreload.org is a one-way commitment; revisit only after the operator has run with `preload` locally for a few months and is confident in maintaining HSTS forever.
-
-If you also add `Strict-Transport-Security` to `/etc/nginx/snippets/security-headers.conf` for completeness, remove the per-server directive from `deploy/levels` to avoid duplicate headers in responses that fall through to server scope (browsers accept duplicates; just noisy).
 
 ## 11. Fail2ban
 
@@ -722,7 +601,7 @@ Check the socket path matches your PHP version:
 ```bash
 ls /run/php/php*-fpm.sock
 ```
-Update `fastcgi_pass` in `deploy/levels` to match.
+Update `fastcgi_pass` in `conf/snippets/levels-common.conf` to match.
 
 **Pipeline fails with permission errors:**
 The systemd services run as user `pat`. Ensure the kayak directory and database are owned by that user:

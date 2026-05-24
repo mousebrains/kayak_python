@@ -8,6 +8,26 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Gradient profile**: per-reach `max_gradient` plus a statistically-binned
+  gradient chart on reach-detail pages (DEM-sampled; canyon-trace artifacts
+  flagged via `reach.gradient_unreliable`).
+
+### Fixed
+- **rDNS resolver bounded** so `kayak-status.service` no longer times out on
+  slow reverse lookups (wall-clock budget + negative-cache backoff).
+- **Deploy path**: the documented quick-start now loads the metadata snapshot
+  so a fresh DB renders data; `systemd/install.service.sh` installs all 15
+  timers; `deploy/SETUP.md` deploys the live `conf/sites/` split instead of the
+  retired `deploy/levels`; migrations 0052/0054/0055/0056 no longer carry stray
+  `BEGIN/COMMIT` that broke the runner's transaction wrapper.
+- **Docs drift**: schema-doc table count corrected to 24/25 and the dropped
+  `maintainer_credential` table removed; hardware specs corrected to the
+  Hetzner CPX11 (2 vCPU / 2 GB / 40 GB).
+
+### Changed
+- Pinned `ruff` in pre-commit/CI to match `uv.lock` and stop formatter drift.
+
 ## [1.1.1] - 2026-05-21
 
 ### Added
