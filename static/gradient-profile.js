@@ -21,8 +21,8 @@
 function hydrate(chart) {
   let payload;
   try { payload = JSON.parse(chart.dataset.profile); }
-  catch (e) { return; }
-  if (!payload || !payload.samples || payload.samples.length < 2) return;
+  catch (_e) { return; }
+  if (!payload?.samples || payload.samples.length < 2) return;
 
   const samples = payload.samples;
   const xMin = payload.x_min;
@@ -61,7 +61,7 @@ function hydrate(chart) {
     if (leafletMap) return leafletMap;
     const el = document.getElementById('feature-map') ||
                document.getElementById('reach-map');
-    if (el && el._kayakMap) {
+    if (el?._kayakMap) {
       leafletMap = el._kayakMap;
     }
     return leafletMap;

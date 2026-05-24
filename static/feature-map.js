@@ -97,10 +97,10 @@ map.on('overlayadd',function(e){
 });
 
 function populateOsmbLayer(lg,data,def){
-  const features=(data&&data.features)||[];
+  const features=(data?.features)||[];
   for(let i=0;i<features.length;i++){
     const f=features[i];
-    const coords=f.geometry&&f.geometry.coordinates;
+    const coords=f.geometry?.coordinates;
     if(!coords||coords.length<2)continue;
     const ll=L.latLng(coords[1],coords[0]);
     const props=f.properties||{};
