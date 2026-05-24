@@ -17,14 +17,21 @@ canonical-id rows this script loads from source.csv (Source.name is not
 unique), leaving duplicate sources. ``--no-seed`` gives empty tables so the CSV
 ids load cleanly.
 
+reach.geom is loaded from data/db/reaches.json (it's excluded from reach.csv)
+via ``UPDATE reach SET geom``. To apply just the geometry to a live prod DB
+without re-syncing metadata from the CSVs — e.g. after a re-trace or the ~5 m
+simplification — use ``--geom-only``.
+
 Usage:
     python3 scripts/import_metadata.py                # uses ../DB/kayak.db
     python3 scripts/import_metadata.py --db /path.db
     python3 scripts/import_metadata.py --in data/db   # default
+    python3 scripts/import_metadata.py --geom-only    # only reaches.json geom
 """
 
 import argparse
 import csv
+import json
 import sqlite3
 import sys
 from pathlib import Path
@@ -112,6 +119,12 @@ def main() -> int:
         default=str(REPO_DIR / "data" / "db"),
         help="Input directory (default: data/db)",
     )
+    parser.add_argument(
+        "--geom-only",
+        action="store_true",
+        help="Load only reaches.json (reach.geom); skip the CSV upsert. Use to "
+        "apply geometry to a live DB without re-syncing metadata from the CSVs.",
+    )
     args = parser.parse_args()
 
     db_path = (Path(args.db) if args.db else _default_db_path()).resolve()
@@ -135,13 +148,27 @@ def main() -> int:
         print(f"{'Table':<20} {'Rows':>10}")
         print(f"{'-' * 20} {'-' * 10:>10}")
         with conn:
-            for table in LOAD_ORDER:
-                csv_path = in_dir / f"{table}.csv"
-                if not csv_path.exists():
-                    continue
-                rows = import_table(conn, csv_path)
-                print(f"{table:<20} {rows:>10}")
-                total_rows += rows
+            if not args.geom_only:
+                for table in LOAD_ORDER:
+                    csv_path = in_dir / f"{table}.csv"
+                    if not csv_path.exists():
+                        continue
+                    rows = import_table(conn, csv_path)
+                    print(f"{table:<20} {rows:>10}")
+                    total_rows += rows
+
+            # reach.geom lives in reaches.json (excluded from reach.csv —
+            # large + not regenerable on prod); apply it to the reach rows
+            # (loaded from reach.csv above, or already present in a live DB).
+            reaches_json = in_dir / "reaches.json"
+            if reaches_json.exists():
+                with reaches_json.open(encoding="utf-8") as f:
+                    geoms = json.load(f)
+                conn.executemany(
+                    "UPDATE reach SET geom = ? WHERE id = ?",
+                    [(geom, int(rid)) for rid, geom in geoms.items()],
+                )
+                print(f"{'reaches.json (geom)':<20} {len(geoms):>10}")
         print(f"{'-' * 20} {'-' * 10:>10}")
         print(f"{'TOTAL':<20} {total_rows:>10}")
 
