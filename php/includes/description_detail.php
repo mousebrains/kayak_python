@@ -21,6 +21,7 @@ require_once __DIR__ . '/html.php';
 require_once __DIR__ . '/svg_plot.php';
 require_once __DIR__ . '/gauge_plots.php';
 require_once __DIR__ . '/gauge_map.php';
+require_once __DIR__ . '/reach_fields.php';
 
 /**
  * Dispatch detail mode and write the full HTTP response.
@@ -422,17 +423,11 @@ function _render_description_fields_and_map(array $reach, array $related, array 
     $fields = [
         'Description' => $reach['description'],
         'Class' => implode(', ', $related['classes']),
-        'State' => implode(', ', $related['states']),
-        'Watershed' => $reach['basin'],
-        'Region' => $reach['region'],
+        'Watershed' => format_reach_watershed($reach, $related['states']),
         'Gauge' => $gauge_html,
         'Season' => $reach['season'],
-        'Length' => $reach['length'] ? number_format((float)$reach['length'], 1) . ' mi' : null,
-        'Gradient' => $reach['gradient'] ? number_format((float)$reach['gradient'], 0) . ' ft/mi' : null,
-        'Max Gradient' => $reach['max_gradient'] !== null
-            ? number_format((float)$reach['max_gradient'], 0) . ' ft/mi'
-            : null,
-        'Elevation Loss' => $reach['elevation_lost'] ? number_format((float)$reach['elevation_lost'], 0) . ' ft' : null,
+        'Length' => format_reach_length($reach),
+        'Elevation' => format_reach_elevation($reach),
         'Scenery' => $reach['scenery'],
         'Features' => $reach['features'],
         'Remoteness' => $reach['remoteness'],
@@ -441,23 +436,8 @@ function _render_description_fields_and_map(array $reach, array $related, array 
         'Optimal Flow' => $reach['optimal_flow']
             ? number_format((float)$reach['optimal_flow'], 0) . ' CFS'
             : null,
+        'Flow' => format_reach_flow($related['flow_levels']),
     ];
-
-    foreach ($related['flow_levels'] as $fl) {
-        $parts = [];
-        if ($fl['low'] !== null) {
-            $unit = $fl['low_data_type'] === 'flow' ? ' CFS' : ' ft';
-            $parts[] = number_format((float)$fl['low'], $fl['low_data_type'] === 'flow' ? 0 : 1) . $unit;
-        }
-        if ($fl['high'] !== null) {
-            $unit = $fl['high_data_type'] === 'flow' ? ' CFS' : ' ft';
-            $parts[] = number_format((float)$fl['high'], $fl['high_data_type'] === 'flow' ? 0 : 1) . $unit;
-        }
-        if ($parts) {
-            $label = ucfirst($fl['level']) . ' Flow';
-            $fields[$label] = implode(' – ', $parts);
-        }
-    }
 
     $map_points = [];
     $coord_fields = [];
@@ -525,7 +505,9 @@ function _render_description_fields_and_map(array $reach, array $related, array 
                 putin_lat: $reach['latitude_start'] !== null ? (float)$reach['latitude_start'] : null,
                 putin_lon: $reach['longitude_start'] !== null ? (float)$reach['longitude_start'] : null,
                 takeout_lat: $reach['latitude_end'] !== null ? (float)$reach['latitude_end'] : null,
-                takeout_lon: $reach['longitude_end'] !== null ? (float)$reach['longitude_end'] : null
+                takeout_lon: $reach['longitude_end'] !== null ? (float)$reach['longitude_end'] : null,
+                putin_elev_ft: $reach['elevation'] !== null ? (float)$reach['elevation'] : null,
+                elev_lost_ft: $reach['elevation_lost'] !== null ? (float)$reach['elevation_lost'] : null
             );
             if ($gp_svg !== '') {
                 echo '<div class="gradient-profile-container">' . $gp_svg . '</div>';

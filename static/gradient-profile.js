@@ -149,6 +149,34 @@ function hydrate(chart) {
     };
   }
 
+  // Elevation anchors (river mile -> ft), pinned to put-in / take-out so the
+  // readout matches the drawn line. Null when the reach has no elevation data.
+  const elevAnchors = payload.elev ? [{ d: 0, e: payload.elev.putin }] : null;
+  if (elevAnchors) {
+    for (const s of samples) {
+      if (s.elev_ft != null) elevAnchors.push({ d: s.d_mi, e: s.elev_ft });
+    }
+    elevAnchors.push({ d: xMax, e: payload.elev.takeout });
+  }
+
+  function interpolateElev(dMi) {
+    if (!elevAnchors) return null;
+    if (dMi <= elevAnchors[0].d) return elevAnchors[0].e;
+    const last = elevAnchors[elevAnchors.length - 1];
+    if (dMi >= last.d) return last.e;
+    let lo = 0, hi = elevAnchors.length - 1;
+    while (lo + 1 < hi) {
+      const mid = (lo + hi) >> 1;
+      if (elevAnchors[mid].d <= dMi) lo = mid;
+      else hi = mid;
+    }
+    const a = elevAnchors[lo];
+    const b = elevAnchors[lo + 1];
+    const span = b.d - a.d;
+    const t = span > 0 ? (dMi - a.d) / span : 0;
+    return a.e + t * (b.e - a.e);
+  }
+
   function onMove(evt) {
     // Convert client coords to SVG viewBox coords (chart width may differ
     // from SVG width due to responsive scaling).
@@ -190,8 +218,10 @@ function hydrate(chart) {
       const windowText = s.significant
         ? '(window ' + s.w_mi.toFixed(2) + ' mi)'
         : '(integrated over ' + s.w_mi.toFixed(2) + ' mi, below noise floor)';
+      const elev = interpolateElev(dMi);
+      const elevText = elev != null ? Math.round(elev).toLocaleString() + ' ft, ' : '';
       titleEl.textContent = 'mi ' + dMi.toFixed(2)
-        + ': ' + Math.round(s.grad_ft_per_mi) + ' ft/mi '
+        + ': ' + elevText + Math.round(s.grad_ft_per_mi) + ' ft/mi '
         + windowText;
     }
 
