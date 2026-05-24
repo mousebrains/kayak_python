@@ -28,7 +28,7 @@ Mitigations applied:
 Usage::
 
     KAYAK_DB=/path/to/kayak.db \\
-    python3 scripts/snap_reach_to_channel_min.py \\
+    python3 docs/one-offs/snap_reach_to_channel_min.py \\
         --reach-ids 134,155,127,186 \\
         --search-m 100 --step-m 5
 """
@@ -49,7 +49,7 @@ M_PER_DEG_LAT = 110540.0
 M_TO_FT = 3.28083989501
 
 # Reuse the sample_reach_elevations helpers without making them a package import.
-_sre_spec = importlib.util.spec_from_file_location("sre", "scripts/sample_reach_elevations.py")
+_sre_spec = importlib.util.spec_from_file_location("sre", "docs/one-offs/sample_reach_elevations.py")
 sre = importlib.util.module_from_spec(_sre_spec)
 _sre_spec.loader.exec_module(sre)
 

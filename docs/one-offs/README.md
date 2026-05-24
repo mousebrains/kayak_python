@@ -23,6 +23,11 @@ than active use. Each filename links back to the file's git history —
 | `fix_reach_class_data_type.py` | 2026-05-09 | Walked `reach_class` rows where `low_data_type='flow'` but the stored value (typically < 30) looked like a gage height in feet rather than CFS — proposed flipping `data_type` from `flow` to `gauge` on each affected field. Per-row y/n/q acceptance, with a kayak.db snapshot before any writes. |
 | `apply-audit-timer-biweekly.sh` | 2026-05-11 | One-shot patch that installed the bi-weekly `kayak-audit-gauges` systemd schedule on the live server (commit `972f1d6`). |
 | `apply-nginx-favicon.sh` | 2026-05-11 | One-shot patch that installed the `/favicon.ico` location block from `conf/levels.nginx` into live nginx (commit `49b2321`). |
+| `fetch_dem_tiles.py` | 2026-05-23 | Downloaded the 3DEP/OPR DEM GeoTIFF tiles covering all reach geometries into `DEM-cache/` (gitignored) for the gradient-profile pipeline. |
+| `sample_reach_elevations.py` | 2026-05-23 | Sampled per-vertex elevations along each `reach.geom` from the local DEM tiles into `Elevation-cache/` (gitignored), feeding the gradient computation. |
+| `compute_reach_gradient.py` | 2026-05-23 | Computed `reach.max_gradient` + the binned `reach.gradient_profile` JSON from the sampled elevations; result captured in migration 0046. |
+| `emit_max_gradient_migration.py` | 2026-05-23 | Emitted migration 0046 (per-row `UPDATE`s of `max_gradient`/`gradient_profile`) from the local DB; byte-stable regeneration. |
+| `snap_reach_to_channel_min.py` | 2026-05-23 | Prototype/diagnostic: snapped canyon-reach `geom` vertices to the perpendicular channel-floor minimum to remove NHD-trace artifacts (migrations 0052/0054/0055/0056). |
 
 ## Archived experiments (subdirectories)
 

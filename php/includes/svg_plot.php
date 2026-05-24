@@ -374,7 +374,7 @@ SVG;
 /**
  * Render a gradient profile as an SVG bar chart.
  *
- * Reads the JSON produced by scripts/compute_reach_gradient.py
+ * Reads the JSON produced by docs/one-offs/compute_reach_gradient.py
  * (shape documented in data/db/migrations/0045_*.sql header). Each
  * sample draws as a <rect> spanning its 3σ analysis window
  * (d_mi ± w_mi/2) at height = grad_ft_per_mi. Bars are split into two
