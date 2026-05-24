@@ -8,8 +8,14 @@ present in the DB but absent from the CSVs are NOT deleted. That's deliberate
 that reference sources you're not touching.
 
 To make the DB exactly match the CSVs, start from a clean schema:
-    levels init-db          # creates empty tables
+    levels init-db --no-seed   # empty tables + stamped migrations, no YAML seed
     python3 scripts/import_metadata.py
+
+``--no-seed`` matters: a plain ``levels init-db`` also seeds source rows from
+sources.yaml with fresh autoincrement ids, which then collide by name with the
+canonical-id rows this script loads from source.csv (Source.name is not
+unique), leaving duplicate sources. ``--no-seed`` gives empty tables so the CSV
+ids load cleanly.
 
 Usage:
     python3 scripts/import_metadata.py                # uses ../DB/kayak.db
@@ -24,6 +30,27 @@ import sys
 from pathlib import Path
 
 REPO_DIR = Path(__file__).resolve().parent.parent
+
+
+def _default_db_path() -> Path:
+    """Resolve the DB path the way ``levels`` does (via ``DATABASE_URL``).
+
+    Keeps this script and ``levels init-db`` pointed at the same file even when
+    the operator has set ``DATABASE_URL`` in ``~/.config/kayak/.env``. Falls
+    back to ``../DB/kayak.db`` if the package isn't importable.
+    """
+    try:
+        from sqlalchemy.engine import make_url
+
+        from kayak.config import DATABASE_URL
+
+        db = make_url(DATABASE_URL).database
+        if db:
+            return Path(db)
+    except Exception:
+        pass
+    return REPO_DIR.parent / "DB" / "kayak.db"
+
 
 # Load order respects foreign-key dependencies: parents before children.
 LOAD_ORDER = [
@@ -75,8 +102,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--db",
-        default=str(REPO_DIR.parent / "DB" / "kayak.db"),
-        help="Path to SQLite database (default: ../DB/kayak.db)",
+        default=None,
+        help="Path to SQLite database (default: the configured DATABASE_URL, "
+        "matching `levels`; falls back to ../DB/kayak.db)",
     )
     parser.add_argument(
         "--in",
@@ -86,7 +114,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    db_path = Path(args.db).resolve()
+    db_path = (Path(args.db) if args.db else _default_db_path()).resolve()
     in_dir = Path(args.in_dir).resolve()
 
     if not db_path.exists():
