@@ -28,11 +28,18 @@ POSIX ACLs grant `www-data` access: execute-only on `/home/pat` and `/home/pat/k
 ```bash
 python3 -m venv /home/pat/.venv
 /home/pat/.venv/bin/pip install -e ".[dev]"
-/home/pat/.venv/bin/levels init-db       # Creates schema, seeds states/sources/fetch_urls
-/home/pat/.venv/bin/levels pipeline      # Fetch live data and generate HTML
+/home/pat/.venv/bin/levels init-db --no-seed            # Empty schema + stamp migrations
+/home/pat/.venv/bin/python scripts/import_metadata.py   # Load gauges/reaches/sources from data/db/*.csv
+/home/pat/.venv/bin/levels pipeline                     # Fetch live data and generate HTML
 ```
 
-`init-db` seeds states, sources, and fetch URLs from `data/sources.yaml`.
+`init-db` creates the schema and stamps migrations; `--no-seed` skips the
+`sources.yaml` state/source seed so the canonical rows from `data/db/*.csv`
+(loaded by `import_metadata.py`) import without duplicate-by-name sources.
+Without the metadata load every source is an orphan with no `gauge_source`
+link, so `levels pipeline` fails at `orphan-check` and the site renders empty.
+A plain `levels init-db` (seeded from `data/sources.yaml`) is enough for a
+fetch-only smoke test.
 
 ## Build and Development Commands
 
@@ -43,7 +50,7 @@ pip install -e ".[dev]"              # Install in editable mode with dev deps (p
 levels --help                        # CLI entry point (registered in pyproject.toml)
 levels init-db                       # Create tables, seed states/sources, stamp migrations
 levels migrate                       # Apply any pending data/db/migrations/*.sql files
-levels pipeline                      # fetch → fetch-usgs-ogc → calc-rating → update-gauge-cache → calculator → build → orphan-check
+levels pipeline                      # fetch → fetch-usgs-ogc → calc-rating → update-gauge-cache → calculator → build → orphan-check → check-reaches
 levels build                         # Generate static HTML/CSV/text to public_html/
 
 # Less-common subcommands (see `levels <cmd> --help` for details)
@@ -140,6 +147,7 @@ Runs these steps in order:
 5. **calculator** — evaluates `CalcExpression` formulas referencing `LatestObservation` values
 6. **build** — generates per-state HTML pages, CSV, and text files to `public_html/`; inlines CSS and SVG sparklines
 7. **orphan-check** — soft-fails the run (after build) if any fetch-active source lacks a `gauge_source` link; the existing systemd `OnFailure` chain emails + ntfys on the non-zero exit. See `docs/done/PLAN_orphan_sources.md`.
+8. **check-reaches** — soft-fails the run (after build) if any `reach.geom` fails the format / endpoint validator (`kayak.cli.check_reaches.scan_for_issues`); raises so the same `OnFailure` chain fires.
 
 Multi-source gauges aggregate across all linked sources directly: `update-gauge-cache` reads MAX across `gauge_source`, and PHP queries JOIN through `gauge_source` rather than picking a primary source.
 
@@ -151,7 +159,7 @@ Multi-source gauges aggregate across all linked sources directly: `update-gauge-
 
 ### Database
 
-Single normalized SQLite database (`kayak.db`). Schema defined in `src/kayak/db/models.py` (SQLAlchemy 2.x ORM, 25 tables; live DB adds `schema_migrations` for 26 total). Key tables:
+Single normalized SQLite database (`kayak.db`). Schema defined in `src/kayak/db/models.py` (SQLAlchemy 2.x ORM, 24 tables; live DB adds `schema_migrations` for 25 total). Key tables:
 
 - `source` / `gauge` / `gauge_source` — data sources and physical gauge stations. `source.timezone` is an IANA TZ name (populated from `sources.yaml` → `stations:`) used by `BaseParser.dump_to_db` to localize naive timestamps from feeds that publish local time (USBR's per-station local TZ; wa.gov PST year-round). NULL = treat naive as UTC.
 - `observation` — time-series data (source_id, observed_at, data_type, value)
@@ -159,7 +167,7 @@ Single normalized SQLite database (`kayak.db`). Schema defined in `src/kayak/db/
 - `reach` / `reach_state` / `reach_class` / `reach_guidebook` — paddleable runs with state, class, and guidebook relationships
 - `fetch_url` / `calc_expression` — how to obtain data (fetch vs. calculate)
 - `rating` / `rating_data` — gage height ↔ flow conversion tables (dormant — reserved for per-gauge rating curves)
-- `editor` / `editor_session` / `editor_magic_link` / `maintainer_credential` — Phase 1 editor accounts + session cookies
+- `editor` / `editor_session` / `editor_magic_link` — Phase 1 editor accounts + session cookies
 - `change_request` / `change_request_attachment` / `edit_history` — proposal queue + audit trail
 - `huc_name` — WBD HUC2/4/6/8/10/12 name lookup populated by `levels assign-huc`
 - `schema_migrations` — tracks applied `data/db/migrations/*.sql` versions

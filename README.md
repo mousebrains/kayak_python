@@ -50,13 +50,20 @@ python3 -m venv .venv
 # 2. Activate it — every subsequent step assumes `levels` resolves to .venv/bin/levels.
 source .venv/bin/activate
 
-# 3. Initialize database (creates tables, seeds states/sources from YAML)
-levels init-db
+# 3. Create the schema (empty tables + stamped migrations)
+levels init-db --no-seed
 
-# 4. Run the full pipeline (fetch live data, generate HTML)
+# 4. Load gauge/reach/source metadata from the tracked CSV snapshots.
+#    init-db alone seeds only states + sources/fetch_urls from sources.yaml;
+#    with no gauge_source links the pipeline's orphan-check fails and the site
+#    renders empty. This loads the real gauges, reaches, and source -> gauge
+#    links that make the pipeline produce a populated site.
+python scripts/import_metadata.py
+
+# 5. Run the full pipeline (fetch live data, generate HTML)
 levels pipeline
 
-# 5. Serve locally
+# 6. Serve locally
 php -S localhost:8000 -t public_html
 ```
 
@@ -130,11 +137,14 @@ Key systemd timers:
 - **kayak-cert-expiry** — daily at 06:30 (Let's Encrypt cert health probe; pages on <21 days remaining)
 - **kayak-editor-retention** — daily at 03:45 (prune expired editor sessions + magic links)
 - **kayak-metadata-snapshot** — daily at 04:30 (commit metadata-table drift to `data/db/*.csv`)
+- **kayak-status** — daily at 03:30 (renders the `/_internal/status` operator dashboard to `var/status.html`)
+- **kayak-fetch-osmb** — daily at 03:30 (fetches Oregon State Marine Board hazard/access GeoJSON overlays)
 - **kayak-cert-renewal-test** — weekly Monday 04:15 (`certbot renew --dry-run`)
 - **kayak-backup-weekly** — weekly Sunday 03:15 (4-copy retention; chains to off-site upload via `OnSuccess=`)
 - **kayak-audit-gauges** — weekly Sunday 03:29 (orphan-gauge + reach-mapping audit, emails on drift)
 - **kayak-config-drift** — weekly Sunday 05:30 (diffs repo `conf/`/`deploy/`/`systemd/` against `/etc/`, alerts on drift)
 - **kayak-heartbeat** — weekly Sunday 06:00 (confirms alert pipeline)
+- **kayak-recap** — weekly Monday 07:00 (pipeline-activity recap email from journald events)
 
 ## Documentation
 
@@ -142,8 +152,8 @@ Key systemd timers:
 |----------|----------|
 | [CLAUDE.md](CLAUDE.md) | Architecture, dev setup, conventions, key patterns |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development workflow, testing, adding parsers |
-| [deploy/SETUP.md](deploy/SETUP.md) | Production deployment (Hetzner/Oracle Cloud) |
-| [docs/database-schema.md](docs/database-schema.md) | Full schema reference (25 ORM tables + `schema_migrations`) |
+| [deploy/SETUP.md](deploy/SETUP.md) | Production deployment (Hetzner CPX11) |
+| [docs/database-schema.md](docs/database-schema.md) | Full schema reference (24 ORM tables + `schema_migrations`) |
 | [docs/schema-overview.svg](docs/schema-overview.svg) | ER diagram |
 | [docs/security/posture.md](docs/security/posture.md) | Current security posture (controls, accepted findings, operator obligations) |
 
