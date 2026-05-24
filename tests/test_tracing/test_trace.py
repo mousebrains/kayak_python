@@ -74,3 +74,25 @@ def test_trace_reach_sandy_path_pinned() -> None:
     # Path total distance — catches geometry-hydration regressions
     # (a dropped segment shows as a shorter distance).
     assert total_distance(coords) == pytest.approx(8.4983, abs=0.01)
+
+
+# Nestucca h reach — reach.id=57 in the live DB; huc 171002030206 -> HUC4 1710.
+# Its put-in sits ~1.6e-5° from a 1710 (Oregon Coastal) flowline but is also
+# within the 0.15° search buffer of 1709 (Willamette) flowlines. The old
+# first-file-wins find_huc4 returned 1709 (sorts first); nearest-flowline
+# resolution returns 1710. Across all 407 live reaches this dropped the
+# HUC4 mis-detection count from 88 to 0.
+NESTUCCA_PUTIN = (45.280293, -123.711987)
+
+
+@pytest.mark.skipif(
+    not (
+        (_TRACE_GPKG.parent / "trace_1709.gpkg").exists()
+        and (_TRACE_GPKG.parent / "trace_1710.gpkg").exists()
+    ),
+    reason="needs the 1709 + 1710 divide-pair GPKGs",
+)
+def test_find_huc4_prefers_nearest_across_divide() -> None:
+    """Near a basin divide, find_huc4 resolves by nearest flowline, not file
+    order: Nestucca's put-in -> 1710 (first-file-wins regressed it to 1709)."""
+    assert find_huc4(*NESTUCCA_PUTIN) == "1710"

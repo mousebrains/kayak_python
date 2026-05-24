@@ -57,18 +57,27 @@ def haversine(lat1, lon1, lat2, lon2):
     return 2 * R * math.asin(math.sqrt(a))
 
 
-def _scan_dir_for_huc4(directory, accept_fn, path_fn, layer_name, huc4_from_name, bbox):
-    """Scan ``directory`` for files matching ``accept_fn``; return the HUC4
-    whose ``layer_name`` has a feature inside ``bbox``, or None.
+def _nearest_huc4_in_dir(lat, lon, directory, accept_fn, path_fn, layer_name, huc4_from_name, bbox):
+    """Return ``(huc4, distance_deg)`` for the file in ``directory`` whose
+    ``layer_name`` has the flowline nearest ``(lat, lon)`` within ``bbox``,
+    or ``(None, inf)`` if none qualifies.
 
-    Shared body for find_huc4's two passes (pre-extracted GPKGs and raw
-    GDB zips). ``path_fn(name)`` builds the OGR-openable path for a file
-    in the dir; ``huc4_from_name(name)`` extracts the HUC4 code from the
-    file name.
+    Shared body for find_huc4's two passes (pre-extracted GPKGs and raw GDB
+    zips). ``path_fn(name)`` builds the OGR-openable path for a file in the
+    dir; ``huc4_from_name(name)`` extracts the HUC4 code from the file name.
+
+    Resolving by nearest flowline — rather than returning the first file that
+    merely has a flowline inside ``bbox`` — is what fixes points near a basin
+    divide, where several HUC4s have flowlines in the buffer but only one is
+    actually the point's basin.
     """
     if not os.path.isdir(directory):
-        return None
+        return None, float("inf")
     minx, miny, maxx, maxy = bbox
+    pt = ogr.Geometry(ogr.wkbPoint)
+    pt.AddPoint(lon, lat)
+    best_huc4 = None
+    best_dist = float("inf")
     for name in sorted(os.listdir(directory)):
         if not accept_fn(name):
             continue
@@ -76,23 +85,30 @@ def _scan_dir_for_huc4(directory, accept_fn, path_fn, layer_name, huc4_from_name
         layer = ds.GetLayerByName(layer_name) if ds else None
         if layer is not None:
             layer.SetSpatialFilterRect(minx, miny, maxx, maxy)
-            if layer.GetFeatureCount() > 0:
-                ds = None
-                return huc4_from_name(name)
+            for feat in layer:
+                geom = feat.GetGeometryRef()
+                if geom is None:
+                    continue
+                dist = pt.Distance(geom)
+                if dist < best_dist:
+                    best_dist = dist
+                    best_huc4 = huc4_from_name(name)
         ds = None
-    return None
+    return best_huc4, best_dist
 
 
-def find_huc4(lat, lon, buffer_deg=0.15):
-    """Find which HUC4 has flowlines near the given coordinates.
+def find_huc4_with_distance(lat, lon, buffer_deg=0.15):
+    """Return ``(huc4, distance_deg)`` for the HUC4 whose flowline is nearest
+    ``(lat, lon)``, or ``(None, inf)`` if none within ``buffer_deg``.
 
-    Uses a spatial query rather than just bounding-box extent, so overlapping
-    HUC4s are resolved by actual flowline proximity.
-    Checks pre-extracted GPKGs first (fast), then raw GDB ZIPs.
+    Resolves divide-straddling buffers by actual flowline proximity rather
+    than directory order. Checks pre-extracted GPKGs first (fast), then raw
+    GDB ZIPs.
     """
     bbox = (lon - buffer_deg, lat - buffer_deg, lon + buffer_deg, lat + buffer_deg)
-    # Try pre-extracted GPKGs first.
-    huc4 = _scan_dir_for_huc4(
+    huc4, dist = _nearest_huc4_in_dir(
+        lat,
+        lon,
         TRACE_DIR,
         accept_fn=lambda n: n.startswith("trace_") and n.endswith(".gpkg"),
         path_fn=lambda n: os.path.join(TRACE_DIR, n),
@@ -101,9 +117,10 @@ def find_huc4(lat, lon, buffer_deg=0.15):
         bbox=bbox,
     )
     if huc4 is not None:
-        return huc4
-    # Fall back to raw GDB ZIPs.
-    return _scan_dir_for_huc4(
+        return huc4, dist
+    return _nearest_huc4_in_dir(
+        lat,
+        lon,
         NHD_HR_DIR,
         accept_fn=lambda n: n.endswith("_GDB.zip"),
         path_fn=lambda n: f"/vsizip/{NHD_HR_DIR}/{n}",
@@ -111,6 +128,14 @@ def find_huc4(lat, lon, buffer_deg=0.15):
         huc4_from_name=lambda n: n.split("_")[2],
         bbox=bbox,
     )
+
+
+def find_huc4(lat, lon, buffer_deg=0.15):
+    """Return the HUC4 whose flowline is nearest ``(lat, lon)``, or None.
+
+    Thin wrapper over find_huc4_with_distance (drops the distance).
+    """
+    return find_huc4_with_distance(lat, lon, buffer_deg)[0]
 
 
 def data_source(huc4):
@@ -386,14 +411,29 @@ def make_map(coords, putin, takeout, name, miles, filename):
 
 
 def _resolve_huc4(huc4, putin, takeout, log):
-    """Return ``huc4`` if non-None, otherwise auto-detect from putin then takeout.
+    """Return ``huc4`` if given, otherwise auto-detect from the two endpoints.
 
-    Raises ValueError if no HUC4 can be resolved from either endpoint.
+    Each endpoint's HUC4 is the one with the nearest flowline (see find_huc4).
+    If the endpoints agree, that's the answer. If they disagree — a reach
+    genuinely straddling a basin divide, or an endpoint sitting closer to a
+    neighboring basin's flowline — the endpoint nearer its own flowline is the
+    more reliable signal, so we use it and warn (pass ``--huc4`` to override).
+
+    Raises ValueError if neither endpoint resolves to a HUC4.
     """
     if huc4 is not None:
         return huc4
     log("Finding HUC4...")
-    detected = find_huc4(putin[0], putin[1]) or find_huc4(takeout[0], takeout[1])
+    hp, dp = find_huc4_with_distance(putin[0], putin[1])
+    ht, dt = find_huc4_with_distance(takeout[0], takeout[1])
+    if hp and ht and hp != ht:
+        winner = hp if dp <= dt else ht
+        log(
+            f"WARNING: put-in HUC4 {hp} (d={dp:.4f}°) != take-out HUC4 {ht} "
+            f"(d={dt:.4f}°); using {winner} (nearer flowline). Pass --huc4 to override."
+        )
+        return winner
+    detected = hp or ht
     if not detected:
         raise ValueError(f"Could not find HUC4 for putin={putin}, takeout={takeout}")
     return detected
