@@ -127,7 +127,7 @@ jobs:
         run: FLOOR_PERCENT=5 scripts/check-php-coverage.sh coverage.xml
 
       - name: PHPStan
-        # Level 7 with phpstan-baseline.neon grandfathering the 123
+        # Level 8 with phpstan-baseline.neon grandfathering the 79
         # pre-existing issues. Per docs/PLAN_php_layer_split.md, the
         # baseline shrinks tier-by-tier as files are split.
         # --memory-limit bumped because TypeSpecifier on the larger
