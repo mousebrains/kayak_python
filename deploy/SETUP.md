@@ -46,23 +46,39 @@ python3 -m venv .venv
 
 ## 3. Environment file
 
-Create `/home/pat/kayak/.env`:
+Create the database directory and `/home/pat/kayak/.env`. `levels` (Python)
+reads **`DATABASE_URL`**; PHP reads `SQLITE_PATH` (passed by nginx via
+`fastcgi_param` on the live host — set here too so the CLI and PHP agree). Both
+must point at the **same** file, `/home/pat/DB/kayak.db` (outside the repo,
+matching the nginx config). The directory must exist before `init-db` or SQLite
+fails with "unable to open database file":
 
 ```bash
-SQLITE_PATH=/home/pat/kayak/kayak.db
+mkdir -p /home/pat/DB
+
+cat > /home/pat/kayak/.env <<'EOF'
+DATABASE_URL=sqlite:////home/pat/DB/kayak.db
+SQLITE_PATH=/home/pat/DB/kayak.db
 EDITOR_FEATURE=1
+EOF
 ```
 
-The pipeline, systemd services, and PHP all read from this file or its
-variables. Maintainer access to `/edit.php` uses the `ed_sess` editor-session
-cookie — sign in via `/login.php` with an email that has been promoted to
-`status='maintainer'` (see `levels seed-maintainer`).
+Maintainer access to `/edit.php` uses the `ed_sess` editor-session cookie —
+sign in via `/login.php` with an email promoted to `status='maintainer'` (see
+`levels seed-maintainer`).
 
 ## 4. Initialize the database
 
+`init-db --no-seed` creates the schema and stamps migrations without the
+`sources.yaml` seed; `import_metadata.py` then loads the gauges, reaches,
+sources, and `gauge_source` links from the tracked `data/db/*.csv` snapshots.
+Without those links the pipeline's `orphan-check` fails and the site renders
+empty, so this order matters:
+
 ```bash
 cd /home/pat/kayak
-.venv/bin/levels init-db
+.venv/bin/levels init-db --no-seed
+.venv/bin/python scripts/import_metadata.py
 .venv/bin/levels pipeline    # first run — fetches data and generates HTML
 ```
 
