@@ -395,7 +395,9 @@ function generate_gradient_profile_svg(
     ?float $putin_lat = null,
     ?float $putin_lon = null,
     ?float $takeout_lat = null,
-    ?float $takeout_lon = null
+    ?float $takeout_lon = null,
+    ?float $putin_elev_ft = null,
+    ?float $elev_lost_ft = null
 ): string {
     if ($profile_json === '') return '';
     $data = json_decode($profile_json, true);
@@ -423,7 +425,9 @@ function generate_gradient_profile_svg(
     // viewBox dimensions (responsive — CSS sets actual rendered width to 100%
     // of container). Margins (tighter than generate_svg_plot since this is a
     // sub-widget).
-    $ml = 50; $mr = 10; $mt = 22; $mb = 26;
+    // Right margin widens to make room for the elevation axis when drawn.
+    $has_elev = $putin_elev_ft !== null && $elev_lost_ft !== null && $elev_lost_ft > 0;
+    $ml = 50; $mr = $has_elev ? 48 : 10; $mt = 22; $mb = 26;
     $pw = $width - $ml - $mr;
     $ph = $height - $mt - $mb;
 
@@ -509,6 +513,49 @@ function generate_gradient_profile_svg(
         }
     }
 
+    // Elevation profile: integrate the gradient bins (drop = grad * width),
+    // scale so the total drop equals elevation_lost, then draw a line from the
+    // put-in elevation down to (put-in - loss) against a right-hand axis. Its
+    // slope is the gradient, so it reads as the integral of the bars. Endpoints
+    // are pinned to the put-in / take-out elevations. Drawn only when known.
+    $elev_polyline = '';
+    $elev_right_axis = '';
+    $e_min = $e_max = 0.0;
+    if ($has_elev) {
+        $putin_e = (float)$putin_elev_ft;
+        $end_e = $putin_e - (float)$elev_lost_ft;
+        $cum = 0.0;
+        $raw = [];
+        foreach ($samples as $s) {
+            $cum += max(0.0, (float)$s['grad_ft_per_mi']) * (float)$s['w_mi'];
+            $raw[] = $cum;
+        }
+        $total_raw = $cum > 0 ? $cum : 1.0;
+        [$e_min, $e_max, $e_step] = nice_axis(min($end_e, $putin_e), max($end_e, $putin_e));
+        $e_range = $e_max - $e_min ?: 1;
+        $e_to_py = fn (float $e): float => $mt + ($e_max - $e) / $e_range * $ph;
+
+        $pts = [sprintf('%.1f,%.1f', (float)$ml, $e_to_py($putin_e))];
+        foreach ($samples as $i => $s) {
+            $elev = $putin_e - ($raw[$i] / $total_raw) * (float)$elev_lost_ft;
+            $samples[$i]['elev_ft'] = round($elev, 1);
+            $px = $ml + ((float)$s['d_mi'] - $x_min) / $x_range * $pw;
+            $pts[] = sprintf('%.1f,%.1f', $px, $e_to_py($elev));
+        }
+        $pts[] = sprintf('%.1f,%.1f', (float)$plot_right, $e_to_py($end_e));
+        $elev_polyline = '<polyline fill="none" stroke="#1565C0" stroke-width="1.6" '
+            . 'stroke-linejoin="round" points="' . implode(' ', $pts) . '"/>';
+
+        $e_dec = $e_step >= 1 ? 0 : 1;
+        $rx = $ml + $pw;
+        for ($ev = $e_min; $ev <= $e_max + $e_step * 0.01; $ev += $e_step) {
+            $py = $e_to_py($ev);
+            $elev_right_axis .= '<text x="' . ($rx + 4) . '" y="' . sprintf('%.1f', $py + 4)
+                . '" font-size="12" fill="#1565C0" text-anchor="start">'
+                . number_format($ev, $e_dec) . '</text>' . "\n";
+        }
+    }
+
     // Y-axis grid + labels. Pick label decimal precision from the
     // nice_axis step so low-relief reaches (sub-1.0 step) don't print
     // duplicate labels at every gridline.
@@ -544,6 +591,10 @@ function generate_gradient_profile_svg(
         'x_max' => $x_max,
         'y_min' => $y_min,
         'y_max' => $y_max,
+        'elev' => $has_elev
+            ? ['putin' => (float)$putin_elev_ft, 'takeout' => (float)$putin_elev_ft - (float)$elev_lost_ft,
+               'e_min' => $e_min, 'e_max' => $e_max]
+            : null,
         'putin' => ($putin_lat !== null && $putin_lon !== null)
             ? ['lat' => $putin_lat, 'lon' => $putin_lon] : null,
         'takeout' => ($takeout_lat !== null && $takeout_lon !== null)
@@ -561,9 +612,11 @@ function generate_gradient_profile_svg(
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 $width $height" class="gradient-profile-chart" data-reach-id="$reach_id" data-profile="$payload_attr" role="img" aria-label="Gradient profile chart">
 <text class="gp-title" x="{$title_x}" y="16" text-anchor="middle">Gradient (ft/mi) vs. river mile</text>
 $grid
+$elev_right_axis
 <rect class="gp-frame" x="$ml" y="$mt" width="$pw" height="$ph"/>
 <g class="gp-bars-pale">$bars_pale</g>
 <g class="gp-bars-sig">$bars_sig</g>
+$elev_polyline
 </svg>
 SVG;
 }

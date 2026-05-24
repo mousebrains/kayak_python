@@ -91,7 +91,9 @@ function handle_reach_detail(
             putin_lat: $reach['latitude_start'] !== null ? (float)$reach['latitude_start'] : null,
             putin_lon: $reach['longitude_start'] !== null ? (float)$reach['longitude_start'] : null,
             takeout_lat: $reach['latitude_end'] !== null ? (float)$reach['latitude_end'] : null,
-            takeout_lon: $reach['longitude_end'] !== null ? (float)$reach['longitude_end'] : null
+            takeout_lon: $reach['longitude_end'] !== null ? (float)$reach['longitude_end'] : null,
+            putin_elev_ft: $reach['elevation'] !== null ? (float)$reach['elevation'] : null,
+            elev_lost_ft: $reach['elevation_lost'] !== null ? (float)$reach['elevation_lost'] : null
         );
         if ($gp_svg !== '') {
             echo '<div class="gradient-profile-container">' . $gp_svg . '</div>';
