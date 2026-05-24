@@ -18,6 +18,7 @@ require_once __DIR__ . '/footer.php';
 require_once __DIR__ . '/html.php';
 require_once __DIR__ . '/gauge_map.php';
 require_once __DIR__ . '/svg_plot.php';
+require_once __DIR__ . '/reach_fields.php';
 
 /**
  * Dispatch detail mode and write the full HTTP response.
@@ -74,9 +75,8 @@ function handle_reach_detail(
     }
     echo '<h2><a href="/description.php?id=' . $id . '">' . $h2_text . '</a></h2>';
 
-    _render_reach_details_table($reach, $related['states'], $related['classes']);
+    _render_reach_details_table($reach, $related['states'], $related['classes'], $related['flow_levels']);
     _render_reach_class_ranges($related['classes']);
-    _render_reach_flow_levels($related['flow_levels']);
     _render_reach_guidebooks($reach, $related['guidebooks']);
     _render_reach_linked_gauge($related['gauge']);
     [$has_map, $map_scripts] = _render_reach_map($reach, $related['gauge']);
@@ -324,8 +324,9 @@ function _render_reach_nav_bar(
  * @param array<string, mixed>            $reach
  * @param list<string>                    $states
  * @param list<array<string, mixed>>      $classes
+ * @param list<array<string, mixed>>      $flow_levels
  */
-function _render_reach_details_table(array $reach, array $states, array $classes): void
+function _render_reach_details_table(array $reach, array $states, array $classes, array $flow_levels): void
 {
     echo '<table class="desc-table">';
     $fields = [
@@ -333,22 +334,18 @@ function _render_reach_details_table(array $reach, array $states, array $classes
         'Name' => $reach['name'],
         'Display Name' => $reach['display_name'],
         'River' => $reach['river'],
-        'State' => implode(', ', $states),
         'Class' => implode(', ', array_column($classes, 'name')),
-        'Watershed' => $reach['basin'],
+        'Watershed' => format_reach_watershed($reach, $states),
         'Watershed Area' => $reach['basin_area'] ? number_format((float)$reach['basin_area'], 1) . ' sq mi' : null,
-        'Region' => $reach['region'],
         'Season' => $reach['season'],
         'Nature' => $reach['nature'],
         'Watershed type' => $reach['watershed_type'],
         'Scenery' => $reach['scenery'],
         'Remoteness' => $reach['remoteness'],
         'Features' => $reach['features'],
-        'Length' => $reach['length'] ? number_format((float)$reach['length'], 1) . ' mi' : null,
-        'Gradient' => $reach['gradient'] ? number_format((float)$reach['gradient'], 0) . ' ft/mi' : null,
-        'Max Gradient' => $reach['max_gradient'] ? number_format((float)$reach['max_gradient'], 0) . ' ft/mi' : null,
-        'Elevation' => $reach['elevation'] ? number_format((float)$reach['elevation'], 0) . ' ft' : null,
-        'Elevation Lost' => $reach['elevation_lost'] ? number_format((float)$reach['elevation_lost'], 0) . ' ft' : null,
+        'Length' => format_reach_length($reach),
+        'Elevation' => format_reach_elevation($reach),
+        'Flow' => format_reach_flow($flow_levels),
         'Optimal Flow' => $reach['optimal_flow'] ? number_format((float)$reach['optimal_flow'], 0) . ' CFS' : null,
         'No Show' => $reach['no_show'] ? 'Yes' : null,
         'Updated' => $reach['updated_at'],
@@ -430,44 +427,6 @@ function _render_reach_class_ranges(array $classes): void
         }
         echo "<tr><td>$cname</td><td>$lo</td><td>$hi</td></tr>\n";
     }
-    echo '</table>';
-}
-
-/**
- * "Flow Levels" sub-table — 2-row table with Low / Okay / High as columns.
- * Skipped if _derive_reach_flow_levels returned empty.
- *
- * @param list<array<string, mixed>> $flow_levels
- */
-function _render_reach_flow_levels(array $flow_levels): void
-{
-    if (!$flow_levels) {
-        return;
-    }
-    $by_level = [];
-    foreach ($flow_levels as $fl) {
-        $by_level[$fl['level']] = $fl;
-    }
-    echo '<h3 style="margin-top:1rem">Flow Levels</h3>';
-    echo '<table class="desc-table">';
-    echo '<tr><th style="text-align:center">Low</th><th style="text-align:center">Okay</th>'
-        . '<th style="text-align:center">High</th></tr>';
-    $cells = [];
-    foreach (['low', 'okay', 'high'] as $lvl) {
-        $parts = [];
-        // $by_level always carries every key of $flow_levels, which is
-        // either empty (we don't enter this block) or exactly the three
-        // levels by construction.
-        $fl = $by_level[$lvl];
-        foreach (['low', 'high'] as $bound) {
-            if ($fl[$bound] !== null) {
-                $unit = $fl[$bound . '_data_type'] === 'flow' ? ' CFS' : ' ft';
-                $parts[] = number_format((float)$fl[$bound], $fl[$bound . '_data_type'] === 'flow' ? 0 : 1) . $unit;
-            }
-        }
-        $cells[] = '<td style="text-align:center">' . implode(' – ', $parts) . '</td>';
-    }
-    echo '<tr>' . implode('', $cells) . "</tr>\n";
     echo '</table>';
 }
 
