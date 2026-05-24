@@ -440,12 +440,12 @@ function renderMap(geom,state,gaugesGeom,gaugesState,osmbData){
   // reach lines. Markers are pushed into ``markerArr`` so the zoomend
   // handler can restyle them when the threshold is crossed.
   function buildGaugeLayer(geom,state,layerGroup,markerArr){
-    const features=(geom&&geom.features)||[];
+    const features=(geom?.features)||[];
     const initialRadius=gaugeRadiusForZoom(map.getZoom());
     for(let i=0;i<features.length;i++){
       const f=features[i];
       const gid=f.id;
-      const coords=f.geometry&&f.geometry.coordinates;
+      const coords=f.geometry?.coordinates;
       if(!coords||coords.length!==2)continue;
       const ll=L.latLng(coords[1],coords[0]);
       const entry=state[gid]||{s:'unknown'};
@@ -671,10 +671,10 @@ const OSMB_CANVAS_RENDERER=L.canvas();
 
 function buildOsmbLayer(data,def){
   const group=L.layerGroup();
-  const features=(data&&data.features)||[];
+  const features=(data?.features)||[];
   for(let i=0;i<features.length;i++){
     const f=features[i];
-    const coords=f.geometry&&f.geometry.coordinates;
+    const coords=f.geometry?.coordinates;
     if(!coords||coords.length<2)continue;
     const ll=L.latLng(coords[1],coords[0]);
     const props=f.properties||{};
