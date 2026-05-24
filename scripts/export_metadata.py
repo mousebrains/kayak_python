@@ -3,8 +3,11 @@
 
 Writes one CSV per metadata table, sorted by primary key so diffs are stable
 across exports. Excludes the append-only time-series tables and caches
-(observation, latest_observation, latest_gauge_observation, pages), plus the
-reach.geom column (large WKT LineStrings, regenerable via scripts/trace_reach.py).
+(observation, latest_observation, latest_gauge_observation, pages). The
+reach.geom column goes to a separate reaches.json (keyed by reach id) rather
+than reach.csv — it's large and would bloat every metadata-row diff, and it is
+NOT regenerable on prod (the DEM/NHD/HUC trace stack is dev-only), so committing
+it keeps from-CSV rebuilds self-contained (map traces render).
 
 Usage:
     python3 scripts/export_metadata.py                # uses ../DB/kayak.db
@@ -14,6 +17,7 @@ Usage:
 
 import argparse
 import csv
+import json
 import sqlite3
 import sys
 from pathlib import Path
@@ -38,15 +42,16 @@ METADATA_TABLES = [
     "huc_name",
 ]
 
-# Columns excluded per-table (regenerable or too large for text VCS).
+# Columns excluded from the per-table CSVs (too large for row-based diffs, or
+# pure churn).
 #
-# reach.gradient_profile is deliberately NOT excluded despite its size (~1.6 MB
-# across reaches), and the full huc_name lookup table stays in METADATA_TABLES:
-# keeping both preserves self-contained rebuilds — `levels init-db --no-seed`
-# + scripts/import_metadata.py restores a fully-populated DB (gradients + basin
-# names) without replaying migration 0046 or re-running `levels assign-huc`
-# (the [geo] extra). Don't move gradient_profile here to save space without
-# revisiting that trade-off (decision: 2026-05-23).
+# reach.geom is excluded from reach.csv but snapshotted in reaches.json (see
+# write_reaches_json) — committed there because it is NOT regenerable on prod
+# (DEM/NHD/HUC trace stack is dev-only), keeping rebuilds self-contained without
+# bloating every metadata-row diff. reach.gradient_profile is deliberately kept
+# in reach.csv (also self-contained, not regenerable on prod), and the full
+# huc_name lookup stays in METADATA_TABLES for the same reason. Don't drop these
+# to save space without revisiting the self-contained-rebuild trade-off.
 EXCLUDED_COLUMNS = {
     "reach": {"geom"},
     # last_fetched_at gets bumped on every pipeline run — pure churn in git.
@@ -78,6 +83,26 @@ def export_table(conn: sqlite3.Connection, table: str, out_dir: Path) -> tuple[i
             writer.writerow(row)
             rows += 1
     return rows, dest.stat().st_size
+
+
+def write_reaches_json(conn: sqlite3.Connection, out_dir: Path) -> tuple[int, int]:
+    """Write reach.geom to reaches.json, keyed by reach id (numeric order).
+
+    Kept out of reach.csv (large; would bloat every metadata-row diff) but
+    committed here because geom is not regenerable on prod. Loaded by
+    scripts/import_metadata.py via ``UPDATE reach SET geom``.
+    """
+    data = {
+        str(rid): geom
+        for rid, geom in conn.execute(
+            "SELECT id, geom FROM reach WHERE geom IS NOT NULL AND geom != '' ORDER BY id"
+        )
+    }
+    dest = out_dir / "reaches.json"
+    with dest.open("w", encoding="utf-8") as f:
+        json.dump(data, f, indent=1, ensure_ascii=False)
+        f.write("\n")
+    return len(data), dest.stat().st_size
 
 
 def main() -> int:
@@ -125,6 +150,9 @@ def main() -> int:
             total_bytes += size
         print(f"{'-' * 20} {'-' * 10:>10} {'-' * 12:>12}")
         print(f"{'TOTAL':<20} {total_rows:>10} {total_bytes:>12}")
+
+        n_geom, geom_bytes = write_reaches_json(conn, out_dir)
+        print(f"reaches.json: {n_geom} reaches, {geom_bytes} bytes (reach.geom)")
         print(f"\nWrote to: {out_dir}")
     finally:
         conn.close()

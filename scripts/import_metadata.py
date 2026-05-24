@@ -25,6 +25,7 @@ Usage:
 
 import argparse
 import csv
+import json
 import sqlite3
 import sys
 from pathlib import Path
@@ -142,6 +143,19 @@ def main() -> int:
                 rows = import_table(conn, csv_path)
                 print(f"{table:<20} {rows:>10}")
                 total_rows += rows
+
+            # reach.geom lives in reaches.json (excluded from reach.csv —
+            # large + not regenerable on prod); apply it to the reach rows
+            # just loaded.
+            reaches_json = in_dir / "reaches.json"
+            if reaches_json.exists():
+                with reaches_json.open(encoding="utf-8") as f:
+                    geoms = json.load(f)
+                conn.executemany(
+                    "UPDATE reach SET geom = ? WHERE id = ?",
+                    [(geom, int(rid)) for rid, geom in geoms.items()],
+                )
+                print(f"{'reaches.json (geom)':<20} {len(geoms):>10}")
         print(f"{'-' * 20} {'-' * 10:>10}")
         print(f"{'TOTAL':<20} {total_rows:>10}")
 
