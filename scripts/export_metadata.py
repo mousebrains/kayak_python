@@ -39,6 +39,14 @@ METADATA_TABLES = [
 ]
 
 # Columns excluded per-table (regenerable or too large for text VCS).
+#
+# reach.gradient_profile is deliberately NOT excluded despite its size (~1.6 MB
+# across reaches), and the full huc_name lookup table stays in METADATA_TABLES:
+# keeping both preserves self-contained rebuilds — `levels init-db --no-seed`
+# + scripts/import_metadata.py restores a fully-populated DB (gradients + basin
+# names) without replaying migration 0046 or re-running `levels assign-huc`
+# (the [geo] extra). Don't move gradient_profile here to save space without
+# revisiting that trade-off (decision: 2026-05-23).
 EXCLUDED_COLUMNS = {
     "reach": {"geom"},
     # last_fetched_at gets bumped on every pipeline run — pure churn in git.
