@@ -105,7 +105,7 @@ Effect: `current_editor()` rejects (filters `e.status != 'banned'`); all that ed
 
 When: write paths are being abused but read paths are fine.
 
-Comment out the `location ~ \.php$` block's write-path entries OR add an `nginx` `return 503` to the editor endpoints in `deploy/levels`. Reload nginx. Static-build pages keep serving from `/home/pat/public_html/`.
+Comment out the `location ~ \.php$` block's write-path entries OR add an `nginx` `return 503` to the editor endpoints in `conf/snippets/levels-common.conf`. Reload nginx. Static-build pages keep serving from `/home/pat/public_html/`.
 
 Less surgical: stop PHP-FPM (`sudo systemctl stop php8.1-fpm`). All PHP returns 502; static pages still serve.
 

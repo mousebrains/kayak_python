@@ -182,7 +182,7 @@ Three layers + application-side throttles + daily caps.
 
 ### Layer 1 — nginx `limit_req` (per-IP, key=`$binary_remote_addr`)
 
-Zones in `deploy/ratelimit.conf`; bindings in `deploy/levels`:
+Zones in `deploy/ratelimit.conf`; bindings in `conf/snippets/levels-common.conf`:
 
 | Zone | Rate | Burst | Used by |
 |---|---|---|---|
@@ -234,7 +234,7 @@ No third-party analytics. No third-party error tracking. No CDN for editor-pipel
 
 | Log | Path | Captured | Retention |
 |---|---|---|---|
-| nginx access | `/var/log/nginx/kayak-access.log` (per `deploy/levels:329`) | full `$request` (incl. `/auth.php?t=<token>`), remote_addr, request_time, status, body_bytes_sent, http_referer, http_user_agent | logrotate default (TBD; confirm in Tier 0.4 with `cat /etc/logrotate.d/nginx`) |
+| nginx access | `/var/log/nginx/kayak-access.log` (per `conf/sites/levels-wkcc-org`) | full `$request` (incl. `/auth.php?t=<token>`), remote_addr, request_time, status, body_bytes_sent, http_referer, http_user_agent | logrotate default (TBD; confirm in Tier 0.4 with `cat /etc/logrotate.d/nginx`) |
 | nginx error | `/var/log/nginx/kayak-error.log` | upstream errors, rate-limit-trip rejections (used by fail2ban) | same |
 | PHP-FPM error | per pool config | unhandled PHP errors / warnings | same |
 | systemd journal | `journalctl -u kayak-*` | timer + service lifecycle | journal default |

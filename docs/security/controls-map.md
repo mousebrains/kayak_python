@@ -18,7 +18,7 @@ Format:
 
 | Threat | Control | Status | Notes |
 |---|---|---|---|
-| T-S1 | Magic-link single-use + 30-min expiry: `consume_magic_link()` sets `used_at` in a transaction (`php/includes/auth.php:consume_magic_link`); token hashed at rest (`token_hash = sha256(tok)`). | ⚠ **[F-2]** | Raw token still hits nginx access log via `$request` (`deploy/levels:329`); newly-issued tokens are exploitable for the window between email-send and user-click. |
+| T-S1 | Magic-link single-use + 30-min expiry: `consume_magic_link()` sets `used_at` in a transaction (`php/includes/auth.php:consume_magic_link`); token hashed at rest (`token_hash = sha256(tok)`). | ⚠ **[F-2]** | Raw token still hits nginx access log via `$request` (`conf/sites/levels-wkcc-org`); newly-issued tokens are exploitable for the window between email-send and user-click. |
 | T-S2 | None code-side. Defended by user-managed Gmail account 2FA. | ✗ **[F-5]** | Specifically for **maintainer** accounts: same vector, much higher impact. `maintainer_credential` schema present but unwired. |
 | T-S3 | Cookie `HttpOnly` via `_cookie_params()` (`php/includes/auth.php:_cookie_params`). CSP enforced via nginx snippet (prod-side, not in repo). | ⚠ | Depends on the CSP snippet's `script-src` strictness — confirm in Tier 1 prod check. HSTS not enabled in repo (`deploy/SETUP.md:395` shows "uncomment"; not in `deploy/levels`) — see **[F-1]**. |
 | T-S4 | 7-day flat absolute expiry; logout server-side via `editor_session.revoked_at`; cookie is `Secure` + `SameSite=Strict`; logout-then-replay returns 401 (CHECK design — `current_editor()` query filters `revoked_at IS NULL`). | ✓ | No IP-binding on session, intentional (mobile/laptop roaming). 7-day window for stolen cookie is the dominant remaining exposure. |
@@ -65,7 +65,7 @@ Format:
 | T-D1 | `magic_link_under_throttle()` (5/email/hr, 20/IP/hr) + nginx `login:3r/min` + Turnstile on `/login.php`. | ✓ | Three layers. |
 | T-D2 | `propose.php` tier daily caps (3/10/20); `comment.php` daily cap 5; compounded by [F-3] alias-multiplier. | ⚠ **[F-3]** | T-S6 + T-D2 are co-listed because alias fix mitigates both. |
 | T-D3 | Review-list pagination + default `status=pending` filter (verified in `php/review.php` reading). | ✓ | UI scales. |
-| T-D4 | nginx `global:20r/s + burst=40` per IP (`deploy/ratelimit.conf` + `deploy/levels:145`). | ⚠ | Per-IP only; distributed flood not addressed without CDN/WAF. |
+| T-D4 | nginx `global:20r/s + burst=40` per IP (`deploy/ratelimit.conf` + `conf/snippets/levels-common.conf`). | ⚠ | Per-IP only; distributed flood not addressed without CDN/WAF. |
 | T-D5 | nginx truncates `$request` to ~8K by default. | ✓ | Adequate. |
 | T-D6 | nginx `fastcgi_read_timeout` / `proxy_read_timeout` (need prod-side audit; default 60s). PHP-FPM worker count bounded by pool config. | ⚠ **[F-12]** | Confirm timeouts + worker count in prod-side `php-fpm` pool conf. |
 

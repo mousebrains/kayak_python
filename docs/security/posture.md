@@ -34,7 +34,7 @@ The site is now in a documented, defensible posture for hobby/club scale. The re
 | Asset | Control | Source |
 |---|---|---|
 | HTTPS | nginx + Let's Encrypt | `deploy/SETUP.md` § 8 |
-| HSTS | `max-age=63072000; includeSubDomains` (F-1 fix; preload OFF) | `deploy/levels` |
+| HSTS | `max-age=63072000; includeSubDomains` (F-1 fix; preload OFF) | `conf/security-headers.conf` |
 | Security headers (general) | `/etc/nginx/snippets/security-headers.conf` (CSP, X-Frame-Options, etc.) | nginx snippet (host-side) |
 | Rate limits | nginx `limit_req` zones: `login:3r/min`, `auth:10r/min`, `edit:5r/min`, `contact:10r/min`, `php:5r/sec`, `global:20r/sec`, all per-IP | `deploy/ratelimit.conf` |
 | Captcha | Cloudflare Turnstile on `/login.php`, `/contact.php` | `deploy/secrets.env` for secret |

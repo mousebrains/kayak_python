@@ -2,6 +2,12 @@
 
 Security artifacts for the editor pipeline. Maintained per `docs/done/PLAN_editor_security_review.md`.
 
+> **Config-path note (2026-05):** references in these docs to `deploy/levels` are
+> to the pre-split monolithic nginx vhost, which was split into `conf/sites/*` +
+> `conf/snippets/levels-common.conf` + `conf/security-headers.conf` (HSTS) and
+> removed. Line numbers like `deploy/levels:329` are point-in-time audit
+> evidence; the live directives now live in those files.
+
 ## Contents
 
 | File | Purpose | Updated when |
