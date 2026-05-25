@@ -229,12 +229,12 @@ function _aggregate_reach_classes_and_guides(PDO $db, array $results): array
     ];
     $reach_ss = [];  // reach_id => [edition numbers]
     foreach ($gb_stmt->fetchAll() as $gb) {
-        $gid = $gb['gid'];
-        $rid = $gb['reach_id'];
+        $gid = (int)$gb['gid'];
+        $rid = (int)$gb['reach_id'];
         if (isset($ss_edition[$gid])) {
             $reach_ss[$rid][] = $ss_edition[$gid];
         } else {
-            $abbr = $gb_abbrev[$gid] ?? substr($gb['title'], 0, 2);
+            $abbr = (string)($gb_abbrev[$gid] ?? substr($gb['title'], 0, 2));
             $reach_guides[$rid][$abbr] = true;
         }
     }
@@ -326,9 +326,9 @@ function _render_search_map(PDO $db, array $results, array $gauge_ids, array $re
 
     $map_gauges = _collect_search_map_gauges($db, $gauge_ids, $reach_readings);
 
-    $map_json = htmlspecialchars(json_encode($map_reaches));
-    $colors_json = htmlspecialchars(json_encode(REACH_SEARCH_MAP_COLORS));
-    $gauges_json = htmlspecialchars(json_encode($map_gauges));
+    $map_json = htmlspecialchars((string)json_encode($map_reaches));
+    $colors_json = htmlspecialchars((string)json_encode(REACH_SEARCH_MAP_COLORS));
+    $gauges_json = htmlspecialchars((string)json_encode($map_gauges));
     echo '<div id="search-map" style="height:65vh;min-height:480px;margin-top:1rem;border:1px solid #ccc"'
         . ' data-reaches="' . $map_json . '" data-colors="' . $colors_json
         . '" data-gauges="' . $gauges_json . '"></div>';
@@ -360,7 +360,7 @@ function _build_search_map_reaches(array $results): array
         if (!empty($r['geom'])) {
             $track = [];
             foreach (explode(',', $r['geom']) as $pair) {
-                $parts = preg_split('/\s+/', trim($pair));
+                $parts = preg_split('/\s+/', trim($pair)) ?: [];
                 if (count($parts) === 2) {
                     $track[] = [(float)$parts[1], (float)$parts[0]];
                 }

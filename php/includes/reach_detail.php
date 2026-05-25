@@ -533,21 +533,21 @@ function _render_reach_map(array $reach, ?array $gauge): array
     if (!empty($reach['geom'])) {
         $track = [];
         foreach (explode(',', $reach['geom']) as $pair) {
-            $parts = preg_split('/\s+/', trim($pair));
+            $parts = preg_split('/\s+/', trim($pair)) ?: [];
             if (count($parts) === 2) {
                 $track[] = [(float)$parts[1], (float)$parts[0]];
             }
         }
     }
 
-    $pts_json = htmlspecialchars(json_encode($map_points));
+    $pts_json = htmlspecialchars((string)json_encode($map_points));
     echo '<div id="reach-map" style="height:400px;margin-top:1rem;border:1px solid #ccc"'
         . ' data-points="' . $pts_json . '"';
     if ($gauge && isset($gauge['id'])) {
         echo ' data-gauge-id="' . (int)$gauge['id'] . '"';
     }
     if ($track) {
-        $track_json = htmlspecialchars(json_encode($track));
+        $track_json = htmlspecialchars((string)json_encode($track));
         echo ' data-track="' . $track_json . '"';
     }
     echo '></div>';
