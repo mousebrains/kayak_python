@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Import kayak metadata from data/db/*.csv into a SQLite database.
 
-Uses INSERT OR REPLACE keyed on each table's primary key. This is upsert
-semantics: existing rows are updated, missing rows are inserted, but rows
-present in the DB but absent from the CSVs are NOT deleted. That's deliberate
-— it lets you run this against a live DB without cascade-nuking observations
-that reference sources you're not touching.
+Upserts each row with ``INSERT … ON CONFLICT(<pk>) DO UPDATE``: existing rows
+are updated, missing rows inserted, and rows present in the DB but absent from
+the CSVs are left alone (so this is safe to run against a live DB without
+cascade-nuking observations that reference sources you're not touching).
+
+Columns a table deliberately keeps out of its CSV — ``reach.geom`` (carried in
+reaches.json) and ``fetch_url.last_fetched_at`` (pure churn) — are **preserved**
+on existing rows. That's the key difference from the old ``INSERT OR REPLACE``,
+whose delete-and-reinsert reset those columns to NULL on every import.
 
 To make the DB exactly match the CSVs, start from a clean schema:
     levels init-db --no-seed   # empty tables + stamped migrations, no YAML seed
@@ -54,8 +58,11 @@ def _default_db_path() -> Path:
         db = make_url(DATABASE_URL).database
         if db:
             return Path(db)
-    except Exception:
-        pass
+    except Exception as exc:  # import/resolve failure — fall back, but say so
+        print(
+            f"Note: couldn't resolve DATABASE_URL ({exc}); falling back to ../DB/kayak.db",
+            file=sys.stderr,
+        )
     return REPO_DIR.parent / "DB" / "kayak.db"
 
 
@@ -79,6 +86,33 @@ LOAD_ORDER = [
 ]
 
 
+def _build_upsert_sql(conn: sqlite3.Connection, table: str, header: list[str]) -> str:
+    """Build an upsert keyed on the table's primary key.
+
+    ``INSERT … ON CONFLICT(<pk>) DO UPDATE SET <non-pk cols>`` so columns the
+    CSV omits (``reach.geom``, ``fetch_url.last_fetched_at``) survive on
+    existing rows — unlike ``INSERT OR REPLACE``, which deletes+reinserts and
+    nulls them. Assumes conflicts arrive on the PK, which holds for these
+    stable-id snapshots; a table with no PK falls back to the old REPLACE.
+    """
+    info = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    # table_info row: (cid, name, type, notnull, dflt_value, pk); pk>0 marks a
+    # primary-key column, numbered by its position within a composite key.
+    pk_cols = [r[1] for r in sorted((c for c in info if c[5]), key=lambda c: c[5])]
+    cols = ", ".join(f'"{c}"' for c in header)
+    placeholders = ", ".join("?" for _ in header)
+    insert = f"INSERT INTO {table} ({cols}) VALUES ({placeholders})"
+    if not pk_cols:
+        return f"INSERT OR REPLACE INTO {table} ({cols}) VALUES ({placeholders})"
+    conflict = ", ".join(f'"{c}"' for c in pk_cols)
+    update_cols = [c for c in header if c not in pk_cols]
+    if not update_cols:
+        # Every CSV column is part of the PK — a conflict is an identical row.
+        return f"{insert} ON CONFLICT({conflict}) DO NOTHING"
+    set_clause = ", ".join(f'"{c}" = excluded."{c}"' for c in update_cols)
+    return f"{insert} ON CONFLICT({conflict}) DO UPDATE SET {set_clause}"
+
+
 def import_table(conn: sqlite3.Connection, csv_path: Path) -> int:
     table = csv_path.stem
     with csv_path.open(newline="", encoding="utf-8") as f:
@@ -86,12 +120,10 @@ def import_table(conn: sqlite3.Connection, csv_path: Path) -> int:
         header = next(reader, None)
         if not header:
             return 0
-        cols = ", ".join(f'"{c}"' for c in header)
-        placeholders = ", ".join("?" for _ in header)
-        sql = f"INSERT OR REPLACE INTO {table} ({cols}) VALUES ({placeholders})"
+        sql = _build_upsert_sql(conn, table, header)
 
         rows = 0
-        batch: list[tuple] = []
+        batch: list[tuple[str | None, ...]] = []
         for row in reader:
             # Convert empty strings to NULL; sqlite3 would otherwise store "".
             batch.append(tuple(v if v != "" else None for v in row))
@@ -103,6 +135,67 @@ def import_table(conn: sqlite3.Connection, csv_path: Path) -> int:
             conn.executemany(sql, batch)
             rows += len(batch)
     return rows
+
+
+def _load_csvs(conn: sqlite3.Connection, in_dir: Path) -> int:
+    """Upsert every metadata CSV present, in FK-dependency order. Prints a
+    per-table line and returns the total rows processed."""
+    total = 0
+    for table in LOAD_ORDER:
+        csv_path = in_dir / f"{table}.csv"
+        if not csv_path.exists():
+            continue
+        rows = import_table(conn, csv_path)
+        print(f"{table:<20} {rows:>10}")
+        total += rows
+    return total
+
+
+def _apply_geom(conn: sqlite3.Connection, in_dir: Path) -> None:
+    """Apply reach.geom from reaches.json (excluded from reach.csv).
+
+    Reports the rows actually updated (``cur.rowcount``), not the snapshot
+    size, so a mis-resolved or empty DB shows 0 rather than a falsely-full
+    count. Flags any snapshot reaches that matched no row in this DB.
+    """
+    reaches_json = in_dir / "reaches.json"
+    if not reaches_json.exists():
+        return
+    with reaches_json.open(encoding="utf-8") as f:
+        geoms = json.load(f)
+    cur = conn.executemany(
+        "UPDATE reach SET geom = ? WHERE id = ?",
+        [(geom, int(rid)) for rid, geom in geoms.items()],
+    )
+    applied = cur.rowcount
+    print(f"{'reaches.json (geom)':<20} {applied:>10}")
+    if applied != len(geoms):
+        print(
+            f"Note: {len(geoms)} reaches in reaches.json but {applied} matched a "
+            "reach row (the rest have no row in this DB).",
+            file=sys.stderr,
+        )
+
+
+def _report_integrity(conn: sqlite3.Connection) -> int:
+    """integrity_check (hard fail) + foreign_key_check (informational).
+
+    Returns a process exit code: 1 if the DB is corrupt, else 0.
+    """
+    (check,) = conn.execute("PRAGMA integrity_check").fetchone()
+    if check != "ok":
+        print(f"Integrity check failed: {check}", file=sys.stderr)
+        return 1
+
+    fk_violations = conn.execute("PRAGMA foreign_key_check").fetchall()
+    if fk_violations:
+        by_table: dict[str, int] = {}
+        for row in fk_violations:
+            by_table[row[0]] = by_table.get(row[0], 0) + 1
+        print("\nFK violations detected (informational):", file=sys.stderr)
+        for tbl, count in sorted(by_table.items(), key=lambda x: -x[1]):
+            print(f"  {tbl:<20} {count:>10}", file=sys.stderr)
+    return 0
 
 
 def main() -> int:
@@ -144,47 +237,17 @@ def main() -> int:
     # violations as warnings.
     conn.execute("PRAGMA foreign_keys = OFF")
     try:
-        total_rows = 0
         print(f"{'Table':<20} {'Rows':>10}")
         print(f"{'-' * 20} {'-' * 10:>10}")
         with conn:
-            if not args.geom_only:
-                for table in LOAD_ORDER:
-                    csv_path = in_dir / f"{table}.csv"
-                    if not csv_path.exists():
-                        continue
-                    rows = import_table(conn, csv_path)
-                    print(f"{table:<20} {rows:>10}")
-                    total_rows += rows
-
-            # reach.geom lives in reaches.json (excluded from reach.csv —
-            # large + not regenerable on prod); apply it to the reach rows
-            # (loaded from reach.csv above, or already present in a live DB).
-            reaches_json = in_dir / "reaches.json"
-            if reaches_json.exists():
-                with reaches_json.open(encoding="utf-8") as f:
-                    geoms = json.load(f)
-                conn.executemany(
-                    "UPDATE reach SET geom = ? WHERE id = ?",
-                    [(geom, int(rid)) for rid, geom in geoms.items()],
-                )
-                print(f"{'reaches.json (geom)':<20} {len(geoms):>10}")
+            total_rows = 0 if args.geom_only else _load_csvs(conn, in_dir)
+            _apply_geom(conn, in_dir)
         print(f"{'-' * 20} {'-' * 10:>10}")
         print(f"{'TOTAL':<20} {total_rows:>10}")
 
-        (check,) = conn.execute("PRAGMA integrity_check").fetchone()
-        if check != "ok":
-            print(f"Integrity check failed: {check}", file=sys.stderr)
-            return 1
-
-        fk_violations = conn.execute("PRAGMA foreign_key_check").fetchall()
-        if fk_violations:
-            by_table: dict[str, int] = {}
-            for row in fk_violations:
-                by_table[row[0]] = by_table.get(row[0], 0) + 1
-            print("\nFK violations detected (informational):", file=sys.stderr)
-            for tbl, count in sorted(by_table.items(), key=lambda x: -x[1]):
-                print(f"  {tbl:<20} {count:>10}", file=sys.stderr)
+        rc = _report_integrity(conn)
+        if rc:
+            return rc
         print(f"\nLoaded into: {db_path}")
     finally:
         conn.close()
