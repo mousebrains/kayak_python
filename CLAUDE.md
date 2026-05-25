@@ -62,6 +62,9 @@ Deploy by merging the PR and running `git pull` on `main` in the live tree —
 never by leaving a feature branch checked out. Remove a finished worktree with
 `git worktree remove <path>`.
 
+Full rationale, the incidents that motivated this, a recovery runbook, and the
+deferred "frozen install artifact" fix: [`docs/live-tree-workflow.md`](docs/live-tree-workflow.md).
+
 ## Build and Development Commands
 
 ```bash
