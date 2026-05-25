@@ -114,4 +114,49 @@ final class CspClassifyTest extends TestCase
             'document_uri' => 'https://levels.wkcc.org/',
         ]));
     }
+
+    /** The Reporting-API camelCase keys (sourceFile/blockedURL/documentURL) resolve via fallback. */
+    public function test_camelcase_reporting_api_keys(): void
+    {
+        $this->assertSame('Injected (proxy/extension)', csp_classify([
+            'blockedURL'  => 'inline',
+            'sourceFile'  => 'https://levels.wkcc.org/',
+            'documentURL' => 'https://levels.wkcc.org/',
+        ]));
+        $this->assertSame('Chrome/Edge extension', csp_classify([
+            'sourceFile' => 'chrome-extension://abc/x.js',
+            'blockedURL' => 'inline',
+        ]));
+    }
+
+    /** source_file == document modulo a #fragment the browser appended. */
+    public function test_injected_match_ignores_fragment(): void
+    {
+        $this->assertSame('Injected (proxy/extension)', csp_classify([
+            'blocked'      => 'inline',
+            'source_file'  => 'https://levels.wkcc.org/reach.php#top',
+            'document_uri' => 'https://levels.wkcc.org/reach.php',
+        ]));
+    }
+
+    public function test_other_ad_blocker_names(): void
+    {
+        foreach (['adblock-plus.js', 'ghostery-inject', 'privacy-badger-x'] as $name) {
+            $this->assertSame('Ad blocker', csp_classify([
+                'source_file'  => "https://cdn.example/$name",
+                'blocked'      => 'inline',
+                'document_uri' => 'https://levels.wkcc.org/',
+            ]), $name);
+        }
+    }
+
+    /** A non-string field (browser sent a number/array) is treated as absent, not a crash. */
+    public function test_non_string_fields_and_empty_payload(): void
+    {
+        $this->assertSame('Browser internal', csp_classify([]));
+        $this->assertSame('Browser internal (eval)', csp_classify([
+            'source_file' => ['unexpected', 'array'],
+            'blocked'     => 'eval',
+        ]));
+    }
 }
