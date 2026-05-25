@@ -1,12 +1,6 @@
 parameters:
 	ignoreErrors:
 		-
-			message: '#^Function _load_current_readings\(\) should return list\<array\<string, mixed\>\> but returns array\.$#'
-			identifier: return.type
-			count: 1
-			path: php/includes/description_detail.php
-
-		-
 			message: '#^Function _load_description_navigation\(\) should return array\{prev\: array\<string, mixed\>\|false, next\: array\<string, mixed\>\|false, position\: int\|string, total\: int\|string\} but returns array\{prev\: mixed, next\: mixed, position\: int\|string\|false\|null, total\: int\|string\|false\|null\}\.$#'
 			identifier: return.type
 			count: 1
@@ -31,12 +25,6 @@ parameters:
 			path: php/includes/gauge_detail.php
 
 		-
-			message: '#^Function _load_gauge_readings\(\) should return list\<array\<string, mixed\>\> but returns array\.$#'
-			identifier: return.type
-			count: 1
-			path: php/includes/gauge_detail.php
-
-		-
 			message: '#^Parameter \#1 \$lookup of function rate_flow_to_gauge expects array\<int, array\{float, float\}\>, array\<string, mixed\> given\.$#'
 			identifier: argument.type
 			count: 1
@@ -53,12 +41,6 @@ parameters:
 			identifier: argument.type
 			count: 1
 			path: php/includes/gauge_plots.php
-
-		-
-			message: '#^Function _search_gauges\(\) should return list\<array\<string, mixed\>\> but returns array\.$#'
-			identifier: return.type
-			count: 1
-			path: php/includes/gauge_search.php
 
 		-
 			message: '#^Cannot access offset 0 on list\<string\>\|false\.$#'
@@ -105,12 +87,6 @@ parameters:
 		-
 			message: '#^Cannot access offset 1 on list\<string\>\|false\.$#'
 			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: php/includes/reach_search.php
-
-		-
-			message: '#^Function _search_reaches_query\(\) should return list\<array\<string, mixed\>\> but returns array\.$#'
-			identifier: return.type
 			count: 1
 			path: php/includes/reach_search.php
 

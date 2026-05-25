@@ -68,7 +68,7 @@ function _search_gauges(PDO $db, string $q): array
     );
     $pat = "%$q%";
     $stmt->execute([$pat, $pat, $pat, $pat, $pat, $pat, $pat, $pat, $pat]);
-    return $stmt->fetchAll();
+    return db_rows($stmt);
 }
 
 /**

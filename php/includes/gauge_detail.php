@@ -210,7 +210,7 @@ function _load_gauge_readings(PDO $db, int $gauge_id): array
          FROM latest_gauge_observation WHERE gauge_id = ?'
     );
     $readings_stmt->execute([$gauge_id]);
-    return $readings_stmt->fetchAll();
+    return db_rows($readings_stmt);
 }
 
 /**

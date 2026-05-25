@@ -64,6 +64,18 @@ function db_query(PDO $db, string $sql): PDOStatement {
 }
 
 /**
+ * fetchAll() typed as the list<array<string, mixed>> our FETCH_ASSOC default
+ * actually yields — PHPStan's PDOStatement::fetchAll() stub returns a bare
+ * `array`, dropping the row shape.
+ *
+ * @return list<array<string, mixed>>
+ */
+function db_rows(PDOStatement $stmt): array {
+    /** @var list<array<string, mixed>> */
+    return $stmt->fetchAll();
+}
+
+/**
  * Fetch a reach by ID, or exit 404 if not found.
  *
  * @return array<string, mixed> The reach row.

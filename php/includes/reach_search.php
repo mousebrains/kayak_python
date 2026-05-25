@@ -136,7 +136,7 @@ function _search_reaches_query(PDO $db, string $q, string $st, int $hidden): arr
         );
         $stmt->execute([$st, $hidden]);
     }
-    return $stmt->fetchAll();
+    return db_rows($stmt);
 }
 
 /**
