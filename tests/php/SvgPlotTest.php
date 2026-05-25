@@ -245,6 +245,53 @@ final class SvgPlotTest extends TestCase
         $this->assertSame(1, substr_count($paleGroupHtml, '<rect'));
     }
 
+    public function test_generate_gradient_profile_svg_emits_elevation_line(): void
+    {
+        $profile = json_encode([
+            'samples' => [
+                ['d_mi' => 0.0, 'grad_ft_per_mi' => 80.0, 'w_mi' => 0.5, 'significant' => true],
+                ['d_mi' => 0.5, 'grad_ft_per_mi' => 50.0, 'w_mi' => 1.0, 'significant' => true],
+                ['d_mi' => 1.0, 'grad_ft_per_mi' => 120.0, 'w_mi' => 0.25, 'significant' => true],
+            ],
+        ]);
+        assert($profile !== false);
+
+        // With elevation params $has_elev is true: the polyline + right-axis
+        // labels render, themed via .gp-elev / .gp-elev-axis (no inline color),
+        // and the JS payload carries put-in/take-out elevation anchors.
+        $svg = generate_gradient_profile_svg(
+            $profile,
+            407,
+            480,
+            120,
+            putin_elev_ft: 2400.0,
+            elev_lost_ft: 600.0
+        );
+        $this->assertStringContainsString('<polyline class="gp-elev"', $svg);
+        $this->assertStringContainsString('class="gp-elev-axis"', $svg);
+        $this->assertStringNotContainsString('#1565C0', $svg);  // moved to CSS
+
+        $payload = self::parse_gradient_payload($svg);
+        $this->assertIsArray($payload['elev']);
+        $this->assertEqualsWithDelta(2400.0, $payload['elev']['putin'], 0.01);
+        $this->assertEqualsWithDelta(1800.0, $payload['elev']['takeout'], 0.01);
+    }
+
+    public function test_generate_gradient_profile_svg_omits_elevation_without_params(): void
+    {
+        // 4-arg form: no elevation params → no line, no axis, elev payload null.
+        $profile = json_encode([
+            'samples' => [
+                ['d_mi' => 0.0, 'grad_ft_per_mi' => 80.0, 'w_mi' => 0.5, 'significant' => true],
+                ['d_mi' => 0.5, 'grad_ft_per_mi' => 50.0, 'w_mi' => 1.0, 'significant' => true],
+            ],
+        ]);
+        assert($profile !== false);
+        $svg = generate_gradient_profile_svg($profile, 1, 480, 120);
+        $this->assertStringNotContainsString('gp-elev', $svg);
+        $this->assertNull(self::parse_gradient_payload($svg)['elev']);
+    }
+
     /** Extract the JSON payload from the <svg data-series="..."> attribute. */
     private static function parse_data_series(string $svg): array
     {
@@ -255,6 +302,20 @@ final class SvgPlotTest extends TestCase
         $payload = json_decode($json, true);
         if (!is_array($payload)) {
             throw new \RuntimeException('data-series JSON decode failed');
+        }
+        return $payload;
+    }
+
+    /** Extract the JSON payload from the <svg data-profile="..."> attribute. */
+    private static function parse_gradient_payload(string $svg): array
+    {
+        if (!preg_match('/data-profile="([^"]+)"/', $svg, $m)) {
+            throw new \RuntimeException('no data-profile attribute found');
+        }
+        $json = html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
+        $payload = json_decode($json, true);
+        if (!is_array($payload)) {
+            throw new \RuntimeException('data-profile JSON decode failed');
         }
         return $payload;
     }
