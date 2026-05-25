@@ -210,7 +210,7 @@ def phase2_trace(db: sqlite3.Connection, dry_run: bool) -> None:
     updates: list[tuple[str, float, int]] = []
 
     for row in rows:
-        reach_id, name, aw_id, river, plat, plon, tlat, tlon, old_len, old_geom = row
+        reach_id, name, _aw_id, river, plat, plon, tlat, tlon, old_len, old_geom = row
         if old_geom:
             print(f"SKIP {name} ({river}): geom already populated ({len(old_geom)} chars)")
             continue

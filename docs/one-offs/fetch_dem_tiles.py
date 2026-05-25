@@ -184,7 +184,7 @@ def _query_tnm(
     return items
 
 
-def query_dataset(  # noqa: C901  query + summarize + download in one flow; splitting fragments the per-product loop
+def query_dataset(
     manifest_path: str,
     dataset_key: str,
     cache_dir: Path,

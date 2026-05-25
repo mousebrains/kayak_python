@@ -37,8 +37,8 @@ jobs:
       # Pin to the version in uv.lock / .pre-commit-config.yaml so the format
       # gate can't drift when ruff ships a release (the churn behind df6e422).
       - run: pip install ruff==0.15.11
-      - run: ruff check src/ tests/ scripts/
-      - run: ruff format --check src/ tests/ scripts/
+      - run: ruff check src/ tests/ scripts/ docs/one-offs/
+      - run: ruff format --check src/ tests/ scripts/ docs/one-offs/
 
   lint-misc:
     name: Lint PHP/JS/CSS/Shell
