@@ -12,6 +12,14 @@ All notable changes to this project will be documented in this file.
 - **Gradient profile**: per-reach `max_gradient` plus a statistically-binned
   gradient chart on reach-detail pages (DEM-sampled; canyon-trace artifacts
   flagged via `reach.gradient_unreliable`).
+- **Reach-detail elevation profile**: the gradient chart overlays an elevation
+  line (right axis) with an elevation-first cursor readout, and the per-reach
+  details collapse to four shared lines (Watershed / Length / Elevation / Flow)
+  on both the description and reach pages.
+- **Geometry snapshot + recovery path**: `reach.geom` is snapshotted to
+  `data/db/reaches.json` (~5 m Douglas–Peucker simplified, excluded from
+  `reach.csv`) and applied with `scripts/import_metadata.py --geom-only` — the
+  supported way a dev re-trace's geometry reaches prod.
 
 ### Fixed
 - **rDNS resolver bounded** so `kayak-status.service` no longer times out on
@@ -24,9 +32,16 @@ All notable changes to this project will be documented in this file.
 - **Docs drift**: schema-doc table count corrected to 24/25 and the dropped
   `maintainer_credential` table removed; hardware specs corrected to the
   Hetzner CPX11 (2 vCPU / 2 GB / 40 GB).
+- **HUC4 detection** resolves by nearest flowline with put-in/take-out
+  agreement, fixing 88/407 reaches that mis-detected near basin divides (was:
+  the first GPKG whose flowline extent contained the put-in).
 
 ### Changed
 - Pinned `ruff` in pre-commit/CI to match `uv.lock` and stop formatter drift.
+- Applied biome `--write` cleanups to the static JS (optional chaining, unused
+  catch bindings).
+- Dependabot dependency bumps: the composer dev group and the GitHub Actions
+  group.
 
 ## [1.1.1] - 2026-05-21
 

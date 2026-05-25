@@ -67,6 +67,13 @@ levels pipeline
 php -S localhost:8000 -t public_html
 ```
 
+> **Set `OUTPUT_DIR` on a dev machine.** Unset, `levels build` (run by the
+> pipeline in step 5) writes into the repo's own `public_html/`, clobbering the
+> tracked dev symlinks there and dropping stray artifacts under `static/`. Set
+> `OUTPUT_DIR` to a non-repo path (e.g. `~/public_html_dev`) in
+> `~/.config/kayak/.env` and serve that instead — `php -S localhost:8000 -t
+> "$OUTPUT_DIR"`. See `.env.example` and CLAUDE.md for the full rationale.
+
 Prefer fully-qualified paths over `source .venv/bin/activate` if your
 shell config makes activation noisy: replace every `levels …` with
 `/path/to/.venv/bin/levels …`. Production runs that way — see
