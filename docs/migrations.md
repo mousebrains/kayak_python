@@ -214,25 +214,30 @@ What closes the gap: the `data/db/*.csv` snapshots (written nightly by
 `gauge_source.csv`, `reach.csv`, and the rest — recreating the live
 `gauge_source` links. `reach.geom` is kept out of `reach.csv` (large,
 and not regenerable on prod without a DEM/NHD) and lives in
-`data/db/reaches.json`; the same script's `--geom-only` pass applies it.
+`data/db/reaches.json`; a full `import_metadata.py` run applies it after
+the CSVs in the same invocation (the `--geom-only` flag re-applies *only*
+the geometry to a live DB — the dev re-trace path, see `deploy/SETUP.md`
+§4 and `scripts/deploy.sh`; a from-scratch rebuild doesn't need it).
 
 So rebuilding prod from scratch — e.g. after catastrophic corruption
 with no usable backup — **is** possible purely from what's checked in:
 
 ```bash
-levels init-db --no-seed                       # empty schema + stamped migrations
-python scripts/import_metadata.py              # CSVs → gauges/sources/reaches/links
-python scripts/import_metadata.py --geom-only  # reaches.json → reach.geom
-levels pipeline                                # fetch live data + render
+levels init-db --no-seed           # empty schema + stamped migrations
+python scripts/import_metadata.py  # CSVs (incl. gauge_source) + reaches.json geom
+levels pipeline                    # fetch live data + render
 ```
 
-`--no-seed` skips the `sources.yaml` state/source seed so the canonical
-CSV rows import without duplicate-by-name sources. The import loads with
-FK enforcement off (the live DB carries intentional orphan rows) and
-reports `integrity_check` + `foreign_key_check` afterward. This is the
-same sequence the quick-start (`README.md`, `deploy/SETUP.md` §4) uses
-for a fresh install; `--geom-only` is also how a dev re-trace's geometry
-reaches prod (see `deploy/SETUP.md` §4 and `scripts/deploy.sh`).
+`--no-seed` is required, not just advisable: a plain `levels init-db`
+seeds `state` / `source` / `fetch_url` from `sources.yaml` with fresh
+ids, which then collide with the canonical-id CSV rows on import — a
+duplicate `source` (its name isn't unique), or, since the import upserts
+on the primary key, an *aborting* `UNIQUE` conflict on `state.name` /
+`fetch_url.url`. `--no-seed` gives empty tables so the CSV ids load
+cleanly. The import loads with FK enforcement off (the live DB carries
+intentional orphan rows) and reports `integrity_check` +
+`foreign_key_check` afterward. This is the same sequence the quick-start
+(`README.md`, `deploy/SETUP.md` §4) uses for a fresh install.
 
 ### Smaller follow-ups (one-line each)
 

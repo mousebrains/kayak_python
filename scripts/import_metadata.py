@@ -15,11 +15,14 @@ To make the DB exactly match the CSVs, start from a clean schema:
     levels init-db --no-seed   # empty tables + stamped migrations, no YAML seed
     python3 scripts/import_metadata.py
 
-``--no-seed`` matters: a plain ``levels init-db`` also seeds source rows from
-sources.yaml with fresh autoincrement ids, which then collide by name with the
-canonical-id rows this script loads from source.csv (Source.name is not
-unique), leaving duplicate sources. ``--no-seed`` gives empty tables so the CSV
-ids load cleanly.
+``--no-seed`` is required when loading into a freshly-init'd DB: a plain
+``levels init-db`` seeds ``state`` / ``source`` / ``fetch_url`` from
+sources.yaml with fresh autoincrement ids. Re-importing the canonical-id CSV
+rows on top then collides — a duplicate ``source`` (its name isn't unique), or,
+because the upsert keys on the primary key, an *aborting* ``UNIQUE`` conflict on
+``state.name`` / ``fetch_url.url`` (the old ``INSERT OR REPLACE`` masked these
+by delete+reinsert; the upsert surfaces them instead, rolling back the load).
+``--no-seed`` gives empty tables so the CSV ids load cleanly.
 
 reach.geom is loaded from data/db/reaches.json (it's excluded from reach.csv)
 via ``UPDATE reach SET geom``. To apply just the geometry to a live prod DB
