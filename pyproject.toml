@@ -73,6 +73,10 @@ exclude_lines = [
 target-version = "py313"
 line-length = 100
 src = ["src"]
+# Archived one-off scripts are frozen snapshots. CI lints only src/tests/
+# scripts; exempt the archive here too so `ruff check .` / pre-commit's
+# all-files run stays consistent with CI instead of churning frozen files.
+extend-exclude = ["docs/one-offs"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF", "C901"]
