@@ -20,7 +20,7 @@ from types import ModuleType
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
-from kayak.db.models import Base, Reach
+from kayak.db.models import Base, Guidebook, Reach, ReachGuidebook, ReachState, State
 
 _SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
 
@@ -139,3 +139,44 @@ def test_full_import_preserves_geom_absent_from_snapshot(tmp_path, monkeypatch):
     rows = _reach_rows(dst)
     assert rows[1] == ("snap1", "-120.0 43.0")  # inserted + geom from reaches.json
     assert rows[2] == ("snap2", "-99.9 38.0 LIVE")  # name updated, live geom preserved
+
+
+def test_reimport_idempotent_across_pk_shapes(tmp_path, monkeypatch):
+    """A second full import into a populated DB succeeds — exercising the
+    composite-PK conflict paths the single-reach tests don't: reach_state (all
+    columns are PK → ON CONFLICT DO NOTHING) and reach_guidebook (has non-PK
+    columns → ON CONFLICT DO UPDATE)."""
+    exp = _load("export_metadata")
+    imp = _load("import_metadata")
+    src, dst, out = tmp_path / "src.db", tmp_path / "dst.db", tmp_path / "snap"
+    out.mkdir()
+    _make_db(src)
+    _make_db(dst)
+
+    eng = create_engine(f"sqlite:///{src}")
+    with Session(eng) as s:
+        s.add_all(
+            [
+                Reach(id=1, name="Alpha"),
+                State(id=1, name="Oregon", abbreviation="OR"),
+                Guidebook(id=1, title="Soggy Sneakers"),
+                ReachState(reach_id=1, state_id=1),
+                ReachGuidebook(reach_id=1, guidebook_id=1, page="p1"),
+            ]
+        )
+        s.commit()
+    eng.dispose()
+
+    monkeypatch.setattr(sys, "argv", ["export_metadata", "--db", str(src), "--out", str(out)])
+    assert exp.main() == 0
+
+    monkeypatch.setattr(sys, "argv", ["import_metadata", "--db", str(dst), "--in", str(out)])
+    assert imp.main() == 0  # first import inserts
+    assert imp.main() == 0  # second import hits the DO NOTHING + DO UPDATE conflict paths
+
+    eng = create_engine(f"sqlite:///{dst}")
+    with eng.connect() as c:
+        assert c.execute(text("SELECT COUNT(*) FROM reach_state")).scalar() == 1
+        page = c.execute(text("SELECT page FROM reach_guidebook WHERE reach_id = 1")).scalar()
+    eng.dispose()
+    assert page == "p1"  # DO UPDATE re-applied the non-PK column cleanly

@@ -165,11 +165,16 @@ def _apply_geom(conn: sqlite3.Connection, in_dir: Path) -> None:
     if not reaches_json.exists():
         return
     with reaches_json.open(encoding="utf-8") as f:
-        geoms = json.load(f)
-    cur = conn.executemany(
-        "UPDATE reach SET geom = ? WHERE id = ?",
-        [(geom, int(rid)) for rid, geom in geoms.items()],
-    )
+        # Fail cleanly (and roll back the enclosing transaction) on a corrupt
+        # snapshot rather than dumping a raw traceback — reaches.json is
+        # machine-generated, so a malformed one is a real problem to surface.
+        try:
+            geoms = json.load(f)
+            pairs = [(geom, int(rid)) for rid, geom in geoms.items()]
+        except (json.JSONDecodeError, ValueError, AttributeError) as exc:
+            print(f"Error: {reaches_json} is malformed ({exc})", file=sys.stderr)
+            raise SystemExit(1) from exc
+    cur = conn.executemany("UPDATE reach SET geom = ? WHERE id = ?", pairs)
     applied = cur.rowcount
     print(f"{'reaches.json (geom)':<20} {applied:>10}")
     if applied != len(geoms):

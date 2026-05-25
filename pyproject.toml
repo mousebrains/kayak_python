@@ -87,6 +87,10 @@ known-first-party = ["kayak"]
 
 [tool.mypy]
 python_version = "3.13"
+# Let the scripts gated by mypy (import_metadata / export_metadata) resolve
+# `kayak.*` from source. CI pip-installs kayak editable so it doesn't need
+# this; the pre-commit mypy hook runs isolated (no install) and does.
+mypy_path = "src"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

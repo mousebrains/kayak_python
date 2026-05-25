@@ -601,9 +601,11 @@ setfacl -R -m u:www-data:rX /home/pat/kayak/php            # read PHP files
 setfacl -m u:www-data:rwx /home/pat/DB                     # DB read/write
 setfacl -d -m u:www-data:rw /home/pat/DB                   # default for new DB files
 
-# 6. Initialize and run
-/home/pat/.venv/bin/levels init-db       # schema + seed states/sources/fetch_urls
-/home/pat/.venv/bin/levels pipeline      # fetch live data, generate HTML
+# 6. Initialize and run (same sequence as § 4 — plain init-db leaves every
+#    source an orphan and renders an empty site)
+/home/pat/.venv/bin/levels init-db --no-seed           # schema + stamped migrations
+/home/pat/.venv/bin/python scripts/import_metadata.py  # gauges/reaches/sources/links from data/db/*.csv
+/home/pat/.venv/bin/levels pipeline                    # fetch live data, generate HTML
 ```
 
 ### config.py .env resolution

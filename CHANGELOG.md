@@ -60,9 +60,10 @@ All notable changes to this project will be documented in this file.
   metadata scripts (`import_metadata` / `export_metadata`), with the package
   marked typed (`py.typed`).
 - **Internal dedup**: `_localize` hoisted onto `BaseParser`; `check-reaches`
-  returns an exit code (mapped in `main.py`) instead of calling `sys.exit`;
-  `M_TO_FT` given a canonical home; `.gitattributes` collapses the
-  generated-snapshot diffs.
+  returns an exit code (mapped in `main.py`, which also now surfaces the codes
+  other handlers like `analyze-logs` returned but previously had discarded)
+  instead of calling `sys.exit`; `M_TO_FT` given a canonical home;
+  `.gitattributes` collapses the generated-snapshot diffs.
 
 ## [1.1.1] - 2026-05-21
 
