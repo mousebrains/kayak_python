@@ -46,6 +46,8 @@ function mail_dump_dir(): ?string {
  * the message was handed to the MTA, not that it was delivered. Pass
  * $extra_headers like ['Reply-To' => 'someone@example.com'] to override
  * the defaults.
+ *
+ * @param array<string, string> $extra_headers
  */
 function send_email(string $to, string $subject, string $body, array $extra_headers = []): bool {
     if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {

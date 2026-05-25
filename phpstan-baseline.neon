@@ -1,24 +1,6 @@
 parameters:
 	ignoreErrors:
 		-
-			message: '#^Parameter \#2 \$string of function explode expects string, string\|false given\.$#'
-			identifier: argument.type
-			count: 1
-			path: php/custom.php
-
-		-
-			message: '#^Parameter \#2 \$string of function explode expects string, string\|false given\.$#'
-			identifier: argument.type
-			count: 1
-			path: php/gauge_picker.php
-
-		-
-			message: '#^Function parse_class_tiers\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: php/includes/class_tiers.php
-
-		-
 			message: '#^Function _load_current_readings\(\) should return list\<array\<string, mixed\>\> but returns array\.$#'
 			identifier: return.type
 			count: 1
@@ -77,12 +59,6 @@ parameters:
 			identifier: return.type
 			count: 1
 			path: php/includes/gauge_search.php
-
-		-
-			message: '#^Function send_email\(\) has parameter \$extra_headers with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: php/includes/mail.php
 
 		-
 			message: '#^Cannot access offset 0 on list\<string\>\|false\.$#'
@@ -157,12 +133,6 @@ parameters:
 			path: php/includes/reach_search.php
 
 		-
-			message: '#^Offset ''level'' on array\{level\: ''error''\|''warning'', field\: string, message\: string\} on left side of \?\? always exists and is not nullable\.$#'
-			identifier: nullCoalesce.offset
-			count: 2
-			path: php/includes/sanity.php
-
-		-
 			message: '#^Parameter \#1 \.\.\.\$arg1 of function max expects non\-empty\-array, list\<float\|int\> given\.$#'
 			identifier: argument.type
 			count: 2
@@ -179,21 +149,3 @@ parameters:
 			identifier: notIdentical.alwaysTrue
 			count: 2
 			path: php/includes/svg_plot.php
-
-		-
-			message: '#^Parameter \#1 \$json of function json_decode expects string, string\|true given\.$#'
-			identifier: argument.type
-			count: 1
-			path: php/includes/turnstile.php
-
-		-
-			message: '#^Parameter \#2 \$string of function explode expects string, string\|false given\.$#'
-			identifier: argument.type
-			count: 1
-			path: php/picker.php
-
-		-
-			message: '#^Parameter \#1 \$string of function trim expects string, string\|false given\.$#'
-			identifier: argument.type
-			count: 1
-			path: php/source.php

@@ -6,6 +6,8 @@ declare(strict_types=1);
  * Mirrors src/kayak/utils/class_tiers.py (parse_class_tiers). Cruxes in
  * parentheses are dropped; '+' modifiers are stripped; ranges expand
  * inclusively. Return is sorted Roman-order ['I','II','III','IV','V'].
+ *
+ * @return list<string>
  */
 
 function parse_class_tiers(?string $s): array {

@@ -16,7 +16,7 @@ $q  = filter_input(INPUT_GET, 'q', FILTER_DEFAULT);
 
 // --- Search mode ---
 if ($q !== null && $q !== '') {
-    $q = trim($q);
+    $q = trim((string)$q);
     $stmt = $db->prepare(
         'SELECT id, name, agency FROM source
          WHERE name LIKE ? OR agency LIKE ?

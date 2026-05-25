@@ -234,7 +234,7 @@ function check_putin_takeout(
  * @return list<array{level: 'error'|'warning', field: string, message: string}>
  */
 function sanity_errors(array $issues): array {
-    return array_values(array_filter($issues, fn($i) => ($i['level'] ?? '') === 'error'));
+    return array_values(array_filter($issues, fn($i) => $i['level'] === 'error'));
 }
 
 /**
@@ -242,5 +242,5 @@ function sanity_errors(array $issues): array {
  * @return list<array{level: 'error'|'warning', field: string, message: string}>
  */
 function sanity_warnings(array $issues): array {
-    return array_values(array_filter($issues, fn($i) => ($i['level'] ?? '') === 'warning'));
+    return array_values(array_filter($issues, fn($i) => $i['level'] === 'warning'));
 }

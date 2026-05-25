@@ -29,7 +29,7 @@ if (filter_input(INPUT_GET, 'ajax', FILTER_VALIDATE_INT)) {
     header('Content-Type: application/json');
     header('Cache-Control: max-age=60');
 
-    $raw = filter_input(INPUT_GET, 'states', FILTER_DEFAULT) ?? '';
+    $raw = (string)(filter_input(INPUT_GET, 'states', FILTER_DEFAULT) ?? '');
     $state_names = array_filter(array_map('trim', explode(',', $raw)));
     if (!$state_names) {
         echo '[]';
