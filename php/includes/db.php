@@ -76,6 +76,17 @@ function db_rows(PDOStatement $stmt): array {
 }
 
 /**
+ * fetch() typed as the single row (or false) our FETCH_ASSOC default yields —
+ * PHPStan's PDOStatement::fetch() stub returns a bare `mixed`.
+ *
+ * @return array<string, mixed>|false
+ */
+function db_row(PDOStatement $stmt): array|false {
+    /** @var array<string, mixed>|false */
+    return $stmt->fetch();
+}
+
+/**
  * Fetch a reach by ID, or exit 404 if not found.
  *
  * @return array<string, mixed> The reach row.

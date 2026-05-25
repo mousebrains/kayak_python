@@ -149,25 +149,25 @@ function _load_reach_navigation(PDO $db, array $reach, int $id, int $hidden): ar
          AND no_show = ? ORDER BY sort_name DESC, id DESC LIMIT 1'
     );
     $prev_stmt->execute([$reach['sort_name'], $reach['sort_name'], $id, $hidden]);
-    $prev = $prev_stmt->fetch();
+    $prev = db_row($prev_stmt);
 
     $next_stmt = $db->prepare(
         'SELECT id FROM reach WHERE (sort_name > ? OR (sort_name = ? AND id > ?))
          AND no_show = ? ORDER BY sort_name ASC, id ASC LIMIT 1'
     );
     $next_stmt->execute([$reach['sort_name'], $reach['sort_name'], $id, $hidden]);
-    $next = $next_stmt->fetch();
+    $next = db_row($next_stmt);
 
     $total_stmt = $db->prepare('SELECT COUNT(*) FROM reach WHERE no_show = ?');
     $total_stmt->execute([$hidden]);
-    $total = $total_stmt->fetchColumn();
+    $total = (int)$total_stmt->fetchColumn();
 
     $pos_stmt = $db->prepare(
         'SELECT COUNT(*) FROM reach WHERE (sort_name < ? OR (sort_name = ? AND id <= ?))
          AND no_show = ?'
     );
     $pos_stmt->execute([$reach['sort_name'], $reach['sort_name'], $id, $hidden]);
-    $position = $pos_stmt->fetchColumn();
+    $position = (int)$pos_stmt->fetchColumn();
 
     return ['prev' => $prev, 'next' => $next, 'position' => $position, 'total' => $total];
 }
@@ -191,7 +191,7 @@ function _load_reach_related(PDO $db, array $reach, int $id): array
     if ($reach['gauge_id']) {
         $stmt = $db->prepare('SELECT * FROM gauge WHERE id = ?');
         $stmt->execute([$reach['gauge_id']]);
-        $g = $stmt->fetch();
+        $g = db_row($stmt);
         $gauge = $g === false ? null : $g;
     }
 
@@ -199,11 +199,11 @@ function _load_reach_related(PDO $db, array $reach, int $id): array
         'SELECT s.name FROM state s JOIN reach_state rs ON s.id = rs.state_id WHERE rs.reach_id = ?'
     );
     $states_stmt->execute([$id]);
-    $states = array_column($states_stmt->fetchAll(), 'name');
+    $states = array_map('strval', array_column($states_stmt->fetchAll(), 'name'));
 
     $classes_stmt = $db->prepare('SELECT * FROM reach_class WHERE reach_id = ?');
     $classes_stmt->execute([$id]);
-    $classes = $classes_stmt->fetchAll();
+    $classes = db_rows($classes_stmt);
 
     $flow_levels = _derive_reach_flow_levels($db, $id);
 
@@ -216,7 +216,7 @@ function _load_reach_related(PDO $db, array $reach, int $id): array
          ORDER BY g.sort_order, g.title, g.edition'
     );
     $gb_stmt->execute([$id]);
-    $guidebooks = $gb_stmt->fetchAll();
+    $guidebooks = db_rows($gb_stmt);
 
     return [
         'gauge' => $gauge,

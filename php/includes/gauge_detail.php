@@ -121,17 +121,17 @@ function _load_gauge_navigation(PDO $db, int $id): array
 {
     $prev_stmt = $db->prepare('SELECT id FROM gauge WHERE id < ? ORDER BY id DESC LIMIT 1');
     $prev_stmt->execute([$id]);
-    $prev = $prev_stmt->fetch();
+    $prev = db_row($prev_stmt);
 
     $next_stmt = $db->prepare('SELECT id FROM gauge WHERE id > ? ORDER BY id ASC LIMIT 1');
     $next_stmt->execute([$id]);
-    $next = $next_stmt->fetch();
+    $next = db_row($next_stmt);
 
-    $total = db_query($db, 'SELECT COUNT(*) FROM gauge')->fetchColumn();
+    $total = (int)db_query($db, 'SELECT COUNT(*) FROM gauge')->fetchColumn();
 
     $pos_stmt = $db->prepare('SELECT COUNT(*) FROM gauge WHERE id <= ?');
     $pos_stmt->execute([$id]);
-    $position = $pos_stmt->fetchColumn();
+    $position = (int)$pos_stmt->fetchColumn();
 
     return ['prev' => $prev, 'next' => $next, 'position' => $position, 'total' => $total];
 }
@@ -162,7 +162,7 @@ function _load_gauge_associated(PDO $db, int $id): array
          ORDER BY s.name'
     );
     $sources_stmt->execute([$id]);
-    $sources = $sources_stmt->fetchAll();
+    $sources = db_rows($sources_stmt);
 
     // Pull class names from reach_class (the canonical source) rather than
     // the rarely-populated reach.difficulties column.
@@ -172,7 +172,7 @@ function _load_gauge_associated(PDO $db, int $id): array
          FROM reach r WHERE r.gauge_id = ? ORDER BY r.sort_name'
     );
     $reaches_stmt->execute([$id]);
-    $reaches = $reaches_stmt->fetchAll();
+    $reaches = db_rows($reaches_stmt);
 
     $reach_class_thresholds = [];
     if ($reaches) {
@@ -185,7 +185,7 @@ function _load_gauge_associated(PDO $db, int $id): array
              ORDER BY id"
         );
         $thr_stmt->execute($reach_ids);
-        foreach ($thr_stmt->fetchAll() as $row) {
+        foreach (db_rows($thr_stmt) as $row) {
             $reach_class_thresholds[(int)$row['reach_id']][] = $row;
         }
     }

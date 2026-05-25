@@ -1,12 +1,3 @@
-includes:
-    # Grandfather list of pre-existing level-7/8 issues (mostly
-    # PDOStatement|false and string|false unguarded calls). Each PHP
-    # layer split in docs/PLAN_php_layer_split.md Tiers 2–6 shrinks
-    # this file; Tier 6.1 cleared most missingType.iterableValue
-    # entries and Tier 6.2 raised the level from 7 to 8. Regenerate
-    # with `composer baseline`.
-    - phpstan-baseline.neon
-
 parameters:
     level: 8
     paths:

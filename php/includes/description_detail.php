@@ -111,25 +111,25 @@ function _load_description_navigation(PDO $db, array $reach, int $id, int $hidde
          AND no_show = ? ORDER BY sort_name DESC, id DESC LIMIT 1'
     );
     $prev_stmt->execute([$reach['sort_name'], $reach['sort_name'], $id, $hidden]);
-    $prev = $prev_stmt->fetch();
+    $prev = db_row($prev_stmt);
 
     $next_stmt = $db->prepare(
         'SELECT id FROM reach WHERE (sort_name > ? OR (sort_name = ? AND id > ?))
          AND no_show = ? ORDER BY sort_name ASC, id ASC LIMIT 1'
     );
     $next_stmt->execute([$reach['sort_name'], $reach['sort_name'], $id, $hidden]);
-    $next = $next_stmt->fetch();
+    $next = db_row($next_stmt);
 
     $total_stmt = $db->prepare('SELECT COUNT(*) FROM reach WHERE no_show = ?');
     $total_stmt->execute([$hidden]);
-    $total = $total_stmt->fetchColumn();
+    $total = (int)$total_stmt->fetchColumn();
 
     $pos_stmt = $db->prepare(
         'SELECT COUNT(*) FROM reach WHERE (sort_name < ? OR (sort_name = ? AND id <= ?))
          AND no_show = ?'
     );
     $pos_stmt->execute([$reach['sort_name'], $reach['sort_name'], $id, $hidden]);
-    $position = $pos_stmt->fetchColumn();
+    $position = (int)$pos_stmt->fetchColumn();
 
     return ['prev' => $prev, 'next' => $next, 'position' => $position, 'total' => $total];
 }
@@ -642,6 +642,8 @@ function _render_data_sources(PDO $db, ?array $gauge): void
 
         if ($matched) {
             $shown_agencies[] = $matched;
+            // $matched is always a key of $station_urls — it came from the loop above.
+            assert(isset($station_urls[$matched]));
             $info = $station_urls[$matched];
             $label = '<a href="' . htmlspecialchars($info['url'])
                 . '" target="_blank" rel="noopener">'

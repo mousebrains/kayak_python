@@ -55,8 +55,8 @@ function _gp_render_single_plot(
  * the row is empty / a bound's data_type can't be converted (e.g. gauge bound
  * but no rating lookup is available for a flow plot).
  *
- * @param  array<string, mixed>|null      $class_range
- * @param  array<string, mixed>|null      $rating_lookup
+ * @param  array<string, mixed>|null              $class_range
+ * @param  array<int, array{0: float, 1: float}>|null $rating_lookup
  * @return array{low: ?float, high: ?float}|null
  */
 function _gp_bands_for_axis(?array $class_range, string $axis_type, ?array $rating_lookup = null): ?array
