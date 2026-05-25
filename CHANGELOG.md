@@ -12,6 +12,14 @@ All notable changes to this project will be documented in this file.
 - **Gradient profile**: per-reach `max_gradient` plus a statistically-binned
   gradient chart on reach-detail pages (DEM-sampled; canyon-trace artifacts
   flagged via `reach.gradient_unreliable`).
+- **Reach-detail elevation profile**: the gradient chart overlays an elevation
+  line (right axis) with an elevation-first cursor readout, and the per-reach
+  details collapse to four shared lines (Watershed / Length / Elevation / Flow)
+  on both the description and reach pages.
+- **Geometry snapshot + recovery path**: `reach.geom` is snapshotted to
+  `data/db/reaches.json` (~5 m Douglas–Peucker simplified, excluded from
+  `reach.csv`) and applied with `scripts/import_metadata.py --geom-only` — the
+  supported way a dev re-trace's geometry reaches prod.
 
 ### Fixed
 - **rDNS resolver bounded** so `kayak-status.service` no longer times out on
@@ -24,9 +32,39 @@ All notable changes to this project will be documented in this file.
 - **Docs drift**: schema-doc table count corrected to 24/25 and the dropped
   `maintainer_credential` table removed; hardware specs corrected to the
   Hetzner CPX11 (2 vCPU / 2 GB / 40 GB).
+- **HUC4 detection** resolves by nearest flowline with put-in/take-out
+  agreement, fixing 88/407 reaches that mis-detected near basin divides (was:
+  the first GPKG whose flowline extent contained the put-in).
+- **Metadata recovery hardened**: `scripts/import_metadata.py` upserts on the
+  primary key — preserving `reach.geom` / `fetch_url.last_fetched_at` instead of
+  nulling them on a full import — and reports the rows actually applied;
+  `docs/migrations.md` now documents the real from-scratch rebuild runbook (the
+  prior text wrongly declared rebuild impossible). Covered by a new export→import
+  round-trip test.
+- **`deploy.sh` applies committed geometry**: a changed `data/db/reaches.json`
+  now triggers `import_metadata.py --geom-only`, so a dev re-trace's geometry
+  reaches prod instead of silently going stale.
+- **Gradient elevation line themed** via `.gp-elev` CSS (legible in dark mode)
+  rather than a hardcoded inline color.
+- **`docs/security/` audit anchors repointed** to the post-2026-05-14-split
+  files (`auth_magic_link` / `propose_handler` / `review_handler`), keyed on
+  function names so they survive future line drift.
 
 ### Changed
 - Pinned `ruff` in pre-commit/CI to match `uv.lock` and stop formatter drift.
+- Applied biome `--write` cleanups to the static JS (optional chaining, unused
+  catch bindings).
+- Dependabot dependency bumps: the composer dev group and the GitHub Actions
+  group.
+- **`scripts/` gated in CI**: ruff over all of `scripts/`; mypy over the core
+  metadata scripts (`import_metadata` / `export_metadata`), with the package
+  marked typed (`py.typed`).
+- **Internal dedup**: `_localize` hoisted onto `BaseParser`; `check-reaches`
+  returns an exit code (mapped in `main.py`, which also now surfaces the codes
+  other handlers like `analyze-logs` returned but previously had discarded)
+  instead of calling `sys.exit`; `M_TO_FT` given a canonical home;
+  `.gitattributes` collapses the opaque `reaches.json` / `huc_name.csv`
+  snapshot diffs (reach.csv stays a readable text diff).
 
 ## [1.1.1] - 2026-05-21
 

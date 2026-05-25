@@ -26,9 +26,10 @@ import sys
 
 import httpx
 
+from kayak.tracing.constants import M_TO_FT
+
 DEFAULT_DB = os.environ.get("KAYAK_DB", "/home/pat/DB/kayak.db")
 EPQS_URL = "https://epqs.nationalmap.gov/v1/json"
-M_TO_FT = 3.28083989501
 
 
 async def fetch_elevation_m(client, lon, lat):

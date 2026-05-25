@@ -20,7 +20,13 @@ repos:
           - pydantic>=2.7
           - pydantic-settings>=2.4
         pass_filenames: false
-        args: [src/]
+        # Mirror CI's `mypy src/ scripts/import_metadata.py
+        # scripts/export_metadata.py`. The hook runs in an isolated env with no
+        # editable kayak install; `mypy_path = "src"` in pyproject lets the
+        # scripts resolve `kayak.*` here (additional_dependencies above cover
+        # their third-party imports). Keeps the local gate from passing what CI
+        # rejects.
+        args: [src/, scripts/import_metadata.py, scripts/export_metadata.py]
 
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.10.0.1

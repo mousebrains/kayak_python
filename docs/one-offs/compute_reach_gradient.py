@@ -62,8 +62,8 @@ MAX_WINDOW_MI = 5.0
 # m_sigma * sqrt(sigma(bin_i)^2 + sigma(bin_j)^2) — a constant in n,
 # since the cumsum telescopes to bin_mean[j] - bin_mean[i].
 SRC_RMSE_M = {
-    "1arc3": 2.4,    # USGS 3DEP 1/3 arc-second seamless
-    "1m": 0.15,      # OPR DEM 1 meter (typical Pacific NW project accuracy)
+    "1arc3": 2.4,  # USGS 3DEP 1/3 arc-second seamless
+    "1m": 0.15,  # OPR DEM 1 meter (typical Pacific NW project accuracy)
 }
 
 # Significance threshold in standard deviations. 3 = 99.7% confidence.
@@ -134,7 +134,7 @@ def _bin_elevations(
         i_lo = _index_at_or_after(d_mi, bin_start)
         i_hi_exc = _index_at_or_after(d_mi, bin_end)
         if i_hi_exc > i_lo and d_mi[i_hi_exc] < bin_end + 1e-9:
-            i_hi_exc += 1   # _index_at_or_after returns the last sample if past end
+            i_hi_exc += 1  # _index_at_or_after returns the last sample if past end
         if i_hi_exc <= i_lo or i_lo >= len(d_mi):
             means.append(None)
             sigmas.append(None)
@@ -183,7 +183,7 @@ def compute_max_gradient(d_mi: list[float], elev_ft: list[float], window_mi: flo
     return round(best, 1)
 
 
-def build_profile(  # noqa: C901 — sequential bin walk with multiple guards; splitting fragments the loop
+def build_profile(
     d_mi: list[float],
     elev_ft: list[float],
     lat: list[float],
@@ -225,7 +225,7 @@ def build_profile(  # noqa: C901 — sequential bin walk with multiple guards; s
             j = i + n
             if means[j] is None:
                 continue
-            drop = means[i] - means[j]   # signed: positive when descending
+            drop = means[i] - means[j]  # signed: positive when descending
             sigma_drop = math.sqrt((sigmas[i] or 0) ** 2 + (sigmas[j] or 0) ** 2)
             if drop >= m_sigma * sigma_drop:
                 chosen_n = n
@@ -260,14 +260,16 @@ def build_profile(  # noqa: C901 — sequential bin walk with multiple guards; s
                     lat_v, lon_v = lats[center_bin + off], lons[center_bin + off]
                     break
 
-        samples.append({
-            "d_mi": round(d_mi_center, 4),
-            "lat": round(lat_v, 6) if lat_v is not None else None,
-            "lon": round(lon_v, 6) if lon_v is not None else None,
-            "grad_ft_per_mi": round(grad, 1),
-            "w_mi": round(w_mi, 4),
-            "significant": bool(significant),
-        })
+        samples.append(
+            {
+                "d_mi": round(d_mi_center, 4),
+                "lat": round(lat_v, 6) if lat_v is not None else None,
+                "lon": round(lon_v, 6) if lon_v is not None else None,
+                "grad_ft_per_mi": round(grad, 1),
+                "w_mi": round(w_mi, 4),
+                "significant": bool(significant),
+            }
+        )
         i += chosen_n
     return samples
 
@@ -296,7 +298,11 @@ def process_cache_file(
     max_grad = compute_max_gradient(d_mi, smoothed, args.max_window_mi)
 
     samples = build_profile(
-        d_mi, elev_ft, lat, lon, srcs,
+        d_mi,
+        elev_ft,
+        lat,
+        lon,
+        srcs,
         default_rmse_m=args.rmse_m,
         dl_mi=args.dl_mi,
         max_window_mi=args.profile_max_window_mi,
@@ -318,26 +324,34 @@ def process_cache_file(
     return cache["reach_id"], max_grad, profile
 
 
-def main() -> int:  # noqa: C901 — sequential I/O orchestration, splitting fragments the read/process/write loop
+def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--db", default=DEFAULT_DB)
     ap.add_argument("--cache-dir", default=str(DEFAULT_CACHE), type=Path)
     ap.add_argument("--reach-ids", help="Comma-separated reach IDs (default: all with caches)")
     ap.add_argument("--apply", action="store_true")
     ap.add_argument(
-        "--max-window-mi", type=float, default=1.0,
-        help="Window for max_gradient sliding-window scalar (default 1.0 mi)"
+        "--max-window-mi",
+        type=float,
+        default=1.0,
+        help="Window for max_gradient sliding-window scalar (default 1.0 mi)",
     )
     ap.add_argument(
-        "--dl-mi", type=float, default=DL_MI,
+        "--dl-mi",
+        type=float,
+        default=DL_MI,
         help=f"Bin width for the profile builder (default {DL_MI} mi)",
     )
     ap.add_argument(
-        "--profile-max-window-mi", type=float, default=MAX_WINDOW_MI,
+        "--profile-max-window-mi",
+        type=float,
+        default=MAX_WINDOW_MI,
         help=f"Cap on the search-for-significance window (default {MAX_WINDOW_MI} mi)",
     )
     ap.add_argument(
-        "--m-sigma", type=float, default=M_SIGMA,
+        "--m-sigma",
+        type=float,
+        default=M_SIGMA,
         help=f"Significance threshold in std devs (default {M_SIGMA} = 99.7%%)",
     )
     ap.add_argument(
@@ -350,7 +364,9 @@ def main() -> int:  # noqa: C901 — sequential I/O orchestration, splitting fra
         "sample's source tag.",
     )
     ap.add_argument(
-        "--smooth-points", type=int, default=5,
+        "--smooth-points",
+        type=int,
+        default=5,
         help="Rolling-mean window for max_gradient elevation smoothing only "
         "(the profile builder uses bin-mean averaging — no rolling smoothing).",
     )
@@ -377,15 +393,21 @@ def main() -> int:  # noqa: C901 — sequential I/O orchestration, splitting fra
     # sqrt(2) * bin_mean_noise. Per-bin threshold below is the
     # m_sigma * drop_noise for a pure-source bin pair at the listed N.
     n_per_bin_est = max(1, int(args.dl_mi / 0.025))
-    print(f"dl={args.dl_mi} mi (~{n_per_bin_est} samples/bin at 25 m), "
-          f"max search {args.profile_max_window_mi} mi, "
-          f"m_sigma={args.m_sigma}")
-    print(f"Per-source {args.m_sigma}-sigma drop threshold (ft) for a "
-          f"pure-source bin pair at N={n_per_bin_est}:")
+    print(
+        f"dl={args.dl_mi} mi (~{n_per_bin_est} samples/bin at 25 m), "
+        f"max search {args.profile_max_window_mi} mi, "
+        f"m_sigma={args.m_sigma}"
+    )
+    print(
+        f"Per-source {args.m_sigma}-sigma drop threshold (ft) for a "
+        f"pure-source bin pair at N={n_per_bin_est}:"
+    )
     for src, sigma_m in SRC_RMSE_M.items():
         sigma_bin_m = sigma_m / math.sqrt(n_per_bin_est)
         sigma_drop_m = math.sqrt(2.0) * sigma_bin_m
-        print(f"  {src}: rmse={sigma_m} m, threshold={args.m_sigma * sigma_drop_m * M_TO_FT:.2f} ft")
+        print(
+            f"  {src}: rmse={sigma_m} m, threshold={args.m_sigma * sigma_drop_m * M_TO_FT:.2f} ft"
+        )
     print(f"  fallback (--rmse-m): {args.rmse_m} m")
     print()
 
@@ -397,9 +419,7 @@ def main() -> int:  # noqa: C901 — sequential I/O orchestration, splitting fra
     # (canyon-wall artifacts, dam/falls between endpoints, etc.). Set by
     # migration 0051 onward via the reach.gradient_unreliable column.
     suppressed = {
-        r[0] for r in conn.execute(
-            "SELECT id FROM reach WHERE gradient_unreliable = 1"
-        ).fetchall()
+        r[0] for r in conn.execute("SELECT id FROM reach WHERE gradient_unreliable = 1").fetchall()
     }
     if suppressed:
         print(f"Suppressed reaches (gradient_unreliable=1): {sorted(suppressed)}")

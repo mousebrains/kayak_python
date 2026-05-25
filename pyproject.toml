@@ -78,11 +78,22 @@ src = ["src"]
 select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF", "C901"]
 ignore = ["E501", "SIM108"]
 
+[tool.ruff.lint.per-file-ignores]
+# Archived run-once scripts: linted like the rest of the tree, but exempt from
+# the C901 complexity bar — refactoring frozen one-shot code for a
+# maintainability standard it'll never need is unwarranted (the package itself
+# noqa's its few irreducible cases; see docs/done/PLAN_c901_cleanup.md).
+"docs/one-offs/*" = ["C901"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["kayak"]
 
 [tool.mypy]
 python_version = "3.13"
+# Let the scripts gated by mypy (import_metadata / export_metadata) resolve
+# `kayak.*` from source. CI pip-installs kayak editable so it doesn't need
+# this; the pre-commit mypy hook runs isolated (no install) and does.
+mypy_path = "src"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

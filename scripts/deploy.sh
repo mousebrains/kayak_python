@@ -27,6 +27,7 @@ set -euo pipefail
 
 REPO="${KAYAK_HOME}/kayak"
 VENV_PIP="${KAYAK_HOME}/.venv/bin/pip"
+VENV_PY="${KAYAK_HOME}/.venv/bin/python"
 LEVELS="${KAYAK_HOME}/.venv/bin/levels"
 
 # --- preconditions -----------------------------------------------------
@@ -97,6 +98,25 @@ echo ">>> levels validate-config"
 
 echo ">>> levels migrate"
 "$LEVELS" migrate
+
+# --- 3.25. apply reach geometry (only if reaches.json changed) --------
+#
+# reach.geom lives in data/db/reaches.json (excluded from reach.csv —
+# large, and not regenerable on prod without the dev-only DEM/NHD trace
+# stack). It is NOT migration-managed, so a dev re-trace reaches prod
+# only by re-running this snapshot apply. --geom-only skips the CSV
+# upsert and just runs `UPDATE reach SET geom` from the committed JSON.
+# Runs after migrate (reach table is current) and is gated on the file
+# actually changing between SHAs (mirrors the pyproject.toml guard) so an
+# unchanged deploy does no DB writes.
+
+if [[ "$old_sha" != "$new_sha" ]] && \
+        ! git diff --quiet "$old_sha" "$new_sha" -- data/db/reaches.json; then
+    echo ">>> data/db/reaches.json changed — applying geom (import_metadata.py --geom-only)"
+    "$VENV_PY" scripts/import_metadata.py --geom-only
+else
+    echo "(data/db/reaches.json unchanged — skipping geom apply)"
+fi
 
 # --- 3.5. emit /etc/kayak/runtime-config.json -------------------------
 #

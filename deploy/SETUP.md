@@ -88,6 +88,24 @@ Verify output was generated:
 ls public_html/*.html
 ```
 
+**Reach geometry (`reaches.json`).** `reach.geom` is excluded from
+`reach.csv` (large, and not regenerable on prod — the DEM/NHD trace stack
+is dev-only) and snapshotted to `data/db/reaches.json`. The
+`import_metadata.py` call above applies it on a fresh install. It is
+*not* migration-managed — the documented exception to "reach changes go
+via a migration" — so a dev re-trace reaches prod like this:
+
+1. dev: re-trace, then `python scripts/export_metadata.py` to refresh
+   `data/db/reaches.json`; commit it.
+2. prod: `scripts/deploy.sh` sees the changed `reaches.json` and runs
+   `import_metadata.py --geom-only` automatically.
+
+To apply geometry to the live DB by hand (without re-syncing CSV metadata):
+
+```bash
+.venv/bin/python scripts/import_metadata.py --geom-only
+```
+
 ## 5. SSL certificates
 
 Temporarily allow HTTP for the ACME challenge:
@@ -583,9 +601,11 @@ setfacl -R -m u:www-data:rX /home/pat/kayak/php            # read PHP files
 setfacl -m u:www-data:rwx /home/pat/DB                     # DB read/write
 setfacl -d -m u:www-data:rw /home/pat/DB                   # default for new DB files
 
-# 6. Initialize and run
-/home/pat/.venv/bin/levels init-db       # schema + seed states/sources/fetch_urls
-/home/pat/.venv/bin/levels pipeline      # fetch live data, generate HTML
+# 6. Initialize and run (same sequence as § 4 — plain init-db leaves every
+#    source an orphan and renders an empty site)
+/home/pat/.venv/bin/levels init-db --no-seed           # schema + stamped migrations
+/home/pat/.venv/bin/python scripts/import_metadata.py  # gauges/reaches/sources/links from data/db/*.csv
+/home/pat/.venv/bin/levels pipeline                    # fetch live data, generate HTML
 ```
 
 ### config.py .env resolution

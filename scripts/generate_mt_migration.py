@@ -13,6 +13,7 @@ Outputs:
 
 Field-derivation rules — see docs/PLAN_montana_gauges.md § Phase 2.
 """
+
 from __future__ import annotations
 
 import re
@@ -44,9 +45,7 @@ _ABBREV_EXPANSIONS = [
 ]
 
 # Position words that separate river from location in USGS station_nm.
-_SPLIT_RE = re.compile(
-    r"\s+(at|near|above|below|ab|abv|bl|nr)\s+", re.IGNORECASE
-)
+_SPLIT_RE = re.compile(r"\s+(at|near|above|below|ab|abv|bl|nr)\s+", re.IGNORECASE)
 
 # Strip a trailing state suffix from a location string.
 _TAIL_STATE_RE = re.compile(r",?\s*MT\.?\s*$", re.IGNORECASE)
@@ -81,13 +80,17 @@ def parse_station_name(station_nm: str) -> tuple[str, str, str]:
 
     rel_word = m.group(1).lower()
     rel_map = {
-        "at": "at", "near": "near",
-        "above": "above", "ab": "above", "abv": "above",
-        "below": "below", "bl": "below",
+        "at": "at",
+        "near": "near",
+        "above": "above",
+        "ab": "above",
+        "abv": "above",
+        "below": "below",
+        "bl": "below",
         "nr": "near",
     }
     rel = rel_map.get(rel_word, rel_word)
-    location_raw = clean[m.end():].strip().rstrip(",")
+    location_raw = clean[m.end() :].strip().rstrip(",")
     location = f"{rel} {location_raw}"
     display = f"{river} {rel} {location_raw}".strip()
     return river, location, display

@@ -193,41 +193,51 @@ The one sibling invariant still worth a follow-on plan is:
 |-----------|-------------------|
 | Every `calc_expression.time_expression` resolves to a live gauge + data_type | The May 2026 incident was downstream of this; the orphan-check catches the upstream symptom but not the calc-side staleness directly. Trickiest of the four to implement — requires evaluating the time-expression's gauge-name resolution. |
 
-### `init-db`'s missing `gauge_source` seed path
+### Rebuilding a DB from the checked-in snapshot (recovery runbook)
+
+> This was previously listed here as a future-work gap — "rebuilding
+> prod from scratch is not possible … no code path reads the CSVs back."
+> That gap is **closed**: `scripts/import_metadata.py` reads the CSV
+> snapshots back into the DB (added in the #18/#22 deploy/onboarding
+> work). This section is now the recovery runbook, not an open problem.
 
 `levels init-db` seeds `state`, `source`, and `fetch_url` from
-`data/sources.yaml` but **does not** create any `gauge_source`
-links. Only one migration in the entire repo (0020) contains
-`INSERT INTO gauge_source` and even then only as a fix; the rest of
-the live links are operator-applied side effects that exist only on
-the production DB.
+`data/sources.yaml` but **does not** create any `gauge_source` links
+(only migration 0020 ever `INSERT`s into `gauge_source`, and only as a
+fix). So `init-db` + `migrate` *alone* yields a DB where every
+fetch-backed source is an orphan — `levels orphan-check` would flag
+~300 rows.
 
-Consequences:
+What closes the gap: the `data/db/*.csv` snapshots (written nightly by
+`scripts/export_metadata.py`) are **read back** by
+`scripts/import_metadata.py`, which loads `gauge.csv`, `source.csv`,
+`gauge_source.csv`, `reach.csv`, and the rest — recreating the live
+`gauge_source` links. `reach.geom` is kept out of `reach.csv` (large,
+and not regenerable on prod without a DEM/NHD) and lives in
+`data/db/reaches.json`; a full `import_metadata.py` run applies it after
+the CSVs in the same invocation (the `--geom-only` flag re-applies *only*
+the geometry to a live DB — the dev re-trace path, see `deploy/SETUP.md`
+§4 and `scripts/deploy.sh`; a from-scratch rebuild doesn't need it).
 
-- **`init-db` + `migrate` on a fresh DB produces a DB where every
-  fetch-backed source is an orphan.** `levels orphan-check` would
-  flag ~300 rows.
-- **Rebuilding prod from scratch (e.g., after a catastrophic
-  corruption with no usable backup) is not possible** purely from
-  what's checked in — the operator would have to re-derive every
-  `gauge_source` link from memory or from a stale CSV snapshot.
-- The CSVs under `data/db/*.csv` are
-  nightly auto-snapshots, not seeds. They're useful for git-diff
-  drift detection but no code path reads them back into the DB.
+So rebuilding prod from scratch — e.g. after catastrophic corruption
+with no usable backup — **is** possible purely from what's checked in:
 
-A future plan should pick a direction:
+```bash
+levels init-db --no-seed           # empty schema + stamped migrations
+python scripts/import_metadata.py  # CSVs (incl. gauge_source) + reaches.json geom
+levels pipeline                    # fetch live data + render
+```
 
-- **Read-back-from-CSV at init-db time.** Cheapest. `init-db`
-  reads `data/db/gauge_source.csv` (and probably also
-  `data/db/gauge.csv`, `reach.csv`, etc.) after `Base.metadata.create_all`.
-  Risk: CSV drift becomes load-bearing instead of advisory.
-- **A bootstrap migration that contains the entire `gauge_source`
-  table.** Heaviest. Migration `0001_baseline.sql` would balloon
-  but the DB rebuild path becomes mechanical.
-- **A `levels seed-from-csv` subcommand operators run after
-  `init-db`.** Splits the cost. Day-to-day fresh-DB
-  development (tests) stays empty; prod rebuild has a documented
-  one-command recovery step.
+`--no-seed` is required, not just advisable: a plain `levels init-db`
+seeds `state` / `source` / `fetch_url` from `sources.yaml` with fresh
+ids, which then collide with the canonical-id CSV rows on import — a
+duplicate `source` (its name isn't unique), or, since the import upserts
+on the primary key, an *aborting* `UNIQUE` conflict on `state.name` /
+`fetch_url.url`. `--no-seed` gives empty tables so the CSV ids load
+cleanly. The import loads with FK enforcement off (the live DB carries
+intentional orphan rows) and reports `integrity_check` +
+`foreign_key_check` afterward. This is the same sequence the quick-start
+(`README.md`, `deploy/SETUP.md` §4) uses for a fresh install.
 
 ### Smaller follow-ups (one-line each)
 

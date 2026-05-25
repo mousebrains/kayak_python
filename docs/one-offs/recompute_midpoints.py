@@ -115,7 +115,7 @@ def main():
 
     updates = []
     for row in rows:
-        rid, name, old_lat, old_lon, lps, lpl, lts, ltl, geom = row
+        rid, name, old_lat, old_lon, _lps, _lpl, _lts, _ltl, geom = row
         coords = parse_geom(geom)
         mid = arc_length_midpoint(coords)
         if mid is None:

@@ -194,7 +194,7 @@ None new. The 4 brute-force defense layers (`nginx limit_req`, fail2ban, Turnsti
 
 | # | Test | Verdict | Evidence |
 |---|---|---|---|
-| 1.5.1 | Magic-link resend cap is enforced | ✅ | `magic_link_under_throttle()` (`php/includes/auth.php`) caps at 5 per `editor.email` per rolling hour AND 20 per `ip_issued` per rolling hour, via `created_at > datetime('now', '-1 hour')`. Same-shape SELECT-COUNT per cap. |
+| 1.5.1 | Magic-link resend cap is enforced | ✅ | `magic_link_under_throttle()` (`php/includes/auth_magic_link.php`) caps at 5 per `editor.email` per rolling hour AND 20 per `ip_issued` per rolling hour, via `created_at > datetime('now', '-1 hour')`. Same-shape SELECT-COUNT per cap. |
 | 1.5.2 | Email-changed handling | ⊘ (intentional gap) | **No code path supports changing `editor.email`** (grep across `php/` and `src/`). Account email is set at signup and immutable via the web layer. Implicit policy: lose old email → create a new account with the new email → lose history attribution (FK preserves old rows). Filing as design note D-1 below; possible Tier 4 decision point. |
 | 1.5.3 | Account-takeover blast radius (editor) | ✅ | Editor email compromise allows: proposal/comment submission (tier-capped daily); reading own account page; bumping into the per-account rate limits. Damage is reversible by maintainer reject + ban. Impact: Medium and recoverable. |
 | 1.5.4 | Email normalization (Gmail aliases) | ⚠ **F-3** (existing) | `normalize_email()` is `strtolower(trim(...))` only. Doesn't strip Gmail dots or `+tags`. Already filed; Tier 1.5 decision deferred to Tier 4. |

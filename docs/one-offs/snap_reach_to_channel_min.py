@@ -49,7 +49,9 @@ M_PER_DEG_LAT = 110540.0
 M_TO_FT = 3.28083989501
 
 # Reuse the sample_reach_elevations helpers without making them a package import.
-_sre_spec = importlib.util.spec_from_file_location("sre", "docs/one-offs/sample_reach_elevations.py")
+_sre_spec = importlib.util.spec_from_file_location(
+    "sre", "docs/one-offs/sample_reach_elevations.py"
+)
 sre = importlib.util.module_from_spec(_sre_spec)
 _sre_spec.loader.exec_module(sre)
 
@@ -73,7 +75,9 @@ def _bearing(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return math.degrees(math.atan2(y, x))
 
 
-def _offset_along_bearing(lat: float, lon: float, offset_m: float, bearing_deg: float) -> tuple[float, float]:
+def _offset_along_bearing(
+    lat: float, lon: float, offset_m: float, bearing_deg: float
+) -> tuple[float, float]:
     """Offset (lat, lon) by offset_m along bearing_deg. Equirectangular
     approximation — fine for the small offsets we use (< 200 m)."""
     rad_b = math.radians(bearing_deg)
@@ -149,9 +153,7 @@ def snap_vertex(
     return new_lon, new_lat, trace_elev, best_elev, best_offset
 
 
-def _smooth_verts(
-    verts: list[tuple[float, float]], window_pts: int
-) -> list[tuple[float, float]]:
+def _smooth_verts(verts: list[tuple[float, float]], window_pts: int) -> list[tuple[float, float]]:
     """Rolling-mean smooth of vertex coords. Preserves endpoints."""
     if window_pts <= 1 or len(verts) < 3:
         return list(verts)
@@ -203,8 +205,16 @@ def snap_reach(
         lon, lat = verts[i]
         next_lon, next_lat = verts[i + 1]
         new_lon, new_lat, trace_e, snap_e, offset = snap_vertex(
-            index, prev_lon, prev_lat, lon, lat, next_lon, next_lat,
-            search_m=search_m, step_m=step_m, max_drop_ft=max_drop_ft,
+            index,
+            prev_lon,
+            prev_lat,
+            lon,
+            lat,
+            next_lon,
+            next_lat,
+            search_m=search_m,
+            step_m=step_m,
+            max_drop_ft=max_drop_ft,
         )
         if trace_e is None:
             no_dem += 1
@@ -240,16 +250,27 @@ def main() -> int:
     ap.add_argument("--db", default=DEFAULT_DB)
     ap.add_argument("--reach-ids", required=True, help="Comma-separated reach ids")
     ap.add_argument("--dem-cache", default="DEM-cache", type=Path)
-    ap.add_argument("--search-m", type=float, default=100.0,
-                    help="Perpendicular search radius (default 100 m)")
-    ap.add_argument("--step-m", type=float, default=5.0,
-                    help="Perpendicular sample step (default 5 m)")
-    ap.add_argument("--max-snap-drop-ft", type=float, default=200.0,
-                    help="Refuse snap if local min is > this much below trace (default 200 ft)")
-    ap.add_argument("--smooth-snap-pts", type=int, default=5,
-                    help="Rolling-mean window for post-snap smoothing (default 5)")
-    ap.add_argument("--apply", action="store_true",
-                    help="Write snapped geom back to DB (default: dry-run)")
+    ap.add_argument(
+        "--search-m", type=float, default=100.0, help="Perpendicular search radius (default 100 m)"
+    )
+    ap.add_argument(
+        "--step-m", type=float, default=5.0, help="Perpendicular sample step (default 5 m)"
+    )
+    ap.add_argument(
+        "--max-snap-drop-ft",
+        type=float,
+        default=200.0,
+        help="Refuse snap if local min is > this much below trace (default 200 ft)",
+    )
+    ap.add_argument(
+        "--smooth-snap-pts",
+        type=int,
+        default=5,
+        help="Rolling-mean window for post-snap smoothing (default 5)",
+    )
+    ap.add_argument(
+        "--apply", action="store_true", help="Write snapped geom back to DB (default: dry-run)"
+    )
     args = ap.parse_args()
     if not args.db:
         sys.exit("error: pass --db /path/to/kayak.db or set KAYAK_DB in env")
@@ -273,15 +294,20 @@ def main() -> int:
 
         print(f"=== reach {rid} {row['display_name']!r} ===")
         new_geom, stats = snap_reach(
-            row["geom"], index,
-            search_m=args.search_m, step_m=args.step_m,
-            max_drop_ft=args.max_snap_drop_ft, smooth_pts=args.smooth_snap_pts,
+            row["geom"],
+            index,
+            search_m=args.search_m,
+            step_m=args.step_m,
+            max_drop_ft=args.max_snap_drop_ft,
+            smooth_pts=args.smooth_snap_pts,
         )
-        print(f"  vertices: {stats['vertices']}, "
-              f"snapped: {stats['snapped']} (mean drop {stats['mean_drop_ft']} ft, "
-              f"mean offset {stats['mean_offset_m']} m), "
-              f"bridge-refused: {stats['skipped_bridge']}, "
-              f"no DEM: {stats['no_dem']}")
+        print(
+            f"  vertices: {stats['vertices']}, "
+            f"snapped: {stats['snapped']} (mean drop {stats['mean_drop_ft']} ft, "
+            f"mean offset {stats['mean_offset_m']} m), "
+            f"bridge-refused: {stats['skipped_bridge']}, "
+            f"no DEM: {stats['no_dem']}"
+        )
 
         if args.apply:
             cur = conn.cursor()
@@ -292,7 +318,9 @@ def main() -> int:
             conn.commit()
             print("  applied (geom updated)")
         else:
-            print(f"  dry-run only (pass --apply to write geom); new_geom length: {len(new_geom)} bytes")
+            print(
+                f"  dry-run only (pass --apply to write geom); new_geom length: {len(new_geom)} bytes"
+            )
         print()
 
     return 0

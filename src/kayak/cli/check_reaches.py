@@ -54,7 +54,6 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import sys
 from decimal import Decimal
 
 from kayak.db.engine import get_session
@@ -97,7 +96,7 @@ _KNOWN_REAL_EXTREME_PEAKS = frozenset(
 _ENDPOINT_TOL_DEG = 0.003
 
 
-def _addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = subparsers.add_parser(
         "check-reaches",
         help="Validate reach.geom format + lat/lon sanity (read-only)",
@@ -115,10 +114,6 @@ def _addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
         help=f"Max allowed degrees between geom endpoint and "
         f"latitude_start/end column (default: {_ENDPOINT_TOL_DEG})",
     )
-
-
-# main.py calls addArgs (no underscore); export the canonical name.
-addArgs = _addArgs
 
 
 def _endpoint_drift_deg(
@@ -281,8 +276,15 @@ def scan_for_issues(
     return len(reaches), flagged
 
 
-def check_reaches(args: argparse.Namespace) -> None:
-    """Entry point for ``levels check-reaches``."""
+def check_reaches(args: argparse.Namespace) -> int:
+    """Entry point for ``levels check-reaches``.
+
+    Returns the process exit code (0 = clean, 1 = issues found); ``main.py``
+    maps a non-None int return onto ``sys.exit``. (The pipeline drives
+    :func:`scan_for_issues` directly and raises on failure instead — the
+    orchestrator treats ``SystemExit`` as success, so a soft-fail step must
+    surface as an exception, not an exit code.)
+    """
     total, flagged = scan_for_issues(
         database_url=args.database_url,
         endpoint_tolerance=args.endpoint_tolerance,
@@ -293,4 +295,4 @@ def check_reaches(args: argparse.Namespace) -> None:
             print(f"  • {issue}")
     print()
     print(f"checked {total} reaches; {len(flagged)} with issues")
-    sys.exit(0 if not flagged else 1)
+    return 0 if not flagged else 1

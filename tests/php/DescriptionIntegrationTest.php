@@ -31,6 +31,11 @@ final class DescriptionIntegrationTest extends IntegrationTestCase
     private const REACH_WITH_GAUGE_NAME = 'Sandy Test Reach';
     private const REACH_NO_GAUGE_NAME = 'No Gauge Description Reach';
 
+    // Two non-overlapping significant bins → a renderable gradient chart.
+    private const GRADIENT_PROFILE_JSON =
+        '{"samples":[{"d_mi":0.0,"grad_ft_per_mi":57.0,"w_mi":7.0,"significant":true},'
+        . '{"d_mi":7.0,"grad_ft_per_mi":57.0,"w_mi":7.0,"significant":true}]}';
+
     protected static function seedDatabase(PDO $db): void
     {
         // Gauge with coords + a source linked to it (needed for the
@@ -70,8 +75,10 @@ final class DescriptionIntegrationTest extends IntegrationTestCase
             'INSERT INTO reach
                 (id, name, display_name, river, description, sort_name,
                  gauge_id, latitude_start, longitude_start, latitude_end,
-                 longitude_end, no_show)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                 longitude_end, no_show, basin, region,
+                 elevation, elevation_lost, length, gradient, max_gradient,
+                 gradient_profile)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         )->execute([
             self::REACH_WITH_GAUGE_ID,
             self::REACH_WITH_GAUGE_NAME,
@@ -83,6 +90,9 @@ final class DescriptionIntegrationTest extends IntegrationTestCase
             45.38, -122.32,
             45.42, -122.28,
             0,
+            'Sandy Basin', 'Cascades',
+            900.0, 800.0, 14.0, 57.0, 140.0,
+            self::GRADIENT_PROFILE_JSON,
         ]);
 
         // Reach 2: no gauge, no coordinates — exercises the
@@ -155,6 +165,25 @@ final class DescriptionIntegrationTest extends IntegrationTestCase
         );
         // No PHP-side CSP header (nginx owns it).
         $this->assertArrayNotHasKey('content-security-policy', $resp['headers']);
+        $this->assertNoBareInlineScript($resp['body']);
+    }
+
+    public function testDetailModeRendersConsolidatedLines(): void
+    {
+        // The Sandy reach carries basin/region/elevation/length/gradient + a
+        // gradient profile, so description_detail.php renders the same four
+        // consolidated lines + themed elevation overlay that reach.php does.
+        $resp = $this->request('/description.php', ['id' => self::REACH_WITH_GAUGE_ID]);
+
+        $this->assertSame(200, $resp['status']);
+        $this->assertResponseContains(
+            $resp['body'],
+            'Sandy Basin in Oregon, Cascades',            // Watershed line
+            '14.0 mi, gradient 57 ft/mi, max 140 ft/mi',  // Length line
+            '900 ft to 100 ft, loss 800 ft',              // Elevation line
+            'gradient-profile-chart',                      // the chart renders
+            'class="gp-elev"',                             // elevation overlay (themed)
+        );
         $this->assertNoBareInlineScript($resp['body']);
     }
 

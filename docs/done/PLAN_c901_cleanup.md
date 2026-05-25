@@ -8,7 +8,7 @@
 - **Phase 3a** — `1dd03e5` (`fetch` cc 30 → ≤7).
 - **Phase 3b** — `a7b13c9` (`calc_rating` cc 22 → ≤7).
 - **Phase 3c** — `8eacf1a` (`calculator` cc 30 → ≤8 + `# noqa: C901` on `_safe_eval`/`_eval`; closed the `cli/*` per-file-ignore).
-- **Tracing carve-out** — `b662118` followed by polish in `3d4786c` (2026-05-12). `find_huc4` and `trace_reach` split into four helpers (`_scan_dir_for_huc4`, `_resolve_huc4`, `_extend_and_trim_path`, `_load_missing_geoms`); both land at cc≤5. Regression tests in `tests/test_tracing/test_trace.py` (Sandy reach ground truth).
+- **Tracing carve-out** — `b662118` followed by polish in `3d4786c` (2026-05-12). `find_huc4` and `trace_reach` split into four helpers (`_scan_dir_for_huc4` — later replaced by `_nearest_huc4_in_dir` in #23's nearest-flowline rework — `_resolve_huc4`, `_extend_and_trim_path`, `_load_missing_geoms`); both land at cc≤5. Regression tests in `tests/test_tracing/test_trace.py` (Sandy reach ground truth).
 
 **End state re-verified 2026-05-15 against `main` at `804b02d`:**
 - `ruff check src/ --select C901 --config 'lint.per-file-ignores={}'` → **All checks passed!** (0 hits even with overrides bypassed).

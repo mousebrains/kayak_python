@@ -125,6 +125,26 @@ class BaseParser(ABC):
     # Database helpers (mirrors dumpToDatabase)
     # ------------------------------------------------------------------
 
+    def _localize(self, when: datetime, station: str) -> datetime:
+        """Apply ``source_tz_map`` to a naive datetime; pass tz-aware through.
+
+        Naive timestamps from per-station local-time feeds (USBR's multi-zone
+        CSV, wa.gov year-round PST) are interpreted in the station's mapped
+        timezone and converted to UTC. Without a mapping the datetime stays
+        naive (and is treated as UTC at store time). Used both inline by
+        ``dump_to_db`` and by parsers that localize while building records.
+        """
+        if when.tzinfo is not None:
+            return when
+        tz_name = self.source_tz_map.get(station)
+        if not tz_name:
+            return when
+        tz = self._tz_cache.get(tz_name)
+        if tz is None:
+            tz = ZoneInfo(tz_name)
+            self._tz_cache[tz_name] = tz
+        return when.replace(tzinfo=tz).astimezone(UTC)
+
     def dump_to_db(
         self,
         station: str,
@@ -147,14 +167,7 @@ class BaseParser(ABC):
         """
         # Localize naive timestamps using per-station TZ metadata. Must run
         # BEFORE the debug log so the log reflects the final stored value.
-        if when.tzinfo is None:
-            tz_name = self.source_tz_map.get(station)
-            if tz_name:
-                tz = self._tz_cache.get(tz_name)
-                if tz is None:
-                    tz = ZoneInfo(tz_name)
-                    self._tz_cache[tz_name] = tz
-                when = when.replace(tzinfo=tz).astimezone(UTC)
+        when = self._localize(when, station)
 
         self._db_updates += 1
 

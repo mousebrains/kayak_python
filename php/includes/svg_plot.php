@@ -543,15 +543,14 @@ function generate_gradient_profile_svg(
             $pts[] = sprintf('%.1f,%.1f', $px, $e_to_py($elev));
         }
         $pts[] = sprintf('%.1f,%.1f', (float)$plot_right, $e_to_py($end_e));
-        $elev_polyline = '<polyline fill="none" stroke="#1565C0" stroke-width="1.6" '
-            . 'stroke-linejoin="round" points="' . implode(' ', $pts) . '"/>';
+        $elev_polyline = '<polyline class="gp-elev" points="' . implode(' ', $pts) . '"/>';
 
         $e_dec = $e_step >= 1 ? 0 : 1;
         $rx = $ml + $pw;
         for ($ev = $e_min; $ev <= $e_max + $e_step * 0.01; $ev += $e_step) {
             $py = $e_to_py($ev);
-            $elev_right_axis .= '<text x="' . ($rx + 4) . '" y="' . sprintf('%.1f', $py + 4)
-                . '" font-size="12" fill="#1565C0" text-anchor="start">'
+            $elev_right_axis .= '<text class="gp-elev-axis" x="' . ($rx + 4) . '" y="'
+                . sprintf('%.1f', $py + 4) . '" text-anchor="start">'
                 . number_format($ev, $e_dec) . '</text>' . "\n";
         }
     }

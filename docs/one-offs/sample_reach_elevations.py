@@ -405,7 +405,10 @@ def main() -> int:
         f"{sum(1 for t in index if t['src'] == '1m')} x 1m)"
     )
     if not index:
-        print("ERROR: no DEM tiles found. Run docs/one-offs/fetch_dem_tiles.py first.", file=sys.stderr)
+        print(
+            "ERROR: no DEM tiles found. Run docs/one-offs/fetch_dem_tiles.py first.",
+            file=sys.stderr,
+        )
         return 2
 
     conn = sqlite3.connect(args.db)

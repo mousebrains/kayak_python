@@ -75,9 +75,13 @@ prove useful for urban/suburban streams where OSM contributors have traced detai
 
 ### Step 1: Determine the HUC4
 
-Each reach falls within a HUC4 hydrologic unit. `trace_reach.py` auto-detects the
-correct HUC4 by checking which GPKG's flowline extent contains the put-in
-coordinates. Override with `--huc4 1705`.
+Each reach falls within a HUC4 hydrologic unit. The tracer auto-detects the
+HUC4 by finding the **nearest flowline** to the put-in across every candidate
+GPKG (point-to-line distance, same query as Step 3), then confirming the
+take-out resolves to the same HUC4 — endpoint agreement guards against picking
+a neighbour across a basin divide. (The earlier heuristic — first GPKG whose
+flowline *extent* contained the put-in — mis-detected 88 of 407 reaches near
+divides, because bounding boxes overlap.) Override with `--huc4 1705`.
 
 We have 19 HUC4s covering OR, WA, ID, NV, CA (1601–1803).
 

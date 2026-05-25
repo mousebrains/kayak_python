@@ -86,7 +86,7 @@ Per-column classification:
 | `editor_id` | int FK editor.id (CASCADE) | internal | recipient |
 | `token_hash` | varchar(64) UNIQUE | **credential** | sha256(64-char hex token); raw token only ever in transit and in the email |
 | `created_at` | datetime | internal | issued at |
-| `expires_at` | datetime | internal | 30-min absolute (`MAGIC_LINK_TTL` in `php/includes/auth.php`) |
+| `expires_at` | datetime | internal | 30-min absolute (no named constant; the literal `30 * 60` in `php/includes/auth_magic_link.php`) |
 | `used_at` | datetime nullable | internal | single-use marker; non-null = burnt |
 | `ip_issued` | varchar(45) | **PII** | requester IP at issuance |
 | `next_url` | varchar(512) | internal | post-login redirect target; pre-validated via `safe_next_url()` |
@@ -212,7 +212,7 @@ Required on POST handlers in `login.php` and `contact.php`. Verified server-side
 
 ### Layer 4 — application-side throttles
 
-- **`magic_link_under_throttle()`** in `php/includes/auth.php` — 5 magic links per email per hour, 20 magic links per IP per hour. Per-email cap blunts targeted enumeration; per-IP cap covers shared households without locking out the household.
+- **`magic_link_under_throttle()`** in `php/includes/auth_magic_link.php` — 5 magic links per email per hour, 20 magic links per IP per hour. Per-email cap blunts targeted enumeration; per-IP cap covers shared households without locking out the household.
 - **`comment.php` daily cap** — 5 site-comments per editor per day.
 - **`propose.php` tiered daily cap** — 3 (pending) / 10 (minimal) / 20 (full) proposals per editor per day; maintainers unlimited (9999).
 
@@ -251,7 +251,7 @@ No third-party analytics. No third-party error tracking. No CDN for editor-pipel
 
 ## Open verification items (Tier 0.4 confirms)
 
-- HSTS active in live nginx? (`deploy/levels` doesn't include the directive; `deploy/SETUP.md:395` shows the intended line; prod-side `sudo nginx -T` needed)
+- HSTS active in live nginx? (now at `conf/security-headers.conf:7`; `deploy/SETUP.md:395` shows the intended line; prod-side `sudo nginx -T` needed)
 - nginx access-log rotation cadence (default vs custom)
 - fail2ban filter regex match against current error-log format
 - CSP details on each endpoint (snippet contents live on prod only, not in `deploy/`)
