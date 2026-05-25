@@ -8,9 +8,7 @@ Data codes: Q=FLOW, GH=GAGE, WC/WF=TEMPERATURE, etc.
 
 import math
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from kayak.db.models import DataType
 from kayak.parsers.base import BaseParser, ObservationRecord
@@ -160,21 +158,3 @@ class USBRParser(BaseParser):
                     info.station, info.data_type, self._localize(when, info.station), val
                 )
             )
-
-    def _localize(self, when: datetime, station: str) -> datetime:
-        """Apply source_tz_map to a naive datetime; pass tz-aware through.
-
-        Mirrors the dump_to_db logic so parse_records emits the same
-        timestamp the buffer would have stored.  Stays naive (and is
-        treated as UTC at store time) when source_tz_map lacks an entry.
-        """
-        if when.tzinfo is not None:
-            return when
-        tz_name = self.source_tz_map.get(station)
-        if not tz_name:
-            return when
-        tz = self._tz_cache.get(tz_name)
-        if tz is None:
-            tz = ZoneInfo(tz_name)
-            self._tz_cache[tz_name] = tz
-        return when.replace(tzinfo=tz).astimezone(UTC)

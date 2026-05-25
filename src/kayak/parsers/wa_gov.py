@@ -8,8 +8,6 @@ Quality field (last column) must be 0-200 for valid data.
 """
 
 import math
-from datetime import UTC, datetime
-from zoneinfo import ZoneInfo
 
 from kayak.db.models import DataType
 from kayak.parsers.base import BaseParser, ObservationRecord
@@ -128,16 +126,3 @@ class WaGovParser(BaseParser):
             val = celsius_to_fahrenheit(val)
 
         return ObservationRecord(station, data_type, self._localize(when, station), val)
-
-    def _localize(self, when: datetime, station: str) -> datetime:
-        """Apply source_tz_map to a naive datetime; pass tz-aware through."""
-        if when.tzinfo is not None:
-            return when
-        tz_name = self.source_tz_map.get(station)
-        if not tz_name:
-            return when
-        tz = self._tz_cache.get(tz_name)
-        if tz is None:
-            tz = ZoneInfo(tz_name)
-            self._tz_cache[tz_name] = tz
-        return when.replace(tzinfo=tz).astimezone(UTC)
