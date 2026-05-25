@@ -57,8 +57,35 @@ function handle_custom_levels(PDO $db, array $ids): void
  * The big LEFT JOIN — reach + gauge + flow/gage/temp latest obs +
  * status (computed from class_range vs current flow) + first state.
  *
- * @param list<int> $ids
- * @return list<array<string, mixed>>
+ * Row shape verified against the dev DB (`PRAGMA table_info` + `typeof`):
+ *   - id:             reach.id INTEGER NOT NULL → int
+ *   - display_name:   COALESCE(reach.display_name, reach.name), both nullable text
+ *   - sort_name:      reach.sort_name nullable text
+ *   - drainage:       reach.basin nullable text
+ *   - gauge_location: COALESCE(NULLIF(reach.description,''), gauge.location), both nullable
+ *   - flow/gage/temperature: latest_gauge_observation.value REAL via LEFT JOIN → float|null
+ *   - flow_delta:     latest_gauge_observation.delta_per_hour REAL via LEFT JOIN → float|null
+ *   - *_time:         latest_gauge_observation.observed_at text via LEFT JOIN → string|null
+ *   - status:         CASE … THEN 'low'/'high'/'okay' ELSE NULL → string|null
+ *   - state:          correlated subquery on state.name; LIMIT 1, may match nothing → string|null
+ *
+ * @param  list<int> $ids
+ * @return list<array{
+ *     id: int,
+ *     display_name: string|null,
+ *     sort_name: string|null,
+ *     drainage: string|null,
+ *     gauge_location: string|null,
+ *     flow: float|null,
+ *     flow_delta: float|null,
+ *     gage: float|null,
+ *     temperature: float|null,
+ *     flow_time: string|null,
+ *     gage_time: string|null,
+ *     temp_time: string|null,
+ *     status: string|null,
+ *     state: string|null
+ * }>
  */
 function _load_custom_reach_rows(PDO $db, array $ids): array
 {
@@ -104,7 +131,24 @@ WHERE r.id IN ($placeholders)
 SQL;
     $stmt = $db->prepare($sql);
     $stmt->execute($ids);
-    return array_values($stmt->fetchAll());
+    /** @var list<array{
+     *     id: int,
+     *     display_name: string|null,
+     *     sort_name: string|null,
+     *     drainage: string|null,
+     *     gauge_location: string|null,
+     *     flow: float|null,
+     *     flow_delta: float|null,
+     *     gage: float|null,
+     *     temperature: float|null,
+     *     flow_time: string|null,
+     *     gage_time: string|null,
+     *     temp_time: string|null,
+     *     status: string|null,
+     *     state: string|null
+     * }> $rows */
+    $rows = array_values($stmt->fetchAll());
+    return $rows;
 }
 
 /**
@@ -113,9 +157,13 @@ SQL;
  * to the end (defensive — the WHERE r.id IN (…) clause should make
  * that impossible).
  *
- * @param  list<array<string, mixed>> $reaches
- * @param  list<int>                  $ids
- * @return list<array<string, mixed>>
+ * Threads the full reach-row shape from {@see _load_custom_reach_rows} through
+ * untouched (a sort is order-only) so the header/table consumers keep concrete
+ * column types rather than collapsing back to mixed.
+ *
+ * @param  list<array{id: int, display_name: string|null, sort_name: string|null, drainage: string|null, gauge_location: string|null, flow: float|null, flow_delta: float|null, gage: float|null, temperature: float|null, flow_time: string|null, gage_time: string|null, temp_time: string|null, status: string|null, state: string|null}> $reaches
+ * @param  list<int> $ids
+ * @return list<array{id: int, display_name: string|null, sort_name: string|null, drainage: string|null, gauge_location: string|null, flow: float|null, flow_delta: float|null, gage: float|null, temperature: float|null, flow_time: string|null, gage_time: string|null, temp_time: string|null, status: string|null, state: string|null}>
  */
 function _custom_reorder_by_position(array $reaches, array $ids): array
 {
@@ -278,7 +326,7 @@ function _build_custom_sparkline(array $data, int $w = 80, int $h = 20): string
  * rendered rows so the UI only offers choices that map to
  * something visible.
  *
- * @param  list<array<string, mixed>>  $reaches
+ * @param  list<array{id: int, state: string|null, drainage: string|null, status: string|null, ...}> $reaches
  * @param  array<int, list<string>>    $tiers_by_reach
  * @return array{
  *     states:   array<string, true>,
@@ -294,7 +342,7 @@ function _compute_custom_filters(array $reaches, array $tiers_by_reach): array
     $statuses_present = [];
     $tiers_present = [];
     foreach ($reaches as $s) {
-        $rid = (int)$s['id'];
+        $rid = $s['id'];
         if (($s['state'] ?? '') !== '') {
             $states_present[$s['state']] = true;
         }
@@ -326,7 +374,7 @@ function _compute_custom_filters(array $reaches, array $tiers_by_reach): array
  * (state/watershed/status/class pills, only including values that
  * appear on the page).
  *
- * @param list<array<string, mixed>>  $reaches
+ * @param list<array{id: int, state: string|null, drainage: string|null, status: string|null, ...}> $reaches
  * @param array<int, list<string>>    $tiers_by_reach
  */
 function _render_custom_header(array $reaches, array $tiers_by_reach): void
@@ -348,7 +396,7 @@ function _render_custom_header(array $reaches, array $tiers_by_reach): void
     // the original $ids through _render_custom_header's signature; that
     // naturally drops any ids the DB couldn't resolve (which the picker
     // wouldn't pre-check anyway). Per docs/done/PLAN_map_and_ui_tweaks.md Item 3.
-    $id_csv = implode(',', array_map(static fn(array $r): int => (int)$r['id'], $reaches));
+    $id_csv = implode(',', array_map(static fn(array $r): int => $r['id'], $reaches));
     $picker_href = '/picker.php' . ($id_csv !== '' ? '?ids=' . $id_csv : '');
     ?>
 <h2>Custom Levels Page</h2>
@@ -409,7 +457,7 @@ function _render_custom_header(array $reaches, array $tiers_by_reach): void
  * Flow / Height / Temp / Watershed / Class. Each row carries
  * data-{state,basin,status,tier} attrs for client-side filtering.
  *
- * @param list<array<string, mixed>>                       $reaches
+ * @param list<array{id: int, display_name: string|null, sort_name: string|null, drainage: string|null, gauge_location: string|null, flow: float|null, flow_delta: float|null, gage: float|null, temperature: float|null, flow_time: string|null, gage_time: string|null, temp_time: string|null, status: string|null, state: string|null}> $reaches
  * @param array<int, list<string>>                         $tiers_by_reach
  * @param array<int, string>                               $classes
  * @param array<int, list<array{ts: int, v: float}>>       $sparklines
@@ -437,12 +485,12 @@ function _render_custom_table(
 </tr></thead>
 <tbody>
 <?php foreach ($reaches as $s):
-    $id = (int)$s['id'];
+    $id = $s['id'];
 
     // Status from flow delta.
     $status = '';
     if ($s['flow_delta'] !== null) {
-        $dph = (float)$s['flow_delta'];
+        $dph = $s['flow_delta'];
         if (abs($dph) < 0.5) {
             $status = '<span class="stable">stable</span>';
         } elseif ($dph > 0) {
@@ -457,8 +505,8 @@ function _render_custom_table(
     $time_html = '';
     $ts = $s['flow_time'] ?? $s['gage_time'] ?? $s['temp_time'] ?? null;
     if ($ts !== null) {
-        $iso = gmdate('Y-m-d\TH:i:s\Z', strtotime($ts));
-        $display = date('m/d H:i', strtotime($ts));
+        $iso = gmdate('Y-m-d\TH:i:s\Z', (int)strtotime($ts));
+        $display = date('m/d H:i', (int)strtotime($ts));
         $time_html = "<time datetime=\"$iso\">$display</time>";
     }
 
@@ -470,10 +518,10 @@ function _render_custom_table(
         $spark = _build_custom_sparkline($sparklines[$gid]);
     }
 
-    $flow_val = $s['flow'] !== null ? number_format((float)$s['flow'], 0) : '';
+    $flow_val = $s['flow'] !== null ? number_format($s['flow'], 0) : '';
     $flow = $flow_val !== '' ? '<a href="/plot.php?type=flow&id=' . $id . '">' . $flow_val . '</a>' . $spark : '';
-    $gage = $s['gage'] !== null ? '<a href="/plot.php?type=gage&id=' . $id . '">' . number_format((float)$s['gage'], 2) . '</a>' : '';
-    $temp = $s['temperature'] !== null ? '<a href="/plot.php?type=temp&id=' . $id . '">' . number_format((float)$s['temperature'], 0) . '</a>' : '';
+    $gage = $s['gage'] !== null ? '<a href="/plot.php?type=gage&id=' . $id . '">' . number_format($s['gage'], 2) . '</a>' : '';
+    $temp = $s['temperature'] !== null ? '<a href="/plot.php?type=temp&id=' . $id . '">' . number_format($s['temperature'], 0) . '</a>' : '';
     $drain = htmlspecialchars($s['drainage'] ?? '');
     $class = htmlspecialchars($classes[$id] ?? '');
 
@@ -514,7 +562,8 @@ function _render_custom_footer(): void
   CFS = cubic feet per second. Feet = gage height in feet. F = Fahrenheit.
 </p>
     <?php
-    $filters_mtime_raw = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/filters.js');
+    $doc_root = is_string($_SERVER['DOCUMENT_ROOT'] ?? null) ? $_SERVER['DOCUMENT_ROOT'] : '';
+    $filters_mtime_raw = @filemtime($doc_root . '/static/filters.js');
     $filters_mtime = $filters_mtime_raw !== false ? $filters_mtime_raw : 1;
     ?>
 <script src="/static/filters.js?v=<?= $filters_mtime ?>" defer></script>

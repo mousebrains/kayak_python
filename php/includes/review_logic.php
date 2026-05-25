@@ -4,6 +4,19 @@ declare(strict_types=1);
  * Pure logic for the change_request review flow — extracted from review.php
  * so unit tests can exercise approve/reject/resolve/reply without pulling in
  * the page-rendering controller.
+ *
+ * The `$cr` argument threaded through every review_* helper is a
+ * `SELECT * FROM change_request` row, shaped against the dev SQLite schema
+ * (PDO, EMULATE_PREPARES=false): INTEGER→int, TEXT/VARCHAR/DATETIME→string,
+ * `|null` for each notnull=0 column. It is inlined on each @param below
+ * (this project's PHPStan run does not register @phpstan-type aliases —
+ * see the same note in propose_handler.php). The matching shape lives at
+ * the fetch sites in review_handler.php / propose_handler.php:
+ *   array{id: int, target_type: string, target_id: int|null, editor_id: int,
+ *     submitted_at: string, subject: string|null, payload_json: string,
+ *     notes_to_maint: string|null, status: string, reviewed_at: string|null,
+ *     reviewed_by: int|null, reviewer_note: string|null, applied_json: string|null,
+ *     source_url: string|null}
  */
 
 require_once __DIR__ . '/mail.php';
@@ -23,6 +36,7 @@ function review_load_target_state(PDO $db, string $type, int $id): ?array {
     if ($type !== 'reach') return null;
     $st = $db->prepare('SELECT * FROM reach WHERE id = ?');
     $st->execute([$id]);
+    /** @var array{id: int, updated_at: string|null, gauge_id: int|null, name: string|null, display_name: string|null, sort_name: string|null, nature: string|null, description: string|null, difficulties: string|null, basin: string|null, basin_area: float|null, elevation: float|null, elevation_lost: float|null, length: float|null, gradient: float|null, features: string|null, latitude: float|null, longitude: float|null, latitude_start: float|null, longitude_start: float|null, latitude_end: float|null, longitude_end: float|null, no_show: int, notes: string|null, optimal_flow: float|null, region: string|null, remoteness: string|null, scenery: string|null, season: string|null, watershed_type: string|null, aw_id: int|null, river: string|null, max_gradient: float|null, geom: string|null, huc: string|null, map_only: int, no_flow_range: int, gradient_profile: string|null, gradient_unreliable: int}|false $reach */
     $reach = $st->fetch();
     if ($reach === false) return null;
 
@@ -31,17 +45,21 @@ function review_load_target_state(PDO $db, string $type, int $id): ?array {
          FROM reach_class WHERE reach_id = ? ORDER BY id'
     );
     $st->execute([$id]);
+    /** @var list<array{name: string, low: float|null, low_data_type: string|null, high: float|null, high_data_type: string|null}> $rows */
     $rows = $st->fetchAll();
     $classes = array_column($rows, 'name');
     $range = ['low' => null, 'high' => null, 'data_type' => 'flow'];
     foreach ($rows as $row) {
         if ($row['low'] !== null || $row['high'] !== null) {
+            $low_dt  = $row['low_data_type'];
+            $high_dt = $row['high_data_type'];
+            $data_type = ($low_dt !== null && $low_dt !== '')
+                ? $low_dt
+                : (($high_dt !== null && $high_dt !== '') ? $high_dt : 'flow');
             $range = [
                 'low'       => $row['low'],
                 'high'      => $row['high'],
-                'data_type' => ($row['low_data_type'] ?? '') !== ''
-                    ? $row['low_data_type']
-                    : (($row['high_data_type'] ?? '') !== '' ? $row['high_data_type'] : 'flow'),
+                'data_type' => $data_type,
             ];
             break;
         }
@@ -63,7 +81,7 @@ function merge_reviewer_note(string $prev, string $new): string {
 }
 
 /**
- * @param array<string, mixed> $cr        change_request row.
+ * @param array{id: int, target_type: string, target_id: int|null, editor_id: int, submitted_at: string, subject: string|null, payload_json: string, notes_to_maint: string|null, status: string, reviewed_at: string|null, reviewed_by: int|null, reviewer_note: string|null, applied_json: string|null, source_url: string|null} $cr  change_request row.
  * @param array<string, mixed> $applied   payload-shaped overlay (reach + reach_class).
  * @return array{ok: bool, err?: string}
  */
@@ -79,7 +97,7 @@ function review_approve(PDO $db, array $cr, array $applied, int $maint_id, strin
         // Two concurrent maintainers (e.g. two browser tabs) would otherwise
         // both pass the pre-transaction status check, both UPDATE the reach
         // (clobbering each other), and both write edit_history rows.
-        $merged_note = merge_reviewer_note((string)($cr['reviewer_note'] ?? ''), $new_note);
+        $merged_note = merge_reviewer_note($cr['reviewer_note'] ?? '', $new_note);
         $claim = $db->prepare(
             "UPDATE change_request
              SET status = 'approved', reviewed_at = datetime('now'),
@@ -170,10 +188,10 @@ function review_approve(PDO $db, array $cr, array $applied, int $maint_id, strin
 /**
  * Returns true on transition, false if another maintainer already reviewed.
  *
- * @param array<string, mixed> $cr change_request row.
+ * @param array{id: int, target_type: string, target_id: int|null, editor_id: int, submitted_at: string, subject: string|null, payload_json: string, notes_to_maint: string|null, status: string, reviewed_at: string|null, reviewed_by: int|null, reviewer_note: string|null, applied_json: string|null, source_url: string|null} $cr change_request row.
  */
 function review_reject(PDO $db, array $cr, string $new_note, int $maint_id): bool {
-    $merged = merge_reviewer_note((string)($cr['reviewer_note'] ?? ''), $new_note);
+    $merged = merge_reviewer_note($cr['reviewer_note'] ?? '', $new_note);
     $stmt = $db->prepare(
         "UPDATE change_request
          SET status = 'rejected', reviewed_at = datetime('now'),
@@ -184,16 +202,18 @@ function review_reject(PDO $db, array $cr, string $new_note, int $maint_id): boo
     return $stmt->rowCount() > 0;
 }
 
-/** @param array<string, mixed> $cr change_request row. */
+/** @param array{id: int, target_type: string, target_id: int|null, editor_id: int, submitted_at: string, subject: string|null, payload_json: string, notes_to_maint: string|null, status: string, reviewed_at: string|null, reviewed_by: int|null, reviewer_note: string|null, applied_json: string|null, source_url: string|null} $cr change_request row. */
 function review_notify_editor(PDO $db, array $cr, string $decision, string $note): void {
     $st = $db->prepare('SELECT email FROM editor WHERE id = ?');
     $st->execute([$cr['editor_id']]);
+    /** @var array{email: string}|false $row */
     $row = $st->fetch();
-    if ($row === false || ($row['email'] ?? '') === '') return;
+    if ($row === false || $row['email'] === '') return;
 
-    $target_label = ($cr['subject'] ?? '') !== '' ? $cr['subject'] : ($cr['target_type'] . ' #' . $cr['target_id']);
+    $subject = $cr['subject'] ?? '';
+    $target_label = $subject !== '' ? $subject : ($cr['target_type'] . ' #' . $cr['target_id']);
     send_email(
-        (string)$row['email'],
+        $row['email'],
         "[levels] your proposal was $decision",
         render_editor_decision_email($target_label, $decision, $note)
     );
@@ -202,20 +222,22 @@ function review_notify_editor(PDO $db, array $cr, string $decision, string $note
 /**
  * Send a maintainer reply without changing the request's status.
  *
- * @param array<string, mixed> $cr change_request row.
+ * @param array{id: int, target_type: string, target_id: int|null, editor_id: int, submitted_at: string, subject: string|null, payload_json: string, notes_to_maint: string|null, status: string, reviewed_at: string|null, reviewed_by: int|null, reviewer_note: string|null, applied_json: string|null, source_url: string|null} $cr change_request row.
  */
 function review_send_reply(PDO $db, array $cr, string $reply, int $maint_id): void {
-    $merged = merge_reviewer_note((string)($cr['reviewer_note'] ?? ''), $reply);
+    $merged = merge_reviewer_note($cr['reviewer_note'] ?? '', $reply);
     $db->prepare('UPDATE change_request SET reviewer_note = ? WHERE id = ?')
         ->execute([$merged, $cr['id']]);
 
     $st = $db->prepare('SELECT email FROM editor WHERE id = ?');
     $st->execute([$cr['editor_id']]);
+    /** @var array{email: string}|false $row */
     $row = $st->fetch();
-    if ($row !== false && ($row['email'] ?? '') !== '') {
-        $target_label = ($cr['subject'] ?? '') !== '' ? $cr['subject'] : ($cr['target_type'] . ' #' . $cr['target_id']);
+    if ($row !== false && $row['email'] !== '') {
+        $subject = $cr['subject'] ?? '';
+        $target_label = $subject !== '' ? $subject : ($cr['target_type'] . ' #' . $cr['target_id']);
         send_email(
-            (string)$row['email'],
+            $row['email'],
             "[levels] maintainer reply on your proposal",
             render_editor_reply_email($target_label, $reply)
         );
@@ -226,10 +248,10 @@ function review_send_reply(PDO $db, array $cr, string $reply, int $maint_id): vo
  * Terminal close without a payload apply (site comments, mooted proposals).
  * Returns true on transition, false if another maintainer already reviewed.
  *
- * @param array<string, mixed> $cr change_request row.
+ * @param array{id: int, target_type: string, target_id: int|null, editor_id: int, submitted_at: string, subject: string|null, payload_json: string, notes_to_maint: string|null, status: string, reviewed_at: string|null, reviewed_by: int|null, reviewer_note: string|null, applied_json: string|null, source_url: string|null} $cr change_request row.
  */
 function review_resolve(PDO $db, array $cr, string $new_note, int $maint_id): bool {
-    $merged = merge_reviewer_note((string)($cr['reviewer_note'] ?? ''), $new_note);
+    $merged = merge_reviewer_note($cr['reviewer_note'] ?? '', $new_note);
     $stmt = $db->prepare(
         "UPDATE change_request
          SET status = 'resolved', reviewed_at = datetime('now'),
@@ -243,10 +265,10 @@ function review_resolve(PDO $db, array $cr, string $new_note, int $maint_id): bo
 /**
  * Returns true on transition, false if another maintainer already reviewed.
  *
- * @param array<string, mixed> $cr change_request row.
+ * @param array{id: int, target_type: string, target_id: int|null, editor_id: int, submitted_at: string, subject: string|null, payload_json: string, notes_to_maint: string|null, status: string, reviewed_at: string|null, reviewed_by: int|null, reviewer_note: string|null, applied_json: string|null, source_url: string|null} $cr change_request row.
  */
 function review_reply_and_close(PDO $db, array $cr, string $reply, int $maint_id): bool {
-    $merged = merge_reviewer_note((string)($cr['reviewer_note'] ?? ''), $reply);
+    $merged = merge_reviewer_note($cr['reviewer_note'] ?? '', $reply);
     $stmt = $db->prepare(
         "UPDATE change_request
          SET status = 'resolved', reviewed_at = datetime('now'),
@@ -258,11 +280,13 @@ function review_reply_and_close(PDO $db, array $cr, string $reply, int $maint_id
 
     $st = $db->prepare('SELECT email FROM editor WHERE id = ?');
     $st->execute([$cr['editor_id']]);
+    /** @var array{email: string}|false $row */
     $row = $st->fetch();
-    if ($row !== false && ($row['email'] ?? '') !== '') {
-        $target_label = ($cr['subject'] ?? '') !== '' ? $cr['subject'] : ($cr['target_type'] . ' #' . $cr['target_id']);
+    if ($row !== false && $row['email'] !== '') {
+        $subject = $cr['subject'] ?? '';
+        $target_label = $subject !== '' ? $subject : ($cr['target_type'] . ' #' . $cr['target_id']);
         send_email(
-            (string)$row['email'],
+            $row['email'],
             "[levels] your proposal was resolved",
             render_editor_reply_and_close_email($target_label, $reply)
         );

@@ -140,9 +140,21 @@ external regression-artifact JSON) — left as-is, not guessed.
 
 Second pass typed `description_detail.php` (59 → 0), `reach_detail.php` (54 → 0),
 `source.php` (37 → 0), and `propose_handler.php` (40 → 12; rest is superglobal /
-JSON). Baseline **510 → 332**. Next worst: `review_logic.php` (35),
-`svg_plot.php` (28), `reach_search.php` (25), `custom_handler.php` (21),
-`review_handler.php` (20).
+JSON). Baseline **510 → 332**.
+
+Third pass typed `reach_search.php` (25 → 0), `custom_handler.php` (21 → 0),
+`custom_gauges_handler.php` (14 → 0), `svg_plot.php` (28 → 0 — `$data['samples']`
+typed from the gradient-profile JSON shape documented in migration 0045 /
+`compute_reach_gradient.py`, `float|int` so the `(float)` casts stay
+load-bearing), and `review_logic.php` (35 → 12; rest is the JSON apply-body).
+Baseline **332 → 221** (~65% of the original 634 cleared in three passes).
+
+The remaining 221 are now dominated by genuinely-dynamic `mixed` — `$_POST`/
+`$_GET` in the form handlers and `json_decode` editor-payload values — spread
+thin (top file `review_handler.php` 20, then `auth.php` 13, `contact.php`/
+`edit.php`/`propose_handler.php`/`review_logic.php` 12). The cheap DB-row wins
+are largely harvested; further shrink means typing handler/superglobal flows
+(lower ROI) and is best done opportunistically as those files are next edited.
 
 ## Per-stage discipline
 

@@ -406,6 +406,17 @@ function generate_gradient_profile_svg(
     if (!is_array($data) || !isset($data['samples']) || !is_array($data['samples'])) {
         return '';
     }
+    /**
+     * Per-sample shape from compute_reach_gradient.build_profile (documented
+     * in data/db/migrations/0045_*.sql header). Numeric fields are `float|int`
+     * because JSON whole numbers (e.g. grad_ft_per_mi: 0) decode to int — the
+     * (float) casts below are load-bearing coercion of that external JSON.
+     * `significant` defaults via `?? false`; `lat`/`lon` exist in live data but
+     * are absent from elevation-only test fixtures; `elev_ft` is added by the
+     * elevation branch at render time.
+     *
+     * @var list<array{d_mi: float|int, w_mi: float|int, grad_ft_per_mi: float|int, significant?: bool, lat?: float|int|null, lon?: float|int|null, elev_ft?: float|int}> $samples
+     */
     $samples = $data['samples'];
     if (count($samples) < 2) return '';
 
@@ -419,7 +430,7 @@ function generate_gradient_profile_svg(
     // the take-out (via the first/last edge logic below). The
     // underlying gradient_profile JSON keeps both bars.
     $n = count($samples);
-    if (!(bool)($samples[$n - 1]['significant'] ?? false) && (bool)($samples[$n - 2]['significant'] ?? false)) {
+    if (!($samples[$n - 1]['significant'] ?? false) && ($samples[$n - 2]['significant'] ?? false)) {
         array_pop($samples);
         if (count($samples) < 2) return '';
     }
@@ -489,7 +500,7 @@ function generate_gradient_profile_svg(
         $d_mi = (float)$s['d_mi'];
         $w_mi = (float)$s['w_mi'];
         $grad = max(0.0, (float)$s['grad_ft_per_mi']);
-        $sig = (bool)($s['significant'] ?? false);
+        $sig = $s['significant'] ?? false;
 
         $left_x = $d_mi === $first_d_mi
             ? (float)$ml

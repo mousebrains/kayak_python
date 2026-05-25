@@ -253,72 +253,6 @@ parameters:
 			path: php/includes/config.php
 
 		-
-			message: '#^Binary operation "\." between mixed and ''/static/filters\.js'' results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: php/includes/custom_gauges_handler.php
-
-		-
-			message: '#^Cannot cast mixed to float\.$#'
-			identifier: cast.double
-			count: 4
-			path: php/includes/custom_gauges_handler.php
-
-		-
-			message: '#^Cannot cast mixed to int\.$#'
-			identifier: cast.int
-			count: 1
-			path: php/includes/custom_gauges_handler.php
-
-		-
-			message: '#^Cannot cast mixed to string\.$#'
-			identifier: cast.string
-			count: 7
-			path: php/includes/custom_gauges_handler.php
-
-		-
-			message: '#^Parameter \#1 \$callback of function array_map expects \(callable\(mixed\)\: mixed\)\|null, ''strtotime'' given\.$#'
-			identifier: argument.type
-			count: 1
-			path: php/includes/custom_gauges_handler.php
-
-		-
-			message: '#^Binary operation "\." between mixed and ''/static/filters\.js'' results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: php/includes/custom_handler.php
-
-		-
-			message: '#^Cannot cast mixed to float\.$#'
-			identifier: cast.double
-			count: 4
-			path: php/includes/custom_handler.php
-
-		-
-			message: '#^Cannot cast mixed to int\.$#'
-			identifier: cast.int
-			count: 3
-			path: php/includes/custom_handler.php
-
-		-
-			message: '#^Parameter \#1 \$datetime of function strtotime expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 2
-			path: php/includes/custom_handler.php
-
-		-
-			message: '#^Parameter \#1 \$string of function htmlspecialchars expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 6
-			path: php/includes/custom_handler.php
-
-		-
-			message: '#^Possibly invalid array key type mixed\.$#'
-			identifier: offsetAccess.invalidOffset
-			count: 5
-			path: php/includes/custom_handler.php
-
-		-
 			message: '#^Function get_reach_or_404\(\) should return array\<string, mixed\> but returns mixed\.$#'
 			identifier: return.type
 			count: 1
@@ -451,54 +385,6 @@ parameters:
 			path: php/includes/reach_fields.php
 
 		-
-			message: '#^Binary operation "\." between ''Location\: /reach…'' and mixed results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: php/includes/reach_search.php
-
-		-
-			message: '#^Cannot cast mixed to float\.$#'
-			identifier: cast.double
-			count: 11
-			path: php/includes/reach_search.php
-
-		-
-			message: '#^Function _aggregate_reach_readings\(\) should return array\{array\<int, array\<string, array\<string, mixed\>\>\>, list\<int\>\} but returns array\{array\<non\-empty\-array\>, non\-empty\-list\<mixed\>\}\.$#'
-			identifier: return.type
-			count: 1
-			path: php/includes/reach_search.php
-
-		-
-			message: '#^Parameter \#1 \$array of function array_unique expects an array of values castable to string, array\<int\<0, max\>, mixed\> given\.$#'
-			identifier: argument.type
-			count: 1
-			path: php/includes/reach_search.php
-
-		-
-			message: '#^Parameter \#1 \$string of function htmlspecialchars expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 3
-			path: php/includes/reach_search.php
-
-		-
-			message: '#^Parameter \#2 \$string of function explode expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: php/includes/reach_search.php
-
-		-
-			message: '#^Part \$r\[''id''\] \(mixed\) of encapsed string cannot be cast to string\.$#'
-			identifier: encapsedStringPart.nonString
-			count: 2
-			path: php/includes/reach_search.php
-
-		-
-			message: '#^Possibly invalid array key type mixed\.$#'
-			identifier: offsetAccess.invalidOffset
-			count: 5
-			path: php/includes/reach_search.php
-
-		-
 			message: '#^Cannot cast mixed to int\.$#'
 			identifier: cast.int
 			count: 1
@@ -517,27 +403,9 @@ parameters:
 			path: php/includes/review_logic.php
 
 		-
-			message: '#^Binary operation "\." between mixed and '' \#'' results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 3
-			path: php/includes/review_logic.php
-
-		-
-			message: '#^Binary operation "\." between non\-falsy\-string and mixed results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 3
-			path: php/includes/review_logic.php
-
-		-
 			message: '#^Cannot access offset ''data_type'' on mixed\.$#'
 			identifier: offsetAccess.nonOffsetAccessible
 			count: 1
-			path: php/includes/review_logic.php
-
-		-
-			message: '#^Cannot access offset ''email'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 3
 			path: php/includes/review_logic.php
 
 		-
@@ -565,45 +433,9 @@ parameters:
 			path: php/includes/review_logic.php
 
 		-
-			message: '#^Cannot cast mixed to int\.$#'
-			identifier: cast.int
-			count: 1
-			path: php/includes/review_logic.php
-
-		-
 			message: '#^Cannot cast mixed to string\.$#'
 			identifier: cast.string
-			count: 10
-			path: php/includes/review_logic.php
-
-		-
-			message: '#^Function review_load_target_state\(\) should return array\{reach\: array\<string, mixed\>, reach_class\: array\{names\: list\<string\>, range\: array\{low\: float\|null, high\: float\|null, data_type\: string\}\}\}\|null but returns array\{reach\: mixed, reach_class\: array\{names\: list, range\: array\{low\: mixed, high\: mixed, data_type\: mixed\}\}\}\.$#'
-			identifier: return.type
-			count: 1
-			path: php/includes/review_logic.php
-
-		-
-			message: '#^Parameter \#1 \$target_label of function render_editor_decision_email expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: php/includes/review_logic.php
-
-		-
-			message: '#^Parameter \#1 \$target_label of function render_editor_reply_and_close_email expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: php/includes/review_logic.php
-
-		-
-			message: '#^Parameter \#1 \$target_label of function render_editor_reply_email expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: php/includes/review_logic.php
-
-		-
-			message: '#^Parameter \#2 \$type of function review_load_target_state expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
+			count: 2
 			path: php/includes/review_logic.php
 
 		-
@@ -623,42 +455,6 @@ parameters:
 			identifier: cast.string
 			count: 2
 			path: php/includes/source_url.php
-
-		-
-			message: '#^Cannot access offset ''d_mi'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 5
-			path: php/includes/svg_plot.php
-
-		-
-			message: '#^Cannot access offset ''elev_ft'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: php/includes/svg_plot.php
-
-		-
-			message: '#^Cannot access offset ''grad_ft_per_mi'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 3
-			path: php/includes/svg_plot.php
-
-		-
-			message: '#^Cannot access offset ''significant'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 3
-			path: php/includes/svg_plot.php
-
-		-
-			message: '#^Cannot access offset ''w_mi'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 4
-			path: php/includes/svg_plot.php
-
-		-
-			message: '#^Cannot cast mixed to float\.$#'
-			identifier: cast.double
-			count: 12
-			path: php/includes/svg_plot.php
 
 		-
 			message: '#^Cannot access offset ''gauge_ft'' on mixed\.$#'
