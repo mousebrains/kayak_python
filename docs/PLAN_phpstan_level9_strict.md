@@ -1,6 +1,8 @@
 # Plan — PHPStan: clear the baseline, then level 9 + strict-rules
 
-**Status:** Complete (branch `phpstan-strict`; Stages 1–3 landed 2026-05-24/25).
+**Status:** Complete (branch `phpstan-strict`; Stages 1–4 landed 2026-05-24/25).
+Final bar: **level 9 + full `phpstan-strict-rules`** (no toggles), zero live
+findings, with a shrinking 634-entry level-9 `mixed` baseline.
 
 ## Context
 
@@ -22,17 +24,18 @@ stage. `vendor/bin/phpstan analyse -c <tmp>.neon --memory-limit=1G`:
 | + strict-rules (full) | 431 | sized; the two stylistic families = ~321 of them |
 | + strict-rules (tuned) | 110 | **Stage 2** — fixed all to zero |
 | level 9 + strict-rules (tuned) | 640 | **Stage 3** — fresh shrinking baseline |
+| level 9 + strict-rules (full)  | +324 over Stage 3 | **Stage 4** — fixed all 324; baseline 640→634 |
 
 The level-9 jump is the classic web-app explosion: every `$_GET` / `$_POST` /
 `json_decode` / PDO fetch result is `mixed`, and level 9 flags each use
 (cast.string/double/int 324, argument.type 121, offsetAccess 99, …).
 
-**Tuned strict-rules** = full strict-rules minus the two highest-churn,
-lowest-bug-value families (maintainer call, 2026-05-25): `booleansInConditions`
-(~237 finds — would force `if ($row !== false)` over the idiomatic `if ($row)`)
-and `disallowedShortTernary` (~84 finds — bans `$x ?: $y`). Both are turned off
-via `parameters.strictRules` in `phpstan.neon`; every other strict rule is
-enforced at zero.
+**Tuned strict-rules** (Stages 2–3) = full strict-rules minus the two
+highest-churn families: `booleansInConditions` (~237 finds — `if ($row !== false)`
+over the idiomatic `if ($row)`) and `disallowedShortTernary` (~84 finds — bans
+`$x ?: $y`). **Stage 4 (2026-05-25) re-enabled both** and fixed all 324 resulting
+finds to zero (behaviour-preserving), so there are no `strictRules` toggles left —
+full strict-rules is enforced.
 
 ## Stages
 
@@ -84,6 +87,36 @@ level-9-adoption grandfathering (distinct from the level-8 list Stage 1 cleared)
 **✓ Done** — `phpstan.neon` `level: 9`; regenerated `phpstan-baseline.neon`
 (640 finds / 260 entries) with a header noting it as a *shrinking* level-9
 debt list. `composer analyse` → 0.
+
+### Stage 4 — enable the two stylistic families (fix to zero)
+Maintainer opted (2026-05-25) to go after the families Stages 2–3 had deferred.
+Removed the `parameters.strictRules` toggles so `booleansInConditions` +
+`disallowedShortTernary` enforce, then fixed all **324** resulting finds to zero,
+behaviour-preserving, by the type→comparison table below. The level-9 `mixed`
+finds stay baselined; six were incidentally eliminated by narrowing fixes, so the
+baseline shrank 640 → **634**.
+
+Type→fix table used (the condition/operand `$x` must become boolean):
+- `string` → `$x !== ''` / `=== ''`; `string|null` → `($x ?? '') !== ''` (or
+  `$x !== null && $x !== ''` when `$x` must stay **narrowed** for a later
+  string call — `($x ?? '')` does not narrow `$x`).
+- array/list → `$x !== []` / `=== []`; `array|null` → `($x ?? []) !== []`;
+  `$stmt->fetch()` row (`array|false`) → `$x !== false` / `=== false`.
+- `int` → `$x !== 0`; `strpos()` → `!== false` (0 is valid); `preg_match()` →
+  `=== 1`; `strtotime`/`filter_var`/`filemtime` (`int|false`) → `!== false`.
+- `filter_input(…, FILTER_VALIDATE_INT)` (`int|false|null`): id → `is_int($x) &&
+  $x >= 1`; flag → `is_int($x) && $x !== 0`.
+- short `$a ?: $b` → `??` when null is the only falsy case; else a long ternary
+  with a boolean condition; a function-call `$a` is hoisted to a temp first (no
+  double-eval).
+- genuinely-truthy `mixed` flags/counters (`no_show`, `significant`, Turnstile
+  `success`, `HTTPS`, numeric `optimal_flow`/`basin_area`) → `(bool)$x`, the only
+  exact behaviour-preserving form; nullable `mixed` columns → `!== null`.
+
+**Exit:** `composer analyse` (level 9 + **full** strict-rules, with the 634
+baseline) → 0 errors; no `strictRules` toggles remain.
+**✓ Done** — 53 files, behaviour-preserving; `composer analyse` → 0,
+`composer fix-check` clean, 172 phpunit tests pass.
 
 ## Shrinking the baseline (follow-up work)
 

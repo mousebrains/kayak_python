@@ -1,8 +1,10 @@
 includes:
-    # Opt-in strict rules layered on the base level: useless-cast,
+    # Full phpstan-strict-rules, layered on the base level: useless-cast,
     # empty(), strict in_array/array_filter, loose ==, loop-variable
-    # overwrite, variable-variables, etc. vendor/ is always present
-    # when PHPStan can run, so a hard include is safe here.
+    # overwrite, variable-variables, AND booleans-in-conditions +
+    # no-short-ternary (the two stylistic families). All enforced at
+    # zero — no strictRules toggles. vendor/ is always present when
+    # PHPStan can run, so a hard include is safe here.
     - vendor/phpstan/phpstan-strict-rules/rules.neon
     # Level-9 grandfather baseline — the pre-existing mixed-typing finds
     # (cast-of-mixed, offset-on-mixed, argument.type) the level 8->9 bump
@@ -14,14 +16,6 @@ includes:
 
 parameters:
     level: 9
-    strictRules:
-        # Two high-churn, low-bug-value strict families are off; every
-        # other strict rule is enforced (fixed to zero, no baseline).
-        #   booleansInConditions — would force `if ($row !== false)` over
-        #     the idiomatic `if ($row)` (~237 finds, no behavior change).
-        #   disallowedShortTernary — bans `$x ?: $y` (~84 finds, stylistic).
-        booleansInConditions: false
-        disallowedShortTernary: false
     paths:
         - php
     excludePaths:

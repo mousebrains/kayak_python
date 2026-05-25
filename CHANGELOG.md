@@ -65,13 +65,15 @@ All notable changes to this project will be documented in this file.
   instead of calling `sys.exit`; `M_TO_FT` given a canonical home;
   `.gitattributes` collapses the opaque `reaches.json` / `huc_name.csv`
   snapshot diffs (reach.csv stays a readable text diff).
-- **PHP type-safety hardened**: `php/` now runs PHPStan at **level 9** with
-  `phpstan/phpstan-strict-rules` (tuned — the stylistic `booleansInConditions`
-  and short-ternary families off). The old level-8 grandfather baseline was
-  cleared by fixing every find at the source, strict-rules fixed to zero, and
-  the level-9 `mixed`-typing finds captured in a fresh *shrinking*
-  `phpstan-baseline.neon` so new code is held to level 9. Behaviour-preserving;
-  172 phpunit tests stay green. See `docs/PLAN_phpstan_level9_strict.md`.
+- **PHP type-safety hardened**: `php/` now runs PHPStan at **level 9** with the
+  **full** `phpstan/phpstan-strict-rules` (no toggles). The old level-8
+  grandfather baseline was cleared by fixing every find at the source; all
+  strict-rules finds — including the `booleansInConditions` and short-ternary
+  families (boolean conditions made explicit, `$a ?: $b` removed) — fixed to
+  zero with hundreds of behaviour-preserving edits; the residual level-9
+  `mixed`-typing finds are captured in a fresh *shrinking* `phpstan-baseline.neon`
+  (634 entries) so new code is held to level 9. 172 phpunit tests stay green.
+  See `docs/PLAN_phpstan_level9_strict.md`.
 
 ## [1.1.1] - 2026-05-21
 
