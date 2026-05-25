@@ -41,6 +41,30 @@ link, so `levels pipeline` fails at `orphan-check` and the site renders empty.
 A plain `levels init-db` (seeded from `data/sources.yaml`) is enough for a
 fetch-only smoke test.
 
+### Working on the live host
+
+`/home/pat/kayak` is the **live editable-install tree**: the venv imports
+`kayak` directly from `src/`, so the running systemd pipeline and scheduled
+jobs execute *whatever branch is checked out here, right now*. A
+`git checkout <feature-branch>` in this tree is therefore an unannounced
+deploy — and `scripts/snapshot_metadata.sh` refuses to run unless it's on
+`main`.
+
+So **keep `/home/pat/kayak` on `main` and do all branch/PR work in a git
+worktree** (the venv never imports a worktree):
+
+```bash
+scripts/new-worktree.sh my-feature   # ~/kayak-worktrees/my-feature, off origin/main
+cd ~/kayak-worktrees/my-feature      # edit, commit, push, open the PR here
+```
+
+Deploy by merging the PR and running `git pull` on `main` in the live tree —
+never by leaving a feature branch checked out. Remove a finished worktree with
+`git worktree remove <path>`.
+
+Full rationale, the incidents that motivated this, a recovery runbook, and the
+deferred "frozen install artifact" fix: [`docs/live-tree-workflow.md`](docs/live-tree-workflow.md).
+
 ## Build and Development Commands
 
 ```bash

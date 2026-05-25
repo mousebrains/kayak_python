@@ -6,6 +6,10 @@
 # systemd timer kayak-metadata-snapshot.timer.
 #
 # Safety properties:
+#   - Refuses to run unless the live tree is on `main` — this commits on the
+#     checked-out branch and pushes origin/main, so a feature branch left
+#     checked out here would strand the snapshot off-main (do branch work in a
+#     worktree; see scripts/new-worktree.sh)
 #   - Only stages data/db/*.csv (never scoops up other working-tree edits)
 #   - Refuses to run if there are pre-existing staged changes outside data/db/
 #   - Bails (non-zero exit -> OnFailure notify) if local main has diverged
@@ -21,6 +25,17 @@ VENV_PY="${KAYAK_HOME}/.venv/bin/python3"
 BRANCH=main
 
 cd "$REPO"
+
+# The live tree must be on $BRANCH: we commit on the checked-out branch and
+# push origin/$BRANCH, so a feature branch left checked out here would commit
+# the snapshot off-main and silently push nothing. Bail loudly (non-zero ->
+# OnFailure notify) rather than write to the wrong place.
+CURRENT_BRANCH=$(git symbolic-ref --quiet --short HEAD || echo '(detached HEAD)')
+if [ "$CURRENT_BRANCH" != "$BRANCH" ]; then
+    echo "Aborting: $REPO is on '$CURRENT_BRANCH', not '$BRANCH'." >&2
+    echo "  Branch work belongs in a worktree (scripts/new-worktree.sh); the live tree stays on $BRANCH." >&2
+    exit 1
+fi
 
 OUTSIDE_STAGED=$(git diff --cached --name-only -- ':!data/db/')
 if [ -n "$OUTSIDE_STAGED" ]; then
