@@ -43,10 +43,10 @@ include_header('Account');
 ?>
 <h2>Your account</h2>
 
-<?php if ($flash): ?>
+<?php if ($flash !== null): ?>
 <p style="padding:.5rem;background:#e8f4ea;border:1px solid #b7dcc0;border-radius:4px"><?= htmlspecialchars($flash) ?></p>
 <?php endif ?>
-<?php if ($flash_err): ?>
+<?php if ($flash_err !== null): ?>
 <p style="padding:.5rem;background:#fde8e8;border:1px solid #f5b5b5;border-radius:4px"><?= htmlspecialchars($flash_err) ?></p>
 <?php endif ?>
 
@@ -79,7 +79,7 @@ include_header('Account');
     </details>
   </td></tr>
   <tr><td>Joined</td><td><?= htmlspecialchars((string)$ed['created_at']) ?></td></tr>
-  <?php if (!empty($ed['last_login_at'])): ?>
+  <?php if (($ed['last_login_at'] ?? '') !== ''): ?>
   <tr><td>Last login</td><td><?= htmlspecialchars((string)$ed['last_login_at']) ?></td></tr>
   <?php endif ?>
   <tr><td>Session expires</td><td><?= htmlspecialchars((string)$ed['session_expires_at']) ?></td></tr>

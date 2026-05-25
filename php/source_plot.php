@@ -17,8 +17,10 @@ require_once __DIR__ . '/includes/svg_plot.php';
 require_once __DIR__ . '/includes/validate.php';
 
 $id   = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
-$type = filter_input(INPUT_GET, 'type', FILTER_SANITIZE_SPECIAL_CHARS) ?: 'flow';
-$days = filter_input(INPUT_GET, 'days', FILTER_VALIDATE_INT) ?: 10;
+$type = filter_input(INPUT_GET, 'type', FILTER_SANITIZE_SPECIAL_CHARS);
+$type = is_string($type) && $type !== '' ? $type : 'flow';
+$days = filter_input(INPUT_GET, 'days', FILTER_VALIDATE_INT);
+$days = is_int($days) && $days !== 0 ? $days : 10;
 // Clamp the lookback to 1 year — same rationale as plot.php's cap.
 $days = max(1, min($days, 366));
 $embed = filter_input(INPUT_GET, 'embed', FILTER_VALIDATE_INT);
@@ -28,7 +30,7 @@ $end_raw    = filter_input(INPUT_GET, 'end', FILTER_SANITIZE_SPECIAL_CHARS);
 $start_date = validate_date(is_string($start_raw) ? $start_raw : null);
 $end_date   = validate_date(is_string($end_raw)   ? $end_raw   : null);
 
-if (!$id) { http_response_code(400); exit('Missing id parameter'); }
+if (!is_int($id) || $id < 1) { http_response_code(400); exit('Missing id parameter'); }
 
 // Aliases match plot.php so /source_plot.php?type=gage and ?type=temp work.
 if ($type === 'gage') { $type = 'gauge'; }
@@ -43,9 +45,9 @@ $db = get_db();
 $stmt = $db->prepare('SELECT id, name, agency FROM source WHERE id = ?');
 $stmt->execute([$id]);
 $source = $stmt->fetch();
-if (!$source) { http_response_code(404); exit('Source not found'); }
+if ($source === false) { http_response_code(404); exit('Source not found'); }
 
-if ($start_date && $end_date) {
+if ($start_date !== null && $end_date !== null) {
     // validate_date guarantees a parseable Y-m-d, but strtotime is typed
     // int|false — cast to int to satisfy PHPStan without a baseline entry.
     $start_ts = (int)strtotime($start_date);
@@ -98,12 +100,12 @@ $is_flow  = in_array($type, ['flow', 'inflow', 'outflow'], true);
 
 $svg = generate_svg_plot($times, $values, $title, $y_label, 800, 350, 200, $is_flow);
 
-if ($embed) {
+if (is_int($embed) && $embed !== 0) {
     $latest_ts     = count($times) > 0 ? max($times) : time();
     $default_end   = date('Y-m-d', $latest_ts);
     $default_start = date('Y-m-d', $latest_ts - $days * 86400);
-    $form_start    = $start_date ?: $default_start;
-    $form_end      = $end_date   ?: $default_end;
+    $form_start    = $start_date ?? $default_start;
+    $form_end      = $end_date   ?? $default_end;
 
     require_once __DIR__ . '/includes/header.php';
     require_once __DIR__ . '/includes/footer.php';

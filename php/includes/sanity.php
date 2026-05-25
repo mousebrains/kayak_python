@@ -117,7 +117,7 @@ function check_class_string(string $field, string $value): array {
     }
     $pat = '/^(?:[IVX]{1,4}(?:\.\d)?[+\-]?)'
          . '(?:[\s\-(,][IVX]{1,4}(?:\.\d)?[+\-]?\)?)?$/';
-    if (!preg_match($pat, $v)) {
+    if (preg_match($pat, $v) !== 1) {
         return [['level' => 'warning', 'field' => $field,
                  'message' => "\"$v\" doesn't match the expected class format "
                             . '(e.g. III, III+, II-III, IV V, III+(IV), V.1).']];
@@ -234,7 +234,7 @@ function check_putin_takeout(
  * @return list<array{level: 'error'|'warning', field: string, message: string}>
  */
 function sanity_errors(array $issues): array {
-    return array_values(array_filter($issues, fn($i) => ($i['level'] ?? '') === 'error'));
+    return array_values(array_filter($issues, fn($i) => $i['level'] === 'error'));
 }
 
 /**
@@ -242,5 +242,5 @@ function sanity_errors(array $issues): array {
  * @return list<array{level: 'error'|'warning', field: string, message: string}>
  */
 function sanity_warnings(array $issues): array {
-    return array_values(array_filter($issues, fn($i) => ($i['level'] ?? '') === 'warning'));
+    return array_values(array_filter($issues, fn($i) => $i['level'] === 'warning'));
 }

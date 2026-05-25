@@ -73,7 +73,7 @@ $build_at = $build_mtime !== false ? gmdate('Y-m-d\TH:i:s\Z', $build_mtime) : nu
 
 // latest_observation_at — most recent observation across all sources.
 $row = status_query($db, 'SELECT MAX(observed_at) AS m FROM latest_observation')->fetch();
-$latest_observation_at = is_array($row) && $row['m']
+$latest_observation_at = is_array($row) && $row['m'] !== null
     ? gmdate('Y-m-d\TH:i:s\Z', (int)strtotime((string)$row['m']))
     : null;
 

@@ -44,7 +44,8 @@ final class Config
     public static function get_singleton(): self
     {
         if (self::$singleton === null) {
-            $path = (string)(getenv('KAYAK_CONFIG_PATH') ?: '');
+            $env_path = getenv('KAYAK_CONFIG_PATH');
+            $path = is_string($env_path) && $env_path !== '' ? $env_path : '';
             if ($path === '') {
                 $path = self::DEFAULT_PATH;
             }

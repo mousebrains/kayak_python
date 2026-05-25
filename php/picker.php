@@ -15,13 +15,14 @@ $db = get_db();
 // AJAX JSON endpoint — returns one row per reach with enough metadata
 // for client-side filtering (state/basin/status/tiers) and display.
 // -----------------------------------------------------------------------
-if (filter_input(INPUT_GET, 'ajax', FILTER_VALIDATE_INT)) {
+$ajax = filter_input(INPUT_GET, 'ajax', FILTER_VALIDATE_INT);
+if (is_int($ajax) && $ajax !== 0) {
     header('Content-Type: application/json');
     header('Cache-Control: max-age=60');
 
-    $raw = filter_input(INPUT_GET, 'states', FILTER_DEFAULT) ?? '';
-    $state_names = array_filter(array_map('trim', explode(',', $raw)));
-    if (!$state_names) {
+    $raw = (string)(filter_input(INPUT_GET, 'states', FILTER_DEFAULT) ?? '');
+    $state_names = array_filter(array_map('trim', explode(',', $raw)), fn($s) => $s !== '');
+    if ($state_names === []) {
         echo '[]';
         exit;
     }
@@ -69,7 +70,7 @@ SQL;
     // the client (which splits the data-tier attribute on comma).
     $reach_ids = array_column($rows, 'id');
     $tiers_by_reach = [];
-    if ($reach_ids) {
+    if ($reach_ids !== []) {
         $ph = implode(',', array_fill(0, count($reach_ids), '?'));
         $cls_stmt = $db->prepare(
             "SELECT reach_id, name FROM reach_class WHERE reach_id IN ($ph)"
@@ -111,7 +112,7 @@ require_once __DIR__ . '/includes/footer.php';
 // additional round trip. Also keep the auto-checked primary state so the
 // picker table populates immediately on first load.
 $all_states = array_column(
-    $db->query('SELECT DISTINCT st.name FROM state st
+    db_query($db, 'SELECT DISTINCT st.name FROM state st
                 JOIN reach_state rs ON st.id = rs.state_id
                 JOIN reach r ON rs.reach_id = r.id
                 WHERE r.no_show = 0 ORDER BY st.name')->fetchAll(),
@@ -127,7 +128,7 @@ $primary_state = (is_string($state_param) && in_array($state_param, $all_states,
     ? $state_param
     : 'Oregon';
 $all_basins = array_column(
-    $db->query("SELECT DISTINCT basin FROM reach
+    db_query($db, "SELECT DISTINCT basin FROM reach
                 WHERE no_show = 0 AND basin IS NOT NULL AND basin != ''
                 ORDER BY basin")->fetchAll(),
     'basin'
@@ -231,8 +232,10 @@ $fg_toggle = '<span class="fg-toggle">'
 </div>
 
 <?php
-$filters_mtime = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/filters.js') ?: 1;
-$picker_mtime  = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/picker.js')  ?: 1;
+$filters_mtime_raw = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/filters.js');
+$filters_mtime = $filters_mtime_raw !== false ? $filters_mtime_raw : 1;
+$picker_mtime_raw  = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/picker.js');
+$picker_mtime  = $picker_mtime_raw !== false ? $picker_mtime_raw : 1;
 ?>
 <script src="/static/filters.js?v=<?= $filters_mtime ?>" defer></script>
 <script src="/static/picker.js?v=<?= $picker_mtime ?>" defer></script>

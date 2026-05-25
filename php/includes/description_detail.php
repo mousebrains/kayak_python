@@ -36,8 +36,11 @@ function handle_description_detail(
     ?string $end_date,
     int $hidden,
 ): void {
+    /** @var array{id: int, updated_at: string|null, gauge_id: int|null, name: string|null, display_name: string|null, sort_name: string|null, nature: string|null, description: string|null, difficulties: string|null, basin: string|null, basin_area: float|null, elevation: float|null, elevation_lost: float|null, length: float|null, gradient: float|null, features: string|null, latitude: float|null, longitude: float|null, latitude_start: float|null, longitude_start: float|null, latitude_end: float|null, longitude_end: float|null, no_show: int, notes: string|null, optimal_flow: float|null, region: string|null, remoteness: string|null, scenery: string|null, season: string|null, watershed_type: string|null, aw_id: int|null, river: string|null, max_gradient: float|null, geom: string|null, huc: string|null, map_only: int, no_flow_range: int, gradient_profile: string|null, gradient_unreliable: int} $reach */
     $reach = get_reach_or_404($id);
-    $name = $reach['display_name'] ?: $reach['name'];
+    $name = ($reach['display_name'] !== null && $reach['display_name'] !== '')
+        ? $reach['display_name']
+        : ($reach['name'] ?? '');
     $nav = _load_description_navigation($db, $reach, $id, $hidden);
     $related = _load_description_related($db, $reach, $id);
     $readings = _load_current_readings($db, $related['gauge']);
@@ -52,7 +55,7 @@ function handle_description_detail(
         $nav['total'],
     );
     $h2 = htmlspecialchars($name);
-    $location = trim((string)($reach['description'] ?? ''));
+    $location = trim($reach['description'] ?? '');
     if ($location !== '') {
         $h2 .= ' -- ' . htmlspecialchars($location);
     }
@@ -60,7 +63,7 @@ function handle_description_detail(
 
     _render_current_readings($readings);
 
-    if ($related['gauge']) {
+    if ($related['gauge'] !== null) {
         _render_description_date_form_and_plots(
             $db,
             $related['gauge'],
@@ -77,15 +80,18 @@ function handle_description_detail(
     _render_description_guidebooks($db, $reach, $id);
     _render_description_footer($id);
 
+    $doc_root = is_string($_SERVER['DOCUMENT_ROOT'] ?? null) ? $_SERVER['DOCUMENT_ROOT'] : '';
     if ($has_map) {
-        $fm_mtime = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/feature-map.js') ?: 1;
+        $fm_raw = @filemtime($doc_root . '/static/feature-map.js');
+        $fm_mtime = $fm_raw !== false ? $fm_raw : 1;
         echo '<script src="/static/leaflet.js" defer></script>';
         echo '<script src="/static/feature-map.js?v=' . $fm_mtime . '" defer></script>';
     }
     // gradient-profile.js is independent of the map (degrades to chart-only
     // tooltip if the map isn't there), so we ship it regardless of $has_map.
     // It's a no-op when the page has no .gradient-profile-chart elements.
-    $gp_mtime = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/gradient-profile.js') ?: 1;
+    $gp_raw = @filemtime($doc_root . '/static/gradient-profile.js');
+    $gp_mtime = $gp_raw !== false ? $gp_raw : 1;
     echo '<script src="/static/gradient-profile.js?v=' . $gp_mtime . '" defer></script>';
     include_footer();
 }
@@ -96,12 +102,12 @@ function handle_description_detail(
  * of three sub-clusters that overlap; see docs/done/PLAN_php_layer_split.md Tier 3
  * follow-up note about a future shared-helpers DRY pass).
  *
- * @param  array<string, mixed> $reach
+ * @param  array{sort_name: string|null} $reach
  * @return array{
- *     prev: array<string, mixed>|false,
- *     next: array<string, mixed>|false,
- *     position: int|string,
- *     total: int|string
+ *     prev: array{id: int}|false,
+ *     next: array{id: int}|false,
+ *     position: int,
+ *     total: int
  * }
  */
 function _load_description_navigation(PDO $db, array $reach, int $id, int $hidden): array
@@ -111,25 +117,27 @@ function _load_description_navigation(PDO $db, array $reach, int $id, int $hidde
          AND no_show = ? ORDER BY sort_name DESC, id DESC LIMIT 1'
     );
     $prev_stmt->execute([$reach['sort_name'], $reach['sort_name'], $id, $hidden]);
-    $prev = $prev_stmt->fetch();
+    /** @var array{id: int}|false $prev */
+    $prev = db_row($prev_stmt);
 
     $next_stmt = $db->prepare(
         'SELECT id FROM reach WHERE (sort_name > ? OR (sort_name = ? AND id > ?))
          AND no_show = ? ORDER BY sort_name ASC, id ASC LIMIT 1'
     );
     $next_stmt->execute([$reach['sort_name'], $reach['sort_name'], $id, $hidden]);
-    $next = $next_stmt->fetch();
+    /** @var array{id: int}|false $next */
+    $next = db_row($next_stmt);
 
     $total_stmt = $db->prepare('SELECT COUNT(*) FROM reach WHERE no_show = ?');
     $total_stmt->execute([$hidden]);
-    $total = $total_stmt->fetchColumn();
+    $total = (int)$total_stmt->fetchColumn();
 
     $pos_stmt = $db->prepare(
         'SELECT COUNT(*) FROM reach WHERE (sort_name < ? OR (sort_name = ? AND id <= ?))
          AND no_show = ?'
     );
     $pos_stmt->execute([$reach['sort_name'], $reach['sort_name'], $id, $hidden]);
-    $position = $pos_stmt->fetchColumn();
+    $position = (int)$pos_stmt->fetchColumn();
 
     return ['prev' => $prev, 'next' => $next, 'position' => $position, 'total' => $total];
 }
@@ -139,21 +147,22 @@ function _load_description_navigation(PDO $db, array $reach, int $id, int $hidde
  * (needed by `gp_render_plots`), and the derived flow_levels for the
  * fields-table render.
  *
- * @param  array<string, mixed> $reach
+ * @param  array{gauge_id: int|null} $reach
  * @return array{
- *     gauge: array<string, mixed>|null,
+ *     gauge: array{id: int, name: string, bank_full: float|null, flood_stage: float|null, location: string|null, latitude: float|null, longitude: float|null, station_id: string|null, cbtt_id: string|null, geos_id: string|null, nws_id: string|null, nwsli_id: string|null, snotel_id: string|null, usgs_id: string|null, rating_id: int|null, elevation: float|null, drainage_area: float|null, huc: string|null, allow_negative_flow: int, river: string|null, display_name: string|null, sort_name: string|null, state: string|null}|null,
  *     states: list<string>,
  *     classes: list<string>,
- *     class_range: array<string, mixed>|false,
- *     flow_levels: list<array<string, mixed>>
+ *     class_range: array{low: float|null, low_data_type: string|null, high: float|null, high_data_type: string|null}|false,
+ *     flow_levels: list<array{level: string, low: float|null, low_data_type: string, high: float|null, high_data_type: string}>
  * }
  */
 function _load_description_related(PDO $db, array $reach, int $id): array
 {
     $gauge = null;
-    if ($reach['gauge_id']) {
+    if ($reach['gauge_id'] !== null) {
         $stmt = $db->prepare('SELECT * FROM gauge WHERE id = ?');
         $stmt->execute([$reach['gauge_id']]);
+        /** @var array{id: int, name: string, bank_full: float|null, flood_stage: float|null, location: string|null, latitude: float|null, longitude: float|null, station_id: string|null, cbtt_id: string|null, geos_id: string|null, nws_id: string|null, nwsli_id: string|null, snotel_id: string|null, usgs_id: string|null, rating_id: int|null, elevation: float|null, drainage_area: float|null, huc: string|null, allow_negative_flow: int, river: string|null, display_name: string|null, sort_name: string|null, state: string|null}|false $g */
         $g = $stmt->fetch();
         $gauge = $g === false ? null : $g;
     }
@@ -175,6 +184,7 @@ function _load_description_related(PDO $db, array $reach, int $id): array
          ORDER BY id LIMIT 1'
     );
     $class_range_stmt->execute([$id]);
+    /** @var array{low: float|null, low_data_type: string|null, high: float|null, high_data_type: string|null}|false $class_range */
     $class_range = $class_range_stmt->fetch();
     $flow_levels = _derive_description_flow_levels($class_range);
 
@@ -193,18 +203,20 @@ function _load_description_related(PDO $db, array $reach, int $id): array
  * rather than re-querying — caller in _load_description_related already
  * fetched it because gp_render_plots needs the raw row too).
  *
- * @param  array<string, mixed>|false $class_range
- * @return list<array<string, mixed>>
+ * @param  array{low: float|null, low_data_type: string|null, high: float|null, high_data_type: string|null}|false $class_range
+ * @return list<array{level: string, low: float|null, low_data_type: string, high: float|null, high_data_type: string}>
  */
 function _derive_description_flow_levels(array|false $class_range): array
 {
-    if (!$class_range) {
+    if ($class_range === false) {
         return [];
     }
     $lo = $class_range['low'];
     $hi = $class_range['high'];
-    $lo_dt = $class_range['low_data_type'] ?: 'flow';
-    $hi_dt = $class_range['high_data_type'] ?: 'flow';
+    $lo_dt = ($class_range['low_data_type'] !== null && $class_range['low_data_type'] !== '')
+        ? $class_range['low_data_type'] : 'flow';
+    $hi_dt = ($class_range['high_data_type'] !== null && $class_range['high_data_type'] !== '')
+        ? $class_range['high_data_type'] : 'flow';
     return [
         ['level' => 'low',  'low' => null, 'low_data_type' => $lo_dt, 'high' => $lo,   'high_data_type' => $lo_dt],
         ['level' => 'okay', 'low' => $lo,  'low_data_type' => $lo_dt, 'high' => $hi,   'high_data_type' => $hi_dt],
@@ -217,12 +229,12 @@ function _derive_description_flow_levels(array|false $class_range): array
  * when the reach has no linked gauge (caller's render also skips in
  * that case).
  *
- * @param  array<string, mixed>|null $gauge
- * @return list<array<string, mixed>>
+ * @param  array{id: int}|null $gauge
+ * @return list<array{data_type: string, value: float, observed_at: string, delta_per_hour: float|null}>
  */
 function _load_current_readings(PDO $db, ?array $gauge): array
 {
-    if (!$gauge) {
+    if ($gauge === null) {
         return [];
     }
     $stmt = $db->prepare(
@@ -230,7 +242,9 @@ function _load_current_readings(PDO $db, ?array $gauge): array
          FROM latest_gauge_observation WHERE gauge_id = ?'
     );
     $stmt->execute([$gauge['id']]);
-    return $stmt->fetchAll();
+    /** @var list<array{data_type: string, value: float, observed_at: string, delta_per_hour: float|null}> $rows */
+    $rows = db_rows($stmt);
+    return $rows;
 }
 
 /**
@@ -259,29 +273,27 @@ function _render_description_header(int $id, string $name): void
  * — no embedded search form, no state-select, no hidden toggle (this is
  * a description page, not the reach picker).
  *
- * @param array<string, mixed>|false $prev
- * @param array<string, mixed>|false $next
- * @param int|string                  $position
- * @param int|string                  $total
+ * @param array{id: int}|false $prev
+ * @param array{id: int}|false $next
  */
 function _render_description_nav_bar(
     int $id,
     int $hidden,
     array|false $prev,
     array|false $next,
-    int|string $position,
-    int|string $total,
+    int $position,
+    int $total,
 ): void {
     echo '<nav aria-label="Reach navigation" style="display:flex;align-items:center;'
         . 'gap:1rem;margin-bottom:.5rem;flex-wrap:wrap">';
-    $hq = $hidden ? '&amp;hidden=1' : '';
-    if ($prev) {
+    $hq = $hidden !== 0 ? '&amp;hidden=1' : '';
+    if ($prev !== false) {
         echo '<a href="/description.php?id=' . $prev['id'] . $hq . '">&laquo; Prev</a>';
     } else {
         echo '<span style="color:#999">&laquo; Prev</span>';
     }
     echo "<span>Reach $position of $total</span>";
-    if ($next) {
+    if ($next !== false) {
         echo '<a href="/description.php?id=' . $next['id'] . $hq . '">Next &raquo;</a>';
     } else {
         echo '<span style="color:#999">Next &raquo;</span>';
@@ -294,11 +306,11 @@ function _render_description_nav_bar(
  * Status is a <span> with .stable / .rising / .falling class; threshold
  * is |delta_per_hour| < 0.5 for "stable". Skipped if no readings.
  *
- * @param list<array<string, mixed>> $readings
+ * @param list<array{data_type: string, value: float, observed_at: string, delta_per_hour: float|null}> $readings
  */
 function _render_current_readings(array $readings): void
 {
-    if (!$readings) {
+    if ($readings === []) {
         return;
     }
     $type_labels = [
@@ -318,20 +330,20 @@ function _render_current_readings(array $readings): void
     foreach ($readings as $r) {
         $label = $type_labels[$r['data_type']] ?? htmlspecialchars($r['data_type']);
         $unit = $type_units[$r['data_type']] ?? '';
-        $raw = (float)$r['value'];
+        $raw = $r['value'];
         if ($r['data_type'] === 'flow' || $r['data_type'] === 'inflow') {
             $val = number_format($raw, 0) . " $unit";
         } else {
             $val = number_format($raw, 1) . " $unit";
         }
-        $time_iso = $r['observed_at'] ? gmdate('Y-m-d\TH:i:s\Z', strtotime($r['observed_at'])) : '';
-        $time_display = $r['observed_at'] ? date('m/d H:i', strtotime($r['observed_at'])) : 'N/A';
-        $time_html = $time_iso ? "<time datetime=\"$time_iso\">$time_display</time>" : 'N/A';
+        $time_iso = gmdate('Y-m-d\TH:i:s\Z', (int)strtotime($r['observed_at']));
+        $time_display = date('m/d H:i', (int)strtotime($r['observed_at']));
+        $time_html = "<time datetime=\"$time_iso\">$time_display</time>";
         $delta_dec = ($r['data_type'] === 'flow' || $r['data_type'] === 'inflow') ? 0 : 2;
-        $delta = $r['delta_per_hour'] !== null ? number_format((float)$r['delta_per_hour'], $delta_dec) : '';
+        $delta = $r['delta_per_hour'] !== null ? number_format($r['delta_per_hour'], $delta_dec) : '';
         $status = '';
         if ($r['delta_per_hour'] !== null) {
-            $dph = (float)$r['delta_per_hour'];
+            $dph = $r['delta_per_hour'];
             if (abs($dph) < 0.5) {
                 $status = '<span class="stable">stable</span>';
             } elseif ($dph > 0) {
@@ -350,8 +362,8 @@ function _render_current_readings(array $readings): void
  * gp_resolve_window / gp_render_date_form / gp_render_plots trio.
  * Only called when the reach has a linked gauge.
  *
- * @param array<string, mixed>       $gauge
- * @param array<string, mixed>|false $class_range
+ * @param array{id: int}             $gauge
+ * @param array{low: float|null, low_data_type: string|null, high: float|null, high_data_type: string|null}|false $class_range
  */
 function _render_description_date_form_and_plots(
     PDO $db,
@@ -363,7 +375,7 @@ function _render_description_date_form_and_plots(
     array|false $class_range,
 ): void {
     [$latest_ts, $since, $until, $is_default_view] =
-        gp_resolve_window($db, (int)$gauge['id'], $start_date, $end_date);
+        gp_resolve_window($db, $gauge['id'], $start_date, $end_date);
     gp_render_date_form(
         $id,
         $start_date,
@@ -373,13 +385,13 @@ function _render_description_date_form_and_plots(
     );
     gp_render_plots(
         $db,
-        (int)$gauge['id'],
+        $gauge['id'],
         $name,
         $since,
         $until,
         $latest_ts,
         $is_default_view,
-        $class_range ?: null,
+        $class_range === false ? null : $class_range,
     );
 }
 
@@ -394,15 +406,15 @@ function _render_description_date_form_and_plots(
  * `$map_points` array are built together — splitting them would
  * duplicate the lat/lon-to-string formatting.
  *
- * @param  array<string, mixed>           $reach
+ * @param  array{id: int, updated_at: string|null, gauge_id: int|null, name: string|null, display_name: string|null, sort_name: string|null, nature: string|null, description: string|null, difficulties: string|null, basin: string|null, basin_area: float|null, elevation: float|null, elevation_lost: float|null, length: float|null, gradient: float|null, features: string|null, latitude: float|null, longitude: float|null, latitude_start: float|null, longitude_start: float|null, latitude_end: float|null, longitude_end: float|null, no_show: int, notes: string|null, optimal_flow: float|null, region: string|null, remoteness: string|null, scenery: string|null, season: string|null, watershed_type: string|null, aw_id: int|null, river: string|null, max_gradient: float|null, geom: string|null, huc: string|null, map_only: int, no_flow_range: int, gradient_profile: string|null, gradient_unreliable: int} $reach
  * @param  array{
- *     gauge: array<string, mixed>|null,
+ *     gauge: array{id: int, name: string, bank_full: float|null, flood_stage: float|null, location: string|null, latitude: float|null, longitude: float|null, station_id: string|null, cbtt_id: string|null, geos_id: string|null, nws_id: string|null, nwsli_id: string|null, snotel_id: string|null, usgs_id: string|null, rating_id: int|null, elevation: float|null, drainage_area: float|null, huc: string|null, allow_negative_flow: int, river: string|null, display_name: string|null, sort_name: string|null, state: string|null}|null,
  *     states: list<string>,
  *     classes: list<string>,
- *     class_range: array<string, mixed>|false,
- *     flow_levels: list<array<string, mixed>>
+ *     class_range: array{low: float|null, low_data_type: string|null, high: float|null, high_data_type: string|null}|false,
+ *     flow_levels: list<array{level: string, low: float|null, low_data_type: string, high: float|null, high_data_type: string}>
  * } $related
- * @param  list<array<string, mixed>>     $readings
+ * @param  list<array{data_type: string, value: float, observed_at: string, delta_per_hour: float|null}> $readings
  */
 function _render_description_fields_and_map(array $reach, array $related, array $readings): bool
 {
@@ -410,14 +422,16 @@ function _render_description_fields_and_map(array $reach, array $related, array 
 
     $gauge = $related['gauge'];
     $gauge_html = null;
-    if ($gauge) {
+    if ($gauge !== null) {
         // Hyperlink the gauge name through to /gauge.php so users can
         // reach the per-gauge readings table, plot, map, associated
         // sources, and (for regression-derived calc gauges) the
         // analysis writeup. Fall back to location text when the gauge
         // has no location set.
-        $gauge_label = $gauge['location'] ?: ($gauge['display_name'] ?: $gauge['name']);
-        $gauge_html = '<a href="/gauge.php?id=' . (int)$gauge['id'] . '">'
+        $gauge_label = ($gauge['location'] ?? '') !== ''
+            ? $gauge['location']
+            : (($gauge['display_name'] ?? '') !== '' ? $gauge['display_name'] : $gauge['name']);
+        $gauge_html = '<a href="/gauge.php?id=' . $gauge['id'] . '">'
             . htmlspecialchars((string)$gauge_label) . '</a>';
     }
     $fields = [
@@ -433,29 +447,29 @@ function _render_description_fields_and_map(array $reach, array $related, array 
         'Remoteness' => $reach['remoteness'],
         'Nature' => $reach['nature'],
         'Watershed type' => $reach['watershed_type'],
-        'Optimal Flow' => $reach['optimal_flow']
-            ? number_format((float)$reach['optimal_flow'], 0) . ' CFS'
+        'Optimal Flow' => (bool)$reach['optimal_flow']
+            ? number_format($reach['optimal_flow'], 0) . ' CFS'
             : null,
         'Flow' => format_reach_flow($related['flow_levels']),
     ];
 
     $map_points = [];
     $coord_fields = [];
-    if ($gauge && $gauge['latitude'] !== null && $gauge['longitude'] !== null) {
-        $glat = number_format((float)$gauge['latitude'], 5, '.', '');
-        $glon = number_format((float)$gauge['longitude'], 5, '.', '');
+    if ($gauge !== null && $gauge['latitude'] !== null && $gauge['longitude'] !== null) {
+        $glat = number_format($gauge['latitude'], 5, '.', '');
+        $glon = number_format($gauge['longitude'], 5, '.', '');
         $coord_fields['Gauge Location'] = [$glat, $glon];
         $map_points['Gauge'] = "$glat,$glon";
     }
     if ($reach['latitude_start'] !== null && $reach['longitude_start'] !== null) {
-        $slat = number_format((float)$reach['latitude_start'], 5, '.', '');
-        $slon = number_format((float)$reach['longitude_start'], 5, '.', '');
+        $slat = number_format($reach['latitude_start'], 5, '.', '');
+        $slon = number_format($reach['longitude_start'], 5, '.', '');
         $coord_fields['Put-in'] = [$slat, $slon];
         $map_points['Put-in'] = "$slat,$slon";
     }
     if ($reach['latitude_end'] !== null && $reach['longitude_end'] !== null) {
-        $elat = number_format((float)$reach['latitude_end'], 5, '.', '');
-        $elon = number_format((float)$reach['longitude_end'], 5, '.', '');
+        $elat = number_format($reach['latitude_end'], 5, '.', '');
+        $elon = number_format($reach['longitude_end'], 5, '.', '');
         $coord_fields['Take-out'] = [$elat, $elon];
         $map_points['Take-out'] = "$elat,$elon";
     }
@@ -464,7 +478,7 @@ function _render_description_fields_and_map(array $reach, array $related, array 
     // separate rows so on a wide screen they sit side-by-side. The CSS
     // (.coord-trio) wraps to vertical stack when the container is narrow.
     $coord_row_html = '';
-    if ($coord_fields) {
+    if ($coord_fields !== []) {
         $items = '';
         foreach ($coord_fields as $label => $coords) {
             $url = "https://www.google.com/maps?q={$coords[0]},{$coords[1]}";
@@ -489,25 +503,25 @@ function _render_description_fields_and_map(array $reach, array $related, array 
 
     $has_map = false;
     $geom = $reach['geom'] ?? null;
-    if (count($map_points) >= 1 || $geom) {
+    if (count($map_points) >= 1 || ($geom ?? '') !== '') {
         echo '</table>';
-        $gauge_id_for_map = ($gauge && isset($gauge['id'])) ? (int)$gauge['id'] : null;
+        $gauge_id_for_map = $gauge !== null ? $gauge['id'] : null;
         $has_map = gm_render_map($map_points, $geom, $track_color, [], $gauge_id_for_map);
-        if (!empty($reach['gradient_profile'])) {
+        if (($reach['gradient_profile'] ?? '') !== '') {
             // Sits directly below the map, full container width, so the
             // cursor-linked map dot tracks visually with chart position.
             // Capture first and skip the wrapper when the SVG is '' (a
             // profile with < 2 samples) so we don't emit an empty div.
             $gp_svg = generate_gradient_profile_svg(
                 (string)$reach['gradient_profile'],
-                (int)$reach['id'],
-                length_mi: $reach['length'] !== null ? (float)$reach['length'] : null,
-                putin_lat: $reach['latitude_start'] !== null ? (float)$reach['latitude_start'] : null,
-                putin_lon: $reach['longitude_start'] !== null ? (float)$reach['longitude_start'] : null,
-                takeout_lat: $reach['latitude_end'] !== null ? (float)$reach['latitude_end'] : null,
-                takeout_lon: $reach['longitude_end'] !== null ? (float)$reach['longitude_end'] : null,
-                putin_elev_ft: $reach['elevation'] !== null ? (float)$reach['elevation'] : null,
-                elev_lost_ft: $reach['elevation_lost'] !== null ? (float)$reach['elevation_lost'] : null
+                $reach['id'],
+                length_mi: $reach['length'],
+                putin_lat: $reach['latitude_start'],
+                putin_lon: $reach['longitude_start'],
+                takeout_lat: $reach['latitude_end'],
+                takeout_lon: $reach['longitude_end'],
+                putin_elev_ft: $reach['elevation'],
+                elev_lost_ft: $reach['elevation_lost']
             );
             if ($gp_svg !== '') {
                 echo '<div class="gradient-profile-container">' . $gp_svg . '</div>';
@@ -519,19 +533,19 @@ function _render_description_fields_and_map(array $reach, array $related, array 
     $html_fields = ['Gauge'];
     $autolink_fields = ['Description', 'Notes'];
     foreach ($fields as $label => $value) {
-        if ($value === null || trim((string)$value) === '') {
+        if ($value === null || trim($value) === '') {
             continue;
         }
-        if (in_array($label, $html_fields)) {
+        if (in_array($label, $html_fields, true)) {
             echo "<tr><td>$label</td><td>$value</td></tr>\n";
-        } elseif (in_array($label, $autolink_fields)) {
-            echo "<tr><td>$label</td><td>" . nl2br(autolink_urls((string)$value)) . "</td></tr>\n";
+        } elseif (in_array($label, $autolink_fields, true)) {
+            echo "<tr><td>$label</td><td>" . nl2br(autolink_urls($value)) . "</td></tr>\n";
         } else {
-            $esc = htmlspecialchars((string)$value);
+            $esc = htmlspecialchars($value);
             echo "<tr><td>$label</td><td>$esc</td></tr>\n";
         }
     }
-    if ($coord_row_html) {
+    if ($coord_row_html !== '') {
         echo $coord_row_html;
     }
 
@@ -544,18 +558,18 @@ function _render_description_fields_and_map(array $reach, array $related, array 
  * against the flow-level bands. Defaults to blue (unknown) if no
  * reading matches any level's data_type.
  *
- * @param list<array<string, mixed>> $flow_levels
- * @param list<array<string, mixed>> $readings
+ * @param list<array{level: string, low: float|null, low_data_type: string, high: float|null, high_data_type: string}> $flow_levels
+ * @param list<array{data_type: string, value: float, observed_at: string, delta_per_hour: float|null}> $readings
  */
 function _compute_description_track_color(array $flow_levels, array $readings): string
 {
     $default = '#2196F3'; // blue = unknown
-    if (!$flow_levels || !$readings) {
+    if ($flow_levels === [] || $readings === []) {
         return $default;
     }
     $reading_by_type = [];
     foreach ($readings as $r) {
-        $reading_by_type[$r['data_type']] = (float)$r['value'];
+        $reading_by_type[$r['data_type']] = $r['value'];
     }
     foreach ($flow_levels as $fl) {
         $dtype = $fl['low_data_type'];
@@ -563,8 +577,8 @@ function _compute_description_track_color(array $flow_levels, array $readings): 
             continue;
         }
         $val = $reading_by_type[$dtype];
-        $lo = $fl['low'] !== null ? (float)$fl['low'] : null;
-        $hi = $fl['high'] !== null ? (float)$fl['high'] : null;
+        $lo = $fl['low'];
+        $hi = $fl['high'];
         $in_range = ($lo === null || $val >= $lo) && ($hi === null || $val <= $hi);
         if ($in_range) {
             $level_colors = ['low' => '#e8a735', 'okay' => '#4caf50', 'high' => '#e53935'];
@@ -580,11 +594,11 @@ function _compute_description_track_color(array $flow_levels, array $readings): 
  * (case-insensitive). Calc-expression sources get an autolinker that
  * cross-refs gauge-name tokens to other reaches.
  *
- * @param array<string, mixed>|null $gauge
+ * @param array{id: int, usgs_id: string|null, nwsli_id: string|null}|null $gauge
  */
 function _render_data_sources(PDO $db, ?array $gauge): void
 {
-    if (!$gauge) {
+    if ($gauge === null) {
         return;
     }
     $src_stmt = $db->prepare(
@@ -596,9 +610,10 @@ function _render_data_sources(PDO $db, ?array $gauge): void
          WHERE gs.gauge_id = ?'
     );
     $src_stmt->execute([$gauge['id']]);
+    /** @var list<array{name: string, agency: string|null, fetch_url: string|null, calc_expr: string|null}> $sources */
     $sources = $src_stmt->fetchAll();
 
-    if (!$sources) {
+    if ($sources === []) {
         return;
     }
 
@@ -606,7 +621,7 @@ function _render_data_sources(PDO $db, ?array $gauge): void
     echo '<table class="desc-table">';
 
     $station_urls = [];
-    if (!empty($gauge['usgs_id'])) {
+    if ($gauge['usgs_id'] !== null && $gauge['usgs_id'] !== '') {
         $station_urls['USGS'] = [
             'label' => 'USGS - ' . $gauge['usgs_id'],
             'url' => "https://waterdata.usgs.gov/monitoring-location/USGS-"
@@ -614,7 +629,7 @@ function _render_data_sources(PDO $db, ?array $gauge): void
                 . "/#dataTypeId=continuous-00065-0&period=P7D&showFieldMeasurements=true",
         ];
     }
-    if (!empty($gauge['nwsli_id'])) {
+    if ($gauge['nwsli_id'] !== null && $gauge['nwsli_id'] !== '') {
         $station_urls['NWRFC'] = [
             'label' => 'NWRFC - ' . $gauge['nwsli_id'],
             'url' => "https://www.nwrfc.noaa.gov/river/station/flowplot/flowplot.cgi?lid="
@@ -627,7 +642,7 @@ function _render_data_sources(PDO $db, ?array $gauge): void
         $matched = null;
         $agency = $src['agency'] ?? '';
         foreach ($station_urls as $key => $info) {
-            if (in_array($key, $shown_agencies)) {
+            if (in_array($key, $shown_agencies, true)) {
                 continue;
             }
             if (stripos($agency, $key) !== false) {
@@ -640,22 +655,24 @@ function _render_data_sources(PDO $db, ?array $gauge): void
             }
         }
 
-        if ($matched) {
+        if ($matched !== null) {
             $shown_agencies[] = $matched;
+            // $matched is always a key of $station_urls — it came from the loop above.
+            assert(isset($station_urls[$matched]));
             $info = $station_urls[$matched];
             $label = '<a href="' . htmlspecialchars($info['url'])
                 . '" target="_blank" rel="noopener">'
                 . htmlspecialchars($info['label']) . '</a>';
         } else {
             $src_name = htmlspecialchars($src['name']);
-            $agency = $src['agency'] ? htmlspecialchars($src['agency']) : '';
-            $label = $agency ? "$agency — $src_name" : $src_name;
+            $agency = ($src['agency'] !== null && $src['agency'] !== '') ? htmlspecialchars($src['agency']) : '';
+            $label = $agency !== '' ? "$agency — $src_name" : $src_name;
         }
 
-        if ($src['fetch_url']) {
+        if ($src['fetch_url'] !== null && $src['fetch_url'] !== '') {
             $url = htmlspecialchars($src['fetch_url']);
             echo "<tr><td>$label</td><td><a href=\"$url\" target=\"_blank\" rel=\"noopener\">$url</a></td></tr>\n";
-        } elseif ($src['calc_expr']) {
+        } elseif ($src['calc_expr'] !== null && $src['calc_expr'] !== '') {
             // Escape FIRST, then run the regex on the escaped string.
             // preg_replace_callback returns unmatched portions of the
             // input verbatim — without pre-escaping, any HTML
@@ -676,9 +693,14 @@ function _render_data_sources(PDO $db, ?array $gauge): void
                          LIMIT 1'
                     );
                     $stmt->execute([$gauge_name]);
+                    /** @var array{id: int, display_name: string|null}|false $r */
                     $r = $stmt->fetch();
-                    if ($r) {
-                        $display = htmlspecialchars($r['display_name'] ?: $gauge_name);
+                    if ($r !== false) {
+                        $display = htmlspecialchars(
+                            ($r['display_name'] !== null && $r['display_name'] !== '')
+                                ? $r['display_name']
+                                : $gauge_name
+                        );
                         return "<a href=\"/description.php?id={$r['id']}\" title=\"{$m[0]}\">$display</a>::{$m[3]}";
                     }
                     return $m[0];
@@ -691,7 +713,7 @@ function _render_data_sources(PDO $db, ?array $gauge): void
         }
     }
     foreach ($station_urls as $key => $info) {
-        if (!in_array($key, $shown_agencies)) {
+        if (!in_array($key, $shown_agencies, true)) {
             $label = '<a href="' . htmlspecialchars($info['url'])
                 . '" target="_blank" rel="noopener">'
                 . htmlspecialchars($info['label']) . '</a>';
@@ -709,7 +731,7 @@ function _render_data_sources(PDO $db, ?array $gauge): void
  * DRY pass could share the body via a parameter for the surrounding
  * button bar; see docs/done/PLAN_php_layer_split.md Tier 3 closeout.)
  *
- * @param array<string, mixed> $reach
+ * @param array{aw_id: int|null} $reach
  */
 function _render_description_guidebooks(PDO $db, array $reach, int $id): void
 {
@@ -722,14 +744,15 @@ function _render_description_guidebooks(PDO $db, array $reach, int $id): void
          ORDER BY g.sort_order, g.title, g.edition'
     );
     $gb_stmt->execute([$id]);
+    /** @var list<array{title: string, subtitle: string|null, edition: string|null, author: string|null, book_url: string|null, page: string|null, run: string|null, entry_url: string|null}> $guidebooks */
     $guidebooks = $gb_stmt->fetchAll();
 
-    if (!$guidebooks && !$reach['aw_id']) {
+    if ($guidebooks === [] && $reach['aw_id'] === null) {
         return;
     }
     echo '<h3 style="margin-top:1rem">Guidebooks</h3>';
     echo '<table class="desc-table">';
-    if ($reach['aw_id']) {
+    if ($reach['aw_id'] !== null) {
         $aw_url = "https://www.americanwhitewater.org/content/River/view/river-detail/"
             . intval($reach['aw_id']) . "/";
         echo '<tr><td><a href="' . htmlspecialchars($aw_url)
@@ -737,21 +760,21 @@ function _render_description_guidebooks(PDO $db, array $reach, int $id): void
     }
     foreach ($guidebooks as $gb) {
         $title = htmlspecialchars($gb['title']);
-        if ($gb['subtitle']) {
+        if ($gb['subtitle'] !== null && $gb['subtitle'] !== '') {
             $title .= ' — ' . htmlspecialchars($gb['subtitle']);
         }
-        if ($gb['edition']) {
+        if ($gb['edition'] !== null && $gb['edition'] !== '') {
             $title .= ' (' . htmlspecialchars($gb['edition']) . ')';
         }
-        $url = $gb['entry_url'] ?: $gb['book_url'];
-        if ($url) {
+        $url = ($gb['entry_url'] !== null && $gb['entry_url'] !== '') ? $gb['entry_url'] : $gb['book_url'];
+        if ($url !== null && $url !== '') {
             $title = '<a href="' . htmlspecialchars($url) . '" target="_blank" rel="noopener">' . $title . '</a>';
         }
         $detail = [];
-        if ($gb['page']) {
+        if ($gb['page'] !== null && $gb['page'] !== '') {
             $detail[] = 'p. ' . htmlspecialchars($gb['page']);
         }
-        if ($gb['run']) {
+        if ($gb['run'] !== null && $gb['run'] !== '') {
             $detail[] = 'run ' . htmlspecialchars($gb['run']);
         }
         echo "<tr><td>$title</td><td>" . implode(', ', $detail) . "</td></tr>\n";

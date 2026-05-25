@@ -13,6 +13,28 @@ declare(strict_types=1);
  * Convention matches the other helpers in this directory: function-only
  * (no top-level side effects beyond require_once), snake_case names,
  * strict types, helpers prefixed with `_` are file-private.
+ *
+ * Row shapes used below (inlined at each site rather than aliased — this
+ * project's PHPStan run does not register @phpstan-type aliases):
+ *   ReachRow (reach SELECT *):
+ *     array{id: int, updated_at: string|null, gauge_id: int|null, name: string|null,
+ *       display_name: string|null, sort_name: string|null, nature: string|null,
+ *       description: string|null, difficulties: string|null, basin: string|null,
+ *       basin_area: float|null, elevation: float|null, elevation_lost: float|null,
+ *       length: float|null, gradient: float|null, features: string|null,
+ *       latitude: float|null, longitude: float|null, latitude_start: float|null,
+ *       longitude_start: float|null, latitude_end: float|null, longitude_end: float|null,
+ *       no_show: int, notes: string|null, optimal_flow: float|null, region: string|null,
+ *       remoteness: string|null, scenery: string|null, season: string|null,
+ *       watershed_type: string|null, aw_id: int|null, river: string|null,
+ *       max_gradient: float|null, geom: string|null, huc: string|null, map_only: int,
+ *       no_flow_range: int, gradient_profile: string|null, gradient_unreliable: int}
+ *   ChangeRequestRow (change_request SELECT *):
+ *     array{id: int, target_type: string, target_id: int|null, editor_id: int,
+ *       submitted_at: string, subject: string|null, payload_json: string,
+ *       notes_to_maint: string|null, status: string, reviewed_at: string|null,
+ *       reviewed_by: int|null, reviewer_note: string|null, applied_json: string|null,
+ *       source_url: string|null}
  */
 
 require_once __DIR__ . '/db.php';
@@ -46,8 +68,11 @@ function handle_propose(PDO $db, array $ed, string $type, int $id): void
         exit('Missing id parameter');
     }
 
+    /** @var array{id: int, updated_at: string|null, gauge_id: int|null, name: string|null, display_name: string|null, sort_name: string|null, nature: string|null, description: string|null, difficulties: string|null, basin: string|null, basin_area: float|null, elevation: float|null, elevation_lost: float|null, length: float|null, gradient: float|null, features: string|null, latitude: float|null, longitude: float|null, latitude_start: float|null, longitude_start: float|null, latitude_end: float|null, longitude_end: float|null, no_show: int, notes: string|null, optimal_flow: float|null, region: string|null, remoteness: string|null, scenery: string|null, season: string|null, watershed_type: string|null, aw_id: int|null, river: string|null, max_gradient: float|null, geom: string|null, huc: string|null, map_only: int, no_flow_range: int, gradient_profile: string|null, gradient_unreliable: int} $reach */
     $reach = get_reach_or_404($id);
-    $reach_name = $reach['display_name'] ?: $reach['name'] ?: "Reach #$id";
+    $reach_name = ($reach['display_name'] ?? '') !== ''
+        ? (string)$reach['display_name']
+        : (($reach['name'] ?? '') !== '' ? (string)$reach['name'] : "Reach #$id");
 
     $ctx = _load_propose_context($db, $ed, $id);
 
@@ -75,11 +100,11 @@ function handle_propose(PDO $db, array $ed, string $type, int $id): void
  *     tier: string,
  *     reach_fields: list<string>,
  *     allow_full: bool,
- *     existing: array<string, mixed>|null,
+ *     existing: array{id: int, target_type: string, target_id: int|null, editor_id: int, submitted_at: string, subject: string|null, payload_json: string, notes_to_maint: string|null, status: string, reviewed_at: string|null, reviewed_by: int|null, reviewer_note: string|null, applied_json: string|null, source_url: string|null}|null,
  *     cap: int,
  *     submitted_today: int,
  *     cur_classes: list<string>,
- *     cur_range: array{low: mixed, high: mixed, data_type: string}
+ *     cur_range: array{low: float|null, high: float|null, data_type: string}
  * }
  */
 function _load_propose_context(PDO $db, array $ed, int $id): array
@@ -101,7 +126,9 @@ function _load_propose_context(PDO $db, array $ed, int $id): array
          FROM reach_class WHERE reach_id = ? ORDER BY id'
     );
     $st->execute([$id]);
-    foreach ($st->fetchAll() as $row) {
+    /** @var list<array{name: string, low: float|null, low_data_type: string|null, high: float|null, high_data_type: string|null}> $class_rows */
+    $class_rows = $st->fetchAll();
+    foreach ($class_rows as $row) {
         $cur_classes[] = $row['name'];
         // First row with populated bounds wins as the primary range.
         if ($cur_range['low'] === null && $cur_range['high'] === null
@@ -109,7 +136,9 @@ function _load_propose_context(PDO $db, array $ed, int $id): array
             $cur_range = [
                 'low'       => $row['low'],
                 'high'      => $row['high'],
-                'data_type' => $row['low_data_type'] ?: ($row['high_data_type'] ?: 'flow'),
+                'data_type' => $row['low_data_type'] !== null && $row['low_data_type'] !== ''
+                    ? $row['low_data_type']
+                    : ($row['high_data_type'] !== null && $row['high_data_type'] !== '' ? $row['high_data_type'] : 'flow'),
             ];
         }
     }
@@ -120,6 +149,7 @@ function _load_propose_context(PDO $db, array $ed, int $id): array
          ORDER BY submitted_at DESC LIMIT 1"
     );
     $existing_stmt->execute([$ed['id'], $id]);
+    /** @var array{id: int, target_type: string, target_id: int|null, editor_id: int, submitted_at: string, subject: string|null, payload_json: string, notes_to_maint: string|null, status: string, reviewed_at: string|null, reviewed_by: int|null, reviewer_note: string|null, applied_json: string|null, source_url: string|null}|false $existing_row */
     $existing_row = $existing_stmt->fetch();
     $existing = $existing_row === false ? null : $existing_row;
 
@@ -152,13 +182,13 @@ function _load_propose_context(PDO $db, array $ed, int $id): array
  * Behaviorally identical to the pre-extract inline POST handler
  * (lines 106-290 of pre-Tier-5.P propose.php).
  *
- * @param  array<string, mixed>                          $ed
- * @param  array<string, mixed>                          $reach
+ * @param  array<string, mixed> $ed
+ * @param  array{id: int, updated_at: string|null, gauge_id: int|null, name: string|null, display_name: string|null, sort_name: string|null, nature: string|null, description: string|null, difficulties: string|null, basin: string|null, basin_area: float|null, elevation: float|null, elevation_lost: float|null, length: float|null, gradient: float|null, features: string|null, latitude: float|null, longitude: float|null, latitude_start: float|null, longitude_start: float|null, latitude_end: float|null, longitude_end: float|null, no_show: int, notes: string|null, optimal_flow: float|null, region: string|null, remoteness: string|null, scenery: string|null, season: string|null, watershed_type: string|null, aw_id: int|null, river: string|null, max_gradient: float|null, geom: string|null, huc: string|null, map_only: int, no_flow_range: int, gradient_profile: string|null, gradient_unreliable: int} $reach
  * @param  array{
  *     tier: string, reach_fields: list<string>, allow_full: bool,
- *     existing: array<string, mixed>|null, cap: int, submitted_today: int,
+ *     existing: array{id: int, target_type: string, target_id: int|null, editor_id: int, submitted_at: string, subject: string|null, payload_json: string, notes_to_maint: string|null, status: string, reviewed_at: string|null, reviewed_by: int|null, reviewer_note: string|null, applied_json: string|null, source_url: string|null}|null, cap: int, submitted_today: int,
  *     cur_classes: list<string>,
- *     cur_range: array{low: mixed, high: mixed, data_type: string}
+ *     cur_range: array{low: float|null, high: float|null, data_type: string}
  * } $ctx
  * @return array{0: list<string>, 1: list<string>, 2: bool}  [errors, warnings, saved]
  */
@@ -175,7 +205,7 @@ function _handle_propose_post(PDO $db, array $ed, array $reach, string $reach_na
         return [[], [], true];
     }
 
-    if ($ctx['submitted_today'] >= $ctx['cap'] && !$ctx['existing']) {
+    if ($ctx['submitted_today'] >= $ctx['cap'] && $ctx['existing'] === null) {
         return [["Daily submission cap of {$ctx['cap']} reached. Please try again later."], [], false];
     }
 
@@ -200,40 +230,34 @@ function _handle_propose_post(PDO $db, array $ed, array $reach, string $reach_na
     $issues = [];
     if (isset($proposed_reach['display_name'])) {
         $issues = array_merge($issues,
-            check_display_name($proposed_reach['display_name'], $reach['river']));
+            check_display_name((string)$proposed_reach['display_name'], $reach['river']));
     }
     foreach (['description' => 10000, 'features' => 5000] as $f => $max) {
         if (isset($proposed_reach[$f])) {
-            $issues = array_merge($issues, check_text_length($f, $proposed_reach[$f], $max));
+            $issues = array_merge($issues, check_text_length($f, (string)$proposed_reach[$f], $max));
         }
     }
     if ($ctx['allow_full']) {
-        $ref_lat = isset($reach['latitude'])  ? (float)$reach['latitude']  : null;
-        $ref_lon = isset($reach['longitude']) ? (float)$reach['longitude'] : null;
-        $issues = array_merge($issues, check_coords(
-            'put-in',
-            $proposed_reach['latitude_start']  ?? null,
-            $proposed_reach['longitude_start'] ?? null,
-            $ref_lat, $ref_lon
-        ));
-        $issues = array_merge($issues, check_coords(
-            'take-out',
-            $proposed_reach['latitude_end']  ?? null,
-            $proposed_reach['longitude_end'] ?? null,
-            $ref_lat, $ref_lon
-        ));
-        $issues = array_merge($issues, check_putin_takeout(
-            $proposed_reach['latitude_start']  ?? null,
-            $proposed_reach['longitude_start'] ?? null,
-            $proposed_reach['latitude_end']    ?? null,
-            $proposed_reach['longitude_end']   ?? null
-        ));
+        $ref_lat = $reach['latitude']  ?? null;
+        $ref_lon = $reach['longitude'] ?? null;
+        // Coordinate fields only ever hold float|null here (the loop above
+        // rejects non-numeric input), but $proposed_reach is a heterogeneous
+        // array<string, float|string|null>; narrow to float|null for the
+        // coordinate validators.
+        $lat_s = $proposed_reach['latitude_start']  ?? null;
+        $lon_s = $proposed_reach['longitude_start'] ?? null;
+        $lat_e = $proposed_reach['latitude_end']    ?? null;
+        $lon_e = $proposed_reach['longitude_end']   ?? null;
+        assert(!is_string($lat_s) && !is_string($lon_s) && !is_string($lat_e) && !is_string($lon_e));
+        $issues = array_merge($issues, check_coords('put-in', $lat_s, $lon_s, $ref_lat, $ref_lon));
+        $issues = array_merge($issues, check_coords('take-out', $lat_e, $lon_e, $ref_lat, $ref_lon));
+        $issues = array_merge($issues, check_putin_takeout($lat_s, $lon_s, $lat_e, $lon_e));
     }
 
     $proposed_class_payload = null;
     if ($ctx['allow_full'] && isset($_POST['classes_present'])) {
         $raw = trim((string)($_POST['classes'] ?? ''));
-        $names = $raw === '' ? [] : array_values(array_filter(array_map('trim', explode(',', $raw))));
+        $names = $raw === '' ? [] : array_values(array_filter(array_map('trim', explode(',', $raw)), fn($s) => $s !== ''));
         foreach ($names as $c) {
             $issues = array_merge($issues, check_class_string('class', $c));
         }
@@ -243,7 +267,7 @@ function _handle_propose_post(PDO $db, array $ed, array $reach, string $reach_na
         $range = [
             'low'       => $lo !== '' ? (float)$lo : null,
             'high'      => $hi !== '' ? (float)$hi : null,
-            'data_type' => $dt ?: 'flow',
+            'data_type' => $dt !== '' ? $dt : 'flow',
         ];
         $issues = array_merge($issues, check_flow_range($range['low'], $range['high'], $range['data_type']));
         $proposed_class_payload = ['names' => $names, 'range' => $range];
@@ -255,7 +279,7 @@ function _handle_propose_post(PDO $db, array $ed, array $reach, string $reach_na
     $errors = array_map(fn($i) => $i['message'], sanity_errors($issues));
     $warnings = array_map(fn($i) => $i['message'], sanity_warnings($issues));
 
-    if ($errors) {
+    if ($errors !== []) {
         return [$errors, $warnings, false];
     }
 
@@ -283,7 +307,7 @@ function _handle_propose_post(PDO $db, array $ed, array $reach, string $reach_na
         }
     }
 
-    if (empty($payload) && $notes === '') {
+    if ($payload === [] && $notes === '') {
         return [
             ['No changes detected. Edit at least one field or add a note to the maintainer.'],
             $warnings,
@@ -295,14 +319,14 @@ function _handle_propose_post(PDO $db, array $ed, array $reach, string $reach_na
     $subject = "Proposed edit: $reach_name";
     $src = sanitize_source_url((string)($_POST['source_url'] ?? ''));
 
-    if ($ctx['existing']) {
+    if ($ctx['existing'] !== null) {
         $db->prepare(
             "UPDATE change_request
              SET payload_json = ?, notes_to_maint = ?, subject = ?,
                  submitted_at = datetime('now'), source_url = ?
              WHERE id = ?"
         )->execute([$payload_json, $notes, $subject, $src !== '' ? $src : null, $ctx['existing']['id']]);
-        $cr_id = (int)$ctx['existing']['id'];
+        $cr_id = $ctx['existing']['id'];
     } else {
         $db->prepare(
             "INSERT INTO change_request
@@ -324,13 +348,13 @@ function _handle_propose_post(PDO $db, array $ed, array $reach, string $reach_na
  * (mail failures are logged but don't block the user's save).
  *
  * @param array<string, mixed> $ed
- * @param array<string, mixed> $reach
- * @param array<string, mixed> $payload     The diff-only payload that landed in change_request
+ * @param array{id: int, updated_at: string|null, gauge_id: int|null, name: string|null, display_name: string|null, sort_name: string|null, nature: string|null, description: string|null, difficulties: string|null, basin: string|null, basin_area: float|null, elevation: float|null, elevation_lost: float|null, length: float|null, gradient: float|null, features: string|null, latitude: float|null, longitude: float|null, latitude_start: float|null, longitude_start: float|null, latitude_end: float|null, longitude_end: float|null, no_show: int, notes: string|null, optimal_flow: float|null, region: string|null, remoteness: string|null, scenery: string|null, season: string|null, watershed_type: string|null, aw_id: int|null, river: string|null, max_gradient: float|null, geom: string|null, huc: string|null, map_only: int, no_flow_range: int, gradient_profile: string|null, gradient_unreliable: int} $reach
+ * @param array{reach?: array<string, float|string|null>, reach_class?: array{names: list<string>, range: array{low: float|null, high: float|null, data_type: string}}} $payload     The diff-only payload that landed in change_request
  * @param array{
  *     tier: string, reach_fields: list<string>, allow_full: bool,
- *     existing: array<string, mixed>|null, cap: int, submitted_today: int,
+ *     existing: array{id: int, target_type: string, target_id: int|null, editor_id: int, submitted_at: string, subject: string|null, payload_json: string, notes_to_maint: string|null, status: string, reviewed_at: string|null, reviewed_by: int|null, reviewer_note: string|null, applied_json: string|null, source_url: string|null}|null, cap: int, submitted_today: int,
  *     cur_classes: list<string>,
- *     cur_range: array{low: mixed, high: mixed, data_type: string}
+ *     cur_range: array{low: float|null, high: float|null, data_type: string}
  * } $ctx
  */
 function _send_proposal_notification(
@@ -344,7 +368,7 @@ function _send_proposal_notification(
     string $src,
 ): void {
     $maint_emails = maintainer_emails();
-    if (!$maint_emails) {
+    if ($maint_emails === []) {
         return;
     }
     $site = rtrim(Config::str('site_url', 'https://levels.wkcc.org'), '/');
@@ -368,13 +392,13 @@ function _send_proposal_notification(
         $new_names = $payload['reach_class']['names'];
         $new_range = $payload['reach_class']['range'];
         $summary_lines[] = 'reach_class: '
-            . (empty($ctx['cur_classes']) ? '(none)' : implode(', ', $ctx['cur_classes']))
+            . ($ctx['cur_classes'] === [] ? '(none)' : implode(', ', $ctx['cur_classes']))
             . ' -> '
-            . (empty($new_names) ? '(none)' : implode(', ', $new_names));
+            . ($new_names === [] ? '(none)' : implode(', ', $new_names));
         $summary_lines[] = 'flow range: '
             . $fmt_range($ctx['cur_range']) . ' -> ' . $fmt_range($new_range);
     }
-    $summary = $summary_lines
+    $summary = $summary_lines !== []
         ? implode("\n\n", $summary_lines)
         : '(No reach-column changes — only a note to the maintainer.)';
 
@@ -396,13 +420,13 @@ function _send_proposal_notification(
  * from the args — no global $_POST / $_SERVER reads beyond what the
  * source_url helper does internally.
  *
- * @param array<string, mixed> $reach
+ * @param array{id: int, updated_at: string|null, gauge_id: int|null, name: string|null, display_name: string|null, sort_name: string|null, nature: string|null, description: string|null, difficulties: string|null, basin: string|null, basin_area: float|null, elevation: float|null, elevation_lost: float|null, length: float|null, gradient: float|null, features: string|null, latitude: float|null, longitude: float|null, latitude_start: float|null, longitude_start: float|null, latitude_end: float|null, longitude_end: float|null, no_show: int, notes: string|null, optimal_flow: float|null, region: string|null, remoteness: string|null, scenery: string|null, season: string|null, watershed_type: string|null, aw_id: int|null, river: string|null, max_gradient: float|null, geom: string|null, huc: string|null, map_only: int, no_flow_range: int, gradient_profile: string|null, gradient_unreliable: int} $reach
  * @param array<string, mixed> $ed
  * @param array{
  *     tier: string, reach_fields: list<string>, allow_full: bool,
- *     existing: array<string, mixed>|null, cap: int, submitted_today: int,
+ *     existing: array{id: int, target_type: string, target_id: int|null, editor_id: int, submitted_at: string, subject: string|null, payload_json: string, notes_to_maint: string|null, status: string, reviewed_at: string|null, reviewed_by: int|null, reviewer_note: string|null, applied_json: string|null, source_url: string|null}|null, cap: int, submitted_today: int,
  *     cur_classes: list<string>,
- *     cur_range: array{low: mixed, high: mixed, data_type: string}
+ *     cur_range: array{low: float|null, high: float|null, data_type: string}
  * } $ctx
  * @param list<string> $errors
  * @param list<string> $warnings
@@ -453,21 +477,21 @@ function _render_propose_form(
     <a href="/description.php?id=<?= $id ?>">Return to the reach</a>.
   </p>
 <?php else: ?>
-  <?php if ($errors): ?>
+  <?php if ($errors !== []): ?>
     <ul style="padding:.6rem 1.4rem;background:#fde8e8;border:1px solid #f5b5b5;border-radius:4px">
       <?php foreach ($errors as $e): ?><li><?= htmlspecialchars($e) ?></li><?php endforeach ?>
     </ul>
   <?php endif ?>
-  <?php if ($warnings): ?>
+  <?php if ($warnings !== []): ?>
     <ul style="padding:.6rem 1.4rem;background:#fff4dc;border:1px solid #e8d291;border-radius:4px">
       <?php foreach ($warnings as $w): ?><li><?= htmlspecialchars($w) ?></li><?php endforeach ?>
     </ul>
   <?php endif ?>
 
-  <?php if ($existing): ?>
+  <?php if ($existing !== null): ?>
     <p style="font-size:.85rem;color:var(--c-text-muted)">
       You already have a pending proposal for this reach (submitted
-      <?= htmlspecialchars((string)$existing['submitted_at']) ?>); submitting
+      <?= htmlspecialchars($existing['submitted_at']) ?>); submitting
       again will replace it.
     </p>
   <?php endif ?>
@@ -544,7 +568,7 @@ function _render_propose_form(
     <?php endif ?>
 
     <label style="margin-top:.75rem">Notes to maintainer</label>
-    <textarea name="notes_to_maint" style="height:6em" placeholder="Anything the maintainer should know (source for the change, caveats, etc.)"><?= htmlspecialchars((string)($existing['notes_to_maint'] ?? '')) ?></textarea>
+    <textarea name="notes_to_maint" style="height:6em" placeholder="Anything the maintainer should know (source for the change, caveats, etc.)"><?= htmlspecialchars($existing['notes_to_maint'] ?? '') ?></textarea>
 
     <button type="submit" style="margin-top:.75rem">Submit proposal</button>
   </form>
@@ -558,13 +582,14 @@ function _render_propose_form(
  * the field's value from the editor's existing pending proposal if
  * present, otherwise from the current reach row.
  *
- * @param array<string, mixed>      $reach
- * @param array<string, mixed>|null $existing
+ * @param array{id: int, updated_at: string|null, gauge_id: int|null, name: string|null, display_name: string|null, sort_name: string|null, nature: string|null, description: string|null, difficulties: string|null, basin: string|null, basin_area: float|null, elevation: float|null, elevation_lost: float|null, length: float|null, gradient: float|null, features: string|null, latitude: float|null, longitude: float|null, latitude_start: float|null, longitude_start: float|null, latitude_end: float|null, longitude_end: float|null, no_show: int, notes: string|null, optimal_flow: float|null, region: string|null, remoteness: string|null, scenery: string|null, season: string|null, watershed_type: string|null, aw_id: int|null, river: string|null, max_gradient: float|null, geom: string|null, huc: string|null, map_only: int, no_flow_range: int, gradient_profile: string|null, gradient_unreliable: int} $reach
+ * @param array{id: int, target_type: string, target_id: int|null, editor_id: int, submitted_at: string, subject: string|null, payload_json: string, notes_to_maint: string|null, status: string, reviewed_at: string|null, reviewed_by: int|null, reviewer_note: string|null, applied_json: string|null, source_url: string|null}|null $existing
  */
 function _propose_prefill(array $reach, ?array $existing, string $field): string
 {
     if ($existing !== null) {
-        $payload = json_decode((string)$existing['payload_json'], true) ?: [];
+        $decoded = json_decode($existing['payload_json'], true);
+        $payload = is_array($decoded) ? $decoded : [];
         if (isset($payload['reach'][$field])) {
             return (string)$payload['reach'][$field];
         }

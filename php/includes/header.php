@@ -90,14 +90,14 @@ function render_nav(string $active, array $context): string {
 
     // Maintainers still get a prominent Edit shortcut on reach pages.
     // Everyone else reaches the Comment form through the footer.
-    if ($feature && $maint && ($context['type'] ?? null) === 'reach' && !empty($context['id'])) {
+    if ($feature && $maint && ($context['type'] ?? null) === 'reach' && ($context['id'] ?? '') !== '') {
         $left .= '<a href="/edit.php?id=' . (int)$context['id'] . '"' . $comment_cls . '>Edit</a>';
     }
     $left .= '</nav>';
 
     $right = '<nav class="site-nav-right" aria-label="Account and external">';
-    if ($feature && $ed) {
-        $label = htmlspecialchars($ed['display_name'] ?: $ed['email']);
+    if ($feature && $ed !== null) {
+        $label = htmlspecialchars(($ed['display_name'] ?? '') !== '' ? $ed['display_name'] : $ed['email']);
         $right .= '<span class="site-nav-id" title="' . htmlspecialchars((string)$ed['email']) . '">'
                 . $label . '</span>';
     }
@@ -117,11 +117,11 @@ function include_header(
 ): void {
     $css_block = css_head_block();
     $esc_title = htmlspecialchars($title);
-    $esc_desc = $description
+    $esc_desc = $description !== ''
         ? htmlspecialchars($description)
         : 'Real-time river levels, flow, and gage data from USGS, NOAA, USACE, and other government agencies.';
     $nav = render_nav($active, $context);
-    $scheme = ($_SERVER['HTTPS'] ?? '') ? 'https' : 'http';
+    $scheme = (bool)($_SERVER['HTTPS'] ?? '') ? 'https' : 'http';
     $host   = (string)($_SERVER['HTTP_HOST'] ?? 'levels.wkcc.org');
     $path   = strtok((string)($_SERVER['REQUEST_URI'] ?? '/'), '?');
     $url    = htmlspecialchars($scheme . '://' . $host . $path);

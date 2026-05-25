@@ -68,9 +68,9 @@ function derive_rating_lookup(
 
     $bin_width = ($gmax - $gmin) / $n_bins;
     $bins = [];
-    foreach ($rows as [$g, $v]) {
-        $idx = min($n_bins - 1, (int)floor(($g - $gmin) / $bin_width));
-        $bins[$idx][] = [$g, $v];
+    foreach ($rows as [$rg, $rv]) {
+        $idx = min($n_bins - 1, (int)floor(($rg - $gmin) / $bin_width));
+        $bins[$idx][] = [$rg, $rv];
     }
 
     $lookup = [];
@@ -81,8 +81,8 @@ function derive_rating_lookup(
         sort($vs);
         $n = count($bin);
         $mid = intdiv($n, 2);
-        $g_med = $n % 2 ? $gs[$mid] : ($gs[$mid - 1] + $gs[$mid]) / 2;
-        $v_med = $n % 2 ? $vs[$mid] : ($vs[$mid - 1] + $vs[$mid]) / 2;
+        $g_med = $n % 2 === 1 ? $gs[$mid] : ($gs[$mid - 1] + $gs[$mid]) / 2;
+        $v_med = $n % 2 === 1 ? $vs[$mid] : ($vs[$mid - 1] + $vs[$mid]) / 2;
         $lookup[] = [$g_med, $v_med];
     }
     usort($lookup, fn($a, $b) => $a[0] <=> $b[0]);
@@ -110,13 +110,13 @@ function derive_rating_lookup(
 function rate_gauge_to_flow(array $lookup, float $gauge_ft): ?float {
     $n = count($lookup);
     if ($n === 0) return null;
-    if ($gauge_ft <= $lookup[0][0]) return (float)$lookup[0][1];
-    if ($gauge_ft >= $lookup[$n - 1][0]) return (float)$lookup[$n - 1][1];
+    if ($gauge_ft <= $lookup[0][0]) return $lookup[0][1];
+    if ($gauge_ft >= $lookup[$n - 1][0]) return $lookup[$n - 1][1];
     for ($i = 0; $i < $n - 1; $i++) {
         [$g1, $f1] = $lookup[$i];
         [$g2, $f2] = $lookup[$i + 1];
         if ($g1 <= $gauge_ft && $gauge_ft <= $g2) {
-            if ($g2 == $g1) return (float)$f1;
+            if ($g2 === $g1) return $f1;
             return $f1 + ($f2 - $f1) / ($g2 - $g1) * ($gauge_ft - $g1);
         }
     }
@@ -133,13 +133,13 @@ function rate_gauge_to_flow(array $lookup, float $gauge_ft): ?float {
 function rate_flow_to_gauge(array $lookup, float $flow_cfs): ?float {
     $n = count($lookup);
     if ($n === 0) return null;
-    if ($flow_cfs <= $lookup[0][1]) return (float)$lookup[0][0];
-    if ($flow_cfs >= $lookup[$n - 1][1]) return (float)$lookup[$n - 1][0];
+    if ($flow_cfs <= $lookup[0][1]) return $lookup[0][0];
+    if ($flow_cfs >= $lookup[$n - 1][1]) return $lookup[$n - 1][0];
     for ($i = 0; $i < $n - 1; $i++) {
         [$g1, $f1] = $lookup[$i];
         [$g2, $f2] = $lookup[$i + 1];
         if ($f1 <= $flow_cfs && $flow_cfs <= $f2) {
-            if ($f2 == $f1) return (float)$g1;
+            if ($f2 === $f1) return $g1;
             return $g1 + ($g2 - $g1) / ($f2 - $f1) * ($flow_cfs - $f1);
         }
     }

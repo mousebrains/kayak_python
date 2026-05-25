@@ -10,19 +10,19 @@ require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
 
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
-if (!$id) { http_response_code(400); exit('Missing id parameter'); }
+if (!is_int($id) || $id < 1) { http_response_code(400); exit('Missing id parameter'); }
 
 $db = get_db();
 $reach = get_reach_or_404($id);
 
-$name = $reach['display_name'] ?: $reach['name'];
+$name = ($reach['display_name'] ?? '') !== '' ? $reach['display_name'] : $reach['name'];
 
 header('Cache-Control: max-age=60');
 include_header("$name - Data", '', '', '', ['picker_kind' => 'gauge']);
 
 echo '<h2>' . htmlspecialchars($name) . '</h2>';
 
-if (!$reach['gauge_id']) {
+if ($reach['gauge_id'] === null) {
     echo '<p>No gauge data available.</p>';
     echo '<p><a href="/index.html">Back</a></p>';
     include_footer();
@@ -36,7 +36,7 @@ $stmt = $db->prepare(
 $stmt->execute([$reach['gauge_id']]);
 $rows = $stmt->fetchAll();
 
-if ($rows) {
+if ($rows !== []) {
     echo '<table class="view-table">';
     echo '<tr><th>Type</th><th>Value</th><th>Time</th><th>Change/hr</th></tr>';
     foreach ($rows as $r) {

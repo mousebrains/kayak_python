@@ -69,8 +69,13 @@ function handle_custom_gauges(PDO $db, array $ids, string $id_param): void
  * temperature) for every requested gauge. Returns keyed by gauge id
  * so the URL-order reorder is a cheap O(N) lookup.
  *
+ * Shapes verified against the dev DB: g.id is the PK (int); river and
+ * location are COALESCE(...) so non-null strings; state/huc are
+ * nullable text; every lo_*.value is a LEFT-JOIN real (float|null) and
+ * lo_*.observed_at a LEFT-JOIN text (string|null).
+ *
  * @param  list<int> $ids
- * @return array<int, array<string, mixed>>
+ * @return array<int, array{id: int, river: string, location: string, state_abbrev: string|null, huc: string|null, flow: float|null, flow_time: string|null, inflow: float|null, inflow_time: string|null, gage: float|null, gage_time: string|null, temperature: float|null, temp_time: string|null}>
  */
 function _load_custom_gauges_rows(PDO $db, array $ids): array
 {
@@ -103,8 +108,10 @@ SQL;
     $stmt = $db->prepare($sql);
     $stmt->execute($ids);
     $gauges_by_id = [];
-    foreach ($stmt->fetchAll() as $row) {
-        $gauges_by_id[(int)$row['id']] = $row;
+    /** @var list<array{id: int, river: string, location: string, state_abbrev: string|null, huc: string|null, flow: float|null, flow_time: string|null, inflow: float|null, inflow_time: string|null, gage: float|null, gage_time: string|null, temperature: float|null, temp_time: string|null}> $fetched */
+    $fetched = $stmt->fetchAll();
+    foreach ($fetched as $row) {
+        $gauges_by_id[$row['id']] = $row;
     }
     return $gauges_by_id;
 }
@@ -165,7 +172,7 @@ SQL;
         }
         $status_by_gauge[$gid] = [
             'label'  => $label,
-            'counts' => array_filter(['low' => $n_low, 'okay' => $n_okay, 'high' => $n_high]),
+            'counts' => array_filter(['low' => $n_low, 'okay' => $n_okay, 'high' => $n_high], fn($n) => $n > 0),
         ];
     }
     return $status_by_gauge;
@@ -176,9 +183,9 @@ SQL;
  * IDs that didn't match a row (defensive — the WHERE r.id IN (…)
  * should make that impossible).
  *
- * @param  array<int, array<string, mixed>> $gauges_by_id
- * @param  list<int>                        $ids
- * @return list<array<string, mixed>>
+ * @param  array<int, array{id: int, river: string, location: string, state_abbrev: string|null, huc: string|null, flow: float|null, flow_time: string|null, inflow: float|null, inflow_time: string|null, gage: float|null, gage_time: string|null, temperature: float|null, temp_time: string|null}> $gauges_by_id
+ * @param  list<int>                  $ids
+ * @return list<array{id: int, river: string, location: string, state_abbrev: string|null, huc: string|null, flow: float|null, flow_time: string|null, inflow: float|null, inflow_time: string|null, gage: float|null, gage_time: string|null, temperature: float|null, temp_time: string|null}>
  */
 function _custom_gauges_reorder_by_position(array $gauges_by_id, array $ids): array
 {
@@ -195,7 +202,7 @@ function _custom_gauges_reorder_by_position(array $gauges_by_id, array $ids): ar
  * Collect the union of state + huc8 values present on the page so the
  * filter pills only offer values that map to something visible.
  *
- * @param  list<array<string, mixed>> $rows
+ * @param  list<array{state_abbrev: string|null, huc: string|null}> $rows
  * @return array{
  *     states:       array<string, true>,
  *     huc8_present: array<string, true>,
@@ -208,11 +215,11 @@ function _compute_custom_gauges_filters(array $rows): array
     $huc8_present   = [];
     $has_no_huc     = false;
     foreach ($rows as $r) {
-        $abbrev = (string)($r['state_abbrev'] ?? '');
+        $abbrev = $r['state_abbrev'] ?? '';
         if ($abbrev !== '' && isset(CUSTOM_GAUGES_STATE_ABBREVS[$abbrev])) {
             $states_present[CUSTOM_GAUGES_STATE_ABBREVS[$abbrev]] = true;
         }
-        $huc = (string)($r['huc'] ?? '');
+        $huc = $r['huc'] ?? '';
         if (strlen($huc) >= 8) {
             $huc8_present[substr($huc, 0, 8)] = true;
         } else {
@@ -245,7 +252,7 @@ function _load_custom_gauges_huc_groups(PDO $db, array $huc8_codes): array
     $huc8_names = [];
     $huc6_names = [];
     $huc6_groups = [];
-    if (!$huc8_codes) {
+    if ($huc8_codes === []) {
         return [$huc8_names, $huc6_names, $huc6_groups];
     }
     $huc8_codes = array_map('strval', $huc8_codes);
@@ -270,8 +277,8 @@ function _load_custom_gauges_huc_groups(PDO $db, array $huc8_codes): array
         $huc6_groups[$h6][] = [$h8, $huc8_names[$h8] ?? $h8];
     }
     uksort($huc6_groups, fn($a, $b) => strcmp(
-        $huc6_names[(string)$a] ?? (string)$a,
-        $huc6_names[(string)$b] ?? (string)$b,
+        $huc6_names[$a] ?? strval($a),
+        $huc6_names[$b] ?? strval($b),
     ));
     foreach ($huc6_groups as &$arr) {
         sort($arr);
@@ -324,14 +331,14 @@ function _render_custom_gauges_header(
     </div>
   </details>
 <?php endif; ?>
-<?php if ($huc6_groups || $has_no_huc):
+<?php if ($huc6_groups !== [] || $has_no_huc):
     $total = array_sum(array_map('count', $huc6_groups)) + ($has_no_huc ? 1 : 0); ?>
   <details class="filter-group" open>
     <summary>Watershed <span class="fg-count"><?= $total ?></span></summary>
     <div class="filter-pills" data-group="huc8">
       <?= $fg_toggle ?>
 <?php foreach ($huc6_groups as $h6 => $children):
-        $h6 = (string)$h6;
+        $h6 = strval($h6);  // numeric HUC keys are coerced to int by PHP; strict_types needs string
         $h6_name = $huc6_names[$h6] ?? $h6; ?>
       <details class="filter-subgroup">
         <summary><label class="huc6-parent"><input type="checkbox" data-huc6="<?= htmlspecialchars($h6) ?>" checked><?= htmlspecialchars($h6_name) ?></label> <span class="fg-count"><?= count($children) ?></span></summary>
@@ -364,8 +371,8 @@ function _render_custom_gauges_header(
  * sparkline placeholder is lazy-loaded by levels.js from
  * /static/sparklines.json, matching gauges.html.
  *
- * @param list<array<string, mixed>>                                          $rows
- * @param array<int, array{label: ?string, counts: array<string, int>}>      $status_by_gauge
+ * @param list<array{id: int, river: string, location: string, state_abbrev: string|null, huc: string|null, flow: float|null, flow_time: string|null, inflow: float|null, inflow_time: string|null, gage: float|null, gage_time: string|null, temperature: float|null, temp_time: string|null}> $rows
+ * @param array<int, array{label: ?string, counts: array<string, int>}>  $status_by_gauge
  */
 function _render_custom_gauges_table(array $rows, array $status_by_gauge): void
 {
@@ -383,28 +390,32 @@ function _render_custom_gauges_table(array $rows, array $status_by_gauge): void
 </tr></thead>
 <tbody>
 <?php foreach ($rows as $r):
-    $gid = (int)$r['id'];
-    $abbrev = (string)($r['state_abbrev'] ?? '');
+    $gid = $r['id'];
+    $abbrev = $r['state_abbrev'] ?? '';
     $state = CUSTOM_GAUGES_STATE_ABBREVS[$abbrev] ?? '';
-    $huc8 = strlen((string)$r['huc']) >= 8 ? substr((string)$r['huc'], 0, 8) : '';
+    $huc_str = $r['huc'] ?? '';
+    $huc8 = strlen($huc_str) >= 8 ? substr($huc_str, 0, 8) : '';
 
     // Status cell — rollup label + per-bucket count tooltip.
     $status_info = $status_by_gauge[$gid] ?? null;
     $status_word = $status_info['label'] ?? null;
-    if ($status_word) {
+    if ($status_word !== null) {
         $counts = $status_info['counts'] ?? [];
         $count_summary = implode(', ', array_map(fn($k, $v) => "$v $k", array_keys($counts), array_values($counts)));
-        $title = $count_summary ? ' title="' . htmlspecialchars($count_summary) . '"' : '';
+        $title = $count_summary !== '' ? ' title="' . htmlspecialchars($count_summary) . '"' : '';
         $status_cell = '<span class="level-' . htmlspecialchars($status_word) . '"' . $title . '>' . htmlspecialchars($status_word) . '</span>';
     } else {
         $status_cell = '';
     }
 
     // Best-available time — latest of the four observation timestamps.
-    $times = array_filter([$r['flow_time'], $r['inflow_time'], $r['gage_time'], $r['temp_time']]);
+    $times = array_filter([$r['flow_time'], $r['inflow_time'], $r['gage_time'], $r['temp_time']], fn($t) => $t !== null);
     $time_html = '';
-    if ($times) {
-        $latest = max(array_map('strtotime', $times));
+    if ($times !== []) {
+        // strtotime returns int|false; DB timestamps always parse, but cast
+        // each result to int (matching description_detail/gauge_detail) so
+        // $latest is a clean int for gmdate.
+        $latest = max(array_map(fn(string $t): int => (int)strtotime($t), $times));
         $iso = gmdate('Y-m-d\TH:i:s\Z', $latest);
         $disp = gmdate('m/d H:i', $latest);
         $time_html = "<time datetime=\"$iso\">$disp</time>";
@@ -415,26 +426,27 @@ function _render_custom_gauges_table(array $rows, array $status_by_gauge): void
     $flow_val = $r['flow'] ?? $r['inflow'];
     $gage_val = $r['gage'];
     if ($flow_val !== null) {
-        $flow_cell = number_format((float)$flow_val, 0);
+        $flow_cell = number_format($flow_val, 0);
     } elseif ($gage_val !== null) {
-        $flow_cell = number_format((float)$gage_val, 1) . '&prime;';
+        $flow_cell = number_format($gage_val, 1) . '&prime;';
     } else {
         $flow_cell = '';
     }
 
-    $gage_cell = $gage_val !== null ? number_format((float)$gage_val, 1) : '';
-    $temp_cell = $r['temperature'] !== null ? number_format((float)$r['temperature'], 1) : '';
+    $gage_cell = $gage_val !== null ? number_format($gage_val, 1) : '';
+    $temp_val = $r['temperature'];
+    $temp_cell = $temp_val !== null ? number_format($temp_val, 1) : '';
 
     $attrs = '';
     if ($state !== '' && $huc8 !== '') {
         $attrs = ' data-state="' . htmlspecialchars($state) . '" data-huc8="' . htmlspecialchars($huc8) . '"';
     }
-    $status_attr = $status_word ? ' data-status="' . htmlspecialchars($status_word) . '"' : '';
+    $status_attr = $status_word !== null ? ' data-status="' . htmlspecialchars($status_word) . '"' : '';
 ?>
 <tr class="clickable-row" data-href="/gauge.php?id=<?= $gid ?>"<?= $attrs ?><?= $status_attr ?>>
   <td class="td-status" data-label="Status"><?= $status_cell ?></td>
-  <td class="td-name" data-label="River"><a href="/gauge.php?id=<?= $gid ?>"><?= htmlspecialchars((string)$r['river']) ?></a></td>
-  <td data-label="Location"><?= htmlspecialchars((string)$r['location']) ?></td>
+  <td class="td-name" data-label="River"><a href="/gauge.php?id=<?= $gid ?>"><?= htmlspecialchars($r['river']) ?></a></td>
+  <td data-label="Location"><?= htmlspecialchars($r['location']) ?></td>
   <td class="td-date" data-label="Date"><?= $time_html ?></td>
   <td class="td-flow" data-label="Flow"><?= $flow_cell ?></td>
   <td class="td-spark secondary" data-label="2-day Trend"><span class="spark" data-gid="<?= $gid ?>"></span></td>
@@ -453,7 +465,9 @@ function _render_custom_gauges_table(array $rows, array $status_by_gauge): void
  */
 function _render_custom_gauges_footer(): void
 {
-    $filters_mtime = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/filters.js') ?: 1;
+    $doc_root = is_string($_SERVER['DOCUMENT_ROOT'] ?? null) ? $_SERVER['DOCUMENT_ROOT'] : '';
+    $filters_mtime_raw = @filemtime($doc_root . '/static/filters.js');
+    $filters_mtime = $filters_mtime_raw !== false ? $filters_mtime_raw : 1;
     ?>
 <script src="/static/filters.js?v=<?= $filters_mtime ?>" defer></script>
     <?php

@@ -1,14 +1,21 @@
 includes:
-    # Grandfather list of pre-existing level-7/8 issues (mostly
-    # PDOStatement|false and string|false unguarded calls). Each PHP
-    # layer split in docs/PLAN_php_layer_split.md Tiers 2–6 shrinks
-    # this file; Tier 6.1 cleared most missingType.iterableValue
-    # entries and Tier 6.2 raised the level from 7 to 8. Regenerate
-    # with `composer baseline`.
+    # Full phpstan-strict-rules, layered on the base level: useless-cast,
+    # empty(), strict in_array/array_filter, loose ==, loop-variable
+    # overwrite, variable-variables, AND booleans-in-conditions +
+    # no-short-ternary (the two stylistic families). All enforced at
+    # zero — no strictRules toggles. vendor/ is always present when
+    # PHPStan can run, so a hard include is safe here.
+    - vendor/phpstan/phpstan-strict-rules/rules.neon
+    # Level-9 grandfather baseline — the pre-existing mixed-typing finds
+    # (cast-of-mixed, offset-on-mixed, argument.type) the level 8->9 bump
+    # surfaced, almost all rooted in the array<string,mixed> rows the db
+    # helpers return. This is a SHRINKING debt list, not a permanent
+    # suppression: new level-9 violations still fail the build. Tighten a
+    # query's row types, then `composer baseline` to shrink this file.
     - phpstan-baseline.neon
 
 parameters:
-    level: 8
+    level: 9
     paths:
         - php
     excludePaths:

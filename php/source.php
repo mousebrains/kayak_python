@@ -16,7 +16,7 @@ $q  = filter_input(INPUT_GET, 'q', FILTER_DEFAULT);
 
 // --- Search mode ---
 if ($q !== null && $q !== '') {
-    $q = trim($q);
+    $q = trim((string)$q);
     $stmt = $db->prepare(
         'SELECT id, name, agency FROM source
          WHERE name LIKE ? OR agency LIKE ?
@@ -25,6 +25,7 @@ if ($q !== null && $q !== '') {
     );
     $pat = "%$q%";
     $stmt->execute([$pat, $pat]);
+    /** @var list<array{id:int,name:string,agency:?string}> $results */
     $results = $stmt->fetchAll();
 
     if (count($results) === 1) {
@@ -36,7 +37,7 @@ if ($q !== null && $q !== '') {
     include_header('Source Search', '', '', '', ['picker_kind' => 'gauge']);
     echo '<h2>Source Search</h2>';
 
-    if (!$results) {
+    if ($results === []) {
         echo '<p>No sources matching &ldquo;' . htmlspecialchars($q) . '&rdquo;.</p>';
     } else {
         echo '<p>' . count($results) . ' sources matching &ldquo;' . htmlspecialchars($q) . '&rdquo;:</p>';
@@ -56,9 +57,10 @@ if ($q !== null && $q !== '') {
 }
 
 // --- Default: show first source ---
-if (!$id) {
-    $row = $db->query('SELECT id FROM source ORDER BY id ASC LIMIT 1')->fetch();
-    if (!$row) {
+if (!is_int($id) || $id < 1) {
+    /** @var array{id:int}|false $row */
+    $row = db_query($db, 'SELECT id FROM source ORDER BY id ASC LIMIT 1')->fetch();
+    if ($row === false) {
         header('Cache-Control: no-cache');
         include_header('Sources', '', '', '', ['picker_kind' => 'gauge']);
         echo '<p>No sources in database.</p>';
@@ -78,22 +80,32 @@ $stmt = $db->prepare(
      WHERE s.id = ?'
 );
 $stmt->execute([$id]);
+/**
+ * @var array{
+ *     id:int, name:string, agency:?string, fetch_url_id:?int,
+ *     calc_expression_id:?int, timezone:?string,
+ *     fetch_url:?string, fetch_parser:?string,
+ *     calc_expr:?string, calc_data_type:?string, calc_note:?string
+ * }|false $source
+ */
 $source = $stmt->fetch();
-if (!$source) { http_response_code(404); exit('Source not found'); }
+if ($source === false) { http_response_code(404); exit('Source not found'); }
 
 // --- Navigation ---
 $prev_stmt = $db->prepare('SELECT id FROM source WHERE id < ? ORDER BY id DESC LIMIT 1');
 $prev_stmt->execute([$id]);
+/** @var array{id:int}|false $prev */
 $prev = $prev_stmt->fetch();
 
 $next_stmt = $db->prepare('SELECT id FROM source WHERE id > ? ORDER BY id ASC LIMIT 1');
 $next_stmt->execute([$id]);
+/** @var array{id:int}|false $next */
 $next = $next_stmt->fetch();
 
-$total = $db->query('SELECT COUNT(*) FROM source')->fetchColumn();
+$total = (int)db_query($db, 'SELECT COUNT(*) FROM source')->fetchColumn();
 $pos = $db->prepare('SELECT COUNT(*) FROM source WHERE id <= ?');
 $pos->execute([$id]);
-$position = $pos->fetchColumn();
+$position = (int)$pos->fetchColumn();
 
 // --- Observation summary ---
 $obs_stmt = $db->prepare(
@@ -101,6 +113,7 @@ $obs_stmt = $db->prepare(
      FROM observation WHERE source_id = ? GROUP BY data_type ORDER BY data_type'
 );
 $obs_stmt->execute([$id]);
+/** @var list<array{data_type:string,cnt:int,latest:?string}> $obs_summary */
 $obs_summary = $obs_stmt->fetchAll();
 
 // --- Associated gauges ---
@@ -112,6 +125,7 @@ $gauges_stmt = $db->prepare(
      ORDER BY g.name'
 );
 $gauges_stmt->execute([$id]);
+/** @var list<array{id:int,name:string,location:?string,usgs_id:?string}> $gauges */
 $gauges = $gauges_stmt->fetchAll();
 
 // --- Render ---
@@ -119,18 +133,18 @@ header('Cache-Control: no-cache');
 include_header(
     $source['name'] . ' - Source',
     '', '', '',
-    ['type' => 'source', 'id' => (int)$source['id']]
+    ['type' => 'source', 'id' => $source['id']]
 );
 
 // Navigation bar
 echo '<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">';
-if ($prev) {
+if ($prev !== false) {
     echo '<a href="/source.php?id=' . $prev['id'] . '">&laquo; Prev</a>';
 } else {
     echo '<span style="color:#999">&laquo; Prev</span>';
 }
 echo "<span>Source $position of $total</span>";
-if ($next) {
+if ($next !== false) {
     echo '<a href="/source.php?id=' . $next['id'] . '">Next &raquo;</a>';
 } else {
     echo '<span style="color:#999">Next &raquo;</span>';
@@ -148,10 +162,10 @@ echo '<table class="desc-table">';
 // Build agency metadata URL for the source name
 $agency_url = null;
 $agency_lc = strtolower($source['agency'] ?? '');
-$src_name = $source['name'] ?? '';
-if ($agency_lc === 'usgs' && preg_match('/^\d+$/', $src_name)) {
+$src_name = $source['name'];
+if ($agency_lc === 'usgs' && preg_match('/^\d+$/', $src_name) === 1) {
     $agency_url = 'https://waterdata.usgs.gov/monitoring-location/' . urlencode($src_name);
-} elseif ($agency_lc === 'nwrfc' && preg_match('/^[A-Z]{4}\d?$/', $src_name)) {
+} elseif ($agency_lc === 'nwrfc' && preg_match('/^[A-Z]{4}\d?$/', $src_name) === 1) {
     $agency_url = 'https://www.nwrfc.noaa.gov/river/station/flowplot/flowplot.cgi?lid=' . urlencode($src_name);
 } elseif ($agency_lc === 'usace') {
     $agency_url = 'https://www.nwp.usace.army.mil/Locations/' . urlencode($src_name);
@@ -162,7 +176,7 @@ if ($agency_lc === 'usgs' && preg_match('/^\d+$/', $src_name)) {
 }
 
 $name_html = htmlspecialchars($src_name);
-if ($agency_url) {
+if ($agency_url !== null) {
     $name_html = '<a href="' . htmlspecialchars($agency_url) . '" target="_blank" rel="noopener">' . $name_html . '</a>';
 }
 
@@ -172,18 +186,18 @@ $fields = [
     'Agency' => $source['agency'],
 ];
 
-if ($source['fetch_url']) {
+if ($source['fetch_url'] !== null) {
     $url_esc = htmlspecialchars($source['fetch_url']);
     $fields['Fetch URL'] = "<a href=\"$url_esc\" target=\"_blank\" rel=\"noopener\">$url_esc</a>";
-    if ($source['fetch_parser']) {
+    if ($source['fetch_parser'] !== null) {
         $fields['Parser'] = $source['fetch_parser'];
     }
-} elseif ($source['calc_expr']) {
+} elseif ($source['calc_expr'] !== null) {
     $fields['Calc Expression'] = $source['calc_expr'];
-    if ($source['calc_data_type']) {
+    if ($source['calc_data_type'] !== null) {
         $fields['Calc Data Type'] = $source['calc_data_type'];
     }
-    if ($source['calc_note']) {
+    if ($source['calc_note'] !== null) {
         $fields['Calc Note'] = $source['calc_note'];
     }
 }
@@ -202,21 +216,21 @@ foreach ($fields as $label => $value) {
 echo '</table>';
 
 // Observation summary
-if ($obs_summary) {
+if ($obs_summary !== []) {
     echo '<h3 style="margin-top:1rem">Observations</h3>';
     echo '<table class="readings-table">';
     echo '<tr><th>Data Type</th><th>Count</th><th>Latest</th><th>View</th></tr>';
     foreach ($obs_summary as $o) {
-        $dtype_raw = (string)$o['data_type'];
+        $dtype_raw = $o['data_type'];
         $dtype = htmlspecialchars($dtype_raw);
-        $cnt = number_format((int)$o['cnt']);
+        $cnt = number_format($o['cnt']);
         // observed_at comes back as 'YYYY-MM-DD HH:MM:SS.000000'; the microsecond
         // tail is always zero (parsers store at second precision) so trim it.
-        $latest = htmlspecialchars(substr((string)($o['latest'] ?? ''), 0, 19));
-        $plot_url = '/source_plot.php?id=' . (int)$source['id']
+        $latest = htmlspecialchars(substr($o['latest'] ?? '', 0, 19));
+        $plot_url = '/source_plot.php?id=' . $source['id']
                   . '&type=' . urlencode($dtype_raw)
                   . '&embed=1';
-        $data_url = '/source_data.php?id=' . (int)$source['id'];
+        $data_url = '/source_data.php?id=' . $source['id'];
         $links = '<a href="' . htmlspecialchars($plot_url) . '">plot</a>'
                . ' · <a href="' . htmlspecialchars($data_url) . '">data</a>';
         echo "<tr><td>$dtype</td><td>$cnt</td><td>$latest</td><td>$links</td></tr>\n";
@@ -227,7 +241,7 @@ if ($obs_summary) {
 }
 
 // Associated gauges
-if ($gauges) {
+if ($gauges !== []) {
     echo '<h3 style="margin-top:1rem">Associated Gauges</h3>';
     echo '<table class="readings-table">';
     echo '<tr><th>ID</th><th>Name</th><th>Location</th><th>USGS ID</th></tr>';

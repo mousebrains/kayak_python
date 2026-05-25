@@ -29,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     switch ($action) {
         case 'bulk_approve':
-            if ($ids) {
+            if ($ids !== []) {
                 $in = implode(',', array_fill(0, count($ids), '?'));
                 $stmt = $db->prepare(
                     "UPDATE editor
@@ -131,7 +131,7 @@ $statuses = ['pending', 'minimal', 'full', 'banned', 'maintainer', 'all'];
 if (!in_array($status_filter, $statuses, true)) $status_filter = 'all';
 
 // Per-status counts for the filter bar
-$count_rows = $db->query("SELECT status, COUNT(*) AS n FROM editor GROUP BY status")
+$count_rows = db_query($db, "SELECT status, COUNT(*) AS n FROM editor GROUP BY status")
                  ->fetchAll();
 $status_counts = ['all' => 0];
 foreach ($count_rows as $r) {
@@ -174,10 +174,10 @@ include_header('Admin — editors');
 ?>
 <h2>Editors</h2>
 
-<?php if ($flash): ?>
+<?php if ($flash !== null): ?>
 <p style="padding:.5rem;background:#e8f4ea;border:1px solid #b7dcc0;border-radius:4px"><?= htmlspecialchars($flash) ?></p>
 <?php endif ?>
-<?php if ($flash_err): ?>
+<?php if ($flash_err !== null): ?>
 <p style="padding:.5rem;background:#fde8e8;border:1px solid #f5b5b5;border-radius:4px"><?= htmlspecialchars($flash_err) ?></p>
 <?php endif ?>
 

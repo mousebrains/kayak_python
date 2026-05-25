@@ -20,7 +20,8 @@ require_once __DIR__ . '/config.php';
 function mail_from(): string {
     $v = Config::str('mail_from');
     if ($v !== '') return $v;
-    $host = gethostname() ?: 'localhost';
+    $hostname = gethostname();
+    $host = is_string($hostname) && $hostname !== '' ? $hostname : 'localhost';
     return "noreply@$host";
 }
 
@@ -46,9 +47,11 @@ function mail_dump_dir(): ?string {
  * the message was handed to the MTA, not that it was delivered. Pass
  * $extra_headers like ['Reply-To' => 'someone@example.com'] to override
  * the defaults.
+ *
+ * @param array<string, string> $extra_headers
  */
 function send_email(string $to, string $subject, string $body, array $extra_headers = []): bool {
-    if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
+    if (filter_var($to, FILTER_VALIDATE_EMAIL) === false) {
         error_log("send_email: refused invalid recipient: $to");
         return false;
     }
@@ -70,7 +73,7 @@ function send_email(string $to, string $subject, string $body, array $extra_head
     ];
     // Sanitize extra header values — strip CR/LF to prevent header injection.
     foreach ($extra_headers as $k => $v) {
-        $default_headers[$k] = preg_replace('/[\r\n]+/', ' ', (string)$v);
+        $default_headers[$k] = preg_replace('/[\r\n]+/', ' ', $v);
     }
     $headers = implode("\r\n", array_map(
         fn($k, $v) => "$k: $v",
@@ -102,7 +105,7 @@ function send_email(string $to, string $subject, string $body, array $extra_head
 
 /** Render the magic-link email body. */
 function render_magic_link_email(string $link, string $ip, ?string $user_agent): string {
-    $ua = $user_agent ? substr($user_agent, 0, 200) : '(unknown browser)';
+    $ua = $user_agent !== null && $user_agent !== '' ? substr($user_agent, 0, 200) : '(unknown browser)';
     return <<<TXT
 Hello,
 

@@ -6,6 +6,8 @@ declare(strict_types=1);
  * Mirrors src/kayak/utils/class_tiers.py (parse_class_tiers). Cruxes in
  * parentheses are dropped; '+' modifiers are stripped; ranges expand
  * inclusively. Return is sorted Roman-order ['I','II','III','IV','V'].
+ *
+ * @return list<string>
  */
 
 function parse_class_tiers(?string $s): array {
@@ -15,7 +17,7 @@ function parse_class_tiers(?string $s): array {
     $found   = [];
     if (preg_match_all(
             '/\b(V|IV|III|II|I)(?:\s*[-\x{2013}]\s*(V|IV|III|II|I))?\b/u',
-            $cleaned, $matches, PREG_SET_ORDER | PREG_UNMATCHED_AS_NULL)) {
+            $cleaned, $matches, PREG_SET_ORDER | PREG_UNMATCHED_AS_NULL) !== false) {
         foreach ($matches as $hit) {
             $lo = $roman[$hit[1]];
             // With PREG_UNMATCHED_AS_NULL the optional group is null when

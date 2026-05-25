@@ -38,7 +38,7 @@ function handle_gauge_search(PDO $db, string $q): never
     include_header('Gauge Search', '', '', '', ['picker_kind' => 'gauge']);
     echo '<h2>Gauge Search</h2>';
 
-    if (!$results) {
+    if ($results === []) {
         echo '<p>No gauges matching &ldquo;' . htmlspecialchars($q) . '&rdquo;.</p>';
     } else {
         _render_gauge_search_results($results, $q);
@@ -68,7 +68,7 @@ function _search_gauges(PDO $db, string $q): array
     );
     $pat = "%$q%";
     $stmt->execute([$pat, $pat, $pat, $pat, $pat, $pat, $pat, $pat, $pat]);
-    return $stmt->fetchAll();
+    return db_rows($stmt);
 }
 
 /**

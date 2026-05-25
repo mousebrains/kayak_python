@@ -26,7 +26,7 @@ function _gp_has_current_obs(PDO $db, int $gauge_id, string $type, int $hours): 
     );
     $stmt->execute([$gauge_id, $type]);
     $latest = $stmt->fetchColumn();
-    if (!$latest) {
+    if ($latest === false || $latest === null) {
         return false;
     }
     $ts = strtotime((string)$latest . ' UTC');

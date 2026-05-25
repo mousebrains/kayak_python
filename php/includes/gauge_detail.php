@@ -36,18 +36,18 @@ function handle_gauge_detail(PDO $db, int $id, ?string $start_date, ?string $end
     // Prefer the normalized display_name populated by
     // scripts/seed_gauge_display.py; fall back to the internal canonical
     // `name` when the row predates the seeder.
-    $gauge_display = $gauge['display_name'] ?: $gauge['name'];
+    $gauge_display = $gauge['display_name'] !== null && $gauge['display_name'] !== ''
+        ? $gauge['display_name']
+        : $gauge['name'];
 
     $nav = _load_gauge_navigation($db, $id);
     $related = _load_gauge_associated($db, $id);
-    $readings = _load_gauge_readings($db, (int)$gauge['id']);
+    $readings = _load_gauge_readings($db, $gauge['id']);
 
     // dtype → numeric value map for downstream reach-status classification.
     $readings_by_dtype = [];
     foreach ($readings as $r) {
-        if ($r['value'] !== null) {
-            $readings_by_dtype[(string)$r['data_type']] = (float)$r['value'];
-        }
+        $readings_by_dtype[$r['data_type']] = $r['value'];
     }
     $reach_status_by_id = _compute_reach_statuses(
         $related['reaches'],
@@ -67,7 +67,7 @@ function handle_gauge_detail(PDO $db, int $id, ?string $start_date, ?string $end
     _render_stale_or_empty_banner($readings);
     _render_gauge_readings_table($readings);
 
-    if ($readings) {
+    if ($readings !== []) {
         _render_gauge_date_form_and_plots($db, $gauge, $id, $gauge_display, $start_date, $end_date);
     }
 
@@ -79,7 +79,7 @@ function handle_gauge_detail(PDO $db, int $id, ?string $start_date, ?string $end
 
     // Regression analysis (when present) sits below the primary content —
     // most users don't care about fit diagnostics.
-    _render_gauge_regression($db, (string)$gauge['name'], $related['sources']);
+    _render_gauge_regression($db, $gauge['name'], $related['sources']);
 
     _render_gauge_footer($id, $has_map);
 
@@ -91,14 +91,33 @@ function handle_gauge_detail(PDO $db, int $id, ?string $start_date, ?string $end
  * inline check (plain text 404 body — see header docblock about the
  * deferred get_gauge_or_404 helper).
  *
- * @return array<string, mixed>
+ * @return array{
+ *     id: int, name: string, bank_full: float|null, flood_stage: float|null,
+ *     location: string|null, latitude: float|null, longitude: float|null,
+ *     station_id: string|null, cbtt_id: string|null, geos_id: string|null,
+ *     nws_id: string|null, nwsli_id: string|null, snotel_id: string|null,
+ *     usgs_id: string|null, rating_id: int|null, elevation: float|null,
+ *     drainage_area: float|null, huc: string|null, allow_negative_flow: int,
+ *     river: string|null, display_name: string|null, sort_name: string|null,
+ *     state: string|null
+ * }
  */
 function _load_gauge_or_404(PDO $db, int $id): array
 {
     $stmt = $db->prepare('SELECT * FROM gauge WHERE id = ?');
     $stmt->execute([$id]);
+    /** @var array{
+     *     id: int, name: string, bank_full: float|null, flood_stage: float|null,
+     *     location: string|null, latitude: float|null, longitude: float|null,
+     *     station_id: string|null, cbtt_id: string|null, geos_id: string|null,
+     *     nws_id: string|null, nwsli_id: string|null, snotel_id: string|null,
+     *     usgs_id: string|null, rating_id: int|null, elevation: float|null,
+     *     drainage_area: float|null, huc: string|null, allow_negative_flow: int,
+     *     river: string|null, display_name: string|null, sort_name: string|null,
+     *     state: string|null
+     * }|false $gauge */
     $gauge = $stmt->fetch();
-    if (!$gauge) {
+    if ($gauge === false) {
         http_response_code(404);
         exit('Gauge not found');
     }
@@ -111,27 +130,29 @@ function _load_gauge_or_404(PDO $db, int $id): array
  * filter — gauges have no equivalent flag yet).
  *
  * @return array{
- *     prev: array<string, mixed>|false,
- *     next: array<string, mixed>|false,
- *     position: int|string,
- *     total: int|string
+ *     prev: array{id: int}|false,
+ *     next: array{id: int}|false,
+ *     position: int,
+ *     total: int
  * }
  */
 function _load_gauge_navigation(PDO $db, int $id): array
 {
     $prev_stmt = $db->prepare('SELECT id FROM gauge WHERE id < ? ORDER BY id DESC LIMIT 1');
     $prev_stmt->execute([$id]);
-    $prev = $prev_stmt->fetch();
+    /** @var array{id: int}|false $prev */
+    $prev = db_row($prev_stmt);
 
     $next_stmt = $db->prepare('SELECT id FROM gauge WHERE id > ? ORDER BY id ASC LIMIT 1');
     $next_stmt->execute([$id]);
-    $next = $next_stmt->fetch();
+    /** @var array{id: int}|false $next */
+    $next = db_row($next_stmt);
 
-    $total = $db->query('SELECT COUNT(*) FROM gauge')->fetchColumn();
+    $total = (int)db_query($db, 'SELECT COUNT(*) FROM gauge')->fetchColumn();
 
     $pos_stmt = $db->prepare('SELECT COUNT(*) FROM gauge WHERE id <= ?');
     $pos_stmt->execute([$id]);
-    $position = $pos_stmt->fetchColumn();
+    $position = (int)$pos_stmt->fetchColumn();
 
     return ['prev' => $prev, 'next' => $next, 'position' => $position, 'total' => $total];
 }
@@ -143,9 +164,9 @@ function _load_gauge_navigation(PDO $db, int $id): array
  * avoid N+1 on gauges with many reaches.
  *
  * @return array{
- *     sources: list<array<string, mixed>>,
- *     reaches: list<array<string, mixed>>,
- *     reach_class_thresholds: array<int, list<array<string, mixed>>>
+ *     sources: list<array{id: int, name: string, agency: string|null, obs_count: int, latest_at: string|null, calc_provenance_slug: string|null}>,
+ *     reaches: list<array{id: int, name: string, river: string|null, length: float|null, basin: string|null, geom: string|null, description: string|null, classes: string|null}>,
+ *     reach_class_thresholds: array<int, list<array{reach_id: int, low: float|null, high: float|null, low_data_type: string|null, high_data_type: string|null}>>
  * }
  */
 function _load_gauge_associated(PDO $db, int $id): array
@@ -162,7 +183,8 @@ function _load_gauge_associated(PDO $db, int $id): array
          ORDER BY s.name'
     );
     $sources_stmt->execute([$id]);
-    $sources = $sources_stmt->fetchAll();
+    /** @var list<array{id: int, name: string, agency: string|null, obs_count: int, latest_at: string|null, calc_provenance_slug: string|null}> $sources */
+    $sources = db_rows($sources_stmt);
 
     // Pull class names from reach_class (the canonical source) rather than
     // the rarely-populated reach.difficulties column.
@@ -172,11 +194,12 @@ function _load_gauge_associated(PDO $db, int $id): array
          FROM reach r WHERE r.gauge_id = ? ORDER BY r.sort_name'
     );
     $reaches_stmt->execute([$id]);
-    $reaches = $reaches_stmt->fetchAll();
+    /** @var list<array{id: int, name: string, river: string|null, length: float|null, basin: string|null, geom: string|null, description: string|null, classes: string|null}> $reaches */
+    $reaches = db_rows($reaches_stmt);
 
     $reach_class_thresholds = [];
-    if ($reaches) {
-        $reach_ids = array_map(static fn($r) => (int)$r['id'], $reaches);
+    if ($reaches !== []) {
+        $reach_ids = array_map(static fn($r) => $r['id'], $reaches);
         $ph = implode(',', array_fill(0, count($reach_ids), '?'));
         $thr_stmt = $db->prepare(
             "SELECT reach_id, low, high, low_data_type, high_data_type
@@ -185,8 +208,10 @@ function _load_gauge_associated(PDO $db, int $id): array
              ORDER BY id"
         );
         $thr_stmt->execute($reach_ids);
-        foreach ($thr_stmt->fetchAll() as $row) {
-            $reach_class_thresholds[(int)$row['reach_id']][] = $row;
+        /** @var list<array{reach_id: int, low: float|null, high: float|null, low_data_type: string|null, high_data_type: string|null}> $thr_rows */
+        $thr_rows = db_rows($thr_stmt);
+        foreach ($thr_rows as $row) {
+            $reach_class_thresholds[$row['reach_id']][] = $row;
         }
     }
 
@@ -201,7 +226,7 @@ function _load_gauge_associated(PDO $db, int $id): array
  * Latest gauge observations (one row per data_type) for the readings
  * table and the per-reach status-classification path.
  *
- * @return list<array<string, mixed>>
+ * @return list<array{data_type: string, value: float, observed_at: string, delta_per_hour: float|null}>
  */
 function _load_gauge_readings(PDO $db, int $gauge_id): array
 {
@@ -210,7 +235,9 @@ function _load_gauge_readings(PDO $db, int $gauge_id): array
          FROM latest_gauge_observation WHERE gauge_id = ?'
     );
     $readings_stmt->execute([$gauge_id]);
-    return $readings_stmt->fetchAll();
+    /** @var list<array{data_type: string, value: float, observed_at: string, delta_per_hour: float|null}> $rows */
+    $rows = db_rows($readings_stmt);
+    return $rows;
 }
 
 /**
@@ -220,7 +247,7 @@ function _load_gauge_readings(PDO $db, int $gauge_id): array
  * and pick the first dtype with both a reading on this gauge and a class
  * threshold whose data_type matches.
  *
- * @param  list<array<string, mixed>> $thresholds        Class rows with low/high bounds.
+ * @param  list<array{reach_id: int, low: float|null, high: float|null, low_data_type: string|null, high_data_type: string|null}> $thresholds Class rows with low/high bounds.
  * @param  array<string, float>       $readings_by_dtype Reading values keyed by data_type.
  * @return 'low'|'okay'|'high'|'unknown'
  */
@@ -236,16 +263,16 @@ function _classify_reach_status(array $thresholds, array $readings_by_dtype): st
             if ($rc['low'] === null && $rc['high'] === null) {
                 continue;
             }
-            if (!empty($rc['low_data_type']) && $rc['low_data_type'] !== $classify_dt) {
+            if (($rc['low_data_type'] ?? '') !== '' && $rc['low_data_type'] !== $classify_dt) {
                 continue;
             }
-            if (!empty($rc['high_data_type']) && $rc['high_data_type'] !== $classify_dt) {
+            if (($rc['high_data_type'] ?? '') !== '' && $rc['high_data_type'] !== $classify_dt) {
                 continue;
             }
-            if ($rc['low'] !== null && $v < (float)$rc['low']) {
+            if ($rc['low'] !== null && $v < $rc['low']) {
                 return 'low';
             }
-            if ($rc['high'] !== null && $v > (float)$rc['high']) {
+            if ($rc['high'] !== null && $v > $rc['high']) {
                 return 'high';
             }
             return 'okay';
@@ -257,8 +284,8 @@ function _classify_reach_status(array $thresholds, array $readings_by_dtype): st
 /**
  * Pre-compute one status per associated reach so the map and table agree.
  *
- * @param  list<array<string, mixed>>                       $reaches
- * @param  array<int, list<array<string, mixed>>>           $reach_class_thresholds
+ * @param  list<array{id: int, name: string, river: string|null, length: float|null, basin: string|null, geom: string|null, description: string|null, classes: string|null}> $reaches
+ * @param  array<int, list<array{reach_id: int, low: float|null, high: float|null, low_data_type: string|null, high_data_type: string|null}>> $reach_class_thresholds
  * @param  array<string, float>                             $readings_by_dtype
  * @return array<int, string>                               reach_id → status
  */
@@ -266,8 +293,8 @@ function _compute_reach_statuses(array $reaches, array $reach_class_thresholds, 
 {
     $out = [];
     foreach ($reaches as $r) {
-        $out[(int)$r['id']] = _classify_reach_status(
-            $reach_class_thresholds[(int)$r['id']] ?? [],
+        $out[$r['id']] = _classify_reach_status(
+            $reach_class_thresholds[$r['id']] ?? [],
             $readings_by_dtype,
         );
     }
@@ -278,7 +305,16 @@ function _compute_reach_statuses(array $reaches, array $reach_class_thresholds, 
  * `Cache-Control: no-cache` + include_header with editor-feature context
  * (so the nav's "Comment" link redirects back to this gauge after sign-in).
  *
- * @param array<string, mixed> $gauge
+ * @param array{
+ *     id: int, name: string, bank_full: float|null, flood_stage: float|null,
+ *     location: string|null, latitude: float|null, longitude: float|null,
+ *     station_id: string|null, cbtt_id: string|null, geos_id: string|null,
+ *     nws_id: string|null, nwsli_id: string|null, snotel_id: string|null,
+ *     usgs_id: string|null, rating_id: int|null, elevation: float|null,
+ *     drainage_area: float|null, huc: string|null, allow_negative_flow: int,
+ *     river: string|null, display_name: string|null, sort_name: string|null,
+ *     state: string|null
+ * } $gauge
  */
 function _render_gauge_header(array $gauge, string $gauge_display): void
 {
@@ -286,7 +322,7 @@ function _render_gauge_header(array $gauge, string $gauge_display): void
     include_header(
         $gauge_display . ' - Gauge',
         '', '', gm_head_links(),
-        ['type' => 'gauge', 'id' => (int)$gauge['id']]
+        ['type' => 'gauge', 'id' => $gauge['id']]
     );
 }
 
@@ -294,21 +330,19 @@ function _render_gauge_header(array $gauge, string $gauge_display): void
  * Top nav bar — prev / "Gauge N of M" / next + an inline search form
  * (q only — gauge search has no state filter or hidden toggle).
  *
- * @param int|string                  $position
- * @param int|string                  $total
- * @param array<string, mixed>|false  $prev
- * @param array<string, mixed>|false  $next
+ * @param array{id: int}|false  $prev
+ * @param array{id: int}|false  $next
  */
-function _render_gauge_nav_bar(int|string $position, int|string $total, array|false $prev, array|false $next): void
+function _render_gauge_nav_bar(int $position, int $total, array|false $prev, array|false $next): void
 {
     echo '<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">';
-    if ($prev) {
+    if ($prev !== false) {
         echo '<a href="/gauge.php?id=' . $prev['id'] . '">&laquo; Prev</a>';
     } else {
         echo '<span style="color:#999">&laquo; Prev</span>';
     }
     echo "<span>Gauge $position of $total</span>";
-    if ($next) {
+    if ($next !== false) {
         echo '<a href="/gauge.php?id=' . $next['id'] . '">Next &raquo;</a>';
     } else {
         echo '<span style="color:#999">Next &raquo;</span>';
@@ -325,11 +359,11 @@ function _render_gauge_nav_bar(int|string $position, int|string $total, array|fa
  * an empty-state banner (red) when no observations exist at all. The
  * yellow banner is skipped if observations are fresh.
  *
- * @param list<array<string, mixed>> $readings
+ * @param list<array{data_type: string, value: float, observed_at: string, delta_per_hour: float|null}> $readings
  */
 function _render_stale_or_empty_banner(array $readings): void
 {
-    if (!$readings) {
+    if ($readings === []) {
         echo '<p style="padding:.5rem .8rem;background:#fbe8e7;border:1px solid #e53935;border-radius:4px;margin:.5rem 0">'
             . 'No cached observations for this gauge.'
             . '</p>';
@@ -337,14 +371,14 @@ function _render_stale_or_empty_banner(array $readings): void
     }
     $latest_ts_all = 0;
     foreach ($readings as $r) {
-        if ($r['observed_at']) {
-            $t = strtotime((string)$r['observed_at']);
+        if ($r['observed_at'] !== '') {
+            $t = strtotime($r['observed_at']);
             if ($t > $latest_ts_all) {
                 $latest_ts_all = $t;
             }
         }
     }
-    $age_days = $latest_ts_all ? (int)floor((time() - $latest_ts_all) / 86400) : null;
+    $age_days = $latest_ts_all !== 0 ? (int)floor((time() - $latest_ts_all) / 86400) : null;
     if ($age_days !== null && $age_days > 7) {
         $last = date('Y-m-d', $latest_ts_all);
         echo '<p style="padding:.5rem .8rem;background:#fef6e1;border:1px solid #e8a735;border-radius:4px;margin:.5rem 0">'
@@ -357,11 +391,11 @@ function _render_stale_or_empty_banner(array $readings): void
  * 5-col readings table — Type / Value / Time / Change/hr / Status. Same
  * shape as description.php's readings table. Skipped if no readings.
  *
- * @param list<array<string, mixed>> $readings
+ * @param list<array{data_type: string, value: float, observed_at: string, delta_per_hour: float|null}> $readings
  */
 function _render_gauge_readings_table(array $readings): void
 {
-    if (!$readings) {
+    if ($readings === []) {
         return;
     }
     $type_labels = [
@@ -381,20 +415,20 @@ function _render_gauge_readings_table(array $readings): void
     foreach ($readings as $r) {
         $label = $type_labels[$r['data_type']] ?? htmlspecialchars($r['data_type']);
         $unit = $type_units[$r['data_type']] ?? '';
-        $raw = (float)$r['value'];
+        $raw = $r['value'];
         if ($r['data_type'] === 'flow' || $r['data_type'] === 'inflow') {
             $val = number_format($raw, 0) . " $unit";
         } else {
             $val = number_format($raw, 1) . " $unit";
         }
-        $time_iso = $r['observed_at'] ? gmdate('Y-m-d\TH:i:s\Z', strtotime($r['observed_at'])) : '';
-        $time_display = $r['observed_at'] ? date('m/d H:i', strtotime($r['observed_at'])) : 'N/A';
-        $time_html = $time_iso ? "<time datetime=\"$time_iso\">$time_display</time>" : 'N/A';
+        $time_iso = $r['observed_at'] !== '' ? gmdate('Y-m-d\TH:i:s\Z', (int)strtotime($r['observed_at'])) : '';
+        $time_display = $r['observed_at'] !== '' ? date('m/d H:i', (int)strtotime($r['observed_at'])) : 'N/A';
+        $time_html = $time_iso !== '' ? "<time datetime=\"$time_iso\">$time_display</time>" : 'N/A';
         $delta_dec = ($r['data_type'] === 'flow' || $r['data_type'] === 'inflow') ? 0 : 2;
-        $delta = $r['delta_per_hour'] !== null ? number_format((float)$r['delta_per_hour'], $delta_dec) : '';
+        $delta = $r['delta_per_hour'] !== null ? number_format($r['delta_per_hour'], $delta_dec) : '';
         $status = '';
         if ($r['delta_per_hour'] !== null) {
-            $dph = (float)$r['delta_per_hour'];
+            $dph = $r['delta_per_hour'];
             if (abs($dph) < 0.5) {
                 $status = '<span class="stable">stable</span>';
             } elseif ($dph > 0) {
@@ -412,7 +446,16 @@ function _render_gauge_readings_table(array $readings): void
  * Date-window selector + the inline SVG plots, when the gauge has any
  * readings. Wraps gp_resolve_window / gp_render_date_form / gp_render_plots.
  *
- * @param array<string, mixed> $gauge
+ * @param array{
+ *     id: int, name: string, bank_full: float|null, flood_stage: float|null,
+ *     location: string|null, latitude: float|null, longitude: float|null,
+ *     station_id: string|null, cbtt_id: string|null, geos_id: string|null,
+ *     nws_id: string|null, nwsli_id: string|null, snotel_id: string|null,
+ *     usgs_id: string|null, rating_id: int|null, elevation: float|null,
+ *     drainage_area: float|null, huc: string|null, allow_negative_flow: int,
+ *     river: string|null, display_name: string|null, sort_name: string|null,
+ *     state: string|null
+ * } $gauge
  */
 function _render_gauge_date_form_and_plots(
     PDO $db,
@@ -423,9 +466,9 @@ function _render_gauge_date_form_and_plots(
     ?string $end_date,
 ): void {
     [$latest_ts, $since, $until, $is_default_view] =
-        gp_resolve_window($db, (int)$gauge['id'], $start_date, $end_date);
+        gp_resolve_window($db, $gauge['id'], $start_date, $end_date);
     gp_render_date_form($id, $start_date, $end_date, $latest_ts);
-    gp_render_plots($db, (int)$gauge['id'], $gauge_display, $since, $until, $latest_ts, $is_default_view);
+    gp_render_plots($db, $gauge['id'], $gauge_display, $since, $until, $latest_ts, $is_default_view);
 }
 
 /**
@@ -437,31 +480,40 @@ function _render_gauge_date_form_and_plots(
  * Returns the bool gm_render_map returned so the caller knows whether to
  * emit Leaflet `<script>` tags at the end of the page.
  *
- * @param  array<string, mixed>       $gauge
- * @param  list<array<string, mixed>> $reaches
+ * @param  array{
+ *     id: int, name: string, bank_full: float|null, flood_stage: float|null,
+ *     location: string|null, latitude: float|null, longitude: float|null,
+ *     station_id: string|null, cbtt_id: string|null, geos_id: string|null,
+ *     nws_id: string|null, nwsli_id: string|null, snotel_id: string|null,
+ *     usgs_id: string|null, rating_id: int|null, elevation: float|null,
+ *     drainage_area: float|null, huc: string|null, allow_negative_flow: int,
+ *     river: string|null, display_name: string|null, sort_name: string|null,
+ *     state: string|null
+ * } $gauge
+ * @param  list<array{id: int, name: string, river: string|null, length: float|null, basin: string|null, geom: string|null, description: string|null, classes: string|null}> $reaches
  * @param  array<int, string>         $reach_status_by_id
  */
 function _render_gauge_map(array $gauge, array $reaches, array $reach_status_by_id): bool
 {
     $reach_tracks_for_map = [];
     foreach ($reaches as $r) {
-        if (!empty($r['geom']) && strpos((string)$r['geom'], ',') !== false) {
+        if ($r['geom'] !== null && $r['geom'] !== '' && strpos($r['geom'], ',') !== false) {
             $reach_tracks_for_map[] = [
-                'id' => (int)$r['id'],
-                'name' => (string)$r['name'],
-                'location' => (string)($r['description'] ?? ''),
-                'classes' => (string)($r['classes'] ?? ''),
-                'status' => $reach_status_by_id[(int)$r['id']] ?? 'unknown',
-                'geom' => (string)$r['geom'],
+                'id' => $r['id'],
+                'name' => $r['name'],
+                'location' => $r['description'] ?? '',
+                'classes' => $r['classes'] ?? '',
+                'status' => $reach_status_by_id[$r['id']] ?? 'unknown',
+                'geom' => $r['geom'],
             ];
         }
     }
     if ($gauge['latitude'] !== null && $gauge['longitude'] !== null) {
-        $glat = number_format((float)$gauge['latitude'], 5, '.', '');
-        $glon = number_format((float)$gauge['longitude'], 5, '.', '');
+        $glat = number_format($gauge['latitude'], 5, '.', '');
+        $glon = number_format($gauge['longitude'], 5, '.', '');
         return gm_render_map(['Gauge' => "$glat,$glon"], null, '#2196F3', $reach_tracks_for_map);
     }
-    if ($reach_tracks_for_map) {
+    if ($reach_tracks_for_map !== []) {
         // No gauge coordinates but we still have reach geometry to show.
         return gm_render_map([], null, '#2196F3', $reach_tracks_for_map);
     }
@@ -473,7 +525,16 @@ function _render_gauge_map(array $gauge, array $reaches, array $reach_status_by_
  * Coordinates (Google Maps link), Elevation, Drainage Area, Bank Full,
  * Flood Stage. NWSLI ID is rendered as a link to the NWRFC flowplot page.
  *
- * @param array<string, mixed> $gauge
+ * @param array{
+ *     id: int, name: string, bank_full: float|null, flood_stage: float|null,
+ *     location: string|null, latitude: float|null, longitude: float|null,
+ *     station_id: string|null, cbtt_id: string|null, geos_id: string|null,
+ *     nws_id: string|null, nwsli_id: string|null, snotel_id: string|null,
+ *     usgs_id: string|null, rating_id: int|null, elevation: float|null,
+ *     drainage_area: float|null, huc: string|null, allow_negative_flow: int,
+ *     river: string|null, display_name: string|null, sort_name: string|null,
+ *     state: string|null
+ * } $gauge
  */
 function _render_gauge_details_table(array $gauge): void
 {
@@ -488,7 +549,7 @@ function _render_gauge_details_table(array $gauge): void
         'CBTT ID' => $gauge['cbtt_id'],
         'GEOS ID' => $gauge['geos_id'],
         'NWS ID' => $gauge['nws_id'],
-        'NWSLI ID' => $gauge['nwsli_id']
+        'NWSLI ID' => $gauge['nwsli_id'] !== null && $gauge['nwsli_id'] !== ''
             ? '<a href="https://www.nwrfc.noaa.gov/river/station/flowplot/flowplot.cgi?lid='
                 . urlencode($gauge['nwsli_id']) . '" target="_blank" rel="noopener">'
                 . htmlspecialchars($gauge['nwsli_id']) . '</a>'
@@ -497,23 +558,23 @@ function _render_gauge_details_table(array $gauge): void
     ];
 
     if ($gauge['latitude'] !== null && $gauge['longitude'] !== null) {
-        $lat_f = number_format((float)$gauge['latitude'], 6, '.', '');
-        $lon_f = number_format((float)$gauge['longitude'], 6, '.', '');
+        $lat_f = number_format($gauge['latitude'], 6, '.', '');
+        $lon_f = number_format($gauge['longitude'], 6, '.', '');
         $maps_url = "https://www.google.com/maps?q={$lat_f},{$lon_f}";
         $fields['Coordinates'] = "<a href=\"" . htmlspecialchars($maps_url)
             . "\" target=\"_blank\" rel=\"noopener\">{$lat_f}, {$lon_f}</a>";
     }
     if ($gauge['elevation'] !== null) {
-        $fields['Elevation'] = number_format((float)$gauge['elevation'], 0) . ' ft';
+        $fields['Elevation'] = number_format($gauge['elevation'], 0) . ' ft';
     }
     if ($gauge['drainage_area'] !== null) {
-        $fields['Drainage Area'] = number_format((float)$gauge['drainage_area'], 0) . ' sq mi';
+        $fields['Drainage Area'] = number_format($gauge['drainage_area'], 0) . ' sq mi';
     }
     if ($gauge['bank_full'] !== null) {
-        $fields['Bank Full'] = number_format((float)$gauge['bank_full'], 2);
+        $fields['Bank Full'] = number_format($gauge['bank_full'], 2);
     }
     if ($gauge['flood_stage'] !== null) {
-        $fields['Flood Stage'] = number_format((float)$gauge['flood_stage'], 2);
+        $fields['Flood Stage'] = number_format($gauge['flood_stage'], 2);
     }
 
     foreach ($fields as $label => $value) {
@@ -544,18 +605,18 @@ function _render_gauge_details_table(array $gauge): void
  * — same defense-in-depth pattern as gauge_map.php's
  * basename-whitelist approach.
  *
- * @param list<array<string, mixed>> $sources From _load_gauge_associated().
+ * @param list<array{id: int, name: string, agency: string|null, obs_count: int, latest_at: string|null, calc_provenance_slug: string|null}> $sources From _load_gauge_associated().
  */
 function _render_gauge_regression(PDO $db, string $gauge_name, array $sources): void
 {
-    /** @var array<string, array<string, mixed>> $by_slug */
+    /** @var array<string, array{slug: string, target: bool, predictor_for: list<array{gauge_id: int, gauge_name: string}>}> $by_slug */
     $by_slug = [];
 
     // (A) Target role — this gauge is fed by a calc_expression with a
     // provenance_slug. Read directly from $sources to avoid a re-query.
     foreach ($sources as $s) {
-        $slug = $s['calc_provenance_slug'] ?? null;
-        if (!$slug) {
+        $slug = $s['calc_provenance_slug'];
+        if ($slug === null || $slug === '') {
             continue;
         }
         $by_slug[$slug] = ['slug' => $slug, 'target' => true, 'predictor_for' => []];
@@ -580,25 +641,27 @@ function _render_gauge_regression(PDO $db, string $gauge_name, array $sources): 
            AND INSTR(ce.time_expression, :delim) > 0'
     );
     $pred_stmt->execute([':delim' => '::' . $gauge_name . '::']);
-    foreach ($pred_stmt->fetchAll() as $row) {
-        $slug = (string)$row['slug'];
+    /** @var list<array{slug: string, calc_gauge_id: int, calc_gauge_name: string}> $pred_rows */
+    $pred_rows = $pred_stmt->fetchAll();
+    foreach ($pred_rows as $row) {
+        $slug = $row['slug'];
         if (!isset($by_slug[$slug])) {
             $by_slug[$slug] = ['slug' => $slug, 'target' => false, 'predictor_for' => []];
         }
         $by_slug[$slug]['predictor_for'][] = [
-            'gauge_id'   => (int)$row['calc_gauge_id'],
-            'gauge_name' => (string)$row['calc_gauge_name'],
+            'gauge_id'   => $row['calc_gauge_id'],
+            'gauge_name' => $row['calc_gauge_name'],
         ];
     }
 
-    if (!$by_slug) {
+    if ($by_slug === []) {
         return;
     }
 
-    $doc_root = $_SERVER['DOCUMENT_ROOT'] ?? '';
+    $doc_root = is_string($_SERVER['DOCUMENT_ROOT'] ?? null) ? $_SERVER['DOCUMENT_ROOT'] : '';
     foreach ($by_slug as $entry) {
-        $slug = (string)$entry['slug'];
-        if (!preg_match('/^[A-Za-z0-9_-]+$/', $slug)) {
+        $slug = $entry['slug'];
+        if (preg_match('/^[A-Za-z0-9_-]+$/', $slug) !== 1) {
             continue;
         }
         $base = $doc_root . '/static/regression/' . $slug;
@@ -617,8 +680,8 @@ function _render_gauge_regression(PDO $db, string $gauge_name, array $sources): 
             continue;
         }
 
-        $is_target    = !empty($entry['target']);
-        $predictor_of = $entry['predictor_for'] ?? [];
+        $is_target    = $entry['target'];
+        $predictor_of = $entry['predictor_for'];
 
         echo '<section class="regression-analysis">';
         echo '<h3>Regression analysis</h3>';
@@ -627,24 +690,25 @@ function _render_gauge_regression(PDO $db, string $gauge_name, array $sources): 
         $intro_parts = [];
         if ($is_target) {
             $preds = (array)($fit['predictors'] ?? []);
-            $pred_label = $preds
+            $pred_label = $preds !== []
                 ? 'USGS ' . htmlspecialchars(implode(', USGS ', array_map('strval', $preds)))
                 : 'another gauge';
             $intro_parts[] = 'Estimated from ' . $pred_label
                 . ' via a fitted linear relationship; the residuals diagnostic below '
                 . 'shows fit quality across the predictor flow range.';
         }
-        if ($predictor_of) {
+        if ($predictor_of !== []) {
             $links = [];
             foreach ($predictor_of as $g) {
-                $links[] = '<a href="/gauge.php?id=' . (int)$g['gauge_id'] . '">'
+                $links[] = '<a href="/gauge.php?id=' . $g['gauge_id'] . '">'
                     . htmlspecialchars($g['gauge_name']) . '</a>';
             }
             $intro_parts[] = 'Used as a predictor for ' . implode(', ', $links) . '.';
         }
         echo '<p>' . implode(' ', $intro_parts) . '</p>';
 
-        $svg_mtime = @filemtime($svg_path) ?: 1;
+        $svg_mtime_raw = @filemtime($svg_path);
+        $svg_mtime = $svg_mtime_raw !== false && $svg_mtime_raw !== 0 ? $svg_mtime_raw : 1;
         echo '<div class="regression-image">';
         echo '<img src="/static/regression/' . htmlspecialchars($slug) . '.svg?v=' . $svg_mtime . '"'
             . ' alt="Residuals (cfs) vs predictor flow for ' . htmlspecialchars($slug) . '"'
@@ -685,11 +749,11 @@ function _render_gauge_regression(PDO $db, string $gauge_name, array $sources): 
  * "Associated Sources" sub-table — one row per source feeding the gauge,
  * with observation count and date of latest reading.
  *
- * @param list<array<string, mixed>> $sources
+ * @param list<array{id: int, name: string, agency: string|null, obs_count: int, latest_at: string|null, calc_provenance_slug: string|null}> $sources
  */
 function _render_associated_sources(array $sources): void
 {
-    if (!$sources) {
+    if ($sources === []) {
         echo '<p style="margin-top:1rem;color:#666">No associated sources.</p>';
         return;
     }
@@ -699,7 +763,7 @@ function _render_associated_sources(array $sources): void
     foreach ($sources as $s) {
         $sname = htmlspecialchars($s['name']);
         $sagency = htmlspecialchars($s['agency'] ?? '');
-        $cnt = number_format((int)$s['obs_count']);
+        $cnt = number_format($s['obs_count']);
         $latest = htmlspecialchars($s['latest_at'] ?? '');
         $shref = "/source.php?id={$s['id']}";
         echo "<tr><td><a href=\"$shref\">{$s['id']}</a></td><td><a href=\"$shref\">$sname</a></td><td>$sagency</td><td>$cnt</td><td>$latest</td></tr>\n";
@@ -711,12 +775,12 @@ function _render_associated_sources(array $sources): void
  * "Associated Reaches" sub-table — one row per reach linked to this
  * gauge, with class list and a status badge (low/okay/high/unknown).
  *
- * @param list<array<string, mixed>> $reaches
+ * @param list<array{id: int, name: string, river: string|null, length: float|null, basin: string|null, geom: string|null, description: string|null, classes: string|null}> $reaches
  * @param array<int, string>         $reach_status_by_id
  */
 function _render_associated_reaches(array $reaches, array $reach_status_by_id): void
 {
-    if (!$reaches) {
+    if ($reaches === []) {
         echo '<p style="margin-top:1rem;color:#666">No associated reaches.</p>';
         return;
     }
@@ -736,11 +800,11 @@ function _render_associated_reaches(array $reaches, array $reach_status_by_id): 
     echo '<tbody>';
     foreach ($reaches as $r) {
         $rname = htmlspecialchars($r['name']);
-        $location = htmlspecialchars((string)($r['description'] ?? ''));
+        $location = htmlspecialchars($r['description'] ?? '');
         $river = htmlspecialchars($r['river'] ?? '');
         $classes = htmlspecialchars($r['classes'] ?? '');
-        $len = $r['length'] !== null ? number_format((float)$r['length'], 1) . ' mi' : '';
-        $status = $reach_status_by_id[(int)$r['id']] ?? 'unknown';
+        $len = $r['length'] !== null ? number_format($r['length'], 1) . ' mi' : '';
+        $status = $reach_status_by_id[$r['id']] ?? 'unknown';
         $status_attr = htmlspecialchars($status);
         $status_html = $status === 'unknown'
             ? '<span style="color:var(--c-text-muted)">unknown</span>'
@@ -780,7 +844,9 @@ function _render_gauge_footer(int $id, bool $has_map): void
     echo '</nav>';
 
     if ($has_map) {
-        $fm_mtime = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/feature-map.js') ?: 1;
+        $doc_root = is_string($_SERVER['DOCUMENT_ROOT'] ?? null) ? $_SERVER['DOCUMENT_ROOT'] : '';
+        $fm_mtime_raw = @filemtime($doc_root . '/static/feature-map.js');
+        $fm_mtime = $fm_mtime_raw !== false && $fm_mtime_raw !== 0 ? $fm_mtime_raw : 1;
         echo '<script src="/static/leaflet.js" defer></script>';
         echo '<script src="/static/feature-map.js?v=' . $fm_mtime . '" defer></script>';
     }

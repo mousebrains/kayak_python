@@ -15,13 +15,13 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/custom_handler.php';
 
-$raw = filter_input(INPUT_GET, 'ids', FILTER_DEFAULT) ?? '';
+$raw = (string)(filter_input(INPUT_GET, 'ids', FILTER_DEFAULT) ?? '');
 $ids = array_values(array_unique(array_filter(
     array_map('intval', explode(',', $raw)),
     fn($v) => $v > 0,
 )));
 
-if (!$ids) {
+if ($ids === []) {
     header('Location: /picker.php');
     exit;
 }

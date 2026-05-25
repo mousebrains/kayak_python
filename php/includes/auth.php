@@ -45,6 +45,7 @@ function require_editor_feature(): void
 // Token utilities
 // ---------------------------------------------------------------------------
 
+/** @param int<1, max> $bytes */
 function generate_token(int $bytes = 32): string
 {
     return bin2hex(random_bytes($bytes));
@@ -64,14 +65,14 @@ const EDITOR_SESSION_DAYS   = 7;
 const EDITOR_CSRF_COOKIE    = 'ed_csrf';
 
 /**
- * @return array{expires:int, path:string, secure:bool, httponly:bool, samesite:string}
+ * @return array{expires:int, path:string, secure:bool, httponly:bool, samesite:'Strict'}
  */
 function _cookie_params(int $lifetime_seconds): array
 {
     return [
         'expires'  => $lifetime_seconds === 0 ? 0 : time() + $lifetime_seconds,
         'path'     => '/',
-        'secure'   => !empty($_SERVER['HTTPS']),
+        'secure'   => ($_SERVER['HTTPS'] ?? '') !== '',
         'httponly' => true,
         'samesite' => 'Strict',
     ];
@@ -149,7 +150,7 @@ function current_editor(?PDO $db_override = null): ?array
         return $editor;
     }
 
-    $tok = $_COOKIE[EDITOR_SESSION_COOKIE] ?? '';
+    $tok = (string)($_COOKIE[EDITOR_SESSION_COOKIE] ?? '');
     if ($tok === '' || !ctype_xdigit($tok) || strlen($tok) !== 64) {
         if ($db_override === null) {
             $cached = true;
@@ -171,7 +172,7 @@ function current_editor(?PDO $db_override = null): ?array
     );
     $stmt->execute([$hash, 'banned']);
     $row = $stmt->fetch();
-    if (!$row) {
+    if ($row === false) {
         if ($db_override === null) {
             $cached = true;
             $editor = null;
@@ -242,7 +243,7 @@ function require_maintainer(): array
 
 function csrf_token(): string
 {
-    $tok = $_COOKIE[EDITOR_CSRF_COOKIE] ?? '';
+    $tok = (string)($_COOKIE[EDITOR_CSRF_COOKIE] ?? '');
     if ($tok === '' || !ctype_xdigit($tok) || strlen($tok) !== 64) {
         $tok = generate_token();
         setcookie(EDITOR_CSRF_COOKIE, $tok, _cookie_params(0));
@@ -278,7 +279,7 @@ function maintainer_emails(): array
     //    override the JSON snapshot without re-running emit-config.
     $env = getenv('MAINTAINER_EMAIL');
     if ($env !== false && $env !== '') {
-        return array_values(array_filter(array_map('trim', explode(',', $env))));
+        return array_values(array_filter(array_map('trim', explode(',', $env)), fn($s) => $s !== ''));
     }
     // 2. ``maintainer_emails`` from /etc/kayak/runtime-config.json
     //    (list[EmailStr] from KayakConfig).
@@ -293,7 +294,7 @@ function maintainer_emails(): array
         );
         $stmt->execute();
         $rows = array_column($stmt->fetchAll(), 'email');
-        if ($rows) {
+        if ($rows !== []) {
             return $rows;
         }
     } catch (Throwable) {

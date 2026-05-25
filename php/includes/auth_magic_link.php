@@ -111,7 +111,7 @@ function magic_link_under_throttle(PDO $db, string $email, string $ip): bool
 function issue_magic_link(string $email, ?string $next_url = null): array
 {
     $email = normalize_email($email);
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
         throw new RuntimeException('Invalid email');
     }
     $ip = (string)($_SERVER['REMOTE_ADDR'] ?? '');
@@ -126,7 +126,7 @@ function issue_magic_link(string $email, ?string $next_url = null): array
         $stmt = $db->prepare('SELECT id, status FROM editor WHERE email = ?');
         $stmt->execute([$email]);
         $ed = $stmt->fetch();
-        if (!$ed) {
+        if ($ed === false) {
             $db->prepare(
                 "INSERT INTO editor (email, status, created_at) VALUES (?, 'pending', datetime('now'))"
             )->execute([$email]);
@@ -201,7 +201,7 @@ function consume_magic_link(string $tok): ?array
         );
         $stmt->execute([$hash]);
         $row = $stmt->fetch();
-        if (!$row) {
+        if ($row === false) {
             $db->commit();
             return null;
         }
@@ -230,7 +230,7 @@ function safe_next_url(?string $next): string
     if ($next === null || $next === '') {
         return '/';
     }
-    if (!preg_match('#^/[^/\\\\]#', $next)) {
+    if (preg_match('#^/[^/\\\\]#', $next) !== 1) {
         return '/';
     }
     return $next;

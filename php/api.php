@@ -19,13 +19,17 @@ header('Cache-Control: max-age=300');
 header('Access-Control-Allow-Origin: *');
 
 $id     = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
-$type   = filter_input(INPUT_GET, 'type', FILTER_SANITIZE_SPECIAL_CHARS) ?: 'flow';
-$days   = filter_input(INPUT_GET, 'days', FILTER_VALIDATE_INT) ?: 60;
+$type   = filter_input(INPUT_GET, 'type', FILTER_SANITIZE_SPECIAL_CHARS);
+$type   = is_string($type) && $type !== '' ? $type : 'flow';
+$days   = filter_input(INPUT_GET, 'days', FILTER_VALIDATE_INT);
+$days   = is_int($days) && $days !== 0 ? $days : 60;
 $days   = min($days, 365);
-$points = filter_input(INPUT_GET, 'points', FILTER_VALIDATE_INT) ?: 0;
-$format = filter_input(INPUT_GET, 'format', FILTER_SANITIZE_SPECIAL_CHARS) ?: 'compact';
+$points = filter_input(INPUT_GET, 'points', FILTER_VALIDATE_INT);
+$points = is_int($points) && $points !== 0 ? $points : 0;
+$format = filter_input(INPUT_GET, 'format', FILTER_SANITIZE_SPECIAL_CHARS);
+$format = is_string($format) && $format !== '' ? $format : 'compact';
 
-if (!$id) { http_response_code(400); echo json_encode(['error' => 'Missing id']); exit; }
+if (!is_int($id) || $id < 1) { http_response_code(400); echo json_encode(['error' => 'Missing id']); exit; }
 
 // Normalize type aliases
 if ($type === 'gage') $type = 'gauge';
@@ -36,7 +40,7 @@ $db = get_db();
 $stmt = $db->prepare('SELECT gauge_id, name FROM reach WHERE id = ?');
 $stmt->execute([$id]);
 $reach = $stmt->fetch();
-if (!$reach || !$reach['gauge_id']) {
+if ($reach === false || $reach['gauge_id'] === null) {
     echo json_encode(['reach' => $reach['name'] ?? '', 'type' => $type, 'count' => 0, 'ts' => [], 'v' => []]);
     exit;
 }

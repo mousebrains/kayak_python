@@ -25,13 +25,14 @@ $db = get_db();
 // -----------------------------------------------------------------------
 // AJAX JSON endpoint — one row per gauge for client-side filter/render.
 // -----------------------------------------------------------------------
-if (filter_input(INPUT_GET, 'ajax', FILTER_VALIDATE_INT)) {
+$ajax = filter_input(INPUT_GET, 'ajax', FILTER_VALIDATE_INT);
+if (is_int($ajax) && $ajax !== 0) {
     header('Content-Type: application/json');
     header('Cache-Control: max-age=60');
 
-    $raw = filter_input(INPUT_GET, 'states', FILTER_DEFAULT) ?? '';
-    $state_names = array_filter(array_map('trim', explode(',', $raw)));
-    if (!$state_names) {
+    $raw = (string)(filter_input(INPUT_GET, 'states', FILTER_DEFAULT) ?? '');
+    $state_names = array_filter(array_map('trim', explode(',', $raw)), fn($s) => $s !== '');
+    if ($state_names === []) {
         echo '[]';
         exit;
     }
@@ -41,7 +42,7 @@ if (filter_input(INPUT_GET, 'ajax', FILTER_VALIDATE_INT)) {
         fn($n) => $STATE_TO_ABBREV[$n] ?? null,
         $state_names
     )));
-    if (!$abbrevs) {
+    if ($abbrevs === []) {
         echo '[]';
         exit;
     }
@@ -93,7 +94,7 @@ require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
 
 // All states that have at least one runnable gauge with current data.
-$state_rows = $db->query(
+$state_rows = db_query($db,
     "SELECT DISTINCT state FROM gauge
      WHERE state IS NOT NULL
        AND id IN (SELECT DISTINCT gauge_id FROM latest_gauge_observation)
@@ -102,13 +103,13 @@ $state_rows = $db->query(
 $all_states = [];
 foreach ($state_rows as $r) {
     $name = $ABBREV_TO_STATE[$r['state']] ?? null;
-    if ($name) $all_states[] = $name;
+    if ($name !== null) $all_states[] = $name;
 }
 sort($all_states);
 
 // All HUC8s (with HUC6 parent) for the watershed filter — built once across
 // every state so toggling state pills doesn't rebuild the filter UI.
-$huc_rows = $db->query(
+$huc_rows = db_query($db,
     "SELECT DISTINCT SUBSTR(g.huc, 1, 8) AS huc8, SUBSTR(g.huc, 1, 6) AS huc6
      FROM gauge g
      WHERE g.huc IS NOT NULL AND LENGTH(g.huc) >= 8
@@ -123,22 +124,22 @@ foreach ($huc_rows as $r) {
 }
 $huc8_names = [];
 $huc6_names = [];
-if ($huc8_codes) {
+if ($huc8_codes !== []) {
     $codes = array_map('strval', array_keys($huc8_codes));
     $hp = implode(',', array_fill(0, count($codes), '?'));
     $hn8 = $db->prepare("SELECT code, name FROM huc_name WHERE level = 8 AND code IN ($hp)");
     $hn8->execute($codes);
-    foreach ($hn8->fetchAll() as $r) $huc8_names[(string)$r['code']] = $r['name'];
+    foreach ($hn8->fetchAll() as $r8) $huc8_names[(string)$r8['code']] = $r8['name'];
 
     $huc6 = array_map('strval', array_keys($huc6_to_huc8s));
     $hp6 = implode(',', array_fill(0, count($huc6), '?'));
     $hn6 = $db->prepare("SELECT code, name FROM huc_name WHERE level = 6 AND code IN ($hp6)");
     $hn6->execute($huc6);
-    foreach ($hn6->fetchAll() as $r) $huc6_names[(string)$r['code']] = $r['name'];
+    foreach ($hn6->fetchAll() as $r6) $huc6_names[(string)$r6['code']] = $r6['name'];
 }
 uksort($huc6_to_huc8s, fn($a, $b) => strcmp(
-    $huc6_names[(string)$a] ?? (string)$a,
-    $huc6_names[(string)$b] ?? (string)$b
+    $huc6_names[$a] ?? strval($a),
+    $huc6_names[$b] ?? strval($b)
 ));
 
 // Optional ?state=<full name> — pre-checks only that pill so users arriving
@@ -174,7 +175,7 @@ $total_huc8 = array_sum(array_map('count', $huc6_to_huc8s));
     <div class="filter-pills" data-group="huc8">
       <?= $fg_toggle ?>
 <?php foreach ($huc6_to_huc8s as $h6 => $children):
-      $h6 = (string)$h6;
+      $h6 = strval($h6);  // numeric HUC keys are coerced to int by PHP; strict_types needs string
       $h6_name = $huc6_names[$h6] ?? $h6;
       $codes = array_map('strval', array_keys($children));
       sort($codes); ?>
@@ -233,8 +234,10 @@ $total_huc8 = array_sum(array_map('count', $huc6_to_huc8s));
 </div>
 
 <?php
-$filters_mtime = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/filters.js') ?: 1;
-$picker_mtime  = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/gauge_picker.js') ?: 1;
+$filters_mtime_raw = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/filters.js');
+$filters_mtime = $filters_mtime_raw !== false ? $filters_mtime_raw : 1;
+$picker_mtime_raw  = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/gauge_picker.js');
+$picker_mtime  = $picker_mtime_raw !== false ? $picker_mtime_raw : 1;
 ?>
 <script src="/static/filters.js?v=<?= $filters_mtime ?>" defer></script>
 <script src="/static/gauge_picker.js?v=<?= $picker_mtime ?>" defer></script>

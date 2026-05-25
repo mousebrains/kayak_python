@@ -66,7 +66,7 @@ function handle_search_mode(
 
     $has_map = false;
     $map_scripts = '';
-    if (!$results) {
+    if ($results === []) {
         $label = $q !== '' ? '&ldquo;' . htmlspecialchars($q) . '&rdquo;' : htmlspecialchars($st);
         echo '<p>No reaches matching ' . $label . '.</p>';
     } else {
@@ -89,7 +89,7 @@ function handle_search_mode(
  *   st only → list every visible reach in the state (1000 cap — Oregon /
  *             California legitimately exceed 200)
  *
- * @return list<array<string, mixed>>
+ * @return list<array{id: int, name: string, river: string|null, description: string|null, gauge_id: int|null, latitude_start: float|null, longitude_start: float|null, latitude_end: float|null, longitude_end: float|null, latitude: float|null, longitude: float|null, sort_name: string|null, aw_id: int|null, geom: string|null}>
  */
 function _search_reaches_query(PDO $db, string $q, string $st, int $hidden): array
 {
@@ -136,7 +136,9 @@ function _search_reaches_query(PDO $db, string $q, string $st, int $hidden): arr
         );
         $stmt->execute([$st, $hidden]);
     }
-    return $stmt->fetchAll();
+    /** @var list<array{id: int, name: string, river: string|null, description: string|null, gauge_id: int|null, latitude_start: float|null, longitude_start: float|null, latitude_end: float|null, longitude_end: float|null, latitude: float|null, longitude: float|null, sort_name: string|null, aw_id: int|null, geom: string|null}> $rows */
+    $rows = db_rows($stmt);
+    return $rows;
 }
 
 /**
@@ -147,17 +149,17 @@ function _search_reaches_query(PDO $db, string $q, string $st, int $hidden): arr
  * Also returns the list of unique non-null gauge_ids — the map renderer
  * reuses it for the gauges-with-locations query.
  *
- * @param  list<array<string, mixed>>                        $results
- * @return array{0: array<int, array<string, array<string, mixed>>>, 1: list<int>}
+ * @param  list<array{id: int, name: string, river: string|null, description: string|null, gauge_id: int|null, latitude_start: float|null, longitude_start: float|null, latitude_end: float|null, longitude_end: float|null, latitude: float|null, longitude: float|null, sort_name: string|null, aw_id: int|null, geom: string|null}>  $results
+ * @return array{0: array<int, array<string, array{gauge_id: int, data_type: string, value: float, observed_at: string}>>, 1: list<int>}
  */
 function _aggregate_reach_readings(PDO $db, array $results): array
 {
     $reach_readings = [];
-    if (!$results) {
+    if ($results === []) {
         return [$reach_readings, []];
     }
-    $gauge_ids = array_values(array_unique(array_filter(array_column($results, 'gauge_id'))));
-    if (!$gauge_ids) {
+    $gauge_ids = array_values(array_unique(array_filter(array_column($results, 'gauge_id'), fn($id) => $id !== null)));
+    if ($gauge_ids === []) {
         return [$reach_readings, []];
     }
 
@@ -171,7 +173,9 @@ function _aggregate_reach_readings(PDO $db, array $results): array
          ORDER BY gs.gauge_id, lo.data_type"
     );
     $lo_stmt->execute($gauge_ids);
-    foreach ($lo_stmt->fetchAll() as $lo) {
+    /** @var list<array{gauge_id: int, data_type: string, value: float, observed_at: string}> $lo_rows */
+    $lo_rows = $lo_stmt->fetchAll();
+    foreach ($lo_rows as $lo) {
         $gid = $lo['gauge_id'];
         $dt = $lo['data_type'];
         if (!isset($reach_readings[$gid][$dt])
@@ -188,7 +192,7 @@ function _aggregate_reach_readings(PDO $db, array $results): array
  * single SS<editions> label; non-SS guides keep two-letter abbrevs.
  * Reaches with aw_id but no guidebook row still get an "AW" entry.
  *
- * @param  list<array<string, mixed>>                                       $results
+ * @param  list<array{id: int, name: string, river: string|null, description: string|null, gauge_id: int|null, latitude_start: float|null, longitude_start: float|null, latitude_end: float|null, longitude_end: float|null, latitude: float|null, longitude: float|null, sort_name: string|null, aw_id: int|null, geom: string|null}>  $results
  * @return array{0: array<int, list<string>>, 1: array<int, array<string, true>>}
  */
 function _aggregate_reach_classes_and_guides(PDO $db, array $results): array
@@ -196,7 +200,7 @@ function _aggregate_reach_classes_and_guides(PDO $db, array $results): array
     $reach_classes = [];
     $reach_guides = [];
     $reach_ids = array_column($results, 'id');
-    if (!$reach_ids) {
+    if ($reach_ids === []) {
         return [$reach_classes, $reach_guides];
     }
 
@@ -204,7 +208,9 @@ function _aggregate_reach_classes_and_guides(PDO $db, array $results): array
 
     $cls_stmt = $db->prepare("SELECT reach_id, name FROM reach_class WHERE reach_id IN ($ph)");
     $cls_stmt->execute($reach_ids);
-    foreach ($cls_stmt->fetchAll() as $c) {
+    /** @var list<array{reach_id: int, name: string}> $cls_rows */
+    $cls_rows = $cls_stmt->fetchAll();
+    foreach ($cls_rows as $c) {
         $reach_classes[$c['reach_id']][] = $c['name'];
     }
 
@@ -228,7 +234,9 @@ function _aggregate_reach_classes_and_guides(PDO $db, array $results): array
         11 => 'DF',   // Dreamflows
     ];
     $reach_ss = [];  // reach_id => [edition numbers]
-    foreach ($gb_stmt->fetchAll() as $gb) {
+    /** @var list<array{reach_id: int, gid: int, title: string}> $gb_rows */
+    $gb_rows = $gb_stmt->fetchAll();
+    foreach ($gb_rows as $gb) {
         $gid = $gb['gid'];
         $rid = $gb['reach_id'];
         if (isset($ss_edition[$gid])) {
@@ -247,7 +255,7 @@ function _aggregate_reach_classes_and_guides(PDO $db, array $results): array
     }
 
     foreach ($results as $r) {
-        if (!empty($r['aw_id'])) {
+        if (($r['aw_id'] ?? '') !== '') {
             $reach_guides[$r['id']]['AW'] = true;
         }
     }
@@ -258,8 +266,8 @@ function _aggregate_reach_classes_and_guides(PDO $db, array $results): array
 /**
  * Render the matched-reaches table — one row per result.
  *
- * @param list<array<string, mixed>>                            $results
- * @param array<int, array<string, array<string, mixed>>>       $reach_readings
+ * @param list<array{id: int, name: string, river: string|null, description: string|null, gauge_id: int|null, latitude_start: float|null, longitude_start: float|null, latitude_end: float|null, longitude_end: float|null, latitude: float|null, longitude: float|null, sort_name: string|null, aw_id: int|null, geom: string|null}>  $results
+ * @param array<int, array<string, array{gauge_id: int, data_type: string, value: float, observed_at: string}>>  $reach_readings
  * @param array<int, list<string>>                              $reach_classes
  * @param array<int, array<string, true>>                       $reach_guides
  */
@@ -281,16 +289,16 @@ function _render_search_results_table(
         $desc = htmlspecialchars($r['description'] ?? '');
         $sname = htmlspecialchars($r['sort_name'] ?? '');
         $reading = '';
-        if ($r['gauge_id'] && isset($reach_readings[$r['gauge_id']])) {
+        if ($r['gauge_id'] !== null && isset($reach_readings[$r['gauge_id']])) {
             $rr = $reach_readings[$r['gauge_id']];
             $parts = [];
             if (isset($rr['flow'])) {
-                $parts[] = number_format((float)$rr['flow']['value'], 0) . ' cfs';
+                $parts[] = number_format($rr['flow']['value'], 0) . ' cfs';
             } elseif (isset($rr['inflow'])) {
-                $parts[] = number_format((float)$rr['inflow']['value'], 0) . ' cfs';
+                $parts[] = number_format($rr['inflow']['value'], 0) . ' cfs';
             }
             if (isset($rr['gauge'])) {
-                $parts[] = number_format((float)$rr['gauge']['value'], 2) . ' ft';
+                $parts[] = number_format($rr['gauge']['value'], 2) . ' ft';
             }
             $reading = implode(' / ', $parts);
         }
@@ -312,23 +320,23 @@ function _render_search_results_table(
  * are returned to the caller so they can be deferred until after the
  * footer.
  *
- * @param  list<array<string, mixed>>                       $results
+ * @param  list<array{id: int, name: string, river: string|null, description: string|null, gauge_id: int|null, latitude_start: float|null, longitude_start: float|null, latitude_end: float|null, longitude_end: float|null, latitude: float|null, longitude: float|null, sort_name: string|null, aw_id: int|null, geom: string|null}>  $results
  * @param  list<int>                                        $gauge_ids
- * @param  array<int, array<string, array<string, mixed>>>  $reach_readings
+ * @param  array<int, array<string, array{gauge_id: int, data_type: string, value: float, observed_at: string}>>  $reach_readings
  * @return array{0: bool, 1: string}  [has_map, deferred_script_tags]
  */
 function _render_search_map(PDO $db, array $results, array $gauge_ids, array $reach_readings): array
 {
     $map_reaches = _build_search_map_reaches($results);
-    if (!$map_reaches) {
+    if ($map_reaches === []) {
         return [false, ''];
     }
 
     $map_gauges = _collect_search_map_gauges($db, $gauge_ids, $reach_readings);
 
-    $map_json = htmlspecialchars(json_encode($map_reaches));
-    $colors_json = htmlspecialchars(json_encode(REACH_SEARCH_MAP_COLORS));
-    $gauges_json = htmlspecialchars(json_encode($map_gauges));
+    $map_json = htmlspecialchars((string)json_encode($map_reaches));
+    $colors_json = htmlspecialchars((string)json_encode(REACH_SEARCH_MAP_COLORS));
+    $gauges_json = htmlspecialchars((string)json_encode($map_gauges));
     echo '<div id="search-map" style="height:65vh;min-height:480px;margin-top:1rem;border:1px solid #ccc"'
         . ' data-reaches="' . $map_json . '" data-colors="' . $colors_json
         . '" data-gauges="' . $gauges_json . '"></div>';
@@ -344,7 +352,7 @@ function _render_search_map(PDO $db, array $results, array $gauge_ids, array $re
  * Lat/lon + (optionally downsampled to ~100 pts) track polyline for the
  * result reaches with map-renderable coords. Skips reaches with no lat/lon.
  *
- * @param  list<array<string, mixed>> $results
+ * @param  list<array{id: int, name: string, river: string|null, description: string|null, gauge_id: int|null, latitude_start: float|null, longitude_start: float|null, latitude_end: float|null, longitude_end: float|null, latitude: float|null, longitude: float|null, sort_name: string|null, aw_id: int|null, geom: string|null}>  $results
  * @return list<array<string, mixed>>
  */
 function _build_search_map_reaches(array $results): array
@@ -357,10 +365,11 @@ function _build_search_map_reaches(array $results): array
             continue;
         }
         $track = null;
-        if (!empty($r['geom'])) {
+        if (isset($r['geom']) && $r['geom'] !== '') {
             $track = [];
             foreach (explode(',', $r['geom']) as $pair) {
-                $parts = preg_split('/\s+/', trim($pair));
+                $split = preg_split('/\s+/', trim($pair));
+                $parts = $split === false ? [] : $split;
                 if (count($parts) === 2) {
                     $track[] = [(float)$parts[1], (float)$parts[0]];
                 }
@@ -380,12 +389,12 @@ function _build_search_map_reaches(array $results): array
         $map_reaches[] = [
             'id' => $r['id'],
             'name' => $r['name'],
-            'lat' => (float)$lat,
-            'lon' => (float)$lon,
-            'lat_start' => $r['latitude_start'] ? (float)$r['latitude_start'] : null,
-            'lon_start' => $r['longitude_start'] ? (float)$r['longitude_start'] : null,
-            'lat_end' => $r['latitude_end'] ? (float)$r['latitude_end'] : null,
-            'lon_end' => $r['longitude_end'] ? (float)$r['longitude_end'] : null,
+            'lat' => $lat,
+            'lon' => $lon,
+            'lat_start' => $r['latitude_start'],
+            'lon_start' => $r['longitude_start'],
+            'lat_end' => $r['latitude_end'],
+            'lon_end' => $r['longitude_end'],
             'track' => $track,
             'idx' => $idx,
         ];
@@ -398,12 +407,12 @@ function _build_search_map_reaches(array $results): array
  * unique gauges that have coords. Labels mirror the table's reading column.
  *
  * @param  list<int>                                        $gauge_ids
- * @param  array<int, array<string, array<string, mixed>>>  $reach_readings
+ * @param  array<int, array<string, array{gauge_id: int, data_type: string, value: float, observed_at: string}>>  $reach_readings
  * @return list<array<string, mixed>>
  */
 function _collect_search_map_gauges(PDO $db, array $gauge_ids, array $reach_readings): array
 {
-    if (!$gauge_ids) {
+    if ($gauge_ids === []) {
         return [];
     }
     $ph = implode(',', array_fill(0, count($gauge_ids), '?'));
@@ -414,25 +423,28 @@ function _collect_search_map_gauges(PDO $db, array $gauge_ids, array $reach_read
     $g_stmt->execute($gauge_ids);
 
     $map_gauges = [];
-    foreach ($g_stmt->fetchAll() as $g) {
+    // WHERE filters latitude/longitude NOT NULL, so both are non-null here.
+    /** @var list<array{id: int, name: string, latitude: float, longitude: float}> $g_rows */
+    $g_rows = $g_stmt->fetchAll();
+    foreach ($g_rows as $g) {
         $glabel = $g['name'];
         if (isset($reach_readings[$g['id']])) {
             $parts = [];
             $rr = $reach_readings[$g['id']];
             if (isset($rr['flow'])) {
-                $parts[] = number_format((float)$rr['flow']['value'], 0) . ' cfs';
+                $parts[] = number_format($rr['flow']['value'], 0) . ' cfs';
             }
             if (isset($rr['gauge'])) {
-                $parts[] = number_format((float)$rr['gauge']['value'], 2) . ' ft';
+                $parts[] = number_format($rr['gauge']['value'], 2) . ' ft';
             }
-            if ($parts) {
+            if ($parts !== []) {
                 $glabel .= ' (' . implode(' / ', $parts) . ')';
             }
         }
         $map_gauges[] = [
             'name' => $glabel,
-            'lat' => (float)$g['latitude'],
-            'lon' => (float)$g['longitude'],
+            'lat' => $g['latitude'],
+            'lon' => $g['longitude'],
         ];
     }
     return $map_gauges;

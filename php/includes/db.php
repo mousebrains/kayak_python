@@ -52,6 +52,41 @@ function get_db(): PDO {
 }
 
 /**
+ * Run a query and return its statement, narrowing PDO::query()'s
+ * `PDOStatement|false` return. PDO runs in ERRMODE_EXCEPTION (see get_db), so a
+ * failed query throws rather than returning false — the assert records that
+ * invariant for static analysis and never fires at runtime.
+ */
+function db_query(PDO $db, string $sql): PDOStatement {
+    $stmt = $db->query($sql);
+    assert($stmt !== false);
+    return $stmt;
+}
+
+/**
+ * fetchAll() typed as the list<array<string, mixed>> our FETCH_ASSOC default
+ * actually yields — PHPStan's PDOStatement::fetchAll() stub returns a bare
+ * `array`, dropping the row shape.
+ *
+ * @return list<array<string, mixed>>
+ */
+function db_rows(PDOStatement $stmt): array {
+    /** @var list<array<string, mixed>> */
+    return $stmt->fetchAll();
+}
+
+/**
+ * fetch() typed as the single row (or false) our FETCH_ASSOC default yields —
+ * PHPStan's PDOStatement::fetch() stub returns a bare `mixed`.
+ *
+ * @return array<string, mixed>|false
+ */
+function db_row(PDOStatement $stmt): array|false {
+    /** @var array<string, mixed>|false */
+    return $stmt->fetch();
+}
+
+/**
  * Fetch a reach by ID, or exit 404 if not found.
  *
  * @return array<string, mixed> The reach row.
@@ -60,12 +95,12 @@ function get_reach_or_404(int $id): array {
     $stmt = get_db()->prepare('SELECT * FROM reach WHERE id = ?');
     $stmt->execute([$id]);
     $reach = $stmt->fetch();
-    if (!$reach) {
+    if ($reach === false) {
         require_once __DIR__ . '/error.php';
         render_error_page(
             404,
             'Reach not found',
-            '<p>No reach with id ' . (int)$id . ' exists. It may have been removed or merged.</p>'
+            '<p>No reach with id ' . $id . ' exists. It may have been removed or merged.</p>'
         );
     }
     return $reach;

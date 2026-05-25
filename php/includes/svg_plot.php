@@ -12,7 +12,7 @@ require_once __DIR__ . '/svg_plot_rating.php';
  * @return array{0: string, 1: string}
  */
 function _split_y_label(string $y_label): array {
-    if (preg_match('/^(.+?)\s*\(([^)]+)\)\s*$/', $y_label, $m)) {
+    if (preg_match('/^(.+?)\s*\(([^)]+)\)\s*$/', $y_label, $m) === 1) {
         return [$m[1], $m[2]];
     }
     return [$y_label, ''];
@@ -95,11 +95,11 @@ function _bands_svg(?array $bands, float $y_min, float $y_max, int $ml, int $mt,
     }
 
     $colors = ['low' => '#e8a735', 'okay' => '#4caf50', 'high' => '#e53935'];
-    $y_range = $y_max - $y_min ?: 1;
+    $y_range = ($y_max - $y_min) !== 0.0 ? $y_max - $y_min : 1;
     $svg = '';
     foreach ($zones as $z) {
-        $top = max($y_min, min($y_max, (float)$z['top']));
-        $bot = max($y_min, min($y_max, (float)$z['bot']));
+        $top = max($y_min, min($y_max, $z['top']));
+        $bot = max($y_min, min($y_max, $z['bot']));
         if ($top <= $bot) continue;
         $py_top = $mt + (int)(($y_max - $top) / $y_range * $ph);
         $py_bot = $mt + (int)(($y_max - $bot) / $y_range * $ph);
@@ -115,7 +115,7 @@ function _bands_svg(?array $bands, float $y_min, float $y_max, int $ml, int $mt,
  * Generate a lightweight time-series SVG plot.
  *
  * @param list<int>                               $times          Unix timestamps.
- * @param list<float>                             $values         Float values.
+ * @param list<float|null>                        $values         Float values (null = gap).
  * @param string                                  $title          Plot title.
  * @param string                                  $y_label        Y-axis label.
  * @param int                                     $width          SVG width.
@@ -144,7 +144,7 @@ function generate_svg_plot(
     $pairs = [];
     for ($i = 0; $i < $n; $i++) {
         if ($values[$i] !== null) {
-            $pairs[] = [(float)$times[$i], (float)$values[$i]];
+            $pairs[] = [(float)$times[$i], $values[$i]];
         }
     }
     usort($pairs, fn($a, $b) => $a[0] <=> $b[0]);
@@ -165,9 +165,10 @@ function generate_svg_plot(
     $x_min = $pairs[0][0];
     $x_max = $pairs[count($pairs) - 1][0];
     $y_vals = array_column($pairs, 1);
+    assert($y_vals !== []);  // $pairs has >= 2 elements (count guarded above)
     [$y_min, $y_max, $y_step] = nice_axis(min($y_vals), max($y_vals));
-    $x_range = $x_max - $x_min ?: 1;
-    $y_range = $y_max - $y_min ?: 1;
+    $x_range = ($x_max - $x_min) !== 0.0 ? $x_max - $x_min : 1;
+    $y_range = ($y_max - $y_min) !== 0.0 ? $y_max - $y_min : 1;
 
     // Map to pixel coords
     $points_str = '';
@@ -213,7 +214,7 @@ function generate_svg_plot(
         'margins'  => ['ml' => $ml, 'mr' => $mr, 'mt' => $mt, 'mb' => $mb, 'w' => $width, 'h' => $height],
     ]);
 
-    $bands_svg = _bands_svg($bands, (float)$y_min, (float)$y_max, $ml, $mt, $pw, $ph);
+    $bands_svg = _bands_svg($bands, $y_min, $y_max, $ml, $mt, $pw, $ph);
 
     return <<<SVG
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 $width $height" width="$width" height="$height" data-series="$series_attr">
@@ -233,7 +234,7 @@ SVG;
  * maps to that gauge's flow through $rating_lookup.
  *
  * @param list<int>                               $flow_times      Unix timestamps.
- * @param list<float>                             $flow_values     Flow values (CFS).
+ * @param list<float|null>                        $flow_values     Flow values (CFS; null = gap).
  * @param array<int, array{0: float, 1: float}>   $rating_lookup   Sorted (gauge_ft, flow_cfs) pairs.
  * @param string                                  $title           Plot title.
  * @param string                                  $primary_label   Left-axis label.
@@ -256,7 +257,7 @@ function generate_rating_dual_plot(
     $pairs = [];
     for ($i = 0; $i < $n; $i++) {
         if ($flow_values[$i] !== null) {
-            $pairs[] = [(float)$flow_times[$i], (float)$flow_values[$i]];
+            $pairs[] = [(float)$flow_times[$i], $flow_values[$i]];
         }
     }
     usort($pairs, fn($a, $b) => $a[0] <=> $b[0]);
@@ -271,9 +272,10 @@ function generate_rating_dual_plot(
     $x_min = $pairs[0][0];
     $x_max = $pairs[count($pairs) - 1][0];
     $fy_vals = array_column($pairs, 1);
+    assert($fy_vals !== []);  // $pairs has >= 2 elements (count guarded above)
     [$fy_min, $fy_max, $fy_step] = nice_axis(min($fy_vals), max($fy_vals));
-    $x_range = $x_max - $x_min ?: 1;
-    $fy_range = $fy_max - $fy_min ?: 1;
+    $x_range = ($x_max - $x_min) !== 0.0 ? $x_max - $x_min : 1;
+    $fy_range = ($fy_max - $fy_min) !== 0.0 ? $fy_max - $fy_min : 1;
 
     // Flow polyline
     $pts = '';
@@ -297,8 +299,8 @@ function generate_rating_dual_plot(
     // Right-axis: nice gauge-height tick values, placed at y-pixel of their rated flow.
     $right_grid = '';
     $right_x = $ml + $pw;
-    $gy_visible_min = rate_flow_to_gauge($rating_lookup, (float)$fy_min);
-    $gy_visible_max = rate_flow_to_gauge($rating_lookup, (float)$fy_max);
+    $gy_visible_min = rate_flow_to_gauge($rating_lookup, $fy_min);
+    $gy_visible_max = rate_flow_to_gauge($rating_lookup, $fy_max);
     if ($gy_visible_min !== null && $gy_visible_max !== null) {
         $lo = min($gy_visible_min, $gy_visible_max);
         $hi = max($gy_visible_min, $gy_visible_max);
@@ -312,7 +314,7 @@ function generate_rating_dual_plot(
             $valid_ticks[] = [$gv, $qv];
         }
         // Fallback: if no nice tick landed in-range, place labels at visible endpoints.
-        if (!$valid_ticks) {
+        if ($valid_ticks === []) {
             foreach ([$lo, $hi] as $gv) {
                 $qv = rate_gauge_to_flow($rating_lookup, $gv);
                 if ($qv !== null) $valid_ticks[] = [$gv, $qv];
@@ -355,7 +357,7 @@ function generate_rating_dual_plot(
         'margins'        => ['ml' => $ml, 'mr' => $mr, 'mt' => $mt, 'mb' => $mb, 'w' => $width, 'h' => $height],
     ]);
 
-    $bands_svg = _bands_svg($bands, (float)$fy_min, (float)$fy_max, $ml, $mt, $pw, $ph);
+    $bands_svg = _bands_svg($bands, $fy_min, $fy_max, $ml, $mt, $pw, $ph);
 
     return <<<SVG
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 $width $height" width="$width" height="$height" data-series="$series_attr">
@@ -404,6 +406,17 @@ function generate_gradient_profile_svg(
     if (!is_array($data) || !isset($data['samples']) || !is_array($data['samples'])) {
         return '';
     }
+    /**
+     * Per-sample shape from compute_reach_gradient.build_profile (documented
+     * in data/db/migrations/0045_*.sql header). Numeric fields are `float|int`
+     * because JSON whole numbers (e.g. grad_ft_per_mi: 0) decode to int — the
+     * (float) casts below are load-bearing coercion of that external JSON.
+     * `significant` defaults via `?? false`; `lat`/`lon` exist in live data but
+     * are absent from elevation-only test fixtures; `elev_ft` is added by the
+     * elevation branch at render time.
+     *
+     * @var list<array{d_mi: float|int, w_mi: float|int, grad_ft_per_mi: float|int, significant?: bool, lat?: float|int|null, lon?: float|int|null, elev_ft?: float|int}> $samples
+     */
     $samples = $data['samples'];
     if (count($samples) < 2) return '';
 
@@ -417,7 +430,7 @@ function generate_gradient_profile_svg(
     // the take-out (via the first/last edge logic below). The
     // underlying gradient_profile JSON keeps both bars.
     $n = count($samples);
-    if (empty($samples[$n - 1]['significant']) && !empty($samples[$n - 2]['significant'])) {
+    if (!($samples[$n - 1]['significant'] ?? false) && ($samples[$n - 2]['significant'] ?? false)) {
         array_pop($samples);
         if (count($samples) < 2) return '';
     }
@@ -438,15 +451,15 @@ function generate_gradient_profile_svg(
     // Fall back to sample extents when length isn't provided.
     $x_min = 0.0;
     $x_max = $length_mi !== null && $length_mi > 0
-        ? (float)$length_mi
+        ? $length_mi
         : (float)$samples[count($samples) - 1]['d_mi'];
-    $x_range = $x_max - $x_min ?: 1;
+    $x_range = ($x_max - $x_min) !== 0.0 ? $x_max - $x_min : 1;
     $y_vals = array_map(fn($s) => (float)$s['grad_ft_per_mi'], $samples);
     // Anchor y-axis at zero so a short bar (low gradient) reads short
     // and a tall bar reads tall. nice_axis() handles only the top end.
     [, $y_max, $y_step] = nice_axis(0.0, max($y_vals));
     $y_min = 0.0;
-    $y_range = $y_max - $y_min ?: 1;
+    $y_range = ($y_max - $y_min) !== 0.0 ? $y_max - $y_min : 1;
 
     // Bar plot: each sample renders as a rect spanning its 3-sigma
     // ANALYSIS window (d_mi ± w_mi/2) at height = grad_ft_per_mi.
@@ -487,7 +500,7 @@ function generate_gradient_profile_svg(
         $d_mi = (float)$s['d_mi'];
         $w_mi = (float)$s['w_mi'];
         $grad = max(0.0, (float)$s['grad_ft_per_mi']);
-        $sig = !empty($s['significant']);
+        $sig = $s['significant'] ?? false;
 
         $left_x = $d_mi === $first_d_mi
             ? (float)$ml
@@ -522,8 +535,8 @@ function generate_gradient_profile_svg(
     $elev_right_axis = '';
     $e_min = $e_max = 0.0;
     if ($has_elev) {
-        $putin_e = (float)$putin_elev_ft;
-        $end_e = $putin_e - (float)$elev_lost_ft;
+        $putin_e = $putin_elev_ft;
+        $end_e = $putin_e - $elev_lost_ft;
         $cum = 0.0;
         $raw = [];
         foreach ($samples as $s) {
@@ -532,12 +545,12 @@ function generate_gradient_profile_svg(
         }
         $total_raw = $cum > 0 ? $cum : 1.0;
         [$e_min, $e_max, $e_step] = nice_axis(min($end_e, $putin_e), max($end_e, $putin_e));
-        $e_range = $e_max - $e_min ?: 1;
+        $e_range = ($e_max - $e_min) !== 0.0 ? $e_max - $e_min : 1;
         $e_to_py = fn (float $e): float => $mt + ($e_max - $e) / $e_range * $ph;
 
         $pts = [sprintf('%.1f,%.1f', (float)$ml, $e_to_py($putin_e))];
         foreach ($samples as $i => $s) {
-            $elev = $putin_e - ($raw[$i] / $total_raw) * (float)$elev_lost_ft;
+            $elev = $putin_e - ($raw[$i] / $total_raw) * $elev_lost_ft;
             $samples[$i]['elev_ft'] = round($elev, 1);
             $px = $ml + ((float)$s['d_mi'] - $x_min) / $x_range * $pw;
             $pts[] = sprintf('%.1f,%.1f', $px, $e_to_py($elev));
@@ -591,7 +604,7 @@ function generate_gradient_profile_svg(
         'y_min' => $y_min,
         'y_max' => $y_max,
         'elev' => $has_elev
-            ? ['putin' => (float)$putin_elev_ft, 'takeout' => (float)$putin_elev_ft - (float)$elev_lost_ft,
+            ? ['putin' => $putin_elev_ft, 'takeout' => $putin_elev_ft - $elev_lost_ft,
                'e_min' => $e_min, 'e_max' => $e_max]
             : null,
         'putin' => ($putin_lat !== null && $putin_lon !== null)

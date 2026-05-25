@@ -33,16 +33,18 @@ if (!in_array($type, ['reach', 'gauge'], true)) {
     exit('Unsupported edit target type');
 }
 
-$id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT)
-    ?: filter_input(INPUT_POST, 'reach_id', FILTER_VALIDATE_INT)
-    ?: filter_input(INPUT_POST, 'gauge_id', FILTER_VALIDATE_INT);
-if (!$id) { http_response_code(400); exit('Missing id parameter'); }
+$id_get   = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+$id_reach = filter_input(INPUT_POST, 'reach_id', FILTER_VALIDATE_INT);
+$id_gauge = filter_input(INPUT_POST, 'gauge_id', FILTER_VALIDATE_INT);
+$id = (is_int($id_get) && $id_get !== 0) ? $id_get
+    : ((is_int($id_reach) && $id_reach !== 0) ? $id_reach : $id_gauge);
+if (!is_int($id) || $id < 1) { http_response_code(400); exit('Missing id parameter'); }
 
 $db = get_db();
 
 if ($type === 'reach') {
     $row = get_reach_or_404($id);
-    $name = $row['display_name'] ?: $row['name'];
+    $name = ($row['display_name'] ?? '') !== '' ? $row['display_name'] : $row['name'];
     $table = 'reach';
     $editable_fields = [
         'display_name', 'sort_name', 'description', 'difficulties',
@@ -58,7 +60,7 @@ if ($type === 'reach') {
     $stmt = $db->prepare('SELECT * FROM gauge WHERE id = ?');
     $stmt->execute([$id]);
     $row = $stmt->fetch();
-    if (!$row) { http_response_code(404); exit('Gauge not found'); }
+    if ($row === false) { http_response_code(404); exit('Gauge not found'); }
     $name = $row['name'];
     $table = 'gauge';
     $editable_fields = [
@@ -107,7 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $changes[$field] = ['old' => $old, 'new' => $val];
     }
 
-    if ($changes) {
+    if ($changes !== []) {
         $db->beginTransaction();
         try {
             if ($table === 'reach') {
@@ -146,7 +148,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Cache-Control: no-cache');
     include_header('Changes Saved', '', '', '', ['type' => $type, 'id' => $id]);
     echo '<h2>Changes Saved</h2>';
-    if ($changes) {
+    if ($changes !== []) {
         $n = count($changes);
         $fields = implode(', ', array_keys($changes));
         echo '<p>Saved ' . $n . ' field' . ($n === 1 ? '' : 's')

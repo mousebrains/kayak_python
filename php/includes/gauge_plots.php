@@ -55,8 +55,8 @@ function _gp_render_single_plot(
  * the row is empty / a bound's data_type can't be converted (e.g. gauge bound
  * but no rating lookup is available for a flow plot).
  *
- * @param  array<string, mixed>|null      $class_range
- * @param  array<string, mixed>|null      $rating_lookup
+ * @param  array<string, mixed>|null              $class_range
+ * @param  array<int, array{0: float, 1: float}>|null $rating_lookup
  * @return array{low: ?float, high: ?float}|null
  */
 function _gp_bands_for_axis(?array $class_range, string $axis_type, ?array $rating_lookup = null): ?array
@@ -71,7 +71,7 @@ function _gp_bands_for_axis(?array $class_range, string $axis_type, ?array $rati
             return null;
         }
         $v = (float)$v;
-        $dt = $dt ?: 'flow';
+        $dt = ($dt ?? '') !== '' ? $dt : 'flow';
         $bound_is_flow = ($dt === 'flow' || $dt === 'inflow');
         if ($bound_is_flow === $axis_is_flow) {
             return $v;
@@ -110,11 +110,11 @@ function gp_resolve_window(PDO $db, int $gauge_id, ?string $start_date, ?string 
     );
     $stmt->execute([$gauge_id]);
     $row = $stmt->fetch();
-    $latest_ts = $row && $row['latest'] ? strtotime($row['latest']) : time();
+    $latest_ts = $row !== false && $row['latest'] !== null ? strtotime($row['latest']) : time();
 
-    if ($start_date && $end_date) {
-        $since = date('Y-m-d 00:00:00', strtotime($start_date));
-        $until = date('Y-m-d 23:59:59', strtotime($end_date));
+    if ($start_date !== null && $start_date !== '' && $end_date !== null && $end_date !== '') {
+        $since = date('Y-m-d 00:00:00', date_ts($start_date));
+        $until = date('Y-m-d 23:59:59', date_ts($end_date));
         $is_default_view = false;
     } else {
         $since = date('Y-m-d H:i:s', $latest_ts - 10 * 86400);
@@ -142,8 +142,8 @@ function gp_render_date_form(
 ): void {
     $default_end = date('Y-m-d', $latest_ts);
     $default_start = date('Y-m-d', $latest_ts - 10 * 86400);
-    $form_start = $start_date ?: $default_start;
-    $form_end = $end_date ?: $default_end;
+    $form_start = ($start_date !== null && $start_date !== '') ? $start_date : $default_start;
+    $form_end = ($end_date !== null && $end_date !== '') ? $end_date : $default_end;
 
     echo '<form method="get" style="margin:.5rem 0;font-size:.85rem;display:flex;align-items:center;flex-wrap:wrap;gap:.5rem">';
     echo '<input type="hidden" name="id" value="' . $id . '">';

@@ -27,7 +27,7 @@ function sanitize_source_url(string $raw): string {
     $raw = trim($raw);
     if ($raw === '') return '';
     if (strlen($raw) > 2048) return '';
-    if (preg_match('/[\r\n\0]/', $raw)) return '';
+    if (preg_match('/[\r\n\0]/', $raw) === 1) return '';
     $parts = @parse_url($raw);
     if ($parts === false) return '';
     $host = $parts['host'] ?? '';

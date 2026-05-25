@@ -22,21 +22,21 @@ $start_date = validate_date(is_string($start_raw) ? $start_raw : null);
 $end_date   = validate_date(is_string($end_raw)   ? $end_raw   : null);
 $sort       = filter_input(INPUT_GET, 'sort', FILTER_SANITIZE_SPECIAL_CHARS) === 'asc' ? 'asc' : 'desc';
 
-if (!$id) { http_response_code(400); exit('Missing id parameter'); }
+if (!is_int($id) || $id < 1) { http_response_code(400); exit('Missing id parameter'); }
 
 $db = get_db();
 $stmt = $db->prepare('SELECT id, name, agency FROM source WHERE id = ?');
 $stmt->execute([$id]);
 $source = $stmt->fetch();
-if (!$source) { http_response_code(404); exit('Source not found'); }
+if ($source === false) { http_response_code(404); exit('Source not found'); }
 
 $name = (string)$source['name'];
 
 // Default date range: last 2 days (matches data.php).
 $default_end   = date('Y-m-d');
 $default_start = date('Y-m-d', time() - 2 * 86400);
-$form_start    = $start_date ?: $default_start;
-$form_end      = $end_date   ?: $default_end;
+$form_start    = $start_date ?? $default_start;
+$form_end      = $end_date   ?? $default_end;
 // validate_date / the date() default guarantee parseable Y-m-d strings;
 // the cast is to satisfy PHPStan (strtotime is int|false-typed).
 $since         = date('Y-m-d 00:00:00', (int)strtotime($form_start));
@@ -90,7 +90,7 @@ echo '<label>End: <input type="date" name="end" value="' . htmlspecialchars($for
 echo '<button type="submit">Update</button>';
 echo '</form>';
 
-if (!$pivoted) {
+if ($pivoted === []) {
     echo '<p>No observations in this date range.</p>';
 } else {
     $toggle_sort = $sort === 'desc' ? 'asc' : 'desc';

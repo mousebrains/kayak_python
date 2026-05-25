@@ -16,19 +16,19 @@ header('Cache-Control: max-age=60');
 header('Access-Control-Allow-Origin: *');
 
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
-if (!$id) { http_response_code(400); echo json_encode(['error' => 'Missing id']); exit; }
+if (!is_int($id) || $id < 1) { http_response_code(400); echo json_encode(['error' => 'Missing id']); exit; }
 
 $db = get_db();
 
 $stmt = $db->prepare('SELECT gauge_id, name, display_name FROM reach WHERE id = ?');
 $stmt->execute([$id]);
 $reach = $stmt->fetch();
-if (!$reach) { http_response_code(404); echo json_encode(['error' => 'Not found']); exit; }
+if ($reach === false) { http_response_code(404); echo json_encode(['error' => 'Not found']); exit; }
 
-$name = $reach['display_name'] ?: $reach['name'];
+$name = ($reach['display_name'] ?? '') !== '' ? $reach['display_name'] : $reach['name'];
 $types = [];
 
-if ($reach['gauge_id']) {
+if ($reach['gauge_id'] !== null) {
     $stmt = $db->prepare(
         'SELECT data_type, value, observed_at, delta_per_hour, prev_value, prev_observed_at
          FROM latest_gauge_observation WHERE gauge_id = ?'

@@ -94,7 +94,7 @@ function _gp_despike_per_source(
             }
             $window = array_slice($sv, $lo, $w);
             sort($window);
-            $median = ($w & 1)
+            $median = ($w & 1) === 1
                 ? $window[intdiv($w, 2)]
                 : ($window[intdiv($w, 2) - 1] + $window[intdiv($w, 2)]) / 2.0;
             $abs_dev = [];
@@ -102,7 +102,7 @@ function _gp_despike_per_source(
                 $abs_dev[] = abs($v - $median);
             }
             sort($abs_dev);
-            $mad = ($w & 1)
+            $mad = ($w & 1) === 1
                 ? $abs_dev[intdiv($w, 2)]
                 : ($abs_dev[intdiv($w, 2) - 1] + $abs_dev[intdiv($w, 2)]) / 2.0;
             $threshold = max($k * 1.4826 * $mad, 0.25 * abs($median) + 0.5);
@@ -185,13 +185,13 @@ function _gp_cross_source_mean(
             $sums[$sid] = ($sums[$sid] ?? 0.0) + $sv[$i];
             $cnts[$sid] = ($cnts[$sid] ?? 0) + 1;
         }
-        if (empty($sums)) {
+        if ($sums === []) {
             continue;
         }
         $sum_of_means = 0.0;
         $n_sources = 0;
-        foreach ($sums as $sid => $s) {
-            $sum_of_means += $s / $cnts[$sid];
+        foreach ($sums as $sum_sid => $s) {
+            $sum_of_means += $s / $cnts[$sum_sid];
             $n_sources++;
         }
         $out_v[] = $sum_of_means / $n_sources;

@@ -56,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = "Daily site-comment cap of $DAILY_CAP reached.";
         }
 
-        if (!$errors) {
+        if ($errors === []) {
             $src = sanitize_source_url((string)($_POST['source_url'] ?? ''));
             $payload = ['body' => $body];
             $db->prepare(
@@ -112,7 +112,7 @@ include_header('Site feedback');
     Thanks — your feedback was recorded. The maintainer will review it.
   </p>
 <?php else: ?>
-  <?php if ($errors): ?>
+  <?php if ($errors !== []): ?>
     <ul style="padding:.6rem 1.4rem;background:#fde8e8;border:1px solid #f5b5b5;border-radius:4px">
       <?php foreach ($errors as $e): ?><li><?= htmlspecialchars($e) ?></li><?php endforeach ?>
     </ul>

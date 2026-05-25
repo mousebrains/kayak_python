@@ -10,8 +10,10 @@ require_once __DIR__ . '/includes/svg_plot.php';
 require_once __DIR__ . '/includes/validate.php';
 
 $id   = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
-$type = filter_input(INPUT_GET, 'type', FILTER_SANITIZE_SPECIAL_CHARS) ?: 'flow';
-$days = filter_input(INPUT_GET, 'days', FILTER_VALIDATE_INT) ?: 10;
+$type = filter_input(INPUT_GET, 'type', FILTER_SANITIZE_SPECIAL_CHARS);
+$type = is_string($type) && $type !== '' ? $type : 'flow';
+$days = filter_input(INPUT_GET, 'days', FILTER_VALIDATE_INT);
+$days = is_int($days) && $days !== 0 ? $days : 10;
 // Clamp to 1 year. Plotting decades of observations is never the user's
 // actual intent; capping defends against a hostile or accidentally-broken
 // bookmark pinning a PHP-FPM worker through derive_rating_lookup's joins.
@@ -20,10 +22,10 @@ $embed = filter_input(INPUT_GET, 'embed', FILTER_VALIDATE_INT);
 $start_date = validate_date(filter_input(INPUT_GET, 'start', FILTER_SANITIZE_SPECIAL_CHARS));
 $end_date = validate_date(filter_input(INPUT_GET, 'end', FILTER_SANITIZE_SPECIAL_CHARS));
 
-if (!$id) { http_response_code(400); exit('Missing id parameter'); }
+if (!is_int($id) || $id < 1) { http_response_code(400); exit('Missing id parameter'); }
 
 $valid_types = ['flow', 'gauge', 'gage', 'temperature', 'temp', 'inflow', 'outflow', 'dual'];
-if (!in_array($type, $valid_types)) {
+if (!in_array($type, $valid_types, true)) {
     http_response_code(400); exit('Invalid type');
 }
 
@@ -35,16 +37,16 @@ $db = get_db();
 
 // Look up reach → gauge → source
 $reach = get_reach_or_404($id);
-if (!$reach['gauge_id']) { http_response_code(404); exit('No gauge for this reach'); }
+if ($reach['gauge_id'] === null) { http_response_code(404); exit('No gauge for this reach'); }
 
-$name = $reach['display_name'] ?: $reach['name'];
+$name = ($reach['display_name'] ?? '') !== '' ? $reach['display_name'] : $reach['name'];
 
 $gauge_id = $reach['gauge_id'];
-$is_flow = in_array($type, ['flow', 'inflow', 'outflow']);
+$is_flow = in_array($type, ['flow', 'inflow', 'outflow'], true);
 
-if ($start_date && $end_date) {
-    $start_ts = strtotime($start_date);
-    $end_ts   = strtotime($end_date);
+if ($start_date !== null && $end_date !== null) {
+    $start_ts = date_ts($start_date);
+    $end_ts   = date_ts($end_date);
     // Clamp window to 1 year — same rationale as the $days cap above.
     if ($end_ts - $start_ts > 366 * 86400) {
         $start_ts = $end_ts - 366 * 86400;
@@ -91,13 +93,13 @@ $title = "$name — $y_label";
 
 $svg = generate_svg_plot($times, $values, $title, $y_label, 800, 350, 200, $is_flow);
 
-if ($embed) {
+if (is_int($embed) && $embed !== 0) {
     // Compute default date range from latest data point
     $latest_ts = count($times) > 0 ? max($times) : time();
     $default_end = date('Y-m-d', $latest_ts);
     $default_start = date('Y-m-d', $latest_ts - 10 * 86400);
-    $form_start = $start_date ?: $default_start;
-    $form_end = $end_date ?: $default_end;
+    $form_start = $start_date ?? $default_start;
+    $form_end = $end_date ?? $default_end;
 
     // Serve as HTML page with the SVG embedded
     require_once __DIR__ . '/includes/header.php';
