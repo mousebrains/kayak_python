@@ -20,15 +20,15 @@ The original F-6 framing ("no calls specify ENT_QUOTES|ENT_HTML5") missed this d
 
 | Target | XSS vector | Status | Evidence |
 |---|---|---|---|
-| `payload_json` rendering (the plan's flagged "stored XSS" vector, T-T1) | Editor-submitted JSON rendered in `/review.php` maintainer view | ✅ | `php/review.php:200-213`: all rendered fields wrap `htmlspecialchars((string)$v)`. Both `<pre>` content contexts and `<textarea>`/`<input value=...>` attribute contexts. The form's `name` attribute uses `htmlspecialchars($f)`. |
-| `payload['body']` (comment subject/body) | Free-text editor input shown to maintainer | ✅ | `php/review.php:168` escapes via `htmlspecialchars`. |
-| `notes_to_maint` (proposer's notes) | Free-text editor input | ✅ | `php/review.php:172` escapes. |
-| `reviewer_note` (maintainer's reply) | Maintainer input shown to editor (via email body, plain-text — not HTML rendered) AND in review.php form | ✅ | `php/review.php:181` escapes for HTML view; email is plain-text. |
+| `payload_json` rendering (the plan's flagged "stored XSS" vector, T-T1) | Editor-submitted JSON rendered in `/review.php` maintainer view | ✅ | `php/includes/review_handler.php :: _render_review_reach_fields`: all rendered fields wrap `htmlspecialchars((string)$v)`. Both `<pre>` content contexts and `<textarea>`/`<input value=...>` attribute contexts. The form's `name` attribute uses `htmlspecialchars($f)`. |
+| `payload['body']` (comment subject/body) | Free-text editor input shown to maintainer | ✅ | `php/includes/review_handler.php :: _render_review_meta_table` escapes via `htmlspecialchars`. |
+| `notes_to_maint` (proposer's notes) | Free-text editor input | ✅ | `php/includes/review_handler.php :: _render_review_meta_table` escapes. |
+| `reviewer_note` (maintainer's reply) | Maintainer input shown to editor (via email body, plain-text — not HTML rendered) AND in review.php form | ✅ | `php/includes/review_handler.php :: _render_review_form` escapes for HTML view; email is plain-text. |
 | `editor.email` rendered in admin / nav | Editor-controlled at signup; rendered to maintainer | ✅ | `php/admin.php` and `php/includes/header.php` use `htmlspecialchars` on every email render. |
 | `editor.display_name` rendered to admin + own account page | User-set | ✅ | `php/account.php`, `php/admin.php` escape. |
 | `edit.php` form pre-fill from DB | DB-stored reach/gauge values, themselves coming from previous proposer submissions | ✅ | `php/edit.php:179`: `$val = htmlspecialchars((string)($row[$field] ?? ''))` before interpolation into `<input value="$val">` or `<textarea>$val</textarea>` (`php/edit.php:184,186`). |
 | Bare `echo $var` sites | Unescaped HTML output | ✅ | 6 sites found via grep: all server-constructed literals, none user-influenced:<br>• `reach.php:188,413` `$compact_css` = server-constructed `<style>` block<br>• `reach.php:310,648` `$map_scripts` = server-constructed `<script src=...>` literals<br>• `plot.php:126` `$svg` = output of `generate_svg_plot()` which escapes `$title`, `$y_label`, and json-encodes series data (`php/includes/svg_plot.php:24,323-324`)<br>• `error.php:26` `$message_html` = documented as "caller's responsibility" — all 5 callers verified to escape user data (see render_error_page audit below) |
-| `render_error_page()` caller audit | Verbatim HTML injection from callers | ✅ | All 5 callers verified:<br>• `php/review.php:136` interpolates `(int)$cr_id` (integer cast)<br>• `php/includes/auth.php:36` hard-coded literal<br>• `php/includes/auth.php:181` wraps `$ed['email']`, `$ed['status']` in `htmlspecialchars`<br>• `php/includes/db.php:56` interpolates `(int)$id`<br>None pass un-escaped user data. |
+| `render_error_page()` caller audit | Verbatim HTML injection from callers | ✅ | All 5 callers verified:<br>• `php/includes/review_handler.php :: _render_review_detail` interpolates `(int)$cr_id` (integer cast)<br>• `php/includes/auth.php:36` hard-coded literal<br>• `php/includes/auth.php:181` wraps `$ed['email']`, `$ed['status']` in `htmlspecialchars`<br>• `php/includes/db.php:56` interpolates `(int)$id`<br>None pass un-escaped user data. |
 | HTML5 unquoted-attribute interpolation | F-6 original concern | ✅ | grep for `<[a-z]+ [a-z]+=[^"\47][^>]*\$` returns the 10 `\$f`/`\$type`/`\$iso`/`\$val`/`\$field` interpolations; all are inside DOUBLE-QUOTED attributes (e.g. `name="\$field"`). NO unquoted-attribute interpolation found. |
 
 ### Specific attack-string tests (static analysis only — live test deferred to Tier 6)
@@ -179,8 +179,8 @@ Tier 0 inventory + Tier 2.1 role-enforcement verified:
 | `/edit.php` | yes | ✅ `php/edit.php:83` | maintainer direct edit |
 | `/login.php` | yes | ✅ `php/login.php:36` | magic-link request |
 | `/logout.php` | yes | ✅ `php/logout.php:17` | logout |
-| `/propose.php` | yes | ✅ `php/propose.php:107` | proposal upsert |
-| `/review.php` | yes | ✅ `php/review.php:33` | review actions |
+| `/propose.php` | yes | ✅ `php/includes/propose_handler.php :: _handle_propose_post` | proposal upsert |
+| `/review.php` | yes | ✅ `php/includes/review_handler.php :: _review_handle_post` | review actions |
 
 **10/10 covered.** `csp-report.php` is the lone POST endpoint without CSRF — by design (CSP violation reports are sent by the browser without user interaction; no CSRF threat applies).
 

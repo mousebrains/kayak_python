@@ -16,7 +16,7 @@ The site is now in a documented, defensible posture for hobby/club scale. The re
 
 | Asset | Control | Source |
 |---|---|---|
-| Magic-link token | 256-bit random_bytes(32), sha256 at rest, 30-min expiry, GET-peek/POST-consume split (email-scanner defense) | `php/includes/auth.php` + `php/auth.php` |
+| Magic-link token | 256-bit random_bytes(32), sha256 at rest, 30-min expiry, GET-peek/POST-consume split (email-scanner defense) | `php/includes/auth_magic_link.php` + `php/auth.php` |
 | Magic-link rate limit | 5/hour per email + 20/hour per IP | `magic_link_under_throttle()` |
 | Magic-link token in logs | Redacted via nginx `map` directives (F-2 fix) | `deploy/kayak-log-format.conf` |
 | Magic-link token in browser Referer | `Referrer-Policy: no-referrer` on auth.php (F-14 fix) | `php/auth.php` |

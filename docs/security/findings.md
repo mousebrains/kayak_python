@@ -72,9 +72,9 @@
 - **Threats:** T-T3, T-E1
 - **Severity:** ~~Critical impact if a whitelist gap exists~~ — gap does not exist.
 - **Description:** Phase 2.3 audit traced the data flow:
-  - `propose.php:51-56` defines `$reach_fields` (tier-gated); the POST loop iterates ONLY this whitelist.
+  - `propose_handler.php :: _load_propose_context` defines `$reach_fields` (tier-gated); the POST loop iterates ONLY this whitelist.
   - `propose.php` stores the result in `change_request.payload_json`.
-  - `review.php:50-56` builds `$applied['reach']` from `array_keys($payload['reach'])` — KEY SET is constrained to what the proposer submitted, which was already tier-whitelisted.
+  - `review_handler.php :: _review_build_approve_payload` builds `$applied['reach']` from `array_keys($payload['reach'])` — KEY SET is constrained to what the proposer submitted, which was already tier-whitelisted.
   - `review_logic.php:101` concats `$f = ?` where `$f` comes from this constrained key set.
 
   Conclusion: the SQL concat in `review_logic.php:101` and `edit.php:117` IS safe given the upstream invariants. F-7 closes; the refactor recommendation moves under F-8 (which tracks the code-smell aspect separately).
@@ -104,10 +104,10 @@
 
 #### F-1 — HSTS not enabled
 
-- **Status:** 🟢 Closed (Tier 6 fix; deploy/levels server block + SETUP.md § 10).
+- **Status:** 🟢 Closed (Tier 6 fix; `conf/security-headers.conf:7` + SETUP.md § 10).
 - **Threats:** Adjacent to T-S3 (cookie-theft via MITM on first HTTP)
-- **Description:** `deploy/SETUP.md:395` showed the intended header (`Strict-Transport-Security "max-age=63072000; includeSubDomains"`) marked "uncomment when SSL working." It was not present in `deploy/levels`.
-- **Resolution:** Added `add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;` at server scope in `deploy/levels` (right after the security-headers snippet include). SETUP.md § 10 updated to verify with `curl -sI` and to clarify the snippet-vs-server-scope trade-off. `preload` qualifier intentionally OFF — that's a one-way commitment best left to a future explicit decision.
+- **Description:** `deploy/SETUP.md:395` showed the intended header (`Strict-Transport-Security "max-age=63072000; includeSubDomains"`) marked "uncomment when SSL working." It was not present in `conf/security-headers.conf:7`.
+- **Resolution:** Added `add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;` at server scope in `conf/security-headers.conf:7` (right after the security-headers snippet include). SETUP.md § 10 updated to verify with `curl -sI` and to clarify the snippet-vs-server-scope trade-off. `preload` qualifier intentionally OFF — that's a one-way commitment best left to a future explicit decision.
 - **Verification:** After deploying, `curl -sI https://levels.wkcc.org/ | grep -i strict-transport` should show the header.
 - **Plan tier:** Tier 1.2 (session audit) / Tier 6 (apply).
 
@@ -115,7 +115,7 @@
 
 - **Status:** ⚪ Accepted (Tier 6 disposition: low-impact at hobby-club scale; documented re-eval triggers).
 - **Threats:** T-S6, T-D2
-- **Description:** `normalize_email()` in `php/includes/auth.php` is `strtolower(trim(...))`. Gmail's `Foo.Bar+test@gmail.com` and `foobar@gmail.com` resolve to *different* `editor` rows. An attacker could spawn N alias accounts to: (1) bypass per-account caps; (2) dilute audit trail; (3) sock-puppet proposal volume.
+- **Description:** `normalize_email()` in `php/includes/auth_magic_link.php` is `strtolower(trim(...))`. Gmail's `Foo.Bar+test@gmail.com` and `foobar@gmail.com` resolve to *different* `editor` rows. An attacker could spawn N alias accounts to: (1) bypass per-account caps; (2) dilute audit trail; (3) sock-puppet proposal volume.
 - **Acceptance rationale:**
   1. **Realized attack surface is low at this scale.** No per-account daily cap exists today — only magic-link rate limits (per-email + per-IP). Audit-trail dilution requires the alias accounts to actually contribute, which means the maintainer approves them; 5 accounts with `foo+1@`/`foo+2@`/etc. patterns would be visible during review and trivially banned. Sock-puppet proposal volume requires those proposals to be approved, again through the same maintainer gate.
   2. **Privacy policy does not promise one-account-per-person.** No external trust contract is violated by alias accounts.
@@ -151,8 +151,8 @@ This section holds two kinds of items: (a) findings downgraded to Low after audi
 - **Severity:** **Low** (downgraded from Medium after Phase 2.3 audit).
 - **Deferral trigger:** Second maintainer joins (same trigger as F-13 / D-T1.3 / D-T2.4 family). At single-maintainer scale, the maintainer can direct-edit anything anyway, so this is essentially moot; the audit-trail attribution is correct. At multi-maintainer scale, the reach_class slip becomes a "did maintainer A apply class changes proposer B didn't request" question — meaningful enough to fix at that point.
 - **Description:** Phase 2.3 audit refined the scope:
-  - **Reach fields:** NOT vulnerable. `review.php:50-56` builds `$applied['reach']` from `array_keys($payload['reach'])` — keys are constrained to what the proposer submitted (which was tier-whitelisted). Maintainer cannot add `latitude_start` to the apply when the proposer only submitted `description`.
-  - **reach_class:** Still vulnerable. `$applied['reach_class']` is built from POST `classes_present`/`classes`/`flow_low`/etc. (`php/review.php:58-74`), independent of `$payload`. Maintainer can add class changes the proposer didn't propose.
+  - **Reach fields:** NOT vulnerable. `review_handler.php :: _review_build_approve_payload` builds `$applied['reach']` from `array_keys($payload['reach'])` — keys are constrained to what the proposer submitted (which was tier-whitelisted). Maintainer cannot add `latitude_start` to the apply when the proposer only submitted `description`.
+  - **reach_class:** Still vulnerable. `$applied['reach_class']` is built from POST `classes_present`/`classes`/`flow_low`/etc. (`review_handler.php :: _review_build_approve_payload`), independent of `$payload`. Maintainer can add class changes the proposer didn't propose.
   - Mitigation: the `edit_history` row records `changed_by='maintainer:<id>'` with `change_request_id` linkage. Audit trail is technically correct — "this class change was applied by maintainer X during review of proposal Y." A reader can determine the maintainer ADDED the class change (not in payload_json).
 - **Remediation options:** Same as before, but only for `reach_class`. The reach-fields concern resolves to non-issue.
   - Restrict `reach_class` apply to "only if `$payload['reach_class']` was set" — i.e., honor the proposer's intent.
