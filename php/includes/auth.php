@@ -45,6 +45,7 @@ function require_editor_feature(): void
 // Token utilities
 // ---------------------------------------------------------------------------
 
+/** @param int<1, max> $bytes */
 function generate_token(int $bytes = 32): string
 {
     return bin2hex(random_bytes($bytes));
@@ -64,7 +65,7 @@ const EDITOR_SESSION_DAYS   = 7;
 const EDITOR_CSRF_COOKIE    = 'ed_csrf';
 
 /**
- * @return array{expires:int, path:string, secure:bool, httponly:bool, samesite:string}
+ * @return array{expires:int, path:string, secure:bool, httponly:bool, samesite:'Strict'}
  */
 function _cookie_params(int $lifetime_seconds): array
 {
@@ -149,7 +150,7 @@ function current_editor(?PDO $db_override = null): ?array
         return $editor;
     }
 
-    $tok = $_COOKIE[EDITOR_SESSION_COOKIE] ?? '';
+    $tok = (string)($_COOKIE[EDITOR_SESSION_COOKIE] ?? '');
     if ($tok === '' || !ctype_xdigit($tok) || strlen($tok) !== 64) {
         if ($db_override === null) {
             $cached = true;
@@ -242,7 +243,7 @@ function require_maintainer(): array
 
 function csrf_token(): string
 {
-    $tok = $_COOKIE[EDITOR_CSRF_COOKIE] ?? '';
+    $tok = (string)($_COOKIE[EDITOR_CSRF_COOKIE] ?? '');
     if ($tok === '' || !ctype_xdigit($tok) || strlen($tok) !== 64) {
         $tok = generate_token();
         setcookie(EDITOR_CSRF_COOKIE, $tok, _cookie_params(0));

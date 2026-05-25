@@ -25,36 +25,6 @@ parameters:
 			path: php/gauge_picker.php
 
 		-
-			message: '#^Function csrf_token\(\) should return string but returns int\|string\.$#'
-			identifier: return.type
-			count: 1
-			path: php/includes/auth.php
-
-		-
-			message: '#^Parameter \#1 \$length of function random_bytes expects int\<1, max\>, int given\.$#'
-			identifier: argument.type
-			count: 1
-			path: php/includes/auth.php
-
-		-
-			message: '#^Parameter \#1 \$string of function strlen expects string, int\|string given\.$#'
-			identifier: argument.type
-			count: 2
-			path: php/includes/auth.php
-
-		-
-			message: '#^Parameter \#1 \$tok of function hash_token expects string, int\|string given\.$#'
-			identifier: argument.type
-			count: 1
-			path: php/includes/auth.php
-
-		-
-			message: '#^Parameter \#3 \$options of function setcookie expects array\{expires\?\: int, path\?\: string, domain\?\: string, secure\?\: bool, httponly\?\: bool, samesite\?\: ''Lax''\|''lax''\|''None''\|''none''\|''Strict''\|''strict''\}, array\{expires\: int, path\: string, secure\: bool, httponly\: bool, samesite\: string\} given\.$#'
-			identifier: argument.type
-			count: 4
-			path: php/includes/auth.php
-
-		-
 			message: '#^Function parse_class_tiers\(\) return type has no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1
@@ -131,54 +101,6 @@ parameters:
 			identifier: missingType.iterableValue
 			count: 1
 			path: php/includes/mail.php
-
-		-
-			message: '#^Parameter \#1 \$lat_s of function check_putin_takeout expects float\|null, float\|string\|null given\.$#'
-			identifier: argument.type
-			count: 1
-			path: php/includes/propose_handler.php
-
-		-
-			message: '#^Parameter \#1 \$proposed of function check_display_name expects string, float\|string given\.$#'
-			identifier: argument.type
-			count: 1
-			path: php/includes/propose_handler.php
-
-		-
-			message: '#^Parameter \#2 \$lat of function check_coords expects float\|null, float\|string\|null given\.$#'
-			identifier: argument.type
-			count: 2
-			path: php/includes/propose_handler.php
-
-		-
-			message: '#^Parameter \#2 \$lon_s of function check_putin_takeout expects float\|null, float\|string\|null given\.$#'
-			identifier: argument.type
-			count: 1
-			path: php/includes/propose_handler.php
-
-		-
-			message: '#^Parameter \#2 \$value of function check_text_length expects string, float\|string given\.$#'
-			identifier: argument.type
-			count: 1
-			path: php/includes/propose_handler.php
-
-		-
-			message: '#^Parameter \#3 \$lat_e of function check_putin_takeout expects float\|null, float\|string\|null given\.$#'
-			identifier: argument.type
-			count: 1
-			path: php/includes/propose_handler.php
-
-		-
-			message: '#^Parameter \#3 \$lon of function check_coords expects float\|null, float\|string\|null given\.$#'
-			identifier: argument.type
-			count: 2
-			path: php/includes/propose_handler.php
-
-		-
-			message: '#^Parameter \#4 \$lon_e of function check_putin_takeout expects float\|null, float\|string\|null given\.$#'
-			identifier: argument.type
-			count: 1
-			path: php/includes/propose_handler.php
 
 		-
 			message: '#^Cannot access offset 0 on list\<string\>\|false\.$#'

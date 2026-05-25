@@ -200,34 +200,28 @@ function _handle_propose_post(PDO $db, array $ed, array $reach, string $reach_na
     $issues = [];
     if (isset($proposed_reach['display_name'])) {
         $issues = array_merge($issues,
-            check_display_name($proposed_reach['display_name'], $reach['river']));
+            check_display_name((string)$proposed_reach['display_name'], $reach['river']));
     }
     foreach (['description' => 10000, 'features' => 5000] as $f => $max) {
         if (isset($proposed_reach[$f])) {
-            $issues = array_merge($issues, check_text_length($f, $proposed_reach[$f], $max));
+            $issues = array_merge($issues, check_text_length($f, (string)$proposed_reach[$f], $max));
         }
     }
     if ($ctx['allow_full']) {
         $ref_lat = isset($reach['latitude'])  ? (float)$reach['latitude']  : null;
         $ref_lon = isset($reach['longitude']) ? (float)$reach['longitude'] : null;
-        $issues = array_merge($issues, check_coords(
-            'put-in',
-            $proposed_reach['latitude_start']  ?? null,
-            $proposed_reach['longitude_start'] ?? null,
-            $ref_lat, $ref_lon
-        ));
-        $issues = array_merge($issues, check_coords(
-            'take-out',
-            $proposed_reach['latitude_end']  ?? null,
-            $proposed_reach['longitude_end'] ?? null,
-            $ref_lat, $ref_lon
-        ));
-        $issues = array_merge($issues, check_putin_takeout(
-            $proposed_reach['latitude_start']  ?? null,
-            $proposed_reach['longitude_start'] ?? null,
-            $proposed_reach['latitude_end']    ?? null,
-            $proposed_reach['longitude_end']   ?? null
-        ));
+        // Coordinate fields only ever hold float|null here (the loop above
+        // rejects non-numeric input), but $proposed_reach is a heterogeneous
+        // array<string, float|string|null>; narrow to float|null for the
+        // coordinate validators.
+        $lat_s = $proposed_reach['latitude_start']  ?? null;
+        $lon_s = $proposed_reach['longitude_start'] ?? null;
+        $lat_e = $proposed_reach['latitude_end']    ?? null;
+        $lon_e = $proposed_reach['longitude_end']   ?? null;
+        assert(!is_string($lat_s) && !is_string($lon_s) && !is_string($lat_e) && !is_string($lon_e));
+        $issues = array_merge($issues, check_coords('put-in', $lat_s, $lon_s, $ref_lat, $ref_lon));
+        $issues = array_merge($issues, check_coords('take-out', $lat_e, $lon_e, $ref_lat, $ref_lon));
+        $issues = array_merge($issues, check_putin_takeout($lat_s, $lon_s, $lat_e, $lon_e));
     }
 
     $proposed_class_payload = null;
