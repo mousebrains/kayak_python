@@ -1,5 +1,20 @@
+includes:
+    # Opt-in strict rules layered on level 8: useless-cast, empty(),
+    # strict in_array/array_filter, loose ==, loop-variable overwrite,
+    # variable-variables, etc. vendor/ is always present when PHPStan
+    # can run, so a hard include is safe here.
+    - vendor/phpstan/phpstan-strict-rules/rules.neon
+
 parameters:
     level: 8
+    strictRules:
+        # Two high-churn, low-bug-value strict families are off; every
+        # other strict rule is enforced (fixed to zero, no baseline).
+        #   booleansInConditions — would force `if ($row !== false)` over
+        #     the idiomatic `if ($row)` (~237 finds, no behavior change).
+        #   disallowedShortTernary — bans `$x ?: $y` (~84 finds, stylistic).
+        booleansInConditions: false
+        disallowedShortTernary: false
     paths:
         - php
     excludePaths:
