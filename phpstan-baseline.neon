@@ -7,18 +7,6 @@ parameters:
 			path: php/custom.php
 
 		-
-			message: '#^Parameter \#1 \$input of function validate_date expects string\|null, string\|false\|null given\.$#'
-			identifier: argument.type
-			count: 2
-			path: php/data.php
-
-		-
-			message: '#^Parameter \#2 \$timestamp of function date expects int\|null, int\|false given\.$#'
-			identifier: argument.type
-			count: 2
-			path: php/data.php
-
-		-
 			message: '#^Parameter \#2 \$string of function explode expects string, string\|false given\.$#'
 			identifier: argument.type
 			count: 1
@@ -76,12 +64,6 @@ parameters:
 			message: '#^Parameter \#1 \$lookup of function rate_gauge_to_flow expects array\<int, array\{float, float\}\>, array\<string, mixed\> given\.$#'
 			identifier: argument.type
 			count: 1
-			path: php/includes/gauge_plots.php
-
-		-
-			message: '#^Parameter \#2 \$timestamp of function date expects int\|null, int\|false given\.$#'
-			identifier: argument.type
-			count: 2
 			path: php/includes/gauge_plots.php
 
 		-
@@ -209,18 +191,6 @@ parameters:
 			identifier: argument.type
 			count: 1
 			path: php/picker.php
-
-		-
-			message: '#^Parameter \#1 \$input of function validate_date expects string\|null, string\|false\|null given\.$#'
-			identifier: argument.type
-			count: 2
-			path: php/plot.php
-
-		-
-			message: '#^Parameter \#2 \$timestamp of function date expects int\|null, int\|false given\.$#'
-			identifier: argument.type
-			count: 2
-			path: php/plot.php
 
 		-
 			message: '#^Parameter \#1 \$string of function trim expects string, string\|false given\.$#'

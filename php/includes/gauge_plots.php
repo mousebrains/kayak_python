@@ -113,8 +113,8 @@ function gp_resolve_window(PDO $db, int $gauge_id, ?string $start_date, ?string 
     $latest_ts = $row && $row['latest'] ? strtotime($row['latest']) : time();
 
     if ($start_date && $end_date) {
-        $since = date('Y-m-d 00:00:00', strtotime($start_date));
-        $until = date('Y-m-d 23:59:59', strtotime($end_date));
+        $since = date('Y-m-d 00:00:00', date_ts($start_date));
+        $until = date('Y-m-d 23:59:59', date_ts($end_date));
         $is_default_view = false;
     } else {
         $since = date('Y-m-d H:i:s', $latest_ts - 10 * 86400);

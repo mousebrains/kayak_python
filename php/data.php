@@ -61,8 +61,8 @@ $default_end = date('Y-m-d');
 $default_start = date('Y-m-d', time() - 2 * 86400);
 $form_start = $start_date ?: $default_start;
 $form_end = $end_date ?: $default_end;
-$since = date('Y-m-d 00:00:00', strtotime($form_start));
-$until = date('Y-m-d 23:59:59', strtotime($form_end));
+$since = date('Y-m-d 00:00:00', date_ts($form_start));
+$until = date('Y-m-d 23:59:59', date_ts($form_end));
 
 // Query observations for all sources in range
 $placeholders = implode(',', array_fill(0, count($source_ids), '?'));

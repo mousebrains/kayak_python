@@ -43,8 +43,8 @@ $gauge_id = $reach['gauge_id'];
 $is_flow = in_array($type, ['flow', 'inflow', 'outflow']);
 
 if ($start_date && $end_date) {
-    $start_ts = strtotime($start_date);
-    $end_ts   = strtotime($end_date);
+    $start_ts = date_ts($start_date);
+    $end_ts   = date_ts($end_date);
     // Clamp window to 1 year — same rationale as the $days cap above.
     if ($end_ts - $start_ts > 366 * 86400) {
         $start_ts = $end_ts - 366 * 86400;
