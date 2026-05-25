@@ -17,6 +17,12 @@ declare(strict_types=1);
  * `review_*` helpers (review_approve, review_reject, …); the
  * file-private helpers stay underscored + file-prefixed to keep the
  * boundary unambiguous.
+ *
+ * The `array{...}` row shapes on the helpers below are verified against
+ * the dev SQLite schema (PDO, EMULATE_PREPARES=false): INTEGER→int,
+ * TEXT/VARCHAR/DATETIME→string, with `|null` for every `notnull=0`
+ * column. The detail/list helpers additionally carry the three editor
+ * columns aliased by the `JOIN editor` (editor_email/name/status).
  */
 
 require_once __DIR__ . '/db.php';
@@ -77,6 +83,7 @@ function _review_handle_post(PDO $db, ?int $cr_id, ?string $action, int $maint_i
     }
     $st = $db->prepare('SELECT * FROM change_request WHERE id = ?');
     $st->execute([$cr_id]);
+    /** @var array{id: int, target_type: string, target_id: int|null, editor_id: int, submitted_at: string, subject: string|null, payload_json: string, notes_to_maint: string|null, status: string, reviewed_at: string|null, reviewed_by: int|null, reviewer_note: string|null, applied_json: string|null, source_url: string|null}|false $cr */
     $cr = $st->fetch();
     if ($cr === false) {
         http_response_code(404);
@@ -140,21 +147,23 @@ function _review_handle_post(PDO $db, ?int $cr_id, ?string $action, int $maint_i
  * fields. Each `reach_<field>` overlay wins over the editor's
  * proposal; `classes_present`=1 unlocks the reach_class block.
  *
- * @param  array<string, mixed> $cr
+ * @param  array{payload_json: string} $cr  change_request row (only payload_json is read here).
  * @return array<string, mixed>
  */
 function _review_build_approve_payload(array $cr): array
 {
-    $decoded = json_decode((string)$cr['payload_json'], true);
+    $decoded = json_decode($cr['payload_json'], true);
     $payload = is_array($decoded) ? $decoded : [];
     $applied = ['reach' => [], 'reach_class' => null];
 
-    if (($payload['reach'] ?? []) !== []) {
-        foreach (array_keys($payload['reach']) as $f) {
+    /** @var array<string, mixed> $reach */
+    $reach = is_array($payload['reach'] ?? null) ? $payload['reach'] : [];
+    if ($reach !== []) {
+        foreach (array_keys($reach) as $f) {
             $key = "reach_$f";
             $applied['reach'][$f] = array_key_exists($key, $_POST)
                 ? trim((string)$_POST[$key])
-                : $payload['reach'][$f];
+                : $reach[$f];
         }
     }
     if (isset($payload['reach_class']) && isset($_POST['classes_present'])) {
@@ -195,6 +204,7 @@ function _render_review_detail(
          WHERE cr.id = ?'
     );
     $st->execute([$cr_id]);
+    /** @var array{id: int, target_type: string, target_id: int|null, editor_id: int, submitted_at: string, subject: string|null, payload_json: string, notes_to_maint: string|null, status: string, reviewed_at: string|null, reviewed_by: int|null, reviewer_note: string|null, applied_json: string|null, source_url: string|null, editor_email: string, editor_name: string|null, editor_status: string}|false $cr */
     $cr = $st->fetch();
     if ($cr === false) {
         require_once __DIR__ . '/error.php';
@@ -207,14 +217,15 @@ function _render_review_detail(
         return;
     }
 
-    $decoded = json_decode((string)$cr['payload_json'], true);
+    $decoded = json_decode($cr['payload_json'], true);
     $payload = is_array($decoded) ? $decoded : [];
-    $applied = json_decode((string)($cr['applied_json'] ?? 'null'), true);
+    $applied_decoded = json_decode($cr['applied_json'] ?? 'null', true);
+    $applied = is_array($applied_decoded) ? $applied_decoded : null;
     $cur = $cr['target_type'] === 'reach' && $cr['target_id'] !== null
-        ? review_load_target_state($db, 'reach', (int)$cr['target_id'])
+        ? review_load_target_state($db, 'reach', $cr['target_id'])
         : null;
 
-    $subject = (string)$cr['subject'];
+    $subject = $cr['subject'] ?? '';
     include_header('Review: ' . ($subject !== '' ? $subject : 'change_request #' . $cr['id']));
     echo '<h2>Review: ' . htmlspecialchars($subject) . '</h2>';
     _render_review_flash($flash, $flash_err);
@@ -246,23 +257,23 @@ function _render_review_flash(?string $flash, ?string $flash_err): void
 /**
  * From / Submitted / Page / Status / Reach / Message / Notes table.
  *
- * @param array<string, mixed> $cr
+ * @param array{id: int, target_type: string, target_id: int|null, editor_id: int, submitted_at: string, subject: string|null, payload_json: string, notes_to_maint: string|null, status: string, reviewed_at: string|null, reviewed_by: int|null, reviewer_note: string|null, applied_json: string|null, source_url: string|null, editor_email: string, editor_name: string|null, editor_status: string} $cr
  * @param array<string, mixed> $payload
  */
 function _render_review_meta_table(array $cr, array $payload): void
 {
     echo '<table class="desc-table">';
-    echo '<tr><td>From</td><td>' . htmlspecialchars((string)$cr['editor_email'])
-       . ' (' . htmlspecialchars((string)$cr['editor_status']) . ')</td></tr>';
-    echo '<tr><td>Submitted</td><td>' . htmlspecialchars((string)$cr['submitted_at']) . '</td></tr>';
+    echo '<tr><td>From</td><td>' . htmlspecialchars($cr['editor_email'])
+       . ' (' . htmlspecialchars($cr['editor_status']) . ')</td></tr>';
+    echo '<tr><td>Submitted</td><td>' . htmlspecialchars($cr['submitted_at']) . '</td></tr>';
     if (($cr['source_url'] ?? '') !== '') {
         $src = (string)$cr['source_url'];
         echo '<tr><td>Page</td><td><a href="' . htmlspecialchars($src) . '">'
            . htmlspecialchars($src) . '</a></td></tr>';
     }
-    echo '<tr><td>Status</td><td>' . htmlspecialchars((string)$cr['status']) . '</td></tr>';
+    echo '<tr><td>Status</td><td>' . htmlspecialchars($cr['status']) . '</td></tr>';
     if ($cr['target_type'] === 'reach' && $cr['target_id'] !== null) {
-        echo '<tr><td>Reach</td><td><a href="/description.php?id=' . (int)$cr['target_id']
+        echo '<tr><td>Reach</td><td><a href="/description.php?id=' . $cr['target_id']
            . '">description</a></td></tr>';
     }
     if (($payload['body'] ?? '') !== '') {
@@ -280,8 +291,8 @@ function _render_review_meta_table(array $cr, array $payload): void
  * Terminal-state view (approved/rejected/resolved): maintainer notes
  * + applied-payload JSON + back link. No form, no buttons.
  *
- * @param array<string, mixed>      $cr
- * @param array<string, mixed>|null $applied
+ * @param array{id: int, target_type: string, target_id: int|null, editor_id: int, submitted_at: string, subject: string|null, payload_json: string, notes_to_maint: string|null, status: string, reviewed_at: string|null, reviewed_by: int|null, reviewer_note: string|null, applied_json: string|null, source_url: string|null, editor_email: string, editor_name: string|null, editor_status: string} $cr
+ * @param array<array-key, mixed>|null $applied  decoded applied_json payload (untrusted shape).
  */
 function _render_review_terminal_state(array $cr, ?array $applied): void
 {
@@ -302,20 +313,21 @@ function _render_review_terminal_state(array $cr, ?array $applied): void
  * Editable approve form — reach-field overlay table, optional
  * reach_class block, reviewer-note textarea, action buttons.
  *
- * @param array<string, mixed>      $cr
- * @param array<string, mixed>      $payload
- * @param array<string, mixed>|null $cur
+ * @param array{id: int, target_type: string, target_id: int|null, editor_id: int, submitted_at: string, subject: string|null, payload_json: string, notes_to_maint: string|null, status: string, reviewed_at: string|null, reviewed_by: int|null, reviewer_note: string|null, applied_json: string|null, source_url: string|null, editor_email: string, editor_name: string|null, editor_status: string} $cr
+ * @param array<string, mixed> $payload
+ * @param array{reach: array<string, mixed>, reach_class: array{names: list<string>, range: array{low: ?float, high: ?float, data_type: string}}}|null $cur
  */
 function _render_review_form(array $cr, array $payload, ?array $cur, string $csrf): void
 {
     echo '<form method="POST" action="/review.php">';
     echo '<input type="hidden" name="csrf_token" value="' . $csrf . '">';
-    echo '<input type="hidden" name="id" value="' . (int)$cr['id'] . '">';
+    echo '<input type="hidden" name="id" value="' . $cr['id'] . '">';
 
-    if (($payload['reach'] ?? []) !== []) {
-        _render_review_reach_fields($payload['reach'], $cur);
+    $reach = is_array($payload['reach'] ?? null) ? $payload['reach'] : [];
+    if ($reach !== []) {
+        _render_review_reach_fields($reach, $cur);
     }
-    if (isset($payload['reach_class'])) {
+    if (isset($payload['reach_class']) && is_array($payload['reach_class'])) {
         _render_review_class_block($payload['reach_class'], $cur);
     }
 
@@ -345,8 +357,8 @@ function _render_review_form(array $cr, array $payload, ?array $cur, string $csr
  * (editable). description+features use <textarea>, everything else
  * uses <input type=text>.
  *
- * @param array<string, mixed>      $reach_fields
- * @param array<string, mixed>|null $cur
+ * @param array<string, mixed> $reach_fields  proposed reach-field overlay (decoded JSON).
+ * @param array{reach: array<string, mixed>, reach_class: array{names: list<string>, range: array{low: ?float, high: ?float, data_type: string}}}|null $cur
  */
 function _render_review_reach_fields(array $reach_fields, ?array $cur): void
 {
@@ -375,8 +387,8 @@ function _render_review_reach_fields(array $reach_fields, ?array $cur): void
  * reach_class block — classes input + flow range row + data-type
  * select. Renders current values inline above the editable widgets.
  *
- * @param array<string, mixed>      $proposed
- * @param array<string, mixed>|null $cur
+ * @param array<array-key, mixed> $proposed  proposed reach_class block (decoded JSON; untrusted shape).
+ * @param array{reach: array<string, mixed>, reach_class: array{names: list<string>, range: array{low: ?float, high: ?float, data_type: string}}}|null $cur
  */
 function _render_review_class_block(array $proposed, ?array $cur): void
 {
@@ -384,12 +396,19 @@ function _render_review_class_block(array $proposed, ?array $cur): void
     echo '<input type="hidden" name="classes_present" value="1">';
     $cur_names = $cur['reach_class']['names'] ?? [];
     $cur_range = $cur['reach_class']['range'] ?? ['low' => null, 'high' => null, 'data_type' => 'flow'];
-    $p_names = $proposed['names'] ?? [];
-    $p_range = $proposed['range'] ?? ['low' => null, 'high' => null, 'data_type' => 'flow'];
+    // names is decoded from an untrusted JSON payload; coerce each entry to
+    // string (matching implode's own runtime coercion) so the value typechecks.
+    $p_names = is_array($proposed['names'] ?? null)
+        ? array_map(static fn (mixed $n): string => (string) $n, $proposed['names'])
+        : [];
+    /** @var array<string, mixed> $p_range */
+    $p_range = is_array($proposed['range'] ?? null)
+        ? $proposed['range']
+        : ['low' => null, 'high' => null, 'data_type' => 'flow'];
     $cur_names_str = implode(', ', $cur_names);
     echo '<p>Current classes: <code>' . htmlspecialchars($cur_names_str !== '' ? $cur_names_str : '(none)') . '</code></p>';
     $cur_range_str = ($cur_range['low'] ?? '-') . ' to ' . ($cur_range['high'] ?? '-')
-                   . ' ' . ($cur_range['data_type'] ?? 'flow');
+                   . ' ' . $cur_range['data_type'];
     echo '<p>Current range: <code>' . htmlspecialchars($cur_range_str) . '</code></p>';
     echo '<label>Proposed classes (comma-separated)</label>';
     echo '<input type="text" name="classes" value="' . htmlspecialchars(implode(', ', $p_names)) . '" style="width:100%">';

@@ -129,6 +129,17 @@ with the worst files (`gauge_detail`, `review_handler`, `description_detail`,
 `reach_detail` ≈ 270 of 640). Each reduction: tighten types → `composer
 baseline` → commit the smaller file.
 
+**Progress (2026-05-25):** first reduction pass — typed every DB-query row in
+`gauge_detail.php` (79 → 9) and `review_handler.php` (74 → 20) with verified
+`array{…}` shapes (PDO returns `int`/`float`/`string` for INTEGER/REAL+NUMERIC/
+TEXT, `int` for BOOLEAN; runtime-probed against the dev DB), removing the
+now-redundant casts and null-guarding where a nullable column feeds a non-null
+call. Baseline **640 → 510**. Residuals in those two files are genuinely-dynamic
+`mixed` casts (`$_POST`/`$_GET` superglobals, `json_decode` payload values,
+external regression-artifact JSON) — left as-is, not guessed. Next worst:
+`description_detail.php` (59), `reach_detail.php` (54), `propose_handler.php`
+(40), `source.php` (37).
+
 ## Per-stage discipline
 
 Each stage: iterate `composer analyse` to 0 → run `composer test` (phpunit) +
