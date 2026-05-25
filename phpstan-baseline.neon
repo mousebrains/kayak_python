@@ -53,21 +53,3 @@ parameters:
 			identifier: return.type
 			count: 1
 			path: php/includes/reach_detail.php
-
-		-
-			message: '#^Parameter \#1 \.\.\.\$arg1 of function max expects non\-empty\-array, list\<float\|int\> given\.$#'
-			identifier: argument.type
-			count: 2
-			path: php/includes/svg_plot.php
-
-		-
-			message: '#^Parameter \#1 \.\.\.\$arg1 of function min expects non\-empty\-array, list\<float\|int\> given\.$#'
-			identifier: argument.type
-			count: 2
-			path: php/includes/svg_plot.php
-
-		-
-			message: '#^Strict comparison using \!\=\= between float and null will always evaluate to true\.$#'
-			identifier: notIdentical.alwaysTrue
-			count: 2
-			path: php/includes/svg_plot.php

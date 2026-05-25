@@ -115,7 +115,7 @@ function _bands_svg(?array $bands, float $y_min, float $y_max, int $ml, int $mt,
  * Generate a lightweight time-series SVG plot.
  *
  * @param list<int>                               $times          Unix timestamps.
- * @param list<float>                             $values         Float values.
+ * @param list<float|null>                        $values         Float values (null = gap).
  * @param string                                  $title          Plot title.
  * @param string                                  $y_label        Y-axis label.
  * @param int                                     $width          SVG width.
@@ -165,6 +165,7 @@ function generate_svg_plot(
     $x_min = $pairs[0][0];
     $x_max = $pairs[count($pairs) - 1][0];
     $y_vals = array_column($pairs, 1);
+    assert($y_vals !== []);  // $pairs has >= 2 elements (count guarded above)
     [$y_min, $y_max, $y_step] = nice_axis(min($y_vals), max($y_vals));
     $x_range = $x_max - $x_min ?: 1;
     $y_range = $y_max - $y_min ?: 1;
@@ -233,7 +234,7 @@ SVG;
  * maps to that gauge's flow through $rating_lookup.
  *
  * @param list<int>                               $flow_times      Unix timestamps.
- * @param list<float>                             $flow_values     Flow values (CFS).
+ * @param list<float|null>                        $flow_values     Flow values (CFS; null = gap).
  * @param array<int, array{0: float, 1: float}>   $rating_lookup   Sorted (gauge_ft, flow_cfs) pairs.
  * @param string                                  $title           Plot title.
  * @param string                                  $primary_label   Left-axis label.
@@ -271,6 +272,7 @@ function generate_rating_dual_plot(
     $x_min = $pairs[0][0];
     $x_max = $pairs[count($pairs) - 1][0];
     $fy_vals = array_column($pairs, 1);
+    assert($fy_vals !== []);  // $pairs has >= 2 elements (count guarded above)
     [$fy_min, $fy_max, $fy_step] = nice_axis(min($fy_vals), max($fy_vals));
     $x_range = $x_max - $x_min ?: 1;
     $fy_range = $fy_max - $fy_min ?: 1;

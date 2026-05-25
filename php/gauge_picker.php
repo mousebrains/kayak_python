@@ -93,7 +93,7 @@ require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
 
 // All states that have at least one runnable gauge with current data.
-$state_rows = db_query($db, 
+$state_rows = db_query($db,
     "SELECT DISTINCT state FROM gauge
      WHERE state IS NOT NULL
        AND id IN (SELECT DISTINCT gauge_id FROM latest_gauge_observation)
@@ -108,7 +108,7 @@ sort($all_states);
 
 // All HUC8s (with HUC6 parent) for the watershed filter — built once across
 // every state so toggling state pills doesn't rebuild the filter UI.
-$huc_rows = db_query($db, 
+$huc_rows = db_query($db,
     "SELECT DISTINCT SUBSTR(g.huc, 1, 8) AS huc8, SUBSTR(g.huc, 1, 6) AS huc6
      FROM gauge g
      WHERE g.huc IS NOT NULL AND LENGTH(g.huc) >= 8
