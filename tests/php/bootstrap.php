@@ -24,6 +24,14 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../php/includes/config.php';
 Config::install_for_tests([]);
 
+// In-process tests must never let a handler's early-out `exit` kill the test
+// run — KAYAK_TEST makes http_terminate() throw HttpExitException instead.
+// No effect on integration tests (their `php -S` subprocess never sees it).
+if (!defined('KAYAK_TEST')) {
+    define('KAYAK_TEST', true);
+}
+require_once __DIR__ . '/../../php/includes/http_exit.php';
+
 /** Fresh in-memory SQLite PDO with a minimal editor/magic-link/session schema. */
 function kayak_test_pdo(): PDO {
     $pdo = new PDO('sqlite::memory:');
