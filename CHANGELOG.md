@@ -63,7 +63,8 @@ All notable changes to this project will be documented in this file.
   returns an exit code (mapped in `main.py`, which also now surfaces the codes
   other handlers like `analyze-logs` returned but previously had discarded)
   instead of calling `sys.exit`; `M_TO_FT` given a canonical home;
-  `.gitattributes` collapses the generated-snapshot diffs.
+  `.gitattributes` collapses the opaque `reaches.json` / `huc_name.csv`
+  snapshot diffs (reach.csv stays a readable text diff).
 
 ## [1.1.1] - 2026-05-21
 
