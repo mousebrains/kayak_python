@@ -1,7 +1,13 @@
 # Plan — fuller PHP unit + integration tests
 
-**Status:** In progress (branch `php-test-coverage`, started 2026-05-25), on top of
-the level-9 + strict-rules work merged in #29.
+**Status:** Phases 0–5 complete (branch `php-test-coverage`, 2026-05-25), on top of
+the level-9 + strict-rules work merged in #29. **PHP line coverage 9.4% → 60.4%**
+(172 → 516 tests); CI floor ratcheted **5% → 55%**. Handler files (reach/
+description/gauge detail, custom, search, plots, review/propose) and the Tier-1
+auth/magic-link core all sit at 90–99%; what remains uncounted is the page-shim
+glue (driven via `filter_input`, only reachable over real HTTP — covered
+behaviorally by the subprocess integration tests pcov can't see) and the
+static content pages.
 
 ## Context / starting state
 

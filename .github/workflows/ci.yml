@@ -119,14 +119,14 @@ jobs:
       - name: PHPUnit (with line coverage via pcov)
         run: vendor/bin/phpunit --coverage-clover=coverage.xml --coverage-text
 
-      - name: PHP coverage gate (5% baseline floor)
-        # Started at 5% post-fix while the unit-test-only baseline
-        # settles. Integration tests in tests/php/ spawn their own
-        # `php -S` subprocess via IntegrationTestCase and pcov in the
-        # test runner can't see lines executed there — so the floor
-        # reflects what the in-process unit tests cover. Ratchet up in
-        # follow-up PRs after observing several runs.
-        run: FLOOR_PERCENT=5 scripts/check-php-coverage.sh coverage.xml
+      - name: PHP coverage gate (55% floor)
+        # The in-process functional harness (tests/php/FunctionalTestCase.php)
+        # lets pcov see handler logic that the `php -S` subprocess integration
+        # tests can't, lifting line coverage ~9% -> ~60%. Floor sits a few
+        # points below current to catch regressions; ratchet up in follow-up
+        # PRs. (The number still reflects only in-process tests — the
+        # subprocess integration tests remain uncounted by pcov.)
+        run: FLOOR_PERCENT=55 scripts/check-php-coverage.sh coverage.xml
 
       - name: PHPStan
         # Level 8 with phpstan-baseline.neon grandfathering the 79
