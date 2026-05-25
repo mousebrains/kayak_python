@@ -52,6 +52,18 @@ function get_db(): PDO {
 }
 
 /**
+ * Run a query and return its statement, narrowing PDO::query()'s
+ * `PDOStatement|false` return. PDO runs in ERRMODE_EXCEPTION (see get_db), so a
+ * failed query throws rather than returning false — the assert records that
+ * invariant for static analysis and never fires at runtime.
+ */
+function db_query(PDO $db, string $sql): PDOStatement {
+    $stmt = $db->query($sql);
+    assert($stmt !== false);
+    return $stmt;
+}
+
+/**
  * Fetch a reach by ID, or exit 404 if not found.
  *
  * @return array<string, mixed> The reach row.

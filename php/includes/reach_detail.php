@@ -294,7 +294,7 @@ function _render_reach_nav_bar(
     } else {
         echo '<span style="color:#999">Next &raquo;</span>';
     }
-    $all_states = $db->query('SELECT abbreviation FROM state ORDER BY abbreviation')
+    $all_states = db_query($db, 'SELECT abbreviation FROM state ORDER BY abbreviation')
         ->fetchAll(PDO::FETCH_COLUMN);
     echo '<form method="get" action="/reach.php" style="display:flex;gap:.25rem;margin-left:auto">';
     echo '<input type="text" name="q" placeholder="Search reaches…" style="width:14rem"'

@@ -127,7 +127,7 @@ function _load_gauge_navigation(PDO $db, int $id): array
     $next_stmt->execute([$id]);
     $next = $next_stmt->fetch();
 
-    $total = $db->query('SELECT COUNT(*) FROM gauge')->fetchColumn();
+    $total = db_query($db, 'SELECT COUNT(*) FROM gauge')->fetchColumn();
 
     $pos_stmt = $db->prepare('SELECT COUNT(*) FROM gauge WHERE id <= ?');
     $pos_stmt->execute([$id]);

@@ -111,7 +111,7 @@ require_once __DIR__ . '/includes/footer.php';
 // additional round trip. Also keep the auto-checked primary state so the
 // picker table populates immediately on first load.
 $all_states = array_column(
-    $db->query('SELECT DISTINCT st.name FROM state st
+    db_query($db, 'SELECT DISTINCT st.name FROM state st
                 JOIN reach_state rs ON st.id = rs.state_id
                 JOIN reach r ON rs.reach_id = r.id
                 WHERE r.no_show = 0 ORDER BY st.name')->fetchAll(),
@@ -127,7 +127,7 @@ $primary_state = (is_string($state_param) && in_array($state_param, $all_states,
     ? $state_param
     : 'Oregon';
 $all_basins = array_column(
-    $db->query("SELECT DISTINCT basin FROM reach
+    db_query($db, "SELECT DISTINCT basin FROM reach
                 WHERE no_show = 0 AND basin IS NOT NULL AND basin != ''
                 ORDER BY basin")->fetchAll(),
     'basin'

@@ -38,7 +38,7 @@ if ($q_trimmed !== '') {
 // --- Default: show first gauge ---
 $id = is_int($id_raw) && $id_raw > 0 ? $id_raw : null;
 if ($id === null) {
-    $row = $db->query('SELECT id FROM gauge ORDER BY id ASC LIMIT 1')->fetch();
+    $row = db_query($db, 'SELECT id FROM gauge ORDER BY id ASC LIMIT 1')->fetch();
     if (!$row) {
         header('Cache-Control: no-cache');
         include_header('Gauges', '', '', '', ['picker_kind' => 'gauge']);

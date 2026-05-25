@@ -131,7 +131,7 @@ $statuses = ['pending', 'minimal', 'full', 'banned', 'maintainer', 'all'];
 if (!in_array($status_filter, $statuses, true)) $status_filter = 'all';
 
 // Per-status counts for the filter bar
-$count_rows = $db->query("SELECT status, COUNT(*) AS n FROM editor GROUP BY status")
+$count_rows = db_query($db, "SELECT status, COUNT(*) AS n FROM editor GROUP BY status")
                  ->fetchAll();
 $status_counts = ['all' => 0];
 foreach ($count_rows as $r) {

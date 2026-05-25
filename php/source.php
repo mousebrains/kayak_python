@@ -57,7 +57,7 @@ if ($q !== null && $q !== '') {
 
 // --- Default: show first source ---
 if (!$id) {
-    $row = $db->query('SELECT id FROM source ORDER BY id ASC LIMIT 1')->fetch();
+    $row = db_query($db, 'SELECT id FROM source ORDER BY id ASC LIMIT 1')->fetch();
     if (!$row) {
         header('Cache-Control: no-cache');
         include_header('Sources', '', '', '', ['picker_kind' => 'gauge']);
@@ -90,7 +90,7 @@ $next_stmt = $db->prepare('SELECT id FROM source WHERE id > ? ORDER BY id ASC LI
 $next_stmt->execute([$id]);
 $next = $next_stmt->fetch();
 
-$total = $db->query('SELECT COUNT(*) FROM source')->fetchColumn();
+$total = db_query($db, 'SELECT COUNT(*) FROM source')->fetchColumn();
 $pos = $db->prepare('SELECT COUNT(*) FROM source WHERE id <= ?');
 $pos->execute([$id]);
 $position = $pos->fetchColumn();

@@ -1,12 +1,6 @@
 parameters:
 	ignoreErrors:
 		-
-			message: '#^Cannot call method fetchAll\(\) on PDOStatement\|false\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: php/admin.php
-
-		-
 			message: '#^Parameter \#2 \$string of function explode expects string, string\|false given\.$#'
 			identifier: argument.type
 			count: 1
@@ -23,18 +17,6 @@ parameters:
 			identifier: argument.type
 			count: 2
 			path: php/data.php
-
-		-
-			message: '#^Cannot call method fetch\(\) on PDOStatement\|false\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: php/gauge.php
-
-		-
-			message: '#^Cannot call method fetchAll\(\) on PDOStatement\|false\.$#'
-			identifier: method.nonObject
-			count: 2
-			path: php/gauge_picker.php
 
 		-
 			message: '#^Parameter \#2 \$string of function explode expects string, string\|false given\.$#'
@@ -95,12 +77,6 @@ parameters:
 			identifier: offsetAccess.notFound
 			count: 1
 			path: php/includes/description_detail.php
-
-		-
-			message: '#^Cannot call method fetchColumn\(\) on PDOStatement\|false\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: php/includes/gauge_detail.php
 
 		-
 			message: '#^Function _load_gauge_associated\(\) should return array\{sources\: list\<array\<string, mixed\>\>, reaches\: list\<array\<string, mixed\>\>, reach_class_thresholds\: array\<int, list\<array\<string, mixed\>\>\>\} but returns array\{sources\: array, reaches\: array, reach_class_thresholds\: array\<int, non\-empty\-list\>\}\.$#'
@@ -217,12 +193,6 @@ parameters:
 			path: php/includes/reach_detail.php
 
 		-
-			message: '#^Cannot call method fetchAll\(\) on PDOStatement\|false\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: php/includes/reach_detail.php
-
-		-
 			message: '#^Function _load_reach_navigation\(\) should return array\{prev\: array\<string, mixed\>\|false, next\: array\<string, mixed\>\|false, position\: int\|string, total\: int\|string\} but returns array\{prev\: mixed, next\: mixed, position\: int\|string\|false\|null, total\: int\|string\|false\|null\}\.$#'
 			identifier: return.type
 			count: 1
@@ -313,12 +283,6 @@ parameters:
 			path: php/includes/turnstile.php
 
 		-
-			message: '#^Cannot call method fetchAll\(\) on PDOStatement\|false\.$#'
-			identifier: method.nonObject
-			count: 2
-			path: php/picker.php
-
-		-
 			message: '#^Parameter \#2 \$string of function explode expects string, string\|false given\.$#'
 			identifier: argument.type
 			count: 1
@@ -335,18 +299,6 @@ parameters:
 			identifier: argument.type
 			count: 2
 			path: php/plot.php
-
-		-
-			message: '#^Cannot call method fetch\(\) on PDOStatement\|false\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: php/source.php
-
-		-
-			message: '#^Cannot call method fetchColumn\(\) on PDOStatement\|false\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: php/source.php
 
 		-
 			message: '#^Parameter \#1 \$string of function trim expects string, string\|false given\.$#'
