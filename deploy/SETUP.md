@@ -14,8 +14,13 @@ Debian 13 ships Python 3.13 and PHP 8.4.
 
 ```bash
 sudo apt update
-sudo apt install -y nginx php8.4-fpm php8.4-sqlite3 python3 python3-venv certbot
+sudo apt install -y nginx libnginx-mod-http-headers-more-filter \
+    php8.4-fpm php8.4-sqlite3 python3 python3-venv certbot acl
 ```
+
+`libnginx-mod-http-headers-more-filter` supplies the `more_clear_headers`
+directive used by `conf/snippets/levels-common.conf` (§6) — `nginx -t` fails
+without it. `acl` is needed for the `www-data` ACL grants in §4.
 
 Verify the PHP-FPM socket path:
 
@@ -36,27 +41,36 @@ sudo ln -sf /run/php/php8.4-fpm.sock /run/php/php-fpm.sock
 sudo adduser pat
 sudo -u pat mkdir -p /home/pat/.ssh
 
+# Add pat to the adm group so the log-reading timers/scripts work without
+# root: kayak-recap reads journald (journalctl --unit kayak-*) and
+# scripts/audit-t30.sh tails /var/log/{nginx/*,fail2ban,auth,mail}.log
+# (mode 640, group adm).
+sudo usermod -aG adm pat
+
 # Clone as the pat user
 sudo -u pat git clone git@github.com:mousebrains/kayak_python.git /home/pat/kayak
 
+# The venv lives at ~/.venv, NOT inside the repo — every kayak-*.service unit's
+# ExecStart= and the §7 sudoers grant invoke /home/pat/.venv/bin/levels.
 cd /home/pat/kayak
-python3 -m venv .venv
-.venv/bin/pip install -e .
+python3 -m venv /home/pat/.venv
+/home/pat/.venv/bin/pip install -e .
 ```
 
 ## 3. Environment file
 
-Create the database directory and `/home/pat/kayak/.env`. `levels` (Python)
-reads **`DATABASE_URL`**; PHP reads `SQLITE_PATH` (passed by nginx via
-`fastcgi_param` on the live host — set here too so the CLI and PHP agree). Both
-must point at the **same** file, `/home/pat/DB/kayak.db` (outside the repo,
-matching the nginx config). The directory must exist before `init-db` or SQLite
-fails with "unable to open database file":
+Create the database directory and the config file at `~/.config/kayak/.env` —
+the path `kayak.config` checks first and that every `kayak-*.service` unit
+reads via `EnvironmentFile=` (§8). `levels` (Python) reads **`DATABASE_URL`**;
+PHP resolves the DB path from `/etc/kayak/runtime-config.json` (written by
+`levels emit-config`, §7), falling back to `SQLITE_PATH`. Both must point at the
+**same** file, `/home/pat/DB/kayak.db` (outside the repo). The directory must
+exist before `init-db` or SQLite fails with "unable to open database file":
 
 ```bash
-mkdir -p /home/pat/DB
+mkdir -p /home/pat/DB /home/pat/.config/kayak
 
-cat > /home/pat/kayak/.env <<'EOF'
+cat > /home/pat/.config/kayak/.env <<'EOF'
 DATABASE_URL=sqlite:////home/pat/DB/kayak.db
 SQLITE_PATH=/home/pat/DB/kayak.db
 EDITOR_FEATURE=1
@@ -77,9 +91,9 @@ empty, so this order matters:
 
 ```bash
 cd /home/pat/kayak
-.venv/bin/levels init-db --no-seed
-.venv/bin/python scripts/import_metadata.py
-.venv/bin/levels pipeline    # first run — fetches data and generates HTML
+/home/pat/.venv/bin/levels init-db --no-seed
+/home/pat/.venv/bin/python scripts/import_metadata.py
+/home/pat/.venv/bin/levels pipeline    # first run — fetches data and generates HTML
 ```
 
 Verify output was generated:
@@ -103,7 +117,22 @@ via a migration" — so a dev re-trace reaches prod like this:
 To apply geometry to the live DB by hand (without re-syncing CSV metadata):
 
 ```bash
-.venv/bin/python scripts/import_metadata.py --geom-only
+/home/pat/.venv/bin/python scripts/import_metadata.py --geom-only
+```
+
+**Filesystem access for nginx/PHP (`www-data`).** The pipeline runs as `pat`,
+but nginx and PHP-FPM run as `www-data`, which must traverse `pat`'s `0700`
+home to reach the docroot and DB. Point the nginx docroot (§6) at the build
+output and grant `www-data` access via ACLs:
+
+```bash
+ln -sfn /home/pat/kayak/public_html /home/pat/public_html
+
+sudo setfacl -m  u:www-data:x    /home/pat /home/pat/kayak
+sudo setfacl -R -m u:www-data:rX  /home/pat/kayak/public_html /home/pat/kayak/php /home/pat/kayak/static
+sudo setfacl -R -d -m u:www-data:rX /home/pat/kayak/public_html   # inherit for files build writes later
+sudo setfacl -R -m u:www-data:rwX /home/pat/DB                    # WAL needs write even for read-only pages
+sudo setfacl -R -d -m u:www-data:rwX /home/pat/DB
 ```
 
 ## 5. SSL certificates
@@ -189,18 +218,21 @@ path (run `scripts/check-config-drift.sh` to see exactly what differs), then
 
 The config assumes:
 - Document root: `/home/pat/public_html` (symlink → `/home/pat/kayak/public_html`)
-- Database: `/home/pat/DB/kayak.db` (passed to PHP via `fastcgi_param SQLITE_PATH`)
+- Database: `/home/pat/DB/kayak.db` (PHP resolves the path from `/etc/kayak/runtime-config.json`, not nginx — see §7)
 - Per-vhost certs under `/etc/letsencrypt/live/<hostname>/`
 
 ## 7. PHP-FPM configuration
 
-Edit the PHP-FPM pool to pass the database path. In `/etc/php/*/fpm/pool.d/www.conf`, add:
+PHP resolves the database path via the typed config
+(`/etc/kayak/runtime-config.json`, written by `levels emit-config` — see the
+typed-config subsection below), falling back to a `SQLITE_PATH` env var and
+then a path relative to the script. On a standard install the JSON provides
+it, so no pool edit is needed. To force a path via the pool instead, add to
+`/etc/php/*/fpm/pool.d/www.conf`:
 
 ```ini
-env[SQLITE_PATH] = /home/pat/kayak/kayak.db
+env[SQLITE_PATH] = /home/pat/DB/kayak.db
 ```
-
-Alternatively, the nginx config passes `SQLITE_PATH` via `fastcgi_param`, so this step is optional.
 
 ### Config files (`/etc/kayak/env` + `/etc/kayak/secrets.env`)
 
@@ -611,8 +643,9 @@ setfacl -d -m u:www-data:rw /home/pat/DB                   # default for new DB 
 ### config.py .env resolution
 
 `kayak.config` checks `~/.config/kayak/.env` first, then falls back to the
-default `load_dotenv()` search (current directory upward). PHP gets `SQLITE_PATH`
-from nginx `fastcgi_param`, not from the `.env` file.
+default `load_dotenv()` search (current directory upward). PHP gets the DB
+path from `/etc/kayak/runtime-config.json` (written by `levels emit-config`),
+not from the `.env` file.
 
 ## Troubleshooting
 
