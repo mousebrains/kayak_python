@@ -168,7 +168,8 @@ function tail_lines(string $path, int $max_lines): array {
         $lines = substr_count($buf, "\n");
     }
     fclose($fh);
-    $arr = preg_split('/\R/', $buf) ?: [];
+    $split = preg_split('/\R/', $buf);
+    $arr = $split !== false ? $split : [];
     $out = array_values(array_filter($arr, static fn($s) => $s !== ''));
     return array_slice(array_reverse($out), 0, $max_lines);
 }
@@ -181,7 +182,7 @@ $build_mtime = file_exists($index_path) ? filemtime($index_path) : false;
 $build_at    = $build_mtime !== false ? gmdate('Y-m-d H:i:s', $build_mtime) . ' UTC' : null;
 
 $row = dash_query($db, 'SELECT MAX(observed_at) AS m FROM latest_observation')->fetch();
-$latest_obs_at = (is_array($row) && $row['m']) ? (string)$row['m'] : null;
+$latest_obs_at = (is_array($row) && $row['m'] !== null) ? (string)$row['m'] : null;
 
 $db_path = _sqlite_path();
 $db_size  = safe_filesize($db_path);
@@ -332,7 +333,7 @@ pre { font-size: 12px; background: #f5f5f5; padding: .5rem; overflow-x: auto; ma
 <dl class="summary-grid">
     <dt>Last build</dt>
     <dd><?= htmlspecialchars($build_at ?? '—') ?>
-        (<?= htmlspecialchars(age_phrase($build_at ? gmdate('Y-m-d H:i:s', $build_mtime) : null)) ?>)</dd>
+        (<?= htmlspecialchars(age_phrase($build_mtime !== false ? gmdate('Y-m-d H:i:s', $build_mtime) : null)) ?>)</dd>
     <dt>Latest observation</dt>
     <dd><?= htmlspecialchars($latest_obs_at ?? '—') ?>
         (<?= htmlspecialchars(age_phrase($latest_obs_at)) ?>)</dd>

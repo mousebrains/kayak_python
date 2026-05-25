@@ -36,8 +36,10 @@ const REVIEW_LIST_STATUSES = ['pending', 'approved', 'rejected', 'resolved', 'al
  */
 function handle_review_request(PDO $db, array $maint): void
 {
-    $cr_id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT)
-          ?: filter_input(INPUT_POST, 'id', FILTER_VALIDATE_INT);
+    $cr_id_get = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+    $cr_id = is_int($cr_id_get) && $cr_id_get !== 0
+          ? $cr_id_get
+          : filter_input(INPUT_POST, 'id', FILTER_VALIDATE_INT);
     $cr_id = is_int($cr_id) ? $cr_id : null;
     $action = isset($_POST['action']) ? (string)$_POST['action'] : null;
 
@@ -51,7 +53,7 @@ function handle_review_request(PDO $db, array $maint): void
     $csrf = htmlspecialchars(csrf_token());
     header('Cache-Control: no-store');
 
-    if ($cr_id) {
+    if ($cr_id !== null && $cr_id !== 0) {
         _render_review_detail($db, $cr_id, $flash, $flash_err, $csrf);
         return;
     }
@@ -69,14 +71,14 @@ function handle_review_request(PDO $db, array $maint): void
 function _review_handle_post(PDO $db, ?int $cr_id, ?string $action, int $maint_id): array
 {
     require_csrf();
-    if (!$cr_id) {
+    if ($cr_id === null || $cr_id === 0) {
         http_response_code(400);
         exit('Missing id');
     }
     $st = $db->prepare('SELECT * FROM change_request WHERE id = ?');
     $st->execute([$cr_id]);
     $cr = $st->fetch();
-    if (!$cr) {
+    if ($cr === false) {
         http_response_code(404);
         exit('change_request not found');
     }
@@ -143,7 +145,8 @@ function _review_handle_post(PDO $db, ?int $cr_id, ?string $action, int $maint_i
  */
 function _review_build_approve_payload(array $cr): array
 {
-    $payload = json_decode((string)$cr['payload_json'], true) ?: [];
+    $decoded = json_decode((string)$cr['payload_json'], true);
+    $payload = is_array($decoded) ? $decoded : [];
     $applied = ['reach' => [], 'reach_class' => null];
 
     if (($payload['reach'] ?? []) !== []) {
@@ -165,7 +168,7 @@ function _review_build_approve_payload(array $cr): array
             'range' => [
                 'low'       => $lo !== '' ? (float)$lo : null,
                 'high'      => $hi !== '' ? (float)$hi : null,
-                'data_type' => $dt ?: 'flow',
+                'data_type' => $dt !== '' ? $dt : 'flow',
             ],
         ];
     } else {
@@ -193,7 +196,7 @@ function _render_review_detail(
     );
     $st->execute([$cr_id]);
     $cr = $st->fetch();
-    if (!$cr) {
+    if ($cr === false) {
         require_once __DIR__ . '/error.php';
         render_error_page(
             404,
@@ -204,14 +207,16 @@ function _render_review_detail(
         return;
     }
 
-    $payload = json_decode((string)$cr['payload_json'], true) ?: [];
+    $decoded = json_decode((string)$cr['payload_json'], true);
+    $payload = is_array($decoded) ? $decoded : [];
     $applied = json_decode((string)($cr['applied_json'] ?? 'null'), true);
-    $cur = $cr['target_type'] === 'reach' && $cr['target_id']
+    $cur = $cr['target_type'] === 'reach' && $cr['target_id'] !== null
         ? review_load_target_state($db, 'reach', (int)$cr['target_id'])
         : null;
 
-    include_header('Review: ' . ($cr['subject'] ?: 'change_request #' . $cr['id']));
-    echo '<h2>Review: ' . htmlspecialchars((string)$cr['subject']) . '</h2>';
+    $subject = (string)$cr['subject'];
+    include_header('Review: ' . ($subject !== '' ? $subject : 'change_request #' . $cr['id']));
+    echo '<h2>Review: ' . htmlspecialchars($subject) . '</h2>';
     _render_review_flash($flash, $flash_err);
     _render_review_meta_table($cr, $payload);
 
@@ -228,11 +233,11 @@ function _render_review_detail(
 /** Inline flash banners (green for success, red for error). */
 function _render_review_flash(?string $flash, ?string $flash_err): void
 {
-    if ($flash) {
+    if ($flash !== null && $flash !== '') {
         echo '<p style="padding:.5rem;background:#e8f4ea;border:1px solid #b7dcc0;border-radius:4px">'
            . htmlspecialchars($flash) . '</p>';
     }
-    if ($flash_err) {
+    if ($flash_err !== null && $flash_err !== '') {
         echo '<p style="padding:.5rem;background:#fde8e8;border:1px solid #f5b5b5;border-radius:4px">'
            . htmlspecialchars($flash_err) . '</p>';
     }
@@ -256,7 +261,7 @@ function _render_review_meta_table(array $cr, array $payload): void
            . htmlspecialchars($src) . '</a></td></tr>';
     }
     echo '<tr><td>Status</td><td>' . htmlspecialchars((string)$cr['status']) . '</td></tr>';
-    if ($cr['target_type'] === 'reach' && $cr['target_id']) {
+    if ($cr['target_type'] === 'reach' && $cr['target_id'] !== null) {
         echo '<tr><td>Reach</td><td><a href="/description.php?id=' . (int)$cr['target_id']
            . '">description</a></td></tr>';
     }
@@ -264,7 +269,7 @@ function _render_review_meta_table(array $cr, array $payload): void
         echo '<tr><td>Message</td><td><pre style="white-space:pre-wrap;margin:0">'
            . htmlspecialchars((string)$payload['body']) . '</pre></td></tr>';
     }
-    if ($cr['notes_to_maint']) {
+    if (($cr['notes_to_maint'] ?? '') !== '') {
         echo '<tr><td>Notes</td><td><pre style="white-space:pre-wrap;margin:0">'
            . htmlspecialchars((string)$cr['notes_to_maint']) . '</pre></td></tr>';
     }
@@ -285,7 +290,7 @@ function _render_review_terminal_state(array $cr, ?array $applied): void
         echo '<pre style="white-space:pre-wrap;background:#f6f8fa;border:1px solid #e1e4e8;border-radius:4px;padding:.5rem">'
            . htmlspecialchars((string)$cr['reviewer_note']) . '</pre>';
     }
-    if ($applied) {
+    if (($applied ?? []) !== []) {
         $applied_json = json_encode($applied, JSON_PRETTY_PRINT);
         echo '<h3>Applied payload</h3><pre style="white-space:pre-wrap">'
            . htmlspecialchars($applied_json !== false ? $applied_json : '') . '</pre>';
@@ -317,7 +322,7 @@ function _render_review_form(array $cr, array $payload, ?array $cur, string $csr
     echo '<h3 style="margin-top:1rem">Decision</h3>';
     echo '<label>Reviewer note / reply (included in the email to the editor)</label>';
     echo '<textarea name="reviewer_note" style="width:100%;min-height:4em"></textarea>';
-    if ($cr['reviewer_note']) {
+    if (($cr['reviewer_note'] ?? '') !== '') {
         echo '<p style="margin-top:.25rem;font-size:.8rem;color:var(--c-text-muted)">Earlier notes:</p>';
         echo '<pre style="white-space:pre-wrap;background:#f6f8fa;border:1px solid #e1e4e8;border-radius:4px;padding:.5rem;font-size:.8rem">'
            . htmlspecialchars((string)$cr['reviewer_note']) . '</pre>';
@@ -349,7 +354,7 @@ function _render_review_reach_fields(array $reach_fields, ?array $cur): void
     echo '<table class="desc-table">';
     echo '<tr><th>Field</th><th>Current</th><th>Proposed (editable)</th></tr>';
     foreach ($reach_fields as $f => $v) {
-        $cur_val = $cur ? (string)($cur['reach'][$f] ?? '') : '';
+        $cur_val = $cur !== null ? (string)($cur['reach'][$f] ?? '') : '';
         $is_long = in_array($f, ['description', 'features'], true);
         echo '<tr><td>' . htmlspecialchars($f) . '</td>';
         echo '<td><pre style="white-space:pre-wrap;margin:0;max-width:30em">'
@@ -381,7 +386,8 @@ function _render_review_class_block(array $proposed, ?array $cur): void
     $cur_range = $cur['reach_class']['range'] ?? ['low' => null, 'high' => null, 'data_type' => 'flow'];
     $p_names = $proposed['names'] ?? [];
     $p_range = $proposed['range'] ?? ['low' => null, 'high' => null, 'data_type' => 'flow'];
-    echo '<p>Current classes: <code>' . htmlspecialchars(implode(', ', $cur_names) ?: '(none)') . '</code></p>';
+    $cur_names_str = implode(', ', $cur_names);
+    echo '<p>Current classes: <code>' . htmlspecialchars($cur_names_str !== '' ? $cur_names_str : '(none)') . '</code></p>';
     $cur_range_str = ($cur_range['low'] ?? '-') . ' to ' . ($cur_range['high'] ?? '-')
                    . ' ' . ($cur_range['data_type'] ?? 'flow');
     echo '<p>Current range: <code>' . htmlspecialchars($cur_range_str) . '</code></p>';
@@ -435,7 +441,7 @@ function _render_review_list(PDO $db, ?string $flash, ?string $flash_err): void
     echo '<a href="/admin.php" style="float:right">Admin</a>';
     echo '</p>';
 
-    if (!$rows) {
+    if ($rows === []) {
         echo '<p>No proposals.</p>';
     } else {
         echo '<table class="desc-table">';

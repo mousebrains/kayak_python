@@ -66,7 +66,7 @@ function handle_search_mode(
 
     $has_map = false;
     $map_scripts = '';
-    if (!$results) {
+    if ($results === []) {
         $label = $q !== '' ? '&ldquo;' . htmlspecialchars($q) . '&rdquo;' : htmlspecialchars($st);
         echo '<p>No reaches matching ' . $label . '.</p>';
     } else {
@@ -153,11 +153,11 @@ function _search_reaches_query(PDO $db, string $q, string $st, int $hidden): arr
 function _aggregate_reach_readings(PDO $db, array $results): array
 {
     $reach_readings = [];
-    if (!$results) {
+    if ($results === []) {
         return [$reach_readings, []];
     }
     $gauge_ids = array_values(array_unique(array_filter(array_column($results, 'gauge_id'), fn($id) => $id !== null)));
-    if (!$gauge_ids) {
+    if ($gauge_ids === []) {
         return [$reach_readings, []];
     }
 
@@ -196,7 +196,7 @@ function _aggregate_reach_classes_and_guides(PDO $db, array $results): array
     $reach_classes = [];
     $reach_guides = [];
     $reach_ids = array_column($results, 'id');
-    if (!$reach_ids) {
+    if ($reach_ids === []) {
         return [$reach_classes, $reach_guides];
     }
 
@@ -281,7 +281,7 @@ function _render_search_results_table(
         $desc = htmlspecialchars($r['description'] ?? '');
         $sname = htmlspecialchars($r['sort_name'] ?? '');
         $reading = '';
-        if ($r['gauge_id'] && isset($reach_readings[$r['gauge_id']])) {
+        if ($r['gauge_id'] !== null && isset($reach_readings[$r['gauge_id']])) {
             $rr = $reach_readings[$r['gauge_id']];
             $parts = [];
             if (isset($rr['flow'])) {
@@ -320,7 +320,7 @@ function _render_search_results_table(
 function _render_search_map(PDO $db, array $results, array $gauge_ids, array $reach_readings): array
 {
     $map_reaches = _build_search_map_reaches($results);
-    if (!$map_reaches) {
+    if ($map_reaches === []) {
         return [false, ''];
     }
 
@@ -360,7 +360,8 @@ function _build_search_map_reaches(array $results): array
         if (isset($r['geom']) && $r['geom'] !== '') {
             $track = [];
             foreach (explode(',', $r['geom']) as $pair) {
-                $parts = preg_split('/\s+/', trim($pair)) ?: [];
+                $split = preg_split('/\s+/', trim($pair));
+                $parts = $split === false ? [] : $split;
                 if (count($parts) === 2) {
                     $track[] = [(float)$parts[1], (float)$parts[0]];
                 }
@@ -382,10 +383,10 @@ function _build_search_map_reaches(array $results): array
             'name' => $r['name'],
             'lat' => (float)$lat,
             'lon' => (float)$lon,
-            'lat_start' => $r['latitude_start'] ? (float)$r['latitude_start'] : null,
-            'lon_start' => $r['longitude_start'] ? (float)$r['longitude_start'] : null,
-            'lat_end' => $r['latitude_end'] ? (float)$r['latitude_end'] : null,
-            'lon_end' => $r['longitude_end'] ? (float)$r['longitude_end'] : null,
+            'lat_start' => $r['latitude_start'] !== null ? (float)$r['latitude_start'] : null,
+            'lon_start' => $r['longitude_start'] !== null ? (float)$r['longitude_start'] : null,
+            'lat_end' => $r['latitude_end'] !== null ? (float)$r['latitude_end'] : null,
+            'lon_end' => $r['longitude_end'] !== null ? (float)$r['longitude_end'] : null,
             'track' => $track,
             'idx' => $idx,
         ];
@@ -403,7 +404,7 @@ function _build_search_map_reaches(array $results): array
  */
 function _collect_search_map_gauges(PDO $db, array $gauge_ids, array $reach_readings): array
 {
-    if (!$gauge_ids) {
+    if ($gauge_ids === []) {
         return [];
     }
     $ph = implode(',', array_fill(0, count($gauge_ids), '?'));
@@ -425,7 +426,7 @@ function _collect_search_map_gauges(PDO $db, array $gauge_ids, array $reach_read
             if (isset($rr['gauge'])) {
                 $parts[] = number_format((float)$rr['gauge']['value'], 2) . ' ft';
             }
-            if ($parts) {
+            if ($parts !== []) {
                 $glabel .= ' (' . implode(' / ', $parts) . ')';
             }
         }

@@ -245,7 +245,7 @@ function _load_custom_gauges_huc_groups(PDO $db, array $huc8_codes): array
     $huc8_names = [];
     $huc6_names = [];
     $huc6_groups = [];
-    if (!$huc8_codes) {
+    if ($huc8_codes === []) {
         return [$huc8_names, $huc6_names, $huc6_groups];
     }
     $huc8_codes = array_map('strval', $huc8_codes);
@@ -324,7 +324,7 @@ function _render_custom_gauges_header(
     </div>
   </details>
 <?php endif; ?>
-<?php if ($huc6_groups || $has_no_huc):
+<?php if ($huc6_groups !== [] || $has_no_huc):
     $total = array_sum(array_map('count', $huc6_groups)) + ($has_no_huc ? 1 : 0); ?>
   <details class="filter-group" open>
     <summary>Watershed <span class="fg-count"><?= $total ?></span></summary>
@@ -391,10 +391,10 @@ function _render_custom_gauges_table(array $rows, array $status_by_gauge): void
     // Status cell — rollup label + per-bucket count tooltip.
     $status_info = $status_by_gauge[$gid] ?? null;
     $status_word = $status_info['label'] ?? null;
-    if ($status_word) {
+    if ($status_word !== null) {
         $counts = $status_info['counts'] ?? [];
         $count_summary = implode(', ', array_map(fn($k, $v) => "$v $k", array_keys($counts), array_values($counts)));
-        $title = $count_summary ? ' title="' . htmlspecialchars($count_summary) . '"' : '';
+        $title = $count_summary !== '' ? ' title="' . htmlspecialchars($count_summary) . '"' : '';
         $status_cell = '<span class="level-' . htmlspecialchars($status_word) . '"' . $title . '>' . htmlspecialchars($status_word) . '</span>';
     } else {
         $status_cell = '';
@@ -403,7 +403,7 @@ function _render_custom_gauges_table(array $rows, array $status_by_gauge): void
     // Best-available time — latest of the four observation timestamps.
     $times = array_filter([$r['flow_time'], $r['inflow_time'], $r['gage_time'], $r['temp_time']], fn($t) => $t !== null);
     $time_html = '';
-    if ($times) {
+    if ($times !== []) {
         $latest = max(array_map('strtotime', $times));
         $iso = gmdate('Y-m-d\TH:i:s\Z', $latest);
         $disp = gmdate('m/d H:i', $latest);
@@ -429,7 +429,7 @@ function _render_custom_gauges_table(array $rows, array $status_by_gauge): void
     if ($state !== '' && $huc8 !== '') {
         $attrs = ' data-state="' . htmlspecialchars($state) . '" data-huc8="' . htmlspecialchars($huc8) . '"';
     }
-    $status_attr = $status_word ? ' data-status="' . htmlspecialchars($status_word) . '"' : '';
+    $status_attr = $status_word !== null ? ' data-status="' . htmlspecialchars($status_word) . '"' : '';
 ?>
 <tr class="clickable-row" data-href="/gauge.php?id=<?= $gid ?>"<?= $attrs ?><?= $status_attr ?>>
   <td class="td-status" data-label="Status"><?= $status_cell ?></td>
@@ -453,7 +453,8 @@ function _render_custom_gauges_table(array $rows, array $status_by_gauge): void
  */
 function _render_custom_gauges_footer(): void
 {
-    $filters_mtime = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/filters.js') ?: 1;
+    $filters_mtime_raw = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/filters.js');
+    $filters_mtime = $filters_mtime_raw !== false ? $filters_mtime_raw : 1;
     ?>
 <script src="/static/filters.js?v=<?= $filters_mtime ?>" defer></script>
     <?php

@@ -15,17 +15,17 @@ $start_date = validate_date(filter_input(INPUT_GET, 'start', FILTER_SANITIZE_SPE
 $end_date = validate_date(filter_input(INPUT_GET, 'end', FILTER_SANITIZE_SPECIAL_CHARS));
 $sort = filter_input(INPUT_GET, 'sort', FILTER_SANITIZE_SPECIAL_CHARS) === 'asc' ? 'asc' : 'desc';
 
-if (!$id) { http_response_code(400); exit('Missing id parameter'); }
+if (!is_int($id) || $id < 1) { http_response_code(400); exit('Missing id parameter'); }
 
 $db = get_db();
 $reach = get_reach_or_404($id);
 
-$name = $reach['display_name'] ?: $reach['name'];
+$name = ($reach['display_name'] ?? '') !== '' ? $reach['display_name'] : $reach['name'];
 
 // Find all sources via gauge
 $source_ids = [];
 $source_map = []; // source_id => {name, agency, letter}
-if ($reach['gauge_id']) {
+if ($reach['gauge_id'] !== null) {
     $stmt = $db->prepare(
         'SELECT s.id, s.name, s.agency
          FROM source s
@@ -46,7 +46,7 @@ if ($reach['gauge_id']) {
     }
 }
 
-if (!$source_ids) {
+if ($source_ids === []) {
     header('Cache-Control: no-cache');
     include_header("$name - Data", '', '', '', ['picker_kind' => 'gauge']);
     echo '<h2>' . htmlspecialchars($name) . ' — Data Inspector</h2>';
@@ -59,8 +59,8 @@ if (!$source_ids) {
 // Default date range: last 2 days
 $default_end = date('Y-m-d');
 $default_start = date('Y-m-d', time() - 2 * 86400);
-$form_start = $start_date ?: $default_start;
-$form_end = $end_date ?: $default_end;
+$form_start = $start_date ?? $default_start;
+$form_end = $end_date ?? $default_end;
 $since = date('Y-m-d 00:00:00', date_ts($form_start));
 $until = date('Y-m-d 23:59:59', date_ts($form_end));
 
@@ -115,7 +115,7 @@ echo '<label>End: <input type="date" name="end" value="' . htmlspecialchars($for
 echo '<button type="submit">Update</button>';
 echo '</form>';
 
-if (!$pivoted) {
+if ($pivoted === []) {
     echo '<p>No observations in this date range.</p>';
 } else {
     $toggle_sort = $sort === 'desc' ? 'asc' : 'desc';

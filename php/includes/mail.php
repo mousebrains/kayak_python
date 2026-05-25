@@ -20,7 +20,8 @@ require_once __DIR__ . '/config.php';
 function mail_from(): string {
     $v = Config::str('mail_from');
     if ($v !== '') return $v;
-    $host = gethostname() ?: 'localhost';
+    $hostname = gethostname();
+    $host = is_string($hostname) && $hostname !== '' ? $hostname : 'localhost';
     return "noreply@$host";
 }
 
@@ -50,7 +51,7 @@ function mail_dump_dir(): ?string {
  * @param array<string, string> $extra_headers
  */
 function send_email(string $to, string $subject, string $body, array $extra_headers = []): bool {
-    if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
+    if (filter_var($to, FILTER_VALIDATE_EMAIL) === false) {
         error_log("send_email: refused invalid recipient: $to");
         return false;
     }
@@ -104,7 +105,7 @@ function send_email(string $to, string $subject, string $body, array $extra_head
 
 /** Render the magic-link email body. */
 function render_magic_link_email(string $link, string $ip, ?string $user_agent): string {
-    $ua = $user_agent ? substr($user_agent, 0, 200) : '(unknown browser)';
+    $ua = $user_agent !== null && $user_agent !== '' ? substr($user_agent, 0, 200) : '(unknown browser)';
     return <<<TXT
 Hello,
 

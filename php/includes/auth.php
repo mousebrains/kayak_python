@@ -172,7 +172,7 @@ function current_editor(?PDO $db_override = null): ?array
     );
     $stmt->execute([$hash, 'banned']);
     $row = $stmt->fetch();
-    if (!$row) {
+    if ($row === false) {
         if ($db_override === null) {
             $cached = true;
             $editor = null;
@@ -294,7 +294,7 @@ function maintainer_emails(): array
         );
         $stmt->execute();
         $rows = array_column($stmt->fetchAll(), 'email');
-        if ($rows) {
+        if ($rows !== []) {
             return $rows;
         }
     } catch (Throwable) {

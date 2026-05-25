@@ -39,7 +39,7 @@ if ($q_trimmed !== '') {
 $id = is_int($id_raw) && $id_raw > 0 ? $id_raw : null;
 if ($id === null) {
     $row = db_query($db, 'SELECT id FROM gauge ORDER BY id ASC LIMIT 1')->fetch();
-    if (!$row) {
+    if ($row === false) {
         header('Cache-Control: no-cache');
         include_header('Gauges', '', '', '', ['picker_kind' => 'gauge']);
         echo '<p>No gauges in database.</p>';

@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_csrf();
 
     $email = normalize_email((string)($_POST['email'] ?? ''));
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
         $error = 'Please enter a valid email address.';
     } elseif (!turnstile_verify((string)($_POST['cf-turnstile-response'] ?? ''),
                                 (string)($_SERVER['REMOTE_ADDR'] ?? ''))) {
@@ -74,15 +74,15 @@ include_header('Sign in', '', 'Sign in to WKCC River Levels.', turnstile_script_
 ?>
 <h2>Sign in</h2>
 
-<?php if ($info): ?>
+<?php if ($info !== ''): ?>
 <p style="padding:.6rem;background:#e8f4ea;border:1px solid #b7dcc0;border-radius:4px"><?= htmlspecialchars($info) ?></p>
 <?php endif ?>
 
-<?php if ($error): ?>
+<?php if ($error !== ''): ?>
 <p style="padding:.6rem;background:#fde8e8;border:1px solid #f5b5b5;border-radius:4px"><?= htmlspecialchars($error) ?></p>
 <?php endif ?>
 
-<?php if (!$info): ?>
+<?php if ($info === ''): ?>
 <form method="POST" action="/login.php" class="edit-form" style="max-width:420px">
   <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
   <input type="hidden" name="next" value="<?= $next_attr ?>">

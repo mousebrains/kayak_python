@@ -47,7 +47,9 @@ function handle_propose(PDO $db, array $ed, string $type, int $id): void
     }
 
     $reach = get_reach_or_404($id);
-    $reach_name = $reach['display_name'] ?: $reach['name'] ?: "Reach #$id";
+    $reach_name = ($reach['display_name'] ?? '') !== ''
+        ? $reach['display_name']
+        : (($reach['name'] ?? '') !== '' ? $reach['name'] : "Reach #$id");
 
     $ctx = _load_propose_context($db, $ed, $id);
 
@@ -109,7 +111,9 @@ function _load_propose_context(PDO $db, array $ed, int $id): array
             $cur_range = [
                 'low'       => $row['low'],
                 'high'      => $row['high'],
-                'data_type' => $row['low_data_type'] ?: ($row['high_data_type'] ?: 'flow'),
+                'data_type' => ($row['low_data_type'] ?? '') !== ''
+                    ? $row['low_data_type']
+                    : (($row['high_data_type'] ?? '') !== '' ? $row['high_data_type'] : 'flow'),
             ];
         }
     }
@@ -175,7 +179,7 @@ function _handle_propose_post(PDO $db, array $ed, array $reach, string $reach_na
         return [[], [], true];
     }
 
-    if ($ctx['submitted_today'] >= $ctx['cap'] && !$ctx['existing']) {
+    if ($ctx['submitted_today'] >= $ctx['cap'] && $ctx['existing'] === null) {
         return [["Daily submission cap of {$ctx['cap']} reached. Please try again later."], [], false];
     }
 
@@ -237,7 +241,7 @@ function _handle_propose_post(PDO $db, array $ed, array $reach, string $reach_na
         $range = [
             'low'       => $lo !== '' ? (float)$lo : null,
             'high'      => $hi !== '' ? (float)$hi : null,
-            'data_type' => $dt ?: 'flow',
+            'data_type' => $dt !== '' ? $dt : 'flow',
         ];
         $issues = array_merge($issues, check_flow_range($range['low'], $range['high'], $range['data_type']));
         $proposed_class_payload = ['names' => $names, 'range' => $range];
@@ -249,7 +253,7 @@ function _handle_propose_post(PDO $db, array $ed, array $reach, string $reach_na
     $errors = array_map(fn($i) => $i['message'], sanity_errors($issues));
     $warnings = array_map(fn($i) => $i['message'], sanity_warnings($issues));
 
-    if ($errors) {
+    if ($errors !== []) {
         return [$errors, $warnings, false];
     }
 
@@ -289,7 +293,7 @@ function _handle_propose_post(PDO $db, array $ed, array $reach, string $reach_na
     $subject = "Proposed edit: $reach_name";
     $src = sanitize_source_url((string)($_POST['source_url'] ?? ''));
 
-    if ($ctx['existing']) {
+    if ($ctx['existing'] !== null) {
         $db->prepare(
             "UPDATE change_request
              SET payload_json = ?, notes_to_maint = ?, subject = ?,
@@ -338,7 +342,7 @@ function _send_proposal_notification(
     string $src,
 ): void {
     $maint_emails = maintainer_emails();
-    if (!$maint_emails) {
+    if ($maint_emails === []) {
         return;
     }
     $site = rtrim(Config::str('site_url', 'https://levels.wkcc.org'), '/');
@@ -368,7 +372,7 @@ function _send_proposal_notification(
         $summary_lines[] = 'flow range: '
             . $fmt_range($ctx['cur_range']) . ' -> ' . $fmt_range($new_range);
     }
-    $summary = $summary_lines
+    $summary = $summary_lines !== []
         ? implode("\n\n", $summary_lines)
         : '(No reach-column changes — only a note to the maintainer.)';
 
@@ -447,18 +451,18 @@ function _render_propose_form(
     <a href="/description.php?id=<?= $id ?>">Return to the reach</a>.
   </p>
 <?php else: ?>
-  <?php if ($errors): ?>
+  <?php if ($errors !== []): ?>
     <ul style="padding:.6rem 1.4rem;background:#fde8e8;border:1px solid #f5b5b5;border-radius:4px">
       <?php foreach ($errors as $e): ?><li><?= htmlspecialchars($e) ?></li><?php endforeach ?>
     </ul>
   <?php endif ?>
-  <?php if ($warnings): ?>
+  <?php if ($warnings !== []): ?>
     <ul style="padding:.6rem 1.4rem;background:#fff4dc;border:1px solid #e8d291;border-radius:4px">
       <?php foreach ($warnings as $w): ?><li><?= htmlspecialchars($w) ?></li><?php endforeach ?>
     </ul>
   <?php endif ?>
 
-  <?php if ($existing): ?>
+  <?php if ($existing !== null): ?>
     <p style="font-size:.85rem;color:var(--c-text-muted)">
       You already have a pending proposal for this reach (submitted
       <?= htmlspecialchars((string)$existing['submitted_at']) ?>); submitting
@@ -558,7 +562,8 @@ function _render_propose_form(
 function _propose_prefill(array $reach, ?array $existing, string $field): string
 {
     if ($existing !== null) {
-        $payload = json_decode((string)$existing['payload_json'], true) ?: [];
+        $decoded = json_decode((string)$existing['payload_json'], true);
+        $payload = is_array($decoded) ? $decoded : [];
         if (isset($payload['reach'][$field])) {
             return (string)$payload['reach'][$field];
         }

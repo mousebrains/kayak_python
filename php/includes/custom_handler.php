@@ -186,7 +186,7 @@ function _load_custom_sparklines(PDO $db, array $ids): array
 
     $gauge_ids = array_values(array_unique(array_filter(array_values($gauge_map), fn($id) => $id > 0)));
     $sparklines = [];
-    if (!$gauge_ids) {
+    if ($gauge_ids === []) {
         return [$gauge_map, $sparklines];
     }
 
@@ -256,8 +256,10 @@ function _build_custom_sparkline(array $data, int $w = 80, int $h = 20): string
     $x_max = max($xs);
     $y_min = min($ys);
     $y_max = max($ys);
-    $x_range = $x_max - $x_min ?: 1;
-    $y_range = $y_max - $y_min ?: 1;
+    $x_span = $x_max - $x_min;
+    $x_range = $x_span !== 0 ? $x_span : 1;
+    $y_span = $y_max - $y_min;
+    $y_range = $y_span !== 0.0 ? $y_span : 1;
     $pts = [];
     foreach ($data as $d) {
         $px = (int)(($d['ts'] - $x_min) / $x_range * $w);
@@ -454,7 +456,7 @@ function _render_custom_table(
     // local conversion.
     $time_html = '';
     $ts = $s['flow_time'] ?? $s['gage_time'] ?? $s['temp_time'] ?? null;
-    if ($ts) {
+    if ($ts !== null) {
         $iso = gmdate('Y-m-d\TH:i:s\Z', strtotime($ts));
         $display = date('m/d H:i', strtotime($ts));
         $time_html = "<time datetime=\"$iso\">$display</time>";
@@ -464,7 +466,7 @@ function _render_custom_table(
     $loc  = htmlspecialchars($s['gauge_location'] ?? '');
     $spark = '';
     $gid = $gauge_map[$id] ?? null;
-    if ($gid && isset($sparklines[$gid])) {
+    if ($gid !== null && isset($sparklines[$gid])) {
         $spark = _build_custom_sparkline($sparklines[$gid]);
     }
 
@@ -476,7 +478,7 @@ function _render_custom_table(
     $class = htmlspecialchars($classes[$id] ?? '');
 
     $row_tiers = $tiers_by_reach[$id] ?? [];
-    $tier_attr = $row_tiers ? implode(',', $row_tiers) : '?';
+    $tier_attr = $row_tiers !== [] ? implode(',', $row_tiers) : '?';
     $state_attr = htmlspecialchars($s['state'] ?? '');
     $basin_attr = htmlspecialchars($s['drainage'] ?? '');
     $status_attr = htmlspecialchars($s['status'] ?? 'unknown');
@@ -512,7 +514,8 @@ function _render_custom_footer(): void
   CFS = cubic feet per second. Feet = gage height in feet. F = Fahrenheit.
 </p>
     <?php
-    $filters_mtime = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/filters.js') ?: 1;
+    $filters_mtime_raw = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/filters.js');
+    $filters_mtime = $filters_mtime_raw !== false ? $filters_mtime_raw : 1;
     ?>
 <script src="/static/filters.js?v=<?= $filters_mtime ?>" defer></script>
     <?php

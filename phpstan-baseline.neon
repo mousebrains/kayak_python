@@ -667,12 +667,6 @@ parameters:
 			path: php/includes/propose_handler.php
 
 		-
-			message: '#^Cannot access offset ''reach'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: php/includes/propose_handler.php
-
-		-
 			message: '#^Cannot access offset string on mixed\.$#'
 			identifier: offsetAccess.nonOffsetAccessible
 			count: 1
@@ -907,12 +901,6 @@ parameters:
 			path: php/includes/reach_search.php
 
 		-
-			message: '#^Binary operation "\." between ''Review\: '' and mixed results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: php/includes/review_handler.php
-
-		-
 			message: '#^Binary operation "\." between ''This request has…'' and mixed results in an error\.$#'
 			identifier: binaryOp.invalid
 			count: 1
@@ -980,18 +968,6 @@ parameters:
 
 		-
 			message: '#^Cannot access offset ''range'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: php/includes/review_handler.php
-
-		-
-			message: '#^Cannot access offset ''reach'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: php/includes/review_handler.php
-
-		-
-			message: '#^Cannot access offset ''reach_class'' on mixed\.$#'
 			identifier: offsetAccess.nonOffsetAccessible
 			count: 1
 			path: php/includes/review_handler.php
@@ -1124,18 +1100,6 @@ parameters:
 
 		-
 			message: '#^Parameter \#2 \$cr of function review_send_reply expects array\<string, mixed\>, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: php/includes/review_handler.php
-
-		-
-			message: '#^Parameter \#2 \$payload of function _render_review_form expects array\<string, mixed\>, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: php/includes/review_handler.php
-
-		-
-			message: '#^Parameter \#2 \$payload of function _render_review_meta_table expects array\<string, mixed\>, mixed given\.$#'
 			identifier: argument.type
 			count: 1
 			path: php/includes/review_handler.php

@@ -11,7 +11,7 @@ declare(strict_types=1);
  */
 function validate_date(string|false|null $input): ?string {
     if ($input === null || $input === false || $input === '') return null;
-    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $input)) return null;
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $input) !== 1) return null;
     $parts = explode('-', $input);
     if (!checkdate((int)$parts[1], (int)$parts[2], (int)$parts[0])) return null;
     return $input;

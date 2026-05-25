@@ -117,5 +117,5 @@ function format_reach_flow(array $flow_levels): ?string
         $parts[] = 'high ' . number_format((float)$okay['high'], $is_flow ? 0 : 1)
             . ($is_flow ? ' CFS' : ' ft');
     }
-    return $parts ? implode(', ', $parts) : null;
+    return $parts !== [] ? implode(', ', $parts) : null;
 }

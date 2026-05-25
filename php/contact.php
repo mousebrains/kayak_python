@@ -37,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $subject   = strip_html_tags(trim((string)($_POST['subject'] ?? '')));
         $body      = strip_html_tags(trim((string)($_POST['body']    ?? '')));
 
-        if ($from_addr !== '' && !filter_var($from_addr, FILTER_VALIDATE_EMAIL)) {
+        if ($from_addr !== '' && filter_var($from_addr, FILTER_VALIDATE_EMAIL) === false) {
             $errors[] = 'Please enter a valid email address, or leave the field blank.';
         }
         if ($body === '') {
@@ -56,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Captcha verification failed. Please try again.';
         }
 
-        if (!$errors) {
+        if ($errors === []) {
             $ip       = (string)($_SERVER['REMOTE_ADDR'] ?? '');
             $ua       = substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 200);
             $from_txt = $from_addr !== '' ? $from_addr : '(not provided)';
@@ -117,7 +117,7 @@ include_header('Contact the maintainer', '', 'Send a message to the site maintai
   </p>
   <p style="margin-top:1rem"><a href="/">&larr; Back to river levels</a></p>
 <?php else: ?>
-  <?php if ($errors): ?>
+  <?php if ($errors !== []): ?>
     <ul style="padding:.6rem 1.4rem;background:#fde8e8;border:1px solid #f5b5b5;border-radius:4px">
       <?php foreach ($errors as $e): ?><li><?= htmlspecialchars($e) ?></li><?php endforeach ?>
     </ul>

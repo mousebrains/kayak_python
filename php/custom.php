@@ -21,7 +21,7 @@ $ids = array_values(array_unique(array_filter(
     fn($v) => $v > 0,
 )));
 
-if (!$ids) {
+if ($ids === []) {
     header('Location: /picker.php');
     exit;
 }

@@ -9,7 +9,7 @@ function include_footer(): void {
 
     $items = [];
     if ($feature) {
-        if ($ed) {
+        if ($ed !== null) {
             $items[] = is_maintainer($ed)
                 ? '<a href="/admin.php">Admin</a>'
                 : '<a href="/account.php">Account</a>';

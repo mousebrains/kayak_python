@@ -70,9 +70,9 @@ function gm_render_map(
     };
 
     $track_json = 'null';
-    if ($geom) {
+    if ($geom !== null && $geom !== '') {
         $track = $parse_geom($geom);
-        if ($track) {
+        if ($track !== []) {
             $track_json = (string)json_encode($track);
         }
     }
@@ -91,7 +91,7 @@ function gm_render_map(
             ];
         }
     }
-    $rt_json = $rt_payload ? (string)json_encode($rt_payload) : '[]';
+    $rt_json = $rt_payload !== [] ? (string)json_encode($rt_payload) : '[]';
 
     $points_attr = htmlspecialchars((string)json_encode($points));
     $track_attr  = htmlspecialchars($track_json);

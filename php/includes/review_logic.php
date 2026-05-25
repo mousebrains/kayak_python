@@ -24,7 +24,7 @@ function review_load_target_state(PDO $db, string $type, int $id): ?array {
     $st = $db->prepare('SELECT * FROM reach WHERE id = ?');
     $st->execute([$id]);
     $reach = $st->fetch();
-    if (!$reach) return null;
+    if ($reach === false) return null;
 
     $st = $db->prepare(
         'SELECT name, low, low_data_type, high, high_data_type
@@ -39,7 +39,9 @@ function review_load_target_state(PDO $db, string $type, int $id): ?array {
             $range = [
                 'low'       => $row['low'],
                 'high'      => $row['high'],
-                'data_type' => $row['low_data_type'] ?: ($row['high_data_type'] ?: 'flow'),
+                'data_type' => ($row['low_data_type'] ?? '') !== ''
+                    ? $row['low_data_type']
+                    : (($row['high_data_type'] ?? '') !== '' ? $row['high_data_type'] : 'flow'),
             ];
             break;
         }
@@ -187,9 +189,9 @@ function review_notify_editor(PDO $db, array $cr, string $decision, string $note
     $st = $db->prepare('SELECT email FROM editor WHERE id = ?');
     $st->execute([$cr['editor_id']]);
     $row = $st->fetch();
-    if (!$row || ($row['email'] ?? '') === '') return;
+    if ($row === false || ($row['email'] ?? '') === '') return;
 
-    $target_label = $cr['subject'] ?: ($cr['target_type'] . ' #' . $cr['target_id']);
+    $target_label = ($cr['subject'] ?? '') !== '' ? $cr['subject'] : ($cr['target_type'] . ' #' . $cr['target_id']);
     send_email(
         (string)$row['email'],
         "[levels] your proposal was $decision",
@@ -210,8 +212,8 @@ function review_send_reply(PDO $db, array $cr, string $reply, int $maint_id): vo
     $st = $db->prepare('SELECT email FROM editor WHERE id = ?');
     $st->execute([$cr['editor_id']]);
     $row = $st->fetch();
-    if ($row && ($row['email'] ?? '') !== '') {
-        $target_label = $cr['subject'] ?: ($cr['target_type'] . ' #' . $cr['target_id']);
+    if ($row !== false && ($row['email'] ?? '') !== '') {
+        $target_label = ($cr['subject'] ?? '') !== '' ? $cr['subject'] : ($cr['target_type'] . ' #' . $cr['target_id']);
         send_email(
             (string)$row['email'],
             "[levels] maintainer reply on your proposal",
@@ -257,8 +259,8 @@ function review_reply_and_close(PDO $db, array $cr, string $reply, int $maint_id
     $st = $db->prepare('SELECT email FROM editor WHERE id = ?');
     $st->execute([$cr['editor_id']]);
     $row = $st->fetch();
-    if ($row && ($row['email'] ?? '') !== '') {
-        $target_label = $cr['subject'] ?: ($cr['target_type'] . ' #' . $cr['target_id']);
+    if ($row !== false && ($row['email'] ?? '') !== '') {
+        $target_label = ($cr['subject'] ?? '') !== '' ? $cr['subject'] : ($cr['target_type'] . ' #' . $cr['target_id']);
         send_email(
             (string)$row['email'],
             "[levels] your proposal was resolved",

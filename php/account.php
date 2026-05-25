@@ -43,10 +43,10 @@ include_header('Account');
 ?>
 <h2>Your account</h2>
 
-<?php if ($flash): ?>
+<?php if ($flash !== null): ?>
 <p style="padding:.5rem;background:#e8f4ea;border:1px solid #b7dcc0;border-radius:4px"><?= htmlspecialchars($flash) ?></p>
 <?php endif ?>
-<?php if ($flash_err): ?>
+<?php if ($flash_err !== null): ?>
 <p style="padding:.5rem;background:#fde8e8;border:1px solid #f5b5b5;border-radius:4px"><?= htmlspecialchars($flash_err) ?></p>
 <?php endif ?>
 

@@ -117,7 +117,7 @@ function check_class_string(string $field, string $value): array {
     }
     $pat = '/^(?:[IVX]{1,4}(?:\.\d)?[+\-]?)'
          . '(?:[\s\-(,][IVX]{1,4}(?:\.\d)?[+\-]?\)?)?$/';
-    if (!preg_match($pat, $v)) {
+    if (preg_match($pat, $v) !== 1) {
         return [['level' => 'warning', 'field' => $field,
                  'message' => "\"$v\" doesn't match the expected class format "
                             . '(e.g. III, III+, II-III, IV V, III+(IV), V.1).']];

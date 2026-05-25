@@ -48,7 +48,7 @@ if (isset($decoded['csp-report']) && is_array($decoded['csp-report'])) {
     }
 }
 
-if (!$reports) {
+if ($reports === []) {
     http_response_code(204);
     exit;
 }
@@ -62,7 +62,7 @@ foreach ($reports as $r) {
     // so accept either form.
     if (is_string($source_file) && (
         $source_file === 'sandbox eval code'
-        || preg_match('#^(?:chrome|moz|safari|safari-web|edge|ms-browser)-extension(?://|$)#', $source_file)
+        || preg_match('#^(?:chrome|moz|safari|safari-web|edge|ms-browser)-extension(?://|$)#', $source_file) === 1
     )) {
         continue;
     }
@@ -80,7 +80,7 @@ foreach ($reports as $r) {
     ], JSON_UNESCAPED_SLASHES);
 }
 
-if (!$lines) {
+if ($lines === []) {
     http_response_code(204);
     exit;
 }

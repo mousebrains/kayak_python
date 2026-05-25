@@ -95,7 +95,7 @@ function get_reach_or_404(int $id): array {
     $stmt = get_db()->prepare('SELECT * FROM reach WHERE id = ?');
     $stmt->execute([$id]);
     $reach = $stmt->fetch();
-    if (!$reach) {
+    if ($reach === false) {
         require_once __DIR__ . '/error.php';
         render_error_page(
             404,

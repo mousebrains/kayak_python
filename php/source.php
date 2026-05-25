@@ -36,7 +36,7 @@ if ($q !== null && $q !== '') {
     include_header('Source Search', '', '', '', ['picker_kind' => 'gauge']);
     echo '<h2>Source Search</h2>';
 
-    if (!$results) {
+    if ($results === []) {
         echo '<p>No sources matching &ldquo;' . htmlspecialchars($q) . '&rdquo;.</p>';
     } else {
         echo '<p>' . count($results) . ' sources matching &ldquo;' . htmlspecialchars($q) . '&rdquo;:</p>';
@@ -56,9 +56,9 @@ if ($q !== null && $q !== '') {
 }
 
 // --- Default: show first source ---
-if (!$id) {
+if (!is_int($id) || $id < 1) {
     $row = db_query($db, 'SELECT id FROM source ORDER BY id ASC LIMIT 1')->fetch();
-    if (!$row) {
+    if ($row === false) {
         header('Cache-Control: no-cache');
         include_header('Sources', '', '', '', ['picker_kind' => 'gauge']);
         echo '<p>No sources in database.</p>';
@@ -79,7 +79,7 @@ $stmt = $db->prepare(
 );
 $stmt->execute([$id]);
 $source = $stmt->fetch();
-if (!$source) { http_response_code(404); exit('Source not found'); }
+if ($source === false) { http_response_code(404); exit('Source not found'); }
 
 // --- Navigation ---
 $prev_stmt = $db->prepare('SELECT id FROM source WHERE id < ? ORDER BY id DESC LIMIT 1');
@@ -124,13 +124,13 @@ include_header(
 
 // Navigation bar
 echo '<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">';
-if ($prev) {
+if ($prev !== false) {
     echo '<a href="/source.php?id=' . $prev['id'] . '">&laquo; Prev</a>';
 } else {
     echo '<span style="color:#999">&laquo; Prev</span>';
 }
 echo "<span>Source $position of $total</span>";
-if ($next) {
+if ($next !== false) {
     echo '<a href="/source.php?id=' . $next['id'] . '">Next &raquo;</a>';
 } else {
     echo '<span style="color:#999">Next &raquo;</span>';
@@ -149,9 +149,9 @@ echo '<table class="desc-table">';
 $agency_url = null;
 $agency_lc = strtolower($source['agency'] ?? '');
 $src_name = $source['name'] ?? '';
-if ($agency_lc === 'usgs' && preg_match('/^\d+$/', $src_name)) {
+if ($agency_lc === 'usgs' && preg_match('/^\d+$/', $src_name) === 1) {
     $agency_url = 'https://waterdata.usgs.gov/monitoring-location/' . urlencode($src_name);
-} elseif ($agency_lc === 'nwrfc' && preg_match('/^[A-Z]{4}\d?$/', $src_name)) {
+} elseif ($agency_lc === 'nwrfc' && preg_match('/^[A-Z]{4}\d?$/', $src_name) === 1) {
     $agency_url = 'https://www.nwrfc.noaa.gov/river/station/flowplot/flowplot.cgi?lid=' . urlencode($src_name);
 } elseif ($agency_lc === 'usace') {
     $agency_url = 'https://www.nwp.usace.army.mil/Locations/' . urlencode($src_name);
@@ -162,7 +162,7 @@ if ($agency_lc === 'usgs' && preg_match('/^\d+$/', $src_name)) {
 }
 
 $name_html = htmlspecialchars($src_name);
-if ($agency_url) {
+if ($agency_url !== null) {
     $name_html = '<a href="' . htmlspecialchars($agency_url) . '" target="_blank" rel="noopener">' . $name_html . '</a>';
 }
 
@@ -172,18 +172,18 @@ $fields = [
     'Agency' => $source['agency'],
 ];
 
-if ($source['fetch_url']) {
+if ($source['fetch_url'] !== null) {
     $url_esc = htmlspecialchars($source['fetch_url']);
     $fields['Fetch URL'] = "<a href=\"$url_esc\" target=\"_blank\" rel=\"noopener\">$url_esc</a>";
-    if ($source['fetch_parser']) {
+    if ($source['fetch_parser'] !== null) {
         $fields['Parser'] = $source['fetch_parser'];
     }
-} elseif ($source['calc_expr']) {
+} elseif ($source['calc_expr'] !== null) {
     $fields['Calc Expression'] = $source['calc_expr'];
-    if ($source['calc_data_type']) {
+    if ($source['calc_data_type'] !== null) {
         $fields['Calc Data Type'] = $source['calc_data_type'];
     }
-    if ($source['calc_note']) {
+    if ($source['calc_note'] !== null) {
         $fields['Calc Note'] = $source['calc_note'];
     }
 }
@@ -202,7 +202,7 @@ foreach ($fields as $label => $value) {
 echo '</table>';
 
 // Observation summary
-if ($obs_summary) {
+if ($obs_summary !== []) {
     echo '<h3 style="margin-top:1rem">Observations</h3>';
     echo '<table class="readings-table">';
     echo '<tr><th>Data Type</th><th>Count</th><th>Latest</th><th>View</th></tr>';
@@ -227,7 +227,7 @@ if ($obs_summary) {
 }
 
 // Associated gauges
-if ($gauges) {
+if ($gauges !== []) {
     echo '<h3 style="margin-top:1rem">Associated Gauges</h3>';
     echo '<table class="readings-table">';
     echo '<tr><th>ID</th><th>Name</th><th>Location</th><th>USGS ID</th></tr>';

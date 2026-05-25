@@ -21,7 +21,7 @@ function autolink_urls(string $text): string {
     $trailing = '.,;:!?)]}>';
     $result = '';
     $offset = 0;
-    if (preg_match_all('#https?://[^\s<>"\']+#', $text, $matches, PREG_OFFSET_CAPTURE)) {
+    if (preg_match_all('#https?://[^\s<>"\']+#', $text, $matches, PREG_OFFSET_CAPTURE) !== false) {
         foreach ($matches[0] as $m) {
             $url = rtrim($m[0], $trailing);
             if ($url === '') continue;

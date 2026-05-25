@@ -15,13 +15,14 @@ $db = get_db();
 // AJAX JSON endpoint — returns one row per reach with enough metadata
 // for client-side filtering (state/basin/status/tiers) and display.
 // -----------------------------------------------------------------------
-if (filter_input(INPUT_GET, 'ajax', FILTER_VALIDATE_INT)) {
+$ajax = filter_input(INPUT_GET, 'ajax', FILTER_VALIDATE_INT);
+if (is_int($ajax) && $ajax !== 0) {
     header('Content-Type: application/json');
     header('Cache-Control: max-age=60');
 
     $raw = (string)(filter_input(INPUT_GET, 'states', FILTER_DEFAULT) ?? '');
     $state_names = array_filter(array_map('trim', explode(',', $raw)), fn($s) => $s !== '');
-    if (!$state_names) {
+    if ($state_names === []) {
         echo '[]';
         exit;
     }
@@ -69,7 +70,7 @@ SQL;
     // the client (which splits the data-tier attribute on comma).
     $reach_ids = array_column($rows, 'id');
     $tiers_by_reach = [];
-    if ($reach_ids) {
+    if ($reach_ids !== []) {
         $ph = implode(',', array_fill(0, count($reach_ids), '?'));
         $cls_stmt = $db->prepare(
             "SELECT reach_id, name FROM reach_class WHERE reach_id IN ($ph)"
@@ -231,8 +232,10 @@ $fg_toggle = '<span class="fg-toggle">'
 </div>
 
 <?php
-$filters_mtime = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/filters.js') ?: 1;
-$picker_mtime  = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/picker.js')  ?: 1;
+$filters_mtime_raw = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/filters.js');
+$filters_mtime = $filters_mtime_raw !== false ? $filters_mtime_raw : 1;
+$picker_mtime_raw  = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/picker.js');
+$picker_mtime  = $picker_mtime_raw !== false ? $picker_mtime_raw : 1;
 ?>
 <script src="/static/filters.js?v=<?= $filters_mtime ?>" defer></script>
 <script src="/static/picker.js?v=<?= $picker_mtime ?>" defer></script>

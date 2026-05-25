@@ -25,13 +25,14 @@ $db = get_db();
 // -----------------------------------------------------------------------
 // AJAX JSON endpoint — one row per gauge for client-side filter/render.
 // -----------------------------------------------------------------------
-if (filter_input(INPUT_GET, 'ajax', FILTER_VALIDATE_INT)) {
+$ajax = filter_input(INPUT_GET, 'ajax', FILTER_VALIDATE_INT);
+if (is_int($ajax) && $ajax !== 0) {
     header('Content-Type: application/json');
     header('Cache-Control: max-age=60');
 
     $raw = (string)(filter_input(INPUT_GET, 'states', FILTER_DEFAULT) ?? '');
     $state_names = array_filter(array_map('trim', explode(',', $raw)), fn($s) => $s !== '');
-    if (!$state_names) {
+    if ($state_names === []) {
         echo '[]';
         exit;
     }
@@ -41,7 +42,7 @@ if (filter_input(INPUT_GET, 'ajax', FILTER_VALIDATE_INT)) {
         fn($n) => $STATE_TO_ABBREV[$n] ?? null,
         $state_names
     )));
-    if (!$abbrevs) {
+    if ($abbrevs === []) {
         echo '[]';
         exit;
     }
@@ -102,7 +103,7 @@ $state_rows = db_query($db,
 $all_states = [];
 foreach ($state_rows as $r) {
     $name = $ABBREV_TO_STATE[$r['state']] ?? null;
-    if ($name) $all_states[] = $name;
+    if ($name !== null) $all_states[] = $name;
 }
 sort($all_states);
 
@@ -123,7 +124,7 @@ foreach ($huc_rows as $r) {
 }
 $huc8_names = [];
 $huc6_names = [];
-if ($huc8_codes) {
+if ($huc8_codes !== []) {
     $codes = array_map('strval', array_keys($huc8_codes));
     $hp = implode(',', array_fill(0, count($codes), '?'));
     $hn8 = $db->prepare("SELECT code, name FROM huc_name WHERE level = 8 AND code IN ($hp)");
@@ -233,8 +234,10 @@ $total_huc8 = array_sum(array_map('count', $huc6_to_huc8s));
 </div>
 
 <?php
-$filters_mtime = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/filters.js') ?: 1;
-$picker_mtime  = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/gauge_picker.js') ?: 1;
+$filters_mtime_raw = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/filters.js');
+$filters_mtime = $filters_mtime_raw !== false ? $filters_mtime_raw : 1;
+$picker_mtime_raw  = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/gauge_picker.js');
+$picker_mtime  = $picker_mtime_raw !== false ? $picker_mtime_raw : 1;
 ?>
 <script src="/static/filters.js?v=<?= $filters_mtime ?>" defer></script>
 <script src="/static/gauge_picker.js?v=<?= $picker_mtime ?>" defer></script>

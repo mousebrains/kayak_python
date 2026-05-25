@@ -81,8 +81,8 @@ function derive_rating_lookup(
         sort($vs);
         $n = count($bin);
         $mid = intdiv($n, 2);
-        $g_med = $n % 2 ? $gs[$mid] : ($gs[$mid - 1] + $gs[$mid]) / 2;
-        $v_med = $n % 2 ? $vs[$mid] : ($vs[$mid - 1] + $vs[$mid]) / 2;
+        $g_med = $n % 2 === 1 ? $gs[$mid] : ($gs[$mid - 1] + $gs[$mid]) / 2;
+        $v_med = $n % 2 === 1 ? $vs[$mid] : ($vs[$mid - 1] + $vs[$mid]) / 2;
         $lookup[] = [$g_med, $v_med];
     }
     usort($lookup, fn($a, $b) => $a[0] <=> $b[0]);

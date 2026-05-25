@@ -55,7 +55,7 @@ if ($id === null) {
     $row = $db->prepare('SELECT id FROM reach WHERE no_show = ? ORDER BY sort_name, id ASC LIMIT 1');
     $row->execute([$hidden]);
     $row = $row->fetch();
-    if (!$row) {
+    if ($row === false) {
         header('Cache-Control: no-cache');
         include_header('Reaches');
         echo '<p>No reaches in database.</p>';

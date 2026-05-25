@@ -41,7 +41,7 @@ function handle_reach_detail(
     string $compact_css,
 ): void {
     $reach = _load_reach_or_404($db, $id);
-    $name = $reach['display_name'] ?: $reach['name'];
+    $name = ($reach['display_name'] ?? '') !== '' ? $reach['display_name'] : $reach['name'];
     $nav = _load_reach_navigation($db, $reach, $id, $hidden);
     $related = _load_reach_related($db, $reach, $id);
 
@@ -123,7 +123,7 @@ function _load_reach_or_404(PDO $db, int $id): array
     $stmt = $db->prepare('SELECT * FROM reach WHERE id = ?');
     $stmt->execute([$id]);
     $reach = $stmt->fetch();
-    if (!$reach) {
+    if ($reach === false) {
         http_response_code(404);
         exit('Reach not found');
     }
@@ -188,7 +188,7 @@ function _load_reach_navigation(PDO $db, array $reach, int $id, int $hidden): ar
 function _load_reach_related(PDO $db, array $reach, int $id): array
 {
     $gauge = null;
-    if ($reach['gauge_id']) {
+    if ($reach['gauge_id'] !== null) {
         $stmt = $db->prepare('SELECT * FROM gauge WHERE id = ?');
         $stmt->execute([$reach['gauge_id']]);
         $g = db_row($stmt);
@@ -245,13 +245,13 @@ function _derive_reach_flow_levels(PDO $db, int $id): array
     );
     $class_range_stmt->execute([$id]);
     $class_range = $class_range_stmt->fetch();
-    if (!$class_range) {
+    if ($class_range === false) {
         return [];
     }
     $lo = $class_range['low'];
     $hi = $class_range['high'];
-    $lo_dt = $class_range['low_data_type'] ?: 'flow';
-    $hi_dt = $class_range['high_data_type'] ?: 'flow';
+    $lo_dt = ($class_range['low_data_type'] ?? '') !== '' ? $class_range['low_data_type'] : 'flow';
+    $hi_dt = ($class_range['high_data_type'] ?? '') !== '' ? $class_range['high_data_type'] : 'flow';
     return [
         ['level' => 'low',  'low' => null, 'low_data_type' => $lo_dt, 'high' => $lo,   'high_data_type' => $lo_dt],
         ['level' => 'okay', 'low' => $lo,  'low_data_type' => $lo_dt, 'high' => $hi,   'high_data_type' => $hi_dt],
@@ -282,14 +282,14 @@ function _render_reach_nav_bar(
     int|string $total,
 ): void {
     echo '<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">';
-    $hq = $hidden ? '&amp;hidden=1' : '';
-    if ($prev) {
+    $hq = $hidden !== 0 ? '&amp;hidden=1' : '';
+    if ($prev !== false) {
         echo '<a href="/reach.php?id=' . $prev['id'] . $hq . '">&laquo; Prev</a>';
     } else {
         echo '<span style="color:#999">&laquo; Prev</span>';
     }
     echo "<span>Reach $position of $total</span>";
-    if ($next) {
+    if ($next !== false) {
         echo '<a href="/reach.php?id=' . $next['id'] . $hq . '">Next &raquo;</a>';
     } else {
         echo '<span style="color:#999">Next &raquo;</span>';
@@ -307,13 +307,13 @@ function _render_reach_nav_bar(
         echo "<option value=\"$esc\"$sel>$esc</option>";
     }
     echo '</select>';
-    if ($hidden) {
+    if ($hidden !== 0) {
         echo '<input type="hidden" name="hidden" value="1">';
     }
     echo '<button type="submit">Go</button>';
     echo '</form>';
-    $toggle_hidden = $hidden ? 0 : 1;
-    $toggle_label = $hidden ? 'Show visible' : 'Show hidden';
+    $toggle_hidden = $hidden !== 0 ? 0 : 1;
+    $toggle_label = $hidden !== 0 ? 'Show visible' : 'Show hidden';
     echo "<a href=\"/reach.php?id=$id&amp;hidden=$toggle_hidden\">$toggle_label</a>";
     echo '</div>';
 }
@@ -338,7 +338,7 @@ function _render_reach_details_table(array $reach, array $states, array $classes
         'River' => $reach['river'],
         'Class' => implode(', ', array_column($classes, 'name')),
         'Watershed' => format_reach_watershed($reach, $states),
-        'Watershed Area' => $reach['basin_area'] ? number_format((float)$reach['basin_area'], 1) . ' sq mi' : null,
+        'Watershed Area' => (bool)$reach['basin_area'] ? number_format((float)$reach['basin_area'], 1) . ' sq mi' : null,
         'Season' => $reach['season'],
         'Nature' => $reach['nature'],
         'Watershed type' => $reach['watershed_type'],
@@ -348,8 +348,8 @@ function _render_reach_details_table(array $reach, array $states, array $classes
         'Length' => format_reach_length($reach),
         'Elevation' => format_reach_elevation($reach),
         'Flow' => format_reach_flow($flow_levels),
-        'Optimal Flow' => $reach['optimal_flow'] ? number_format((float)$reach['optimal_flow'], 0) . ' CFS' : null,
-        'No Show' => $reach['no_show'] ? 'Yes' : null,
+        'Optimal Flow' => (bool)$reach['optimal_flow'] ? number_format((float)$reach['optimal_flow'], 0) . ' CFS' : null,
+        'No Show' => (bool)$reach['no_show'] ? 'Yes' : null,
         'Updated' => $reach['updated_at'],
     ];
 
@@ -401,7 +401,7 @@ function _render_reach_details_table(array $reach, array $states, array $classes
  */
 function _render_reach_class_ranges(array $classes): void
 {
-    if (!$classes) {
+    if ($classes === []) {
         return;
     }
     $has_ranges = false;
@@ -421,10 +421,10 @@ function _render_reach_class_ranges(array $classes): void
         $cname = htmlspecialchars($c['name']);
         $lo = $c['low'] !== null ? number_format((float)$c['low'], 1) : '';
         $hi = $c['high'] !== null ? number_format((float)$c['high'], 1) : '';
-        if ($c['low_data_type']) {
+        if (($c['low_data_type'] ?? '') !== '') {
             $lo .= ' ' . htmlspecialchars($c['low_data_type']);
         }
-        if ($c['high_data_type']) {
+        if (($c['high_data_type'] ?? '') !== '') {
             $hi .= ' ' . htmlspecialchars($c['high_data_type']);
         }
         echo "<tr><td>$cname</td><td>$lo</td><td>$hi</td></tr>\n";
@@ -442,12 +442,12 @@ function _render_reach_class_ranges(array $classes): void
  */
 function _render_reach_guidebooks(array $reach, array $guidebooks): void
 {
-    if (!$guidebooks && !$reach['aw_id']) {
+    if ($guidebooks === [] && $reach['aw_id'] === null) {
         return;
     }
     echo '<h3 style="margin-top:1rem">Guidebooks</h3>';
     echo '<table class="desc-table">';
-    if ($reach['aw_id']) {
+    if ($reach['aw_id'] !== null) {
         $aw_url = "https://www.americanwhitewater.org/content/River/view/river-detail/"
             . intval($reach['aw_id']) . "/";
         echo '<tr><td><a href="' . htmlspecialchars($aw_url)
@@ -455,21 +455,21 @@ function _render_reach_guidebooks(array $reach, array $guidebooks): void
     }
     foreach ($guidebooks as $gb) {
         $title = htmlspecialchars($gb['title']);
-        if ($gb['subtitle']) {
+        if (($gb['subtitle'] ?? '') !== '') {
             $title .= ' — ' . htmlspecialchars($gb['subtitle']);
         }
-        if ($gb['edition']) {
+        if (($gb['edition'] ?? '') !== '') {
             $title .= ' (' . htmlspecialchars($gb['edition']) . ')';
         }
-        $url = $gb['entry_url'] ?: $gb['book_url'];
-        if ($url) {
+        $url = ($gb['entry_url'] ?? '') !== '' ? $gb['entry_url'] : $gb['book_url'];
+        if (($url ?? '') !== '') {
             $title = '<a href="' . htmlspecialchars($url) . '" target="_blank" rel="noopener">' . $title . '</a>';
         }
         $detail = [];
-        if ($gb['page']) {
+        if (($gb['page'] ?? '') !== '') {
             $detail[] = 'p. ' . htmlspecialchars($gb['page']);
         }
-        if ($gb['run']) {
+        if (($gb['run'] ?? '') !== '') {
             $detail[] = 'run ' . htmlspecialchars($gb['run']);
         }
         echo "<tr><td>$title</td><td>" . implode(', ', $detail) . "</td></tr>\n";
@@ -485,15 +485,15 @@ function _render_reach_guidebooks(array $reach, array $guidebooks): void
  */
 function _render_reach_linked_gauge(?array $gauge): void
 {
-    if (!$gauge) {
+    if ($gauge === null) {
         return;
     }
     echo '<h3 style="margin-top:1rem">Linked Gauge</h3>';
     echo '<table class="desc-table">';
-    $gname = htmlspecialchars($gauge['display_name'] ?: $gauge['name']);
+    $gname = htmlspecialchars(($gauge['display_name'] ?? '') !== '' ? $gauge['display_name'] : $gauge['name']);
     $gloc = htmlspecialchars($gauge['location'] ?? '');
     echo "<tr><td>Gauge</td><td><a href=\"/gauge.php?id={$gauge['id']}\">$gname</a></td></tr>\n";
-    if ($gloc) {
+    if ($gloc !== '') {
         echo "<tr><td>Location</td><td>$gloc</td></tr>\n";
     }
     echo '</table>';
@@ -520,12 +520,12 @@ function _render_reach_map(array $reach, ?array $gauge): array
         $map_points['Take-out'] = number_format((float)$reach['latitude_end'], 6, '.', '')
             . ',' . number_format((float)$reach['longitude_end'], 6, '.', '');
     }
-    if ($gauge && $gauge['latitude'] !== null && $gauge['longitude'] !== null) {
+    if ($gauge !== null && $gauge['latitude'] !== null && $gauge['longitude'] !== null) {
         $map_points['Gauge'] = number_format((float)$gauge['latitude'], 6, '.', '')
             . ',' . number_format((float)$gauge['longitude'], 6, '.', '');
     }
 
-    if (!$map_points && ($reach['geom'] ?? '') === '') {
+    if ($map_points === [] && ($reach['geom'] ?? '') === '') {
         return [false, ''];
     }
 
@@ -533,7 +533,8 @@ function _render_reach_map(array $reach, ?array $gauge): array
     if (isset($reach['geom']) && $reach['geom'] !== '') {
         $track = [];
         foreach (explode(',', $reach['geom']) as $pair) {
-            $parts = preg_split('/\s+/', trim($pair)) ?: [];
+            $split = preg_split('/\s+/', trim($pair));
+            $parts = $split !== false ? $split : [];
             if (count($parts) === 2) {
                 $track[] = [(float)$parts[1], (float)$parts[0]];
             }
@@ -543,16 +544,17 @@ function _render_reach_map(array $reach, ?array $gauge): array
     $pts_json = htmlspecialchars((string)json_encode($map_points));
     echo '<div id="reach-map" style="height:400px;margin-top:1rem;border:1px solid #ccc"'
         . ' data-points="' . $pts_json . '"';
-    if ($gauge && isset($gauge['id'])) {
+    if ($gauge !== null && isset($gauge['id'])) {
         echo ' data-gauge-id="' . (int)$gauge['id'] . '"';
     }
-    if ($track) {
+    if (($track ?? []) !== []) {
         $track_json = htmlspecialchars((string)json_encode($track));
         echo ' data-track="' . $track_json . '"';
     }
     echo '></div>';
 
-    $gp_mtime = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/gradient-profile.js') ?: 1;
+    $gp_raw = @filemtime($_SERVER['DOCUMENT_ROOT'] . '/static/gradient-profile.js');
+    $gp_mtime = $gp_raw !== false ? $gp_raw : 1;
     return [
         true,
         '<script src="/static/leaflet.js" defer></script>'

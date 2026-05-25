@@ -12,7 +12,7 @@ require_once __DIR__ . '/svg_plot_rating.php';
  * @return array{0: string, 1: string}
  */
 function _split_y_label(string $y_label): array {
-    if (preg_match('/^(.+?)\s*\(([^)]+)\)\s*$/', $y_label, $m)) {
+    if (preg_match('/^(.+?)\s*\(([^)]+)\)\s*$/', $y_label, $m) === 1) {
         return [$m[1], $m[2]];
     }
     return [$y_label, ''];
@@ -95,7 +95,7 @@ function _bands_svg(?array $bands, float $y_min, float $y_max, int $ml, int $mt,
     }
 
     $colors = ['low' => '#e8a735', 'okay' => '#4caf50', 'high' => '#e53935'];
-    $y_range = $y_max - $y_min ?: 1;
+    $y_range = ($y_max - $y_min) !== 0.0 ? $y_max - $y_min : 1;
     $svg = '';
     foreach ($zones as $z) {
         $top = max($y_min, min($y_max, $z['top']));
@@ -167,8 +167,8 @@ function generate_svg_plot(
     $y_vals = array_column($pairs, 1);
     assert($y_vals !== []);  // $pairs has >= 2 elements (count guarded above)
     [$y_min, $y_max, $y_step] = nice_axis(min($y_vals), max($y_vals));
-    $x_range = $x_max - $x_min ?: 1;
-    $y_range = $y_max - $y_min ?: 1;
+    $x_range = ($x_max - $x_min) !== 0.0 ? $x_max - $x_min : 1;
+    $y_range = ($y_max - $y_min) !== 0.0 ? $y_max - $y_min : 1;
 
     // Map to pixel coords
     $points_str = '';
@@ -274,8 +274,8 @@ function generate_rating_dual_plot(
     $fy_vals = array_column($pairs, 1);
     assert($fy_vals !== []);  // $pairs has >= 2 elements (count guarded above)
     [$fy_min, $fy_max, $fy_step] = nice_axis(min($fy_vals), max($fy_vals));
-    $x_range = $x_max - $x_min ?: 1;
-    $fy_range = $fy_max - $fy_min ?: 1;
+    $x_range = ($x_max - $x_min) !== 0.0 ? $x_max - $x_min : 1;
+    $fy_range = ($fy_max - $fy_min) !== 0.0 ? $fy_max - $fy_min : 1;
 
     // Flow polyline
     $pts = '';
@@ -314,7 +314,7 @@ function generate_rating_dual_plot(
             $valid_ticks[] = [$gv, $qv];
         }
         // Fallback: if no nice tick landed in-range, place labels at visible endpoints.
-        if (!$valid_ticks) {
+        if ($valid_ticks === []) {
             foreach ([$lo, $hi] as $gv) {
                 $qv = rate_gauge_to_flow($rating_lookup, $gv);
                 if ($qv !== null) $valid_ticks[] = [$gv, $qv];
@@ -419,7 +419,7 @@ function generate_gradient_profile_svg(
     // the take-out (via the first/last edge logic below). The
     // underlying gradient_profile JSON keeps both bars.
     $n = count($samples);
-    if (!($samples[$n - 1]['significant'] ?? false) && ($samples[$n - 2]['significant'] ?? false)) {
+    if (!(bool)($samples[$n - 1]['significant'] ?? false) && (bool)($samples[$n - 2]['significant'] ?? false)) {
         array_pop($samples);
         if (count($samples) < 2) return '';
     }
@@ -442,13 +442,13 @@ function generate_gradient_profile_svg(
     $x_max = $length_mi !== null && $length_mi > 0
         ? $length_mi
         : (float)$samples[count($samples) - 1]['d_mi'];
-    $x_range = $x_max - $x_min ?: 1;
+    $x_range = ($x_max - $x_min) !== 0.0 ? $x_max - $x_min : 1;
     $y_vals = array_map(fn($s) => (float)$s['grad_ft_per_mi'], $samples);
     // Anchor y-axis at zero so a short bar (low gradient) reads short
     // and a tall bar reads tall. nice_axis() handles only the top end.
     [, $y_max, $y_step] = nice_axis(0.0, max($y_vals));
     $y_min = 0.0;
-    $y_range = $y_max - $y_min ?: 1;
+    $y_range = ($y_max - $y_min) !== 0.0 ? $y_max - $y_min : 1;
 
     // Bar plot: each sample renders as a rect spanning its 3-sigma
     // ANALYSIS window (d_mi ± w_mi/2) at height = grad_ft_per_mi.
@@ -534,7 +534,7 @@ function generate_gradient_profile_svg(
         }
         $total_raw = $cum > 0 ? $cum : 1.0;
         [$e_min, $e_max, $e_step] = nice_axis(min($end_e, $putin_e), max($end_e, $putin_e));
-        $e_range = $e_max - $e_min ?: 1;
+        $e_range = ($e_max - $e_min) !== 0.0 ? $e_max - $e_min : 1;
         $e_to_py = fn (float $e): float => $mt + ($e_max - $e) / $e_range * $ph;
 
         $pts = [sprintf('%.1f,%.1f', (float)$ml, $e_to_py($putin_e))];

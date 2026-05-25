@@ -17,7 +17,7 @@ function parse_class_tiers(?string $s): array {
     $found   = [];
     if (preg_match_all(
             '/\b(V|IV|III|II|I)(?:\s*[-\x{2013}]\s*(V|IV|III|II|I))?\b/u',
-            $cleaned, $matches, PREG_SET_ORDER | PREG_UNMATCHED_AS_NULL)) {
+            $cleaned, $matches, PREG_SET_ORDER | PREG_UNMATCHED_AS_NULL) !== false) {
         foreach ($matches as $hit) {
             $lo = $roman[$hit[1]];
             // With PREG_UNMATCHED_AS_NULL the optional group is null when
