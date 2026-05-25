@@ -13,6 +13,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/http_exit.php';
 
 /**
  * Resolve the SQLite path without opening a connection, so it's unit-testable.
@@ -26,6 +27,14 @@ function _sqlite_path(): string {
 }
 
 function get_db(): PDO {
+    // Test seam: functional tests inject a seeded PDO via $GLOBALS so the
+    // handler-under-test and the shared chrome (current_editor, …) share one
+    // in-memory DB. Never set in production.
+    /** @var PDO|null $override */
+    $override = $GLOBALS['__kayak_test_db'] ?? null;
+    if ($override instanceof PDO) {
+        return $override;
+    }
     static $pdo = null;
     if ($pdo !== null) return $pdo;
 

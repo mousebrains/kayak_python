@@ -146,6 +146,16 @@ function current_editor(?PDO $db_override = null): ?array
 {
     static $cached = false;
     static $editor = null;
+    static $seen_gen = 0;
+    // Test seam: bumping $GLOBALS['__kayak_editor_cache_gen'] invalidates the
+    // per-process memo so an in-process functional test can't leak its editor
+    // into the next test. Never set in production — the memo behaves as before.
+    $gen = $GLOBALS['__kayak_editor_cache_gen'] ?? 0;
+    if ($gen !== $seen_gen) {
+        $cached = false;
+        $editor = null;
+        $seen_gen = $gen;
+    }
     if ($db_override === null && $cached) {
         return $editor;
     }
@@ -214,7 +224,7 @@ function require_editor(): array
     if ($ed === null) {
         $next = rawurlencode($_SERVER['REQUEST_URI'] ?? '/');
         header("Location: /login.php?next=$next");
-        exit;
+        http_terminate(302);
     }
     return $ed;
 }
@@ -257,8 +267,7 @@ function require_csrf(): void
     $submitted = (string)($_POST['csrf_token'] ?? '');
     $cookie    = (string)($_COOKIE[EDITOR_CSRF_COOKIE] ?? '');
     if ($submitted === '' || $cookie === '' || !hash_equals($cookie, $submitted)) {
-        http_response_code(403);
-        exit('Invalid CSRF token');
+        http_terminate(403, 'Invalid CSRF token');
     }
 }
 

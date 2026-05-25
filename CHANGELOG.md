@@ -82,6 +82,13 @@ All notable changes to this project will be documented in this file.
   `mixed`-typing finds are captured in a fresh *shrinking* `phpstan-baseline.neon`
   (634 entries) so new code is held to level 9. 172 phpunit tests stay green.
   See `docs/PLAN_phpstan_level9_strict.md`.
+- **PHP test coverage raised ~9% → ~60%** via an in-process functional harness
+  (`tests/php/FunctionalTestCase.php` + an `http_terminate` exit seam) so pcov
+  sees handler logic the `php -S` integration tests can't: unit tests for the
+  pure helpers, functional tests for every handler (detail / custom / search /
+  plots / review / propose) and the Tier-1 auth + magic-link core, all at
+  90–99% (172 → 516 tests). The CI coverage floor ratchets 5% → 55%. See
+  `docs/PLAN_php_testing.md`.
 
 ## [1.1.1] - 2026-05-21
 

@@ -16,6 +16,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/header.php';
 require_once __DIR__ . '/footer.php';
+require_once __DIR__ . '/http_exit.php';
 
 /**
  * Dispatch search mode and write the full HTTP response.
@@ -31,7 +32,7 @@ function handle_gauge_search(PDO $db, string $q): never
 
     if (count($results) === 1) {
         header('Location: /gauge.php?id=' . $results[0]['id']);
-        exit;
+        http_terminate(302);
     }
 
     header('Cache-Control: no-cache');
@@ -46,7 +47,7 @@ function handle_gauge_search(PDO $db, string $q): never
 
     echo '<p style="margin-top:1rem"><a href="/gauge.php">Browse all gauges</a></p>';
     include_footer();
-    exit;
+    http_terminate(200);
 }
 
 /**

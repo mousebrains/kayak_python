@@ -118,8 +118,7 @@ function _load_gauge_or_404(PDO $db, int $id): array
      * }|false $gauge */
     $gauge = $stmt->fetch();
     if ($gauge === false) {
-        http_response_code(404);
-        exit('Gauge not found');
+        http_terminate(404, 'Gauge not found');
     }
     return $gauge;
 }

@@ -11,6 +11,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/header.php';
 require_once __DIR__ . '/footer.php';
+require_once __DIR__ . '/http_exit.php';
 
 /**
  * Render an error page with status $code and terminate the request.
@@ -26,5 +27,5 @@ function render_error_page(int $code, string $title, string $message_html): void
     echo $message_html;
     echo '<p style="margin-top:1.5rem"><a href="/">&larr; Back to river levels</a></p>';
     include_footer();
-    exit;
+    http_terminate($code);
 }

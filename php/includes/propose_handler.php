@@ -60,12 +60,10 @@ const PROPOSE_DAILY_CAPS = ['pending' => 3, 'minimal' => 10, 'full' => 20, 'main
 function handle_propose(PDO $db, array $ed, string $type, int $id): void
 {
     if ($type !== 'reach') {
-        http_response_code(400);
-        exit('Only reach proposals supported in Phase 2.');
+        http_terminate(400, 'Only reach proposals supported in Phase 2.');
     }
     if ($id <= 0) {
-        http_response_code(400);
-        exit('Missing id parameter');
+        http_terminate(400, 'Missing id parameter');
     }
 
     /** @var array{id: int, updated_at: string|null, gauge_id: int|null, name: string|null, display_name: string|null, sort_name: string|null, nature: string|null, description: string|null, difficulties: string|null, basin: string|null, basin_area: float|null, elevation: float|null, elevation_lost: float|null, length: float|null, gradient: float|null, features: string|null, latitude: float|null, longitude: float|null, latitude_start: float|null, longitude_start: float|null, latitude_end: float|null, longitude_end: float|null, no_show: int, notes: string|null, optimal_flow: float|null, region: string|null, remoteness: string|null, scenery: string|null, season: string|null, watershed_type: string|null, aw_id: int|null, river: string|null, max_gradient: float|null, geom: string|null, huc: string|null, map_only: int, no_flow_range: int, gradient_profile: string|null, gradient_unreliable: int} $reach */

@@ -78,16 +78,14 @@ function _review_handle_post(PDO $db, ?int $cr_id, ?string $action, int $maint_i
 {
     require_csrf();
     if ($cr_id === null || $cr_id === 0) {
-        http_response_code(400);
-        exit('Missing id');
+        http_terminate(400, 'Missing id');
     }
     $st = $db->prepare('SELECT * FROM change_request WHERE id = ?');
     $st->execute([$cr_id]);
     /** @var array{id: int, target_type: string, target_id: int|null, editor_id: int, submitted_at: string, subject: string|null, payload_json: string, notes_to_maint: string|null, status: string, reviewed_at: string|null, reviewed_by: int|null, reviewer_note: string|null, applied_json: string|null, source_url: string|null}|false $cr */
     $cr = $st->fetch();
     if ($cr === false) {
-        http_response_code(404);
-        exit('change_request not found');
+        http_terminate(404, 'change_request not found');
     }
     if ($cr['status'] !== 'pending') {
         return [null, 'This request has already been ' . $cr['status'] . '.'];

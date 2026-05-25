@@ -83,4 +83,76 @@ final class TurnstileTest extends TestCase
             putenv('TURNSTILE_SITE_KEY');
         }
     }
+
+    // -----------------------------------------------------------------
+    // turnstile_enabled — needs BOTH keys
+    // -----------------------------------------------------------------
+
+    public function testEnabledRequiresBothKeys(): void
+    {
+        $this->_install_fixture(['turnstile_site_key' => 'only-site']);
+        $this->assertFalse(turnstile_enabled());
+
+        $this->_install_fixture(['turnstile_secret' => 'only-secret']);
+        $this->assertFalse(turnstile_enabled());
+
+        $this->_install_fixture([
+            'turnstile_site_key' => 's', 'turnstile_secret' => 'k',
+        ]);
+        $this->assertTrue(turnstile_enabled());
+    }
+
+    // -----------------------------------------------------------------
+    // turnstile_script_tag / turnstile_widget — gated on enabled
+    // -----------------------------------------------------------------
+
+    public function testScriptAndWidgetEmptyWhenDisabled(): void
+    {
+        $this->_install_fixture([]);
+        $this->assertSame('', turnstile_script_tag());
+        $this->assertSame('', turnstile_widget());
+    }
+
+    public function testScriptTagWhenEnabled(): void
+    {
+        $this->_install_fixture(['turnstile_site_key' => 's', 'turnstile_secret' => 'k']);
+        $tag = turnstile_script_tag();
+        $this->assertStringContainsString('<script src="https://challenges.cloudflare.com/turnstile/v0/api.js"', $tag);
+        $this->assertStringContainsString('async', $tag);
+        $this->assertStringContainsString('defer', $tag);
+    }
+
+    public function testWidgetWhenEnabledEscapesSiteKey(): void
+    {
+        // The sitekey lands in a double-quoted attribute, so a quote in the
+        // key must be HTML-escaped.
+        $this->_install_fixture([
+            'turnstile_site_key' => 'ab"cd', 'turnstile_secret' => 'k',
+        ]);
+        $widget = turnstile_widget();
+        $this->assertStringContainsString('class="cf-turnstile"', $widget);
+        $this->assertStringContainsString('data-sitekey="ab&quot;cd"', $widget);
+    }
+
+    // -----------------------------------------------------------------
+    // turnstile_verify — branches reachable without network
+    // -----------------------------------------------------------------
+
+    public function testVerifyReturnsTrueWhenDisabled(): void
+    {
+        // No keys → verification is a no-op pass (dev / pre-rollout).
+        $this->_install_fixture([]);
+        $this->assertTrue(turnstile_verify('any-token', '1.2.3.4'));
+        // Even an empty token passes when the feature is off.
+        $this->assertTrue(turnstile_verify('', '1.2.3.4'));
+    }
+
+    public function testVerifyReturnsFalseOnEmptyResponseWhenEnabled(): void
+    {
+        // Enabled + empty client token → fail fast, no HTTP call attempted.
+        $this->_install_fixture([
+            'turnstile_site_key' => 's', 'turnstile_secret' => 'k',
+        ]);
+        $this->assertFalse(turnstile_verify('', '1.2.3.4'));
+    }
 }
