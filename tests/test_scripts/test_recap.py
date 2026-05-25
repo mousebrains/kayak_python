@@ -8,6 +8,9 @@ covers the pure formatting path.
 from __future__ import annotations
 
 import importlib.util
+import io
+import json
+import logging
 from pathlib import Path
 
 _RECAP_PATH = Path(__file__).resolve().parents[2] / "scripts" / "recap.py"
@@ -19,6 +22,46 @@ def _load_recap():
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def test_journalctl_json_parses_real_struct_log_line(monkeypatch):
+    """End-to-end seam guard: the bare-JSON line ``struct_log.emit()``
+    writes is exactly what ``_journalctl_json`` expects in journald's
+    ``MESSAGE``.
+
+    This crosses the producer/consumer boundary that the formatter-prefix
+    bug lived in — events arriving as ``"<asctime> INFO: {json}"`` were
+    silently dropped by the ``startswith("{")`` gate, so recap reported
+    "Events parsed: 0" while the pipeline ran fine. No prior test
+    exercised ``_journalctl_json`` against an actual emitted line.
+    """
+    from kayak.utils import struct_log
+
+    recap = _load_recap()
+
+    # Reproduce a genuine emit() line by capturing the dedicated handler.
+    buf = io.StringIO()
+    monkeypatch.setattr(struct_log._logger.handlers[0], "stream", buf)
+    logging.getLogger().setLevel(logging.WARNING)  # production default
+    struct_log.emit("step_done", run_id="r1", step="build", elapsed_s=1.0, outcome="ok")
+    message = buf.getvalue().strip()
+
+    # Wrap it the way `journalctl --output json` presents each entry,
+    # then drive recap's real parser via a stubbed subprocess.
+    journal_line = json.dumps({"MESSAGE": message, "_SYSTEMD_UNIT": "kayak-pipeline.service"})
+
+    class _Proc:
+        stdout = journal_line + "\n"
+        stderr = ""
+
+    monkeypatch.setattr(recap.subprocess, "run", lambda *a, **k: _Proc())
+
+    events = recap._journalctl_json("kayak-*", since="7 days ago")
+
+    assert len(events) == 1, "emitted line was dropped by the parse gate"
+    assert events[0]["event"] == "step_done"
+    assert events[0]["step"] == "build"
+    assert events[0]["_unit"] == "kayak-pipeline.service"
 
 
 def test_summarize_empty_events_returns_no_events_marker():
