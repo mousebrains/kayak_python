@@ -22,6 +22,14 @@ All notable changes to this project will be documented in this file.
   supported way a dev re-trace's geometry reaches prod.
 
 ### Fixed
+- **CSP dashboard accuracy**: `_internal/`'s "Recent CSP violations" table no
+  longer mislabels proxy/extension-injected inline scripts as "Same-origin
+  (our code)". Inline/eval/wasm-eval violations carry the *document* URL as
+  their source-file, so a same-origin value there is an injection (e.g. Google
+  Web Light's `google-proxy-*` fleet), not authored code — now bucketed
+  "Injected (proxy/extension)". Also fixes the `violated`/`blocked` columns
+  rendering `—` (they read pre-normalization log keys). `csp_classify()`
+  extracted to `php/includes/csp_classify.php` with unit tests.
 - **rDNS resolver bounded** so `kayak-status.service` no longer times out on
   slow reverse lookups (wall-clock budget + negative-cache backoff).
 - **Deploy path**: the documented quick-start now loads the metadata snapshot
