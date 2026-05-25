@@ -28,9 +28,9 @@ require_once __DIR__ . '/reach_fields.php';
 /**
  * Dispatch detail mode and write the full HTTP response.
  *
- * 404s with `exit('Reach not found')` if the id has no reach row
- * (preserving the original inline 404 — Phase 2.5 may switch this
- * to get_reach_or_404 for a richer HTML 404 page).
+ * 404s via `http_terminate(404, 'Reach not found')` if the id has no
+ * reach row (preserving the original inline plain-text 404 — Phase 2.5
+ * may switch this to get_reach_or_404 for a richer HTML 404 page).
  *
  * $q and $st are the entry-point's query/state filters; in detail mode
  * they are always empty (search mode would have exited before getting
@@ -117,9 +117,10 @@ function handle_reach_detail(
 }
 
 /**
- * Load a reach by id or write a 404 + exit. Behavior matches the
- * pre-extraction inline check; see header docblock about the planned
- * Phase 2.5 migration to get_reach_or_404.
+ * Load a reach by id or 404 via http_terminate(). Behavior matches the
+ * pre-extraction inline check (plain-text 404 body); see header docblock
+ * about the planned Phase 2.5 migration to get_reach_or_404. The
+ * http_terminate seam lets in-process tests catch the early-out.
  *
  * @return array{id: int, updated_at: string|null, gauge_id: int|null,
  *     name: string|null, display_name: string|null, sort_name: string|null,
@@ -152,8 +153,7 @@ function _load_reach_or_404(PDO $db, int $id): array
      *     gradient_profile: string|null, gradient_unreliable: int}|false $reach */
     $reach = $stmt->fetch();
     if ($reach === false) {
-        http_response_code(404);
-        exit('Reach not found');
+        http_terminate(404, 'Reach not found');
     }
     return $reach;
 }

@@ -292,6 +292,227 @@ final class SvgPlotTest extends TestCase
         $this->assertNull(self::parse_gradient_payload($svg)['elev']);
     }
 
+    // -----------------------------------------------------------------
+    // _empty_svg via too-few data points
+    // -----------------------------------------------------------------
+
+    public function test_generate_svg_plot_empty_times_returns_no_data(): void
+    {
+        $svg = generate_svg_plot([], [], 'Empty', 'Flow (CFS)');
+        $this->assertStringContainsString('No data available', $svg);
+        $this->assertStringContainsString('Empty', $svg);
+    }
+
+    public function test_generate_svg_plot_single_point_returns_no_data(): void
+    {
+        // Fewer than 2 non-null pairs → empty plot.
+        $svg = generate_svg_plot([1700000000], [100.0], 'One', 'Flow (CFS)');
+        $this->assertStringContainsString('No data available', $svg);
+    }
+
+    public function test_generate_svg_plot_drops_null_values(): void
+    {
+        // Nulls are gaps — with only one real value left, the plot is empty.
+        $svg = generate_svg_plot(
+            [1700000000, 1700003600, 1700007200],
+            [null, 150.0, null],
+            'Gappy',
+            'Flow (CFS)'
+        );
+        $this->assertStringContainsString('No data available', $svg);
+    }
+
+    public function test_generate_rating_dual_plot_empty_times_returns_no_data(): void
+    {
+        $svg = generate_rating_dual_plot([], [], [[3.0, 100.0], [4.0, 200.0]], 'T', 'Flow (CFS)');
+        $this->assertStringContainsString('No data available', $svg);
+    }
+
+    // -----------------------------------------------------------------
+    // _bands_svg — exercised through generate_svg_plot($bands)
+    // -----------------------------------------------------------------
+
+    public function test_bands_low_and_high_emit_three_zones(): void
+    {
+        // low + high present → low/okay/high zones; expect <= 3 band rects
+        // (a zone clipped to zero height is skipped).
+        $svg = generate_svg_plot(
+            [1700000000, 1700003600, 1700007200],
+            [50.0, 250.0, 450.0],
+            'Bands',
+            'Flow (CFS)',
+            800,
+            350,
+            200,
+            true,
+            ['low' => 150.0, 'high' => 350.0]
+        );
+        $n = substr_count($svg, 'fill-opacity="0.12"');
+        $this->assertGreaterThanOrEqual(2, $n);
+        $this->assertLessThanOrEqual(3, $n);
+        // Band colours come from the low/okay/high palette.
+        $this->assertStringContainsString('#4caf50', $svg); // okay green present
+    }
+
+    public function test_bands_low_only(): void
+    {
+        // Only a low threshold → low + okay zones (no high red).
+        $svg = generate_svg_plot(
+            [1700000000, 1700003600],
+            [50.0, 450.0],
+            'LowOnly',
+            'Flow (CFS)',
+            800,
+            350,
+            200,
+            true,
+            ['low' => 200.0]
+        );
+        $this->assertStringContainsString('fill-opacity="0.12"', $svg);
+        $this->assertStringNotContainsString('#e53935', $svg); // no high-zone red
+    }
+
+    public function test_bands_high_only(): void
+    {
+        // Only a high threshold → okay + high zones (no low amber).
+        $svg = generate_svg_plot(
+            [1700000000, 1700003600],
+            [50.0, 450.0],
+            'HighOnly',
+            'Flow (CFS)',
+            800,
+            350,
+            200,
+            true,
+            ['high' => 200.0]
+        );
+        $this->assertStringContainsString('#e53935', $svg);   // high red present
+        $this->assertStringNotContainsString('#e8a735', $svg); // no low amber
+    }
+
+    public function test_bands_null_emits_no_band_rects(): void
+    {
+        // bands array present but both keys null → no band rects at all.
+        $svg = generate_svg_plot(
+            [1700000000, 1700003600],
+            [50.0, 450.0],
+            'NoBand',
+            'Flow (CFS)',
+            800,
+            350,
+            200,
+            true,
+            ['low' => null, 'high' => null]
+        );
+        $this->assertStringNotContainsString('fill-opacity="0.12"', $svg);
+    }
+
+    // -----------------------------------------------------------------
+    // nice_axis — direct, including the fallback tick search
+    // -----------------------------------------------------------------
+
+    public function test_nice_axis_round_bounds_and_step(): void
+    {
+        [$lo, $hi, $step] = nice_axis(0.0, 100.0);
+        $this->assertLessThanOrEqual(0.0, $lo);
+        $this->assertGreaterThanOrEqual(100.0, $hi);
+        $this->assertGreaterThan(0.0, $step);
+        // Bounds are integral multiples of the step.
+        $this->assertEqualsWithDelta(0.0, fmod($lo, $step), 1e-9);
+        $this->assertEqualsWithDelta(0.0, fmod($hi, $step), 1e-9);
+    }
+
+    public function test_nice_axis_zero_range_does_not_divide_by_zero(): void
+    {
+        // data_min == data_max → range forced to 1.0; returns a sane window.
+        [$lo, $hi, $step] = nice_axis(5.0, 5.0);
+        $this->assertGreaterThan(0.0, $step);
+        $this->assertLessThanOrEqual(5.0, $lo);
+        $this->assertGreaterThanOrEqual(5.0, $hi);
+    }
+
+    public function test_nice_axis_tiny_fractional_range(): void
+    {
+        // Sub-unit range exercises the smaller candidate steps (0.1/0.2 * mag).
+        [$lo, $hi, $step] = nice_axis(3.02, 3.07);
+        $this->assertLessThanOrEqual(3.02, $lo);
+        $this->assertGreaterThanOrEqual(3.07, $hi);
+        $this->assertGreaterThan(0.0, $step);
+    }
+
+    // -----------------------------------------------------------------
+    // generate_rating_dual_plot — right-axis tick fallback path
+    // -----------------------------------------------------------------
+
+    public function test_rating_dual_plot_right_axis_fallback_to_endpoints(): void
+    {
+        // A steep, narrow rating curve with flow values whose "nice" gauge
+        // ticks may not land inside the visible flow window forces the
+        // endpoint-fallback branch for the right axis. Either way the plot
+        // must render with gage-height labelling and at least one right tick.
+        $rating = [[2.50, 1000.0], [2.55, 5000.0], [2.60, 9000.0]];
+        $svg = generate_rating_dual_plot(
+            [1700000000, 1700003600, 1700007200],
+            [3000.0, 5000.0, 7000.0],
+            $rating,
+            'Steep',
+            'Flow (CFS)'
+        );
+        $this->assertStringContainsString('Gage Height', $svg);
+        // Right-axis ticks use the #C04020 colour.
+        $this->assertStringContainsString('#C04020', $svg);
+    }
+
+    // -----------------------------------------------------------------
+    // generate_gradient_profile_svg — x_max falls back to sample extent
+    // -----------------------------------------------------------------
+
+    public function test_gradient_profile_xmax_from_samples_without_length(): void
+    {
+        // No $length_mi → x_max derived from the last sample's d_mi.
+        $profile = json_encode([
+            'samples' => [
+                ['d_mi' => 0.0, 'grad_ft_per_mi' => 40.0, 'w_mi' => 0.5, 'significant' => true],
+                ['d_mi' => 1.0, 'grad_ft_per_mi' => 60.0, 'w_mi' => 0.5, 'significant' => true],
+                ['d_mi' => 2.0, 'grad_ft_per_mi' => 50.0, 'w_mi' => 0.5, 'significant' => true],
+            ],
+        ]);
+        assert($profile !== false);
+        $svg = generate_gradient_profile_svg($profile, 9, 480, 120);
+        $payload = self::parse_gradient_payload($svg);
+        $this->assertSame(0.0, $payload['x_min']);
+        // Last d_mi is 2.0 → that becomes x_max.
+        $this->assertEqualsWithDelta(2.0, $payload['x_max'], 1e-9);
+    }
+
+    public function test_gradient_profile_carries_putin_takeout_coords(): void
+    {
+        // Supplying length + put-in/take-out coords populates the JS payload
+        // anchors the map dot interpolates against.
+        $profile = json_encode([
+            'samples' => [
+                ['d_mi' => 0.0, 'lat' => 44.1, 'lon' => -122.0, 'grad_ft_per_mi' => 40.0, 'w_mi' => 0.5, 'significant' => true],
+                ['d_mi' => 1.0, 'lat' => 44.2, 'lon' => -122.1, 'grad_ft_per_mi' => 60.0, 'w_mi' => 0.5, 'significant' => true],
+            ],
+        ]);
+        assert($profile !== false);
+        $svg = generate_gradient_profile_svg(
+            $profile,
+            9,
+            480,
+            120,
+            length_mi: 1.5,
+            putin_lat: 44.10,
+            putin_lon: -122.00,
+            takeout_lat: 44.25,
+            takeout_lon: -122.15
+        );
+        $payload = self::parse_gradient_payload($svg);
+        $this->assertEqualsWithDelta(1.5, $payload['x_max'], 1e-9);
+        $this->assertSame(['lat' => 44.10, 'lon' => -122.00], $payload['putin']);
+        $this->assertSame(['lat' => 44.25, 'lon' => -122.15], $payload['takeout']);
+    }
+
     /** Extract the JSON payload from the <svg data-series="..."> attribute. */
     private static function parse_data_series(string $svg): array
     {

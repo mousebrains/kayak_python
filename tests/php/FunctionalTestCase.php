@@ -86,6 +86,9 @@ abstract class FunctionalTestCase extends TestCase
             self::markTestSkipped('test schema not available');
         }
         $GLOBALS['__kayak_test_db'] = self::$pdo;
+        // Invalidate current_editor()'s process-static memo so a prior test's
+        // editor/session can't leak into this one (and vice-versa on teardown).
+        $GLOBALS['__kayak_editor_cache_gen'] = ($GLOBALS['__kayak_editor_cache_gen'] ?? 0) + 1;
         $_GET = [];
         $_POST = [];
         $_COOKIE = [];
@@ -98,6 +101,8 @@ abstract class FunctionalTestCase extends TestCase
     protected function tearDown(): void
     {
         unset($GLOBALS['__kayak_test_db']);
+        $_COOKIE = [];
+        $GLOBALS['__kayak_editor_cache_gen'] = ($GLOBALS['__kayak_editor_cache_gen'] ?? 0) + 1;
     }
 
     /** Override to seed reference + fixture rows once per class. */

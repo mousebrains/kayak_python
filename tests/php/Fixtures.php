@@ -87,6 +87,63 @@ final class Fixtures
         return self::insert($db, 'reach_class', $overrides + ['reach_id' => $reachId, 'name' => 'III']);
     }
 
+    /**
+     * A `state` reference row. Returns the new id so callers can link reaches.
+     *
+     * @param array<string, mixed> $overrides
+     */
+    public static function state(PDO $db, array $overrides = []): int
+    {
+        $n = ++self::$seq;
+        return self::insert($db, 'state', $overrides + [
+            'name' => "State $n",
+            'abbreviation' => 'X' . $n,
+        ]);
+    }
+
+    public static function linkReachState(PDO $db, int $reachId, int $stateId): void
+    {
+        self::insert($db, 'reach_state', ['reach_id' => $reachId, 'state_id' => $stateId]);
+    }
+
+    /** A WBD HUC name lookup row (HUC2/4/6/8/10/12). @param array<string, mixed> $overrides */
+    public static function hucName(PDO $db, string $code, int $level, string $name): void
+    {
+        self::insert($db, 'huc_name', ['code' => $code, 'level' => $level, 'name' => $name]);
+    }
+
+    /** A guidebook reference row. @param array<string, mixed> $overrides */
+    public static function guidebook(PDO $db, array $overrides = []): int
+    {
+        $n = ++self::$seq;
+        return self::insert($db, 'guidebook', $overrides + ['title' => "Guidebook $n"]);
+    }
+
+    public static function linkReachGuidebook(PDO $db, int $reachId, int $guidebookId): void
+    {
+        self::insert($db, 'reach_guidebook', ['reach_id' => $reachId, 'guidebook_id' => $guidebookId]);
+    }
+
+    /** Latest cached observation for a source + data_type. @param array<string, mixed> $overrides */
+    public static function latestObservation(PDO $db, int $sourceId, array $overrides = []): void
+    {
+        self::insert($db, 'latest_observation', $overrides + [
+            'source_id' => $sourceId,
+            'data_type' => 'flow',
+            'observed_at' => date('Y-m-d H:i:s'),
+            'value' => 100.0,
+        ]);
+    }
+
+    /**
+     * Generic insert that returns lastInsertId — for one-off reference rows a
+     * test needs without a dedicated factory. @param array<string, mixed> $row
+     */
+    public static function insertReturning(PDO $db, string $table, array $row): int
+    {
+        return self::insert($db, $table, $row);
+    }
+
     /** @param array<string, mixed> $overrides */
     public static function editor(PDO $db, array $overrides = []): int
     {

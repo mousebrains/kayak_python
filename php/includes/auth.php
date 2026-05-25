@@ -146,6 +146,16 @@ function current_editor(?PDO $db_override = null): ?array
 {
     static $cached = false;
     static $editor = null;
+    static $seen_gen = 0;
+    // Test seam: bumping $GLOBALS['__kayak_editor_cache_gen'] invalidates the
+    // per-process memo so an in-process functional test can't leak its editor
+    // into the next test. Never set in production — the memo behaves as before.
+    $gen = $GLOBALS['__kayak_editor_cache_gen'] ?? 0;
+    if ($gen !== $seen_gen) {
+        $cached = false;
+        $editor = null;
+        $seen_gen = $gen;
+    }
     if ($db_override === null && $cached) {
         return $editor;
     }

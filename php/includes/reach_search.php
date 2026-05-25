@@ -15,6 +15,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/header.php';
 require_once __DIR__ . '/footer.php';
 require_once __DIR__ . '/gauge_map.php';
+require_once __DIR__ . '/http_exit.php';
 
 /**
  * Map-marker color palette. Indexed by result row position; mirrors the
@@ -46,7 +47,7 @@ function handle_search_mode(
 
     if (count($results) === 1) {
         header('Location: /reach.php?id=' . $results[0]['id']);
-        exit;
+        http_terminate(302);
     }
 
     [$reach_readings, $gauge_ids] = _aggregate_reach_readings($db, $results);
@@ -79,7 +80,7 @@ function handle_search_mode(
         echo $map_scripts;
     }
     include_footer();
-    exit;
+    http_terminate(200);
 }
 
 /**
