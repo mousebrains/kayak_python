@@ -54,7 +54,7 @@ function gm_render_map(
     array $reach_tracks = [],
     ?int $gauge_id = null
 ): bool {
-    if (empty($points) && empty($geom) && empty($reach_tracks)) {
+    if ($points === [] && ($geom ?? '') === '' && $reach_tracks === []) {
         return false;
     }
 
@@ -82,11 +82,11 @@ function gm_render_map(
         $coords = $parse_geom($rt['geom']);
         if (count($coords) >= 2) {
             $rt_payload[] = [
-                'id' => (int)$rt['id'],
-                'name' => (string)$rt['name'],
-                'location' => (string)($rt['location'] ?? ''),
-                'classes' => (string)($rt['classes'] ?? ''),
-                'status' => (string)($rt['status'] ?? 'unknown'),
+                'id' => $rt['id'],
+                'name' => $rt['name'],
+                'location' => $rt['location'] ?? '',
+                'classes' => $rt['classes'] ?? '',
+                'status' => $rt['status'] ?? 'unknown',
                 'points' => $coords,
             ];
         }

@@ -72,7 +72,7 @@ function send_email(string $to, string $subject, string $body, array $extra_head
     ];
     // Sanitize extra header values — strip CR/LF to prevent header injection.
     foreach ($extra_headers as $k => $v) {
-        $default_headers[$k] = preg_replace('/[\r\n]+/', ' ', (string)$v);
+        $default_headers[$k] = preg_replace('/[\r\n]+/', ' ', $v);
     }
     $headers = implode("\r\n", array_map(
         fn($k, $v) => "$k: $v",

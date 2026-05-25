@@ -100,7 +100,7 @@ function get_reach_or_404(int $id): array {
         render_error_page(
             404,
             'Reach not found',
-            '<p>No reach with id ' . (int)$id . ' exists. It may have been removed or merged.</p>'
+            '<p>No reach with id ' . $id . ' exists. It may have been removed or merged.</p>'
         );
     }
     return $reach;

@@ -97,7 +97,7 @@ function turnstile_verify(string $response, string $remote_ip): bool {
         error_log('turnstile_verify: non-JSON response: ' . substr((string)$body, 0, 300));
         return false;
     }
-    if (!empty($data['success'])) return true;
+    if ($data['success'] ?? false) return true;
 
     $codes = $data['error-codes'] ?? [];
     error_log('turnstile_verify: success=false error-codes='

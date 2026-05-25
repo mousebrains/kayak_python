@@ -236,10 +236,10 @@ function _classify_reach_status(array $thresholds, array $readings_by_dtype): st
             if ($rc['low'] === null && $rc['high'] === null) {
                 continue;
             }
-            if (!empty($rc['low_data_type']) && $rc['low_data_type'] !== $classify_dt) {
+            if (($rc['low_data_type'] ?? '') !== '' && $rc['low_data_type'] !== $classify_dt) {
                 continue;
             }
-            if (!empty($rc['high_data_type']) && $rc['high_data_type'] !== $classify_dt) {
+            if (($rc['high_data_type'] ?? '') !== '' && $rc['high_data_type'] !== $classify_dt) {
                 continue;
             }
             if ($rc['low'] !== null && $v < (float)$rc['low']) {
@@ -445,7 +445,7 @@ function _render_gauge_map(array $gauge, array $reaches, array $reach_status_by_
 {
     $reach_tracks_for_map = [];
     foreach ($reaches as $r) {
-        if (!empty($r['geom']) && strpos((string)$r['geom'], ',') !== false) {
+        if (($r['geom'] ?? '') !== '' && strpos((string)$r['geom'], ',') !== false) {
             $reach_tracks_for_map[] = [
                 'id' => (int)$r['id'],
                 'name' => (string)$r['name'],
@@ -617,7 +617,7 @@ function _render_gauge_regression(PDO $db, string $gauge_name, array $sources): 
             continue;
         }
 
-        $is_target    = !empty($entry['target']);
+        $is_target    = (bool)($entry['target'] ?? false);
         $predictor_of = $entry['predictor_for'] ?? [];
 
         echo '<section class="regression-analysis">';

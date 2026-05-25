@@ -185,13 +185,13 @@ function _gp_cross_source_mean(
             $sums[$sid] = ($sums[$sid] ?? 0.0) + $sv[$i];
             $cnts[$sid] = ($cnts[$sid] ?? 0) + 1;
         }
-        if (empty($sums)) {
+        if ($sums === []) {
             continue;
         }
         $sum_of_means = 0.0;
         $n_sources = 0;
-        foreach ($sums as $sid => $s) {
-            $sum_of_means += $s / $cnts[$sid];
+        foreach ($sums as $sum_sid => $s) {
+            $sum_of_means += $s / $cnts[$sum_sid];
             $n_sources++;
         }
         $out_v[] = $sum_of_means / $n_sources;

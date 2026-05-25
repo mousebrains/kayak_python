@@ -79,7 +79,7 @@ include_header('Account');
     </details>
   </td></tr>
   <tr><td>Joined</td><td><?= htmlspecialchars((string)$ed['created_at']) ?></td></tr>
-  <?php if (!empty($ed['last_login_at'])): ?>
+  <?php if (($ed['last_login_at'] ?? '') !== ''): ?>
   <tr><td>Last login</td><td><?= htmlspecialchars((string)$ed['last_login_at']) ?></td></tr>
   <?php endif ?>
   <tr><td>Session expires</td><td><?= htmlspecialchars((string)$ed['session_expires_at']) ?></td></tr>

@@ -30,7 +30,7 @@ if (filter_input(INPUT_GET, 'ajax', FILTER_VALIDATE_INT)) {
     header('Cache-Control: max-age=60');
 
     $raw = (string)(filter_input(INPUT_GET, 'states', FILTER_DEFAULT) ?? '');
-    $state_names = array_filter(array_map('trim', explode(',', $raw)));
+    $state_names = array_filter(array_map('trim', explode(',', $raw)), fn($s) => $s !== '');
     if (!$state_names) {
         echo '[]';
         exit;
@@ -128,17 +128,17 @@ if ($huc8_codes) {
     $hp = implode(',', array_fill(0, count($codes), '?'));
     $hn8 = $db->prepare("SELECT code, name FROM huc_name WHERE level = 8 AND code IN ($hp)");
     $hn8->execute($codes);
-    foreach ($hn8->fetchAll() as $r) $huc8_names[(string)$r['code']] = $r['name'];
+    foreach ($hn8->fetchAll() as $r8) $huc8_names[(string)$r8['code']] = $r8['name'];
 
     $huc6 = array_map('strval', array_keys($huc6_to_huc8s));
     $hp6 = implode(',', array_fill(0, count($huc6), '?'));
     $hn6 = $db->prepare("SELECT code, name FROM huc_name WHERE level = 6 AND code IN ($hp6)");
     $hn6->execute($huc6);
-    foreach ($hn6->fetchAll() as $r) $huc6_names[(string)$r['code']] = $r['name'];
+    foreach ($hn6->fetchAll() as $r6) $huc6_names[(string)$r6['code']] = $r6['name'];
 }
 uksort($huc6_to_huc8s, fn($a, $b) => strcmp(
-    $huc6_names[(string)$a] ?? (string)$a,
-    $huc6_names[(string)$b] ?? (string)$b
+    $huc6_names[$a] ?? strval($a),
+    $huc6_names[$b] ?? strval($b)
 ));
 
 // Optional ?state=<full name> — pre-checks only that pill so users arriving
@@ -174,7 +174,7 @@ $total_huc8 = array_sum(array_map('count', $huc6_to_huc8s));
     <div class="filter-pills" data-group="huc8">
       <?= $fg_toggle ?>
 <?php foreach ($huc6_to_huc8s as $h6 => $children):
-      $h6 = (string)$h6;
+      $h6 = strval($h6);  // numeric HUC keys are coerced to int by PHP; strict_types needs string
       $h6_name = $huc6_names[$h6] ?? $h6;
       $codes = array_map('strval', array_keys($children));
       sort($codes); ?>

@@ -72,7 +72,7 @@ function _cookie_params(int $lifetime_seconds): array
     return [
         'expires'  => $lifetime_seconds === 0 ? 0 : time() + $lifetime_seconds,
         'path'     => '/',
-        'secure'   => !empty($_SERVER['HTTPS']),
+        'secure'   => ($_SERVER['HTTPS'] ?? '') !== '',
         'httponly' => true,
         'samesite' => 'Strict',
     ];
@@ -279,7 +279,7 @@ function maintainer_emails(): array
     //    override the JSON snapshot without re-running emit-config.
     $env = getenv('MAINTAINER_EMAIL');
     if ($env !== false && $env !== '') {
-        return array_values(array_filter(array_map('trim', explode(',', $env))));
+        return array_values(array_filter(array_map('trim', explode(',', $env)), fn($s) => $s !== ''));
     }
     // 2. ``maintainer_emails`` from /etc/kayak/runtime-config.json
     //    (list[EmailStr] from KayakConfig).

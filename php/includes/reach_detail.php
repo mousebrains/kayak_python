@@ -80,7 +80,7 @@ function handle_reach_detail(
     _render_reach_guidebooks($reach, $related['guidebooks']);
     _render_reach_linked_gauge($related['gauge']);
     [$has_map, $map_scripts] = _render_reach_map($reach, $related['gauge']);
-    if (!empty($reach['gradient_profile'])) {
+    if (($reach['gradient_profile'] ?? '') !== '') {
         // Capture first: generate_gradient_profile_svg returns '' for a
         // profile with < 2 samples (very short reaches). Skip the wrapper
         // in that case so we don't emit an empty container div.
@@ -380,9 +380,9 @@ function _render_reach_details_table(array $reach, array $states, array $classes
         if ($value === null || trim((string)$value) === '') {
             continue;
         }
-        if (in_array($label, $html_fields)) {
+        if (in_array($label, $html_fields, true)) {
             echo "<tr><td>$label</td><td>$value</td></tr>\n";
-        } elseif (in_array($label, $autolink_fields)) {
+        } elseif (in_array($label, $autolink_fields, true)) {
             echo "<tr><td>$label</td><td>" . nl2br(autolink_urls((string)$value)) . "</td></tr>\n";
         } else {
             $esc = htmlspecialchars((string)$value);
@@ -525,12 +525,12 @@ function _render_reach_map(array $reach, ?array $gauge): array
             . ',' . number_format((float)$gauge['longitude'], 6, '.', '');
     }
 
-    if (!$map_points && empty($reach['geom'])) {
+    if (!$map_points && ($reach['geom'] ?? '') === '') {
         return [false, ''];
     }
 
     $track = null;
-    if (!empty($reach['geom'])) {
+    if (isset($reach['geom']) && $reach['geom'] !== '') {
         $track = [];
         foreach (explode(',', $reach['geom']) as $pair) {
             $parts = preg_split('/\s+/', trim($pair)) ?: [];

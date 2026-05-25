@@ -23,7 +23,7 @@ $end_date = validate_date(filter_input(INPUT_GET, 'end', FILTER_SANITIZE_SPECIAL
 if (!$id) { http_response_code(400); exit('Missing id parameter'); }
 
 $valid_types = ['flow', 'gauge', 'gage', 'temperature', 'temp', 'inflow', 'outflow', 'dual'];
-if (!in_array($type, $valid_types)) {
+if (!in_array($type, $valid_types, true)) {
     http_response_code(400); exit('Invalid type');
 }
 
@@ -40,7 +40,7 @@ if (!$reach['gauge_id']) { http_response_code(404); exit('No gauge for this reac
 $name = $reach['display_name'] ?: $reach['name'];
 
 $gauge_id = $reach['gauge_id'];
-$is_flow = in_array($type, ['flow', 'inflow', 'outflow']);
+$is_flow = in_array($type, ['flow', 'inflow', 'outflow'], true);
 
 if ($start_date && $end_date) {
     $start_ts = date_ts($start_date);

@@ -493,7 +493,7 @@ function _render_description_fields_and_map(array $reach, array $related, array 
         echo '</table>';
         $gauge_id_for_map = ($gauge && isset($gauge['id'])) ? (int)$gauge['id'] : null;
         $has_map = gm_render_map($map_points, $geom, $track_color, [], $gauge_id_for_map);
-        if (!empty($reach['gradient_profile'])) {
+        if (($reach['gradient_profile'] ?? '') !== '') {
             // Sits directly below the map, full container width, so the
             // cursor-linked map dot tracks visually with chart position.
             // Capture first and skip the wrapper when the SVG is '' (a
@@ -522,9 +522,9 @@ function _render_description_fields_and_map(array $reach, array $related, array 
         if ($value === null || trim((string)$value) === '') {
             continue;
         }
-        if (in_array($label, $html_fields)) {
+        if (in_array($label, $html_fields, true)) {
             echo "<tr><td>$label</td><td>$value</td></tr>\n";
-        } elseif (in_array($label, $autolink_fields)) {
+        } elseif (in_array($label, $autolink_fields, true)) {
             echo "<tr><td>$label</td><td>" . nl2br(autolink_urls((string)$value)) . "</td></tr>\n";
         } else {
             $esc = htmlspecialchars((string)$value);
@@ -606,7 +606,7 @@ function _render_data_sources(PDO $db, ?array $gauge): void
     echo '<table class="desc-table">';
 
     $station_urls = [];
-    if (!empty($gauge['usgs_id'])) {
+    if (($gauge['usgs_id'] ?? '') !== '') {
         $station_urls['USGS'] = [
             'label' => 'USGS - ' . $gauge['usgs_id'],
             'url' => "https://waterdata.usgs.gov/monitoring-location/USGS-"
@@ -614,7 +614,7 @@ function _render_data_sources(PDO $db, ?array $gauge): void
                 . "/#dataTypeId=continuous-00065-0&period=P7D&showFieldMeasurements=true",
         ];
     }
-    if (!empty($gauge['nwsli_id'])) {
+    if (($gauge['nwsli_id'] ?? '') !== '') {
         $station_urls['NWRFC'] = [
             'label' => 'NWRFC - ' . $gauge['nwsli_id'],
             'url' => "https://www.nwrfc.noaa.gov/river/station/flowplot/flowplot.cgi?lid="
@@ -627,7 +627,7 @@ function _render_data_sources(PDO $db, ?array $gauge): void
         $matched = null;
         $agency = $src['agency'] ?? '';
         foreach ($station_urls as $key => $info) {
-            if (in_array($key, $shown_agencies)) {
+            if (in_array($key, $shown_agencies, true)) {
                 continue;
             }
             if (stripos($agency, $key) !== false) {
@@ -693,7 +693,7 @@ function _render_data_sources(PDO $db, ?array $gauge): void
         }
     }
     foreach ($station_urls as $key => $info) {
-        if (!in_array($key, $shown_agencies)) {
+        if (!in_array($key, $shown_agencies, true)) {
             $label = '<a href="' . htmlspecialchars($info['url'])
                 . '" target="_blank" rel="noopener">'
                 . htmlspecialchars($info['label']) . '</a>';

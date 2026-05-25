@@ -140,7 +140,7 @@ if (!$pivoted) {
         foreach ($data_types as $dt) {
             if (!isset($row[$dt])) {
                 $val = '';
-            } elseif (in_array($dt, ['flow', 'inflow', 'outflow'])) {
+            } elseif (in_array($dt, ['flow', 'inflow', 'outflow'], true)) {
                 $val = number_format((float)$row[$dt], 0);
             } else {
                 $val = number_format((float)$row[$dt], 1);

@@ -20,7 +20,7 @@ if (filter_input(INPUT_GET, 'ajax', FILTER_VALIDATE_INT)) {
     header('Cache-Control: max-age=60');
 
     $raw = (string)(filter_input(INPUT_GET, 'states', FILTER_DEFAULT) ?? '');
-    $state_names = array_filter(array_map('trim', explode(',', $raw)));
+    $state_names = array_filter(array_map('trim', explode(',', $raw)), fn($s) => $s !== '');
     if (!$state_names) {
         echo '[]';
         exit;

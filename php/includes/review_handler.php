@@ -146,7 +146,7 @@ function _review_build_approve_payload(array $cr): array
     $payload = json_decode((string)$cr['payload_json'], true) ?: [];
     $applied = ['reach' => [], 'reach_class' => null];
 
-    if (!empty($payload['reach'])) {
+    if (($payload['reach'] ?? []) !== []) {
         foreach (array_keys($payload['reach']) as $f) {
             $key = "reach_$f";
             $applied['reach'][$f] = array_key_exists($key, $_POST)
@@ -156,7 +156,7 @@ function _review_build_approve_payload(array $cr): array
     }
     if (isset($payload['reach_class']) && isset($_POST['classes_present'])) {
         $raw = trim((string)($_POST['classes'] ?? ''));
-        $names = $raw === '' ? [] : array_values(array_filter(array_map('trim', explode(',', $raw))));
+        $names = $raw === '' ? [] : array_values(array_filter(array_map('trim', explode(',', $raw)), fn($s) => $s !== ''));
         $lo = trim((string)($_POST['flow_low']       ?? ''));
         $hi = trim((string)($_POST['flow_high']      ?? ''));
         $dt = trim((string)($_POST['flow_data_type'] ?? 'flow'));
@@ -250,7 +250,7 @@ function _render_review_meta_table(array $cr, array $payload): void
     echo '<tr><td>From</td><td>' . htmlspecialchars((string)$cr['editor_email'])
        . ' (' . htmlspecialchars((string)$cr['editor_status']) . ')</td></tr>';
     echo '<tr><td>Submitted</td><td>' . htmlspecialchars((string)$cr['submitted_at']) . '</td></tr>';
-    if (!empty($cr['source_url'])) {
+    if (($cr['source_url'] ?? '') !== '') {
         $src = (string)$cr['source_url'];
         echo '<tr><td>Page</td><td><a href="' . htmlspecialchars($src) . '">'
            . htmlspecialchars($src) . '</a></td></tr>';
@@ -260,7 +260,7 @@ function _render_review_meta_table(array $cr, array $payload): void
         echo '<tr><td>Reach</td><td><a href="/description.php?id=' . (int)$cr['target_id']
            . '">description</a></td></tr>';
     }
-    if (!empty($payload['body'])) {
+    if (($payload['body'] ?? '') !== '') {
         echo '<tr><td>Message</td><td><pre style="white-space:pre-wrap;margin:0">'
            . htmlspecialchars((string)$payload['body']) . '</pre></td></tr>';
     }
@@ -280,7 +280,7 @@ function _render_review_meta_table(array $cr, array $payload): void
  */
 function _render_review_terminal_state(array $cr, ?array $applied): void
 {
-    if (!empty($cr['reviewer_note'])) {
+    if (($cr['reviewer_note'] ?? '') !== '') {
         echo '<h3>Maintainer notes</h3>';
         echo '<pre style="white-space:pre-wrap;background:#f6f8fa;border:1px solid #e1e4e8;border-radius:4px;padding:.5rem">'
            . htmlspecialchars((string)$cr['reviewer_note']) . '</pre>';
@@ -307,7 +307,7 @@ function _render_review_form(array $cr, array $payload, ?array $cur, string $csr
     echo '<input type="hidden" name="csrf_token" value="' . $csrf . '">';
     echo '<input type="hidden" name="id" value="' . (int)$cr['id'] . '">';
 
-    if (!empty($payload['reach'])) {
+    if (($payload['reach'] ?? []) !== []) {
         _render_review_reach_fields($payload['reach'], $cur);
     }
     if (isset($payload['reach_class'])) {
@@ -351,14 +351,14 @@ function _render_review_reach_fields(array $reach_fields, ?array $cur): void
     foreach ($reach_fields as $f => $v) {
         $cur_val = $cur ? (string)($cur['reach'][$f] ?? '') : '';
         $is_long = in_array($f, ['description', 'features'], true);
-        echo '<tr><td>' . htmlspecialchars((string)$f) . '</td>';
+        echo '<tr><td>' . htmlspecialchars($f) . '</td>';
         echo '<td><pre style="white-space:pre-wrap;margin:0;max-width:30em">'
            . htmlspecialchars($cur_val) . '</pre></td>';
         if ($is_long) {
-            echo '<td><textarea name="reach_' . htmlspecialchars((string)$f) . '" style="width:100%;min-height:6em">'
+            echo '<td><textarea name="reach_' . htmlspecialchars($f) . '" style="width:100%;min-height:6em">'
                . htmlspecialchars((string)$v) . '</textarea></td>';
         } else {
-            echo '<td><input type="text" name="reach_' . htmlspecialchars((string)$f) . '" value="'
+            echo '<td><input type="text" name="reach_' . htmlspecialchars($f) . '" value="'
                . htmlspecialchars((string)$v) . '" style="width:100%"></td>';
         }
         echo '</tr>';

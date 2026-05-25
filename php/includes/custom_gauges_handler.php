@@ -165,7 +165,7 @@ SQL;
         }
         $status_by_gauge[$gid] = [
             'label'  => $label,
-            'counts' => array_filter(['low' => $n_low, 'okay' => $n_okay, 'high' => $n_high]),
+            'counts' => array_filter(['low' => $n_low, 'okay' => $n_okay, 'high' => $n_high], fn($n) => $n > 0),
         ];
     }
     return $status_by_gauge;
@@ -270,8 +270,8 @@ function _load_custom_gauges_huc_groups(PDO $db, array $huc8_codes): array
         $huc6_groups[$h6][] = [$h8, $huc8_names[$h8] ?? $h8];
     }
     uksort($huc6_groups, fn($a, $b) => strcmp(
-        $huc6_names[(string)$a] ?? (string)$a,
-        $huc6_names[(string)$b] ?? (string)$b,
+        $huc6_names[$a] ?? strval($a),
+        $huc6_names[$b] ?? strval($b),
     ));
     foreach ($huc6_groups as &$arr) {
         sort($arr);
@@ -331,7 +331,7 @@ function _render_custom_gauges_header(
     <div class="filter-pills" data-group="huc8">
       <?= $fg_toggle ?>
 <?php foreach ($huc6_groups as $h6 => $children):
-        $h6 = (string)$h6;
+        $h6 = strval($h6);  // numeric HUC keys are coerced to int by PHP; strict_types needs string
         $h6_name = $huc6_names[$h6] ?? $h6; ?>
       <details class="filter-subgroup">
         <summary><label class="huc6-parent"><input type="checkbox" data-huc6="<?= htmlspecialchars($h6) ?>" checked><?= htmlspecialchars($h6_name) ?></label> <span class="fg-count"><?= count($children) ?></span></summary>
@@ -401,7 +401,7 @@ function _render_custom_gauges_table(array $rows, array $status_by_gauge): void
     }
 
     // Best-available time — latest of the four observation timestamps.
-    $times = array_filter([$r['flow_time'], $r['inflow_time'], $r['gage_time'], $r['temp_time']]);
+    $times = array_filter([$r['flow_time'], $r['inflow_time'], $r['gage_time'], $r['temp_time']], fn($t) => $t !== null);
     $time_html = '';
     if ($times) {
         $latest = max(array_map('strtotime', $times));

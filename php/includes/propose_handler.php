@@ -227,7 +227,7 @@ function _handle_propose_post(PDO $db, array $ed, array $reach, string $reach_na
     $proposed_class_payload = null;
     if ($ctx['allow_full'] && isset($_POST['classes_present'])) {
         $raw = trim((string)($_POST['classes'] ?? ''));
-        $names = $raw === '' ? [] : array_values(array_filter(array_map('trim', explode(',', $raw))));
+        $names = $raw === '' ? [] : array_values(array_filter(array_map('trim', explode(',', $raw)), fn($s) => $s !== ''));
         foreach ($names as $c) {
             $issues = array_merge($issues, check_class_string('class', $c));
         }
@@ -277,7 +277,7 @@ function _handle_propose_post(PDO $db, array $ed, array $reach, string $reach_na
         }
     }
 
-    if (empty($payload) && $notes === '') {
+    if ($payload === [] && $notes === '') {
         return [
             ['No changes detected. Edit at least one field or add a note to the maintainer.'],
             $warnings,
@@ -362,9 +362,9 @@ function _send_proposal_notification(
         $new_names = $payload['reach_class']['names'];
         $new_range = $payload['reach_class']['range'];
         $summary_lines[] = 'reach_class: '
-            . (empty($ctx['cur_classes']) ? '(none)' : implode(', ', $ctx['cur_classes']))
+            . ($ctx['cur_classes'] === [] ? '(none)' : implode(', ', $ctx['cur_classes']))
             . ' -> '
-            . (empty($new_names) ? '(none)' : implode(', ', $new_names));
+            . ($new_names === [] ? '(none)' : implode(', ', $new_names));
         $summary_lines[] = 'flow range: '
             . $fmt_range($ctx['cur_range']) . ' -> ' . $fmt_range($new_range);
     }

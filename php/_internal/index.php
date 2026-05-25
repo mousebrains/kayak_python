@@ -160,7 +160,7 @@ function tail_lines(string $path, int $max_lines): array {
     $buf = '';
     $lines = 0;
     while ($pos > 0 && $lines <= $max_lines) {
-        $read = (int)min($chunk_size, $pos);
+        $read = min($chunk_size, $pos);
         $pos -= $read;
         fseek($fh, $pos, SEEK_SET);
         $chunk = (string)fread($fh, $read);
@@ -332,7 +332,7 @@ pre { font-size: 12px; background: #f5f5f5; padding: .5rem; overflow-x: auto; ma
 <dl class="summary-grid">
     <dt>Last build</dt>
     <dd><?= htmlspecialchars($build_at ?? '—') ?>
-        (<?= htmlspecialchars(age_phrase($build_at ? gmdate('Y-m-d H:i:s', (int)$build_mtime) : null)) ?>)</dd>
+        (<?= htmlspecialchars(age_phrase($build_at ? gmdate('Y-m-d H:i:s', $build_mtime) : null)) ?>)</dd>
     <dt>Latest observation</dt>
     <dd><?= htmlspecialchars($latest_obs_at ?? '—') ?>
         (<?= htmlspecialchars(age_phrase($latest_obs_at)) ?>)</dd>
@@ -407,7 +407,7 @@ pre { font-size: 12px; background: #f5f5f5; padding: .5rem; overflow-x: auto; ma
     $cause      = csp_classify($data);
 ?>
             <tr>
-                <td><?= htmlspecialchars((string)$e['ts']) ?></td>
+                <td><?= htmlspecialchars($e['ts']) ?></td>
                 <td><?= htmlspecialchars($cause) ?></td>
                 <td><?= htmlspecialchars($doc) ?></td>
                 <td><?= htmlspecialchars($violated) ?></td>

@@ -156,7 +156,7 @@ function _aggregate_reach_readings(PDO $db, array $results): array
     if (!$results) {
         return [$reach_readings, []];
     }
-    $gauge_ids = array_values(array_unique(array_filter(array_column($results, 'gauge_id'))));
+    $gauge_ids = array_values(array_unique(array_filter(array_column($results, 'gauge_id'), fn($id) => $id !== null)));
     if (!$gauge_ids) {
         return [$reach_readings, []];
     }
@@ -234,7 +234,7 @@ function _aggregate_reach_classes_and_guides(PDO $db, array $results): array
         if (isset($ss_edition[$gid])) {
             $reach_ss[$rid][] = $ss_edition[$gid];
         } else {
-            $abbr = (string)($gb_abbrev[$gid] ?? substr($gb['title'], 0, 2));
+            $abbr = $gb_abbrev[$gid] ?? substr($gb['title'], 0, 2);
             $reach_guides[$rid][$abbr] = true;
         }
     }
@@ -247,7 +247,7 @@ function _aggregate_reach_classes_and_guides(PDO $db, array $results): array
     }
 
     foreach ($results as $r) {
-        if (!empty($r['aw_id'])) {
+        if (($r['aw_id'] ?? '') !== '') {
             $reach_guides[$r['id']]['AW'] = true;
         }
     }
@@ -357,7 +357,7 @@ function _build_search_map_reaches(array $results): array
             continue;
         }
         $track = null;
-        if (!empty($r['geom'])) {
+        if (isset($r['geom']) && $r['geom'] !== '') {
             $track = [];
             foreach (explode(',', $r['geom']) as $pair) {
                 $parts = preg_split('/\s+/', trim($pair)) ?: [];

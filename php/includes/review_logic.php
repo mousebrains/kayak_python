@@ -96,7 +96,7 @@ function review_approve(PDO $db, array $cr, array $applied, int $maint_id, strin
         }
 
         // Apply reach columns
-        if (!empty($applied['reach'])) {
+        if (($applied['reach'] ?? []) !== []) {
             $sets = [];
             $params = [];
             foreach ($applied['reach'] as $f => $v) {
@@ -187,7 +187,7 @@ function review_notify_editor(PDO $db, array $cr, string $decision, string $note
     $st = $db->prepare('SELECT email FROM editor WHERE id = ?');
     $st->execute([$cr['editor_id']]);
     $row = $st->fetch();
-    if (!$row || empty($row['email'])) return;
+    if (!$row || ($row['email'] ?? '') === '') return;
 
     $target_label = $cr['subject'] ?: ($cr['target_type'] . ' #' . $cr['target_id']);
     send_email(
@@ -210,7 +210,7 @@ function review_send_reply(PDO $db, array $cr, string $reply, int $maint_id): vo
     $st = $db->prepare('SELECT email FROM editor WHERE id = ?');
     $st->execute([$cr['editor_id']]);
     $row = $st->fetch();
-    if ($row && !empty($row['email'])) {
+    if ($row && ($row['email'] ?? '') !== '') {
         $target_label = $cr['subject'] ?: ($cr['target_type'] . ' #' . $cr['target_id']);
         send_email(
             (string)$row['email'],
@@ -257,7 +257,7 @@ function review_reply_and_close(PDO $db, array $cr, string $reply, int $maint_id
     $st = $db->prepare('SELECT email FROM editor WHERE id = ?');
     $st->execute([$cr['editor_id']]);
     $row = $st->fetch();
-    if ($row && !empty($row['email'])) {
+    if ($row && ($row['email'] ?? '') !== '') {
         $target_label = $cr['subject'] ?: ($cr['target_type'] . ' #' . $cr['target_id']);
         send_email(
             (string)$row['email'],

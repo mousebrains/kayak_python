@@ -90,7 +90,7 @@ function render_nav(string $active, array $context): string {
 
     // Maintainers still get a prominent Edit shortcut on reach pages.
     // Everyone else reaches the Comment form through the footer.
-    if ($feature && $maint && ($context['type'] ?? null) === 'reach' && !empty($context['id'])) {
+    if ($feature && $maint && ($context['type'] ?? null) === 'reach' && ($context['id'] ?? '') !== '') {
         $left .= '<a href="/edit.php?id=' . (int)$context['id'] . '"' . $comment_cls . '>Edit</a>';
     }
     $left .= '</nav>';

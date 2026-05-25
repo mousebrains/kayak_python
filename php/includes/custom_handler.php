@@ -184,7 +184,7 @@ function _load_custom_sparklines(PDO $db, array $ids): array
         }
     }
 
-    $gauge_ids = array_values(array_unique(array_filter(array_values($gauge_map))));
+    $gauge_ids = array_values(array_unique(array_filter(array_values($gauge_map), fn($id) => $id > 0)));
     $sparklines = [];
     if (!$gauge_ids) {
         return [$gauge_map, $sparklines];
@@ -293,7 +293,7 @@ function _compute_custom_filters(array $reaches, array $tiers_by_reach): array
     $tiers_present = [];
     foreach ($reaches as $s) {
         $rid = (int)$s['id'];
-        if (!empty($s['state'])) {
+        if (($s['state'] ?? '') !== '') {
             $states_present[$s['state']] = true;
         }
         $basins_present[$s['drainage'] ?? ''] = true;
@@ -301,7 +301,7 @@ function _compute_custom_filters(array $reaches, array $tiers_by_reach): array
         foreach ($tiers_by_reach[$rid] ?? ['?'] as $t) {
             $tiers_present[$t] = true;
         }
-        if (empty($tiers_by_reach[$rid])) {
+        if (($tiers_by_reach[$rid] ?? []) === []) {
             $tiers_present['?'] = true;
         }
     }
