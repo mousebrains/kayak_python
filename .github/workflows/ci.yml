@@ -37,8 +37,8 @@ jobs:
       # Pin to the version in uv.lock / .pre-commit-config.yaml so the format
       # gate can't drift when ruff ships a release (the churn behind df6e422).
       - run: pip install ruff==0.15.11
-      - run: ruff check src/ tests/
-      - run: ruff format --check src/ tests/
+      - run: ruff check src/ tests/ scripts/
+      - run: ruff format --check src/ tests/ scripts/
 
   lint-misc:
     name: Lint PHP/JS/CSS/Shell
@@ -197,7 +197,10 @@ jobs:
           cache: 'pip'
           cache-dependency-path: pyproject.toml
       - run: pip install -e ".[dev]"
-      - run: mypy src/
+      # scripts/ isn't strictly typed wholesale; gate the prod-path metadata
+      # scripts that round-trip the live DB. The one-off harvest scripts and
+      # the httpx-using elevation refresh (httpx is undeclared) stay out.
+      - run: mypy src/ scripts/import_metadata.py scripts/export_metadata.py
 
   test:
     runs-on: ubuntu-24.04
