@@ -59,7 +59,7 @@ For each of the 10 editor-pipeline endpoints, what's the expected behavior at ea
 | `/admin.php` | — | `id`, `ids[]` | maintainer-required; can act on any non-maintainer editor row (by design) |
 | `/comment.php` | — | — | INSERT only; `editor_id` = current editor; `target_type='site'`, `target_id=NULL` |
 | `/edit.php` | `id`, `type` | `reach_id`, `gauge_id`, `target_type` | maintainer-required; can edit any reach/gauge row (by design); `$type` whitelisted to `['reach','gauge']`; `$id` unified via `?:` chain |
-| `/propose.php` | `type`, `id` | `target_type`, `target_id` | editor-required; existing-proposal lookup is scoped `WHERE editor_id = ? AND target_type = 'reach' AND target_id = ?` (per `php/includes/propose_handler.php :: _handle_propose_post`); INSERT/UPDATE uses `$ed['id']` for editor_id |
+| `/propose.php` | `type`, `id` | `target_type`, `target_id` | editor-required; existing-proposal lookup is scoped `WHERE editor_id = ? AND target_type = 'reach' AND target_id = ?` (per `php/includes/propose_handler.php :: _load_propose_context`); INSERT/UPDATE (in `_handle_propose_post`) uses `$ed['id']` for editor_id |
 | `/review.php` | `id`, `status` | `id`, `action` | maintainer-required; can read/write any change_request (by design) |
 
 Out of scope for this tier (public-facing reads, no editor scope): `description.php`, `gauge.php`, `api.php`, `latest.php`, `plot.php`, `reach.php`, `picker.php`, `gauge_picker.php`, `custom.php`, `custom_gauges.php`, `data.php`. Their model is "any reach/gauge is public" — documented here so future audits don't re-flag.
@@ -68,7 +68,7 @@ Out of scope for this tier (public-facing reads, no editor scope): `description.
 
 | # | Test | Verdict | Evidence |
 |---|---|---|---|
-| 2.2.1 | `propose.php` GET — can an editor see another editor's pending proposal? | ✅ | Pre-populated form is loaded via the existing-proposal SELECT (`php/includes/propose_handler.php :: _handle_propose_post`), scoped by `editor_id = ?` from `current_editor()`. If editor X queries `?id=42` (a reach), they see their own pending proposal for reach 42, or no pre-population. They cannot see editor Y's proposal for the same reach. |
+| 2.2.1 | `propose.php` GET — can an editor see another editor's pending proposal? | ✅ | Pre-populated form is loaded via the existing-proposal SELECT (`php/includes/propose_handler.php :: _load_propose_context`), scoped by `editor_id = ?` from `current_editor()`. If editor X queries `?id=42` (a reach), they see their own pending proposal for reach 42, or no pre-population. They cannot see editor Y's proposal for the same reach. |
 | 2.2.2 | `propose.php` POST — can an editor write a proposal as a different editor? | ✅ | INSERT (`php/includes/propose_handler.php :: _handle_propose_post`) uses `$ed['id']` from `current_editor()` for `editor_id`. The POST `target_id` is the reach id (public). No path lets editor X set `editor_id=Y`. |
 | 2.2.3 | `edit.php` GET/POST id-mismatch — can attacker write to a row they didn't view? | ✅ | The handler reads `$id` from GET `?id` or POST `reach_id`/`gauge_id` (priority chain via `?:`). The POST id is used for the UPDATE; an attacker who changes the POST id is editing a different row than they viewed on GET — but maintainers can edit any row anyway. No privilege escalation. |
 | 2.2.4 | `edit.php` `$type` whitelist | ✅ | `php/edit.php:30-33`: `if (!in_array($type, ['reach', 'gauge'], true)) { http_response_code(400); exit('Unsupported edit target type'); }`. No way to pass `$type='editor'` or similar. |

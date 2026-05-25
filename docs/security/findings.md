@@ -107,7 +107,7 @@
 - **Status:** 🟢 Closed (Tier 6 fix; `conf/security-headers.conf:7` + SETUP.md § 10).
 - **Threats:** Adjacent to T-S3 (cookie-theft via MITM on first HTTP)
 - **Description:** `deploy/SETUP.md:395` showed the intended header (`Strict-Transport-Security "max-age=63072000; includeSubDomains"`) marked "uncomment when SSL working." It was not present in `conf/security-headers.conf:7`.
-- **Resolution:** Added `add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;` at server scope in `conf/security-headers.conf:7` (right after the security-headers snippet include). SETUP.md § 10 updated to verify with `curl -sI` and to clarify the snippet-vs-server-scope trade-off. `preload` qualifier intentionally OFF — that's a one-way commitment best left to a future explicit decision.
+- **Resolution:** Added `add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;` to the shared security-headers snippet (`conf/security-headers.conf:7`), which `conf/snippets/levels-common.conf:27` includes at server level and the header-overriding location blocks re-include — so HSTS is emitted once on every response. SETUP.md § 10 updated to verify with `curl -sI`. `preload` qualifier intentionally OFF — that's a one-way commitment best left to a future explicit decision.
 - **Verification:** After deploying, `curl -sI https://levels.wkcc.org/ | grep -i strict-transport` should show the header.
 - **Plan tier:** Tier 1.2 (session audit) / Tier 6 (apply).
 

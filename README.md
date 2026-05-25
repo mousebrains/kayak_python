@@ -67,8 +67,8 @@ levels pipeline
 php -S localhost:8000 -t public_html
 ```
 
-> **Set `OUTPUT_DIR` on a dev machine.** Unset, `levels build` (run by the
-> pipeline in step 5) writes into the repo's own `public_html/`, clobbering the
+> **Set `OUTPUT_DIR` on a dev machine.** Unset, `levels build` (which `levels
+> pipeline` runs) writes into the repo's own `public_html/`, clobbering the
 > tracked dev symlinks there and dropping stray artifacts under `static/`. Set
 > `OUTPUT_DIR` to a non-repo path (e.g. `~/public_html_dev`) in
 > `~/.config/kayak/.env` and serve that instead — `php -S localhost:8000 -t
