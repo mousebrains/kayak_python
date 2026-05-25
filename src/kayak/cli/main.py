@@ -73,4 +73,10 @@ def main() -> None:
         parser.print_help()
         sys.exit(1)
 
-    args.func(args)
+    # Handlers either return None (success → exit 0) or an int exit code
+    # (e.g. check-reaches returns 1 when it flags issues). Map the latter
+    # onto sys.exit; handlers that need other codes still call sys.exit
+    # themselves before returning.
+    rc = args.func(args)
+    if isinstance(rc, int):
+        sys.exit(rc)
