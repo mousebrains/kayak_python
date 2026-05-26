@@ -219,6 +219,11 @@ the CSVs in the same invocation (the `--geom-only` flag re-applies *only*
 the geometry to a live DB — the dev re-trace path, see `deploy/SETUP.md`
 §4 and `scripts/deploy.sh`; a from-scratch rebuild doesn't need it).
 
+`huc_name.csv` carries only the HUC6 + HUC8 names the site resolves; the
+HUC2/4/10/12 levels (≈97% of WBD's 17k rows) were trimmed in migration
+0061 and `levels assign-huc` no longer writes them (review-3 R6.2), so a
+rebuild restores the 403 names the UI needs, not the full WBD lookup.
+
 So rebuilding prod from scratch — e.g. after catastrophic corruption
 with no usable backup — **is** possible purely from what's checked in:
 

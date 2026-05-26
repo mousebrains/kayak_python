@@ -238,25 +238,23 @@ def test_dry_run_does_not_write(session, synthetic_gpkg):
     assert counts["assigned"] == 1
 
 
-def test_upsert_huc_names_loads_all_six_levels(session, synthetic_gpkg):
+def test_upsert_huc_names_loads_only_read_levels(session, synthetic_gpkg):
+    # R6.2: only HUC6 + HUC8 names are read anywhere, so upsert_huc_names carries
+    # just those two levels; HUC2/4/10/12 and the old HUC2 fallback are dropped.
     rows = upsert_huc_names(session, synthetic_gpkg)
     session.commit()
-    # HUC2 + HUC4 + HUC6 + HUC8 + HUC10 + HUC12 + 1 hardcoded HUC2 fallback row
-    assert rows == 1 + 1 + 1 + 1 + 2 + 3 + 1
+    assert rows == 1 + 1  # one HUC6 + one HUC8 row in the fixture
 
-    # Spot-check one row at each level.
-    huc2 = session.get(HucName, "17")
-    huc4 = session.get(HucName, "1709")
     huc6 = session.get(HucName, "170912")
     huc8 = session.get(HucName, "17091234")
-    huc10 = session.get(HucName, "1709123401")
-    huc12 = session.get(HucName, "170912340101")
-    assert (huc2.level, huc2.name) == (2, "Pacific Northwest (synthetic)")
-    assert (huc4.level, huc4.name) == (4, "Synthetic Region 4")
     assert (huc6.level, huc6.name) == (6, "Synthetic Region 6")
     assert (huc8.level, huc8.name) == (8, "Synthetic Basin")
-    assert (huc10.level, huc10.name) == (10, "West Sub")
-    assert (huc12.level, huc12.name) == (12, "West Cell")
+
+    # The unread levels (and the former HUC2 fallback) are no longer loaded.
+    assert session.get(HucName, "17") is None  # HUC2 (+ fallback)
+    assert session.get(HucName, "1709") is None  # HUC4
+    assert session.get(HucName, "1709123401") is None  # HUC10
+    assert session.get(HucName, "170912340101") is None  # HUC12
 
 
 def test_get_reach_huc_counts_buckets_by_length(session):

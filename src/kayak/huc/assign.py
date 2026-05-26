@@ -70,31 +70,24 @@ def assign_one(tree: STRtree, codes: list[str], lat: float, lon: float) -> str |
     return codes[int(idxs[0])]
 
 
-# Known HUC2 region names. Used to backfill HUC2 rows that WBD doesn't ship in
-# every HUC4 GDB — notably the 1601-1604 Great Basin GDBs lack a WBDHU2 layer
-# for HUC2=16, so the bulk extract never sees that name.
-_HUC2_FALLBACK_NAMES: dict[str, str] = {
-    "16": "Great Basin Region",
-}
-
-
 def upsert_huc_names(session: Session, gpkg: Path) -> int:
-    """Read every WBD attribute table present; bulk-upsert into ``huc_name``.
+    """Read the WBD HUC6 + HUC8 attribute tables; bulk-upsert into ``huc_name``.
 
-    Tolerates missing layers — older ``wbd.gpkg`` files built before
-    ``extract_wbd.sh`` added HU2/HU4/HU6 only carry HU8/10/12, and the
-    upsert just skips what isn't there.
+    Only these two levels are kept — they're the only ones any reader resolves
+    (review-3 R6.2). Tolerates a missing layer (older ``wbd.gpkg`` files may
+    lack one), skipping what isn't there.
 
-    Returns the total number of rows written across all layers.
+    Returns the total number of rows written.
     """
     total = 0
+    # Only HUC6 + HUC8 names are read anywhere (build/levels.py, build/gauges.py,
+    # huc/assign.py's HUC8 lookup, gauge_picker.php, custom_gauges_handler.php —
+    # all filter level IN (6, 8)). HUC2/4/10/12 were ~97% of the table and unread,
+    # dropped 2026-05 (review-3 R6.2 / migration 0061). Reach HUC *codes* come from
+    # WBD geometry (load_huc12), not this name table, so assignment is unaffected.
     for layer, level, code_col in (
-        ("WBDHU2", 2, "HUC2"),
-        ("WBDHU4", 4, "HUC4"),
         ("WBDHU6", 6, "HUC6"),
         ("WBDHU8", 8, "HUC8"),
-        ("WBDHU10", 10, "HUC10"),
-        ("WBDHU12", 12, "HUC12"),
     ):
         # Attribute-only read: skip geometry to keep peak memory low.
         try:
@@ -139,24 +132,6 @@ def upsert_huc_names(session: Session, gpkg: Path) -> int:
         total += len(rows)
         logger.info("Upserted %d %s rows into huc_name", len(rows), layer)
 
-    # Backfill HUC2 names that WBD didn't supply (insert-only; never overwrites
-    # a real WBD entry, which always wins on conflict). Reported count includes
-    # rows that were already present — they're harmless idempotent no-ops.
-    fallback_rows = [
-        {"code": code, "level": 2, "name": name, "states": None}
-        for code, name in _HUC2_FALLBACK_NAMES.items()
-    ]
-    if fallback_rows:
-        stmt = (
-            sqlite_insert(HucName)
-            .values(fallback_rows)
-            .on_conflict_do_nothing(index_elements=["code"])
-        )
-        session.execute(stmt)
-        total += len(fallback_rows)
-        logger.info(
-            "Backfilled %d HUC2 fallback names (some may already exist)", len(fallback_rows)
-        )
     return total
 
 
