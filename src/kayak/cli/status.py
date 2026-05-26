@@ -40,7 +40,7 @@ _DEFAULT_TZ = "America/Los_Angeles"
 # show up here as an empty path. Those aren't requests to levels.wkcc.org so
 # they don't belong in the operator status page.
 _DEFAULT_LOG_GLOB = "/var/log/nginx/levels-*.access.log*"
-_DEFAULT_OUTPUT = "/home/pat/kayak/var/status.html"
+_DEFAULT_OUTPUT = "/home/pat/var/status.html"
 
 # Mirror of scripts/health-check.sh defaults (the user's "aggressive" set).
 DISK_WARN_PCT = 70

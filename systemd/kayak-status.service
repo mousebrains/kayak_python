@@ -15,7 +15,7 @@ WorkingDirectory=/home/pat/kayak
 Environment=KAYAK_HOME=/home/pat
 EnvironmentFile=-/etc/kayak/env
 EnvironmentFile=-/home/pat/.config/kayak/.env
-ExecStart=/home/pat/.venv/bin/levels status --output /home/pat/kayak/var/status.html
+ExecStart=/home/pat/.venv/bin/levels status --output /home/pat/var/status.html
 # `-` prefix tolerates an empty/missing HC_STATUS env var — same convention
 # as kayak-healthcheck.service. Create the check at healthchecks.io and
 # paste the ping URL into ~/.config/kayak/.env to opt in.
@@ -29,7 +29,8 @@ Nice=15
 
 # Sandboxing — modeled on kayak-recap.service (read journald + write a
 # single file). Differences:
-#   * ReadWritePaths=/home/pat/kayak/var so the rendered HTML can land.
+#   * ReadWritePaths=/home/pat/var (out of the repo, review-3 R2.6) so the
+#     rendered HTML lands where www-data reads it with zero repo access.
 #   * ProcSubset=all (not =pid): the disk-and-memory section reads
 #     /proc/meminfo, which the pid-only subset hides.
 NoNewPrivileges=yes
@@ -37,7 +38,7 @@ PrivateTmp=yes
 PrivateDevices=yes
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/home/pat/kayak/var
+ReadWritePaths=/home/pat/var
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes

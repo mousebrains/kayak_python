@@ -65,8 +65,8 @@ server {
     # auth as /_internal/ (require_maintainer in PHP); same exact-match
     # `=` pattern so the noindex + cache-control + rate-limit headers
     # actually apply, instead of the generic .php$ regex in
-    # levels-common.conf catching it. The HTML cache lives outside
-    # docroot at /home/pat/kayak/var/status.html; PHP readfile()s it.
+    # levels-common.conf catching it. The HTML cache lives outside the
+    # repo at /home/pat/var/status.html (review-3 R2.6); PHP readfile()s it.
     location = /_internal/status {
         rewrite ^ /_internal/status.php last;
     }

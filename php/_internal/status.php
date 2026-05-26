@@ -4,7 +4,7 @@ declare(strict_types=1);
  * /_internal/status — serves the nightly-rendered operator status page.
  *
  * The HTML body is rendered out-of-band by `levels status` (Python; via
- * the kayak-status.timer at 03:30 daily) into /home/pat/kayak/var/status.html.
+ * the kayak-status.timer at 03:30 daily) into /home/pat/var/status.html.
  * This wrapper just enforces maintainer auth and streams the cached file.
  *
  * The cache lives outside the document root so nginx cannot serve it
@@ -22,7 +22,7 @@ header('Content-Type: text/html; charset=utf-8');
 header('X-Robots-Tag: noindex, nofollow');
 header('Cache-Control: no-store, private');
 
-$cached = '/home/pat/kayak/var/status.html';
+$cached = '/home/pat/var/status.html';
 if (!is_readable($cached)) {
     http_response_code(503);
     echo "<!doctype html>\n<html><head><meta charset=\"utf-8\">"
