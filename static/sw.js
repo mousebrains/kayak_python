@@ -31,8 +31,13 @@ self.addEventListener('fetch', e => {
 async function fetchAndCache(req) {
   const res = await fetch(req);
   if (res.ok) {
-    const cache = await caches.open(CACHE);
-    cache.put(req, res.clone());
+    // Don't cache responses the server marked no-store (editor / _internal
+    // pages): CacheStorage.put() ignores HTTP cache semantics, so a stale
+    // authenticated page could otherwise be served after the session is gone.
+    if (!(res.headers.get("Cache-Control") || "").includes("no-store")) {
+      const cache = await caches.open(CACHE);
+      cache.put(req, res.clone());
+    }
     return res;
   }
   // 5xx: prefer stale cache over a blank server-error page. 4xx passes

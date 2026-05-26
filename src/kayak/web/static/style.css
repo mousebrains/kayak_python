@@ -554,7 +554,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .reach-popup .rp-loc{font-size:.85rem;color:var(--c-text-muted);margin-top:2px}
 .reach-popup .rp-cls{font-size:.85rem;color:var(--c-text-muted);margin-top:2px}
 
-/* Permanent marker labels on detail-page maps (feature-map.js, reach-map.js).
+/* Permanent marker labels on detail-page maps (feature-map.js).
    Strip Leaflet's default tooltip chrome; render text with a triple-stacked
    white halo so it reads on topo and satellite basemaps. */
 .leaflet-tooltip.map-label{background:transparent;border:none;box-shadow:none;color:#000;font:700 12px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;text-shadow:0 0 2px #fff,0 0 4px #fff,0 0 6px #fff;padding:0;white-space:nowrap;cursor:pointer}

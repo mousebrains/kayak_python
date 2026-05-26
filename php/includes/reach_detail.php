@@ -639,7 +639,7 @@ function _render_reach_map(array $reach, ?array $gauge): array
     return [
         true,
         '<script src="/static/leaflet.js" defer></script>'
-        . '<script src="/static/reach-map.js" defer></script>'
+        . '<script src="/static/feature-map.js" defer></script>'
         // gradient-profile.js degrades to chart-only tooltip if the map
         // handle isn't there, so it's safe to ship on any reach page —
         // no-op when the page has no .gradient-profile-chart elements.

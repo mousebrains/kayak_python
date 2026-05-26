@@ -10,7 +10,7 @@
 //   * a hover marker on the companion Leaflet map (#feature-map) jumps
 //     to the matching (lat, lon).
 //
-// Loose-coupled to feature-map.js and reach-map.js via a non-public
+// Loose-coupled to feature-map.js via a non-public
 // convention: each map IIFE stashes its Leaflet instance on
 // el._kayakMap. Resolved lazily on first mousemove (not at hydration)
 // so the map IIFE has had a chance to run; if neither map is present
@@ -52,8 +52,8 @@ function hydrate(chart) {
   dot.style.display = 'none';
   chart.appendChild(dot);
 
-  // Locate the Leaflet map exposed by static/feature-map.js (gauge page)
-  // or static/reach-map.js (reach page) on the first mousemove — by then
+  // Locate the Leaflet map exposed by static/feature-map.js (description,
+  // gauge, and reach detail pages) on the first mousemove — by then
   // the map IIFE has run, even if both scripts were `defer`-loaded.
   let leafletMap = null;
   let mapHoverMarker = null;

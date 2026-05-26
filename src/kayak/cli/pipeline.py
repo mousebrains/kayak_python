@@ -186,6 +186,17 @@ def _build_steps(skip_fetch: bool) -> list[_Step]:
     return steps
 
 
+def _system_exit_result(step_name: str, e: SystemExit, failures: list[tuple[str, str]]) -> _Result:
+    """Map a step's ``SystemExit`` to a result: a bare ``exit(0)``/``None`` stays
+    ok; a non-zero or string code is a real failure (logged + appended to
+    ``failures``) rather than silently passing."""
+    if not e.code:
+        return _Result.ok
+    logger.error("Step %s exited with code %s", step_name, e.code)
+    failures.append((step_name, f"SystemExit({e.code})"))
+    return _Result.failed
+
+
 def pipeline(args: argparse.Namespace) -> None:
     """Run the full data pipeline."""
     steps = _build_steps(args.skip_fetch)
@@ -230,8 +241,10 @@ def pipeline(args: argparse.Namespace) -> None:
         try:
             step.fn(args)
             results[step.name] = _Result.ok
-        except SystemExit:
-            results[step.name] = _Result.ok
+        except SystemExit as e:
+            # A truthy/non-zero exit code is a real failure (a bare exit(0)
+            # stays success); the helper logs + records it.
+            results[step.name] = _system_exit_result(step.name, e, failures)
         except Exception as e:
             logger.error("Error in %s: %s", step.name, e)
             failures.append((step.name, str(e)))

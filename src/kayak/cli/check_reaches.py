@@ -281,9 +281,10 @@ def check_reaches(args: argparse.Namespace) -> int:
 
     Returns the process exit code (0 = clean, 1 = issues found); ``main.py``
     maps a non-None int return onto ``sys.exit``. (The pipeline drives
-    :func:`scan_for_issues` directly and raises on failure instead — the
-    orchestrator treats ``SystemExit`` as success, so a soft-fail step must
-    surface as an exception, not an exit code.)
+    :func:`scan_for_issues` directly and raises ``RuntimeError`` on failure —
+    that gives an error-level log + a clean entry in the run's failure summary.
+    The orchestrator now also fails a step on a non-zero ``SystemExit``, but
+    raising stays the soft-fail pattern the OnFailure chain expects.)
     """
     total, flagged = scan_for_issues(
         database_url=args.database_url,
