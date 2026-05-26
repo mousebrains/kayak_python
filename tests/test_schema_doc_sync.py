@@ -67,9 +67,7 @@ def test_schema_doc_covers_every_model_column() -> None:
         if doc_cols is None:
             missing.append(f"{table.name}: entire table undocumented")
             continue
-        missing += [
-            f"{table.name}.{c.name}" for c in table.columns if c.name not in doc_cols
-        ]
+        missing += [f"{table.name}.{c.name}" for c in table.columns if c.name not in doc_cols]
     assert not missing, (
         "docs/database-schema.md is out of sync with src/kayak/db/models.py.\n"
         "Undocumented (add them to the doc, or to _IGNORE_TABLES with a reason):\n  "
