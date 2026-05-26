@@ -125,6 +125,19 @@ def test_sync_sources_creates_sources_with_timezone(session):
     assert sources["BENO"].agency == "usbr"
 
 
+def test_canonical_agency_normalizes_parser_slugs():
+    # review-3 R6.3: parser slugs map to canonical agency names; unmapped
+    # parsers fall back to their name (the BENO/usbr case above).
+    from kayak.cli.init_db import canonical_agency
+
+    assert canonical_agency("nwps") == "NWS"
+    assert canonical_agency("wa.gov") == "WA DOE"
+    assert canonical_agency("nwrfc.textplot") == "NWRFC"
+    assert canonical_agency("nwrfc.xml") == "NWRFC"
+    assert canonical_agency("usgs") == "usgs"
+    assert canonical_agency("usbr") == "usbr"
+
+
 def test_sync_sources_updates_timezone_on_existing_source(session):
     """Changing the YAML TZ updates the existing Source row."""
     from kayak.cli.init_db import sync_sources

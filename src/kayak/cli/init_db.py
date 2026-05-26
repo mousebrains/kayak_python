@@ -14,6 +14,27 @@ from kayak.db.models import Base, FetchUrl, Source, State
 logger = logging.getLogger(__name__)
 
 
+# Canonical source.agency for a parser name, used when sources.yaml sets none
+# (it carries no `agency:` field, so a synced or auto-created source would
+# otherwise inherit the raw parser SLUG — nwps, wa.gov, nwrfc.* — which splits
+# GROUP BY agency; review-3 R6.3, migration 0062 fixed the existing rows). This
+# is the default for a new/unlabeled source; per-gauge exceptions (e.g. an nwps
+# gauge that is really NWRFC) live in source.csv and win, since sync only fills
+# a NULL agency. Unmapped parsers fall back to their name — add a row here if
+# `SELECT DISTINCT agency` ever surfaces a new slug.
+_PARSER_AGENCY: dict[str, str] = {
+    "nwps": "NWS",
+    "wa.gov": "WA DOE",
+}
+
+
+def canonical_agency(parser: str) -> str:
+    """Map a parser name to its canonical source.agency (see _PARSER_AGENCY)."""
+    if parser.startswith("nwrfc"):
+        return "NWRFC"
+    return _PARSER_AGENCY.get(parser, parser)
+
+
 def _validate_tz(tz_name: str, context: str) -> None:
     """Fail loud if a YAML-supplied IANA timezone name is unknown."""
     try:
@@ -107,12 +128,12 @@ def sync_sources(session: Session) -> int:
                     )
                     src_row.timezone = tz_name
                 if src_row.agency is None:
-                    src_row.agency = src["parser"]
+                    src_row.agency = canonical_agency(src["parser"])
             else:
                 session.add(
                     Source(
                         name=station_name,
-                        agency=src["parser"],
+                        agency=canonical_agency(src["parser"]),
                         fetch_url_id=fetch_url_row.id,
                         timezone=tz_name,
                     )

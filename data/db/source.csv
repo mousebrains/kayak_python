@@ -8,7 +8,7 @@ id,name,agency,fetch_url_id,calc_expression_id,timezone
 7,13168500,USGS,,,
 8,14140000,USGS,,,
 9,14201500,USGS,,,
-10,Calapooia_Holly_calc,,,1,
+10,Calapooia_Holly_calc,Calculation,,1,
 11,14400000,USGS,,,
 12,TLYO3,NWS,54,,
 13,ESTO3,NWS,25,,
@@ -108,7 +108,7 @@ id,name,agency,fetch_url_id,calc_expression_id,timezone
 111,MPLO3,NWS,39,,
 112,11532500,USGS,,,
 113,SCRO3,NWS,17,,
-114,Sunshine_calc,,,7,
+114,Sunshine_calc,Calculation,,7,
 115,14188800,USGS,,,
 116,WSLO3,NWS,59,,
 117,FRMO3,NWS,26,,
@@ -163,10 +163,10 @@ id,name,agency,fetch_url_id,calc_expression_id,timezone
 172,LOCO3,NWRFC,84,,
 173,WNFO3,NWRFC,85,,
 175,BRBO3,NWS,81,,
-177,NMFO3,nwps,82,,
+177,NMFO3,NWS,82,,
 179,CMRO3,NWRFC,83,,
 180,GPR,USACE,70,,
-182,29C100,wa.gov,72,,Etc/GMT+8
+182,29C100,WA DOE,72,,Etc/GMT+8
 183,14178000,USGS,,,
 184,14305500,USGS,,,
 185,14306500,USGS,,,
@@ -176,14 +176,14 @@ id,name,agency,fetch_url_id,calc_expression_id,timezone
 189,14020000,USGS,,,
 190,14300350,USGS,,,
 191,14188750,USGS,,,
-192,Hood_EFMF_calc,,,9,
-193,TRAO3,nwps,55,,
-194,WLAO3,nwps,66,,
+192,Hood_EFMF_calc,Calculation,,9,
+193,TRAO3,NWS,55,,
+194,WLAO3,NWS,66,,
 195,14302480,USGS,,,
 196,14170000,USGS,,,
-198,Fall_Creek_above_Winberry_calc,,,10,
+198,Fall_Creek_above_Winberry_calc,Calculation,,10,
 199,14159500,USGS,,,
-200,Applegate_Lake_inflow_to_flow,,,11,
+200,Applegate_Lake_inflow_to_flow,Calculation,,11,
 201,13297380,USGS,,,
 202,13307000,USGS,,,
 203,13311000,USGS,,,
@@ -193,7 +193,7 @@ id,name,agency,fetch_url_id,calc_expression_id,timezone
 207,JOHI1,NWRFC,108,,
 208,RIGI1,NWRFC,109,,
 209,WHBI1,NWRFC,110,,
-210,EFSF_Salmon_calc,,,12,
+210,EFSF_Salmon_calc,Calculation,,12,
 211,SELI1,NWRFC,111,,
 212,LOCI1,NWRFC,112,,
 213,STII1,NWRFC,113,,
@@ -201,7 +201,7 @@ id,name,agency,fetch_url_id,calc_expression_id,timezone
 215,KLCW1,NWRFC,115,,
 216,LWWW1,NWS,99,,
 217,WCNW1,NWS,100,,
-220,28B080,wa.gov,103,,Etc/GMT+8
+220,28B080,WA DOE,103,,Etc/GMT+8
 221,CORO3,NWS,104,,
 222,14171600,USGS,,,
 223,14174000,USGS,,,
@@ -266,22 +266,22 @@ id,name,agency,fetch_url_id,calc_expression_id,timezone
 290,14211720,USGS,,,
 292,14300000,USGS,,,
 293,14128500,USGS,,,
-294,29C100,wa.gov,71,,Etc/GMT+8
-295,29C100,wa.gov,73,,Etc/GMT+8
-296,28B080,wa.gov,102,,Etc/GMT+8
-297,28B080,wa.gov,101,,Etc/GMT+8
-298,WASW1,nwps,61,,
-299,APLO3,nwrfc.textplot,80,,
-300,FALO3,nwrfc.textplot,87,,
+294,29C100,WA DOE,71,,Etc/GMT+8
+295,29C100,WA DOE,73,,Etc/GMT+8
+296,28B080,WA DOE,102,,Etc/GMT+8
+297,28B080,WA DOE,101,,Etc/GMT+8
+298,WASW1,NWS,61,,
+299,APLO3,NWRFC,80,,
+300,FALO3,NWRFC,87,,
 301,14307605,USGS,,,
-302,Siuslaw_above_LakeCreek_calc,,,13,
+302,Siuslaw_above_LakeCreek_calc,Calculation,,13,
 303,NEBO3,NWS,117,,
 304,ORCO3,NWS,118,,
 306,COCO3,NWS,120,,
 307,14207770,USGS,,,
 308,14208000,USGS,,,
 309,14211010,USGS,,,
-310,RCBO3,nwps,122,,
+310,RCBO3,NWS,122,,
 311,14330000,USGS,,,
 312,PR2R.NFD_BYP_80FL_PI,pacificorp,123,,America/Los_Angeles
 313,Rogue_Above_Prospect_calc,Calculation,,14,
