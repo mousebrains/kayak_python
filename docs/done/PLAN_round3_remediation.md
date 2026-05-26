@@ -2,11 +2,13 @@
 
 > **Archived 2026-05-26 — as-built record of the round-3 remediation.** All seven
 > phases shipped: **P1** #34 · **P2** #35/#36 · **P3** #37 · **P4** #38 · **P5** #39
-> · **P6** #40/#41/#42 · **P7** #43/#45. **Deferred (documented decisions, not
-> gaps):** R1.5 (sudoers emit-config wrapper), R2.6 (status-cache relocation), R5.4
-> (PHP coverage ratchet), R5.7 (systemd `ReadWritePaths`), R7.1 OSMB dedup
-> (rule-of-three — revisit on a 3rd map consumer), and the `pacificorp` / `USGS
-> USACE` agency tidy (needs a name-map sign-off). Companion review:
+> · **P6** #40/#41/#42 · **P7** #43/#45.
+>
+> **Post-archival follow-ups — every "deferred" item but one has since shipped:**
+> R2.6 status cache out of repo #47 · R1.5 emit-config wrapper #48 ·
+> `pacificorp`/`USGS USACE` agency tidy #49 · R5.7 systemd `ReadWritePaths` #51 ·
+> R5.4 PHP coverage ratchet (55→58%) in this cleanup PR. **Still deferred:** R7.1
+> OSMB dedup (rule-of-three — revisit on a 3rd map consumer). Companion review:
 > [`REVIEW_round3_2026-05-25.md`](REVIEW_round3_2026-05-25.md).
 
 **Source:** `project-review-3/REVIEW.md` (graded **B−**). **Branch:** `review-3`.
