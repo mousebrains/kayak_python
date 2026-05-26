@@ -41,6 +41,7 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/mail.php';
 require_once __DIR__ . '/sanity.php';
+require_once __DIR__ . '/reach_propose_fields.php';
 require_once __DIR__ . '/source_url.php';
 require_once __DIR__ . '/header.php';
 require_once __DIR__ . '/footer.php';
@@ -108,12 +109,8 @@ function handle_propose(PDO $db, array $ed, string $type, int $id): void
 function _load_propose_context(PDO $db, array $ed, int $id): array
 {
     $tier = (string)$ed['status'];
-    $text_fields = ['description', 'features'];
-    $full_reach_fields = [
-        'display_name',
-        'latitude_start', 'longitude_start',
-        'latitude_end',   'longitude_end',
-    ];
+    $text_fields = REACH_TEXT_FIELDS;
+    $full_reach_fields = REACH_FULL_FIELDS;
     $allow_full = in_array($tier, ['full', 'maintainer'], true);
     $reach_fields = $allow_full ? array_merge($text_fields, $full_reach_fields) : $text_fields;
 

@@ -160,6 +160,45 @@ final class ReviewLogicFunctionalTest extends FunctionalTestCase
         $this->assertNull($st->fetchColumn());
     }
 
+    public function testApproveDropsNonAllowlistedReachField(): void
+    {
+        $db = $this->pdo();
+        $maint = Fixtures::editor($db, ['status' => 'maintainer']);
+        $editor = Fixtures::editor($db);
+        $reach = Fixtures::reach($db, ['description' => 'old desc', 'river' => 'R']);
+
+        // Capture a real reach column the proposal must NOT be able to set.
+        $st = $db->prepare('SELECT no_show FROM reach WHERE id = ?');
+        $st->execute([$reach]);
+        $noShowBefore = $st->fetchColumn();
+
+        // Tampered payload_json: a legit field plus two non-proposable reach columns.
+        // R1.4: the apply path interpolates the column name as a SQL identifier, so it
+        // intersects payload keys against the proposable-fields allowlist. The forged
+        // keys are dropped (not written); the legit field applies and approve succeeds.
+        $applied = ['reach' => [
+            'description' => 'new desc',  // allowlisted -> applied
+            'no_show'     => 1,           // real column, not proposable -> dropped
+            'id'          => 999999,      // dropped
+        ]];
+        $cr = $this->seedCr($editor, $reach, $applied);
+
+        $res = review_approve($db, $cr, $applied, $maint, '');
+        $this->assertTrue($res['ok'], 'forged keys are dropped, not fatal');
+
+        $st = $db->prepare('SELECT id, description, no_show FROM reach WHERE id = ?');
+        $st->execute([$reach]);
+        $row = $st->fetch();
+        $this->assertSame('new desc', $row['description'], 'allowlisted field applied');
+        $this->assertSame($noShowBefore, $row['no_show'], 'non-proposable no_show untouched');
+        $this->assertSame($reach, (int)$row['id'], 'forged id ignored');
+
+        // edit_history only for the allowlisted field.
+        $st = $db->prepare('SELECT field FROM edit_history WHERE change_request_id = ?');
+        $st->execute([$cr['id']]);
+        $this->assertSame(['description'], array_column($st->fetchAll(), 'field'));
+    }
+
     public function testApproveReplacesReachClassSetAndLogsDiff(): void
     {
         $db = $this->pdo();
@@ -245,19 +284,31 @@ final class ReviewLogicFunctionalTest extends FunctionalTestCase
         $maint = Fixtures::editor($db, ['status' => 'maintainer']);
         $editor = Fixtures::editor($db);
         $reach = Fixtures::reach($db, ['description' => 'keep me', 'river' => 'R']);
-        // A bogus reach column makes the UPDATE throw inside the try -> rollback.
-        $applied = ['reach' => ['no_such_column' => 'boom']];
+        // A reach_class range with low > high violates ck_reach_class_low_le_high,
+        // so the INSERT throws inside the try -> rollback. (A bogus reach *column*
+        // no longer reaches the UPDATE — the R1.4 allowlist drops it — so the
+        // catch/rollback path is exercised via the reach_class CHECK instead.)
+        $applied = [
+            'reach'       => ['description' => 'should not persist'],
+            'reach_class' => [
+                'names' => ['III'],
+                'range' => ['low' => 900.0, 'high' => 100.0, 'data_type' => 'flow'],
+            ],
+        ];
         $cr = $this->seedCr($editor, $reach, $applied);
 
         $res = review_approve($db, $cr, $applied, $maint, 'note');
         $this->assertFalse($res['ok']);
         $this->assertStringContainsString('apply failed', (string)$res['err']);
 
-        // Rolled back: status still pending, reach untouched, no history.
+        // Rolled back: status pending, the reach UPDATE reverted, no classes, no history.
         $this->assertSame('pending', $this->fetchCr($cr['id'])['status']);
         $st = $db->prepare('SELECT description FROM reach WHERE id = ?');
         $st->execute([$reach]);
         $this->assertSame('keep me', $st->fetchColumn());
+        $st = $db->prepare('SELECT COUNT(*) FROM reach_class WHERE reach_id = ?');
+        $st->execute([$reach]);
+        $this->assertSame(0, (int)$st->fetchColumn());
         $this->assertSame(0, $this->historyCount($cr['id']));
     }
 

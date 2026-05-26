@@ -20,6 +20,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/mail.php';
+require_once __DIR__ . '/reach_propose_fields.php';
 
 // ---------------------------------------------------------------------------
 // Apply helpers
@@ -115,11 +116,27 @@ function review_approve(PDO $db, array $cr, array $applied, int $maint_id, strin
             return ['ok' => false, 'err' => 'Already reviewed by another maintainer.'];
         }
 
-        // Apply reach columns
-        if (($applied['reach'] ?? []) !== []) {
+        // Apply reach columns. The field name is interpolated as a SQL identifier
+        // below ($f is not bindable), so intersect the payload keys against the
+        // proposable-fields allowlist: a tampered payload_json cannot inject a
+        // column name (review-4 R1.4). propose_handler only ever writes these keys;
+        // the re-check here is defensive.
+        $reach_payload = $applied['reach'] ?? [];
+        if (!is_array($reach_payload)) {
+            $reach_payload = [];
+        }
+        $allowed_fields = array_merge(REACH_TEXT_FIELDS, REACH_FULL_FIELDS);
+        foreach (array_keys($reach_payload) as $k) {
+            if (!in_array($k, $allowed_fields, true)) {
+                error_log('review_approve: dropped non-allowlisted reach field '
+                    . var_export($k, true) . ' (change_request ' . (string)$cr['id'] . ')');
+            }
+        }
+        $reach_apply = array_intersect_key($reach_payload, array_flip($allowed_fields));
+        if ($reach_apply !== []) {
             $sets = [];
             $params = [];
-            foreach ($applied['reach'] as $f => $v) {
+            foreach ($reach_apply as $f => $v) {
                 $sets[] = "$f = ?";
                 $params[] = ($v === '' || $v === null) ? null : $v;
             }
@@ -128,7 +145,7 @@ function review_approve(PDO $db, array $cr, array $applied, int $maint_id, strin
             $db->prepare('UPDATE reach SET ' . implode(', ', $sets) . ' WHERE id = ?')
                 ->execute($params);
 
-            foreach ($applied['reach'] as $f => $v) {
+            foreach ($reach_apply as $f => $v) {
                 $old = $cur['reach'][$f] ?? null;
                 $db->prepare(
                     "INSERT INTO edit_history
