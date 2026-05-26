@@ -25,12 +25,14 @@ Nice=15
 # Sandboxing. Backup runs sqlite3 + gzip locally; the ExecStartPost heartbeat
 # needs outbound HTTPS to hc-ping.com (Phase 1.3). PrivateNetwork +
 # IPAddressDeny removed and AF_INET/AF_INET6 added in 2026-05-12.
+# Writable set is the DB dir + backups dir; ~/.config holds only the READ env
+# file (allowed by ProtectHome=read-only), so its RW was dropped in review-3 R5.7.
 NoNewPrivileges=yes
 PrivateTmp=yes
 PrivateDevices=yes
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/home/pat/DB /home/pat/kayak/backups /home/pat/.config
+ReadWritePaths=/home/pat/DB /home/pat/kayak/backups
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes

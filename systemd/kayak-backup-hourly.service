@@ -23,13 +23,14 @@ Nice=15
 
 # Sandboxing — matches kayak-backup-weekly.service. The hourly path is
 # local-only (no offsite chain), so the writable set is the DB dir +
-# backups dir + env file dir.
+# backups dir. (~/.config holds only the READ env file — EnvironmentFile +
+# dotenv, allowed by ProtectHome=read-only; its RW was dropped in review-3 R5.7.)
 NoNewPrivileges=yes
 PrivateTmp=yes
 PrivateDevices=yes
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/home/pat/DB /home/pat/kayak/backups /home/pat/.config
+ReadWritePaths=/home/pat/DB /home/pat/kayak/backups
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes

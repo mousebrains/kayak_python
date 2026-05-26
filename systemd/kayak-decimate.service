@@ -26,12 +26,15 @@ Nice=15
 # Sandboxing. Decimate touches the local DB; the ExecStartPost heartbeat
 # needs outbound HTTPS to hc-ping.com (Phase 1.3). PrivateNetwork +
 # IPAddressDeny removed and AF_INET/AF_INET6 added in 2026-05-12.
+# ReadWritePaths is the DB only — ~/.config/kayak/.env is READ (EnvironmentFile
+# + dotenv), allowed by ProtectHome=read-only; its RW was a template-inherited
+# over-grant dropped in review-3 R5.7.
 NoNewPrivileges=yes
 PrivateTmp=yes
 PrivateDevices=yes
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/home/pat/DB /home/pat/.config
+ReadWritePaths=/home/pat/DB
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes
