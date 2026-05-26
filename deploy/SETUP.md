@@ -68,11 +68,12 @@ PHP resolves the DB path from `/etc/kayak/runtime-config.json` (written by
 exist before `init-db` or SQLite fails with "unable to open database file":
 
 ```bash
-mkdir -p /home/pat/DB /home/pat/.config/kayak
+mkdir -p /home/pat/DB /home/pat/.config/kayak /home/pat/public_html
 
 cat > /home/pat/.config/kayak/.env <<'EOF'
 DATABASE_URL=sqlite:////home/pat/DB/kayak.db
 SQLITE_PATH=/home/pat/DB/kayak.db
+OUTPUT_DIR=/home/pat/public_html
 EDITOR_FEATURE=1
 EOF
 ```
@@ -99,7 +100,7 @@ cd /home/pat/kayak
 Verify output was generated:
 
 ```bash
-ls public_html/*.html
+ls /home/pat/public_html/*.html
 ```
 
 **Reach geometry (`reaches.json`).** `reach.geom` is excluded from
@@ -122,16 +123,16 @@ To apply geometry to the live DB by hand (without re-syncing CSV metadata):
 
 **Filesystem access for nginx/PHP (`www-data`).** The pipeline runs as `pat`,
 but nginx and PHP-FPM run as `www-data`, which must traverse `pat`'s `0700`
-home to reach the docroot and DB. Point the nginx docroot (§6) at the build
-output and grant `www-data` access via ACLs:
+home to reach the docroot and DB. The docroot (`/home/pat/public_html`, created
+in §3) is a **real directory** that `levels build` (above) fills with a
+self-contained site — HTML plus copied PHP/includes/static — so `www-data`
+needs **no access to the repo at all**:
 
 ```bash
-ln -sfn /home/pat/kayak/public_html /home/pat/public_html
-
-sudo setfacl -m  u:www-data:x    /home/pat /home/pat/kayak
-sudo setfacl -R -m u:www-data:rX  /home/pat/kayak/public_html /home/pat/kayak/php /home/pat/kayak/static
-sudo setfacl -R -d -m u:www-data:rX /home/pat/kayak/public_html   # inherit for files build writes later
-sudo setfacl -R -m u:www-data:rwX /home/pat/DB                    # WAL needs write even for read-only pages
+sudo setfacl -m  u:www-data:x     /home/pat                 # traverse only
+sudo setfacl -R -m u:www-data:rX  /home/pat/public_html     # read the built site
+sudo setfacl -R -d -m u:www-data:rX /home/pat/public_html   # inherit for files build writes
+sudo setfacl -R -m u:www-data:rwX /home/pat/DB              # WAL needs write even for read-only pages
 sudo setfacl -R -d -m u:www-data:rwX /home/pat/DB
 ```
 
@@ -217,7 +218,7 @@ path (run `scripts/check-config-drift.sh` to see exactly what differs), then
 `sudo nginx -t && sudo systemctl reload nginx`.
 
 The config assumes:
-- Document root: `/home/pat/public_html` (symlink → `/home/pat/kayak/public_html`)
+- Document root: `/home/pat/public_html` — a **real directory** written by `levels build` (`OUTPUT_DIR`), outside the repo
 - Database: `/home/pat/DB/kayak.db` (PHP resolves the path from `/etc/kayak/runtime-config.json`, not nginx — see §7)
 - Per-vhost certs under `/etc/letsencrypt/live/<hostname>/`
 
@@ -600,7 +601,7 @@ paths to keep the venv, database, and document root outside the git repo.
 | Virtual environment | `/home/pat/.venv` |
 | Configuration | `~/.config/kayak/.env` |
 | SQLite database | `/home/pat/DB/kayak.db` |
-| Document root | `/home/pat/public_html` → symlink to `kayak/public_html` |
+| Document root | `/home/pat/public_html` (real dir, `OUTPUT_DIR` — outside the repo) |
 
 ### Setup steps
 
@@ -612,9 +613,8 @@ sudo apt install -y nginx php8.4-fpm php8.4-sqlite3 python3 python3-venv sqlite3
 python3 -m venv /home/pat/.venv
 /home/pat/.venv/bin/pip install -e "/home/pat/kayak[dev]"
 
-# 3. Directories
-mkdir -p /home/pat/.config/kayak /home/pat/DB
-ln -s /home/pat/kayak/public_html /home/pat/public_html
+# 3. Directories (docroot is a real dir outside the repo — no symlink)
+mkdir -p /home/pat/.config/kayak /home/pat/DB /home/pat/public_html
 
 # 4. Environment file (~/.config/kayak/.env)
 cat > /home/pat/.config/kayak/.env <<'EOF'
@@ -624,14 +624,12 @@ OUTPUT_DIR=/home/pat/public_html
 EDITOR_FEATURE=1
 EOF
 
-# 5. ACLs for nginx (www-data)
+# 5. ACLs for nginx (www-data) — docroot is a real dir, so no repo access needed
 setfacl -m u:www-data:x /home/pat                         # traverse only
-setfacl -m u:www-data:x /home/pat/kayak                   # traverse only
-setfacl -R -m u:www-data:rX /home/pat/kayak/public_html   # read static files
-setfacl -R -d -m u:www-data:rX /home/pat/kayak/public_html  # default for new files
-setfacl -R -m u:www-data:rX /home/pat/kayak/php            # read PHP files
-setfacl -m u:www-data:rwx /home/pat/DB                     # DB read/write
-setfacl -d -m u:www-data:rw /home/pat/DB                   # default for new DB files
+setfacl -R -m u:www-data:rX /home/pat/public_html         # read the built site
+setfacl -R -d -m u:www-data:rX /home/pat/public_html      # default for new files
+setfacl -R -m u:www-data:rwX /home/pat/DB                 # DB read/write (WAL needs write)
+setfacl -R -d -m u:www-data:rwX /home/pat/DB              # default for new DB files
 
 # 6. Initialize and run (same sequence as § 4 — plain init-db leaves every
 #    source an orphan and renders an empty site)
