@@ -23,12 +23,14 @@ Nice=15
 
 # Sandboxing. Needs network for SMTP to Gmail — keep AF_INET/AF_INET6
 # and no PrivateNetwork. Otherwise mirrors the backup service.
+# No ReadWritePaths: heartbeat writes nothing to disk — it reads
+# (stat/systemctl/df), emails via msmtp (network), and logs to the journal.
+# The .config RW was a template-inherited over-grant, dropped in review-3 R5.7.
 NoNewPrivileges=yes
 PrivateTmp=yes
 PrivateDevices=yes
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/home/pat/.config
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes
