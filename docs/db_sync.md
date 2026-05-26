@@ -105,6 +105,23 @@ rm -f ~/DB/kayak.db-wal ~/DB/kayak.db-shm
 sudo systemctl start kayak-pipeline.timer kayak-decimate.timer kayak-backup-weekly.timer kayak-backup-hourly.timer
 ```
 
+## Snapshot retention
+
+`db_pull.sh` and `db_push.sh` prune their own snapshots so `~/kayak/backups/`
+(and the local `../DB/`) don't grow unbounded:
+
+- **Pull snapshots** (`kayak-<UTC>.db.gz`): newest `KEEP_PULL_SNAPSHOTS` kept
+  (default 3) on both the remote and locally; older pruned each pull.
+- **Pre-push archives** (`kayak-replaced-<UTC>.db.gz`): newest
+  `KEEP_PUSH_ARCHIVES` kept (default 5) on the remote; older pruned each push.
+- **Staging** (`kayak-from-local-<UTC>.db.gz`): deleted after the swap consumes
+  it (the local copy is already removed at the end of the push).
+
+These are transient sync artifacts — the real backup rotation is the systemd
+`kayak-backup-hourly` / `kayak-backup-weekly` units (24 / 4 copies). The prune
+globs are anchored (`kayak-[0-9]*T…`, `kayak-replaced-[0-9]*T…`) so the three
+artifact types never delete one another.
+
 ## Caveats
 
 - **Do not edit `observation` locally.** Live-side rows override nothing (`INSERT OR IGNORE` skips on primary-key conflict), so any local changes silently lose to whatever live already has for the same `(source_id, observed_at, data_type)`. Use `calc-rating` or other pipeline commands on the server if you need to fix observations.
