@@ -32,6 +32,7 @@ dev = [
     "lxml-stubs>=0.5",
     "hypothesis>=6.150",  # Property-based testing for parsers (T2.2)
     "numpy>=2.1",         # scripts/regression/gauge_pair_linear.py + its test; was only transitive via [geo]
+    "httpx>=0.27",        # scripts/refresh_reach_elevations.py (async EPQS elevation fetch) — was an undeclared import
 ]
 geo = [
     "shapely>=2",
@@ -100,10 +101,11 @@ disallow_untyped_defs = true
 check_untyped_defs = true
 
 [[tool.mypy.overrides]]
-# Tracing module is a wholesale move of a standalone script that pre-dates
-# the strict-typing regime; typing it gradually rather than front-loading
-# 19+ annotations in a refactor commit.
-module = "kayak.tracing.*"
+# trace.py is a wholesale move of a standalone script that pre-dates the
+# strict-typing regime; typing it gradually rather than front-loading 19+
+# annotations in a refactor commit. Narrowed from kayak.tracing.* so the
+# typed, tested format.py / constants.py stay under the strict gate.
+module = "kayak.tracing.trace"
 disallow_untyped_defs = false
 check_untyped_defs = false
 

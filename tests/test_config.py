@@ -14,6 +14,12 @@ from pydantic import ValidationError
 from kayak import config
 from kayak.config import KayakConfig
 
+# Subprocess-based tests below spawn a fresh interpreter that must import
+# ``kayak`` without an editable install — put ``src`` on its PYTHONPATH so the
+# suite passes from a bare checkout (CI installs the package, but a clean
+# ``pytest`` shouldn't depend on that). See review-3 R4.2.
+_SRC = str(Path(__file__).resolve().parents[1] / "src")
+
 
 class TestConfigDefaults:
     """Module-level constants — frozen at import time for source-compat."""
@@ -164,6 +170,7 @@ class TestDotenvPrecedence:
         # (override=False) must NOT clobber it. Pass HOME so Path.home()
         # routes through fake_home for the .env-file load.
         env = os.environ.copy()
+        env["PYTHONPATH"] = _SRC
         env["HOME"] = str(fake_home)
         env["MAINTAINER_NAME"] = "From-Os-Env"
 
@@ -201,6 +208,7 @@ class TestDotenvPrecedence:
         """)
 
         env = os.environ.copy()
+        env["PYTHONPATH"] = _SRC
         env["HOME"] = str(root_home)
         env["SUDO_USER"] = "test-op"
         env.pop("MAINTAINER_NAME", None)
@@ -227,6 +235,7 @@ class TestDotenvPrecedence:
         """)
 
         env = os.environ.copy()
+        env["PYTHONPATH"] = _SRC
         env["HOME"] = str(fake_home)
         env.pop("MAINTAINER_NAME", None)
 

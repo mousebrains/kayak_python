@@ -47,7 +47,12 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Set up PHP 8.4 (with pdo_sqlite for unit tests)
-        uses: shivammathur/setup-php@v2
+        # Third-party actions are pinned to a commit SHA (supply-chain: a
+        # moved tag can't silently change what runs); the trailing `# tag`
+        # tracks the human-readable version for Dependabot, which bumps
+        # SHA-pinned actions. GitHub-owned actions/* stay on major tags.
+        # Re-resolve: gh api repos/<owner>/<repo>/commits/<tag> --jq .sha
+        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2
         with:
           php-version: "8.4"
           # Prod PHP-FPM lacks mbstring (CLAUDE.md §PHP Tooling). CI installs only
@@ -68,7 +73,7 @@ jobs:
           tools: composer:v2
 
       - name: Install biome
-        uses: biomejs/setup-biome@v2
+        uses: biomejs/setup-biome@4c91541eaada48f67d7dbd7833600ce162b68f51 # v2
         with:
           version: 2.4.11
 
@@ -82,7 +87,7 @@ jobs:
         run: biome check
 
       - name: Shell lint
-        run: shellcheck --severity=warning scripts/*.sh systemd/*.sh
+        run: shellcheck --severity=warning scripts/*.sh systemd/*.sh deploy/*.sh
 
       - name: Install PHP dev dependencies
         # setup-php@v2 writes ~/.composer/auth.json with the runner's
@@ -198,9 +203,9 @@ jobs:
           cache-dependency-path: pyproject.toml
       - run: pip install -e ".[dev]"
       # scripts/ isn't strictly typed wholesale; gate the prod-path metadata
-      # scripts that round-trip the live DB. The one-off harvest scripts and
-      # the httpx-using elevation refresh (httpx is undeclared) stay out.
-      - run: mypy src/ scripts/import_metadata.py scripts/export_metadata.py
+      # scripts that round-trip the live DB, plus the elevation refresh (httpx
+      # now declared in the dev extra). The one-off harvest scripts stay out.
+      - run: mypy src/ scripts/import_metadata.py scripts/export_metadata.py scripts/refresh_reach_elevations.py
 
   test:
     runs-on: ubuntu-24.04
@@ -210,7 +215,7 @@ jobs:
         python-version: ["3.13", "3.14"]
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v8.1.0
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           enable-cache: true
       - uses: actions/setup-python@v6
@@ -246,7 +251,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
