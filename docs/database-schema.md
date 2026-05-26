@@ -26,6 +26,10 @@ Physical (or virtual) gauge stations that measure river conditions. Linked to da
 |---|---|---|
 | `id` | INTEGER | PK, autoincrement |
 | `name` | VARCHAR(256) | Unique, not null |
+| `river` | TEXT | River name (groups gauges on gauges.html) |
+| `display_name` | TEXT | Rendered name on gauges.html / description pages |
+| `sort_name` | TEXT | Controls display order (encodes the full-row sort key) |
+| `state` | TEXT | Two-letter state abbreviation for the gauges.html filter bar (migration 0010) |
 | `bank_full` | FLOAT | Bank-full **stage height** (feet) |
 | `flood_stage` | FLOAT | Flood **stage height** (feet) |
 | `location` | TEXT | Free-form description of where the gauge sits |
@@ -61,6 +65,7 @@ Use `.first()` (not `.scalar_one_or_none()`) when looking up by name, or disambi
 | `id` | INTEGER | PK, autoincrement |
 | `name` | VARCHAR(256) | Indexed, not null, **not unique** |
 | `agency` | VARCHAR(64) | USGS / NOAA / NWRFC / USACE / USBR / WA DOE / NWS |
+| `timezone` | TEXT | IANA TZ name (e.g. `America/Boise`); localizes naive feed timestamps, NULL = treat as UTC (migration 0008) |
 | `fetch_url_id` | INTEGER | FK → `fetch_url.id` ON DELETE SET NULL |
 | `calc_expression_id` | INTEGER | FK → `calc_expression.id` ON DELETE SET NULL |
 
@@ -83,7 +88,7 @@ Remote URLs to pull observation data from. Seeded from `data/sources.yaml` by `i
 |---|---|---|
 | `id` | INTEGER | PK, autoincrement |
 | `url` | VARCHAR(512) | Unique, not null |
-| `parser` | VARCHAR(32) | Parser name (`usgs`, `nwps`, `usbr`, `wa.gov`, etc.) |
+| `parser` | VARCHAR(32) | Parser name (`nwps`, `usbr`, `usace.cda`, `wa.gov`, etc.) |
 | `hours` | VARCHAR(128) | Comma-separated UTC hour list (empty = always allowed) |
 | `is_active` | BOOLEAN | Default 0. `sync_sources` flips rows to 0 when they disappear from `sources.yaml` |
 | `last_fetched_at` | DATETIME | Set by `fetch` on successful download |
@@ -101,6 +106,7 @@ Formulas for computing synthetic observations from other gauges' latest values. 
 | `expression` | VARCHAR(512) | Whitelisted arithmetic + `max/min/round`; `greatest()`/`least()` accepted as SQL-style aliases |
 | `time_expression` | TEXT | Space-separated list of gauge-value references this expression depends on |
 | `note` | TEXT | Free-form description |
+| `provenance_slug` | TEXT | Stable slug identifying the calc's provenance (migration 0028) |
 
 ### `rating` and `rating_data`
 
@@ -367,6 +373,7 @@ Editor-submitted proposal queue. Polymorphic `target_type`; payload is JSON shap
 | `reviewed_by` | INTEGER | FK → `editor.id` ON DELETE SET NULL |
 | `reviewer_note` | TEXT | |
 | `applied_json` | TEXT | Snapshot of what actually got written on approve |
+| `source_url` | TEXT | Same-origin page the submission came from (sanitized by `sanitize_source_url`); shown in the maintainer review UI |
 
 **Indexes:** `ix_change_request_status`, `ix_change_request_target` on (target_type, target_id), `ix_change_request_editor_id`.
 

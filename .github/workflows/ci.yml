@@ -129,9 +129,9 @@ jobs:
         run: FLOOR_PERCENT=55 scripts/check-php-coverage.sh coverage.xml
 
       - name: PHPStan
-        # Level 8 with phpstan-baseline.neon grandfathering the 79
-        # pre-existing issues. Per docs/PLAN_php_layer_split.md, the
-        # baseline shrinks tier-by-tier as files are split.
+        # Level 9 + full strict-rules; phpstan-baseline.neon carries the
+        # residual mixed-typing (PDO-row) finds, shrinking as types are
+        # narrowed. See docs/PLAN_phpstan_level9_strict.md.
         # --memory-limit bumped because TypeSpecifier on the larger
         # entry-point files (reach.php / description.php) exceeds the
         # 128MB default.

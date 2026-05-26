@@ -1,0 +1,77 @@
+"""Guard: docs/database-schema.md documents every ORM column.
+
+Round-3 review R2.2. The schema reference doc had drifted — four gauge
+columns, source.timezone, and calc_expression.provenance_slug were present
+in models.py but missing from the doc, and a prior review wrongly vouched it
+"in lockstep." This test turns that from a review-only catch into a
+merge-time gate: it parses the markdown column tables and asserts every
+column in ``Base.metadata`` is documented.
+
+Parser notes:
+  * a table's columns are introduced by a ``### `name` `` heading OR a
+    ``**`name`:**`` bold sub-label (the latter handles the combined
+    "### `rating` and `rating_data`" section);
+  * a single doc row may list more than one column (e.g. reach's
+    ``| `latitude`, `longitude` | NUMERIC(9,6) | Midpoint |``), so every
+    backticked identifier in the first cell counts.
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+from kayak.db.models import Base
+
+_DOC = Path(__file__).resolve().parents[1] / "docs" / "database-schema.md"
+
+# Tables intentionally exempt from the column check, with a reason. Empty
+# today — all ORM tables are fully documented. (schema_migrations needs no
+# entry: it is not an ORM table, so it never appears in Base.metadata.)
+_IGNORE_TABLES: set[str] = set()
+
+_HEADING = re.compile(r"^###\s+`([a-z0-9_]+)`")
+_SUBLABEL = re.compile(r"^\*\*`([a-z0-9_]+)`:?\*\*")
+_IDENT = re.compile(r"`([a-z0-9_]+)`")
+
+
+def _documented_columns() -> dict[str, set[str]]:
+    """Map each documented table name → the column names listed under it."""
+    documented: dict[str, set[str]] = {}
+    current: str | None = None
+    in_fence = False
+    for line in _DOC.read_text(encoding="utf-8").splitlines():
+        if line.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        m = _SUBLABEL.match(line) or _HEADING.match(line)
+        if m:
+            current = m.group(1)
+            documented.setdefault(current, set())
+            continue
+        if current and line.startswith("| `"):
+            first_cell = line.split("|")[1]  # between the 1st and 2nd pipe
+            documented[current].update(_IDENT.findall(first_cell))
+    return documented
+
+
+def test_schema_doc_covers_every_model_column() -> None:
+    documented = _documented_columns()
+    missing: list[str] = []
+    for table in Base.metadata.sorted_tables:
+        if table.name in _IGNORE_TABLES:
+            continue
+        doc_cols = documented.get(table.name)
+        if doc_cols is None:
+            missing.append(f"{table.name}: entire table undocumented")
+            continue
+        missing += [
+            f"{table.name}.{c.name}" for c in table.columns if c.name not in doc_cols
+        ]
+    assert not missing, (
+        "docs/database-schema.md is out of sync with src/kayak/db/models.py.\n"
+        "Undocumented (add them to the doc, or to _IGNORE_TABLES with a reason):\n  "
+        + "\n  ".join(sorted(missing))
+    )
