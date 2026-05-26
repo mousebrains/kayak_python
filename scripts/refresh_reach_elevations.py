@@ -32,7 +32,7 @@ DEFAULT_DB = os.environ.get("KAYAK_DB", "/home/pat/DB/kayak.db")
 EPQS_URL = "https://epqs.nationalmap.gov/v1/json"
 
 
-async def fetch_elevation_m(client, lon, lat):
+async def fetch_elevation_m(client: httpx.AsyncClient, lon: float, lat: float) -> float | None:
     """Return elevation in meters at (lat, lon) from USGS 3DEP, or None."""
     params = {
         "x": f"{lon}",
@@ -55,18 +55,20 @@ async def fetch_elevation_m(client, lon, lat):
         return None
 
 
-async def gather_elevations(points, concurrency):
+async def gather_elevations(
+    points: list[tuple[str, float, float]], concurrency: int
+) -> dict[str, float | None]:
     """points: list of (tag, lon, lat). Return dict {tag: meters_or_None}."""
     limits = httpx.Limits(max_connections=concurrency, max_keepalive_connections=concurrency)
     async with httpx.AsyncClient(limits=limits, http2=False) as client:
         sem = asyncio.Semaphore(concurrency)
 
-        async def one(tag, lon, lat):
+        async def one(tag: str, lon: float, lat: float) -> tuple[str, float | None]:
             async with sem:
                 return tag, await fetch_elevation_m(client, lon, lat)
 
         tasks = [one(*p) for p in points]
-        results = {}
+        results: dict[str, float | None] = {}
         for idx, fut in enumerate(asyncio.as_completed(tasks), start=1):
             tag, meters = await fut
             results[tag] = meters
@@ -75,7 +77,7 @@ async def gather_elevations(points, concurrency):
         return results
 
 
-def _load_reaches(conn, reach_ids_csv):
+def _load_reaches(conn: sqlite3.Connection, reach_ids_csv: str | None) -> list[sqlite3.Row]:
     """Pull every reach with both put-in and take-out coords, optionally
     filtered to a comma-separated ID list."""
     query = """
@@ -97,7 +99,9 @@ def _load_reaches(conn, reach_ids_csv):
     return conn.execute(query, params).fetchall()
 
 
-def _classify_reach_changes(reaches, elevations):
+def _classify_reach_changes(
+    reaches: list[sqlite3.Row], elevations: dict[str, float | None]
+) -> tuple[list, list, list[str]]:
     """Partition each reach into update/unchanged/failed buckets.
 
     Returns ``(updates, failures, changed_rows)``:
@@ -144,7 +148,7 @@ def _classify_reach_changes(reaches, elevations):
     return updates, failures, changed_rows
 
 
-def _print_failures(failures):
+def _print_failures(failures: list) -> None:
     if not failures:
         return
     print("\nFailed lookups (probably outside 3DEP coverage — unlikely in WA/OR/ID):")
@@ -154,7 +158,7 @@ def _print_failures(failures):
         print(f"  ... and {len(failures) - 10} more")
 
 
-def main():
+def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--db", default=DEFAULT_DB)
     ap.add_argument("--apply", action="store_true")
@@ -170,7 +174,7 @@ def main():
     reaches = _load_reaches(conn, args.reach_ids)
     print(f"Scope: {len(reaches)} reach(es)")
 
-    points = []
+    points: list[tuple[str, float, float]] = []
     for r in reaches:
         points.append((f"{r['id']}:put", r["longitude_start"], r["latitude_start"]))
         points.append((f"{r['id']}:take", r["longitude_end"], r["latitude_end"]))

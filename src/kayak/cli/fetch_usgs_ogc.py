@@ -11,7 +11,7 @@ import os
 import time
 from collections.abc import Callable
 
-import requests
+import requests  # type: ignore[import-untyped]  # match http_client.py: works with or without the types-requests stub
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 

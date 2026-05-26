@@ -7,14 +7,15 @@ PIP = $(VENV)/bin/pip
 
 ## Development
 
-lint:  ## Run Python linter
-	$(VENV)/bin/ruff check src/ tests/
+lint:  ## Run Python linter + format check (mirrors CI's lint job)
+	$(VENV)/bin/ruff check src/ tests/ scripts/ docs/one-offs/
+	$(VENV)/bin/ruff format --check src/ tests/ scripts/ docs/one-offs/
 
 format:  ## Auto-format Python code
-	$(VENV)/bin/ruff format src/ tests/
+	$(VENV)/bin/ruff format src/ tests/ scripts/ docs/one-offs/
 
 typecheck:  ## Run type checker
-	$(VENV)/bin/mypy src/
+	$(VENV)/bin/mypy src/ scripts/import_metadata.py scripts/export_metadata.py scripts/refresh_reach_elevations.py
 
 test:  ## Run fast tests (skips @pytest.mark.slow)
 	$(VENV)/bin/pytest -q

@@ -69,7 +69,7 @@ deploy/sysctl.d/90-hardening.conf	/etc/sysctl.d/90-hardening.conf
 deploy/sysctl.d/90-swap.conf	/etc/sysctl.d/90-swap.conf
 deploy/sysctl.d/92-local-hardening.conf	/etc/sysctl.d/92-local-hardening.conf
 deploy/sysctl.d/99-hardening.conf	/etc/sysctl.d/99-hardening.conf
-deploy/apt.conf.d/50unattended-upgrades-local	/etc/apt/apt.conf.d/50-unattended-upgrades-local
+deploy/apt.conf.d/50unattended-upgrades-local	/etc/apt/apt.conf.d/50unattended-upgrades-local
 deploy/sshd_config.d/hardening.conf	/etc/ssh/sshd_config.d/hardening.conf
 EOF
 

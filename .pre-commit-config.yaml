@@ -7,7 +7,7 @@ repos:
       - id: ruff-format
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.14.1
+    rev: v1.20.1
     hooks:
       - id: mypy
         additional_dependencies:
@@ -17,16 +17,18 @@ repos:
           - python-dotenv
           - lxml-stubs
           - aiohttp
+          - httpx
           - pydantic>=2.7
           - pydantic-settings>=2.4
         pass_filenames: false
         # Mirror CI's `mypy src/ scripts/import_metadata.py
-        # scripts/export_metadata.py`. The hook runs in an isolated env with no
+        # scripts/export_metadata.py scripts/refresh_reach_elevations.py`. The
+        # hook runs in an isolated env with no
         # editable kayak install; `mypy_path = "src"` in pyproject lets the
         # scripts resolve `kayak.*` here (additional_dependencies above cover
         # their third-party imports). Keeps the local gate from passing what CI
         # rejects.
-        args: [src/, scripts/import_metadata.py, scripts/export_metadata.py]
+        args: [src/, scripts/import_metadata.py, scripts/export_metadata.py, scripts/refresh_reach_elevations.py]
 
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.10.0.1

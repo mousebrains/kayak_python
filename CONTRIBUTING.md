@@ -9,10 +9,14 @@ cd kayak
 python3 -m venv /path/to/venv
 /path/to/venv/bin/pip install -e ".[dev]"
 
-# Initialize database
-levels init-db
+# Initialize database: empty schema + canonical metadata (gauges, reaches,
+# sources). A bare `levels init-db` seeds duplicate sources and leaves every
+# source an orphan — see CLAUDE.md § Quick start.
+levels init-db --no-seed
+python scripts/import_metadata.py
 
-# Verify everything works
+# Verify everything works (the test suite uses in-memory SQLite — the DB
+# above is only needed to run `levels pipeline` or serve the site).
 make check
 ```
 
@@ -21,16 +25,20 @@ make check
 All code must pass lint, type checking, and tests before merge.
 
 ```bash
-make lint       # ruff check src/ tests/
-make typecheck  # mypy src/
+make lint       # ruff check + ruff format --check (src/ tests/ scripts/ docs/one-offs/)
+make typecheck  # mypy src/ + the gated metadata/elevation scripts
 make test       # pytest
-make check      # all three
+make check      # lint-all (Python + PHP/JS/CSS/shell) + typecheck + test
 ```
 
 **Ruff** is configured in `pyproject.toml`: Python 3.13 target, 100-char line
 length, rules `E W F I UP B SIM RUF`. Auto-fix with `make format`.
 
-**mypy** runs in strict mode on `src/`.
+**mypy** runs in strict mode on `src/` plus the gated prod-path scripts
+(metadata import/export, elevation refresh).
+
+**Biome** lints JS/CSS (`make lint-js` / `make lint-css`) and runs as part of
+`make check` via `lint-all`.
 
 ## Testing
 
