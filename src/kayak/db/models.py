@@ -852,16 +852,18 @@ class EditHistory(Base):
 
 
 # ---------------------------------------------------------------------------
-# huc_name — human-readable labels for HUC8/10/12 codes (NHD WBD lookup)
+# huc_name — human-readable labels for HUC6 + HUC8 codes (NHD WBD lookup)
 # ---------------------------------------------------------------------------
 
 
 class HucName(Base):
-    """Watershed-name lookup for the codes stored in `reach.huc` (HUC12).
+    """Watershed-name lookup for codes derived from `reach.huc` (HUC12).
 
-    Populated from the WBD layers shipped with NHDPlus HR. Coarser levels are
-    derived from `reach.huc` via `substr(huc, 1, N)`; this table provides the
-    human-readable name for any of those prefixes.
+    Carries only the HUC6 + HUC8 names the site displays — the only levels any
+    reader resolves; HUC2/4/10/12 were trimmed in migration 0061 (review-3
+    R6.2), and `levels assign-huc` no longer writes them. A 6- or 8-digit
+    prefix of `reach.huc` (`substr(huc, 1, 6)` / `substr(huc, 1, 8)`) keys into
+    this table; populated by `levels assign-huc` from the WBD layers.
     """
 
     __tablename__ = "huc_name"

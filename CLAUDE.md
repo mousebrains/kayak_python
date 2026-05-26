@@ -196,7 +196,7 @@ Single normalized SQLite database (`kayak.db`). Schema defined in `src/kayak/db/
 - `rating` / `rating_data` — gage height ↔ flow conversion tables (dormant — reserved for per-gauge rating curves)
 - `editor` / `editor_session` / `editor_magic_link` — Phase 1 editor accounts + session cookies
 - `change_request` / `change_request_attachment` / `edit_history` — proposal queue + audit trail
-- `huc_name` — WBD HUC2/4/6/8/10/12 name lookup populated by `levels assign-huc`
+- `huc_name` — WBD HUC6/HUC8 name lookup populated by `levels assign-huc` (10/12 trimmed, R6.2)
 - `schema_migrations` — tracks applied `data/db/migrations/*.sql` versions
 
 Schema evolution:

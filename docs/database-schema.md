@@ -420,7 +420,7 @@ Audit trail of fields actually written to the live tables. Populated by both the
 
 ### `huc_name`
 
-Human-readable watershed names for HUC2/4/6/8/10/12 codes. Populated by `levels assign-huc` from the WBD layers shipped with NHDPlus HR. Coarser levels can be derived from a 12-digit code via `substr(huc, 1, N)`; this table provides the label for any of those prefixes.
+Human-readable watershed names for **HUC6 and HUC8** codes — the only two levels the site resolves. HUC2/4/10/12 names (≈97% of the WBD lookup) were trimmed in migration 0061 and `levels assign-huc` no longer writes them (review-3 R6.2). A 6- or 8-digit prefix of `reach.huc` (`substr(huc, 1, 6)` / `substr(huc, 1, 8)`) keys into this table; populated by `levels assign-huc` from the WBD layers shipped with NHDPlus HR.
 
 | Column | Type | Notes |
 |---|---|---|
