@@ -93,14 +93,14 @@ All notable changes to this project will be documented in this file.
   zero with hundreds of behaviour-preserving edits; the residual level-9
   `mixed`-typing finds are captured in a fresh *shrinking* `phpstan-baseline.neon`
   (634 entries) so new code is held to level 9. 172 phpunit tests stay green.
-  See `docs/PLAN_phpstan_level9_strict.md`.
+  See `docs/done/PLAN_phpstan_level9_strict.md`.
 - **PHP test coverage raised ~9% → ~60%** via an in-process functional harness
   (`tests/php/FunctionalTestCase.php` + an `http_terminate` exit seam) so pcov
   sees handler logic the `php -S` integration tests can't: unit tests for the
   pure helpers, functional tests for every handler (detail / custom / search /
   plots / review / propose) and the Tier-1 auth + magic-link core, all at
   90–99% (172 → 516 tests). The CI coverage floor ratchets 5% → 55%. See
-  `docs/PLAN_php_testing.md`.
+  `docs/done/PLAN_php_testing.md`.
 - **Dev workflow**: a worktree-based flow (`scripts/new-worktree.sh`) keeps branch/PR
   work off the live editable tree, and `scripts/snapshot_metadata.sh` refuses to run
   off `main` so the scheduled metadata snapshot never commits a feature branch.

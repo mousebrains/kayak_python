@@ -129,7 +129,7 @@ composer baseline                      # Regenerate phpstan-baseline.neon
 
 PHPStan runs at **level 9** with the full `phpstan-strict-rules`, plus a
 `phpstan-baseline.neon` carrying a shrinking set of residual `mixed`-typing
-(PDO-row) finds (see `docs/PLAN_phpstan_level9_strict.md`).
+(PDO-row) finds (see `docs/done/PLAN_phpstan_level9_strict.md`).
 PHP-FPM in prod **lacks mbstring** — use `strlen`/`substr`/`strtolower`,
 not `mb_*`. CSP is enforced — `<script>` tags must have `src=`; no inline
 event handlers.

@@ -71,6 +71,10 @@ Trace-cache/
 DEM-cache/
 Elevation-cache/
 
+# Gauge station metadata cache (gauges.db — agency site-info lookups, read by
+# web/build/gauges.py + the scripts/ harvesters)
+Gauge-metadata-cache/
+
 # Discovery artifacts — candidate CSVs feeding migration generators
 data/discover/
 

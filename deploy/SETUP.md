@@ -495,9 +495,9 @@ free -h    # confirm: Swap 4.0Gi
 
 Debian's `unattended-upgrades` package handles security updates. The
 local override at `deploy/apt.conf.d/50unattended-upgrades-local` adds
-auto-reboot at 04:00 if an update needs one (which is *before* the
-03:15 weekly backup window starts; pick a different time if that ever
-shifts).
+auto-reboot at 04:00 if an update needs one (which is *after* the 03:15
+weekly backup starts, leaving the backup ~45 min to finish before any
+reboot; pick a different time if either ever shifts).
 
 ```bash
 sudo apt-get install -y unattended-upgrades apt-listchanges

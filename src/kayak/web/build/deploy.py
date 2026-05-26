@@ -235,7 +235,8 @@ def _deploy_php_files(output_dir: Path) -> None:
     # _internal/ — maintainer-only dashboard. Mirror the includes/ pattern:
     # a single flat dir; deeper structure can be added later if the
     # dashboard grows into multiple PHP files. nginx only routes
-    # `/_internal/` and `/_internal/index.php` on the mousebrains vhost
+    # `/_internal/` and `/_internal/index.php` on the canonical
+    # levels.wkcc.org vhost (the mousebrains vhost holds a 404 guard)
     # (docs/done/PLAN_internal_dashboard.md Phase 2.4).
     internal_dir = output_dir / "_internal"
     internal_dir.mkdir(parents=True, exist_ok=True)
