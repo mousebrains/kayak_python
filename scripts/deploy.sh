@@ -142,15 +142,18 @@ fi
 
 # --- 3.5. emit /etc/kayak/runtime-config.json -------------------------
 #
-# Writes the typed-config JSON snapshot consumed by PHP. Atomic (same-
-# dir .tmp + rename) and idempotent (skips the write when the resolved
-# config hasn't changed). Requires the deploy/sudoers.d/kayak-emit-config
-# grant to be installed at /etc/sudoers.d/kayak-emit-config (one-time
-# operator setup; see deploy/SETUP.md). No php-fpm reload needed —
-# PHP re-reads the JSON file once per request.
+# Writes the typed-config JSON snapshot consumed by PHP. emit-config renders
+# the JSON UNPRIVILEGED (as pat, to stdout via --dry-run); the root-owned
+# /usr/local/sbin/kayak-install-runtime-config wrapper validates + atomically
+# installs it (0640 root:www-data). The sudoers grant runs only that fixed
+# wrapper, never the pat-writable venv binary (review-3 R1.5). Requires the
+# deploy/sudoers.d/kayak-emit-config grant + the wrapper installed (one-time
+# operator setup; see deploy/SETUP.md). No php-fpm reload needed — PHP re-reads
+# the JSON once per request. (The wrapper always re-installs; harmless — a few
+# KiB, re-read per request, no mtime watcher.)
 
-echo ">>> sudo -n levels emit-config"
-sudo -n "$LEVELS" emit-config --out /etc/kayak/runtime-config.json
+echo ">>> emit-config (unprivileged) | install-runtime-config (root wrapper)"
+"$LEVELS" emit-config --dry-run | sudo -n /usr/local/sbin/kayak-install-runtime-config
 
 # --- 4. build static HTML ---------------------------------------------
 

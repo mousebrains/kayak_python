@@ -62,6 +62,7 @@ deploy/logrotate-kayak-csp	/etc/logrotate.d/kayak-csp
 deploy/nftables.conf	/etc/nftables.conf
 deploy/sudoers.d/kayak-pipeline	/etc/sudoers.d/kayak-pipeline
 deploy/sudoers.d/kayak-emit-config	/etc/sudoers.d/kayak-emit-config
+deploy/kayak-install-runtime-config.sh	/usr/local/sbin/kayak-install-runtime-config
 deploy/kayak-env.example	/etc/kayak/env
 deploy/msmtp-aliases	/etc/msmtp-aliases
 # sysctl, apt, sshd
