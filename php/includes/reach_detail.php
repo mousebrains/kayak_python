@@ -636,10 +636,12 @@ function _render_reach_map(array $reach, ?array $gauge): array
     $doc_root = is_string($_SERVER['DOCUMENT_ROOT'] ?? null) ? $_SERVER['DOCUMENT_ROOT'] : '';
     $gp_raw = @filemtime($doc_root . '/static/gradient-profile.js');
     $gp_mtime = $gp_raw !== false ? $gp_raw : 1;
+    $fm_raw = @filemtime($doc_root . '/static/feature-map.js');
+    $fm_mtime = $fm_raw !== false ? $fm_raw : 1;
     return [
         true,
         '<script src="/static/leaflet.js" defer></script>'
-        . '<script src="/static/feature-map.js" defer></script>'
+        . '<script src="/static/feature-map.js?v=' . $fm_mtime . '" defer></script>'
         // gradient-profile.js degrades to chart-only tooltip if the map
         // handle isn't there, so it's safe to ship on any reach page —
         // no-op when the page has no .gradient-profile-chart elements.
