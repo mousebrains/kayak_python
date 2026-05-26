@@ -6,15 +6,20 @@ const CACHE = 'kayak-v2';
 const TIMEOUT = 3000;
 
 self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', e => {
+self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)),
+        ),
+      )
+      .then(() => self.clients.claim()),
   );
 });
 
-self.addEventListener('fetch', e => {
+self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   if (!req.url.startsWith(self.location.origin)) return;
@@ -22,9 +27,10 @@ self.addEventListener('fetch', e => {
   e.respondWith(
     Promise.race([
       fetchAndCache(req),
-      new Promise((_, reject) => setTimeout(reject, TIMEOUT))
-    ]).catch(() => caches.match(req))
-    .then(r => r || fetch(req))
+      new Promise((_, reject) => setTimeout(reject, TIMEOUT)),
+    ])
+      .catch(() => caches.match(req))
+      .then((r) => r || fetch(req)),
   );
 });
 
@@ -34,7 +40,7 @@ async function fetchAndCache(req) {
     // Don't cache responses the server marked no-store (editor / _internal
     // pages): CacheStorage.put() ignores HTTP cache semantics, so a stale
     // authenticated page could otherwise be served after the session is gone.
-    if (!(res.headers.get("Cache-Control") || "").includes("no-store")) {
+    if (!(res.headers.get('Cache-Control') || '').includes('no-store')) {
       const cache = await caches.open(CACHE);
       cache.put(req, res.clone());
     }

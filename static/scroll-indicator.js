@@ -29,11 +29,19 @@
   // ResizeObserver catches viewport changes + content additions; scroll
   // event catches direct user scroll + browser-driven Tab-to-link auto-scroll.
   const ro = new ResizeObserver(function (entries) {
-    entries.forEach(function (e) { update(e.target); });
+    entries.forEach(function (e) {
+      update(e.target);
+    });
   });
   document.querySelectorAll('[data-scroll-indicate]').forEach(function (el) {
     update(el);
-    el.addEventListener('scroll', function () { update(el); }, { passive: true });
+    el.addEventListener(
+      'scroll',
+      function () {
+        update(el);
+      },
+      { passive: true },
+    );
     ro.observe(el);
   });
 })();
