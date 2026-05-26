@@ -101,10 +101,10 @@ pytest --cov=kayak                   # Run with coverage
 ### Linting
 
 ```bash
-ruff check src/ tests/               # Lint
-ruff check --fix src/ tests/         # Lint with auto-fix
-ruff format src/ tests/              # Format
-mypy src/                            # Type check
+ruff check src/ tests/ scripts/ docs/one-offs/        # Lint (matches CI scope)
+ruff check --fix src/ tests/ scripts/ docs/one-offs/  # Lint with auto-fix
+ruff format src/ tests/ scripts/ docs/one-offs/       # Format
+mypy src/ scripts/import_metadata.py scripts/export_metadata.py  # Type check (CI scope)
 ```
 
 Ruff config: Python 3.13 target, 100-char line length, rules `E W F I UP B SIM RUF`. Configured in `pyproject.toml`.
@@ -121,22 +121,25 @@ php -S localhost:8000 -t public_html  # Serve PHP pages + static build output
 composer install --no-interaction --no-progress --prefer-dist  # First-time setup
 
 composer test                          # vendor/bin/phpunit
-composer analyse                       # vendor/bin/phpstan --memory-limit=1G (level 8)
+composer analyse                       # vendor/bin/phpstan --memory-limit=1G (level 9 + strict-rules)
 composer fix                           # vendor/bin/php-cs-fixer fix (in-place)
 composer fix-check                     # ... --dry-run (what CI runs)
 composer baseline                      # Regenerate phpstan-baseline.neon
 ```
 
-PHPStan runs at **level 8** with `phpstan-baseline.neon` carrying pre-existing
-`PDOStatement|false`/`string|false`-narrowing finds (see file header for the
-shrinkage history through Tiers 2–6 of `docs/PLAN_php_layer_split.md`).
+PHPStan runs at **level 9** with the full `phpstan-strict-rules`, plus a
+`phpstan-baseline.neon` carrying a shrinking set of residual `mixed`-typing
+(PDO-row) finds (see `docs/PLAN_phpstan_level9_strict.md`).
 PHP-FPM in prod **lacks mbstring** — use `strlen`/`substr`/`strtolower`,
 not `mb_*`. CSP is enforced — `<script>` tags must have `src=`; no inline
 event handlers.
 
-Integration tests use `tests/php/IntegrationTestCase.php`, which spawns
-`php -S 127.0.0.1:0` against a tmp SQLite DB seeded by `levels init-db`
-plus a per-test-class `seedDatabase()` hook. For editor-gated endpoints,
+PHP tests use two harnesses. **`tests/php/FunctionalTestCase.php`** runs handlers
+**in-process** — pcov counts it, so it's the primary vehicle (it lifted coverage
+to ~60%); prefer it for handler coverage. **`tests/php/IntegrationTestCase.php`**
+spawns `php -S 127.0.0.1:0` against a tmp SQLite DB seeded by `levels init-db`
+plus a per-test-class `seedDatabase()` hook (true end-to-end, uncounted by pcov).
+For editor-gated endpoints,
 `seedEditorSession($email, $status = 'full'|'maintainer')` returns
 `{editor_id, session_token, csrf_token}` — pass through `request()`'s
 `$cookies` arg as `ed_sess` + `ed_csrf`, plus `csrf_token` in the POST

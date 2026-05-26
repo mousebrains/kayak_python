@@ -57,6 +57,18 @@ All notable changes to this project will be documented in this file.
 - **`docs/security/` audit anchors repointed** to the post-2026-05-14-split
   files (`auth_magic_link` / `propose_handler` / `review_handler`), keyed on
   function names so they survive future line drift.
+- **Weekly recap fixed**: `kayak-recap` reads pipeline struct-log events again (it
+  had been suppressing them and reporting "Events parsed: 0").
+- **Prod setup doc corrected**: `deploy/SETUP.md` now matches the live host — venv
+  `~/.venv`, config `~/.config/kayak/.env`, `www-data` ACLs, the `adm` group, and the
+  `libnginx-mod-http-headers-more-filter` / `acl` packages a fresh install needs.
+- **Schema doc resynced + guarded**: `docs/database-schema.md` backfilled with the
+  columns it had dropped (gauge `river`/`display_name`/`sort_name`/`state`,
+  `source.timezone`, `calc_expression.provenance_slug`, `change_request.source_url`);
+  a new `tests/test_schema_doc_sync.py` diffs the doc against `models.py` so it can't
+  silently drift again.
+- **Contributor docs**: CLAUDE.md states PHPStan level 9 (was 8), the real lint/mypy
+  CI scope, and both PHP test harnesses (`FunctionalTestCase` + `IntegrationTestCase`).
 
 ### Changed
 - Pinned `ruff` in pre-commit/CI to match `uv.lock` and stop formatter drift.
@@ -89,6 +101,18 @@ All notable changes to this project will be documented in this file.
   plots / review / propose) and the Tier-1 auth + magic-link core, all at
   90–99% (172 → 516 tests). The CI coverage floor ratchets 5% → 55%. See
   `docs/PLAN_php_testing.md`.
+- **Dev workflow**: a worktree-based flow (`scripts/new-worktree.sh`) keeps branch/PR
+  work off the live editable tree, and `scripts/snapshot_metadata.sh` refuses to run
+  off `main` so the scheduled metadata snapshot never commits a feature branch.
+- Archived the one-off `montana/mt.list` to `docs/one-offs/` (generator repointed).
+
+### Security
+- **Round-3 review Phase 1**: pinned the `emit-config` sudoers grant (closing an
+  arbitrary-root-write via `--out`), generated the default-vhost dummy TLS cert (a
+  fresh `nginx -t` was failing without it), repointed the stale backup-unit sudoers
+  grant, and rejected `javascript:`/`data:` URIs in `sanitize_source_url`. A residual
+  (the grant still runs a pat-writable binary as root) is tracked as R1.5 in the
+  round-3 plan.
 
 ## [1.1.1] - 2026-05-21
 
