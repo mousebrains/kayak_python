@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 _PARSER_AGENCY: dict[str, str] = {
     "nwps": "NWS",
     "wa.gov": "WA DOE",
+    "pacificorp": "PacifiCorp",
 }
 
 
