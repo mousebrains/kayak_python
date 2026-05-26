@@ -103,8 +103,9 @@ def stamp(version: str) -> None:
 def stamp_all_known() -> int:
     """Stamp every discovered migration (used by ``init-db`` on fresh DBs)."""
     count = 0
+    already = applied_versions()  # read once; the loop stamps distinct versions
     for m in discover_migrations():
-        if m.version not in applied_versions():
+        if m.version not in already:
             stamp(m.version)
             count += 1
     return count

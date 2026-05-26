@@ -23,6 +23,8 @@ material rather than a deletable graveyard. For work *in flight*, see the
 | `PLAN_outstanding_followups.md` | Outstanding-follow-ups closeout schedule |
 | `PLAN_pacificorp_rogue.md` | PacifiCorp Rogue Bypass parser + Rogue-above-Prospect calc gauge |
 | `PLAN_php_layer_split.md` | PHP entry-point → handler split discipline |
+| `PLAN_php_testing.md` | PHP test harness + coverage ramp (Functional/Integration cases, #31) |
+| `PLAN_phpstan_level9_strict.md` | PHPStan level 9 + full strict-rules, shrinking baseline (#29) |
 | `PLAN_pre_release_followup.md` | Pre-release follow-up after the 2026-05-13 audit |
 | `PLAN_three_instance_layout.md` | Three-instance host layout (prod / test / tpw) |
 | `PLAN_tier3_closeout.md` | Typed-config spine (T3.3) + `KAYAK_HOME` (T3.4) + dormant-schema decision (T3.5) |

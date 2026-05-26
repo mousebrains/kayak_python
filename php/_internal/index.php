@@ -7,8 +7,8 @@ declare(strict_types=1);
  * data right now?" without SSHing in. Auth reuses the editor_session
  * cookie (no new credential); only editors with status='maintainer'
  * pass require_maintainer(). nginx adds X-Robots-Tag noindex and only
- * mounts this URL on levels.mousebrains.com — the wkcc.org vhosts
- * return 404 via a ^~ /_internal/ guard.
+ * mounts this URL on the canonical levels.wkcc.org vhost — the
+ * mousebrains vhost returns 404 for /_internal/.
  *
  * Per docs/done/PLAN_internal_dashboard.md (iter 5, 2026-05-15).
  */
