@@ -32,7 +32,7 @@ make check      # lint-all (Python + PHP/JS/CSS/shell) + typecheck + test
 ```
 
 **Ruff** is configured in `pyproject.toml`: Python 3.13 target, 100-char line
-length, rules `E W F I UP B SIM RUF`. Auto-fix with `make format`.
+length, rules `E W F I UP B SIM RUF C901`. Auto-fix with `make format`.
 
 **mypy** runs in strict mode on `src/` plus the gated prod-path scripts
 (metadata import/export, elevation refresh).
