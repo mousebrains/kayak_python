@@ -5,7 +5,7 @@ the previous draft:
 
 1. Original site scope (HUC4 1701, 62 auto-discovered sites) narrowed to
    a hand-picked list of 13 USGS gauges from
-   [`montana/mt.list`](../montana/mt.list).
+   [`docs/one-offs/mt.list`](../docs/one-offs/mt.list).
 2. The Phase-3 `gauges.<state>.html` builder (already merged for OR/WA/ID
    on this branch) is being **reverted** in favor of the existing
    fragment-filter mechanism (`filters.js` honors `#st=<state>` on
@@ -44,7 +44,7 @@ follow-up reach-import PR.
 
 ## Curated list
 
-[`montana/mt.list`](../montana/mt.list) — transcribed by Pat 2026-05-19
+[`docs/one-offs/mt.list`](../docs/one-offs/mt.list) — transcribed by Pat 2026-05-19
 from the entries circled on
 <https://levels-legacy.wkcc.org/?P=Montana.html>. Two-column TSV (third
 column is a human-readable label, ignored by tooling):
@@ -79,7 +79,7 @@ mt.list is the source of truth.
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Site source | **Curated list — `montana/mt.list` (13 sites)** | Replaces the HUC4 discovery sweep. Pat picked these from the legacy site's Montana page. |
+| Site source | **Curated list — `docs/one-offs/mt.list` (13 sites)** | Replaces the HUC4 discovery sweep. Pat picked these from the legacy site's Montana page. |
 | Geographic boundary | **None** | The list spans Columbia + Missouri drainages. Boundary was a discovery aid, not a product requirement. |
 | Source mix | **USGS continuous only** (NWIS OGC: params 00060, 00065, 00010) | Same as before — auto-discovered via `gauge.usgs_id`. Zero `sources.yaml` change. |
 | Active cutoff | **Implicit** — manual curation already filtered for active sites | All 13 sites have flow obs within the last 24 h per the cache. |
@@ -119,7 +119,7 @@ checkout: those will linger until the next clean deploy or a manual
 
 `scripts/generate_mt_migration.py` currently reads
 `data/discover/montana_candidates.csv` (the gitignored discovery output).
-Switch it to read `montana/mt.list` directly and pull metadata from
+Switch it to read `docs/one-offs/mt.list` directly and pull metadata from
 `Gauge-metadata-cache/gauges.db::usgs_site`:
 
 - Parse mt.list: skip blank lines, take column 2 (USGS site number) of
@@ -136,7 +136,7 @@ Switch it to read `montana/mt.list` directly and pull metadata from
 - Drop the `_REVIEW_HINTS` heuristic and "REVIEW:" comments — the
   curated list has already been hand-screened, so flagging is noise.
 - Update the migration's leading comment block from "HUC4 1701 …
-  candidate CSV" to "curated list — `montana/mt.list`".
+  candidate CSV" to "curated list — `docs/one-offs/mt.list`".
 
 Per-site SQL pattern unchanged — three idempotent inserts (`source`,
 `gauge`, `gauge_source`). Field-derivation rules unchanged (see § Field
@@ -383,8 +383,8 @@ in the last week" detector once per run). Mention in the PR description.
 
 | Path | Change |
 |---|---|
-| `montana/mt.list` | new — curated 13-site list, source of truth |
-| `scripts/generate_mt_migration.py` | **edit** — read `montana/mt.list` + `Gauge-metadata-cache/gauges.db` instead of `data/discover/montana_candidates.csv`; drop REVIEW-hint heuristic; refresh leading comment |
+| `docs/one-offs/mt.list` | new — curated 13-site list, source of truth |
+| `scripts/generate_mt_migration.py` | **edit** — read `docs/one-offs/mt.list` + `Gauge-metadata-cache/gauges.db` instead of `data/discover/montana_candidates.csv`; drop REVIEW-hint heuristic; refresh leading comment |
 | `data/db/migrations/0036_montana_usgs_gauges.sql` | **rewrite** — regenerate from mt.list (13 sites; was 62 HUC4-1701 sites) |
 
 ### Phase 3 (revert state-scoped pages + landing-page cross-links)
@@ -411,7 +411,7 @@ in the last week" detector once per run). Mention in the PR description.
 | Path | Action |
 |---|---|
 | `public_html/gauges.oregon.html`, `public_html/gauges.washington.html`, `public_html/gauges.idaho.html` | `rm` after the revert lands. Not tracked in git; will not be regenerated. |
-| `data/discover/montana_candidates.csv` | `rm` — superseded by `montana/mt.list`. Gitignored. |
+| `data/discover/montana_candidates.csv` | `rm` — superseded by `docs/one-offs/mt.list`. Gitignored. |
 
 Untouched by this revision (kept from earlier commits):
 `scripts/fetch_usgs_sites.py` (Montana coverage stays merged),
