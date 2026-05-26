@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Generate 0036_montana_usgs_gauges.sql from montana/mt.list.
+"""Generate 0036_montana_usgs_gauges.sql from docs/one-offs/mt.list.
 
 Build artifact — gitignored. The committed SQL is the source of truth;
 re-run this to regenerate after editing the curated mt.list.
 
 Inputs:
-  montana/mt.list                              (curated USGS site numbers)
+  docs/one-offs/mt.list                              (curated USGS site numbers)
   Gauge-metadata-cache/gauges.db::usgs_site    (station metadata)
 
 Outputs:
@@ -21,7 +21,7 @@ import sqlite3
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-MT_LIST_PATH = REPO / "montana" / "mt.list"
+MT_LIST_PATH = REPO / "docs" / "one-offs" / "mt.list"
 CACHE_DB_PATH = REPO / "Gauge-metadata-cache" / "gauges.db"
 SQL_PATH = REPO / "data" / "db" / "migrations" / "0036_montana_usgs_gauges.sql"
 
@@ -143,7 +143,7 @@ def emit_sql() -> str:
     out: list[str] = []
     out.append("-- Migration 0036: Montana USGS gauges (curated list).")
     out.append("--")
-    out.append("-- Site numbers pulled from montana/mt.list (hand-curated by Pat from")
+    out.append("-- Site numbers pulled from docs/one-offs/mt.list (hand-curated by Pat from")
     out.append("-- the entries circled on https://levels-legacy.wkcc.org/?P=Montana.html).")
     out.append("-- Per-site metadata pulled from Gauge-metadata-cache/gauges.db::usgs_site.")
     out.append("-- See docs/PLAN_montana_gauges.md.")
