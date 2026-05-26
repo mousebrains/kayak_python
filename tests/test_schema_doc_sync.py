@@ -117,7 +117,10 @@ def test_source_agency_enum_documents_every_value() -> None:
             notes = cells[3] if len(cells) > 3 else ""
             break
     assert notes, "could not find the `agency` row in docs/database-schema.md"
-    missing = sorted(a for a in agencies if a not in notes)
+    # Compare '/'-split tokens, not substrings, so the guard can't be fooled by
+    # one agency being a substring of another (e.g. a future "US"). Review nit on #54.
+    documented_agencies = {tok.strip() for tok in notes.split("/") if tok.strip()}
+    missing = sorted(agencies - documented_agencies)
     assert not missing, (
         "docs/database-schema.md source.agency enum is missing values present "
         "in data/db/source.csv: " + ", ".join(missing)
