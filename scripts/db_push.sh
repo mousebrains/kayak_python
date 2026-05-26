@@ -25,6 +25,9 @@ REMOTE_HOST="${REMOTE_HOST:-pat@levels.mousebrains.com}"
 REMOTE_DB="${REMOTE_DB:-${KAYAK_HOME}/DB/kayak.db}"
 REMOTE_BACKUP_DIR="${REMOTE_BACKUP_DIR:-${KAYAK_HOME}/kayak/backups}"
 KEEP_PUSH_ARCHIVES="${KEEP_PUSH_ARCHIVES:-5}"
+# Guard: a non-numeric value would make (( i >= KEEP )) treat it as 0 and prune
+# every archive — fall back to the default rather than delete all of them.
+[[ "$KEEP_PUSH_ARCHIVES" =~ ^[0-9]+$ ]] || KEEP_PUSH_ARCHIVES=5
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"

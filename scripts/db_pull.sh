@@ -24,6 +24,9 @@ REMOTE_HOST="${REMOTE_HOST:-pat@levels.mousebrains.com}"
 REMOTE_DB="${REMOTE_DB:-${KAYAK_HOME}/DB/kayak.db}"
 REMOTE_BACKUP_DIR="${REMOTE_BACKUP_DIR:-${KAYAK_HOME}/kayak/backups}"
 KEEP_PULL_SNAPSHOTS="${KEEP_PULL_SNAPSHOTS:-3}"
+# Guard: a non-numeric value would make (( i >= KEEP )) treat it as 0 and prune
+# every snapshot — fall back to the default rather than delete all of them.
+[[ "$KEEP_PULL_SNAPSHOTS" =~ ^[0-9]+$ ]] || KEEP_PULL_SNAPSHOTS=3
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
