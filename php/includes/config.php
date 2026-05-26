@@ -17,7 +17,7 @@ declare(strict_types=1);
  * gone; a key absent from the JSON returns the wrapper's $default.
  * Keys outside the schema are silent (forward-compat).
  *
- * PHPStan level 8: the typed wrappers (str/int/bool/list/url) are
+ * PHPStan: the typed wrappers (str/int/bool/list/url) are
  * the public API; `Config::get()` returns mixed for the rare callers
  * that need the raw value.
  */

@@ -89,6 +89,9 @@ jobs:
       - name: Shell lint
         run: shellcheck --severity=warning scripts/*.sh systemd/*.sh deploy/*.sh
 
+      - name: PHPStan-level consistency
+        run: scripts/check-phpstan-level.sh
+
       - name: Install PHP dev dependencies
         # setup-php@v2 writes ~/.composer/auth.json with the runner's
         # ambient GITHUB_TOKEN. GitHub recently shifted the runner token
