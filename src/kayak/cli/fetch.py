@@ -14,7 +14,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from kayak.cli.init_db import sync_sources
+from kayak.cli.init_db import canonical_agency, sync_sources
 from kayak.config import FETCH_BUDGET
 from kayak.config_data import load_sources
 from kayak.db.engine import get_session
@@ -338,7 +338,7 @@ def _parse_and_store(
                 source_tz_map=w.source_tz_map,
                 dry_run=args.dry_run,
                 fetch_url_id=w.fetch_url_id,
-                agency=w.parser_name,
+                agency=canonical_agency(w.parser_name),
             )
             count = parser.parse(text_content)
 

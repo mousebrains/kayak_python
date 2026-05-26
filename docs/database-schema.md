@@ -64,7 +64,7 @@ Use `.first()` (not `.scalar_one_or_none()`) when looking up by name, or disambi
 |---|---|---|
 | `id` | INTEGER | PK, autoincrement |
 | `name` | VARCHAR(256) | Indexed, not null, **not unique** |
-| `agency` | VARCHAR(64) | USGS / NOAA / NWRFC / USACE / USBR / WA DOE / NWS |
+| `agency` | VARCHAR(64) | USGS / NOAA / NWRFC / USACE / USBR / WA DOE / NWS / Calculation |
 | `timezone` | TEXT | IANA TZ name (e.g. `America/Boise`); localizes naive feed timestamps, NULL = treat as UTC (migration 0008) |
 | `fetch_url_id` | INTEGER | FK → `fetch_url.id` ON DELETE SET NULL |
 | `calc_expression_id` | INTEGER | FK → `calc_expression.id` ON DELETE SET NULL |
