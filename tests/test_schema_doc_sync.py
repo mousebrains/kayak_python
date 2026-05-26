@@ -18,6 +18,7 @@ Parser notes:
 
 from __future__ import annotations
 
+import csv
 import re
 from pathlib import Path
 
@@ -25,10 +26,11 @@ from kayak.db.models import Base
 
 _DOC = Path(__file__).resolve().parents[1] / "docs" / "database-schema.md"
 
-# Tables intentionally exempt from the column check, with a reason. Empty
-# today — all ORM tables are fully documented. (schema_migrations needs no
-# entry: it is not an ORM table, so it never appears in Base.metadata.)
-_IGNORE_TABLES: set[str] = set()
+# Tables exempt from the doc<->ORM checks, with a reason. schema_migrations is
+# documented (the migration-bookkeeping table) but is raw DDL created by the
+# migration runner, not an ORM model — so it's absent from Base.metadata and
+# must be skipped in the reverse (doc -> ORM) direction. review-4 R2.4.
+_IGNORE_TABLES: set[str] = {"schema_migrations"}
 
 _HEADING = re.compile(r"^###\s+`([a-z0-9_]+)`")
 _SUBLABEL = re.compile(r"^\*\*`([a-z0-9_]+)`:?\*\*")
@@ -72,4 +74,54 @@ def test_schema_doc_covers_every_model_column() -> None:
         "docs/database-schema.md is out of sync with src/kayak/db/models.py.\n"
         "Undocumented (add them to the doc, or to _IGNORE_TABLES with a reason):\n  "
         + "\n  ".join(sorted(missing))
+    )
+
+
+def test_schema_doc_has_no_stale_columns() -> None:
+    """Reverse direction (review-4 R2.4): every documented table + column must
+    exist in the ORM, so a doc entry for a removed table/column fails too — the
+    forward check above can't see that. schema_migrations is ignored (raw DDL)."""
+    documented = _documented_columns()
+    orm = {t.name: {c.name for c in t.columns} for t in Base.metadata.sorted_tables}
+    stale: list[str] = []
+    for table, doc_cols in documented.items():
+        if table in _IGNORE_TABLES:
+            continue
+        orm_cols = orm.get(table)
+        if orm_cols is None:
+            stale.append(f"{table}: documented but not an ORM table")
+            continue
+        stale += [f"{table}.{c}" for c in sorted(doc_cols) if c not in orm_cols]
+    assert not stale, (
+        "docs/database-schema.md documents tables/columns absent from "
+        "src/kayak/db/models.py (remove them, or add to _IGNORE_TABLES):\n  "
+        + "\n  ".join(sorted(stale))
+    )
+
+
+def test_source_agency_enum_documents_every_value() -> None:
+    """The source.agency Notes enum must list every distinct agency in the
+    committed source.csv — the authoritative set (review-4 R2.4 / R3.4). The
+    forward/reverse column checks only see column *names*, not enum prose."""
+    csv_path = Path(__file__).resolve().parents[1] / "data" / "db" / "source.csv"
+    with csv_path.open(encoding="utf-8") as fh:
+        agencies = {
+            (row.get("agency") or "").strip()
+            for row in csv.DictReader(fh)
+            if (row.get("agency") or "").strip()
+        }
+    notes = ""
+    for line in _DOC.read_text(encoding="utf-8").splitlines():
+        if line.startswith("| `agency`"):
+            cells = line.split("|")
+            notes = cells[3] if len(cells) > 3 else ""
+            break
+    assert notes, "could not find the `agency` row in docs/database-schema.md"
+    # Compare '/'-split tokens, not substrings, so the guard can't be fooled by
+    # one agency being a substring of another (e.g. a future "US"). Review nit on #54.
+    documented_agencies = {tok.strip() for tok in notes.split("/") if tok.strip()}
+    missing = sorted(agencies - documented_agencies)
+    assert not missing, (
+        "docs/database-schema.md source.agency enum is missing values present "
+        "in data/db/source.csv: " + ", ".join(missing)
     )
