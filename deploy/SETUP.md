@@ -125,18 +125,21 @@ To apply geometry to the live DB by hand (without re-syncing CSV metadata):
 but nginx and PHP-FPM run as `www-data`, which must traverse `pat`'s `0700`
 home to reach the docroot and DB. The docroot (`/home/pat/public_html`, created
 in §3) is a **real directory** that `levels build` (above) fills with a
-self-contained site — HTML plus copied PHP/includes/static. The **only** repo
-path `www-data` still reads is the operator status cache
-(`/home/pat/kayak/var/status.html`, streamed by `/_internal/status`; R2.6 in the
-round-3 plan would move it into the docroot and drop this last grant):
+self-contained site — HTML plus copied PHP/includes/static. `www-data` reads
+**zero repo paths**: PHP-FPM execs only the `public_html` copies (not the repo
+`php/`), and the operator status cache it streams via `/_internal/status` lives
+at `/home/pat/var/status.html` — outside both the repo and the docroot (so
+nginx can't serve it directly; review-3 R2.6). So **no ACL touches
+`/home/pat/kayak`** — `www-data` only traverses `/home/pat` to reach the
+docroot, DB, and the out-of-repo status cache:
 
 ```bash
-sudo -u pat mkdir -p /home/pat/kayak/var                      # status-cache dir (status.html lands here)
-sudo setfacl -m  u:www-data:x     /home/pat /home/pat/kayak   # traverse
+sudo -u pat mkdir -p /home/pat/var                            # status-cache dir, OUTSIDE the repo (status.html lands here)
+sudo setfacl -m  u:www-data:x     /home/pat                   # traverse to docroot/DB/var — NOT into /home/pat/kayak
 sudo setfacl -R -m u:www-data:rX  /home/pat/public_html       # read the built site
 sudo setfacl -R -d -m u:www-data:rX /home/pat/public_html     # inherit for files build writes
-sudo setfacl -R -m u:www-data:rX  /home/pat/kayak/var         # operator status cache
-sudo setfacl -R -d -m u:www-data:rX /home/pat/kayak/var
+sudo setfacl -R -m u:www-data:rX  /home/pat/var               # operator status cache (out of repo, R2.6)
+sudo setfacl -R -d -m u:www-data:rX /home/pat/var
 sudo setfacl -R -m u:www-data:rwX /home/pat/DB                # WAL needs write even for read-only pages
 sudo setfacl -R -d -m u:www-data:rwX /home/pat/DB
 ```
@@ -351,7 +354,7 @@ Expected schedule (15 timers; most jittered via `RandomizedDelaySec=`):
 - **kayak-decimate.timer** — daily at 02:32 (thins old observations, VACUUM)
 - **kayak-editor-retention.timer** — daily at 03:45 (prunes expired editor sessions + magic links)
 - **kayak-metadata-snapshot.timer** — daily at 04:30 (commits metadata-table drift to `data/db/*.csv`)
-- **kayak-status.timer** — daily at 03:30 (renders the `/_internal/status` operator dashboard to `var/status.html`)
+- **kayak-status.timer** — daily at 03:30 (renders the `/_internal/status` operator dashboard to `/home/pat/var/status.html`)
 - **kayak-fetch-osmb.timer** — daily at 03:30 (fetches Oregon State Marine Board hazard/access GeoJSON overlays)
 - **kayak-cert-expiry.timer** — daily at 06:30 (Let's Encrypt cert health probe; pages on <21 days remaining)
 - **kayak-cert-renewal-test.timer** — weekly Monday at 04:15 (`certbot renew --dry-run`)
@@ -629,12 +632,13 @@ OUTPUT_DIR=/home/pat/public_html
 EDITOR_FEATURE=1
 EOF
 
-# 5. ACLs for nginx (www-data) — docroot is a real dir; the only repo read is the status cache
-mkdir -p /home/pat/kayak/var                              # status-cache dir (status.html)
-setfacl -m u:www-data:x /home/pat /home/pat/kayak         # traverse
+# 5. ACLs for nginx (www-data) — docroot is a real dir; www-data gets ZERO repo access (R2.6)
+mkdir -p /home/pat/var                                    # status-cache dir, OUTSIDE the repo (status.html)
+setfacl -m u:www-data:x /home/pat                         # traverse only — NOT into /home/pat/kayak
 setfacl -R -m u:www-data:rX /home/pat/public_html         # read the built site
 setfacl -R -d -m u:www-data:rX /home/pat/public_html      # default for new files
-setfacl -R -m u:www-data:rX /home/pat/kayak/var           # operator status cache (status.html)
+setfacl -R -m u:www-data:rX /home/pat/var                 # operator status cache (out of repo)
+setfacl -R -d -m u:www-data:rX /home/pat/var              # default for new files
 setfacl -R -m u:www-data:rwX /home/pat/DB                 # DB read/write (WAL needs write)
 setfacl -R -d -m u:www-data:rwX /home/pat/DB              # default for new DB files
 
