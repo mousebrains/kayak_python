@@ -126,6 +126,20 @@ else
     echo "(data/db/reaches.json unchanged — skipping geom apply)"
 fi
 
+# --- 3.26. apply reach gradient (only if reaches-gradient.json changed) -
+#
+# reach.gradient_profile lives in data/db/reaches-gradient.json (excluded from
+# reach.csv — large, not regenerable on prod), the same snapshot pattern as
+# geom above. review-3 R6.1.
+
+if [[ "$old_sha" != "$new_sha" ]] && \
+        ! git diff --quiet "$old_sha" "$new_sha" -- data/db/reaches-gradient.json; then
+    echo ">>> data/db/reaches-gradient.json changed — applying gradient (import_metadata.py --gradient-only)"
+    "$VENV_PY" scripts/import_metadata.py --gradient-only
+else
+    echo "(data/db/reaches-gradient.json unchanged — skipping gradient apply)"
+fi
+
 # --- 3.5. emit /etc/kayak/runtime-config.json -------------------------
 #
 # Writes the typed-config JSON snapshot consumed by PHP. Atomic (same-

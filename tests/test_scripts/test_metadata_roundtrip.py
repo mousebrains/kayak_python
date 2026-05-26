@@ -180,3 +180,62 @@ def test_reimport_idempotent_across_pk_shapes(tmp_path, monkeypatch):
         page = c.execute(text("SELECT page FROM reach_guidebook WHERE reach_id = 1")).scalar()
     eng.dispose()
     assert page == "p1"  # DO UPDATE re-applied the non-PK column cleanly
+
+
+def _reach_gradients(path: Path) -> dict[int, str | None]:
+    """{id: gradient_profile} — the reaches-gradient.json-managed column (R6.1)."""
+    eng = create_engine(f"sqlite:///{path}")
+    with eng.connect() as c:
+        rows = c.execute(text("SELECT id, gradient_profile FROM reach ORDER BY id")).all()
+    eng.dispose()
+    return {r[0]: r[1] for r in rows}
+
+
+def test_round_trip_preserves_gradient(tmp_path, monkeypatch):
+    """gradient_profile rides through reaches-gradient.json, excluded from reach.csv."""
+    exp = _load("export_metadata")
+    imp = _load("import_metadata")
+    src, dst, out = tmp_path / "src.db", tmp_path / "dst.db", tmp_path / "snap"
+    out.mkdir()
+    _make_db(src)
+    _make_db(dst)
+    _seed_reaches(
+        src,
+        [
+            {"id": 1, "name": "Alpha", "gradient_profile": '{"samples":[1,2,3]}'},
+            {"id": 2, "name": "Bravo"},  # no gradient
+        ],
+    )
+
+    monkeypatch.setattr(sys, "argv", ["export_metadata", "--db", str(src), "--out", str(out)])
+    assert exp.main() == 0
+    assert json.loads((out / "reaches-gradient.json").read_text()) == {"1": '{"samples":[1,2,3]}'}
+    header = (out / "reach.csv").read_text().splitlines()[0]
+    assert "gradient_profile" not in header.split(",")
+
+    monkeypatch.setattr(sys, "argv", ["import_metadata", "--db", str(dst), "--in", str(out)])
+    assert imp.main() == 0
+    assert _reach_gradients(dst) == {1: '{"samples":[1,2,3]}', 2: None}
+
+
+def test_gradient_only_applies_gradient_leaves_metadata(tmp_path, monkeypatch):
+    """--gradient-only applies reaches-gradient.json to existing rows and skips
+    the CSV upsert (and the geom apply)."""
+    imp = _load("import_metadata")
+    dst, snap = tmp_path / "dst.db", tmp_path / "snap"
+    snap.mkdir()
+    _make_db(dst)
+    _seed_reaches(dst, [{"id": 1, "name": "orig1"}, {"id": 2, "name": "orig2"}])
+    (snap / "reaches-gradient.json").write_text(json.dumps({"1": "GP1", "2": "GP2"}))
+
+    monkeypatch.setattr(
+        sys, "argv", ["import_metadata", "--db", str(dst), "--in", str(snap), "--gradient-only"]
+    )
+    assert imp.main() == 0
+
+    assert _reach_gradients(dst) == {1: "GP1", 2: "GP2"}
+    eng = create_engine(f"sqlite:///{dst}")
+    with eng.connect() as c:
+        names = dict(c.execute(text("SELECT id, name FROM reach ORDER BY id")).all())
+    eng.dispose()
+    assert names == {1: "orig1", 2: "orig2"}  # names untouched (CSV upsert skipped)

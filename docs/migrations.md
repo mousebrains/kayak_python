@@ -212,12 +212,13 @@ What closes the gap: the `data/db/*.csv` snapshots (written nightly by
 `scripts/export_metadata.py`) are **read back** by
 `scripts/import_metadata.py`, which loads `gauge.csv`, `source.csv`,
 `gauge_source.csv`, `reach.csv`, and the rest — recreating the live
-`gauge_source` links. `reach.geom` is kept out of `reach.csv` (large,
-and not regenerable on prod without a DEM/NHD) and lives in
-`data/db/reaches.json`; a full `import_metadata.py` run applies it after
-the CSVs in the same invocation (the `--geom-only` flag re-applies *only*
-the geometry to a live DB — the dev re-trace path, see `deploy/SETUP.md`
-§4 and `scripts/deploy.sh`; a from-scratch rebuild doesn't need it).
+`gauge_source` links. `reach.geom` and `reach.gradient_profile` are kept
+out of `reach.csv` (large, not regenerable on prod without a DEM/NHD) and
+live in `data/db/reaches.json` + `data/db/reaches-gradient.json`; a full
+`import_metadata.py` run applies both after the CSVs in the same invocation
+(the `--geom-only` / `--gradient-only` flags re-apply *only* one to a live
+DB — the dev re-trace path, see `deploy/SETUP.md` §4 and `scripts/deploy.sh`;
+a from-scratch rebuild doesn't need them).
 
 `huc_name.csv` carries only the HUC6 + HUC8 names the site resolves; the
 HUC2/4/10/12 levels (≈97% of WBD's 17k rows) were trimmed in migration

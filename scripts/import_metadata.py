@@ -24,16 +24,18 @@ because the upsert keys on the primary key, an *aborting* ``UNIQUE`` conflict on
 by delete+reinsert; the upsert surfaces them instead, rolling back the load).
 ``--no-seed`` gives empty tables so the CSV ids load cleanly.
 
-reach.geom is loaded from data/db/reaches.json (it's excluded from reach.csv)
-via ``UPDATE reach SET geom``. To apply just the geometry to a live prod DB
-without re-syncing metadata from the CSVs — e.g. after a re-trace or the ~5 m
-simplification — use ``--geom-only``.
+reach.geom and reach.gradient_profile are excluded from reach.csv and loaded
+from data/db/reaches.json and data/db/reaches-gradient.json via
+``UPDATE reach SET geom`` / ``SET gradient_profile``. To apply just one to a
+live prod DB without re-syncing metadata from the CSVs — e.g. after a re-trace —
+use ``--geom-only`` or ``--gradient-only``.
 
 Usage:
-    python3 scripts/import_metadata.py                # uses ../DB/kayak.db
+    python3 scripts/import_metadata.py                  # uses ../DB/kayak.db
     python3 scripts/import_metadata.py --db /path.db
-    python3 scripts/import_metadata.py --in data/db   # default
-    python3 scripts/import_metadata.py --geom-only    # only reaches.json geom
+    python3 scripts/import_metadata.py --in data/db     # default
+    python3 scripts/import_metadata.py --geom-only      # only reaches.json geom
+    python3 scripts/import_metadata.py --gradient-only  # only reaches-gradient.json
 """
 
 import argparse
@@ -185,6 +187,32 @@ def _apply_geom(conn: sqlite3.Connection, in_dir: Path) -> None:
         )
 
 
+def _apply_gradient(conn: sqlite3.Connection, in_dir: Path) -> None:
+    """Apply reach.gradient_profile from reaches-gradient.json (excluded from
+    reach.csv). Mirrors _apply_geom: reports rows actually updated and flags any
+    snapshot reaches that matched no row in this DB. review-3 R6.1.
+    """
+    grad_json = in_dir / "reaches-gradient.json"
+    if not grad_json.exists():
+        return
+    with grad_json.open(encoding="utf-8") as f:
+        try:
+            grads = json.load(f)
+            pairs = [(gp, int(rid)) for rid, gp in grads.items()]
+        except (json.JSONDecodeError, ValueError, AttributeError) as exc:
+            print(f"Error: {grad_json} is malformed ({exc})", file=sys.stderr)
+            raise SystemExit(1) from exc
+    cur = conn.executemany("UPDATE reach SET gradient_profile = ? WHERE id = ?", pairs)
+    applied = cur.rowcount
+    print(f"{'reaches-gradient.json':<20} {applied:>10}")
+    if applied != len(grads):
+        print(
+            f"Note: {len(grads)} reaches in reaches-gradient.json but {applied} matched a "
+            "reach row (the rest have no row in this DB).",
+            file=sys.stderr,
+        )
+
+
 def _report_integrity(conn: sqlite3.Connection) -> int:
     """integrity_check (hard fail) + foreign_key_check (informational).
 
@@ -226,6 +254,12 @@ def main() -> int:
         help="Load only reaches.json (reach.geom); skip the CSV upsert. Use to "
         "apply geometry to a live DB without re-syncing metadata from the CSVs.",
     )
+    parser.add_argument(
+        "--gradient-only",
+        action="store_true",
+        help="Load only reaches-gradient.json (reach.gradient_profile); skip the "
+        "CSV upsert. Parallel to --geom-only.",
+    )
     args = parser.parse_args()
 
     db_path = (Path(args.db) if args.db else _default_db_path()).resolve()
@@ -248,8 +282,12 @@ def main() -> int:
         print(f"{'Table':<20} {'Rows':>10}")
         print(f"{'-' * 20} {'-' * 10:>10}")
         with conn:
-            total_rows = 0 if args.geom_only else _load_csvs(conn, in_dir)
-            _apply_geom(conn, in_dir)
+            snapshot_only = args.geom_only or args.gradient_only
+            total_rows = 0 if snapshot_only else _load_csvs(conn, in_dir)
+            if not args.gradient_only:
+                _apply_geom(conn, in_dir)
+            if not args.geom_only:
+                _apply_gradient(conn, in_dir)
         print(f"{'-' * 20} {'-' * 10:>10}")
         print(f"{'TOTAL':<20} {total_rows:>10}")
 
