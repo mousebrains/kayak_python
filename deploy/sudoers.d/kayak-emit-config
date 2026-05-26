@@ -5,10 +5,11 @@
 #
 #     sudo -n /home/pat/.venv/bin/levels emit-config --out /etc/kayak/runtime-config.json
 #
-# The grant is pinned to the exact `levels` binary path under
-# /home/pat/.venv/bin/ and the `emit-config` subcommand. The trailing
-# `*` covers --out and --dry-run flags but never strays outside the
-# levels CLI's emit-config subcommand.
+# The grant is pinned to the two exact invocations actually used:
+# deploy.sh's `emit-config --out /etc/kayak/runtime-config.json` and the
+# `emit-config --dry-run` verification. There is NO trailing wildcard — a
+# `*` would let `emit-config --out <any-root-path>` write arbitrary
+# root-owned files (e.g. /etc/sudoers.d/, /etc/cron.d/).
 #
 # Install (on the live server, as root):
 #
@@ -28,4 +29,5 @@
 # systemd, or touch the database. See docs/PLAN_tier3_closeout.md
 # § Phase 1.5 for the iter-log rationale.
 
-pat ALL=(root) NOPASSWD: /home/pat/.venv/bin/levels emit-config*
+pat ALL=(root) NOPASSWD: /home/pat/.venv/bin/levels emit-config --out /etc/kayak/runtime-config.json
+pat ALL=(root) NOPASSWD: /home/pat/.venv/bin/levels emit-config --dry-run

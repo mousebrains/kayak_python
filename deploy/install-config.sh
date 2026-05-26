@@ -101,6 +101,23 @@ say "reloading systemd"
 systemctl daemon-reload
 
 # ---------------------------------------------------------------------------
+# 2.5. Dummy TLS cert for the default (bare-IP) vhost.
+#    deploy/nginx-default-server listens 443 ssl and references
+#    /etc/nginx/ssl/dummy.{crt,key} to complete the TLS handshake before
+#    returning 444. Without them a fresh `nginx -t` fails.
+# ---------------------------------------------------------------------------
+
+if [[ ! -f /etc/nginx/ssl/dummy.crt ]]; then
+    say "generating self-signed dummy cert for the default vhost"
+    install -d -m 0755 /etc/nginx/ssl
+    openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
+        -subj "/CN=invalid" \
+        -keyout /etc/nginx/ssl/dummy.key \
+        -out /etc/nginx/ssl/dummy.crt
+    chmod 600 /etc/nginx/ssl/dummy.key
+fi
+
+# ---------------------------------------------------------------------------
 # 3. Validate nginx + reload services.
 # ---------------------------------------------------------------------------
 

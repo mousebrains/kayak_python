@@ -19,6 +19,8 @@ declare(strict_types=1);
  *   - strips values > 2048 chars
  *   - rejects any CR/LF/NUL (defends against email-header injection since
  *     the value is emailed unescaped in a plain-text body)
+ *   - rejects any non-http(s) scheme (javascript:, data:, …) so a tampered
+ *     hidden field can't store a clickable XSS URI for the maintainer review UI
  *   - accepts relative paths ("/description.php?id=42")
  *   - for absolute URLs, host must match the current request's host
  *     (same-origin), so we never record where an external referrer came from
@@ -30,8 +32,13 @@ function sanitize_source_url(string $raw): string {
     if (preg_match('/[\r\n\0]/', $raw) === 1) return '';
     $parts = @parse_url($raw);
     if ($parts === false) return '';
+    // Reject non-http(s) schemes (javascript:, data:, vbscript:, …). parse_url
+    // gives these no host, so they would otherwise slip through the relative-path
+    // branch below. parse_url does not case-fold, so lowercase before comparing.
+    $scheme = strtolower($parts['scheme'] ?? '');
+    if ($scheme !== '' && $scheme !== 'http' && $scheme !== 'https') return '';
     $host = $parts['host'] ?? '';
-    if ($host === '') return $raw;  // relative path — always OK
+    if ($host === '') return $raw;  // relative path (no scheme) — always OK
     // HTTP_HOST carries "host:port" when the port is non-default; parse_url
     // returns them separately. Strip the :port before comparing.
     $self_host = (string)($_SERVER['HTTP_HOST'] ?? '');
