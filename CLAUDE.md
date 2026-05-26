@@ -21,7 +21,7 @@ The development environment uses these paths (configured in `~/.config/kayak/.en
 
 **`OUTPUT_DIR` convention:** the live host sets `OUTPUT_DIR=/home/pat/public_html` (outside the repo), so `levels build` writes to the nginx docroot and never touches the repo tree. On a separate dev machine, set `OUTPUT_DIR=/home/<user>/public_html_dev` (or similar non-repo path) in `~/.config/kayak/.env` and serve with `php -S localhost:8000 -t "$OUTPUT_DIR"`. The default (unset) writes back into the repo's `public_html/`, which clobbers tracked dev symlinks and drops stray artifacts under `static/`. See `.env.example` for the full rationale.
 
-POSIX ACLs grant `www-data`: traverse on `/home/pat`, read on the docroot `/home/pat/public_html` (a real dir outside the repo — `levels build` copies the PHP/static in, so `www-data` needs no repo access), read-write on `/home/pat/DB`.
+POSIX ACLs grant `www-data`: traverse on `/home/pat` + `/home/pat/kayak`, read on the docroot `/home/pat/public_html` (a real dir outside the repo — `levels build` copies PHP/static in) and on the operator status cache `/home/pat/kayak/var/status.html` (the one repo path it reads — R2.6 would move it into the docroot), read-write on `/home/pat/DB`.
 
 ### Quick start
 

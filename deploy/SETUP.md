@@ -125,14 +125,19 @@ To apply geometry to the live DB by hand (without re-syncing CSV metadata):
 but nginx and PHP-FPM run as `www-data`, which must traverse `pat`'s `0700`
 home to reach the docroot and DB. The docroot (`/home/pat/public_html`, created
 in §3) is a **real directory** that `levels build` (above) fills with a
-self-contained site — HTML plus copied PHP/includes/static — so `www-data`
-needs **no access to the repo at all**:
+self-contained site — HTML plus copied PHP/includes/static. The **only** repo
+path `www-data` still reads is the operator status cache
+(`/home/pat/kayak/var/status.html`, streamed by `/_internal/status`; R2.6 in the
+round-3 plan would move it into the docroot and drop this last grant):
 
 ```bash
-sudo setfacl -m  u:www-data:x     /home/pat                 # traverse only
-sudo setfacl -R -m u:www-data:rX  /home/pat/public_html     # read the built site
-sudo setfacl -R -d -m u:www-data:rX /home/pat/public_html   # inherit for files build writes
-sudo setfacl -R -m u:www-data:rwX /home/pat/DB              # WAL needs write even for read-only pages
+sudo -u pat mkdir -p /home/pat/kayak/var                      # status-cache dir (status.html lands here)
+sudo setfacl -m  u:www-data:x     /home/pat /home/pat/kayak   # traverse
+sudo setfacl -R -m u:www-data:rX  /home/pat/public_html       # read the built site
+sudo setfacl -R -d -m u:www-data:rX /home/pat/public_html     # inherit for files build writes
+sudo setfacl -R -m u:www-data:rX  /home/pat/kayak/var         # operator status cache
+sudo setfacl -R -d -m u:www-data:rX /home/pat/kayak/var
+sudo setfacl -R -m u:www-data:rwX /home/pat/DB                # WAL needs write even for read-only pages
 sudo setfacl -R -d -m u:www-data:rwX /home/pat/DB
 ```
 
@@ -624,10 +629,12 @@ OUTPUT_DIR=/home/pat/public_html
 EDITOR_FEATURE=1
 EOF
 
-# 5. ACLs for nginx (www-data) — docroot is a real dir, so no repo access needed
-setfacl -m u:www-data:x /home/pat                         # traverse only
+# 5. ACLs for nginx (www-data) — docroot is a real dir; the only repo read is the status cache
+mkdir -p /home/pat/kayak/var                              # status-cache dir (status.html)
+setfacl -m u:www-data:x /home/pat /home/pat/kayak         # traverse
 setfacl -R -m u:www-data:rX /home/pat/public_html         # read the built site
 setfacl -R -d -m u:www-data:rX /home/pat/public_html      # default for new files
+setfacl -R -m u:www-data:rX /home/pat/kayak/var           # operator status cache (status.html)
 setfacl -R -m u:www-data:rwX /home/pat/DB                 # DB read/write (WAL needs write)
 setfacl -R -d -m u:www-data:rwX /home/pat/DB              # default for new DB files
 
