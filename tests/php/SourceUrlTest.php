@@ -69,6 +69,19 @@ final class SourceUrlTest extends TestCase
         $this->assertSame('', sanitize_source_url('https://evil.example/pwn'));
     }
 
+    public function test_dangerous_schemes_rejected(): void
+    {
+        // A tampered hidden field must not store a clickable XSS URI: parse_url
+        // gives these no host, so they used to slip through the relative-path
+        // branch. The scheme check (case-insensitive) rejects them.
+        $this->assertSame('', sanitize_source_url('javascript:alert(1)'));
+        $this->assertSame('', sanitize_source_url('JaVaScRiPt:alert(1)'));
+        $this->assertSame('', sanitize_source_url('data:text/html,<script>alert(1)</script>'));
+        $this->assertSame('', sanitize_source_url('vbscript:msgbox(1)'));
+        // Legit schemes still pass, in any case.
+        $this->assertSame('HTTPS://levels.wkcc.org/x', sanitize_source_url('HTTPS://levels.wkcc.org/x'));
+    }
+
     public function test_crlf_nul_injection_rejected(): void
     {
         // CR/LF/NUL would splice email headers — rejected outright.

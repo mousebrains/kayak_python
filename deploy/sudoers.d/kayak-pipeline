@@ -32,9 +32,13 @@ Cmnd_Alias KAYAK_CTL = \
     /usr/bin/systemctl stop  kayak-editor-retention.timer, \
     /usr/bin/systemctl start kayak-editor-retention.service, \
     /usr/bin/systemctl stop  kayak-editor-retention.service, \
-    /usr/bin/systemctl start kayak-backup.timer, \
-    /usr/bin/systemctl stop  kayak-backup.timer, \
-    /usr/bin/systemctl start kayak-backup.service, \
-    /usr/bin/systemctl stop  kayak-backup.service
+    /usr/bin/systemctl start kayak-backup-hourly.timer, \
+    /usr/bin/systemctl stop  kayak-backup-hourly.timer, \
+    /usr/bin/systemctl start kayak-backup-hourly.service, \
+    /usr/bin/systemctl stop  kayak-backup-hourly.service, \
+    /usr/bin/systemctl start kayak-backup-weekly.timer, \
+    /usr/bin/systemctl stop  kayak-backup-weekly.timer, \
+    /usr/bin/systemctl start kayak-backup-weekly.service, \
+    /usr/bin/systemctl stop  kayak-backup-weekly.service
 
 pat ALL=(root) NOPASSWD: KAYAK_CTL
