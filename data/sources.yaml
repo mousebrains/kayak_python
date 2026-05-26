@@ -123,6 +123,10 @@ nwrfc.textplot:
     # parser splits into gauge + flow. Restores observed flow for the
     # EUGENE_merge gauge after USGS 14158050 dropped flow on 2026-04-20.
     - url: "https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=EUGO3&pe=HG"
+    # GPRO3 — Green Peter Dam outflow (pe=QR, river discharge → flow). Live NWRFC
+    # replacement for the frozen USACE GPR source on Green_Peter_merge (USACE
+    # legacy nwd-wc froze 2026-05-23); linked to gauge 107 by migration 0063.
+    - url: "https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=GPRO3&pe=QR"
 
 # Replaced by fetch-usgs-ogc which only fetches gauges already in the DB.
 # The bulk state fetches below created thousands of unlinked source records.
