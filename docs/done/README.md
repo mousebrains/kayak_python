@@ -29,6 +29,8 @@ material rather than a deletable graveyard. For work *in flight*, see the
 | `PLAN_three_instance_layout.md` | Three-instance host layout (prod / test / tpw) |
 | `PLAN_tier3_closeout.md` | Typed-config spine (T3.3) + `KAYAK_HOME` (T3.4) + dormant-schema decision (T3.5) |
 | `REVIEW_round2_2026-05-24.md` | Round-2 deep project review (graded B−); findings landed in #25, kept for trend + standing thesis |
+| `REVIEW_round3_2026-05-25.md` | Round-3 deep project review (graded B−); remediated across #34–#45 (7 phases), kept for trend |
+| `PLAN_round3_remediation.md` | Round-3 remediation plan (7 phases) — as-built: all landed #34–#45; deferrals (R1.5/R2.6/R5.4/R5.7/OSMB-dedup/agency-tidy) noted |
 
 > `docs/PLAN_production_discipline.md` lives in `docs/` (not here) on purpose:
 > it is a landed plan but remains a live cross-reference target for the systemd
