@@ -70,9 +70,10 @@ sudo systemctl stop php8.4-fpm   # or whichever php-fpm version (Debian 13 ships
 
 # Move the live DB aside (don't delete — keeps a safety net)
 mv /home/pat/DB/kayak.db /home/pat/DB/kayak.db.pre-restore
+rm -f /home/pat/DB/kayak.db-wal /home/pat/DB/kayak.db-shm   # else the old WAL replays onto the restored DB
 
 cp /tmp/restore/backup-*.db /home/pat/DB/kayak.db
-chmod 664 /home/pat/DB/kayak.db
+chmod 660 /home/pat/DB/kayak.db   # no world access (editor emails/sessions); www-data reaches it via its ACL
 
 sudo systemctl start php8.4-fpm
 sudo systemctl start kayak-pipeline.timer kayak-decimate.timer \

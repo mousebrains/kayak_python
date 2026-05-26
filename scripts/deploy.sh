@@ -56,6 +56,14 @@ if ! git diff-index --quiet HEAD --; then
     exit 1
 fi
 
+# Refuse unless on main — deploying a feature branch is the live-tree footgun
+# scripts/snapshot_metadata.sh guards against; deploy.sh must guard it too.
+branch="$(git symbolic-ref --short HEAD 2>/dev/null || echo detached)"
+if [[ "$branch" != "main" ]]; then
+    echo "ERR: deploy.sh must run on 'main' (got '$branch')" >&2
+    exit 1
+fi
+
 # --- record pre-pull state for change detection -----------------------
 
 old_sha=$(git rev-parse HEAD)

@@ -694,11 +694,10 @@ operator:
 ## Quick reference: stop everything before a destructive operation
 
 ```bash
-# Stop all kayak-* timers + their services
-systemctl list-timers --all 'kayak-*' --no-pager | awk '/^[A-Z]/ {print $NF}' \
-    | xargs -I{} sudo systemctl stop {}
-
-# (the .service names are inferred from the timer names by systemd)
+# Stop all kayak-* timers (no future triggers) + any running service. The old
+# one-liner parsed the ACTIVATES column and stopped *services*, leaving the
+# timers to re-fire on schedule; stop the timers (and services) directly:
+sudo systemctl stop 'kayak-*.timer' 'kayak-*.service'
 ```
 
 ## When in doubt
