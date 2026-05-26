@@ -298,28 +298,39 @@ origin, and free with no usage caps.
 
 ### Typed config (`/etc/kayak/runtime-config.json`)
 
-`scripts/deploy.sh` calls `sudo -n levels emit-config` between
-`levels migrate` and `levels build` to refresh
-`/etc/kayak/runtime-config.json` — the JSON snapshot PHP (and any
-future consumer) reads instead of each component re-doing `getenv()`
-calls. The grant lives in `deploy/sudoers.d/kayak-emit-config` and is
-pinned to the exact `emit-config` invocation (it cannot run other
-levels subcommands or modify anything outside `/etc/kayak/`).
-
-Install once on a fresh host:
+`scripts/deploy.sh` refreshes `/etc/kayak/runtime-config.json` (the JSON
+snapshot PHP reads instead of each component re-doing `getenv()`) between
+`levels migrate` and `levels build`. To keep that off the pat→root path
+(review-3 R1.5), `emit-config` renders the JSON **unprivileged** (as pat) and
+pipes it to a **root-owned** install wrapper:
 
 ```bash
+levels emit-config --dry-run | sudo -n /usr/local/sbin/kayak-install-runtime-config
+```
+
+The sudoers grant (`deploy/sudoers.d/kayak-emit-config`) runs **only** that
+fixed wrapper — never the pat-writable `/home/pat/.venv/bin/levels`, so a
+compromised pat can't substitute code to run as root. The wrapper validates the
+piped JSON and atomically installs it (0640 root:www-data).
+
+Install once on a fresh host (the wrapper first, then the grant):
+
+```bash
+sudo install -m 0755 -o root -g root \
+    /home/pat/kayak/deploy/kayak-install-runtime-config.sh \
+    /usr/local/sbin/kayak-install-runtime-config
 sudo install -m 440 -o root -g root \
     /home/pat/kayak/deploy/sudoers.d/kayak-emit-config \
     /etc/sudoers.d/kayak-emit-config
 sudo visudo -cf /etc/sudoers.d/kayak-emit-config   # validate
 ```
 
-Verify the grant works:
+Verify:
 
 ```bash
-sudo -n /home/pat/.venv/bin/levels emit-config --dry-run | head -5
-# Should print the first 5 lines of the JSON snapshot with no password prompt.
+/home/pat/.venv/bin/levels emit-config --dry-run | head -5   # renders as pat, no sudo
+levels emit-config --dry-run | sudo -n /usr/local/sbin/kayak-install-runtime-config
+ls -l /etc/kayak/runtime-config.json                         # → -rw-r----- root www-data
 ```
 
 Inspect the resolved config any time (human-readable table):
