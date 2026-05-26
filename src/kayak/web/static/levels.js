@@ -1,53 +1,79 @@
 'use strict';
 
 // Track header height so sticky thead can sit flush below it
-(function(){
-  const hdr=document.querySelector('header');
-  if(!hdr||typeof ResizeObserver==='undefined')return;
-  function setH(){document.documentElement.style.setProperty('--header-h',hdr.offsetHeight+'px');}
+(function () {
+  const hdr = document.querySelector('header');
+  if (!hdr || typeof ResizeObserver === 'undefined') return;
+  function setH() {
+    document.documentElement.style.setProperty(
+      '--header-h',
+      hdr.offsetHeight + 'px',
+    );
+  }
   setH();
   new ResizeObserver(setH).observe(hdr);
 })();
 
 // Convert UTC timestamps to local time
-document.querySelectorAll('time[datetime]').forEach(function(el){
-  const d=new Date(el.getAttribute('datetime'));
-  if(isNaN(d))return;
-  const mm=d.getMonth()+1,dd=d.getDate();
-  const hh=d.getHours(),mi=d.getMinutes();
-  el.textContent=(mm<10?'0':'')+mm+'/'+(dd<10?'0':'')+dd+' '+(hh<10?'0':'')+hh+':'+(mi<10?'0':'')+mi;
+document.querySelectorAll('time[datetime]').forEach(function (el) {
+  const d = new Date(el.getAttribute('datetime'));
+  if (isNaN(d)) return;
+  const mm = d.getMonth() + 1,
+    dd = d.getDate();
+  const hh = d.getHours(),
+    mi = d.getMinutes();
+  el.textContent =
+    (mm < 10 ? '0' : '') +
+    mm +
+    '/' +
+    (dd < 10 ? '0' : '') +
+    dd +
+    ' ' +
+    (hh < 10 ? '0' : '') +
+    hh +
+    ':' +
+    (mi < 10 ? '0' : '') +
+    mi;
 });
 
 // Clickable table rows — mouse and keyboard
-(function(){
-  const tbl=document.querySelector('.levels');
-  if(!tbl)return;
-  tbl.querySelectorAll('tr[data-href]').forEach(function(r){
-    r.setAttribute('role','link');
-    r.setAttribute('tabindex','0');
+(function () {
+  const tbl = document.querySelector('.levels');
+  if (!tbl) return;
+  tbl.querySelectorAll('tr[data-href]').forEach(function (r) {
+    r.setAttribute('role', 'link');
+    r.setAttribute('tabindex', '0');
   });
-  function nav(e){
-    if(e.target.closest('a'))return;
-    const r=e.target.closest('tr[data-href]');
-    if(r)location.href=r.dataset.href;
+  function nav(e) {
+    if (e.target.closest('a')) return;
+    const r = e.target.closest('tr[data-href]');
+    if (r) location.href = r.dataset.href;
   }
-  tbl.addEventListener('click',nav);
-  tbl.addEventListener('keydown',function(e){
-    if(e.key==='Enter'||e.key===' '){e.preventDefault();nav(e);}
+  tbl.addEventListener('click', nav);
+  tbl.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      nav(e);
+    }
   });
 })();
 
 // Lazy-load sparkline SVGs after first paint (only on pages with placeholders)
-if(document.querySelector('span.spark[data-gid]')){
-  fetch('/static/sparklines.json').then(function(r){return r.json()}).then(function(data){
-    document.querySelectorAll('span.spark[data-gid]').forEach(function(el){
-      const svg=data[el.dataset.gid];
-      if(svg)el.innerHTML=svg;
-    });
-  }).catch(function(){});
+if (document.querySelector('span.spark[data-gid]')) {
+  fetch('/static/sparklines.json')
+    .then(function (r) {
+      return r.json();
+    })
+    .then(function (data) {
+      document.querySelectorAll('span.spark[data-gid]').forEach(function (el) {
+        const svg = data[el.dataset.gid];
+        if (svg) el.innerHTML = svg;
+      });
+    })
+    .catch(function () {});
 }
 
 // Service worker — network-first with cache fallback for slow connections
-if('serviceWorker' in navigator){
+if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js');
 }

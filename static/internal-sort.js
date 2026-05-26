@@ -15,25 +15,25 @@
 
 (function () {
   function cellText(cell) {
-    return (cell.textContent || "").trim();
+    return (cell.textContent || '').trim();
   }
 
   function numeric(value) {
     // Pull the leading number ("1650", "3.2", "-0.5"); return NaN otherwise.
-    const m = value.replace(/,/g, "").match(/^-?\d+(?:\.\d+)?/);
+    const m = value.replace(/,/g, '').match(/^-?\d+(?:\.\d+)?/);
     return m ? parseFloat(m[0]) : NaN;
   }
 
   function inferKind(col, table) {
     const rows = table.tBodies[0]?.rows;
-    if (!rows?.length) return "string";
+    if (!rows?.length) return 'string';
     const sample = cellText(rows[0].cells[col]);
-    if (!isNaN(numeric(sample))) return "number";
-    return "string";
+    if (!isNaN(numeric(sample))) return 'number';
+    return 'string';
   }
 
   function compareFactory(kind) {
-    if (kind === "number") {
+    if (kind === 'number') {
       return function (a, b) {
         const an = numeric(a);
         const bn = numeric(b);
@@ -49,12 +49,12 @@
   }
 
   function setIndicator(th, dir) {
-    const existing = th.querySelector(".sort-indicator");
+    const existing = th.querySelector('.sort-indicator');
     if (existing) existing.remove();
     if (!dir) return;
-    const span = document.createElement("span");
-    span.className = "sort-indicator";
-    span.textContent = dir === "asc" ? " ▲" : " ▼";
+    const span = document.createElement('span');
+    span.className = 'sort-indicator';
+    span.textContent = dir === 'asc' ? ' ▲' : ' ▼';
     th.appendChild(span);
   }
 
@@ -64,14 +64,14 @@
     for (let i = 0; i < headers.length; i++) {
       (function (col) {
         const th = headers[col];
-        th.style.cursor = "pointer";
-        th.title = "Click to sort";
-        th.addEventListener("click", function () {
+        th.style.cursor = 'pointer';
+        th.title = 'Click to sort';
+        th.addEventListener('click', function () {
           // Toggle direction; clear other headers' indicators.
-          const dir = th.dataset.sortDir === "asc" ? "desc" : "asc";
+          const dir = th.dataset.sortDir === 'asc' ? 'desc' : 'asc';
           for (let j = 0; j < headers.length; j++) {
-            headers[j].dataset.sortDir = "";
-            setIndicator(headers[j], "");
+            headers[j].dataset.sortDir = '';
+            setIndicator(headers[j], '');
           }
           th.dataset.sortDir = dir;
           setIndicator(th, dir);
@@ -83,7 +83,7 @@
             const av = cellText(a.cells[col]);
             const bv = cellText(b.cells[col]);
             const r = cmp(av, bv);
-            return dir === "asc" ? r : -r;
+            return dir === 'asc' ? r : -r;
           });
           const tbody = table.tBodies[0];
           for (let k = 0; k < rows.length; k++) tbody.appendChild(rows[k]);
@@ -93,12 +93,12 @@
   }
 
   function init() {
-    const tables = document.querySelectorAll("details.collapsible table");
+    const tables = document.querySelectorAll('details.collapsible table');
     for (let t = 0; t < tables.length; t++) makeSortable(tables[t]);
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
   } else {
     init();
   }

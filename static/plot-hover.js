@@ -34,7 +34,7 @@
   function fmtValue(v, decimals) {
     return v.toLocaleString('en-US', {
       minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals
+      maximumFractionDigits: decimals,
     });
   }
 
@@ -54,11 +54,13 @@
     if (flowCfs <= lookup[0][1]) return lookup[0][0];
     if (flowCfs >= lookup[n - 1][1]) return lookup[n - 1][0];
     for (let i = 0; i < n - 1; i++) {
-      const g1 = lookup[i][0], f1 = lookup[i][1];
-      const g2 = lookup[i + 1][0], f2 = lookup[i + 1][1];
+      const g1 = lookup[i][0],
+        f1 = lookup[i][1];
+      const g2 = lookup[i + 1][0],
+        f2 = lookup[i + 1][1];
       if (f1 <= flowCfs && flowCfs <= f2) {
         if (f2 === f1) return g1;
-        return g1 + (g2 - g1) / (f2 - f1) * (flowCfs - f1);
+        return g1 + ((g2 - g1) / (f2 - f1)) * (flowCfs - f1);
       }
     }
     return null;
@@ -67,13 +69,17 @@
   /* Binary-search points (sorted by timestamp) for the index whose [0]
    * is closest to target. */
   function nearestIndex(points, target) {
-    let lo = 0, hi = points.length - 1;
+    let lo = 0,
+      hi = points.length - 1;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
       if (points[mid][0] < target) lo = mid + 1;
       else hi = mid;
     }
-    if (lo > 0 && Math.abs(points[lo - 1][0] - target) < Math.abs(points[lo][0] - target)) {
+    if (
+      lo > 0 &&
+      Math.abs(points[lo - 1][0] - target) < Math.abs(points[lo][0] - target)
+    ) {
       return lo - 1;
     }
     return lo;
@@ -84,8 +90,11 @@
     if (!container) return;
 
     let payload;
-    try { payload = JSON.parse(svg.getAttribute('data-series')); }
-    catch (_e) { return; }
+    try {
+      payload = JSON.parse(svg.getAttribute('data-series'));
+    } catch (_e) {
+      return;
+    }
     if (!payload?.points || payload.points.length < 2) return;
 
     const pts = payload.points;
@@ -93,7 +102,7 @@
     const xMin = pts[0][0];
     const xMax = pts[pts.length - 1][0];
     const spanSec = xMax - xMin || 1;
-    const yRange = (payload.y_max - payload.y_min) || 1;
+    const yRange = payload.y_max - payload.y_min || 1;
     const plotLeft = m.ml;
     const plotRight = m.w - m.mr;
     const plotTop = m.mt;
@@ -134,8 +143,12 @@
       pt.x = clientX;
       pt.y = clientY;
       const svgPt = pt.matrixTransform(ctm.inverse());
-      if (svgPt.x < plotLeft || svgPt.x > plotRight ||
-          svgPt.y < plotTop  || svgPt.y > plotBottom) {
+      if (
+        svgPt.x < plotLeft ||
+        svgPt.x > plotRight ||
+        svgPt.y < plotTop ||
+        svgPt.y > plotBottom
+      ) {
         hide();
         return;
       }
@@ -146,8 +159,8 @@
       const ts = pts[idx][0];
       const val = pts[idx][1];
 
-      const xPx = plotLeft + (ts - xMin) / spanSec * plotWidth;
-      const yPx = plotTop + (payload.y_max - val) / yRange * plotHeight;
+      const xPx = plotLeft + ((ts - xMin) / spanSec) * plotWidth;
+      const yPx = plotTop + ((payload.y_max - val) / yRange) * plotHeight;
 
       marker.setAttribute('cx', xPx);
       marker.setAttribute('cy', yPx);
@@ -164,7 +177,9 @@
       if (payload.kind === 'dual' && payload.rating) {
         const g = rateFlowToGauge(payload.rating, val);
         if (g !== null) {
-          lines.push('Gage: ' + fmtValue(g, payload.gauge_decimals || 1) + ' ft');
+          lines.push(
+            'Gage: ' + fmtValue(g, payload.gauge_decimals || 1) + ' ft',
+          );
         }
       }
       tooltip.textContent = lines.join('\n');
@@ -175,8 +190,8 @@
       const containerRect = container.getBoundingClientRect();
       const scaleX = svgRect.width / m.w;
       const scaleY = svgRect.height / m.h;
-      const markerCssX = (svgRect.left - containerRect.left) + xPx * scaleX;
-      const markerCssY = (svgRect.top  - containerRect.top)  + yPx * scaleY;
+      const markerCssX = svgRect.left - containerRect.left + xPx * scaleX;
+      const markerCssY = svgRect.top - containerRect.top + yPx * scaleY;
 
       let ttX = markerCssX + 8;
       let ttY = markerCssY - 8 - tooltip.offsetHeight;
@@ -190,11 +205,15 @@
       }
       if (ttX < 0) ttX = 0;
       tooltip.style.left = ttX + 'px';
-      tooltip.style.top  = ttY + 'px';
+      tooltip.style.top = ttY + 'px';
     }
 
-    svg.addEventListener('pointermove',  function (e) { showAt(e.clientX, e.clientY); });
-    svg.addEventListener('pointerdown',  function (e) { showAt(e.clientX, e.clientY); });
+    svg.addEventListener('pointermove', function (e) {
+      showAt(e.clientX, e.clientY);
+    });
+    svg.addEventListener('pointerdown', function (e) {
+      showAt(e.clientX, e.clientY);
+    });
     svg.addEventListener('pointerleave', hide);
   }
 
