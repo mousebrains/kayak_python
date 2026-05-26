@@ -8,9 +8,13 @@
 #      unpack our uploaded DB, merge live's observations + cache tables into
 #      our DB (metadata stays local-wins), then atomically swap into
 #      ~/DB/kayak.db and restart the timers.
+#   3. Clean up: the consumed remote staging gz is removed, and the pre-push
+#      live DB archived to kayak-replaced-<ts>.db.gz is pruned to the newest
+#      KEEP_PUSH_ARCHIVES (default 5).
 #
 # Usage:  ./scripts/db_push.sh [-f]
 #   -f   skip the interactive confirmation prompt
+#   env: KEEP_PUSH_ARCHIVES  newest pre-push archives to keep (default 5)
 
 set -euo pipefail
 
@@ -20,6 +24,10 @@ set -euo pipefail
 REMOTE_HOST="${REMOTE_HOST:-pat@levels.mousebrains.com}"
 REMOTE_DB="${REMOTE_DB:-${KAYAK_HOME}/DB/kayak.db}"
 REMOTE_BACKUP_DIR="${REMOTE_BACKUP_DIR:-${KAYAK_HOME}/kayak/backups}"
+KEEP_PUSH_ARCHIVES="${KEEP_PUSH_ARCHIVES:-5}"
+# Guard: a non-numeric value would make (( i >= KEEP )) treat it as 0 and prune
+# every archive — fall back to the default rather than delete all of them.
+[[ "$KEEP_PUSH_ARCHIVES" =~ ^[0-9]+$ ]] || KEEP_PUSH_ARCHIVES=5
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -77,12 +85,13 @@ rsync -avP "${STAGED_GZ}" "${REMOTE_HOST}:${REMOTE_STAGED_GZ}"
 echo ""
 echo "=== Performing swap-and-merge on ${REMOTE_HOST} ==="
 ssh "${REMOTE_HOST}" \
-    "bash -s '${TS}' '${REMOTE_DB}' '${REMOTE_BACKUP_DIR}' '${REMOTE_STAGED_GZ}'" <<'REMOTE'
+    "bash -s '${TS}' '${REMOTE_DB}' '${REMOTE_BACKUP_DIR}' '${REMOTE_STAGED_GZ}' '${KEEP_PUSH_ARCHIVES}'" <<'REMOTE'
 set -euo pipefail
 TS="$1"
 DB="$2"
 BACKUP_DIR="$3"
 UPLOADED_GZ="$4"
+KEEP="$5"
 
 LIVE_FINAL="/tmp/kayak-live-final-${TS}.db"
 NEW_DB="/tmp/kayak-new-${TS}.db"
@@ -149,6 +158,19 @@ rm -f "${DB}-wal" "${DB}-shm"
 echo "--- Installing new DB ---"
 mv "$NEW_DB" "$DB"
 chmod 660 "$DB"
+
+echo "--- Pruning sync artifacts ---"
+# The uploaded staging gz was unpacked into $NEW_DB and installed — remove it.
+rm -f "$UPLOADED_GZ"
+# Retention: keep the newest $KEEP pre-push archives; remove older. The anchored
+# glob matches only kayak-replaced-<TS>.db.gz.
+mapfile -t archives < <(ls -1r "$BACKUP_DIR"/kayak-replaced-[0-9]*T[0-9]*Z.db.gz 2>/dev/null)
+for i in "${!archives[@]}"; do
+    if (( i >= KEEP )); then
+        echo "Removing old pre-push archive: $(basename "${archives[$i]}")"
+        rm -f "${archives[$i]}"
+    fi
+done
 
 echo "--- Restarting timers ---"
 for unit in kayak-pipeline.timer kayak-decimate.timer \
