@@ -91,7 +91,10 @@ final class ReviewApproveRaceTest extends TestCase
         $db->exec("INSERT INTO reach (name, description) VALUES ('Old Name', 'old desc')");
         $reach_id = (int)$db->lastInsertId();
 
-        $payload = ['reach' => ['name' => 'New Name', 'description' => 'new desc']];
+        // 'name' is the internal reach identifier, not a proposable field — the
+        // R1.4 apply-path allowlist drops it — so the race fixtures change
+        // 'description', which editors can actually propose.
+        $payload = ['reach' => ['description' => 'new desc']];
         $st = $db->prepare(
             "INSERT INTO change_request (target_type, target_id, editor_id, payload_json, status)
              VALUES ('reach', ?, ?, ?, 'pending')"
@@ -110,14 +113,13 @@ final class ReviewApproveRaceTest extends TestCase
     {
         $db = $this->pdo();
         $seed = $this->seed($db);
-        $applied = ['reach' => ['name' => 'New Name', 'description' => 'new desc']];
+        $applied = ['reach' => ['description' => 'new desc']];
 
         // First approval succeeds, applies the reach changes, writes history
         $r1 = review_approve($db, $seed['cr'], $applied, $seed['maint_id'], 'lgtm');
         $this->assertTrue($r1['ok'], 'first approve must succeed');
 
-        $reach = $db->query('SELECT name, description FROM reach WHERE id = ' . $seed['reach_id'])->fetch();
-        $this->assertSame('New Name', $reach['name']);
+        $reach = $db->query('SELECT description FROM reach WHERE id = ' . $seed['reach_id'])->fetch();
         $this->assertSame('new desc', $reach['description']);
 
         $history_before = (int)$db->query(
@@ -150,7 +152,7 @@ final class ReviewApproveRaceTest extends TestCase
     {
         $db = $this->pdo();
         $seed = $this->seed($db);
-        $applied = ['reach' => ['name' => 'New Name']];
+        $applied = ['reach' => ['description' => 'new desc']];
 
         $r1 = review_approve($db, $seed['cr'], $applied, $seed['maint_id'], '');
         $this->assertTrue($r1['ok']);
