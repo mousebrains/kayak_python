@@ -43,5 +43,11 @@ RestrictNamespaces=yes
 RestrictRealtime=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes
+# review-4 R5.3: match the User=pat units' syscall/cap hardening. Runs as root to
+# stat+cmp root-only /etc files (sudoers.d, sshd_config.d), so it keeps only
+# CAP_DAC_READ_SEARCH (bypass read/search perms); all other caps dropped.
+CapabilityBoundingSet=CAP_DAC_READ_SEARCH
+SystemCallFilter=@system-service
 SystemCallArchitectures=native
+SystemCallErrorNumber=EPERM
 UMask=0022

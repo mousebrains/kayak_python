@@ -97,6 +97,18 @@ jobs:
       - name: PHP helper-prefix convention
         run: scripts/check-php-helper-prefix.sh
 
+      # review-4 R4.2: validate systemd unit SYNTAX (.service AND .timer) before
+      # it can reach prod. systemd-analyze is Linux-only, so this lives in CI.
+      - name: systemd unit validation
+        run: |
+          scripts/verify-systemd-units.sh systemd/*.service systemd/*.timer
+          # self-test: the guard must reject a genuinely-malformed unit (non-vacuous)
+          printf '[Unit]\nDescription=kayak R4.2 self-test (no ExecStart)\n[Service]\nType=simple\n' > "${RUNNER_TEMP:-/tmp}/kayak-bad.service"
+          if scripts/verify-systemd-units.sh "${RUNNER_TEMP:-/tmp}/kayak-bad.service" >/dev/null 2>&1; then
+            echo "::error::R4.2 self-test failed — a malformed unit passed validation"; exit 1
+          fi
+          echo "self-test ok: malformed unit correctly rejected"
+
       - name: Install PHP dev dependencies
         # setup-php@v2 writes ~/.composer/auth.json with the runner's
         # ambient GITHUB_TOKEN. GitHub recently shifted the runner token
