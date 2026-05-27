@@ -2,6 +2,7 @@
 
 import argparse
 import sys
+from importlib.metadata import PackageNotFoundError, version
 
 from kayak.cli import (
     analyze_logs,
@@ -30,6 +31,11 @@ from kayak.cli import (
 from kayak.cli.logger import addArgs as addLoggerArgs
 from kayak.cli.logger import mkLogger
 
+try:
+    __version__ = version("kayak")
+except PackageNotFoundError:  # running from a source tree with no installed dist
+    __version__ = "0+unknown"
+
 
 def main() -> None:
     """levels - River level data aggregation from government agencies."""
@@ -37,7 +43,7 @@ def main() -> None:
         prog="levels",
         description="River level data aggregation from government agencies",
     )
-    parser.add_argument("--version", action="version", version="%(prog)s 0.1.0")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
 
     addLoggerArgs(parser)
 
