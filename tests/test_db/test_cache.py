@@ -24,7 +24,9 @@ def _add_obs(session, source_id: int, data_type: DataType, value: float) -> None
         Observation(
             source_id=source_id,
             data_type=data_type,
-            observed_at=datetime(2026, 4, 23, 12, 0, tzinfo=UTC),
+            # Inside the gauge-cache window so update_latest_gauge's `since` bound
+            # (R5.7) sees it; the prune/unlink tests then assert it later vanishes.
+            observed_at=datetime.now(UTC) - timedelta(hours=1),
             value=value,
         )
     )
@@ -84,6 +86,29 @@ def test_update_latest_gauge_prunes_stale_row_when_sources_unlinked(session, lin
         .count()
         == 0
     )
+
+
+def test_update_latest_gauge_ignores_observations_older_than_since(session, linked_source_gauge):
+    """A gauge whose newest observation predates the window gets no cache row:
+    update_latest_gauge applies the same `since` bound as the bulk rebuild, so both
+    agree a long-silent gauge has no recent data (review-4 R5.7). An explicit wider
+    `since` still sees it -- the bound is configurable, not hard-coded."""
+    source, gauge = linked_source_gauge
+    old = datetime.now(UTC) - timedelta(days=400)  # well outside the 30-day window
+    session.add(
+        Observation(source_id=source.id, data_type=DataType.flow, observed_at=old, value=42.0)
+    )
+    session.flush()
+
+    # Default window: the stale observation is filtered out -> no cache row.
+    cache.update_latest_gauge(session, gauge.id, DataType.flow)
+    assert cache.get_latest_gauge(session, gauge.id, DataType.flow) is None
+
+    # Explicit wide window: the same observation is now in range -> cache row built.
+    cache.update_latest_gauge(
+        session, gauge.id, DataType.flow, since=datetime.now(UTC) - timedelta(days=500)
+    )
+    assert cache.get_latest_gauge(session, gauge.id, DataType.flow) is not None
 
 
 # ---------------------------------------------------------------------------
