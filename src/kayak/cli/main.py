@@ -3,6 +3,7 @@
 import argparse
 import sys
 
+from kayak import __version__
 from kayak.cli import (
     analyze_logs,
     assign_huc,
@@ -37,7 +38,7 @@ def main() -> None:
         prog="levels",
         description="River level data aggregation from government agencies",
     )
-    parser.add_argument("--version", action="version", version="%(prog)s 0.1.0")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
 
     addLoggerArgs(parser)
 

@@ -9,7 +9,9 @@ from kayak.cli.main import main
 
 
 def test_version_flag(capsys):
-    """--version prints version string and exits."""
+    """--version echoes the package version (kayak.__version__) and exits."""
+    from kayak import __version__
+
     with (
         mock.patch.object(sys, "argv", ["levels", "--version"]),
         pytest.raises(SystemExit) as exc_info,
@@ -17,7 +19,20 @@ def test_version_flag(capsys):
         main()
     assert exc_info.value.code == 0
     captured = capsys.readouterr()
-    assert "0.1.0" in captured.out
+    assert f"levels {__version__}" in captured.out
+
+
+def test_detect_version_fallback(monkeypatch):
+    """_detect_version returns the sentinel when no installed dist is found."""
+    from importlib.metadata import PackageNotFoundError
+
+    import kayak
+
+    def _raise(_name):
+        raise PackageNotFoundError(_name)
+
+    monkeypatch.setattr(kayak, "version", _raise)
+    assert kayak._detect_version() == "0+unknown"
 
 
 def test_no_args_exits_with_error(capsys):
@@ -49,7 +64,6 @@ def test_known_subcommands_registered():
     from kayak.cli.logger import addArgs as addLoggerArgs
 
     parser = argparse.ArgumentParser(prog="levels")
-    parser.add_argument("--version", action="version", version="%(prog)s 0.1.0")
     addLoggerArgs(parser)
     subparsers = parser.add_subparsers(dest="command")
 
