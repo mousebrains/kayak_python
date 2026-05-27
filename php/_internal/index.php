@@ -26,7 +26,7 @@ const CSP_RECENT_LIMIT       = 50;
 const CSP_RECENT_WINDOW_DAYS = 7;
 
 /**
- * Narrow PDO::query()'s PDOStatement|false return for PHPStan level 8.
+ * Narrow PDO::query()'s PDOStatement|false return for PHPStan.
  * ERRMODE_EXCEPTION (db.php) means the false branch is unreachable
  * at runtime, but the static type still includes it. Same pattern as
  * status.php's status_query().

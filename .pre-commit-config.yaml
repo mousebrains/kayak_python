@@ -70,7 +70,7 @@ repos:
         stages: [pre-commit]
       - id: phpstan
         name: PHPStan
-        # Same gate CI runs in lint-misc (level 8 with phpstan-baseline.neon
+        # Same gate CI runs in lint-misc (level 9 with phpstan-baseline.neon
         # grandfathering). Surfaces typed-PHP regressions before push
         # instead of waiting for the CI cycle. Per PLAN_pre_release_followup.md T2.6.
         entry: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
@@ -96,4 +96,14 @@ repos:
         # themselves (so e.g. dropping a line from the allowlist re-runs
         # the gate on the next commit).
         files: ^(php/includes/.+\.php|scripts/check-php-helper-prefix\.sh|scripts/php-helper-prefix\.allowlist)$
+        pass_filenames: false
+      - id: phpstan-level
+        name: no stale PHPStan-level references
+        # phpstan.neon is at level 9; fail if a badge or comment drifts back to
+        # a stale PHPStan level (review-4 R2.1). Whole-tree grep so a hand-scoped
+        # sweep can't miss a surface; the script carries the historical-note
+        # exclusions.
+        entry: scripts/check-phpstan-level.sh
+        language: system
+        files: \.(md|ya?ml|neon|php)$
         pass_filenames: false

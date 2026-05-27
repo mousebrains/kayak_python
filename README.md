@@ -4,7 +4,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
-[![PHPStan level 8](https://img.shields.io/badge/PHPStan-level%208-brightgreen.svg)](phpstan.neon)
+[![PHPStan level 9](https://img.shields.io/badge/PHPStan-level%209-brightgreen.svg)](phpstan.neon)
 
 Real-time river level, flow, gage height, and temperature data aggregated from
 government agencies (USGS, NOAA, USACE, USBR, IDWR) for the

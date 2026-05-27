@@ -51,7 +51,7 @@ const STALE_THRESHOLD_HOURS = 48;
 const EXPIRED_THRESHOLD_DAYS = 7;
 
 /**
- * Narrow PDO::query()'s PDOStatement|false return for PHPStan level 8.
+ * Narrow PDO::query()'s PDOStatement|false return for PHPStan.
  * ERRMODE_EXCEPTION (set in db.php) means the false branch is
  * unreachable at runtime, but the static type still includes it.
  */
