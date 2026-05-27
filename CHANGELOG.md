@@ -8,6 +8,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-05-27
+
 ### Added
 - **Gradient profile**: per-reach `max_gradient` plus a statistically-binned
   gradient chart on reach-detail pages (DEM-sampled; canyon-trace artifacts
@@ -105,6 +107,18 @@ All notable changes to this project will be documented in this file.
   work off the live editable tree, and `scripts/snapshot_metadata.sh` refuses to run
   off `main` so the scheduled metadata snapshot never commits a feature branch.
 - Archived the one-off `montana/mt.list` to `docs/one-offs/` (generator repointed).
+- **Round-4 anti-drift guards**: a fourth deep review added a suite of mechanized
+  CI guards so these drift classes fail CI instead of relying on vigilance —
+  stale PHPStan-level references, CHANGELOG factual accuracy, orphaned
+  completed-plans, schema-doc reverse-coverage, duplicate migration prefixes,
+  `;`/`--` inside migration string literals, systemd-unit syntax
+  (`systemd-analyze`), the PHP helper-prefix convention, and
+  migration↔`source.csv` source reconciliation — plus `SystemCallFilter`
+  hardening on the two root-run units and a `since`-window reconciliation between
+  the per-gauge and bulk gauge-cache paths.
+- **Backups moved out of the repo** to `/home/pat/backups` (hourly/weekly/offsite
+  snapshots + db-sync staging), so a stray `git clean` in the live
+  editable-install tree can no longer wipe them.
 
 ### Security
 - **Round-3 review Phase 1**: pinned the `emit-config` sudoers grant (closing an
