@@ -14,7 +14,7 @@ set -euo pipefail
 : "${KAYAK_HOME:=/home/pat}"
 [ -r /etc/kayak/env ] && . /etc/kayak/env
 
-BACKUP_DIR="${KAYAK_HOME}/kayak/backups"
+BACKUP_DIR="${KAYAK_HOME}/backups"  # out of the repo (review-4 R5.6); see kayak-backup-hourly.sh
 REMOTE="gdrive-crypt"
 KEEP=26
 

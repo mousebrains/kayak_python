@@ -46,7 +46,8 @@ static/sparklines.json
 static/style-*.css
 static/style.css.hash
 
-# DB backups
+# DB backups moved to /home/pat/backups, outside the repo (review-4 R5.6);
+# kept as a defensive guard against a stray ./backups in the worktree.
 backups
 
 # Runtime-generated state (status page render, future cache files)

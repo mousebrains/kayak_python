@@ -22,7 +22,7 @@ set -euo pipefail
 [ -r /etc/kayak/env ] && . /etc/kayak/env
 
 DB="${SQLITE_PATH:-${KAYAK_HOME}/DB/kayak.db}"
-BACKUP_DIR="${KAYAK_HOME}/kayak/backups"
+BACKUP_DIR="${KAYAK_HOME}/backups"  # out of the repo (review-4 R5.6); see kayak-backup-hourly.sh
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 DEST="$BACKUP_DIR/backup-$STAMP.db"
 

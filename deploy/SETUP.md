@@ -347,6 +347,9 @@ changes; PHP re-reads the file once per request.
 ## 8. Systemd timers
 
 ```bash
+# The backup units write to /home/pat/backups (out of the repo, review-4 R5.6);
+# create it pat-owned before install — ReadWritePaths= needs it at unit start.
+sudo -u pat mkdir -p /home/pat/backups
 sudo /home/pat/kayak/systemd/install.service.sh
 ```
 
