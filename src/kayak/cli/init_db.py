@@ -4,7 +4,7 @@ import argparse
 import logging
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from kayak.config_data import load_sources
@@ -184,6 +184,13 @@ def init_db(args: argparse.Namespace) -> None:
     if args.drop:
         print("Dropping all tables...")
         Base.metadata.drop_all(engine)
+        # schema_migrations is raw DDL (migrate._ensure_tracking_table), not part
+        # of Base.metadata, so drop_all leaves it behind. Drop it too -- otherwise
+        # its stale rows make the freshly create_all'd schema look "already
+        # tracked", init-db skips stamping, and `levels migrate` then re-runs
+        # migrations the new schema already has (review-4 R5.4).
+        with engine.begin() as conn:
+            conn.execute(text("DROP TABLE IF EXISTS schema_migrations"))
 
     print("Creating tables...")
     Base.metadata.create_all(engine)

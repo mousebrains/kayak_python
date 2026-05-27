@@ -252,3 +252,29 @@ def test_init_db_skips_stamping_on_existing_db(engine, capsys):
         versions = {r[0] for r in conn.execute(text("SELECT version FROM schema_migrations")).all()}
     assert versions == {"0001"}, "init-db must not stamp anything beyond the existing 0001"
     assert "already tracks" in capsys.readouterr().out
+
+
+def test_init_db_drop_resets_schema_migrations(engine):
+    """`init-db --drop` must clear the raw-DDL schema_migrations too, not just the
+    Base tables. Otherwise stale tracking rows survive drop_all, init-db treats
+    the freshly create_all'd schema as "already tracked" and skips stamping, and
+    `levels migrate` then re-runs migrations the new schema already has (R5.4).
+    """
+    from kayak.cli import migrate as migrate_mod
+    from kayak.cli.init_db import init_db
+
+    with (
+        patch("kayak.cli.init_db.get_engine", return_value=engine),
+        patch("kayak.cli.migrate.get_engine", return_value=engine),
+    ):
+        # A stale/behind tracking table surviving from a prior DB.
+        migrate_mod.stamp("9999")  # bogus version, not a committed migration
+        assert "9999" in migrate_mod.applied_versions()
+
+        init_db(Namespace(drop=True, no_seed=True))
+
+        applied = migrate_mod.applied_versions()
+        assert "9999" not in applied, "--drop must clear the stale tracking table"
+        # Fresh stamp == exactly the committed migration set, so migrate is a no-op.
+        assert applied == {m.version for m in migrate_mod.discover_migrations()}
+        assert migrate_mod.apply_pending() == []
