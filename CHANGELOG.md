@@ -24,6 +24,9 @@ All notable changes to this project will be documented in this file.
   supported way a dev re-trace's geometry reaches prod.
 
 ### Fixed
+- **`levels --version`**: reports the installed package version (via
+  `importlib.metadata`, exposed as `kayak.__version__`) instead of a hardcoded
+  `0.1.0` that never tracked releases.
 - **CSP dashboard accuracy**: `_internal/`'s "Recent CSP violations" table no
   longer mislabels proxy/extension-injected inline scripts as "Same-origin
   (our code)". Inline/eval/wasm-eval violations carry the *document* URL as
