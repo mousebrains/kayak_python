@@ -32,6 +32,8 @@ material rather than a deletable graveyard. For work *in flight*, see the
 | `REVIEW_round2_2026-05-24.md` | Round-2 deep project review (graded B−); findings landed in #25, kept for trend + standing thesis |
 | `REVIEW_round3_2026-05-25.md` | Round-3 deep project review (graded B−); remediated across #34–#52, kept for trend |
 | `PLAN_round3_remediation.md` | Round-3 remediation plan (7 phases) — as-built: landed #34–#52; all deferrals but OSMB-dedup (R7.1) since shipped (#47–#52) |
+| `REVIEW_round4_2026-05-26.md` | Round-4 deep project review (graded B, ▲ from B−) — audits the round-3 fix surface; remediated across #53–#69, kept for trend |
+| `PLAN_round4_remediation.md` | Round-4 remediation plan — as-built: landed #53–#69 (each anti-drift guard front-loaded with its fix); R1.1/R1.3 prod-host items out-of-band |
 
 > `docs/PLAN_production_discipline.md` lives in `docs/` (not here) on purpose:
 > it is a landed plan but remains a live cross-reference target for the systemd
