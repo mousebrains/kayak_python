@@ -38,6 +38,7 @@ read -r -d '' MANIFEST <<'EOF' || true
 # nginx
 conf/security-headers.conf	/etc/nginx/snippets/security-headers.conf
 conf/security-headers-turnstile.conf	/etc/nginx/snippets/security-headers-turnstile.conf
+conf/mime-extras.conf	/etc/nginx/conf.d/mime-extras.conf
 conf/snippets/levels-common.conf	/etc/nginx/snippets/levels-common.conf
 conf/sites/levels-mousebrains-com	/etc/nginx/sites-available/levels-mousebrains-com
 conf/sites/levels-test-wkcc-org	/etc/nginx/sites-available/levels-test-wkcc-org
