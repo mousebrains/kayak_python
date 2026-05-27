@@ -16,8 +16,15 @@ set -uo pipefail
 raw=$(systemd-analyze verify "$@" 2>&1 || true)
 [ -n "$raw" ] && printf '%s\n' "$raw"
 
-# Tolerate problems explained solely by the prod install paths being absent here.
-genuine=$(printf '%s\n' "$raw" | grep -vE '/home/pat|/etc/kayak' | grep -vE '^[[:space:]]*$' || true)
+# Tolerate problems explained solely by the prod environment being absent here:
+# the prod install paths (/home/pat, /etc/kayak) and any "Command ... is not
+# executable: No such file or directory" -- a missing ExecStart binary, which on
+# a stock runner covers the venv, the in-repo scripts, AND prod-only binaries
+# like /usr/bin/certbot. Genuine syntax/directive errors carry other messages
+# (e.g. "Unknown lvalue", "Failed to parse", "has no ExecStart=").
+genuine=$(printf '%s\n' "$raw" \
+    | grep -vE '/home/pat|/etc/kayak|is not executable: No such file or directory' \
+    | grep -vE '^[[:space:]]*$' || true)
 if [ -n "$genuine" ]; then
     echo "ERROR: systemd-analyze reported problems not explained by missing prod paths:" >&2
     printf '%s\n' "$genuine" >&2
