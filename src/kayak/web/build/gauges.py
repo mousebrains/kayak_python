@@ -283,10 +283,17 @@ def _apply_gauge_metadata(row: dict[str, Any], g: Gauge) -> None:
     full state name (matches reach-side convention); the table cell still
     shows the postal abbreviation.
     """
-    state_abbrev = g.state or ""
+    # gauge.state may be a comma list ("OR,WA") for a border gauge on a
+    # state-line river. Map each abbrev to its full name and re-join, so the
+    # row's data-state lists every state -- filters.js splits data-state on
+    # comma (same as the reach table in levels.py) and matches each, so a
+    # border gauge shows under all of its states.
+    state_abbrevs = [a.strip() for a in (g.state or "").split(",") if a.strip()]
     gauge_huc = g.huc or ""
-    row["state"] = _ABBR_TO_STATE.get(state_abbrev, "")
-    row["state_abbrev"] = state_abbrev
+    row["state"] = ",".join(
+        name for name in (_ABBR_TO_STATE.get(a, "") for a in state_abbrevs) if name
+    )
+    row["state_abbrev"] = ",".join(state_abbrevs)
     row["huc6"] = gauge_huc[:6] if len(gauge_huc) >= 6 else ""
     row["huc8"] = gauge_huc[:8] if len(gauge_huc) >= 8 else ""
     row["has_huc"] = bool(row["huc8"])
@@ -486,7 +493,11 @@ def _build_gauges_filter_bar(
     statuses: set[str] = set()
     for r in rows:
         if r["state"]:
-            states.add(r["state"])
+            # data-state may be a comma list for a border gauge; expose each
+            # state as its own pill, not the combined "A,B" string.
+            for s in r["state"].split(","):
+                if s:
+                    states.add(s)
         if r["has_huc"]:
             huc6_to_huc8s.setdefault(r["huc6"], set()).add(
                 (r["huc8"], huc8_names.get(r["huc8"], r["huc8"]))
