@@ -23,16 +23,14 @@ if [[ ! -r "$CLOVER" ]]; then
     exit 2
 fi
 
-# Pull the project-level <metrics .../> line. Clover writes one per file
-# plus a final rollup on the closing <project>. Grab the first <metrics>
-# that sits directly under <project> (before the per-package <package>
-# blocks) — that's the project-wide rollup PHPUnit emits.
-metrics_line=$(grep -m1 -E '<project[^>]*>\s*<metrics' "$CLOVER" 2>/dev/null || true)
-if [[ -z "$metrics_line" ]]; then
-    # Fallback: some PHPUnit versions put the rollup at the end as a
-    # bare <metrics> just before </project>.
-    metrics_line=$(grep -oE '<metrics[^/]*statements="[0-9]+"[^/]*coveredstatements="[0-9]+"[^/]*/>' "$CLOVER" | tail -1)
-fi
+# PHPUnit's Clover report writes a <metrics .../> for every file, then one
+# project rollup <metrics> — the only one carrying a files="N" attribute and
+# the grand totals — as the last <metrics> before </project>. Grab that rollup
+# by its files= attribute (tail -1 in case package rollups ever carry one too).
+# (The earlier same-line `<project>\s*<metrics` match was dead — PHPUnit emits
+# <project> and the rollup on separate lines — so the gate always fell through
+# to this extraction; R4.5 drops that dead branch.)
+metrics_line=$(grep -oE '<metrics[^>]*files="[0-9]+"[^>]*/>' "$CLOVER" | tail -1 || true)
 if [[ -z "$metrics_line" ]]; then
     echo "ERR: no <metrics .../> rollup found in $CLOVER" >&2
     exit 2
