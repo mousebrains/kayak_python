@@ -87,10 +87,15 @@ jobs:
         run: biome check
 
       - name: Shell lint
-        run: shellcheck --severity=warning scripts/*.sh systemd/*.sh deploy/*.sh
+        run: shellcheck --severity=warning scripts/*.sh systemd/*.sh deploy/*.sh docs/one-offs/*.sh
 
       - name: PHPStan-level consistency
         run: scripts/check-phpstan-level.sh
+
+      # Promoted from pre-commit-only to CI (review-4 R4.7): the file-private
+      # helper-prefix convention is now mechanized, not bypassable via --no-verify.
+      - name: PHP helper-prefix convention
+        run: scripts/check-php-helper-prefix.sh
 
       - name: Install PHP dev dependencies
         # setup-php@v2 writes ~/.composer/auth.json with the runner's
