@@ -201,11 +201,12 @@ sudo cp conf/security-headers.conf           /etc/nginx/snippets/
 sudo cp conf/security-headers-turnstile.conf /etc/nginx/snippets/
 sudo cp conf/snippets/levels-common.conf     /etc/nginx/snippets/
 
-# http-scope conf.d (rate-limit zones, log format, editor $site_url) — must
-# load before the vhosts that reference them
+# http-scope conf.d (rate-limit zones, log format, editor $site_url, GeoJSON
+# MIME type) — the first three must load before the vhosts that reference them
 sudo cp deploy/ratelimit.conf        /etc/nginx/conf.d/ratelimit.conf
 sudo cp deploy/kayak-log-format.conf /etc/nginx/conf.d/kayak-log-format.conf
 sudo cp deploy/nginx-editor-env.conf /etc/nginx/conf.d/editor-env.conf
+sudo cp conf/mime-extras.conf        /etc/nginx/conf.d/mime-extras.conf  # application/geo+json for .geojson map overlays
 sudo cp deploy/nginx-default-server  /etc/nginx/sites-available/default  # stock sites-enabled/default symlink picks this up
 
 # Server blocks
