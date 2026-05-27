@@ -2,8 +2,8 @@
 
 import argparse
 import sys
-from importlib.metadata import PackageNotFoundError, version
 
+from kayak import __version__
 from kayak.cli import (
     analyze_logs,
     assign_huc,
@@ -30,11 +30,6 @@ from kayak.cli import (
 )
 from kayak.cli.logger import addArgs as addLoggerArgs
 from kayak.cli.logger import mkLogger
-
-try:
-    __version__ = version("kayak")
-except PackageNotFoundError:  # running from a source tree with no installed dist
-    __version__ = "0+unknown"
 
 
 def main() -> None:

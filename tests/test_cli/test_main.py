@@ -9,8 +9,8 @@ from kayak.cli.main import main
 
 
 def test_version_flag(capsys):
-    """--version prints the installed package version and exits."""
-    from importlib.metadata import version
+    """--version echoes the package version (kayak.__version__) and exits."""
+    from kayak import __version__
 
     with (
         mock.patch.object(sys, "argv", ["levels", "--version"]),
@@ -19,7 +19,20 @@ def test_version_flag(capsys):
         main()
     assert exc_info.value.code == 0
     captured = capsys.readouterr()
-    assert f"levels {version('kayak')}" in captured.out
+    assert f"levels {__version__}" in captured.out
+
+
+def test_detect_version_fallback(monkeypatch):
+    """_detect_version returns the sentinel when no installed dist is found."""
+    from importlib.metadata import PackageNotFoundError
+
+    import kayak
+
+    def _raise(_name):
+        raise PackageNotFoundError(_name)
+
+    monkeypatch.setattr(kayak, "version", _raise)
+    assert kayak._detect_version() == "0+unknown"
 
 
 def test_no_args_exits_with_error(capsys):
