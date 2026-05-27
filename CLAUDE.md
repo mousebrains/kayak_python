@@ -104,10 +104,10 @@ pytest --cov=kayak                   # Run with coverage
 ruff check src/ tests/ scripts/ docs/one-offs/        # Lint (matches CI scope)
 ruff check --fix src/ tests/ scripts/ docs/one-offs/  # Lint with auto-fix
 ruff format src/ tests/ scripts/ docs/one-offs/       # Format
-mypy src/ scripts/import_metadata.py scripts/export_metadata.py  # Type check (CI scope)
+mypy src/ scripts/import_metadata.py scripts/export_metadata.py scripts/refresh_reach_elevations.py  # Type check (CI scope)
 ```
 
-Ruff config: Python 3.13 target, 100-char line length, rules `E W F I UP B SIM RUF`. Configured in `pyproject.toml`.
+Ruff config: Python 3.13 target, 100-char line length, rules `E W F I UP B SIM RUF C901`. Configured in `pyproject.toml`.
 
 ### Running the PHP Web Layer
 
