@@ -69,7 +69,7 @@ RECENT_COUNT=$(sqlite3 "$DB" "
     WHERE observed_at > datetime('now', '-2 hours');
 ")
 
-# Disk-usage check on /home (where ~/DB and ~/kayak/backups live).
+# Disk-usage check on /home (where ~/DB and ~/backups live).
 DISK_PCT=$(df -P /home | tail -1 | awk '{print $5}' | tr -d '%')
 if [ "$DISK_PCT" -ge "$DISK_FAIL_PCT" ]; then
     DISK_HUMAN=$(df -h /home | tail -1 | awk '{print $3"/"$2" — "$4" free"}')

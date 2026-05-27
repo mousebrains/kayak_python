@@ -8,7 +8,7 @@
 #
 # Filenames are hourly-YYYYMMDDTHHMMSSZ.db.gz (UTC, second-resolution).
 # The hourly- prefix keeps the rotation glob orthogonal to the weekly's
-# backup-* glob — the two cohabit /home/pat/kayak/backups without ever
+# backup-* glob — the two cohabit /home/pat/backups without ever
 # mistaking each other's files.
 #
 # `PRAGMA wal_checkpoint(TRUNCATE)` runs before .backup so the snapshot
@@ -24,7 +24,11 @@ set -euo pipefail
 [ -r /etc/kayak/env ] && . /etc/kayak/env
 
 DB="${SQLITE_PATH:-${KAYAK_HOME}/DB/kayak.db}"
-BACKUP_DIR="${KAYAK_HOME}/kayak/backups"
+# /home/pat/backups, OUTSIDE the repo (review-4 R5.6): a git clean/checkout in
+# the live editable tree must never reach backups. Weekly/offsite + the two
+# .service ReadWritePaths use the same dir; SETUP.md provisions it before the
+# timers run (ReadWritePaths needs it to exist at unit start).
+BACKUP_DIR="${KAYAK_HOME}/backups"
 KEEP=24
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 DEST="$BACKUP_DIR/hourly-$STAMP.db"

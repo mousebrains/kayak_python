@@ -241,10 +241,10 @@ Each tier is several phases; **review gate between tiers**, not between phases.
    - Where logs live (`journalctl -u kayak-*`, `~/logs/...`, `/var/log/nginx/...`)
    - Where the DB lives, schema-migration story
    - Upstream data source contacts (USGS rep email, NWRFC contact, USACE district)
-   - Where backups live (in-repo `/home/pat/kayak/backups/backup-*.db.gz` weekly snapshots; Hetzner disk-level daily; rclone `gdrive-crypt:` offsite — see `docs/offsite-backup.md`)
+   - Where backups live (`/home/pat/backups/backup-*.db.gz` weekly snapshots, out of the repo per review-4 R5.6; Hetzner disk-level daily; rclone `gdrive-crypt:` offsite — see `docs/offsite-backup.md`)
    - Pointer to `docs/slo.md` and the runbook entries
 2. **Phase 4.2 — Common-failure runbooks.** Per-failure entries in `docs/operations.md` or sub-files:
-   - **DB corruption:** restore from a local snapshot at `/home/pat/kayak/backups/backup-YYYYMMDDTHHMMSSZ.db.gz` (gzipped; written weekly by `kayak-backup.service`) or from the rclone offsite copy (`docs/offsite-backup.md` exists; cross-link). Per [feedback_never_overwrite_db], take a fresh `sqlite3 .backup` of the live DB first.
+   - **DB corruption:** restore from a local snapshot at `/home/pat/backups/backup-YYYYMMDDTHHMMSSZ.db.gz` (gzipped; written weekly by `kayak-backup.service`) or from the rclone offsite copy (`docs/offsite-backup.md` exists; cross-link). Per [feedback_never_overwrite_db], take a fresh `sqlite3 .backup` of the live DB first.
    - **Build pipeline stuck:** `journalctl -u kayak-pipeline.service -n 100` to diagnose; `sudo systemctl restart kayak-pipeline.timer` (build runs as the last stage of the pipeline since the build.py split)
    - **Source feed broken:** find in `data/sources.yaml`, set `disabled: true`, file with vendor, redeploy
    - **SSL cert expired:** `sudo certbot renew --dry-run` first; then real renew; `nginx -s reload`
@@ -327,7 +327,7 @@ curl -sI https://levels.mousebrains.com/status.json
 curl -sI https://levels.mousebrains.com/status
 
 # Backup + offsite story (Tier 4.4 will exercise these)
-ls -la /home/pat/kayak/backups/ 2>/dev/null | head -5
+ls -la /home/pat/backups/ 2>/dev/null | head -5
 rclone listremotes 2>/dev/null | grep -i gdrive
 
 # Existing CI surface (Tier 3 builds on this)

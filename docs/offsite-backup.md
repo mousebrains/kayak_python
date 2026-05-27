@@ -2,7 +2,7 @@
 
 Encrypted weekly backup of `kayak.db` to `pat.kayak@gmail.com`'s 15 GiB
 Google Drive, layered on top of the local weekly snapshot in
-`/home/pat/kayak/backups/`.
+`/home/pat/backups/`.
 
 ## Architecture
 

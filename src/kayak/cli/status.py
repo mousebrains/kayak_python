@@ -410,8 +410,8 @@ def _render_backups_cert(now: dt.datetime) -> str:
             f"<td>{_fmt_age(age)} ago — {when}</td></tr>"
         )
 
-    hourly = _newest_mtime("/home/pat/kayak/backups/hourly-*.db.gz")
-    weekly = _newest_mtime("/home/pat/kayak/backups/backup-*.db.gz")
+    hourly = _newest_mtime("/home/pat/backups/hourly-*.db.gz")
+    weekly = _newest_mtime("/home/pat/backups/backup-*.db.gz")
 
     offsite_props = _show_unit("kayak-backup-offsite.service", ["ExecMainStartTimestamp", "Result"])
     offsite_dt = _parse_systemd_timestamp(offsite_props.get("ExecMainStartTimestamp", ""))
@@ -448,9 +448,9 @@ def _render_backups_cert(now: dt.datetime) -> str:
     return (
         "<h2>Backups &amp; cert</h2>\n"
         "<table>\n"
-        + _age_row("Hourly backup (~/kayak/backups/hourly-*.db.gz)", hourly, HOURLY_WARN_S)
+        + _age_row("Hourly backup (~/backups/hourly-*.db.gz)", hourly, HOURLY_WARN_S)
         + "\n"
-        + _age_row("Weekly backup (~/kayak/backups/backup-*.db.gz)", weekly, WEEKLY_WARN_S)
+        + _age_row("Weekly backup (~/backups/backup-*.db.gz)", weekly, WEEKLY_WARN_S)
         + "\n"
         + offsite_row
         + "\n"

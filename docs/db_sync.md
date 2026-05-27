@@ -7,14 +7,14 @@ observations that accumulate on live while you're editing locally.
 - **Pull:** `scripts/db_pull.sh` — snapshot live `~/DB/kayak.db` into local `../DB/kayak.db`.
 - **Push:** `scripts/db_push.sh` — ship local edits back, merging in live observations.
 
-Both scripts use compressed snapshots staged in `~/kayak/backups/` on the remote.
+Both scripts use compressed snapshots staged in `~/backups/` on the remote.
 
 ## Prerequisites
 
 - Passwordless SSH to `pat@levels.mousebrains.com` (tested with `ssh pat@levels.mousebrains.com true`).
 - `sqlite3`, `rsync`, `gzip` on both hosts.
 - `sudo -n systemctl {start,stop} kayak-<unit>` usable non-interactively by `pat` on the server. See `deploy/sudoers.d/kayak-pipeline` for a sample drop-in.
-- Enough free space in `~/kayak/backups/` on the remote for a few compressed DB snapshots (typically 50–200 MB each).
+- Enough free space in `~/backups/` on the remote for a few compressed DB snapshots (typically 50–200 MB each).
 
 ## Layout
 
@@ -24,7 +24,7 @@ Override via env vars if needed:
 ```
 REMOTE_HOST=pat@levels.mousebrains.com
 REMOTE_DB=/home/pat/DB/kayak.db
-REMOTE_BACKUP_DIR=/home/pat/kayak/backups
+REMOTE_BACKUP_DIR=/home/pat/backups
 ```
 
 ## Pull
@@ -37,7 +37,7 @@ cd ~/tpw/kayak
 
 What it does:
 
-1. On the remote: `sqlite3 ~/DB/kayak.db ".backup ~/kayak/backups/kayak-<UTC>.db"` — consistent point-in-time copy, safe under concurrent writes from the pipeline.
+1. On the remote: `sqlite3 ~/DB/kayak.db ".backup ~/backups/kayak-<UTC>.db"` — consistent point-in-time copy, safe under concurrent writes from the pipeline.
 2. `gzip -9` the snapshot.
 3. `rsync` the `.gz` to `../DB/`.
 4. `gunzip` to `../DB/kayak.db`, remove any stale `-wal`/`-shm` files.
@@ -57,7 +57,7 @@ cd ~/tpw/kayak
 What it does:
 
 1. Local: `PRAGMA wal_checkpoint(TRUNCATE)`, then `sqlite3 .backup` → `kayak-from-local-<UTC>.db`, `gzip -9`.
-2. `rsync` the `.gz` to `~/kayak/backups/` on the remote.
+2. `rsync` the `.gz` to `~/backups/` on the remote.
 3. On the remote, within a single SSH session:
    - Stop `kayak-pipeline.{timer,service}`, `kayak-decimate.{timer,service}`, `kayak-backup-weekly.{timer,service}`, `kayak-backup-hourly.{timer,service}`.
    - `PRAGMA wal_checkpoint(TRUNCATE)` on live, then `.backup` it to `/tmp/kayak-live-final-<ts>.db` — this captures every observation the pipeline wrote while we were editing.
@@ -67,7 +67,7 @@ What it does:
      - Replace `latest_observation` / `latest_gauge_observation` from live-final.
      - Clear `pages` (the next `build` regenerates it).
    - `PRAGMA integrity_check` on the merged DB; abort and restart timers if it's not `ok`.
-   - Archive the outgoing live DB to `~/kayak/backups/kayak-replaced-<ts>.db.gz`.
+   - Archive the outgoing live DB to `~/backups/kayak-replaced-<ts>.db.gz`.
    - Atomically `mv /tmp/kayak-new-<ts>.db ~/DB/kayak.db`.
    - Restart the timers.
 
@@ -90,7 +90,7 @@ Result: your metadata edits are live, and no observations were lost.
 Every push archives the pre-push live DB:
 
 ```
-~/kayak/backups/kayak-replaced-<UTC>.db.gz
+~/backups/kayak-replaced-<UTC>.db.gz
 ```
 
 To revert, on the remote:
@@ -99,7 +99,7 @@ To revert, on the remote:
 sudo systemctl stop kayak-pipeline.timer kayak-decimate.timer kayak-backup-weekly.timer kayak-backup-hourly.timer
 sudo systemctl stop kayak-pipeline.service
 mv ~/DB/kayak.db ~/DB/kayak.db.bad
-gunzip -c ~/kayak/backups/kayak-replaced-<UTC>.db.gz > ~/DB/kayak.db
+gunzip -c ~/backups/kayak-replaced-<UTC>.db.gz > ~/DB/kayak.db
 chmod 664 ~/DB/kayak.db
 rm -f ~/DB/kayak.db-wal ~/DB/kayak.db-shm
 sudo systemctl start kayak-pipeline.timer kayak-decimate.timer kayak-backup-weekly.timer kayak-backup-hourly.timer
@@ -107,7 +107,7 @@ sudo systemctl start kayak-pipeline.timer kayak-decimate.timer kayak-backup-week
 
 ## Snapshot retention
 
-`db_pull.sh` and `db_push.sh` prune their own snapshots so `~/kayak/backups/`
+`db_pull.sh` and `db_push.sh` prune their own snapshots so `~/backups/`
 (and the local `../DB/`) don't grow unbounded:
 
 - **Pull snapshots** (`kayak-<UTC>.db.gz`): newest `KEEP_PULL_SNAPSHOTS` kept

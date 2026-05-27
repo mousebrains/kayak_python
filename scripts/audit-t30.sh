@@ -302,7 +302,7 @@ run "test -f /home/pat/logs/csp.log && (echo 'size:'; wc -c /home/pat/logs/csp.l
 
 
 banner "15. Disk + DB footprint"
-run "du -sh /home/pat/DB /home/pat/public_html /home/pat/kayak/backups /home/pat/logs 2>/dev/null"
+run "du -sh /home/pat/DB /home/pat/public_html /home/pat/backups /home/pat/logs 2>/dev/null"
 run "du -sh /home/pat/kayak /home/pat/.venv 2>/dev/null"
 runS "du -sh /var/log /var/cache /var/lib /var/tmp /tmp 2>/dev/null"
 runS "du -sh /var/log/* 2>/dev/null | sort -hr | head -20"
@@ -317,9 +317,9 @@ run "sqlite3 /home/pat/DB/kayak.db '.schema' 2>&1 | grep -E '^CREATE TABLE [a-z_
 section "row counts (high-level)"
 run "sqlite3 /home/pat/DB/kayak.db 'SELECT \"observation\", COUNT(*) FROM observation UNION ALL SELECT \"source\", COUNT(*) FROM source UNION ALL SELECT \"gauge\", COUNT(*) FROM gauge UNION ALL SELECT \"reach\", COUNT(*) FROM reach UNION ALL SELECT \"editor\", COUNT(*) FROM editor;'"
 section "backup retention state (hourly + weekly)"
-run "ls -lht /home/pat/kayak/backups/ 2>/dev/null | head -10"
-run "ls /home/pat/kayak/backups/hourly-*.db.gz 2>/dev/null | wc -l"
-run "ls /home/pat/kayak/backups/backup-*.db.gz  2>/dev/null | wc -l"
+run "ls -lht /home/pat/backups/ 2>/dev/null | head -10"
+run "ls /home/pat/backups/hourly-*.db.gz 2>/dev/null | wc -l"
+run "ls /home/pat/backups/backup-*.db.gz  2>/dev/null | wc -l"
 section "offsite (rclone) — last 30 lines of journal"
 runS "journalctl -u kayak-backup-offsite --no-pager -n 40 | tail -30"
 runS "rclone --config /home/pat/.config/rclone/rclone.conf lsf gdrive-crypt: 2>/dev/null | head -10 || echo 'rclone not configured for pat or remote missing'"

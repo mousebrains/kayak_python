@@ -19,7 +19,7 @@ breaks, the steps shouldn't depend on a network round-trip to GitHub.
 | Cert | Let's Encrypt 3-SAN at `/etc/letsencrypt/live/levels.mousebrains.com/` covering `levels.mousebrains.com`, `levels-test.wkcc.org`, `levels.wkcc.org`. Renewed via certbot's nginx (HTTP-01) authenticator. |
 | Scheduled work | 15 systemd timers — pipeline, backups, cert health, decimation, status page, OSMB fetch, etc. See `deploy/SETUP.md` §timer schedule. |
 | Monitoring | healthchecks.io (heartbeats), ntfy.sh (push), msmtp → Gmail (email). Public status page at <https://status.mousebrains.com> (Better Stack hosted, CNAME → `statuspage.betteruptime.com`). |
-| Backups | `/home/pat/kayak/backups/` (hourly + weekly local) + Google Drive crypt (weekly off-site). |
+| Backups | `/home/pat/backups/` (hourly + weekly local) + Google Drive crypt (weekly off-site). |
 | Operator dashboard | `/_internal/status` (maintainer-only) — disk/memory, backups, TLS-cert expiry, failed `kayak-*` jobs, and 4 h traffic buckets. Regenerated nightly by `kayak-status.timer` (03:30) into `var/status.html`. |
 
 ## Routine code deploy
@@ -118,9 +118,9 @@ through the same channel.
 
 ### Where backups live
 
-- **Hourly local:** `/home/pat/kayak/backups/hourly-*.db.gz` (24 newest).
+- **Hourly local:** `/home/pat/backups/hourly-*.db.gz` (24 newest).
   Filename is the UTC second-resolution timestamp.
-- **Weekly local:** `/home/pat/kayak/backups/backup-*.db.gz` (4-copy
+- **Weekly local:** `/home/pat/backups/backup-*.db.gz` (4-copy
   retention: newest plus positions 1/3/5 in the sorted list).
 - **Weekly off-site:** Google Drive at `gdrive-crypt:` (rclone-encrypted;
   26-copy retention — ~6 months at one per week). See
@@ -130,7 +130,7 @@ through the same channel.
 
 ```bash
 # 1. Identify the snapshot to restore (newest by default; pick by mtime/name otherwise)
-ls -lht /home/pat/kayak/backups/hourly-*.db.gz | head
+ls -lht /home/pat/backups/hourly-*.db.gz | head
 
 # 2. Stop the pipeline + decimate so they don't write during the swap
 sudo systemctl stop kayak-pipeline.timer kayak-decimate.timer \
@@ -143,7 +143,7 @@ mv /home/pat/DB/kayak.db /tmp/kayak-pre-restore-$(date -u +%Y%m%dT%H%M%SZ).db
 rm -f /home/pat/DB/kayak.db-wal /home/pat/DB/kayak.db-shm
 
 # 4. Decompress the chosen backup into place
-gunzip -c /home/pat/kayak/backups/hourly-<UTC-stamp>.db.gz > /home/pat/DB/kayak.db
+gunzip -c /home/pat/backups/hourly-<UTC-stamp>.db.gz > /home/pat/DB/kayak.db
 chmod 660 /home/pat/DB/kayak.db
 chown pat:www-data /home/pat/DB/kayak.db  # if the DB came back owned by root
 
@@ -560,7 +560,7 @@ If your rollback target predates one of the destructive migrations
 above AND the older code still reads the dropped object, **restore
 the DB from the latest pre-migration backup** before redeploying. See
 §Backup + restore above; backups live at
-`/home/pat/kayak/backups/backup-<UTC-stamp>.db.gz`. The backup
+`/home/pat/backups/backup-<UTC-stamp>.db.gz`. The backup
 timestamps line up 1:1 with `kayak-backup.timer` runs (Sun 03:15 +
 the hourly snapshots from T1.1), so picking the right backup is
 matching the backup `<UTC-stamp>` to "just before the bad deploy."
