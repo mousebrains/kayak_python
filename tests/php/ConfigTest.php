@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
 
+require_once __DIR__ . '/FunctionalTestCase.php';
+
 /**
  * Schema parity + behavior tests for php/includes/config.php.
  *
@@ -19,9 +21,10 @@ use PHPUnit\Framework\TestCase;
  *      This catches drift between KayakConfig (Python) and the typed
  *      wrappers (PHP) before runtime.
  *
- * Levels-binary path comes from `getenv('KAYAK_LEVELS_BIN')` with a
- * /home/pat/.venv default; CI sets the env var to the runner-specific
- * path. The test is skipped (not failed) when the binary is missing.
+ * The end-to-end test resolves the `levels` CLI via KAYAK_LEVELS_BIN, then
+ * FunctionalTestCase::resolveVenvCommand (prod venv -> .venv -> PATH), so it
+ * runs in CI (which has `levels` on PATH); it skips (not fails) only when no
+ * binary is found anywhere.
  */
 final class ConfigTest extends TestCase
 {
@@ -144,9 +147,15 @@ final class ConfigTest extends TestCase
 
     public function testEmitConfigJsonRoundTripsViaConfig(): void
     {
-        $bin = (string)(getenv('KAYAK_LEVELS_BIN') ?: '/home/pat/.venv/bin/levels');
-        if (!is_executable($bin)) {
-            $this->markTestSkipped("levels binary not at $bin");
+        // KAYAK_LEVELS_BIN override wins; otherwise reuse FunctionalTestCase's
+        // resolver (prod venv -> .venv -> PATH) so CI, which puts `levels` on
+        // PATH without setting the env, runs this instead of skipping (R4.1).
+        $env = getenv('KAYAK_LEVELS_BIN');
+        $bin = (is_string($env) && $env !== '')
+            ? $env
+            : FunctionalTestCase::resolveVenvCommand(dirname(__DIR__, 2));
+        if ($bin === null || !is_executable($bin)) {
+            $this->markTestSkipped('no `levels` CLI (KAYAK_LEVELS_BIN, prod venv, .venv, or PATH)');
         }
 
         $tmp = tempnam(sys_get_temp_dir(), 'kayak-runtime-config-');

@@ -151,8 +151,11 @@ abstract class FunctionalTestCase extends TestCase
         $this->fail('Expected HttpExitException, but the handler returned normally.');
     }
 
-    /** Locate the `levels` CLI. Prefers the prod venv, then a local .venv, then PATH. */
-    private static function resolveVenvCommand(string $repoRoot): ?string
+    /**
+     * Locate the `levels` CLI. Prefers the prod venv, then a local .venv, then PATH.
+     * Public so ConfigTest reuses one resolver instead of a divergent copy (R4.1).
+     */
+    public static function resolveVenvCommand(string $repoRoot): ?string
     {
         $candidates = [
             '/home/pat/.venv/bin/levels',
