@@ -184,6 +184,56 @@ def test_bulk_matches_per_gauge_loop(session):
     assert len(bulk) == 6
 
 
+def test_update_latest_gauge_tiebreaks_on_higher_source_id(session):
+    """Two sources of one gauge reporting the same observed_at must resolve to
+    the higher source_id's value, matching the bulk rebuild's
+    ``observed_at DESC, source_id DESC`` (review-4 R5.1). Without the tiebreak
+    the per-gauge ``LIMIT 1`` was unordered on the tie and could return either."""
+    from kayak.db.models import FetchUrl, Gauge, GaugeSource, Source
+
+    fu = FetchUrl(url="https://example.com/tie", parser="nwps", is_active=True)
+    session.add(fu)
+    session.flush()
+    gauge = Gauge(name="tie-gauge", usgs_id="9999001")
+    session.add(gauge)
+    session.flush()
+    # Anchor inside the bulk path's 30-day rebuild window.
+    t = datetime.now(UTC).replace(microsecond=0) - timedelta(hours=1)
+    src_ids: list[int] = []
+    for val in (100.0, 200.0):  # second (200) gets the higher autoincrement id
+        src = Source(name=f"tie-src-{val}", agency="USGS", fetch_url_id=fu.id)
+        session.add(src)
+        session.flush()
+        session.add(GaugeSource(gauge_id=gauge.id, source_id=src.id))
+        session.add(
+            Observation(source_id=src.id, data_type=DataType.flow, observed_at=t, value=val)
+        )
+        src_ids.append(src.id)
+    session.flush()
+    higher = max(src_ids)
+
+    cache.update_latest_gauge(session, gauge.id, DataType.flow)
+    row = (
+        session.query(LatestGaugeObservation)
+        .filter_by(gauge_id=gauge.id, data_type=DataType.flow)
+        .one()
+    )
+    assert row.source_id == higher, "tie must resolve to the higher source_id"
+    assert row.value == 200.0
+
+    # The bulk rebuild must agree — the contract the docstring promises.
+    session.query(LatestGaugeObservation).delete()
+    session.flush()
+    cache.update_all_latest_gauges(session)
+    bulk_row = (
+        session.query(LatestGaugeObservation)
+        .filter_by(gauge_id=gauge.id, data_type=DataType.flow)
+        .one()
+    )
+    assert bulk_row.source_id == higher
+    assert bulk_row.value == 200.0
+
+
 def test_bulk_uses_constant_query_count(session):
     """update_all_latest_gauges should issue O(1) queries regardless of gauge
     count — proving the N+1 in the previous loop-of-update_latest_gauge
