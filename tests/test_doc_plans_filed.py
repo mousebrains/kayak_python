@@ -33,7 +33,7 @@ _DONE_STATUS = re.compile(r"\b(implemented|completed)\b|status:\s*done", re.IGNO
 
 def _status_blob(md_text: str) -> str:
     """Text following a '## Status' heading or a '**Status:**' inline label."""
-    m = re.search(r"(?:^##\s*Status\s*$\n?|\**Status:\**)(.*)", md_text, re.MULTILINE)
+    m = re.search(r"(?:^##\s*Status\s*$\s*|\**Status:\**)(.*)", md_text, re.MULTILINE)
     return m.group(1) if m else ""
 
 
@@ -65,5 +65,6 @@ def test_status_trigger_distinguishes_done_from_in_progress() -> None:
     """The trigger must fire on a completed plan and ignore in-progress/landed —
     so the main test isn't vacuous and won't false-positive montana/production."""
     assert _DONE_STATUS.search(_status_blob("## Status\nImplemented in this PR.\n"))
+    assert _DONE_STATUS.search(_status_blob("## Status\n\nImplemented after a blank line.\n"))
     assert not _DONE_STATUS.search(_status_blob("**Status:** Revised 2026-05-19\n"))
     assert not _DONE_STATUS.search(_status_blob("**Status:** landed 2026-05-15\n"))
