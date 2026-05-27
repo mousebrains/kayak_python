@@ -175,7 +175,7 @@ def update_latest_gauge(
             Observation.source_id.in_(source_ids),
             Observation.data_type == data_type,
         )
-        .order_by(Observation.observed_at.desc())
+        .order_by(Observation.observed_at.desc(), Observation.source_id.desc())
         .limit(1)
     ).scalar_one_or_none()
 
@@ -196,7 +196,7 @@ def update_latest_gauge(
             Observation.data_type == data_type,
             Observation.observed_at <= cutoff,
         )
-        .order_by(Observation.observed_at.desc())
+        .order_by(Observation.observed_at.desc(), Observation.source_id.desc())
         .limit(1)
     ).scalar_one_or_none()
 
@@ -323,8 +323,8 @@ def update_all_latest_gauges(session: Session, since: datetime | None = None) ->
     "no recent data", which is the right outcome for a stale gauge.
 
     Tiebreaker on identical ``observed_at`` is ``source_id DESC`` —
-    deterministic across runs and matches the per-gauge implementation
-    when its underlying SQLite ordering matches.
+    deterministic across runs and matching ``update_latest_gauge``, which
+    applies the same ``observed_at DESC, source_id DESC`` ordering (review-4 R5.1).
     """
     if since is None:
         since = datetime.now(UTC) - GAUGE_CACHE_REBUILD_WINDOW
