@@ -150,12 +150,18 @@ def update_latest_gauge(
     session: Session,
     gauge_id: int,
     data_type: DataType,
+    since: datetime | None = None,
 ) -> None:
     """Recompute the LatestGaugeObservation for a gauge/type.
 
     Finds the most recent observation across ALL sources linked to the gauge,
     computes delta_per_hour from a previous observation >6h before latest,
     and upserts into the latest_gauge_observation cache.
+
+    Only observations at or after ``since`` are considered (default
+    ``now - GAUGE_CACHE_REBUILD_WINDOW``), matching the bulk
+    ``update_all_latest_gauges`` window so the two paths agree that a gauge
+    silent longer than the window has no recent data (review-4 R5.7).
     """
     source_ids = list(
         session.scalars(select(GaugeSource.source_id).where(GaugeSource.gauge_id == gauge_id))
@@ -169,11 +175,15 @@ def update_latest_gauge(
         )
         return
 
+    if since is None:
+        since = datetime.now(UTC) - GAUGE_CACHE_REBUILD_WINDOW
+
     latest_row = session.execute(
         select(Observation)
         .where(
             Observation.source_id.in_(source_ids),
             Observation.data_type == data_type,
+            Observation.observed_at >= since,
         )
         .order_by(Observation.observed_at.desc(), Observation.source_id.desc())
         .limit(1)
@@ -194,6 +204,7 @@ def update_latest_gauge(
         .where(
             Observation.source_id.in_(source_ids),
             Observation.data_type == data_type,
+            Observation.observed_at >= since,
             Observation.observed_at <= cutoff,
         )
         .order_by(Observation.observed_at.desc(), Observation.source_id.desc())
