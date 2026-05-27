@@ -6,6 +6,7 @@ from argparse import Namespace
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from sqlalchemy import text
 
 from kayak.cli import migrate as migrate_mod
@@ -26,6 +27,48 @@ def test_discover_migrations_sorts_by_filename(tmp_path: Path) -> None:
 
     assert [m.version for m in found] == ["0001", "0002"]
     assert [m.name for m in found] == ["0001_a", "0002_b"]
+
+
+def test_discover_migrations_rejects_duplicate_version_prefix(tmp_path: Path) -> None:
+    # Two files share the 0099 prefix; the prefix is schema_migrations.version
+    # (a PK), so a collision must fail loudly at discovery, not on apply (#49/#50).
+    (tmp_path / "0099_first.sql").write_text("SELECT 1;")
+    (tmp_path / "0099_second.sql").write_text("SELECT 2;")
+    with pytest.raises(ValueError, match="Duplicate migration version '0099'"):
+        migrate_mod.discover_migrations(tmp_path)
+
+
+def test_committed_migrations_have_unique_prefixes() -> None:
+    # The real migrations dir must pass the dup-prefix guard — a committed
+    # collision would break `levels migrate` for everyone.
+    versions = [m.version for m in migrate_mod.discover_migrations()]
+    assert versions  # sanity: there are migrations
+    assert len(versions) == len(set(versions))
+
+
+def test_split_statements_rejects_semicolon_in_string_literal() -> None:
+    with pytest.raises(ValueError, match="string literal"):
+        migrate_mod._split_statements("INSERT INTO t (v) VALUES ('a; b');")
+
+
+def test_split_statements_rejects_dashdash_in_string_literal() -> None:
+    with pytest.raises(ValueError, match="string literal"):
+        migrate_mod._split_statements("INSERT INTO t (v) VALUES ('a -- b');")
+
+
+def test_split_statements_allows_escaped_quote_then_real_semicolon() -> None:
+    # '' is an in-literal escaped quote, so the ; after the closing quote is a
+    # real top-level separator: two statements, no false rejection.
+    assert migrate_mod._split_statements("INSERT INTO t (v) VALUES ('it''s ok'); SELECT 1;") == [
+        "INSERT INTO t (v) VALUES ('it''s ok')",
+        "SELECT 1",
+    ]
+
+
+def test_split_statements_accepts_every_committed_migration() -> None:
+    # Regression: the R5.5 guard must not reject any real migration.
+    for path in sorted(migrate_mod.MIGRATIONS_DIR.glob("*.sql")):
+        assert migrate_mod._split_statements(path.read_text()), path.name
 
 
 def test_apply_pending_runs_only_unapplied(

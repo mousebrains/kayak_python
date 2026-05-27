@@ -70,12 +70,22 @@ def discover_migrations(migrations_dir: Path | None = None) -> list[Migration]:
     if not root.is_dir():
         return []
     out: list[Migration] = []
+    seen: dict[str, str] = {}  # version prefix -> first filename that claimed it
     for path in sorted(root.glob("*.sql")):
         m = _VERSION_RE.match(path.name)
         if not m:
             logger.warning("Skipping non-versioned migration file: %s", path.name)
             continue
-        out.append(Migration(version=m.group(1), name=path.stem, path=path))
+        version = m.group(1)
+        if version in seen:
+            raise ValueError(
+                f"Duplicate migration version {version!r}: {seen[version]!r} and "
+                f"{path.name!r}. The NNNN_ prefix is the schema_migrations.version "
+                f"PRIMARY KEY, so two files sharing it collide on apply (or one is "
+                f"silently stamped over the other). Renumber one of them."
+            )
+        seen[version] = path.name
+        out.append(Migration(version=version, name=path.stem, path=path))
     return out
 
 
@@ -180,12 +190,53 @@ def _wants_no_transaction(sql: str) -> bool:
     return False
 
 
+def _reject_literal_with_delimiter(sql: str) -> None:
+    """Raise if a single-quoted literal embeds ``;`` or ``--``.
+
+    Those are exactly the tokens ``_split_statements`` keys on (statement
+    separator, line-comment start); its line-wise strip + ``split(';')`` would
+    truncate a statement that buries one inside a string. No committed migration
+    does, so this turns a future foot-gun into a clear discovery-time error
+    rather than a silently mangled statement (review-4 R5.5). SQLite's in-literal
+    ``''`` quote escape is respected.
+    """
+    i = 0
+    n = len(sql)
+    in_string = False
+    while i < n:
+        ch = sql[i]
+        if in_string:
+            if ch == "'":
+                if i + 1 < n and sql[i + 1] == "'":  # '' escape -> stays in string
+                    i += 2
+                    continue
+                in_string = False
+            elif ch == ";" or (ch == "-" and i + 1 < n and sql[i + 1] == "-"):
+                raise ValueError(
+                    "Migration SQL embeds ';' or '--' inside a string literal; the "
+                    "statement splitter would truncate it. Rewrite to avoid the "
+                    "embedded token (e.g. char(59) for ';')."
+                )
+        elif ch == "'":
+            in_string = True
+        elif ch == "-" and i + 1 < n and sql[i + 1] == "-":
+            nl = sql.find("\n", i)  # skip a line comment so its quotes don't count
+            if nl == -1:
+                break
+            i = nl + 1
+            continue
+        i += 1
+
+
 def _split_statements(sql: str) -> list[str]:
     """Split a SQL script on ``;`` boundaries, skipping comments and blanks.
 
     Strips ``-- ...`` line comments first so semicolons inside prose don't
-    confuse the splitter, then separates on the remaining ``;`` tokens.
+    confuse the splitter, then separates on the remaining ``;`` tokens. The
+    splitter doesn't parse string literals, so ``_reject_literal_with_delimiter``
+    first rejects any migration that buries ``;``/``--`` inside one.
     """
+    _reject_literal_with_delimiter(sql)
     # Drop everything from `--` to end of line on every line.
     no_line_comments = "\n".join(re.sub(r"--.*$", "", ln) for ln in sql.splitlines())
     out: list[str] = []
