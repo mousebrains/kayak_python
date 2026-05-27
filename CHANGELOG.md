@@ -92,14 +92,14 @@ All notable changes to this project will be documented in this file.
   families (boolean conditions made explicit, `$a ?: $b` removed) — fixed to
   zero with hundreds of behaviour-preserving edits; the residual level-9
   `mixed`-typing finds are captured in a fresh *shrinking* `phpstan-baseline.neon`
-  (634 entries) so new code is held to level 9. 172 phpunit tests stay green.
+  so new code is held to level 9. 172 phpunit tests stay green.
   See `docs/done/PLAN_phpstan_level9_strict.md`.
 - **PHP test coverage raised ~9% → ~60%** via an in-process functional harness
   (`tests/php/FunctionalTestCase.php` + an `http_terminate` exit seam) so pcov
   sees handler logic the `php -S` integration tests can't: unit tests for the
   pure helpers, functional tests for every handler (detail / custom / search /
   plots / review / propose) and the Tier-1 auth + magic-link core, all at
-  90–99% (172 → 516 tests). The CI coverage floor ratchets 5% → 55%. See
+  90–99% (172 → 516 tests). The CI coverage floor ratchets 5% → 58%. See
   `docs/done/PLAN_php_testing.md`.
 - **Dev workflow**: a worktree-based flow (`scripts/new-worktree.sh`) keeps branch/PR
   work off the live editable tree, and `scripts/snapshot_metadata.sh` refuses to run
@@ -110,9 +110,9 @@ All notable changes to this project will be documented in this file.
 - **Round-3 review Phase 1**: pinned the `emit-config` sudoers grant (closing an
   arbitrary-root-write via `--out`), generated the default-vhost dummy TLS cert (a
   fresh `nginx -t` was failing without it), repointed the stale backup-unit sudoers
-  grant, and rejected `javascript:`/`data:` URIs in `sanitize_source_url`. A residual
-  (the grant still runs a pat-writable binary as root) is tracked as R1.5 in the
-  round-3 plan.
+  grant, and added a scheme allowlist to `sanitize_source_url` (rejecting non-http(s)
+  URIs). The residual pat→root path (the grant ran a pat-writable binary as root) was
+  closed by a root-owned install wrapper (#48).
 
 ## [1.1.1] - 2026-05-21
 
