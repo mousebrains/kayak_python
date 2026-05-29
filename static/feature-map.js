@@ -482,4 +482,62 @@
   // static/gradient-profile.js) can drop a hover marker. Convention
   // only — no other code in the project should poke at this.
   el._kayakMap = map;
+
+  // Right-click anywhere on the map pops up the cursor lat/lon with
+  // a Copy button. Left-click already routes through marker handlers
+  // (which open Google Maps), so contextmenu is the natural channel
+  // for grabbing an arbitrary on-channel waypoint during reach-coord
+  // refinement.
+  //
+  // Listen on the container DOM via L.DomEvent.on (a thin wrapper over
+  // addEventListener), not map.on('contextmenu'): Leaflet only fires
+  // its synthetic contextmenu — and only then runs preventDefault — on
+  // hit-tested targets that have a listener, so right-clicks landing
+  // on tile <img>s, controls, or unlistening marker icons bypass the
+  // Leaflet path entirely and Chrome's native menu still shows. A
+  // native listener on the container fires for every contextmenu that
+  // bubbles up, and preventDefault always lands on the original event.
+  //
+  // CSP-safe: createElement + textContent + addEventListener throughout
+  // (no innerHTML for the popup content, no inline on* attrs).
+  L.DomEvent.on(map.getContainer(), 'contextmenu', function (ev) {
+    L.DomEvent.preventDefault(ev);
+    L.DomEvent.stopPropagation(ev);
+    const latlng = map.containerPointToLatLng(
+      map.mouseEventToContainerPoint(ev),
+    );
+    const lat = latlng.lat.toFixed(6);
+    const lng = latlng.lng.toFixed(6);
+    const coords = lat + ', ' + lng;
+    const wrap = document.createElement('div');
+    const code = document.createElement('code');
+    code.textContent = coords;
+    code.style.fontSize = '13px';
+    code.style.userSelect = 'all';
+    code.style.marginRight = '8px';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = 'Copy';
+    btn.style.cursor = 'pointer';
+    btn.addEventListener('click', function () {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(coords).then(
+          function () {
+            btn.textContent = 'Copied';
+          },
+          function () {
+            btn.textContent = 'Copy failed';
+          },
+        );
+      } else {
+        btn.textContent = 'Clipboard unavailable';
+      }
+    });
+    wrap.appendChild(code);
+    wrap.appendChild(btn);
+    L.popup({ className: 'latlon-popup' })
+      .setLatLng(latlng)
+      .setContent(wrap)
+      .openOn(map);
+  });
 })();
