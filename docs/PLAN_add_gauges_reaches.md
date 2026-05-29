@@ -36,6 +36,7 @@ Initial batches: the **Columbia-River mainstem corridor** (gauge-only) and the
 | **check-reaches** | `geom` has a `LINESTRING(` wrapper, <2 vertices, out-of-range coords, or endpoints drift >0.003° from the `lat/lon_start/end` columns | the tracer writes correct lon-first, no-wrapper geom; keep the endpoint columns in sync with the geom |
 | **dup-prefix** (R5.2) | two migrations share the `NNNN` prefix | next free prefix is **0068** (0067 highest across open PRs — 0065 source-based, 0066 Batch A, 0067 Batch B); re-check open PRs before numbering |
 | **model/schema lockstep** | a new column lands without a `models.py` update | N/A here — these batches add no columns |
+| **reach HUC** (added after Batch B/C shipped without it) | a new `reach` has NULL or hand-typed `huc` | run `levels assign-huc` on dev → 12-digit `reach.huc` + HUC8-name `reach.basin`, baked into the migration INSERT (Shape 2). A NULL `huc` drops the reach from the watershed filter; verify the new reaches show a 12-digit `huc` |
 
 Plus: **canonical `agency` strings** in migrations (`'USGS'`, `'WA DOE'`,
 `'NWRFC'`, `'USBR'`, `'Calculation'` — never the raw parser slug); and the
@@ -123,8 +124,13 @@ Reach data splits across **three paths by size:**
      `elevation`, high→low ⇒ upstream→downstream — not `aw_id`), the four endpoint
      coords, `river`, `gauge_id` (by gauge name), `description`(=section),
      `difficulties`(=class), `length`, `gradient`, `max_gradient`, `elevation`,
-     `elevation_lost`, `aw_id`. (AW's `river`/`display_name`/`description` are
-     inconsistent — normalize them; see *Per-reach review* below.)
+     `elevation_lost`, `aw_id`, plus **`huc` (12-digit HUC12) and `basin` (the
+     HUC8 name)** — obtained from `levels assign-huc` (dev-only toolchain below),
+     **not** hand-typed: a NULL `huc` drops the reach out of the watershed filter
+     (`levels.py` gates the pills on `len(huc) >= 8`) and an 8-digit guess
+     diverges from the HUC12 the other ~400 reaches carry. (AW's
+     `river`/`display_name`/`description` are inconsistent — normalize them; see
+     *Per-reach review* below.)
    - `reach_state` (**required** or it's hidden from state filters).
    - `reach_class` (**required** for the class pills; `name` NOT NULL; CHECK
      `low ≤ high`; set `low`/`high` from AW's runnable range if present).
@@ -142,6 +148,15 @@ Reach data splits across **three paths by size:**
 - `max_gradient` + `gradient_profile`: the 3-stage `docs/one-offs/` DEM pipeline
   (`fetch_dem_tiles` → `sample_reach_elevations` → `compute_reach_gradient`),
   `DEM-cache/`.
+- `huc` + `basin`: `levels assign-huc` (brew python — needs the `[geo]` extra and
+  the WBD GPKG in `Trace-cache/`; prod can't run it). Point-in-polygons each
+  put-in (`latitude_start`/`longitude_start`) → writes the 12-digit HUC12 to
+  `reach.huc` and mirrors the HUC8 name into `reach.basin`; idempotent, so it
+  leaves already-correct reaches untouched. Run it once endpoints are final, then
+  read the resulting `huc`/`basin` off the dev DB and bake them into the
+  migration's reach INSERT. `huc_name` already covers the PNW, so the basin label
+  resolves. **Batch B/C (0067/0068) shipped without this step** — 12 reaches
+  landed with NULL `huc`, one with an 8-digit guess; backfilled after the fact.
 
 ### Reproduce / verify
 - `levels check-reaches` (no wrapper, ≥2 vertices, endpoints within 0.003°).
@@ -405,8 +420,9 @@ would need a hand-set `sort_name`.
 4. **Batch B reaches** (12) — Shape 3, executed in migration `0067`. The
    workflow: stage from cache → right-click endpoint refine on the dev map →
    trace + waypoint splice (for braided routes) + DEM channel-min snap (for
-   canyons) → elevation + gradient → name + AW-metadata normalize +
-   `reach_guidebook` entries → sort each branch by put-in elevation → migration
+   canyons) → elevation + gradient → `assign-huc` (HUC12 + basin) → name +
+   AW-metadata normalize + `reach_guidebook` entries → sort each branch by
+   put-in elevation → migration
    (metadata + links + guidebooks) + `reaches.json` + `reaches-gradient.json`
    → fresh-prod-copy verify → PR → deploy applies the JSONs.
 
