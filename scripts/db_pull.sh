@@ -65,7 +65,10 @@ gzip -9 "$DEST"
 ls -lh "${DEST}.gz"
 # Retention: keep the newest $KEEP pull snapshots; remove older. The anchored
 # glob matches only kayak-<TS>.db.gz — never kayak-from-local-/kayak-replaced-.
-mapfile -t snaps < <(ls -1r "$BACKUP_DIR"/kayak-[0-9]*T[0-9]*Z.db.gz 2>/dev/null)
+snaps=()
+while IFS= read -r snap; do
+    snaps+=("$snap")
+done < <(ls -1r "$BACKUP_DIR"/kayak-[0-9]*T[0-9]*Z.db.gz 2>/dev/null)
 for i in "${!snaps[@]}"; do
     if (( i >= KEEP )); then
         echo "Removing old pull snapshot: $(basename "${snaps[$i]}")"
@@ -88,8 +91,13 @@ echo "${SNAPSHOT}" > "${LOCAL_DB_DIR}/.pulled_snapshot"
 echo "${TS}" > "${LOCAL_DB_DIR}/.pulled_snapshot_ts"
 
 # Retention: keep the newest $KEEP_PULL_SNAPSHOTS pulled .gz snapshots locally
-# too; the current pull is the newest, so it is always kept.
-mapfile -t local_snaps < <(ls -1r "${LOCAL_DB_DIR}"/kayak-[0-9]*T[0-9]*Z.db.gz 2>/dev/null)
+# too; the current pull is the newest, so it is always kept. Build the array
+# with a while-read loop rather than bash-4 `mapfile`/`readarray`: this script
+# runs on the dev Mac, whose system /bin/bash is 3.2 (no `mapfile`).
+local_snaps=()
+while IFS= read -r snap; do
+    local_snaps+=("$snap")
+done < <(ls -1r "${LOCAL_DB_DIR}"/kayak-[0-9]*T[0-9]*Z.db.gz 2>/dev/null)
 for i in "${!local_snaps[@]}"; do
     if (( i >= KEEP_PULL_SNAPSHOTS )); then
         echo "Removing old local snapshot: $(basename "${local_snaps[$i]}")"
