@@ -421,16 +421,21 @@ function generate_gradient_profile_svg(
     if (count($samples) < 2) return '';
 
     // Drop a trailing insignificant bar if the previous bar is
-    // significant. The cumsum walker emits an insig tail when it
-    // runs out of bins to chain — usually correctly (e.g. non-
-    // monotonic elevation from a bridge/road/dam DEM artifact near
-    // the take-out) — but visually it looks like the chart "trails
-    // off" at the end of an otherwise solid reach. Suppressing it
-    // here lets the previous significant bar visually stretch to
-    // the take-out (via the first/last edge logic below). The
-    // underlying gradient_profile JSON keeps both bars.
+    // significant AND the trailing bar is short enough to be a DEM
+    // artifact (typically a bridge/road/dam undercut near the take-
+    // out; rarely more than a few hundred metres). Suppressing those
+    // lets the previous significant bar visually stretch to the
+    // take-out (via the first/last edge logic below) without "trailing
+    // off." But longer flat trailing bars are real low-gradient
+    // terrain — reach 419 (Canyon Creek into Merwin Reservoir) had a
+    // 1.6 mi reservoir tail that, when popped, made the previous
+    // 151 ft/mi · 0.2 mi bar stretch across ~1.97 mi and read as
+    // ~285 ft of drop in a reach whose total elevation_lost is 262 ft.
+    // 0.5 mi keeps artifacts suppressed while preserving reservoir /
+    // lakeshore tails. The underlying JSON keeps both bars regardless.
     $n = count($samples);
-    if (!($samples[$n - 1]['significant'] ?? false) && ($samples[$n - 2]['significant'] ?? false)) {
+    if (!($samples[$n - 1]['significant'] ?? false) && ($samples[$n - 2]['significant'] ?? false)
+        && (float)$samples[$n - 1]['w_mi'] < 0.5) {
         array_pop($samples);
         if (count($samples) < 2) return '';
     }
