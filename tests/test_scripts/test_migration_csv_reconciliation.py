@@ -35,6 +35,13 @@ PENDING_RECONCILIATION: set[str] = {
     # each once the nightly metadata snapshot lands it in data/db/source.csv.
     "14147500",
     "14161100",
+    # Batch A -- Columbia mainstem gauges wired by migration 0066 (incl. the
+    # Bonneville stage source added by the merge).
+    "12438000",
+    "14105700",
+    "454249120423500",
+    "453845121564001",
+    "14128870",
 }
 
 # Across the whole class the form is `INSERT INTO source (name, ...) SELECT

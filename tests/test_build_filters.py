@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 
-from kayak.db.models import Reach, ReachClass, State
-from kayak.web.build.gauges import _build_gauges_filter_bar
+from kayak.db.models import Gauge, Reach, ReachClass, State
+from kayak.web.build.gauges import _apply_gauge_metadata, _build_gauges_filter_bar
 from kayak.web.build.levels import _build_filter_bar, _collect_filter_data, _row_filter_attrs
 from kayak.web.build.shell import _build_page
 
@@ -459,3 +459,40 @@ def test_build_gauges_filter_bar_omits_state_when_not_all_page() -> None:
     assert 'data-group="state"' not in scoped_html
     # Watershed group still renders on a state-scoped page.
     assert 'data-group="huc8"' in scoped_html
+
+
+# ---------------------------------------------------------------------------
+# Multi-state gauges — a border gauge on a state-line river (e.g. the Columbia)
+# carries a comma list in gauge.state, mirroring how a reach joins reach.states.
+# ---------------------------------------------------------------------------
+
+
+def test_apply_gauge_metadata_multistate_splits_to_full_names() -> None:
+    """A border gauge with a comma gauge.state ('OR,WA') emits both full state
+    names, so filters.js (which splits data-state on comma, like the reach
+    table) matches each and the gauge filters under both. A single-state gauge
+    still maps to one name (back-compat)."""
+    border: dict = {}
+    _apply_gauge_metadata(border, Gauge(name="border", state="OR,WA", huc="17070105"))
+    assert border["state"] == "Oregon,Washington"
+    assert border["state_abbrev"] == "OR,WA"
+    assert border["huc8"] == "17070105"
+
+    single: dict = {}
+    _apply_gauge_metadata(single, Gauge(name="single", state="WA", huc="17020005"))
+    assert single["state"] == "Washington"
+    assert single["state_abbrev"] == "WA"
+
+
+def test_build_gauges_filter_bar_splits_multistate_into_separate_pills() -> None:
+    """A border gauge's comma data-state yields one pill per state, not a single
+    collapsed 'Oregon,Washington' pill."""
+    rows = [_gauge_row("Oregon,Washington", "17070105")]
+    html = _build_gauges_filter_bar(
+        rows,
+        huc6_names={"170701": "Middle Columbia"},
+        huc8_names={"17070105": "Middle Columbia-Hood"},
+    )
+    assert ">Oregon<" in html
+    assert ">Washington<" in html
+    assert "Oregon,Washington" not in html  # not collapsed into one pill
