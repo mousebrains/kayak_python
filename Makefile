@@ -23,6 +23,9 @@ test:  ## Run fast tests (skips @pytest.mark.slow)
 test-all:  ## Run every test including slow ones (matches CI)
 	$(VENV)/bin/pytest -m '' -q
 
+test-php:  ## Run PHP unit tests (PHPUnit via composer)
+	composer test
+
 coverage:  ## Run tests with coverage report
 	$(VENV)/bin/pytest -m '' --cov=kayak --cov-report=term-missing -q
 
@@ -40,7 +43,7 @@ lint-shell:  ## Lint shell scripts
 
 lint-all: lint lint-php lint-js lint-css lint-shell  ## Run all linters
 
-check: lint-all typecheck test  ## Run all checks
+check: lint-all typecheck test test-php  ## Run all checks (incl. PHP unit tests; ~35 s extra)
 
 ## Application
 
