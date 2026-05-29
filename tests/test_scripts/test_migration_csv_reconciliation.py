@@ -42,6 +42,10 @@ PENDING_RECONCILIATION: set[str] = {
     "454249120423500",
     "453845121564001",
     "14128870",
+    # Batch B -- 2 new USGS gauges wired by migration 0067 for the Lewis
+    # system (NF Lewis above Muddy River + Canyon Creek near Amboy).
+    "14216000",
+    "14219000",
 }
 
 # Across the whole class the form is `INSERT INTO source (name, ...) SELECT
