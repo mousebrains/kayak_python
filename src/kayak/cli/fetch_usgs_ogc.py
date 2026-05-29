@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from kayak.db.cache import update_latest, update_latest_gauge
 from kayak.db.engine import get_session
-from kayak.db.models import DataType, Gauge, GaugeSource, Source
+from kayak.db.models import DataType, GaugeSource, Source
 from kayak.db.observations import store_observations
 from kayak.db.sources import get_negative_flow_source_ids
 
@@ -77,29 +77,32 @@ def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -
 
 
 def _build_site_map(session: Session, restrict_to: set[str] | None = None) -> dict[str, int]:
-    """Build a mapping of usgs_id → source_id from the database.
+    """Map each USGS station id → its source_id.
 
-    Joins gauge → gauge_source → source to find the source_id for each
-    USGS station.  When a gauge has multiple sources, prefer the one
-    whose name matches the usgs_id (the actual USGS source).
+    Keys on USGS *sources* (``Source.agency == 'USGS'``), fetching each by its
+    ``source.name`` (the station id) -- the same way the ``fetch_url`` path
+    fetches each source by URL. So one gauge can carry several USGS sources
+    (e.g. a dam with separate stage and temperature monitors) and every one is
+    fetched, then aggregated by the gauge cache; and a merged gauge with
+    ``usgs_id`` NULL still fetches its USGS sources, since selection no longer
+    keys on ``gauge.usgs_id``. The ``gauge_source`` join keeps the prior
+    behavior of fetching only linked sources (orphan-check guarantees a link).
 
-    ``restrict_to``: if set, only sites whose usgs_id is in the set are
-    returned (used by ``--site`` for targeted backfills).
+    ``source.name`` is the USGS station id by wiring convention -- enforced by
+    ``test_usgs_source_names_are_station_ids`` so a misnamed source can't
+    silently fetch the wrong station.
+
+    ``restrict_to``: if set, only these station ids (used by ``--site``).
     """
     stmt = (
-        select(Gauge.usgs_id, Source.id, Source.name)
-        .join(GaugeSource, Gauge.id == GaugeSource.gauge_id)
-        .join(Source, GaugeSource.source_id == Source.id)
-        .where(Gauge.usgs_id.is_not(None))
+        select(Source.name, Source.id)
+        .join(GaugeSource, GaugeSource.source_id == Source.id)
+        .where(Source.agency == "USGS")
+        .distinct()
     )
     if restrict_to is not None:
-        stmt = stmt.where(Gauge.usgs_id.in_(restrict_to))
-    rows = session.execute(stmt).all()
-    result: dict[str, int] = {}
-    for usgs_id, source_id, source_name in rows:
-        if usgs_id not in result or source_name == usgs_id:
-            result[usgs_id] = source_id
-    return result
+        stmt = stmt.where(Source.name.in_(restrict_to))
+    return {name: source_id for name, source_id in session.execute(stmt).all()}
 
 
 def _fetch_page(url: str, api_key: str | None) -> dict | None:

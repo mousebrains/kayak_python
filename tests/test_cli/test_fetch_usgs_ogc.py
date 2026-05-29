@@ -27,7 +27,9 @@ def _make_usgs_source(session, usgs_id="14306500", name=None):
     session.add(fetch_url)
     session.flush()
 
-    source = Source(name=name or f"usgs-{usgs_id}", agency="USGS", fetch_url_id=fetch_url.id)
+    # USGS sources are named by their bare station id (the wiring convention the
+    # source-based fetcher relies on) -- not "usgs-<id>".
+    source = Source(name=name or usgs_id, agency="USGS", fetch_url_id=fetch_url.id)
     session.add(source)
     session.flush()
 
@@ -85,12 +87,14 @@ def test_build_site_map_restrict_to_filters_sites(session):
     assert _build_site_map(session, set()) == {}
 
 
-def test_build_site_map_excludes_null_usgs_id(session):
-    """Gauges without usgs_id are excluded from the site map."""
+def test_build_site_map_excludes_non_usgs_agency(session):
+    """Selection keys on ``Source.agency == 'USGS'``, so a linked non-USGS source
+    is excluded -- even on a gauge with no usgs_id. (gauge.usgs_id is no longer
+    the selector; a USGS source is fetched regardless of its gauge's usgs_id.)"""
     fetch_url = FetchUrl(url="https://example.com/other", parser="other", is_active=True)
     session.add(fetch_url)
     session.flush()
-    source = Source(name="no-usgs", agency="OTHER", fetch_url_id=fetch_url.id)
+    source = Source(name="29C100", agency="WA DOE", fetch_url_id=fetch_url.id)
     session.add(source)
     session.flush()
     gauge = Gauge(name="gauge-no-usgs")  # no usgs_id
@@ -99,8 +103,43 @@ def test_build_site_map_excludes_null_usgs_id(session):
     session.add(GaugeSource(gauge_id=gauge.id, source_id=source.id))
     session.flush()
 
-    site_map = _build_site_map(session)
-    assert site_map == {}
+    assert _build_site_map(session) == {}
+
+
+def test_build_site_map_includes_all_usgs_sources_of_one_gauge(session):
+    """A gauge with two USGS sources (e.g. a dam's separate stage + temperature
+    monitors) maps BOTH -- the point of keying on the source, not a single
+    gauge.usgs_id. Works even when the merged gauge's usgs_id is NULL."""
+    gauge = Gauge(name="bonneville_merge")  # merged gauge, no single usgs_id
+    session.add(gauge)
+    session.flush()
+    expected: dict[str, int] = {}
+    for station in ("14128870", "453845121564001"):
+        s = Source(name=station, agency="USGS", fetch_url_id=None)
+        session.add(s)
+        session.flush()
+        session.add(GaugeSource(gauge_id=gauge.id, source_id=s.id))
+        expected[station] = s.id
+    session.flush()
+    assert _build_site_map(session) == expected
+
+
+def test_usgs_source_names_are_station_ids():
+    """Source-based fetch keys on source.name as the USGS station id, so every
+    USGS source must be named a bare numeric station id -- otherwise it would
+    silently fetch the wrong station. Guards that wiring invariant against
+    source.csv."""
+    import csv
+
+    from kayak.config import DATA_DIR
+
+    with (DATA_DIR / "db" / "source.csv").open(encoding="utf-8") as fh:
+        offenders = [
+            row["name"]
+            for row in csv.DictReader(fh)
+            if row["agency"] == "USGS" and not row["name"].isdigit()
+        ]
+    assert not offenders, f"USGS sources whose name is not a numeric station id: {offenders}"
 
 
 # ---------------------------------------------------------------------------

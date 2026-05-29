@@ -29,9 +29,13 @@ SOURCE_CSV = DATA_DIR / "db" / "source.csv"
 # Sources wired by a migration but not yet in source.csv (their ids are
 # prod-assigned, so reconciliation is a prod export_metadata.py snapshot). Add a
 # name here ONLY while its snapshot is pending; the stale-allowlist test forces
-# removal once it lands. Currently empty -- GPRO3 (0063) was reconciled by the
-# nightly metadata snapshot (e408fa8).
-PENDING_RECONCILIATION: set[str] = set()
+# removal once it lands. (GPRO3 from 0063 was reconciled by snapshot e408fa8.)
+PENDING_RECONCILIATION: set[str] = {
+    # USGS sources split out of conflated NWS sources by migration 0065. Drop
+    # each once the nightly metadata snapshot lands it in data/db/source.csv.
+    "14147500",
+    "14161100",
+}
 
 # Across the whole class the form is `INSERT INTO source (name, ...) SELECT
 # '<name>', ...` -- name is always the first column and the first SELECT literal.
