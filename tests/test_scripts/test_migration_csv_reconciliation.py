@@ -46,6 +46,12 @@ PENDING_RECONCILIATION: set[str] = {
     # system (NF Lewis above Muddy River + Canyon Creek near Amboy).
     "14216000",
     "14219000",
+    # Batch C -- 4 new NWS/NWRFC gauges wired by migration 0068 for the
+    # Crooked basin (CRPO3 + PRVO3 + CRSO3 mainstem, OCHO3 Ochoco trib).
+    "CRPO3",
+    "PRVO3",
+    "CRSO3",
+    "OCHO3",
 }
 
 # Across the whole class the form is `INSERT INTO source (name, ...) SELECT

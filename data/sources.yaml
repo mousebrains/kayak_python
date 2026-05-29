@@ -103,6 +103,14 @@ nwps:
     # CNRFC — Klamath River below Iron Gate Dam (CA); matches USGS 11516530.
     # Source row 43 was orphaned (no fetch_url); migration 0024 wired it here.
     - url: "https://api.water.noaa.gov/nwps/v1/gauges/IRGC1/stageflow/observed"
+    # Crooked basin (Batch C) — CRPO3 anchors the new NF Crooked run (aw_11293);
+    # PRVO3 covers the Crooked between Bowman Dam and Lone Pine Bridge (no AW
+    # reach yet); OCHO3 covers Ochoco Creek (no AW reach yet). The fourth new
+    # Crooked-basin gauge (CRSO3 at Smith Rock) is USBR-via-NWRFC, not on the
+    # NWPS API — it lives in the nwrfc.textplot block below.
+    - url: "https://api.water.noaa.gov/nwps/v1/gauges/CRPO3/stageflow/observed"
+    - url: "https://api.water.noaa.gov/nwps/v1/gauges/PRVO3/stageflow/observed"
+    - url: "https://api.water.noaa.gov/nwps/v1/gauges/OCHO3/stageflow/observed"
 
 nwrfc.xml:
   urls:
@@ -127,6 +135,11 @@ nwrfc.textplot:
     # replacement for the frozen USACE GPR source on Green_Peter_merge (USACE
     # legacy nwd-wc froze 2026-05-23); linked to gauge 107 by migration 0063.
     - url: "https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=GPRO3&pe=QR"
+    # CRSO3 — USBR-via-NWRFC stage at Smith Rock on the Crooked. Not on the NWPS
+    # API (USBR-served, not NWS-LID), so it has to come through textPlot rather
+    # than the nwps block above. pe=HG returns paired Stage + computed Discharge
+    # (same pattern as EUGO3); the parser splits into gauge + flow. Batch C.
+    - url: "https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=CRSO3&pe=HG"
 
 # Replaced by fetch-usgs-ogc which only fetches gauges already in the DB.
 # The bulk state fetches below created thousands of unlinked source records.
