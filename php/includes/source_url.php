@@ -17,8 +17,10 @@ declare(strict_types=1);
  * Sanitize a candidate source URL. Returns '' when unusable.
  *
  *   - strips values > 2048 chars
- *   - rejects any CR/LF/NUL (defends against email-header injection since
- *     the value is emailed unescaped in a plain-text body)
+ *   - rejects any CR/LF/TAB/NUL: CR/LF/NUL would splice the email header (the
+ *     value is emailed unescaped in a plain-text body); an embedded TAB (like
+ *     CR/LF) would otherwise let a javascript:/data: URI slip the scheme check
+ *     below — browsers strip TAB/LF/CR per the WHATWG URL spec
  *   - rejects any non-http(s) scheme (javascript:, data:, …) so a tampered
  *     hidden field can't store a clickable XSS URI for the maintainer review UI
  *   - accepts relative paths ("/description.php?id=42")
@@ -29,7 +31,7 @@ function sanitize_source_url(string $raw): string {
     $raw = trim($raw);
     if ($raw === '') return '';
     if (strlen($raw) > 2048) return '';
-    if (preg_match('/[\r\n\0]/', $raw) === 1) return '';
+    if (preg_match('/[\r\n\t\0]/', $raw) === 1) return '';
     $parts = @parse_url($raw);
     if ($parts === false) return '';
     // Reject non-http(s) schemes (javascript:, data:, vbscript:, …). parse_url

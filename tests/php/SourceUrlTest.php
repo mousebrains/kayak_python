@@ -78,6 +78,11 @@ final class SourceUrlTest extends TestCase
         $this->assertSame('', sanitize_source_url('JaVaScRiPt:alert(1)'));
         $this->assertSame('', sanitize_source_url('data:text/html,<script>alert(1)</script>'));
         $this->assertSame('', sanitize_source_url('vbscript:msgbox(1)'));
+        // An embedded TAB defeats parse_url's scheme detection, so without the
+        // control-char filter these fall through as a relative path; the browser
+        // then strips the tab on click → a live javascript:/data: href. (round-5 R1.3)
+        $this->assertSame('', sanitize_source_url("j\tavascript:alert(1)"));
+        $this->assertSame('', sanitize_source_url("da\tta:text/html,<script>alert(1)</script>"));
         // Legit schemes still pass, in any case.
         $this->assertSame('HTTPS://levels.wkcc.org/x', sanitize_source_url('HTTPS://levels.wkcc.org/x'));
     }
