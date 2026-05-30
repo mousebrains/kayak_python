@@ -33,7 +33,7 @@ SOURCE_CSV = DATA_DIR / "db" / "source.csv"
 # 0065 USGS split + the Batch A/B/C gauges from 0066-0068 by snapshot 8ce7366.)
 # Pending now: JDA/BON (0069, USACE Columbia dam outflow) and VAPW1/SHNO3
 # (0070, NWS Vancouver/St. Helens stage).
-PENDING_RECONCILIATION: set[str] = {"JDA", "BON", "VAPW1", "SHNO3"}
+PENDING_RECONCILIATION: set[str] = {}
 
 # Across the whole class the form is `INSERT INTO source (name, ...) SELECT
 # '<name>', ...` -- name is always the first column and the first SELECT literal.
