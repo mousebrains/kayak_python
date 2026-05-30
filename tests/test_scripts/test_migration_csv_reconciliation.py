@@ -31,7 +31,9 @@ SOURCE_CSV = DATA_DIR / "db" / "source.csv"
 # name here ONLY while its snapshot is pending; the stale-allowlist test forces
 # removal once it lands. (GPRO3 from 0063 was reconciled by snapshot e408fa8; the
 # 0065 USGS split + the Batch A/B/C gauges from 0066-0068 by snapshot 8ce7366.)
-PENDING_RECONCILIATION: set[str] = set()
+# Pending now: JDA/BON (0069, USACE Columbia dam outflow) and VAPW1/SHNO3
+# (0070, NWS Vancouver/St. Helens stage).
+PENDING_RECONCILIATION: set[str] = {"JDA", "BON", "VAPW1", "SHNO3"}
 
 # Across the whole class the form is `INSERT INTO source (name, ...) SELECT
 # '<name>', ...` -- name is always the first column and the first SELECT literal.
@@ -50,6 +52,14 @@ _SOURCE_INSERT_VALUES = re.compile(
     re.IGNORECASE,
 )
 
+# A drop-class migration that removes a source via the by-name form (`DELETE FROM
+# source WHERE ... name = '<name>'`). Used to un-expect a previously-wired source
+# from source.csv once a later migration deletes it -- see _deleted_sources().
+_DELETE_SOURCE = re.compile(
+    r"DELETE\s+FROM\s+source\s+WHERE[^;]*?\bname\s*=\s*'([^']*)'",
+    re.IGNORECASE,
+)
+
 
 def _wired_sources() -> dict[str, str]:
     """Map each migration-wired source name to the first migration that wires it."""
@@ -60,6 +70,23 @@ def _wired_sources() -> dict[str, str]:
     return out
 
 
+def _deleted_sources() -> set[str]:
+    """Source names a (later) migration DELETEs by name.
+
+    A source wired by an early migration's ``INSERT INTO source`` stays in
+    ``_wired_sources()`` forever -- we never edit applied migrations -- so a later
+    DROP-class migration that removes it (and removes its ``source.csv`` row)
+    would otherwise read as reconciliation drift. Subtracting these keeps the
+    guard honest for both adds and drops. Only the ``name = '...'`` delete form is
+    recognized (the by-id form can't be mapped to a name without the DB), so a
+    drop migration must delete the source by name to be seen here.
+    """
+    out: set[str] = set()
+    for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
+        out.update(_DELETE_SOURCE.findall(path.read_text()))
+    return out
+
+
 def _csv_source_names() -> set[str]:
     with SOURCE_CSV.open(encoding="utf-8") as fh:
         return {row["name"] for row in csv.DictReader(fh)}
@@ -67,10 +94,11 @@ def _csv_source_names() -> set[str]:
 
 def test_migration_wired_sources_are_in_source_csv() -> None:
     csv_names = _csv_source_names()
+    deleted = _deleted_sources()
     offenders = {
         name: mig
         for name, mig in _wired_sources().items()
-        if name not in csv_names and name not in PENDING_RECONCILIATION
+        if name not in csv_names and name not in PENDING_RECONCILIATION and name not in deleted
     }
     assert not offenders, (
         "source(s) wired by a migration but missing from data/db/source.csv -- run "
