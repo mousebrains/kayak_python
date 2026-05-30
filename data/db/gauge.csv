@@ -214,7 +214,7 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 214,14105700,,,The Dalles,45.60827778,-121.1899167,,,,,,,14105700,,,,17070105,0,Columbia,Columbia at The Dalles,columbia|9|000808|000000,"OR,WA"
 215,Bonneville_merge,,,Below Bonneville Dam,45.63305556,-121.9608333,,,,,,,14128870,,,,17080001,0,Columbia,Columbia below Bonneville Dam,columbia|9|000855|000000,"OR,WA"
 216,14216000,,,above Muddy River,46.060355,-121.9845094,,,,,,,14216000,,,,17080002,0,"Lewis, N. Fork",North Fork Lewis above Muddy River,lewis|0north|005000|000000,WA
-217,14219000,,,near Amboy,45.9398339,-122.3170398,,,,,,,14219000,,,,17080002,0,Canyon Creek (Lewis River trib.),Canyon Creek near Amboy,lewis|0canyon|005000|000000,WA
+217,14219000,,,near Amboy,45.9398339,-122.3170398,,,,,,,14219000,,,,17080002,0,Canyon Creek (Lewis River trib.),Canyon Creek near Amboy,canyon creek (lewis river trib.)|9|999999|999999,WA
 218,CRPO3,,,abv Prineville Resv,44.179166666667,-120.58777777778,,,,,,,,,,,17070304,0,Crooked,Crooked abv Prineville Resv,crooked|9|005000|000000,OR
 219,PRVO3,,,blw Prineville Resv,44.113888888889,-120.79444444444,,,,,,,,,,,17070305,0,Crooked,Crooked blw Prineville Resv,crooked|9|006500|000000,OR
 220,CRSO3,,,Smith Rock,44.368057,-121.138816,,,,,,,,,,,17070305,0,Crooked,Crooked at Smith Rock,crooked|9|007500|000000,OR
