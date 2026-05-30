@@ -110,3 +110,7 @@ id,url,parser,hours,is_active
 126,https://api.water.noaa.gov/nwps/v1/gauges/PRVO3/stageflow/observed,nwps,,1
 127,https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=CRSO3&pe=HG,nwrfc.textplot,,1
 128,https://api.water.noaa.gov/nwps/v1/gauges/OCHO3/stageflow/observed,nwps,,1
+129,https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22JDA.Flow-Out.Ave.1Hour.1Hour.CBT-REV%22%5D&timezone=GMT&backward=2d&forward=0d,usace.cda,,1
+130,https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22BON.Flow-Out.Ave.1Hour.1Hour.CBT-REV%22%5D&timezone=GMT&backward=2d&forward=0d,usace.cda,,1
+131,https://api.water.noaa.gov/nwps/v1/gauges/VAPW1/stageflow/observed,nwps,,1
+132,https://api.water.noaa.gov/nwps/v1/gauges/SHNO3/stageflow/observed,nwps,,1

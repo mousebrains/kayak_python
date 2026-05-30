@@ -313,3 +313,7 @@ id,name,agency,fetch_url_id,calc_expression_id,timezone
 340,PRVO3,NWS,126,,
 341,CRSO3,NWRFC,127,,
 342,OCHO3,NWS,128,,
+343,JDA,USACE,129,,
+344,BON,USACE,130,,
+345,VAPW1,NWS,131,,
+346,SHNO3,NWS,132,,

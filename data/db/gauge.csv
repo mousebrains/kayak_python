@@ -218,3 +218,5 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 219,PRVO3,,,blw Prineville Resv,44.113888888889,-120.79444444444,,,,,,,,,,,17070305,0,Crooked,Crooked blw Prineville Resv,crooked|9|006500|000000,OR
 220,CRSO3,,,Smith Rock,44.368057,-121.138816,,,,,,,,,,,17070305,0,Crooked,Crooked at Smith Rock,crooked|9|007500|000000,OR
 221,OCHO3,,,blw Ochoco Resv,44.396108,-120.431016,,,,,,,,,,,17070304,0,Ochoco Creek,Ochoco Creek blw Ochoco Resv,ochoco|9|005000|000000,OR
+222,VAPW1,,,Vancouver,45.631,-122.696,,,,,VAPW1,,,,,,17080003,0,Columbia,Columbia at Vancouver,columbia|9|000894|000000,"OR,WA"
+223,SHNO3,,,St. Helens,45.864,-122.796,,,,,SHNO3,,,,,,17080003,0,Columbia,Columbia at St. Helens,columbia|9|000914|000000,"OR,WA"
