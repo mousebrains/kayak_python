@@ -209,7 +209,6 @@ id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geo
 209,06085800,,,at Simms,47.50162777777778,-111.9319138888889,06085800,,,,,,06085800,,3551.08,1296.0,100301040708,0,Sun,Sun at Simms,sun|9|006449|001296,MT
 210,McKenzie_McKenzie_Bridge_calc,,,Near McKenzie Bridge (estimated),44.179012,-122.130335,,,,,,,,,1419.04,348.0,170900040209,0,McKenzie,McKenzie at McKenzie Bridge (calc),mckenzie|9|008581|000348,OR
 211,Horse_Creek_calc,,,Near McKenzie Bridge (estimated),44.162694,-122.154,,,,,,,,,,149.6,170900040105,0,Horse Creek,Horse Creek near McKenzie Bridge (calc),horse creek|9|999999|000150,OR
-212,12438000,,,Bridgeport,48.0065333,-119.6653303,,,,,,,12438000,,,,17020005,0,Columbia,Columbia at Bridgeport,columbia|9|000456|000000,WA
 213,454249120423500,,,Below John Day Dam,45.7134579,-120.710893,,,,,,,454249120423500,,,,17070105,0,Columbia,Columbia below John Day Dam,columbia|9|000785|000000,"OR,WA"
 214,14105700,,,The Dalles,45.60827778,-121.1899167,,,,,,,14105700,,,,17070105,0,Columbia,Columbia at The Dalles,columbia|9|000808|000000,"OR,WA"
 215,Bonneville_merge,,,Below Bonneville Dam,45.63305556,-121.9608333,,,,,,,14128870,,,,17080001,0,Columbia,Columbia below Bonneville Dam,columbia|9|000855|000000,"OR,WA"
