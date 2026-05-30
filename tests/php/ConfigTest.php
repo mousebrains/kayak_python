@@ -151,10 +151,12 @@ final class ConfigTest extends TestCase
         // resolver (prod venv -> .venv -> PATH) so CI, which puts `levels` on
         // PATH without setting the env, runs this instead of skipping (R4.1).
         $env = getenv('KAYAK_LEVELS_BIN');
-        $bin = (is_string($env) && $env !== '')
-            ? $env
-            : FunctionalTestCase::resolveVenvCommand(dirname(__DIR__, 2));
+        $envSet = is_string($env) && $env !== '';
+        $bin = $envSet ? $env : FunctionalTestCase::resolveVenvCommand(dirname(__DIR__, 2));
         if ($bin === null || !is_executable($bin)) {
+            if ($envSet) {
+                $this->fail("KAYAK_LEVELS_BIN='$env' set but not executable");
+            }
             $this->markTestSkipped('no `levels` CLI (KAYAK_LEVELS_BIN, prod venv, .venv, or PATH)');
         }
 
