@@ -29,30 +29,9 @@ SOURCE_CSV = DATA_DIR / "db" / "source.csv"
 # Sources wired by a migration but not yet in source.csv (their ids are
 # prod-assigned, so reconciliation is a prod export_metadata.py snapshot). Add a
 # name here ONLY while its snapshot is pending; the stale-allowlist test forces
-# removal once it lands. (GPRO3 from 0063 was reconciled by snapshot e408fa8.)
-PENDING_RECONCILIATION: set[str] = {
-    # USGS sources split out of conflated NWS sources by migration 0065. Drop
-    # each once the nightly metadata snapshot lands it in data/db/source.csv.
-    "14147500",
-    "14161100",
-    # Batch A -- Columbia mainstem gauges wired by migration 0066 (incl. the
-    # Bonneville stage source added by the merge).
-    "12438000",
-    "14105700",
-    "454249120423500",
-    "453845121564001",
-    "14128870",
-    # Batch B -- 2 new USGS gauges wired by migration 0067 for the Lewis
-    # system (NF Lewis above Muddy River + Canyon Creek near Amboy).
-    "14216000",
-    "14219000",
-    # Batch C -- 4 new NWS/NWRFC gauges wired by migration 0068 for the
-    # Crooked basin (CRPO3 + PRVO3 + CRSO3 mainstem, OCHO3 Ochoco trib).
-    "CRPO3",
-    "PRVO3",
-    "CRSO3",
-    "OCHO3",
-}
+# removal once it lands. (GPRO3 from 0063 was reconciled by snapshot e408fa8; the
+# 0065 USGS split + the Batch A/B/C gauges from 0066-0068 by snapshot 8ce7366.)
+PENDING_RECONCILIATION: set[str] = set()
 
 # Across the whole class the form is `INSERT INTO source (name, ...) SELECT
 # '<name>', ...` -- name is always the first column and the first SELECT literal.
