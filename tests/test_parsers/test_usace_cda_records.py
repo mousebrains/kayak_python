@@ -130,3 +130,66 @@ def test_parse_records_returns_empty_on_malformed_json():
     parser = _new_parser()
     assert parser.parse_records("not json", now=_PINNED_NOW) == []
     assert parser.parse_records("", now=_PINNED_NOW) == []
+
+
+def test_parse_records_kcfs_flow_scaled_to_cfs():
+    """Lower-Columbia dams report Flow-Out in kcfs; scale to the canonical cfs."""
+    payload = json.dumps(
+        {
+            "JDA": {
+                "timeseries": {
+                    "JDA.Flow-Out.Ave.1Hour.1Hour.CBT-REV": {
+                        "parameter": "Flow-Out",
+                        "units": "kcfs",
+                        "values": [["2026-06-15T12:00:00", 182.9, 0]],
+                    }
+                }
+            }
+        }
+    )
+    records = _new_parser().parse_records(payload, now=_PINNED_NOW)
+    assert records == [
+        ObservationRecord("JDA", DataType.flow, datetime(2026, 6, 15, 12, 0, tzinfo=UTC), 182900.0),
+    ]
+
+
+def test_parse_records_cfs_flow_not_scaled():
+    """The Willamette dams' .Inst.0.0.Best series is already cfs — left unscaled."""
+    payload = json.dumps(
+        {
+            "GPR": {
+                "timeseries": {
+                    "GPR.Flow-Out.Inst.0.0.Best": {
+                        "parameter": "Flow-Out",
+                        "units": "cfs",
+                        "values": [["2026-06-15T12:00:00", 4110.0, 0]],
+                    }
+                }
+            }
+        }
+    )
+    records = _new_parser().parse_records(payload, now=_PINNED_NOW)
+    assert records == [
+        ObservationRecord("GPR", DataType.flow, datetime(2026, 6, 15, 12, 0, tzinfo=UTC), 4110.0),
+    ]
+
+
+def test_parse_records_kcfs_units_tolerate_whitespace_and_case():
+    """The unit match is strip()+lower(), so a stray ' KCFS ' still scales."""
+    payload = json.dumps(
+        {
+            "BON": {
+                "timeseries": {
+                    "BON.Flow-Out.Ave.1Hour.1Hour.CBT-REV": {
+                        "parameter": "Flow-Out",
+                        "units": " KCFS ",
+                        "values": [["2026-06-15T12:00:00", 194.9, 0]],
+                    }
+                }
+            }
+        }
+    )
+    records = _new_parser().parse_records(payload, now=_PINNED_NOW)
+    assert records == [
+        ObservationRecord("BON", DataType.flow, datetime(2026, 6, 15, 12, 0, tzinfo=UTC), 194900.0),
+    ]

@@ -149,6 +149,34 @@ class TestUSACECDABasic:
         assert gauges[0].value == 1480.5
 
 
+class TestUSACECDAColumbiaDams:
+    def test_kcfs_outflow_scaled_to_cfs_on_store(self, session):
+        """Lower-Columbia dams report Flow-Out in kcfs; the stored value is cfs.
+
+        End-to-end (parse -> store) check of the unit scaling on a real wired
+        dam (Bonneville BON outflow).
+        """
+        src = _make_source(session, "BON")
+        payload = json.dumps(
+            {
+                "BON": {
+                    "timeseries": {
+                        "BON.Flow-Out.Ave.1Hour.1Hour.CBT-REV": {
+                            "parameter": "Flow-Out",
+                            "units": "kcfs",
+                            "values": [["2024-06-15T12:00:00", 194.9, 0]],
+                        }
+                    },
+                }
+            }
+        )
+        parser = USACECDAParser(url=CDA_URL, session=session, source_id=src.id)
+        assert parser.parse(payload) == 1
+
+        flow = session.query(Observation).filter_by(source_id=src.id, data_type=DataType.flow).one()
+        assert flow.value == 194900.0  # 194.9 kcfs -> cfs
+
+
 class TestUSACECDAEdgeCases:
     def test_future_timestamps_rejected(self, session):
         """Timestamps in the future should be skipped."""
