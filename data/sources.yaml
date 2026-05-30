@@ -189,11 +189,12 @@ usace.cda:
   urls:
     - url: "https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22GPR.Flow-Out.Inst.0.0.Best%22,%22GPR.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d"
     - url: "https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22FAL.Flow-Out.Inst.0.0.Best%22,%22FAL.Flow-In.Ave.15Minutes.6Hours.Best%22%5D&timezone=GMT&backward=2d&forward=0d"
-    # Lower-Columbia dam outflow (kcfs -> cfs) + water temperature, added with the
-    # gauge_source links in migration 0069. John Day water temp is keyed JDY (a
-    # sister sensor; no JDA.Temp-Water); Bonneville keys both under BON.
-    - url: "https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22JDA.Flow-Out.Ave.1Hour.1Hour.CBT-REV%22,%22JDY.Temp-Water.Inst.1Hour.0.GOES-REV%22%5D&timezone=GMT&backward=2d&forward=0d"
-    - url: "https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22BON.Flow-Out.Ave.1Hour.1Hour.CBT-REV%22,%22BON.Temp-Water.Inst.1Hour.0.GOES-REV%22%5D&timezone=GMT&backward=2d&forward=0d"
+    # Lower-Columbia dam outflow (kcfs -> cfs), added with the gauge_source links
+    # in migration 0069. Flow only -- the USACE water-temp sensors add little over
+    # the gauges' existing USGS temperature (John Day's is ~3 mi off; Bonneville's
+    # is co-located, ~0.06 F).
+    - url: "https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22JDA.Flow-Out.Ave.1Hour.1Hour.CBT-REV%22%5D&timezone=GMT&backward=2d&forward=0d"
+    - url: "https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?query=%5B%22BON.Flow-Out.Ave.1Hour.1Hour.CBT-REV%22%5D&timezone=GMT&backward=2d&forward=0d"
 
 wa.gov:
   # WA DOE publishes timestamps in PST year-round (no DST), per the header of
