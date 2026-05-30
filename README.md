@@ -87,7 +87,7 @@ shell config makes activation noisy: replace every `levels …` with
 | `levels migrate` | Apply pending `data/db/migrations/*.sql` files (tracked in `schema_migrations`) |
 | `levels pipeline` | Run full pipeline: fetch → fetch-usgs-ogc → calc-rating → update-gauge-cache → calculator → build |
 | `levels fetch` | Fetch observations from all active sources (standalone — also runs as pipeline stage 1) |
-| `levels fetch-usgs-ogc` | Fetch USGS continuous data via the OGC API for gauges with `usgs_id` |
+| `levels fetch-usgs-ogc` | Fetch USGS continuous data via the OGC API for gauges linked to a USGS source |
 | `levels calc-rating` | Interpolate missing flow/gage values using rating tables |
 | `levels calculator` | Evaluate calculated expressions (synthetic gauges) |
 | `levels build` | Generate static HTML/CSV/text to `public_html/` |

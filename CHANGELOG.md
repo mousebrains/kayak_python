@@ -8,6 +8,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Batch A/B/C gauges & reaches**: new Columbia, Crooked-basin, and related
+  NWS/NWRFC/USGS stations plus the NF Crooked reach were wired in (#76, #77,
+  #78), with HUC12 codes backfilled for the affected reaches. The committed
+  metadata CSV snapshot was refreshed from the live DB to match.
+
+### Changed
+- **USGS-OGC fetch is now source-keyed**: `levels fetch-usgs-ogc` selects the
+  USGS stations to poll by walking `gauge → gauge_source → source` for sources
+  with `agency = 'USGS'`, rather than reading `gauge.usgs_id` (#75). A single
+  gauge can now carry several USGS sources (e.g. separate stage and temperature
+  monitors) and each is fetched and aggregated by the gauge cache, and a merged
+  gauge with a NULL `usgs_id` still fetches its linked USGS sources.
+
 ## [1.2.0] - 2026-05-27
 
 ### Added

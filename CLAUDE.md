@@ -79,7 +79,7 @@ levels build                         # Generate static HTML/CSV/text to public_h
 
 # Less-common subcommands (see `levels <cmd> --help` for details)
 levels fetch                         # One shot of the pipeline's first stage
-levels fetch-usgs-ogc                # Fetch USGS OGC continuous data for gauges with usgs_id
+levels fetch-usgs-ogc                # Fetch USGS OGC continuous data for gauges linked to a USGS source
 levels calc-rating                   # Interpolate via rating tables (dormant until rating_data loaded)
 levels calculator                    # Evaluate synthetic gauge expressions
 levels decimate                      # Thin old observations (daily via kayak-decimate timer)
@@ -168,7 +168,7 @@ Traces stream paths using NHDPlus HR HydroSeq network data. Requires `Trace-cach
 Runs these steps in order:
 
 1. **fetch** — reads `data/sources.yaml`, fetches URLs, dispatches to registered parsers, stores `Observation` rows
-2. **fetch-usgs-ogc** — fetches USGS data via the OGC API for gauges with `usgs_id`
+2. **fetch-usgs-ogc** — fetches USGS data via the OGC API for gauges linked to a USGS source
 3. **calc-rating** — interpolates missing flow from gage height (or vice versa) using `Rating`/`RatingData` tables
 4. **update-gauge-cache** — recomputes gauge-level latest observation values
 5. **calculator** — evaluates `CalcExpression` formulas referencing `LatestObservation` values
@@ -204,7 +204,7 @@ Schema evolution:
 2. For new fresh-DB shape only, `levels init-db` (re)creates tables via `Base.metadata.create_all()` and stamps every discovered migration file as applied.
 3. For changes that need to land on an existing DB (ALTER / DROP / rename / CHECK), add a new `data/db/migrations/NNNN_description.sql` and run `levels migrate` — SQL runs in file-order inside a transaction; the row in `schema_migrations` records completion.
 4. Migrations that delete `source` rows have a checklist — see [`docs/migrations.md`](docs/migrations.md) for the orphan-prevention pre-flight (calc-input verification, fetch_url cleanup, `levels orphan-check` against a sandbox).
-5. **`reach.geom` and `reach.gradient_profile` are the documented exceptions** to the convention that reach metadata changes land via a SQL migration. Both are large, machine-generated, and not regenerable on prod (the dev-only DEM/NHD trace stack), so neither is migration-managed: each is excluded from `reach.csv` and snapshotted to its own JSON — `data/db/reaches.json` (geom) and `data/db/reaches-gradient.json` (gradient_profile; review-3 R6.1) — applied with `python scripts/import_metadata.py --geom-only` / `--gradient-only`. After a dev re-trace, run `scripts/export_metadata.py` and commit both JSONs; `scripts/deploy.sh` applies them on prod automatically. See [`deploy/SETUP.md`](deploy/SETUP.md) § 4.
+5. **`reach.geom`, `reach.gradient_profile`, and `reach.huc` are the documented exceptions** to the convention that reach metadata changes land via a SQL migration. `geom` and `gradient_profile` are large, machine-generated, and not regenerable on prod (the dev-only DEM/NHD trace stack), so neither is migration-managed: each is excluded from `reach.csv` and snapshotted to its own JSON — `data/db/reaches.json` (geom) and `data/db/reaches-gradient.json` (gradient_profile; review-3 R6.1) — applied with `python scripts/import_metadata.py --geom-only` / `--gradient-only`. `reach.huc` is the same *tool-derived, snapshot-carried* class: it is populated by `levels assign-huc` (a deterministic point-in-polygon over the WBD HUC12 layer — `kayak.huc.assign`), so an assign-huc run is a re-derivation, not the *hand* edit the "per-row reach backfill via migration" rule governs. It stays *in* `reach.csv` (a single HUC code diffs cleanly, unlike the geom blob), so it rides the normal CSV snapshot rather than a separate JSON. After a dev re-trace, run `scripts/export_metadata.py` and commit the JSONs (and `reach.csv` if HUCs changed); `scripts/deploy.sh` applies them on prod automatically. See [`deploy/SETUP.md`](deploy/SETUP.md) § 4.
 
 ### Parser System
 
