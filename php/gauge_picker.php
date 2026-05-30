@@ -47,7 +47,17 @@ if (is_int($ajax) && $ajax !== 0) {
         exit;
     }
 
-    $placeholders = implode(',', array_fill(0, count($abbrevs), '?'));
+    // gauge.state may be a comma list ('OR,WA') for a border gauge on a
+    // state-line river, so a plain `IN ('OR','WA')` never matches 'OR,WA'.
+    // Match each selected abbrev against the comma-wrapped value instead --
+    // INSTR(',' || state || ',', ',OR,') > 0 -- mirroring the static build,
+    // which splits gauge.state on comma (web/build/gauges.py) so a border
+    // gauge shows under every one of its states.
+    $state_match = implode(' OR ', array_fill(
+        0,
+        count($abbrevs),
+        "INSTR(',' || g.state || ',', ',' || ? || ',') > 0",
+    ));
 
     // Only gauges that have at least one current observation.
     $sql = <<<SQL
@@ -65,7 +75,7 @@ LEFT JOIN latest_gauge_observation lo_flow
        ON g.id = lo_flow.gauge_id AND lo_flow.data_type = 'flow'
 LEFT JOIN latest_gauge_observation lo_gage
        ON g.id = lo_gage.gauge_id AND lo_gage.data_type = 'gauge'
-WHERE g.state IN ($placeholders)
+WHERE ($state_match)
   AND g.id IN (SELECT DISTINCT gauge_id FROM latest_gauge_observation)
 ORDER BY g.sort_name
 SQL;
@@ -74,11 +84,19 @@ SQL;
     $stmt->execute($abbrevs);
     $rows = $stmt->fetchAll();
 
-    // Map abbrev back to full name so the row's data-state matches the
-    // pill values that filters.js compares against.
+    // Map each abbrev back to its full name. A border gauge's state_abbrev is
+    // a comma list ('OR,WA'), so split it and re-join the full names
+    // ('Oregon,Washington'); gauge_picker.js splits this on comma to bucket
+    // the row under every selected state (and dedupes by id).
     foreach ($rows as &$row) {
-        $abbrev = (string)($row['state_abbrev'] ?? '');
-        $row['state'] = $ABBREV_TO_STATE[$abbrev] ?? '';
+        $names = [];
+        foreach (explode(',', (string)($row['state_abbrev'] ?? '')) as $abbrev) {
+            $abbrev = trim($abbrev);
+            if (isset($ABBREV_TO_STATE[$abbrev])) {
+                $names[] = $ABBREV_TO_STATE[$abbrev];
+            }
+        }
+        $row['state'] = implode(',', $names);
         $row['huc8'] = $row['huc8'] ?? '';
     }
     unset($row);
@@ -100,11 +118,19 @@ $state_rows = db_query($db,
        AND id IN (SELECT DISTINCT gauge_id FROM latest_gauge_observation)
      ORDER BY state"
 )->fetchAll();
-$all_states = [];
+// gauge.state may be a comma list ('OR,WA') for a border gauge; split each
+// distinct value so both Oregon and Washington get a pill (deduped via the
+// keyed set), matching the static build's per-state split.
+$states_seen = [];
 foreach ($state_rows as $r) {
-    $name = $ABBREV_TO_STATE[$r['state']] ?? null;
-    if ($name !== null) $all_states[] = $name;
+    foreach (explode(',', (string)$r['state']) as $abbrev) {
+        $abbrev = trim($abbrev);
+        if (isset($ABBREV_TO_STATE[$abbrev])) {
+            $states_seen[$ABBREV_TO_STATE[$abbrev]] = true;
+        }
+    }
 }
+$all_states = array_keys($states_seen);
 sort($all_states);
 
 // All HUC8s (with HUC6 parent) for the watershed filter — built once across
