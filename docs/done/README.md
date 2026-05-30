@@ -33,7 +33,10 @@ material rather than a deletable graveyard. For work *in flight*, see the
 | `REVIEW_round3_2026-05-25.md` | Round-3 deep project review (graded B−); remediated across #34–#52, kept for trend |
 | `PLAN_round3_remediation.md` | Round-3 remediation plan (7 phases) — as-built: landed #34–#52; all deferrals but OSMB-dedup (R7.1) since shipped (#47–#52) |
 | `REVIEW_round4_2026-05-26.md` | Round-4 deep project review (graded B, ▲ from B−) — audits the round-3 fix surface; remediated across #53–#69, kept for trend |
-| `PLAN_round4_remediation.md` | Round-4 remediation plan — as-built: landed #53–#69 (each anti-drift guard front-loaded with its fix); R1.1/R1.3 prod-host items out-of-band |
+| `PLAN_round4_remediation.md` | Round-4 remediation plan — as-built: landed #53–#69; R1.1/R1.2/R1.3 recorded "out-of-band on prod" but never landed in the repo (caught + corrected by round-5; see its erratum, fixed #85/#86) |
+| `REVIEW_round5_2026-05-29.md` | Round-5 deep project review (graded B−, ▼ from B) — verification-integrity downgrade: round-4's R1.1/R1.2/R1.3 recorded done but never landed; remediated #85–#91, kept for trend |
+| `PLAN_round5_remediation.md` | Round-5 remediation plan — as-built: landed #85–#91, each fix shipping a committed guard; the R2.1 claim-vs-source lever (`test_remediation_claims.py`) now enforces archived Verifies |
+| `IMPL_round5.md` | Round-5 PR-by-PR implementation playbook — the as-executed sequence for the round-5 plan |
 
 > `docs/PLAN_production_discipline.md` lives in `docs/` (not here) on purpose:
 > it is a landed plan but remains a live cross-reference target for the systemd
