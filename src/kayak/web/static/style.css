@@ -6,7 +6,7 @@
   --c-text-faint: #666;
   --c-primary: #1b5591;
   --c-link: #1b5591;
-  --c-elev: #1565c0;
+  --c-elev: #e65100;
   --c-primary-hover: #13406d;
   --c-primary-light: #e8f0fa;
   --c-surface: #fff;
@@ -945,13 +945,15 @@ svg.gradient-profile-chart .gp-bars-sig rect {
   fill: var(--c-link);
   fill-opacity: 1;
 }
-/* Elevation profile line + its right-axis labels. Themed via --c-elev (not a
-   hardcoded #1565C0) so dark mode stays legible and the chart's colors live in
-   one place; a thin stroke over the translucent gradient bars. */
+/* Elevation profile line + its right-axis labels. Themed via --c-elev so the
+   chart's colors live in one place. A warm orange (not a blue) is deliberate:
+   the gradient bars are --c-link blue, so a blue elevation line vanished into
+   them — the contrasting hue keeps the line legible over the bars in both
+   themes. */
 svg.gradient-profile-chart .gp-elev {
   fill: none;
   stroke: var(--c-elev);
-  stroke-width: 1.6;
+  stroke-width: 2;
   stroke-linejoin: round;
 }
 svg.gradient-profile-chart .gp-elev-axis {
@@ -1445,7 +1447,7 @@ textarea:focus-visible {
     --c-text-muted: #a8a8b3;
     --c-text-faint: #9191a0;
     --c-link: #6ab0f3;
-    --c-elev: #a9d0f5;
+    --c-elev: #ffa726;
     --c-primary-hover: #2a6298;
     --c-primary-light: #1e293b;
     --c-surface: #27272a;
