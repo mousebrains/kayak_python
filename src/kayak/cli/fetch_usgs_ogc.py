@@ -1,8 +1,9 @@
 """Fetch USGS observations via the OGC API (api.waterdata.usgs.gov).
 
-Queries the database for all gauges with a usgs_id, then fetches continuous
-(15-minute) data from the USGS OGC API.  Each station's data is written to
-the correct Source record via the gauge → gauge_source → source relationship.
+Queries the database for all gauges linked to a USGS source, then fetches
+continuous (15-minute) data from the USGS OGC API.  Each station's data is
+written to the correct Source record via the gauge → gauge_source → source
+relationship.
 """
 
 import argparse
@@ -72,7 +73,7 @@ def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -
         action="append",
         default=None,
         metavar="USGS_ID",
-        help="Restrict fetch to this USGS site id; repeatable (default: all gauges with usgs_id)",
+        help="Restrict fetch to this USGS site id; repeatable (default: all gauges linked to a USGS source)",
     )
 
 

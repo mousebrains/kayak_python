@@ -1,3 +1,9 @@
+> **Erratum (round 5, appended — do not rewrite the body below).** This plan
+> recorded R1.1, R1.2, and R1.3 as shipped / in-flight (⏳), but those three
+> fixes never actually reached the repo — the round-5 review caught the drift.
+> They landed in round 5: R1.1 and R1.2 in #85, R1.3 in #86. For the full
+> account see `project-review-5/`.
+
 # Round-4 Remediation Plan
 
 > **Archived 2026-05-26 — as-built record of the round-4 remediation.** Every
