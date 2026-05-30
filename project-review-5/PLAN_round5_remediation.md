@@ -101,8 +101,8 @@ line. Legend: effort **S/M/L**, risk low/med/high. **Verify** lines let prod cro
     optional-backticked integer N. Strip the backticks around N; handle the Unicode `→` (U+2192).
   - **Count in pure Python — do NOT shell out to `grep`.** `grep -c` returns **exit code 1 when the count
     is 0** (the *post-Phase-1 success* case for R1.1), so a `subprocess.run(check=True)` would crash
-    exactly when the guard should pass; and the ambient `grep` flavor varies (this dev box defaults to
-    `ugrep`; CI/prod is GNU grep). Implement as `sum(1 for ln in (repo_root/path).read_text().splitlines()
+    exactly when the guard should pass; and the ambient `grep` flavor varies across hosts/PATH (GNU grep,
+    BSD grep, and `ugrep` differ on `-E`/exit semantics). Implement as `sum(1 for ln in (repo_root/path).read_text().splitlines()
     if pattern in ln)` and assert it equals N. Note this is a substring/line count equivalent to
     **`grep -Fc`**, *not* bare `grep -c` (which is basic-regex — e.g. `grep -c 'FROM.pages'` → 1 where the
     substring → 0). So **the grammar accepts literal patterns only**: a parsed pattern containing a BRE
@@ -110,12 +110,17 @@ line. Legend: effort **S/M/L**, risk low/med/high. **Verify** lines let prod cro
     can never silently diverge from the documented command. Both the exit-code and grep-flavor hazards
     vanish, and today's sole in-scope pattern (`DELETE FROM pages`) is metacharacter-free.
   - **Non-vacuity, two assertions:** (a) found ≥1 runnable Verify, and R1.1's `DELETE FROM pages` → 0 is
-    among them and passes; (b) an **"unparsed-but-looks-runnable" counter is 0** — flag any Verify line
-    containing a `` `grep -c `` token the strict grammar did *not* fully consume (double-quoted pattern,
-    `->` arrow, apostrophe-in-pattern, quoted path, **or a BRE metacharacter in the pattern**), and
-    `assert` it's zero. Without (b), a future Verify
-    written in an unparsed form would silently drop while R1.1 keeps the suite green — the very
-    "claim recorded but unchecked" hole this guard closes.
+    among them and passes; (b) an **"unparsed command-attempt" counter is 0** — flag any backticked span
+    in a `**Verify:**` field that **begins `grep -c` _and contains a quote_ (`'`/`"`)** — i.e. a genuine
+    command attempt — that the strict grammar did *not* fully consume (double-quoted pattern, `->` arrow,
+    apostrophe-in-pattern, quoted path, or a BRE metacharacter in the pattern), and `assert` it's zero.
+    **Requiring the quote is load-bearing — it is the third self-reference fix this round:** a bare prose
+    mention of the token must NOT count, or once *this* plan is archived to
+    `docs/done/PLAN_round5_remediation.md` (it matches the glob) the guard would self-trip on R2.1's own
+    **Verify** below ("a malformed `grep -c` line"). That is the post-archival mirror of the in-flight-glob
+    trap (round-4 level-8 → `project-review-*/`; round-5 in-flight → `docs/done/`-only glob; this → the
+    quote-scoped counter). Without (b), a future Verify written in an unparsed *command* form would silently
+    drop while R1.1 keeps the suite green — the "claim recorded but unchecked" hole this guard closes.
   - **Scope rationale (state it):** restrict to `grep -c … → N`. Broadening to `grep -rin … → none` would
     land the guard **RED forever** — round-3 R2.3's `grep -rin "level 8" … → none` fails at HEAD on
     `phpstan.neon:10`'s intentionally-permanent "level 8->9" historical line (verified pass 1). The prose
@@ -170,6 +175,17 @@ line. Legend: effort **S/M/L**, risk low/med/high. **Verify** lines let prod cro
   — **prose only; do not pair a shipped review-ID (`R<n>.<n>` + `#<pr>`) with an open-status word**
   (tracked/residual/still/open/…), the one thing `test_changelog_facts.py` forbids. **Verify:** the section
   is non-empty; `test_changelog_facts.py` stays green. **(S, low.)**
+- **R3.4 [LOW, integrity] — correct the round-4 archive's false "shipped" record.**
+  `docs/done/PLAN_round4_remediation.md:3–7,29` states "Every finding shipped across PRs #53–#69" and "the
+  R1.1/R1.3 prod-host items were applied out-of-band (⏳)" — but R1.1/R1.2/R1.3 never reached the repo and
+  ship in *this* round. For a verification-integrity remediation, leaving the archived record reading
+  "shipped" is the exact trust gap the round is about (surfaced by the PR-84 live review). **Fix:** add a
+  clearly-marked top-of-file **erratum** (append-only — preserve the historical body, don't rewrite it):
+  e.g. "**Erratum (round 5, #&lt;this PR&gt;):** R1.1/R1.2/R1.3 were recorded shipped/⏳ here but never
+  reached the repo; they actually land in round 5 — see `project-review-5/`." **Verify:** the round-4
+  archive carries the erratum; the Phase-2 guard (once it exists) still passes against the round-4 archive
+  — R1.1's `grep -c … → 0` Verify holds after Phase 1, and the erratum adds no `**Verify:**` field or
+  quoted `grep -c` span. **(S, low.)**
 
 ---
 
@@ -255,3 +271,10 @@ any Phase-4 PR touches `ci.yml` concurrently. Total: ~13 R-items across ~4–5 P
   `latitude_start`/`longitude_start`. Plus two cosmetic path/count fixes (R4.4 dir prefix; the in-flight
   self-reference count). *Pass 2's two substantive items were both forward-looking clarity, no correctness
   blocker.*
+- **v4** — PR-84 live-review pass (external, reproduced against prod). **R2.1 counter (b) scoped to genuine
+  command attempts** (a backticked `grep -c` span *with a quote*), so a bare prose mention of the token no
+  longer self-trips the guard once *this* plan is archived to `docs/done/` — the post-archival mirror of
+  the in-flight-glob trap, and the third self-reference fix this round. **Added R3.4** (erratum on the
+  round-4 archive's false "Every finding shipped"). **R2.1 grep-flavor wording** made host-agnostic. *The
+  live review reproduced every falsifiable claim against prod and rated the PR merge-ready; these are the
+  two items it surfaced (§4 + §5).*
