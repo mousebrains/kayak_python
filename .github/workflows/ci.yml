@@ -149,9 +149,16 @@ jobs:
       - name: Pin levels for the emit-config parity test (R4.5)
         # Export the resolved path so the emit-config parity test
         # (tests/php/ConfigTest.php) RUNS (env set + executable) instead of
-        # depending on an implicit PATH-ordering artifact. If a future edit
-        # drops the `pip install -e .` above, the test fails (not skips).
-        run: echo "KAYAK_LEVELS_BIN=$(command -v levels)" >> "$GITHUB_ENV"
+        # depending on an implicit PATH-ordering artifact. Fail loudly here if
+        # `levels` isn't on PATH (e.g. a future edit drops the `pip install -e .`
+        # above) rather than exporting an empty value and letting the parity test
+        # silently skip — the exact skip-as-invisible-pass mode R4.5 exists to kill.
+        run: |
+          bin="$(command -v levels)" || {
+            echo "::error::levels not on PATH — the 'pip install -e .' step is required for the emit-config parity test (R4.5)"
+            exit 1
+          }
+          echo "KAYAK_LEVELS_BIN=$bin" >> "$GITHUB_ENV"
 
       - name: PHPUnit (with line coverage via pcov)
         run: vendor/bin/phpunit --coverage-clover=coverage.xml --coverage-text
