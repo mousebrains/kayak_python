@@ -109,6 +109,11 @@ jobs:
           fi
           echo "self-test ok: malformed unit correctly rejected"
 
+      # round-5 R1.2 / R1.1: db_push.sh must keep its timer-restart trap and stay
+      # free of the DELETE FROM pages restore-breaker (project-review-5/).
+      - name: db_push.sh restart-trap guard
+        run: scripts/check-db-push-trap.sh
+
       - name: Install PHP dev dependencies
         # setup-php@v2 writes ~/.composer/auth.json with the runner's
         # ambient GITHUB_TOKEN. GitHub recently shifted the runner token

@@ -93,8 +93,8 @@ BACKUP_DIR="$3"
 UPLOADED_GZ="$4"
 KEEP="$5"
 
-LIVE_FINAL="/tmp/kayak-live-final-${TS}.db"
-NEW_DB="/tmp/kayak-new-${TS}.db"
+LIVE_FINAL="$(mktemp)"
+NEW_DB="$(mktemp)"
 REPLACED_GZ="${BACKUP_DIR}/kayak-replaced-${TS}.db"
 
 echo "--- Stopping pipeline timers ---"
@@ -104,6 +104,21 @@ for unit in kayak-pipeline.timer kayak-decimate.timer \
             kayak-backup-weekly.service kayak-backup-hourly.service; do
     sudo -n systemctl stop "$unit" 2>/dev/null || true
 done
+
+# Any failure after the stop above must NOT leave prod with the pipeline +
+# backups halted. This trap (armed here, cleared after the successful restart
+# below) restarts the 4 timers on every exit path — the integrity-check exit, a
+# set -e abort mid-checkpoint/merge/swap, anything. Restarting the 4 *timers*
+# (not the stopped .service oneshots) re-arms the schedules, matching the
+# success-path restart.
+restart_timers() {
+    local u
+    for u in kayak-pipeline.timer kayak-decimate.timer \
+             kayak-backup-weekly.timer kayak-backup-hourly.timer; do
+        sudo -n systemctl start "$u" || true
+    done
+}
+trap restart_timers EXIT
 
 echo "--- Checkpointing and snapshotting live DB ---"
 sqlite3 "$DB" 'PRAGMA wal_checkpoint(TRUNCATE);'
@@ -131,7 +146,6 @@ INSERT INTO latest_gauge_observation
     SELECT lgo.*
     FROM live.latest_gauge_observation AS lgo
     JOIN main.gauge AS g ON g.id = lgo.gauge_id;
-DELETE FROM pages;
 COMMIT;
 DETACH DATABASE live;
 PRAGMA foreign_keys = ON;
@@ -142,11 +156,7 @@ integrity=$(sqlite3 "$NEW_DB" 'PRAGMA integrity_check;')
 if [[ "$integrity" != "ok" ]]; then
     echo "Integrity check failed: $integrity" >&2
     echo "Live DB is untouched. Staged file: $NEW_DB" >&2
-    for unit in kayak-pipeline.timer kayak-decimate.timer \
-                kayak-backup-weekly.timer kayak-backup-hourly.timer; do
-        sudo -n systemctl start "$unit"
-    done
-    exit 1
+    exit 1  # the EXIT trap restarts the timers
 fi
 echo "  ok"
 
@@ -173,10 +183,8 @@ for i in "${!archives[@]}"; do
 done
 
 echo "--- Restarting timers ---"
-for unit in kayak-pipeline.timer kayak-decimate.timer \
-            kayak-backup-weekly.timer kayak-backup-hourly.timer; do
-    sudo -n systemctl start "$unit"
-done
+restart_timers
+trap - EXIT  # success — disarm so the clean exit doesn't fire the trap again
 
 echo "--- Summary ---"
 sqlite3 "$DB" <<'SUMMARY'
