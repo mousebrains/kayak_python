@@ -5,7 +5,10 @@ Endpoint:
   ?query=["GPR.Flow-Out.Inst.0.0.Best"]&timezone=GMT&backward=2d&forward=0d
 
 Returns JSON keyed by station with nested timeseries containing
-[timestamp, value, quality_flag] triples.  Values are already in CFS.
+[timestamp, value, quality_flag] triples. Each timeseries carries a
+``units`` field: flow is ``cfs`` for the Willamette dams' ``.Inst.0.0.Best``
+series but ``kcfs`` for the lower-Columbia dams' ``.Ave.1Hour.1Hour`` series,
+so kcfs is scaled to cfs per-series. Elevation is ``ft`` (stored as-is).
 """
 
 import json
@@ -34,8 +37,8 @@ class USACECDAParser(BaseParser):
     """US Army Corps of Engineers CDA JSON parser.
 
     Parses time-series JSON from the USACE Columbia Data Access API.
-    Handles multi-parameter responses (flow, gage, temperature) with
-    unit conversion from kcfs to cfs.
+    Handles multi-parameter responses (flow, gage), scaling kcfs flow
+    series to cfs from each timeseries' ``units`` field.
     """
 
     name = "usace.cda"
@@ -76,8 +79,9 @@ class USACECDAParser(BaseParser):
                 data_type = _PARAM_MAP.get(parameter)
                 if data_type is None:
                     continue
+                units = (ts_info.get("units") or "").strip().lower()
                 for entry in ts_info.get("values") or []:
-                    record = self._entry_to_record(entry, station, data_type, now)
+                    record = self._entry_to_record(entry, station, data_type, units, now)
                     if record is not None:
                         records.append(record)
 
@@ -88,9 +92,15 @@ class USACECDAParser(BaseParser):
         entry: object,
         station: str,
         data_type: DataType,
+        units: str,
         now: datetime,
     ) -> ObservationRecord | None:
-        """Convert one [timestamp, value, quality] triple to a record (or None to skip)."""
+        """Convert one [timestamp, value, quality] triple to a record (or None to skip).
+
+        ``units`` is the timeseries' lowercased unit string. The lower-Columbia
+        dams report flow in ``kcfs``; scale those to the project's canonical
+        ``cfs``. Everything else (cfs, ft, or a missing unit) is stored as-is.
+        """
         if not isinstance(entry, list) or len(entry) < 2:
             return None
         timestamp_str, value = entry[0], entry[1]
@@ -99,7 +109,10 @@ class USACECDAParser(BaseParser):
         when = parse_datetime(timestamp_str)
         if when is None or when > now:
             return None
-        return ObservationRecord(station, data_type, when, float(value))
+        result = float(value)
+        if units == "kcfs":
+            result *= 1000.0
+        return ObservationRecord(station, data_type, when, result)
 
     def parse(self, text: str) -> int:
         """Override to keep the prior JSON-parse-error log line.
