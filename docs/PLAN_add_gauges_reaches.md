@@ -6,8 +6,9 @@ completed/archived plan (keep in `docs/`, not `docs/done/`).
 ## Purpose & scope
 
 A repeatable, trackable way to add three entry shapes — **gauge-only**,
-**reach-only**, **reach+gauge** — via `dev → migration PR → merge → prod`, without
-reintroducing the drift/guard regressions closed across review rounds 2–4.
+**reach-only**, **reach+gauge** — and to **drop** a gauge (Shape 4), via
+`dev → migration PR → merge → prod`, without reintroducing the drift/guard
+regressions closed across review rounds 2–4.
 
 Initial batches: the **Columbia-River mainstem corridor** (gauge-only) and the
 **WA Lewis-system reaches** (reach+gauge), both sourced from data we already have
@@ -168,6 +169,55 @@ Reach data splits across **three paths by size:**
 
 Shape 1 (gauge) + Shape 2 (reach) — gauge/source first in the migration, then the
 reach with `gauge_id` linked by gauge name. Batch B is this shape.
+
+---
+
+## Shape 4 — dropping a gauge
+
+The inverse of Shape 1, and the one case where we **do** hand-edit
+`data/db/*.csv`. A drop is a migration (`0026`/`0071` templates) **plus** removing
+the gauge's CSV rows: a deletion assigns no prod id, and the rows must leave the
+snapshot or a from-scratch rebuild — which *stamps* the drop migration without
+running it — resurrects the gauge.
+
+**Pre-flight** (per [`docs/migrations.md`](migrations.md)): confirm nothing else
+needs the source — no `calc_expression` input, no `reach.gauge_id` — and if it's
+a fetch source, delete its URL from `data/sources.yaml` in the same change (else
+`sync_sources` recreates the `fetch_url`). A USGS source (`fetch_url_id` NULL,
+fetched by `fetch-usgs-ogc`) has no URL to remove. If the source feeds a *calc*
+input on another gauge, relink that gauge to a live source first (the
+0018/0020/0021 orphan-incident lesson).
+
+**The migration** — delete **by name** (portable across DBs, and the
+reconciliation guard keys on it — see below), in FK order:
+
+```sql
+-- observation.source_id is ON DELETE RESTRICT -> clear its rows first
+DELETE FROM observation
+WHERE source_id IN (SELECT id FROM source WHERE name = '<name>' AND agency = '<agency>');
+-- gauge_source + latest_observation cascade on the source delete
+DELETE FROM source WHERE name = '<name>' AND agency = '<agency>';
+-- latest_gauge_observation cascades on the gauge delete
+DELETE FROM gauge WHERE name = '<gauge_name>';
+```
+
+**CSV rows**: remove the `gauge` / `source` / `gauge_source` rows from
+`data/db/*.csv` in the same PR (deletions assign no id, so this hand-edit is
+safe — the inverse of the "never hand-write CSV rows" rule, which is about *adds*).
+
+**Reconciliation-guard interaction** (R4.4): a source added by an *earlier*
+migration's `INSERT INTO source` stays in `_wired_sources()` forever (applied
+migrations are immutable), so removing its `source.csv` row would read as drift.
+`test_migration_csv_reconciliation.py::_deleted_sources()` subtracts sources a
+later migration deletes **by name** — which is *why* the drop must use the
+`name = '...'` form, not `id = ...`.
+
+### Reproduce / verify
+- Sandbox: `levels migrate` + `levels orphan-check` → "No orphan sources."
+- `pytest tests/test_scripts/test_migration_csv_reconciliation.py`
+- After deploy: the gauge is gone from the build, and `fetch-usgs-ogc` no longer
+  fetches it (the `usgs_id` left with the gauge). Worked example: Bridgeport
+  (`12438000`, RM 544) — migration `0071`.
 
 ---
 
@@ -428,7 +478,7 @@ would need a hand-set `sort_name`.
 
 ## Migration numbering
 
-Next free prefix: **0068** (0067 highest committed across the open Batch-A/B
-PRs). Re-check open PRs before numbering (R5.2 dup-prefix guard). Keep
-`models.py` in lockstep if any column is ever added (not needed for these
-batches).
+Next free prefix: **0072** (0069–0071 are the Columbia lower-river retrim —
+USACE dam flow/temp, NWS Vancouver/St. Helens, Bridgeport drop). Re-check open
+PRs before numbering (R5.2 dup-prefix guard). Keep `models.py` in lockstep if any
+column is ever added.
