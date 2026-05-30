@@ -18,13 +18,15 @@ require_once __DIR__ . '/IntegrationTestCase.php';
  *  - Gauge without readings: cells blank, no crash
  *  - Status rollup: gauge with okay-status reach gets the okay label
  *
- * Seed: 2 gauges (id=7001 with reach + flow obs + class threshold so
- * status rollup hits, 7002 minimal/no-readings).
+ * Seed: 3 gauges (id=7001 with reach + flow obs + class threshold so
+ * status rollup hits, 7002 minimal/no-readings, 7003 an OR,WA border gauge
+ * that must surface under both states in the pills + as a filterable row).
  */
 final class CustomGaugesIntegrationTest extends IntegrationTestCase
 {
     private const GAUGE_WITH_READINGS = 7001;
     private const GAUGE_NO_READINGS = 7002;
+    private const GAUGE_BORDER = 7003;
     private const REACH_ID = 7501;
 
     protected static function seedDatabase(PDO $db): void
@@ -49,6 +51,20 @@ final class CustomGaugesIntegrationTest extends IntegrationTestCase
             self::GAUGE_NO_READINGS,
             'CUSTGAUGE_E',
             'Custom Gauges Test (empty)',
+        ]);
+        // Gauge 3: an OR,WA border gauge (the Columbia mainstem shape) with an
+        // 8-digit HUC so it qualifies as a filterable row.
+        $db->prepare(
+            "INSERT INTO gauge (id, name, display_name, river, location, state, huc)
+             VALUES (?, ?, ?, ?, ?, ?, ?)"
+        )->execute([
+            self::GAUGE_BORDER,
+            'CUSTGAUGE_ORWA',
+            'Custom Gauges Test (border)',
+            'Columbia',
+            'Vancouver',
+            'OR,WA',
+            '17080003',
         ]);
 
         foreach ([['flow', 750.0], ['gauge', 3.5], ['temperature', 48.0]] as [$dt, $v]) {
@@ -166,5 +182,35 @@ final class CustomGaugesIntegrationTest extends IntegrationTestCase
         $this->assertStringNotContainsString('level-okay', $resp['body']);
         $this->assertStringNotContainsString('level-low', $resp['body']);
         $this->assertStringNotContainsString('level-high', $resp['body']);
+    }
+
+    public function testBorderGaugeSurfacesBothStatesAndStaysFilterable(): void
+    {
+        // A single OR,WA border gauge must contribute BOTH state pills and
+        // render as a filterable row carrying a comma data-state. Before the
+        // fix, 'OR,WA' mapped to no pill and the row dropped its data-state/
+        // data-huc8 (escaping the filters entirely).
+        $resp = $this->request('/custom_gauges.php', ['ids' => (string)self::GAUGE_BORDER]);
+
+        $this->assertSame(200, $resp['status']);
+
+        // Both pills present from the one border gauge (State group renders
+        // because count(states) > 1).
+        $this->assertStringContainsString('value="Oregon"', $resp['body']);
+        $this->assertStringContainsString('value="Washington"', $resp['body']);
+
+        // The State group must split its rows' data-state on the comma.
+        $this->assertStringContainsString(
+            'data-group="state" data-split="csv"',
+            $resp['body'],
+            'state filter group must be data-split="csv" to match a comma data-state'
+        );
+
+        // The row is filterable: comma-joined full-name data-state + data-huc8.
+        $this->assertMatchesRegularExpression(
+            '/data-state="Oregon,Washington"\s+data-huc8="17080003"/',
+            $resp['body'],
+            'border-gauge row should emit a comma-joined data-state plus data-huc8'
+        );
     }
 }

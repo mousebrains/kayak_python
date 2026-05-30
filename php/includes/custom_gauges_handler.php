@@ -215,9 +215,13 @@ function _compute_custom_gauges_filters(array $rows): array
     $huc8_present   = [];
     $has_no_huc     = false;
     foreach ($rows as $r) {
-        $abbrev = $r['state_abbrev'] ?? '';
-        if ($abbrev !== '' && isset(CUSTOM_GAUGES_STATE_ABBREVS[$abbrev])) {
-            $states_present[CUSTOM_GAUGES_STATE_ABBREVS[$abbrev]] = true;
+        // gauge.state may be a comma list ('OR,WA') for a border gauge; split
+        // it so each state contributes a pill, mirroring the static build.
+        foreach (explode(',', $r['state_abbrev'] ?? '') as $abbrev) {
+            $abbrev = trim($abbrev);
+            if ($abbrev !== '' && isset(CUSTOM_GAUGES_STATE_ABBREVS[$abbrev])) {
+                $states_present[CUSTOM_GAUGES_STATE_ABBREVS[$abbrev]] = true;
+            }
         }
         $huc = $r['huc'] ?? '';
         if (strlen($huc) >= 8) {
@@ -323,7 +327,7 @@ function _render_custom_gauges_header(
 <?php if (count($states_present) > 1): ?>
   <details class="filter-group">
     <summary>State <span class="fg-count"><?= count($states_present) ?></span></summary>
-    <div class="filter-pills" data-group="state">
+    <div class="filter-pills" data-group="state" data-split="csv">
       <?= $fg_toggle ?>
 <?php foreach (array_keys($states_present) as $st): ?>
       <label><input type="checkbox" value="<?= htmlspecialchars($st) ?>" checked><?= htmlspecialchars($st) ?></label>
@@ -391,8 +395,18 @@ function _render_custom_gauges_table(array $rows, array $status_by_gauge): void
 <tbody>
 <?php foreach ($rows as $r):
     $gid = $r['id'];
-    $abbrev = $r['state_abbrev'] ?? '';
-    $state = CUSTOM_GAUGES_STATE_ABBREVS[$abbrev] ?? '';
+    // A border gauge's state_abbrev is a comma list ('OR,WA'); map each abbrev
+    // to its full name and re-join ('Oregon,Washington'). The State filter
+    // group is rendered data-split="csv", so filters.js splits this data-state
+    // to match each pill.
+    $state_names = [];
+    foreach (explode(',', $r['state_abbrev'] ?? '') as $abbrev) {
+        $abbrev = trim($abbrev);
+        if (isset(CUSTOM_GAUGES_STATE_ABBREVS[$abbrev])) {
+            $state_names[] = CUSTOM_GAUGES_STATE_ABBREVS[$abbrev];
+        }
+    }
+    $state = implode(',', $state_names);
     $huc_str = $r['huc'] ?? '';
     $huc8 = strlen($huc_str) >= 8 ? substr($huc_str, 0, 8) : '';
 
