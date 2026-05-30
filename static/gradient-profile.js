@@ -160,6 +160,77 @@
       };
     }
 
+    // --- Map dot rides the actual drawn trace (reach.geom) -----------------
+    // Prefer the polyline the map already draws over the gradient-sample
+    // anchors above: across a flat reservoir the analysis collapses the whole
+    // pool into one coarse, insignificant bin, so there are no intermediate
+    // anchors and interpolateLatLon() cuts a straight chord across the curve
+    // (the dot left the trace ~mile 2.7 on Canyon Creek / id=419). feature-map.js
+    // draws the geom from data-track="[[lat,lon],...]"; reuse it and place the
+    // dot at the matching arc-length so it follows every bend to the take-out.
+    function haversineMi(a, b) {
+      const R = 3958.7613; // mean earth radius, miles
+      const rad = Math.PI / 180;
+      const dLat = (b[0] - a[0]) * rad;
+      const dLon = (b[1] - a[1]) * rad;
+      const lat1 = a[0] * rad;
+      const lat2 = b[0] * rad;
+      const s =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+      return 2 * R * Math.asin(Math.sqrt(s));
+    }
+    function readGeomTrack() {
+      const mapEl =
+        document.getElementById('feature-map') ||
+        document.getElementById('reach-map');
+      if (!mapEl?.dataset.track) return null;
+      let pts;
+      try {
+        pts = JSON.parse(mapEl.dataset.track);
+      } catch (_e) {
+        return null;
+      }
+      if (!Array.isArray(pts) || pts.length < 2) return null;
+      const cum = [0];
+      for (let i = 1; i < pts.length; i++) {
+        cum[i] = cum[i - 1] + haversineMi(pts[i - 1], pts[i]);
+      }
+      const total = cum[cum.length - 1];
+      if (!(total > 0)) return null;
+      return { pts, cum, total };
+    }
+    const geomTrack = readGeomTrack();
+
+    function trackLatLon(dMi) {
+      if (!geomTrack) return null;
+      // d_mi is distance-from-put-in along the trace — the same
+      // parameterization as the geom's cumulative length — so the axis
+      // fraction maps 1:1 onto arc-length along the drawn polyline.
+      const span = xMax - xMin || 1;
+      const f = (dMi - xMin) / span;
+      const pts = geomTrack.pts;
+      if (f <= 0) return { lat: pts[0][0], lon: pts[0][1] };
+      if (f >= 1) {
+        const last = pts[pts.length - 1];
+        return { lat: last[0], lon: last[1] };
+      }
+      const target = f * geomTrack.total;
+      const cum = geomTrack.cum;
+      let lo = 0;
+      let hi = cum.length - 1;
+      while (lo + 1 < hi) {
+        const mid = (lo + hi) >> 1;
+        if (cum[mid] <= target) lo = mid;
+        else hi = mid;
+      }
+      const a = pts[lo];
+      const b = pts[lo + 1];
+      const segLen = cum[lo + 1] - cum[lo];
+      const t = segLen > 0 ? (target - cum[lo]) / segLen : 0;
+      return { lat: a[0] + t * (b[0] - a[0]), lon: a[1] + t * (b[1] - a[1]) };
+    }
+
     // Elevation anchors (river mile -> ft), pinned to put-in / take-out so the
     // readout matches the drawn line. Null when the reach has no elevation data.
     const elevAnchors = payload.elev ? [{ d: 0, e: payload.elev.putin }] : null;
@@ -243,7 +314,9 @@
           windowText;
       }
 
-      const ll = interpolateLatLon(dMi);
+      // Ride the drawn geom trace when present; fall back to the sample
+      // anchors only for a chart with no companion map track.
+      const ll = trackLatLon(dMi) || interpolateLatLon(dMi);
       if (ll) placeMapDot(ll.lat, ll.lon);
     }
 
