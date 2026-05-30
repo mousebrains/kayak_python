@@ -203,8 +203,13 @@
         const byState = new Map();
         for (const n of needed) byState.set(n, []);
         for (const r of rows) {
-          const list = byState.get(r.state);
-          if (list) list.push(r);
+          // A border gauge's state is a comma list ('Oregon,Washington');
+          // push it into every requested-state bucket so it appears under
+          // each. buildAllRows() dedupes by id, so the table shows it once.
+          for (const sname of String(r.state || '').split(',')) {
+            const list = byState.get(sname.trim());
+            if (list) list.push(r);
+          }
           byId.set(r.id, r);
         }
         for (const n of needed) {
