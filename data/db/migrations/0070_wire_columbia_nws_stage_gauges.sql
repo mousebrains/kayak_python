@@ -17,8 +17,10 @@
 -- gauge.state and gauge.huc (>=8 digits) are set. Below McNary the Columbia is
 -- the OR/WA line, so state='OR,WA' (gauges.py splits the comma list into one
 -- data-state per state, so the gauge filters under both). huc is HUC8 17080003
--- (Lower Columbia-Clatskanie), from the nearest mainstem USGS sites 14144700 /
--- 14222870.
+-- (Lower Columbia-Clatskanie) -- USGS NWIS assigns both mainstem gauges here
+-- (14144700 Vancouver, 14222870 St. Helens) to 17080003; the 17080001/17080003
+-- boundary is upstream near the Sandy confluence, so Bonneville (RM 146) is
+-- 17080001 while RM 106 / RM 86 are 17080003.
 --
 -- sort_name is set by river mile (columbia|9|<1000-RM>|000000) so the corridor
 -- lists upstream->downstream with the existing Columbia gauges; do NOT run

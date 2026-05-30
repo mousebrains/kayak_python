@@ -31,7 +31,7 @@ SOURCE_CSV = DATA_DIR / "db" / "source.csv"
 # name here ONLY while its snapshot is pending; the stale-allowlist test forces
 # removal once it lands. (GPRO3 from 0063 was reconciled by snapshot e408fa8; the
 # 0065 USGS split + the Batch A/B/C gauges from 0066-0068 by snapshot 8ce7366.)
-# Pending now: JDA/BON (0069, USACE Columbia dam flow+temp) and VAPW1/SHNO3
+# Pending now: JDA/BON (0069, USACE Columbia dam outflow) and VAPW1/SHNO3
 # (0070, NWS Vancouver/St. Helens stage).
 PENDING_RECONCILIATION: set[str] = {"JDA", "BON", "VAPW1", "SHNO3"}
 
