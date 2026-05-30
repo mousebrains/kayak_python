@@ -30,10 +30,10 @@ SOURCE_CSV = DATA_DIR / "db" / "source.csv"
 # prod-assigned, so reconciliation is a prod export_metadata.py snapshot). Add a
 # name here ONLY while its snapshot is pending; the stale-allowlist test forces
 # removal once it lands. (GPRO3 from 0063 was reconciled by snapshot e408fa8; the
-# 0065 USGS split + the Batch A/B/C gauges from 0066-0068 by snapshot 8ce7366.)
-# Pending now: JDA/BON (0069, USACE Columbia dam outflow) and VAPW1/SHNO3
-# (0070, NWS Vancouver/St. Helens stage).
-PENDING_RECONCILIATION: set[str] = {}
+# 0065 USGS split + the Batch A/B/C gauges from 0066-0068 by snapshot 8ce7366;
+# JDA/BON from 0069 + VAPW1/SHNO3 from 0070 by snapshot 6e228d4.)
+# Nothing is pending right now.
+PENDING_RECONCILIATION: set[str] = set()
 
 # Across the whole class the form is `INSERT INTO source (name, ...) SELECT
 # '<name>', ...` -- name is always the first column and the first SELECT literal.
