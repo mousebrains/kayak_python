@@ -40,6 +40,16 @@ _SOURCE_INSERT = re.compile(
     re.IGNORECASE,
 )
 
+# The reconciliation guard above keys on the SELECT form. A future migration
+# that wired a source via the VALUES form (`INSERT INTO source (...) VALUES
+# (...)`) would slip past _SOURCE_INSERT entirely -- never extracted, so never
+# checked against source.csv. This regex catches that alternate form so the
+# convention test below can forbid it. All 32 current wiring INSERTs use SELECT.
+_SOURCE_INSERT_VALUES = re.compile(
+    r"INSERT\s+INTO\s+source\s*\([^)]*\)\s*VALUES",
+    re.IGNORECASE,
+)
+
 
 def _wired_sources() -> dict[str, str]:
     """Map each migration-wired source name to the first migration that wires it."""
@@ -76,6 +86,27 @@ def test_pending_reconciliation_allowlist_is_not_stale() -> None:
     assert not reconciled, (
         "these PENDING_RECONCILIATION sources are now in source.csv -- remove them "
         f"from the allowlist: {reconciled}"
+    )
+
+
+def test_no_source_insert_uses_values_form() -> None:
+    # Keep the wire-via-migration convention on the SELECT form so the
+    # reconciliation guard above (_SOURCE_INSERT) can't be bypassed: a
+    # VALUES-form `INSERT INTO source (...) VALUES (...)` would never be
+    # extracted, hence never reconciled against source.csv. All 32 current
+    # source-inserts use SELECT, so this passes today; it fails the day a
+    # migration introduces the VALUES form, prompting either a SELECT rewrite
+    # or a deliberate broadening of the extractor.
+    offenders = {
+        path.name
+        for path in sorted(MIGRATIONS_DIR.glob("*.sql"))
+        if _SOURCE_INSERT_VALUES.search(path.read_text())
+    }
+    assert not offenders, (
+        "migration(s) wire a source via `INSERT INTO source (...) VALUES (...)`, "
+        "which the reconciliation guard's SELECT-form regex (_SOURCE_INSERT) "
+        "does not capture -- rewrite as `INSERT INTO source (...) SELECT ...` so "
+        f"the guard reconciles it against source.csv: {offenders}"
     )
 
 

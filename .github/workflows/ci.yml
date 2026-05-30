@@ -146,6 +146,13 @@ jobs:
       - name: Install kayak package (for `levels init-db`)
         run: pip install -e .
 
+      - name: Pin levels for the emit-config parity test (R4.5)
+        # Export the resolved path so the emit-config parity test
+        # (tests/php/ConfigTest.php) RUNS (env set + executable) instead of
+        # depending on an implicit PATH-ordering artifact. If a future edit
+        # drops the `pip install -e .` above, the test fails (not skips).
+        run: echo "KAYAK_LEVELS_BIN=$(command -v levels)" >> "$GITHUB_ENV"
+
       - name: PHPUnit (with line coverage via pcov)
         run: vendor/bin/phpunit --coverage-clover=coverage.xml --coverage-text
 

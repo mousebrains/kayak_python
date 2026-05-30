@@ -1,5 +1,5 @@
 .PHONY: lint format typecheck test test-all coverage check pipeline build clean \
-       lint-php lint-js lint-css lint-shell lint-all
+       lint-php lint-js lint-css lint-shell lint-all test-php init-db install help
 
 VENV ?= .venv
 PYTHON = $(VENV)/bin/python
