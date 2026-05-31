@@ -3,6 +3,7 @@
 Usage:
     levels migrate                    # apply all pending migrations
     levels migrate --status           # list applied vs pending
+    levels migrate --check            # exit non-zero if any migration is pending
     levels migrate --stamp 0002       # mark a version as applied w/o running
 
 Migrations live in ``data/db/migrations/NNNN_description.sql`` and are
@@ -98,6 +99,17 @@ def applied_versions() -> set[str]:
     return {r[0] for r in rows}
 
 
+def pending_migrations(applied: set[str] | None = None) -> list[Migration]:
+    """Discovered migrations not yet recorded in schema_migrations, in order.
+
+    Single-sources the "what's pending" computation shared by apply_pending()
+    and ``migrate --check``. Pass ``applied`` to reuse an already-read set.
+    """
+    if applied is None:
+        applied = applied_versions()
+    return [m for m in discover_migrations() if m.version not in applied]
+
+
 def stamp(version: str) -> None:
     """Record ``version`` as applied without running its SQL."""
     _ensure_tracking_table()
@@ -125,9 +137,7 @@ def apply_pending() -> list[str]:
     """Run every migration not yet recorded. Return the versions applied."""
     _ensure_tracking_table()
     engine = get_engine()
-    applied = applied_versions()
-    migrations = discover_migrations()
-    pending = [m for m in migrations if m.version not in applied]
+    pending = pending_migrations()
     if not pending:
         return []
 
@@ -255,6 +265,11 @@ def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> 
         "--status", action="store_true", help="Show applied / pending migrations and exit"
     )
     parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Exit non-zero if any migration is pending (deploy/snapshot guard); applies nothing",
+    )
+    parser.add_argument(
         "--stamp",
         metavar="VERSION",
         action="append",
@@ -291,6 +306,21 @@ def migrate(args: argparse.Namespace) -> None:
         unknown = applied - {m.version for m in migrations}
         for v in sorted(unknown):
             print(f"{v:<10}{'applied':<10}(no file)")
+        return
+
+    if args.check:
+        pending = pending_migrations()
+        if pending:
+            versions = ", ".join(m.version for m in pending)
+            # Non-zero exit lets deploy/snapshot guards refuse to run against a
+            # half-migrated DB (scripts/snapshot_metadata.sh): the nightly git
+            # pull can bring migration files live without `levels migrate`.
+            raise SystemExit(
+                "migrate --check: pending migration(s) not applied to this DB: "
+                + versions
+                + " — run `levels migrate` before snapshotting/deploying."
+            )
+        print("migrate --check: all migrations applied.")
         return
 
     ran = apply_pending()

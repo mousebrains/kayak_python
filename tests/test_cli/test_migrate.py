@@ -13,7 +13,7 @@ from kayak.cli import migrate as migrate_mod
 
 
 def _make_args(**overrides: object) -> Namespace:
-    defaults = {"status": False, "stamp": [], "stamp_all": False}
+    defaults = {"status": False, "check": False, "stamp": [], "stamp_all": False}
     defaults.update(overrides)
     return Namespace(**defaults)
 
@@ -97,6 +97,48 @@ def test_apply_pending_runs_only_unapplied(
         assert count == 1
         versions = {r[0] for r in conn.execute(text("SELECT version FROM schema_migrations")).all()}
         assert versions == {"0001", "0002"}
+
+
+def test_check_exits_nonzero_when_a_migration_is_pending(tmp_path: Path, engine: object) -> None:
+    # The snapshot/deploy guard: a migration file on disk but not yet in
+    # schema_migrations must make `levels migrate --check` exit non-zero, so
+    # scripts/snapshot_metadata.sh refuses to snapshot a half-migrated DB.
+    migrations_dir = tmp_path / "migrations"
+    migrations_dir.mkdir()
+    (migrations_dir / "0001_widget.sql").write_text("CREATE TABLE widget (id INTEGER PRIMARY KEY);")
+    with (
+        patch("kayak.cli.migrate.MIGRATIONS_DIR", migrations_dir),
+        patch("kayak.cli.migrate.get_engine", return_value=engine),
+        pytest.raises(SystemExit) as exc,
+    ):
+        migrate_mod.migrate(_make_args(check=True))
+    assert exc.value.code not in (0, None)
+    # The message is the operator's signal — it must name the pending version.
+    assert "0001" in str(exc.value)
+
+
+def test_check_passes_when_all_applied(tmp_path: Path, engine: object) -> None:
+    migrations_dir = tmp_path / "migrations"
+    migrations_dir.mkdir()
+    (migrations_dir / "0001_widget.sql").write_text("CREATE TABLE widget (id INTEGER PRIMARY KEY);")
+    with (
+        patch("kayak.cli.migrate.MIGRATIONS_DIR", migrations_dir),
+        patch("kayak.cli.migrate.get_engine", return_value=engine),
+    ):
+        migrate_mod.apply_pending()  # apply 0001
+        # Nothing pending now → --check is a clean no-op (must not raise).
+        migrate_mod.migrate(_make_args(check=True))
+
+
+def test_check_passes_when_migrations_dir_absent(tmp_path: Path, engine: object) -> None:
+    # No migrations dir at all → discover_migrations() returns [] → --check is a
+    # clean pass, never a false abort that would wedge the nightly snapshot.
+    missing_dir = tmp_path / "does-not-exist"
+    with (
+        patch("kayak.cli.migrate.MIGRATIONS_DIR", missing_dir),
+        patch("kayak.cli.migrate.get_engine", return_value=engine),
+    ):
+        migrate_mod.migrate(_make_args(check=True))  # must not raise
 
 
 def test_stamp_records_without_running(tmp_path: Path, engine: object) -> None:
