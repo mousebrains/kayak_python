@@ -99,6 +99,17 @@ def applied_versions() -> set[str]:
     return {r[0] for r in rows}
 
 
+def pending_migrations(applied: set[str] | None = None) -> list[Migration]:
+    """Discovered migrations not yet recorded in schema_migrations, in order.
+
+    Single-sources the "what's pending" computation shared by apply_pending()
+    and ``migrate --check``. Pass ``applied`` to reuse an already-read set.
+    """
+    if applied is None:
+        applied = applied_versions()
+    return [m for m in discover_migrations() if m.version not in applied]
+
+
 def stamp(version: str) -> None:
     """Record ``version`` as applied without running its SQL."""
     _ensure_tracking_table()
@@ -126,9 +137,7 @@ def apply_pending() -> list[str]:
     """Run every migration not yet recorded. Return the versions applied."""
     _ensure_tracking_table()
     engine = get_engine()
-    applied = applied_versions()
-    migrations = discover_migrations()
-    pending = [m for m in migrations if m.version not in applied]
+    pending = pending_migrations()
     if not pending:
         return []
 
@@ -300,15 +309,15 @@ def migrate(args: argparse.Namespace) -> None:
         return
 
     if args.check:
-        applied = applied_versions()
-        pending = [m.version for m in discover_migrations() if m.version not in applied]
+        pending = pending_migrations()
         if pending:
+            versions = ", ".join(m.version for m in pending)
             # Non-zero exit lets deploy/snapshot guards refuse to run against a
             # half-migrated DB (scripts/snapshot_metadata.sh): the nightly git
             # pull can bring migration files live without `levels migrate`.
             raise SystemExit(
                 "migrate --check: pending migration(s) not applied to this DB: "
-                + ", ".join(pending)
+                + versions
                 + " — run `levels migrate` before snapshotting/deploying."
             )
         print("migrate --check: all migrations applied.")

@@ -113,6 +113,8 @@ def test_check_exits_nonzero_when_a_migration_is_pending(tmp_path: Path, engine:
     ):
         migrate_mod.migrate(_make_args(check=True))
     assert exc.value.code not in (0, None)
+    # The message is the operator's signal — it must name the pending version.
+    assert "0001" in str(exc.value)
 
 
 def test_check_passes_when_all_applied(tmp_path: Path, engine: object) -> None:
@@ -126,6 +128,17 @@ def test_check_passes_when_all_applied(tmp_path: Path, engine: object) -> None:
         migrate_mod.apply_pending()  # apply 0001
         # Nothing pending now → --check is a clean no-op (must not raise).
         migrate_mod.migrate(_make_args(check=True))
+
+
+def test_check_passes_when_migrations_dir_absent(tmp_path: Path, engine: object) -> None:
+    # No migrations dir at all → discover_migrations() returns [] → --check is a
+    # clean pass, never a false abort that would wedge the nightly snapshot.
+    missing_dir = tmp_path / "does-not-exist"
+    with (
+        patch("kayak.cli.migrate.MIGRATIONS_DIR", missing_dir),
+        patch("kayak.cli.migrate.get_engine", return_value=engine),
+    ):
+        migrate_mod.migrate(_make_args(check=True))  # must not raise
 
 
 def test_stamp_records_without_running(tmp_path: Path, engine: object) -> None:

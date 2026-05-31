@@ -71,7 +71,10 @@ fi
 # runs `levels migrate` first.
 if ! "$LEVELS" migrate --check; then
     echo "Aborting: the live DB has pending (unapplied) migrations — see above." >&2
-    echo "  Run 'levels migrate' on this host, then let the snapshot timer retry." >&2
+    echo "  Run 'levels migrate' on this host NOW: the git pull already brought the" >&2
+    echo "  new code live, so the hourly kayak-pipeline is running it against the old" >&2
+    echo "  schema (orphan-check will red) until you migrate. Then the snapshot timer" >&2
+    echo "  retries automatically." >&2
     exit 1
 fi
 
