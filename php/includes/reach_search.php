@@ -311,7 +311,8 @@ function _render_search_results_table(
         $cls = htmlspecialchars(implode(', ', $reach_classes[$r['id']] ?? []));
         $guides = implode(', ', array_keys($reach_guides[$r['id']] ?? []));
         $rhref = pubhash_url('reach', $r['id']);
-        echo "<tr><td>{$r['id']}</td><td>{$swatch}<a href=\"{$rhref}\">$rname</a></td>"
+        $rhandle = pubhash_encode($r['id']);
+        echo "<tr><td><a href=\"{$rhref}\">{$rhandle}</a></td><td>{$swatch}<a href=\"{$rhref}\">$rname</a></td>"
             . "<td>$desc</td><td>$cls</td><td>$sname</td><td>$guides</td><td>$reading</td></tr>\n";
     }
     echo '</table>';

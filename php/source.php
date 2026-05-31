@@ -186,7 +186,6 @@ if ($agency_url !== null) {
 }
 
 $fields = [
-    'ID' => $source['id'],
     'Name' => $name_html,
     'Agency' => $source['agency'],
 ];
@@ -208,12 +207,12 @@ if ($source['fetch_url'] !== null) {
 }
 
 foreach ($fields as $label => $value) {
-    if ($value === null || trim((string)$value) === '') continue;
+    if ($value === null || trim($value) === '') continue;
     // These fields already contain HTML links
     if ($label === 'Fetch URL' || $label === 'Name') {
         echo "<tr><td>$label</td><td>$value</td></tr>\n";
     } else {
-        $esc = htmlspecialchars((string)$value);
+        $esc = htmlspecialchars($value);
         echo "<tr><td>$label</td><td>$esc</td></tr>\n";
     }
 }
@@ -247,13 +246,13 @@ if ($obs_summary !== []) {
 if ($gauges !== []) {
     echo '<h3 style="margin-top:1rem">Associated Gauges</h3>';
     echo '<table class="readings-table">';
-    echo '<tr><th>ID</th><th>Name</th><th>Location</th><th>USGS ID</th></tr>';
+    echo '<tr><th>Name</th><th>Location</th><th>USGS ID</th></tr>';
     foreach ($gauges as $g) {
         $gname = htmlspecialchars($g['name']);
         $gloc = htmlspecialchars($g['location'] ?? '');
         $gusgs = htmlspecialchars($g['usgs_id'] ?? '');
         $ghref = pubhash_url('gauge', $g['id']);
-        echo "<tr><td><a href=\"$ghref\">{$g['id']}</a></td><td><a href=\"$ghref\">$gname</a></td><td>$gloc</td><td>$gusgs</td></tr>\n";
+        echo "<tr><td><a href=\"$ghref\">$gname</a></td><td>$gloc</td><td>$gusgs</td></tr>\n";
     }
     echo '</table>';
 } else {

@@ -485,6 +485,11 @@ final class GaugeDetailFunctionalTest extends FunctionalTestCase
         $this->assertStringContainsString('/source.php?h=', $html);
         $this->assertStringContainsString('full_obs_src', $html);
         $this->assertStringContainsString('full_empty_src', $html);
+        // The redundant internal-ID column was dropped — header leads with Name.
+        $this->assertStringContainsString(
+            '<tr><th>Name</th><th>Agency</th><th>Observations</th><th>Latest</th></tr>',
+            $html,
+        );
 
         // Associated Reaches — the three status classifications.
         $this->assertStringContainsString('Associated Reaches', $html);
