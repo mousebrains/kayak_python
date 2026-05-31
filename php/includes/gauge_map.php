@@ -13,6 +13,8 @@ declare(strict_types=1);
  * CSS is shipped in the main style.css, so no per-page injection needed.
  */
 
+require_once __DIR__ . '/pubhash.php';
+
 /**
  * Return the <head> fragment a map-bearing page must include in extra_head.
  *
@@ -83,6 +85,7 @@ function gm_render_map(
         if (count($coords) >= 2) {
             $rt_payload[] = [
                 'id' => $rt['id'],
+                'h' => pubhash_encode($rt['id']),
                 'name' => $rt['name'],
                 'location' => $rt['location'] ?? '',
                 'classes' => $rt['classes'] ?? '',
@@ -114,7 +117,7 @@ function gm_render_map(
     $acc_attr = htmlspecialchars($osmb_url('osmb-access-sites.geojson'));
 
     $gauge_id_attr = $gauge_id !== null
-        ? ' data-gauge-id="' . $gauge_id . '"'
+        ? ' data-gauge-id="' . $gauge_id . '" data-gauge-h="' . pubhash_encode($gauge_id) . '"'
         : '';
 
     echo '<div id="feature-map"'

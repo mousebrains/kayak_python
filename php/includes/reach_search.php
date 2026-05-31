@@ -16,7 +16,7 @@ require_once __DIR__ . '/header.php';
 require_once __DIR__ . '/footer.php';
 require_once __DIR__ . '/gauge_map.php';
 require_once __DIR__ . '/http_exit.php';
-require_once __DIR__ . '/pubhash.php';
+require_once __DIR__ . '/pubhash_request.php';
 
 /**
  * Map-marker color palette. Indexed by result row position; mirrors the
@@ -310,7 +310,8 @@ function _render_search_results_table(
             . $color . ';margin-right:4px" title="Map marker color"></span>';
         $cls = htmlspecialchars(implode(', ', $reach_classes[$r['id']] ?? []));
         $guides = implode(', ', array_keys($reach_guides[$r['id']] ?? []));
-        echo "<tr><td>{$r['id']}</td><td>{$swatch}<a href=\"/reach.php?id={$r['id']}\">$rname</a></td>"
+        $rhref = pubhash_url('reach', $r['id']);
+        echo "<tr><td>{$r['id']}</td><td>{$swatch}<a href=\"{$rhref}\">$rname</a></td>"
             . "<td>$desc</td><td>$cls</td><td>$sname</td><td>$guides</td><td>$reading</td></tr>\n";
     }
     echo '</table>';
@@ -391,6 +392,7 @@ function _build_search_map_reaches(array $results): array
         }
         $map_reaches[] = [
             'id' => $r['id'],
+            'h' => pubhash_encode($r['id']),
             'name' => $r['name'],
             'lat' => $lat,
             'lon' => $lon,
