@@ -33,9 +33,21 @@ const DB_PATH = (() => {
   return p;
 })();
 
-/** Run one or more SQL statements via the sqlite3 CLI against the test DB. */
+/**
+ * Run one or more SQL statements via the sqlite3 CLI against the test DB.
+ *
+ * `.timeout 30000` gives the CLI a 30 s busy-timeout matching the PHP server
+ * (php/includes/db.php:53). The server holds the DB open (WAL + 30 s timeout)
+ * while a test reads it through this *separate* sqlite3 process; with the CLI's
+ * default busy-timeout of 0, `-bail` aborts the instant the server holds a
+ * write lock ("database is locked (5)") — a timing flake that reds main on an
+ * unlucky interleave even though the content is unchanged. Set via `-cmd`, not
+ * a `PRAGMA busy_timeout=N` prepended to the SQL: the PRAGMA's assignment form
+ * prints the value as a stray result row that would corrupt callers parsing
+ * the output (e.g. the change_request `split('|')` below).
+ */
 function sqliteExec(sql: string): string {
-  return execFileSync('sqlite3', ['-bail', DB_PATH], {
+  return execFileSync('sqlite3', ['-bail', '-cmd', '.timeout 30000', DB_PATH], {
     input: sql,
     encoding: 'utf8',
   });
