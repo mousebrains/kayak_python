@@ -4,7 +4,7 @@ declare(strict_types=1);
  * Search and state-filter mode for /reach.php.
  *
  * Called from reach.php when ?q= or ?st= is set (after trimming). A
- * single matching reach auto-redirects to /reach.php?id=<single>;
+ * single matching reach auto-redirects to /reach.php?h=<handle>;
  * otherwise renders a results table + Leaflet map and exits.
  *
  * Convention matches the other helpers in this directory: function-only
@@ -16,6 +16,7 @@ require_once __DIR__ . '/header.php';
 require_once __DIR__ . '/footer.php';
 require_once __DIR__ . '/gauge_map.php';
 require_once __DIR__ . '/http_exit.php';
+require_once __DIR__ . '/pubhash.php';
 
 /**
  * Map-marker color palette. Indexed by result row position; mirrors the
@@ -45,8 +46,9 @@ function handle_search_mode(
 ): never {
     $results = _search_reaches_query($db, $q, $st, $hidden);
 
-    if (count($results) === 1) {
-        header('Location: /reach.php?id=' . $results[0]['id']);
+    $single = count($results) === 1 ? $results[0]['id'] : null;
+    if (is_int($single)) {
+        header('Location: /reach.php?h=' . pubhash_encode($single));
         http_terminate(302);
     }
 
