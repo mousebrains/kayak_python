@@ -121,7 +121,7 @@ final class CustomGaugesHandlerFunctionalTest extends FunctionalTestCase
     public function testRendersStatusRollupLabels(): void
     {
         $ids = [self::$gaugeOkay, self::$gaugeLow, self::$gaugeHigh];
-        $html = $this->capture(fn() => handle_custom_gauges($this->pdo(), $ids, implode(',', $ids)));
+        $html = $this->capture(fn() => handle_custom_gauges($this->pdo(), $ids, implode(',', array_map('pubhash_encode', $ids))));
 
         $this->assertStringContainsString('<table class="levels">', $html);
         $this->assertStringContainsString('Sandy', $html);
@@ -144,7 +144,7 @@ final class CustomGaugesHandlerFunctionalTest extends FunctionalTestCase
     {
         // OR (okay+high) + WA (low) → State group renders (count > 1).
         $ids = [self::$gaugeOkay, self::$gaugeLow, self::$gaugeHigh];
-        $html = $this->capture(fn() => handle_custom_gauges($this->pdo(), $ids, implode(',', $ids)));
+        $html = $this->capture(fn() => handle_custom_gauges($this->pdo(), $ids, implode(',', array_map('pubhash_encode', $ids))));
 
         // State filter: abbrevs map to display names via CUSTOM_GAUGES_STATE_ABBREVS.
         $this->assertStringContainsString('data-group="state"', $html);
@@ -167,7 +167,7 @@ final class CustomGaugesHandlerFunctionalTest extends FunctionalTestCase
         // Single OR-less gauge with no huc → "(no HUC)" row; inflow-only
         // reading flows into the Flow cell via the flow ?? inflow fallback.
         $html = $this->capture(
-            fn() => handle_custom_gauges($this->pdo(), [self::$gaugeNoHuc], (string)self::$gaugeNoHuc)
+            fn() => handle_custom_gauges($this->pdo(), [self::$gaugeNoHuc], pubhash_encode(self::$gaugeNoHuc))
         );
 
         $this->assertStringContainsString('(no HUC)', $html);
@@ -182,7 +182,7 @@ final class CustomGaugesHandlerFunctionalTest extends FunctionalTestCase
     public function testGageOnlyFallsBackToFeet(): void
     {
         $html = $this->capture(
-            fn() => handle_custom_gauges($this->pdo(), [self::$gaugeGageOnly], (string)self::$gaugeGageOnly)
+            fn() => handle_custom_gauges($this->pdo(), [self::$gaugeGageOnly], pubhash_encode(self::$gaugeGageOnly))
         );
 
         // No flow/inflow → flow cell shows gage as feet: 6.7 → "6.7&prime;".
@@ -194,7 +194,7 @@ final class CustomGaugesHandlerFunctionalTest extends FunctionalTestCase
     public function testReadingsAndTimeRender(): void
     {
         $html = $this->capture(
-            fn() => handle_custom_gauges($this->pdo(), [self::$gaugeOkay], (string)self::$gaugeOkay)
+            fn() => handle_custom_gauges($this->pdo(), [self::$gaugeOkay], pubhash_encode(self::$gaugeOkay))
         );
 
         // Flow int, gage 1dp, temp 1dp.
@@ -211,7 +211,7 @@ final class CustomGaugesHandlerFunctionalTest extends FunctionalTestCase
     {
         // Request high before okay — even though okay has the lower id.
         $ids = [self::$gaugeHigh, self::$gaugeOkay];
-        $html = $this->capture(fn() => handle_custom_gauges($this->pdo(), $ids, implode(',', $ids)));
+        $html = $this->capture(fn() => handle_custom_gauges($this->pdo(), $ids, implode(',', array_map('pubhash_encode', $ids))));
 
         $posHigh = strpos($html, 'Clackamas');
         $posOkay = strpos($html, 'Sandy');
@@ -225,7 +225,7 @@ final class CustomGaugesHandlerFunctionalTest extends FunctionalTestCase
         // null-rollup: reach present but no class range → no status badge even
         // though the gauge has flow. blank: no readings → empty flow cell.
         $ids = [self::$gaugeNullRollup, self::$gaugeBlank];
-        $html = $this->capture(fn() => handle_custom_gauges($this->pdo(), $ids, implode(',', $ids)));
+        $html = $this->capture(fn() => handle_custom_gauges($this->pdo(), $ids, implode(',', array_map('pubhash_encode', $ids))));
 
         $this->assertStringContainsString('McKenzie', $html);
         $this->assertStringContainsString('Deschutes', $html);

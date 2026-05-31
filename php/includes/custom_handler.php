@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 /**
  * Handler for /custom.php — renders a levels table for arbitrary
- * reach IDs supplied via `?ids=CSV`.
+ * reach handles supplied via `?h=<handle,…>` (decoded to ids upstream).
  *
  * Called from custom.php after arg-parse + empty-redirect. Loads
  * reach summary rows + classes + sparkline data, reorders by URL
@@ -391,14 +391,17 @@ function _render_custom_header(array $reaches, array $tiers_by_reach): void
         . '<button type="button" data-none>None</button>'
         . '</span>';
     $reach_count = count($reaches);
-    // "Edit selection" carries the resolved reach ids so picker.php
-    // pre-checks them — picker.js:readIdsFromUrl() does the auto-check
-    // when ?ids= is present. Rebuild from $reaches rather than threading
-    // the original $ids through _render_custom_header's signature; that
-    // naturally drops any ids the DB couldn't resolve (which the picker
-    // wouldn't pre-check anyway). Per docs/done/PLAN_map_and_ui_tweaks.md Item 3.
-    $id_csv = implode(',', array_map(static fn(array $r): int => $r['id'], $reaches));
-    $picker_href = '/picker.php' . ($id_csv !== '' ? '?ids=' . $id_csv : '');
+    // "Edit selection" carries the resolved reach handles so picker.php
+    // pre-checks them — picker.js reads ?h= on load and auto-checks. Rebuild
+    // from $reaches rather than threading the original $ids through
+    // _render_custom_header's signature; that naturally drops any ids the DB
+    // couldn't resolve (which the picker wouldn't pre-check anyway). Per
+    // docs/done/PLAN_map_and_ui_tweaks.md Item 3.
+    $handle_csv = implode(',', array_map(
+        static fn(array $r): string => pubhash_encode($r['id']),
+        $reaches,
+    ));
+    $picker_href = '/picker.php' . ($handle_csv !== '' ? '?h=' . $handle_csv : '');
     ?>
 <h2>Custom Levels Page</h2>
 <p style="margin:.3rem 0 .5rem;font-size:.85rem">

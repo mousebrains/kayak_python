@@ -8,6 +8,7 @@ declare(strict_types=1);
  */
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/class_tiers.php';
+require_once __DIR__ . '/includes/pubhash_request.php';
 
 $db = get_db();
 
@@ -93,6 +94,7 @@ SQL;
 
     foreach ($rows as &$row) {
         $rid = (int)$row['id'];
+        $row['h'] = pubhash_encode($rid);
         $row['tiers'] = $tiers_by_reach[$rid] ?? [];
         $row['status'] = $row['status'] ?? 'unknown';
     }
@@ -105,6 +107,10 @@ SQL;
 // -----------------------------------------------------------------------
 // HTML page
 // -----------------------------------------------------------------------
+// Canonicalize a legacy ?ids=<decimal,…> bookmark to ?h=<handle,…> before any
+// output; picker.js then reads only ?h=.
+pubhash_redirect_legacy_ids();
+
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
 

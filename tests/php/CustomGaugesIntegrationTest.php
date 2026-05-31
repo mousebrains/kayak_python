@@ -3,15 +3,17 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/IntegrationTestCase.php';
+require_once __DIR__ . '/../../php/includes/pubhash.php';
 
 /**
  * Baseline integration tests for custom_gauges.php (Phase 5.C.1 of
- * php_layer_split). Sister page to custom.php — same `?ids=CSV`
- * shape, but gauge-IDs instead of reach-IDs, and empty/missing
- * redirects to /gauge_picker.php rather than /picker.php.
+ * php_layer_split). Sister page to custom.php — same `?h=<handle,…>`
+ * shape, but gauge handles instead of reach handles, and empty/missing
+ * redirects to /gauge_picker.php rather than /picker.php. A legacy
+ * `?ids=<decimal,…>` 301s to the ?h= canonical.
  *
  * Covers:
- *  - Missing/empty ids → 302 to /gauge_picker.php
+ *  - Missing/empty handles → 302 to /gauge_picker.php
  *  - Single gauge: renders the gauge in the table
  *  - Multi-gauge in URL order
  *  - Gauge with readings: flow/gage/temp cells populated
@@ -109,7 +111,7 @@ final class CustomGaugesIntegrationTest extends IntegrationTestCase
     {
         $resp = $this->request(
             '/custom_gauges.php',
-            ['ids' => (string)self::GAUGE_WITH_READINGS],
+            ['h' => pubhash_encode(self::GAUGE_WITH_READINGS)],
         );
 
         $this->assertSame(200, $resp['status']);
@@ -128,7 +130,7 @@ final class CustomGaugesIntegrationTest extends IntegrationTestCase
         // Reverse-id order; URL order should put empty (7002) before
         // readings (7001).
         $resp = $this->request('/custom_gauges.php', [
-            'ids' => implode(',', [self::GAUGE_NO_READINGS, self::GAUGE_WITH_READINGS]),
+            'h' => implode(',', array_map('pubhash_encode', [self::GAUGE_NO_READINGS, self::GAUGE_WITH_READINGS])),
         ]);
 
         $this->assertSame(200, $resp['status']);
@@ -149,7 +151,7 @@ final class CustomGaugesIntegrationTest extends IntegrationTestCase
     {
         $resp = $this->request(
             '/custom_gauges.php',
-            ['ids' => (string)self::GAUGE_WITH_READINGS],
+            ['h' => pubhash_encode(self::GAUGE_WITH_READINGS)],
         );
 
         $this->assertSame(200, $resp['status']);
@@ -167,7 +169,7 @@ final class CustomGaugesIntegrationTest extends IntegrationTestCase
     {
         $resp = $this->request(
             '/custom_gauges.php',
-            ['ids' => (string)self::GAUGE_NO_READINGS],
+            ['h' => pubhash_encode(self::GAUGE_NO_READINGS)],
         );
 
         $this->assertSame(200, $resp['status']);
@@ -190,7 +192,7 @@ final class CustomGaugesIntegrationTest extends IntegrationTestCase
         // render as a filterable row carrying a comma data-state. Before the
         // fix, 'OR,WA' mapped to no pill and the row dropped its data-state/
         // data-huc8 (escaping the filters entirely).
-        $resp = $this->request('/custom_gauges.php', ['ids' => (string)self::GAUGE_BORDER]);
+        $resp = $this->request('/custom_gauges.php', ['h' => pubhash_encode(self::GAUGE_BORDER)]);
 
         $this->assertSame(200, $resp['status']);
 
@@ -211,6 +213,21 @@ final class CustomGaugesIntegrationTest extends IntegrationTestCase
             '/data-state="Oregon,Washington"\s+data-huc8="17080003"/',
             $resp['body'],
             'border-gauge row should emit a comma-joined data-state plus data-huc8'
+        );
+    }
+
+    public function testLegacyIdsRedirectsToHandles(): void
+    {
+        // A legacy decimal ?ids= bookmark 301s to the canonical ?h= list.
+        $resp = $this->request('/custom_gauges.php', [
+            'ids' => implode(',', [self::GAUGE_NO_READINGS, self::GAUGE_WITH_READINGS]),
+        ]);
+
+        $this->assertSame(301, $resp['status']);
+        $this->assertSame(
+            '/custom_gauges.php?h=' . pubhash_encode(self::GAUGE_NO_READINGS)
+                . ',' . pubhash_encode(self::GAUGE_WITH_READINGS),
+            $resp['headers']['location'] ?? '',
         );
     }
 }

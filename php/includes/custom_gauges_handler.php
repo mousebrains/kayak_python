@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 /**
  * Handler for /custom_gauges.php — renders a gauges table for arbitrary
- * gauge IDs supplied via `?ids=CSV`. Sister page to custom.php but at
- * the gauge level (no reach-class filter, no flow-status-from-class).
+ * gauge handles supplied via `?h=<handle,…>` (decoded to ids upstream).
+ * Sister page to custom.php but at the gauge level (no reach-class
+ * filter, no flow-status-from-class).
  *
  * Called from custom_gauges.php after arg-parse + empty-redirect.
  * Loads gauge metadata + latest observations + per-gauge status
@@ -33,10 +34,10 @@ const CUSTOM_GAUGES_STATE_ABBREVS = [
 /**
  * Dispatch and write the full HTTP response.
  *
- * @param list<int> $ids     Already-validated, > 0, capped at 200.
- * @param string    $id_param Raw `ids` query param (for the edit-selection link).
+ * @param list<int> $ids        Already-validated, > 0, capped at 200.
+ * @param string    $handle_csv Canonical ?h= handle-CSV (for the edit-selection link).
  */
-function handle_custom_gauges(PDO $db, array $ids, string $id_param): void
+function handle_custom_gauges(PDO $db, array $ids, string $handle_csv): void
 {
     $gauges_by_id = _load_custom_gauges_rows($db, $ids);
     $status_by_gauge = _load_custom_gauges_status_rollup($db, $ids);
@@ -57,7 +58,7 @@ function handle_custom_gauges(PDO $db, array $ids, string $id_param): void
         $huc6_groups,
         $huc6_names,
         $filters['has_no_huc'],
-        $id_param,
+        $handle_csv,
     );
     _render_custom_gauges_table($rows, $status_by_gauge);
     _render_custom_gauges_footer();
@@ -308,9 +309,9 @@ function _render_custom_gauges_header(
     array $huc6_groups,
     array $huc6_names,
     bool $has_no_huc,
-    string $id_param,
+    string $handle_csv,
 ): void {
-    $id_param_safe = htmlspecialchars($id_param);
+    $handle_csv_safe = htmlspecialchars($handle_csv);
     $fg_toggle = '<span class="fg-toggle">'
         . '<button type="button" data-all>All</button>'
         . '<button type="button" data-none>None</button>'
@@ -318,7 +319,7 @@ function _render_custom_gauges_header(
     ?>
 <h2>Custom Gauges Page</h2>
 <p style="margin:.3rem 0 .5rem;font-size:.85rem">
-  <a href="/gauge_picker.php?ids=<?= $id_param_safe ?>">Edit selection</a> |
+  <a href="/gauge_picker.php?h=<?= $handle_csv_safe ?>">Edit selection</a> |
   <a href="/gauges.html">All gauges</a> |
   <a href="/index.html">Home</a>
   | <?= $row_count ?> gauge<?= $row_count !== 1 ? 's' : '' ?>

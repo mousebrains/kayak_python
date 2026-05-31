@@ -84,3 +84,85 @@ function pubhash_url(string $page, int $id, string $extra = ''): string
 {
     return '/' . $page . '.php?h=' . pubhash_encode($id) . $extra;
 }
+
+/**
+ * Resolve a custom-list of row ids from the canonical `?h=<handle,handle,…>`
+ * (the comma-list sibling of pubhash_param_id, used by custom.php /
+ * custom_gauges.php / the pickers).
+ *
+ * Each comma element is a base-62 handle; malformed or non-positive elements
+ * are skipped. Returns a de-duplicated list<int> in first-seen order. The
+ * legacy `?ids=<decimal,…>` form is canonicalized to `?h=` by
+ * pubhash_redirect_legacy_ids() before this runs, so this reads `?h=` only.
+ *
+ * @return list<int>
+ */
+function pubhash_param_ids(): array
+{
+    $raw = filter_input(INPUT_GET, 'h', FILTER_DEFAULT);
+    if (!is_string($raw) || $raw === '') {
+        return [];
+    }
+    $ids = [];
+    $seen = [];
+    foreach (explode(',', $raw) as $tok) {
+        try {
+            $n = pubhash_decode($tok);
+        } catch (InvalidArgumentException) {
+            continue; // malformed handle → skip
+        }
+        if ($n >= 1 && !isset($seen[$n])) {
+            $seen[$n] = true;
+            $ids[] = $n;
+        }
+    }
+    return $ids;
+}
+
+/**
+ * HTML-page canonicalizer for the custom-list pages: when the row list was
+ * addressed via the legacy `?ids=<decimal,…>` (and not the canonical `?h=`),
+ * 301 to the `?h=<handle,…>` URL, preserving every other query param. No-op
+ * when `?h=` was used or no positive id is present. Terminates on redirect via
+ * the http_terminate() seam.
+ *
+ * Pre-lookup like its single-id sibling: a bogus id encodes to a handle and is
+ * dropped later by pubhash_param_ids() / the page's empty-list redirect, so
+ * this stays DB-free.
+ */
+function pubhash_redirect_legacy_ids(): void
+{
+    $h = filter_input(INPUT_GET, 'h', FILTER_DEFAULT);
+    if (is_string($h) && $h !== '') {
+        return; // already canonical
+    }
+    $ids = filter_input(INPUT_GET, 'ids', FILTER_DEFAULT);
+    if (!is_string($ids) || $ids === '') {
+        return; // nothing to canonicalize
+    }
+
+    $handles = [];
+    foreach (explode(',', $ids) as $tok) {
+        $n = filter_var(trim($tok), FILTER_VALIDATE_INT);
+        if (is_int($n) && $n >= 1) {
+            $handles[] = pubhash_encode($n);
+        }
+    }
+    if ($handles === []) {
+        return; // no valid ids → let the page's empty-list path handle it
+    }
+
+    $other = $_GET;
+    unset($other['ids'], $other['h']);
+    // Literal commas (sub-delims, RFC 3986) match the ?h= form the picker JS
+    // builds, so the 301 lands on the exact canonical URL.
+    $query = 'h=' . implode(',', $handles);
+    if ($other !== []) {
+        $query .= '&' . http_build_query($other);
+    }
+    $script = $_SERVER['SCRIPT_NAME'] ?? '';
+    $script = is_string($script) ? $script : '';
+
+    header('Location: ' . $script . '?' . $query);
+    http_terminate(301);
+}

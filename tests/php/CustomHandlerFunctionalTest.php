@@ -181,8 +181,8 @@ final class CustomHandlerFunctionalTest extends FunctionalTestCase
         $this->assertStringContainsString('data-group="status"', $html);
         $this->assertStringContainsString('data-group="tier"', $html);
 
-        // Edit-selection link carries resolved ids.
-        $this->assertStringContainsString('/picker.php?ids=', $html);
+        // Edit-selection link carries resolved handles.
+        $this->assertStringContainsString('/picker.php?h=', $html);
     }
 
     public function testSingleStateOmitsStateFilterGroup(): void

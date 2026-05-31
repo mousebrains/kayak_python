@@ -7,9 +7,10 @@ declare(strict_types=1);
  * AJAX endpoint (?ajax=1&states=Oregon,Washington): returns JSON gauges.
  *
  * Mirrors picker.php (which builds custom reach pages); this one builds
- * /custom_gauges.php?ids=1,2,3 URLs.
+ * /custom_gauges.php?h=<handle,…> URLs.
  */
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/pubhash_request.php';
 
 $STATE_ABBREVS = [
     'AZ' => 'Arizona',  'CA' => 'California', 'CO' => 'Colorado',
@@ -98,6 +99,7 @@ SQL;
         }
         $row['state'] = implode(',', $names);
         $row['huc8'] = $row['huc8'] ?? '';
+        $row['h'] = pubhash_encode((int) $row['id']);
     }
     unset($row);
 
@@ -108,6 +110,10 @@ SQL;
 // -----------------------------------------------------------------------
 // HTML page
 // -----------------------------------------------------------------------
+// Canonicalize a legacy ?ids=<decimal,…> bookmark to ?h=<handle,…> before any
+// output; gauge_picker.js then reads only ?h=.
+pubhash_redirect_legacy_ids();
+
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
 

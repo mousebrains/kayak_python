@@ -4,13 +4,16 @@
  *   - Endpoint /gauge_picker.php?ajax=1&states=...
  *   - Row data attributes are state + huc8 (no basin/status/tier).
  *   - Display label is "<river> at <location>" (or just river if no location).
- *   - Result URL is /custom_gauges.php?ids=...
+ *   - Result URL is /custom_gauges.php?h=...
  */
 (function () {
   'use strict';
   const stateCache = new Map(); // state name -> [row, ...]
-  const byId = new Map(); // gauge id  -> row (persists across state toggles)
-  let selectedList = []; // gauge ids in display order
+  // Selection identity is the public base-62 handle (an opaque string), read
+  // from each row's `h` field / the checkbox data-h attribute — never the
+  // numeric id, so the ?h= URL round-trips without a client-side codec.
+  const byHandle = new Map(); // gauge handle -> row (persists across state toggles)
+  let selectedList = []; // gauge handles in display order
   const selectedSet = new Set(); // mirror for O(1) .has()
 
   const pills = document.getElementById('state-pills');
@@ -46,7 +49,7 @@
     selectedList.splice(to, 0, v);
   }
   function syncCheckbox(id, checked) {
-    const cb = tbody.querySelector('input[data-id="' + id + '"]');
+    const cb = tbody.querySelector('input[data-h="' + id + '"]');
     if (cb) cb.checked = checked;
   }
 
@@ -73,13 +76,13 @@
   }
 
   function buildAllRows() {
-    const byIdLocal = new Map();
+    const byHandleLocal = new Map();
     for (const name of checkedStates()) {
       const rows = stateCache.get(name);
       if (!rows) continue;
-      for (const r of rows) byIdLocal.set(r.id, r);
+      for (const r of rows) byHandleLocal.set(r.h, r);
     }
-    allRows = Array.from(byIdLocal.values()).sort((a, b) => {
+    allRows = Array.from(byHandleLocal.values()).sort((a, b) => {
       const keyA = (a.sort_name || a.river || '').toString();
       const keyB = (b.sort_name || b.river || '').toString();
       return keyA.localeCompare(keyB);
@@ -92,7 +95,7 @@
     for (const r of allRows) {
       const label = gaugeLabel(r);
       if (q && !label.toLowerCase().includes(q)) continue;
-      const chk = selectedSet.has(r.id) ? ' checked' : '';
+      const chk = selectedSet.has(r.h) ? ' checked' : '';
       html.push(
         '<tr data-state="' +
           esc(r.state || '') +
@@ -100,8 +103,8 @@
           ' data-huc8="' +
           esc(r.huc8 || '') +
           '">',
-        '<td><label><input type="checkbox" data-id="' +
-          r.id +
+        '<td><label><input type="checkbox" data-h="' +
+          r.h +
           '"' +
           chk +
           '><span class="sr-only"> Select ' +
@@ -139,12 +142,12 @@
     const total = selectedList.length;
     ol.innerHTML = selectedList
       .map(function (id, i) {
-        const r = byId.get(id);
+        const r = byHandle.get(id);
         const label = (r && gaugeLabel(r)) || 'gauge #' + id;
         const safeName = esc(label);
         const ariaLabel = safeName + ', position ' + (i + 1) + ' of ' + total;
         return (
-          '<li data-id="' +
+          '<li data-h="' +
           id +
           '" tabindex="0" aria-label="' +
           ariaLabel +
@@ -172,7 +175,7 @@
     if (editOrderBtn) editOrderBtn.style.display = n ? '' : 'none';
     if (n) {
       const url =
-        location.origin + '/custom_gauges.php?ids=' + selectedList.join(',');
+        location.origin + '/custom_gauges.php?h=' + selectedList.join(',');
       viewLink.href = url;
       viewLink.classList.remove('disabled');
     } else {
@@ -210,7 +213,7 @@
             const list = byState.get(sname.trim());
             if (list) list.push(r);
           }
-          byId.set(r.id, r);
+          byHandle.set(r.h, r);
         }
         for (const n of needed) {
           stateCache.set(n, byState.get(n) || []);
@@ -265,8 +268,8 @@
     dragEl = null;
     placeholder = null;
     if (commit) {
-      selectedList = Array.from(ol.querySelectorAll('li[data-id]')).map((li) =>
-        parseInt(li.dataset.id, 10),
+      selectedList = Array.from(ol.querySelectorAll('li[data-h]')).map(
+        (li) => li.dataset.h,
       );
       selectedSet.clear();
       for (const id of selectedList) selectedSet.add(id);
@@ -282,9 +285,9 @@
   });
 
   ol.addEventListener('keydown', function (e) {
-    const li = e.target.closest('li[data-id]');
+    const li = e.target.closest('li[data-h]');
     if (!li) return;
-    const id = parseInt(li.dataset.id, 10);
+    const id = li.dataset.h;
     const idx = selectedList.indexOf(id);
     if (idx < 0) return;
     let action = null;
@@ -304,7 +307,7 @@
     e.preventDefault();
     renderSelected();
     if (action === 'move') {
-      const target = ol.querySelector('li[data-id="' + id + '"]');
+      const target = ol.querySelector('li[data-h="' + id + '"]');
       if (target) target.focus();
     }
     updateActions();
@@ -313,9 +316,9 @@
   ol.addEventListener('click', function (e) {
     const btn = e.target.closest('.remove-btn');
     if (!btn) return;
-    const li = btn.closest('li[data-id]');
+    const li = btn.closest('li[data-h]');
     if (!li) return;
-    const id = parseInt(li.dataset.id, 10);
+    const id = li.dataset.h;
     remove(id);
     syncCheckbox(id, false);
     renderSelected();
@@ -324,7 +327,7 @@
 
   tbody.addEventListener('change', function (e) {
     if (e.target.type !== 'checkbox') return;
-    const id = parseInt(e.target.dataset.id, 10);
+    const id = e.target.dataset.h;
     if (e.target.checked) add(id);
     else remove(id);
     renderSelected();
@@ -335,9 +338,9 @@
     const checked = selectAll.checked;
     const q = search.value.toLowerCase();
     tbody.querySelectorAll('tr:not([hidden])').forEach(function (tr) {
-      const cb = tr.querySelector('input[data-id]');
+      const cb = tr.querySelector('input[data-h]');
       if (!cb) return;
-      const id = parseInt(cb.dataset.id, 10);
+      const id = cb.dataset.h;
       const label = tr
         .querySelector('td:nth-child(2)')
         .textContent.toLowerCase();
@@ -354,7 +357,7 @@
     clearBtn.addEventListener('click', function () {
       selectedList = [];
       selectedSet.clear();
-      tbody.querySelectorAll('input[data-id]').forEach((cb) => {
+      tbody.querySelectorAll('input[data-h]').forEach((cb) => {
         cb.checked = false;
       });
       renderSelected();
@@ -367,7 +370,7 @@
       const section = document.querySelector('.selected-section');
       if (!section) return;
       section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      const first = ol.querySelector('li[data-id]');
+      const first = ol.querySelector('li[data-h]');
       if (first) first.focus({ preventScroll: true });
     });
   }
@@ -389,17 +392,14 @@
   pills.addEventListener('change', loadStates);
   search.addEventListener('input', renderTable);
 
-  function readIdsFromUrl() {
-    const m = location.search.match(/[?&]ids=([^&]+)/);
+  function readHandlesFromUrl() {
+    const m = location.search.match(/[?&]h=([^&]+)/);
     if (!m) return [];
-    return m[1]
-      .split(',')
-      .map((s) => parseInt(s, 10))
-      .filter((n) => n > 0);
+    return m[1].split(',').filter((s) => /^[0-9A-Za-z]+$/.test(s));
   }
-  const initialIds = readIdsFromUrl();
-  if (initialIds.length) {
-    initialIds.forEach(add);
+  const initialHandles = readHandlesFromUrl();
+  if (initialHandles.length) {
+    initialHandles.forEach(add);
     pills.querySelectorAll('input[type=checkbox]').forEach((cb) => {
       cb.checked = true;
     });
