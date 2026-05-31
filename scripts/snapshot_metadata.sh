@@ -22,6 +22,7 @@ set -euo pipefail
 
 REPO="${KAYAK_HOME}/kayak"
 VENV_PY="${KAYAK_HOME}/.venv/bin/python3"
+LEVELS="${KAYAK_HOME}/.venv/bin/levels"
 BRANCH=main
 
 cd "$REPO"
@@ -58,6 +59,19 @@ elif [ "$REMOTE" = "$BASE" ]; then
 else
     echo "Aborting: local $BRANCH has diverged from origin/$BRANCH." >&2
     echo "Investigate with: git log --oneline --graph $BRANCH origin/$BRANCH" >&2
+    exit 1
+fi
+
+# Half-deploy guard (added after the 2026-05-31 wa.gov incident). The git pull
+# above can bring new migration files live without anything having run
+# `levels migrate` on this host, leaving the DB lagging its own committed
+# yaml/CSV. export_metadata.py would then snapshot that mismatched DB and
+# clobber main's CSVs (exactly the 04:33 failure). Refuse to snapshot a DB with
+# pending migrations; the non-zero exit fires the OnFailure notify so a human
+# runs `levels migrate` first.
+if ! "$LEVELS" migrate --check; then
+    echo "Aborting: the live DB has pending (unapplied) migrations — see above." >&2
+    echo "  Run 'levels migrate' on this host, then let the snapshot timer retry." >&2
     exit 1
 fi
 

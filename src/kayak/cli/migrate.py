@@ -3,6 +3,7 @@
 Usage:
     levels migrate                    # apply all pending migrations
     levels migrate --status           # list applied vs pending
+    levels migrate --check            # exit non-zero if any migration is pending
     levels migrate --stamp 0002       # mark a version as applied w/o running
 
 Migrations live in ``data/db/migrations/NNNN_description.sql`` and are
@@ -255,6 +256,11 @@ def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> 
         "--status", action="store_true", help="Show applied / pending migrations and exit"
     )
     parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Exit non-zero if any migration is pending (deploy/snapshot guard); applies nothing",
+    )
+    parser.add_argument(
         "--stamp",
         metavar="VERSION",
         action="append",
@@ -291,6 +297,21 @@ def migrate(args: argparse.Namespace) -> None:
         unknown = applied - {m.version for m in migrations}
         for v in sorted(unknown):
             print(f"{v:<10}{'applied':<10}(no file)")
+        return
+
+    if args.check:
+        applied = applied_versions()
+        pending = [m.version for m in discover_migrations() if m.version not in applied]
+        if pending:
+            # Non-zero exit lets deploy/snapshot guards refuse to run against a
+            # half-migrated DB (scripts/snapshot_metadata.sh): the nightly git
+            # pull can bring migration files live without `levels migrate`.
+            raise SystemExit(
+                "migrate --check: pending migration(s) not applied to this DB: "
+                + ", ".join(pending)
+                + " — run `levels migrate` before snapshotting/deploying."
+            )
+        print("migrate --check: all migrations applied.")
         return
 
     ran = apply_pending()
