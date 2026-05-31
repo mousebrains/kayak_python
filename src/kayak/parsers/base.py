@@ -137,6 +137,14 @@ class BaseParser(ABC):
         if when.tzinfo is not None:
             return when
         tz_name = self.source_tz_map.get(station)
+        if not tz_name and len(self.source_tz_map) == 1:
+            # Single-source fetch: the parser may key records by a station id
+            # that differs from the source's name — e.g. wa.gov sources renamed
+            # to per-file stems (29C100_STG_FM) while the parser still reads the
+            # bare 29C100 from the file header. With exactly one source tz on the
+            # fetch there is no ambiguity, so apply it. Multi-station feeds (USBR)
+            # carry >1 entry → this fallback does not fire and per-station tz wins.
+            tz_name = next(iter(self.source_tz_map.values()))
         if not tz_name:
             return when
         tz = self._tz_cache.get(tz_name)

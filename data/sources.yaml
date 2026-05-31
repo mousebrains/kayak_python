@@ -200,6 +200,13 @@ wa.gov:
   # WA DOE publishes timestamps in PST year-round (no DST), per the header of
   # every *_FM.TXT file. Etc/GMT+8 is the POSIX alias for "UTC-8 always" — the
   # sign is inverted vs IANA convention but that's correct for fixed PST.
+  #
+  # The `stations:` key IS the source name. WA DOE serves one file per (station,
+  # parameter) — STG/DSG/WTM — all carrying the bare station id (29C100) in the
+  # header, so they once collapsed to one name per station. We name each source
+  # by its file stem (29C100_STG_FM) so source.name is unique; the parser still
+  # reads `29C100` from the header and resolves via source_id (one source per
+  # fetch_url) with the lone tz applied (BaseParser._localize fallback).
   urls:
     # 30C070 Klickitat River at Wahkiacus — station dead since 2025-07-02; disabled 2026-04-17
     # - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/30C070/30C070_STG_FM.TXT"
@@ -207,23 +214,23 @@ wa.gov:
     # - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/30C070/30C070_WTM_FM.TXT"
     - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_STG_FM.TXT"
       stations:
-        "29C100": Etc/GMT+8
+        "29C100_STG_FM": Etc/GMT+8
     - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_DSG_FM.TXT"
       stations:
-        "29C100": Etc/GMT+8
+        "29C100_DSG_FM": Etc/GMT+8
     - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/29C100/29C100_WTM_FM.TXT"
       stations:
-        "29C100": Etc/GMT+8
+        "29C100_WTM_FM": Etc/GMT+8
     # 28B080 Washougal River — gauge 184, linked to reach 387 (Washougal)
     - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/28B080/28B080_STG_FM.TXT"
       stations:
-        "28B080": Etc/GMT+8
+        "28B080_STG_FM": Etc/GMT+8
     - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/28B080/28B080_DSG_FM.TXT"
       stations:
-        "28B080": Etc/GMT+8
+        "28B080_DSG_FM": Etc/GMT+8
     - url: "https://apps.ecology.wa.gov/ContinuousFlowAndWQ/StationData/Prod/28B080/28B080_WTM_FM.TXT"
       stations:
-        "28B080": Etc/GMT+8
+        "28B080_WTM_FM": Etc/GMT+8
 
 # No Python parser implementation yet
 cdec:
