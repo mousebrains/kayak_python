@@ -13,6 +13,10 @@
 -- not on the (now-differing) name. Timezone localization is preserved by the
 -- single-tz fallback added to BaseParser._localize in the same change (the
 -- parser still emits `29C100`, but the lone Etc/GMT+8 on the fetch is applied).
+-- (Caveat: the off-config backfill path -- fetch.py's `-U -t` mode -- builds the
+-- maps from ALL of a parser's sources, so a wa.gov backfill there would be len>1
+-- and BOTH the fallback and station dispatch would miss the bare `29C100`. wa.gov
+-- is a rolling-window feed with no backfill URLs, so this is moot in practice.)
 --
 -- Renamed BY the source's fetch_url (the 3 same-named rows differ only by URL).
 -- Idempotent: re-running matches nothing once renamed (the `name IN (...)` guard

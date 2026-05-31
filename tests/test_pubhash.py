@@ -1,10 +1,10 @@
-"""Tests for the base-62 public-hash sequence helper."""
+"""Tests for the base-62 id↔handle codec."""
 
 from __future__ import annotations
 
 import pytest
 
-from kayak.utils.pubhash import decode, encode, next_hash
+from kayak.utils.pubhash import decode, encode
 
 
 def test_encode_known_values():
@@ -51,11 +51,8 @@ def test_decode_rejects_bad_input():
         decode("a b")
 
 
-def test_next_hash_is_monotonic_max_plus_one():
-    assert next_hash([]) == "1"
-    assert next_hash(["1", "2", "9"]) == "a"
-    assert next_hash(["z"]) == "A"  # base-62: after z comes A
-    assert next_hash(["Z"]) == "10"
-    assert next_hash(["a", "Z", "5"]) == "10"
-    # tolerates blanks / out-of-order
-    assert next_hash(["", "1", "", "3"]) == "4"
+def test_decode_is_lenient_on_leading_zeros():
+    # documented: decode is lenient, encode is canonical; round-trip via encode
+    # is the way to reject non-canonical aliases.
+    assert decode("01") == decode("1") == 1
+    assert encode(decode("01")) == "1"

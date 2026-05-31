@@ -7,6 +7,12 @@ it only ever increments, so a deleted id is never reused and a base-62 handle
 never silently re-points to a different row. This guard keeps every table's ids
 unique and strictly below its counter — catching a duplicate id (e.g. two
 concurrent PRs both grabbing the same ``next_id``) or a stale counter at commit.
+
+This catches an *immediate* collision (a new id ≤ the current max), but not a
+counter that was *lowered* across history (deleting the top rows then dropping
+``next_id`` to ``max+1`` would re-enable handle reuse). The full append-only
+guarantee — ``next_id`` ≥ the previous commit's — wants a git-history check,
+deferred to a later phase.
 """
 
 from __future__ import annotations
