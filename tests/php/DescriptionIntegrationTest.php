@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/IntegrationTestCase.php';
+require_once __DIR__ . '/../../php/includes/pubhash.php';
 
 /**
  * Baseline integration tests for description.php (Phase 3.1 of
@@ -135,8 +136,8 @@ final class DescriptionIntegrationTest extends IntegrationTestCase
 
     public function testInvalidIdReturns400(): void
     {
-        // filter_input(FILTER_VALIDATE_INT) returns false for non-int;
-        // !$id catches that.
+        // A non-int ?id= isn't a valid base-62 handle either, so
+        // pubhash_param_id() returns null → the entry-point guard 400s.
         $resp = $this->request('/description.php', ['id' => 'not-an-int']);
 
         $this->assertSame(400, $resp['status']);
@@ -144,7 +145,7 @@ final class DescriptionIntegrationTest extends IntegrationTestCase
 
     public function testDetailModeRendersGaugedReach(): void
     {
-        $resp = $this->request('/description.php', ['id' => self::REACH_WITH_GAUGE_ID]);
+        $resp = $this->request('/description.php', ['h' => pubhash_encode(self::REACH_WITH_GAUGE_ID)]);
 
         $this->assertSame(200, $resp['status']);
         $this->assertResponseContains(
@@ -173,7 +174,7 @@ final class DescriptionIntegrationTest extends IntegrationTestCase
         // The Sandy reach carries basin/region/elevation/length/gradient + a
         // gradient profile, so description_detail.php renders the same four
         // consolidated lines + themed elevation overlay that reach.php does.
-        $resp = $this->request('/description.php', ['id' => self::REACH_WITH_GAUGE_ID]);
+        $resp = $this->request('/description.php', ['h' => pubhash_encode(self::REACH_WITH_GAUGE_ID)]);
 
         $this->assertSame(200, $resp['status']);
         $this->assertResponseContains(
@@ -189,7 +190,7 @@ final class DescriptionIntegrationTest extends IntegrationTestCase
 
     public function testDetailModeRendersNoGaugeReach(): void
     {
-        $resp = $this->request('/description.php', ['id' => self::REACH_NO_GAUGE_ID]);
+        $resp = $this->request('/description.php', ['h' => pubhash_encode(self::REACH_NO_GAUGE_ID)]);
 
         $this->assertSame(200, $resp['status']);
         // description.php's $fields list doesn't include 'River', so the
@@ -215,7 +216,7 @@ final class DescriptionIntegrationTest extends IntegrationTestCase
         // Valid YYYY-MM-DD window — page renders even with no obs in window
         // (gp_render_plots handles empty data internally).
         $resp = $this->request('/description.php', [
-            'id' => self::REACH_WITH_GAUGE_ID,
+            'h' => pubhash_encode(self::REACH_WITH_GAUGE_ID),
             'start' => '2026-04-01',
             'end' => '2026-05-01',
         ]);
@@ -234,12 +235,34 @@ final class DescriptionIntegrationTest extends IntegrationTestCase
         // validate_date returns null for non-YYYY-MM-DD strings; entry
         // point doesn't reject — the date filter just becomes "no filter".
         $resp = $this->request('/description.php', [
-            'id' => self::REACH_WITH_GAUGE_ID,
+            'h' => pubhash_encode(self::REACH_WITH_GAUGE_ID),
             'start' => 'garbage',
             'end' => '04/01/2026',  // wrong format
         ]);
 
         $this->assertSame(200, $resp['status']);
         $this->assertNoBareInlineScript($resp['body']);
+    }
+
+    public function testHandleResolvesDetail(): void
+    {
+        // The canonical ?h=<handle> resolves the same reach a ?id= would.
+        $resp = $this->request('/description.php', ['h' => pubhash_encode(self::REACH_WITH_GAUGE_ID)]);
+
+        $this->assertSame(200, $resp['status']);
+        $this->assertStringContainsString(self::REACH_WITH_GAUGE_NAME, $resp['body']);
+        $this->assertNoBareInlineScript($resp['body']);
+    }
+
+    public function testLegacyIdRedirectsToHandle(): void
+    {
+        // A legacy ?id=<decimal> 301s to the canonical ?h=<handle> (stable id).
+        $resp = $this->request('/description.php', ['id' => self::REACH_WITH_GAUGE_ID]);
+
+        $this->assertSame(301, $resp['status']);
+        $this->assertSame(
+            '/description.php?h=' . pubhash_encode(self::REACH_WITH_GAUGE_ID),
+            $resp['headers']['location'] ?? '',
+        );
     }
 }
