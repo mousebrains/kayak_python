@@ -114,7 +114,7 @@ if (is_int($embed) && $embed !== 0) {
     include_header("$src_name - $y_label", '', '', '', ['picker_kind' => 'gauge']);
     echo '<h2>' . htmlspecialchars($src_name) . ' — ' . htmlspecialchars($y_label) . '</h2>';
     echo '<form method="get" style="margin-bottom:.5rem;font-size:.85rem">';
-    echo '<input type="hidden" name="id" value="' . $id . '">';
+    echo '<input type="hidden" name="h" value="' . pubhash_encode($id) . '">';
     echo '<input type="hidden" name="type" value="' . htmlspecialchars($type) . '">';
     echo '<input type="hidden" name="embed" value="1">';
     echo '<label>Start: <input type="date" name="start" value="' . htmlspecialchars($form_start) . '"></label> ';
@@ -123,8 +123,8 @@ if (is_int($embed) && $embed !== 0) {
     echo '</form>';
     echo '<div class="plot-container">' . $svg . '</div>';
     echo '<p style="margin-top:.5rem;font-size:.85rem">';
-    echo '<a href="/source.php?id=' . $id . '">Back to source</a>';
-    echo ' | <a href="/source_data.php?id=' . $id . '">Raw data</a></p>';
+    echo '<a href="' . pubhash_url('source', $id) . '">Back to source</a>';
+    echo ' | <a href="' . pubhash_url('source_data', $id) . '">Raw data</a></p>';
     include_footer();
 } else {
     header('Content-Type: image/svg+xml');

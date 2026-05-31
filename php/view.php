@@ -6,10 +6,11 @@ declare(strict_types=1);
  * Usage: /view.php?id=<reach_id>
  */
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/pubhash_request.php';
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
 
-$id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+$id = pubhash_param_id();
 if (!is_int($id) || $id < 1) { http_response_code(400); exit('Missing id parameter'); }
 
 $db = get_db();
@@ -52,8 +53,8 @@ if ($rows !== []) {
 }
 
 echo '<p style="margin-top:1rem">';
-echo '<a href="/description.php?id=' . $id . '">Description</a>';
-echo ' | <a href="/plot.php?type=flow&id=' . $id . '&embed=1">Flow plot</a>';
+echo '<a href="' . pubhash_url('description', $id) . '">Description</a>';
+echo ' | <a href="/plot.php?type=flow&h=' . pubhash_encode($id) . '&embed=1">Flow plot</a>';
 echo ' | <a href="/index.html">Back</a></p>';
 
 include_footer();
