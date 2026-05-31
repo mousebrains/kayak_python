@@ -177,4 +177,19 @@ final class CustomIntegrationTest extends IntegrationTestCase
             $resp['headers']['location'] ?? '',
         );
     }
+
+    public function testLegacyIdsRedirectCapsHandlesAt200(): void
+    {
+        // The redirect encodes every ?ids= token, then caps the handle list at
+        // 200 to match the destination's array_slice — so a pathological list
+        // can't emit an oversized Location header. Encoding is DB-free, so the
+        // ids needn't exist.
+        $resp = $this->request('/custom.php', ['ids' => implode(',', range(1, 250))]);
+
+        $this->assertSame(301, $resp['status']);
+        $loc = $resp['headers']['location'] ?? '';
+        $this->assertStringStartsWith('/custom.php?h=', $loc);
+        $handles = explode(',', substr($loc, strlen('/custom.php?h=')));
+        $this->assertCount(200, $handles, 'redirect handle list must be capped at 200');
+    }
 }

@@ -151,6 +151,10 @@ function pubhash_redirect_legacy_ids(): void
     if ($handles === []) {
         return; // no valid ids → let the page's empty-list path handle it
     }
+    // Bound the Location header to the same 200 the destination keeps
+    // (custom.php / custom_gauges.php array_slice($ids, 0, 200)); a pathological
+    // ?ids= list would otherwise emit an oversized redirect header pre-cap.
+    $handles = array_slice($handles, 0, 200);
 
     $other = $_GET;
     unset($other['ids'], $other['h']);
