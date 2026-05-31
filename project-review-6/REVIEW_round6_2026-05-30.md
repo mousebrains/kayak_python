@@ -15,6 +15,14 @@ watching it go red. Two facet over-claims were dissolved in synthesis (see conve
 round audits the prior round's own fixes, the recursive integrity check the series exists for*) and the
 new feature/data batch (#93–#98 + migrations 0069/0070/0071 + the two nightly snapshots eb4a274/6e228d4 +
 the two direct-to-`main` commits 9b428bb/6007c21).
+**External review (PR #99, 2026-05-31):** an independent verification pass re-confirmed every finding,
+severity, and the grade against `db34ae0` (recommendation: merge) and caught one inaccurate evidence line +
+three off-by-one citations, corrected here: the MED-#1 `git branch --contains` claim was dropped (feature
+branches later cut from `main` now contain those commits, so containment no longer distinguishes them — the
+linear-history + missing-`(#NN)` evidence is the durable proof); `ci.yml:114→115`, `SourceUrlTest.php:83-84→84-85`,
+`check_reaches.py:212→213`. It also noted one below-LOW item the audit didn't call: the 0069/0070 migration
+*header comments* still say JDA/BON/VAPW1/SHNO3 are "in `PENDING_RECONCILIATION` until the snapshot lands them,"
+now stale (the snapshot landed them; the set is empty) — the same stale-comment class as the CHANGELOG LOW.
 
 ---
 
@@ -117,7 +125,7 @@ duplicate the gauges' existing USGS temperature). (2) The tests/CI facet's LOW �
 vertices are only caught via endpoint drift, so a NULL-endpoint reach passes" — was **refuted**:
 `parse_geom_string` (`tracing/format.py:105`) calls `validate_lat_lon` **per vertex** (`format.py:36`,
 strict `[-90,90]`/`[-180,180]`) *before* the drift checks, so an out-of-range vertex raises and
-`check_reaches.py:212` flags it "geom unparseable" regardless of the endpoint columns (verified empirically:
+`check_reaches.py:213` flags it "geom unparseable" regardless of the endpoint columns (verified empirically:
 `-122 45,-121 999` → `latitude 999.0 out of range`). The docstring's out-of-range check is accurate; the
 facet's break-it geom string had failed the *arity* check, not the range check.
 
@@ -131,8 +139,8 @@ facet's break-it geom string had failed the *arity* check, not the range check.
 |---|---|---|---|
 | **R1.1** delete `db_push.sh` `DELETE FROM pages` | line-count → 0 | **0**; `git log -S` → removed in `12074b3` (#85), absent at HEAD | ✅ |
 | **R1.2** timer-restart `trap … EXIT` | trap armed between stop (`:100`) & clean restart (`:187`) | present `db_push.sh:121`; full coverage traced — no exit path strands the 4 timers | ✅ |
-| **R1.2 guard** `check-db-push-trap.sh` | fires on trap removal | **fires** (exit 1); wired `ci.yml:114`; shellcheck-clean (trap opaque in heredoc) | ✅ |
-| **R1.3** `source_url` TAB filter | `/[\r\n\t\0]/` present + tab tests | `source_url.php:34`; `git log -S'\r\n\t\0'` → single hit `18870c4` (#86); `SourceUrlTest.php:83-84` tab cases pass | ✅ |
+| **R1.2 guard** `check-db-push-trap.sh` | fires on trap removal | **fires** (exit 1); wired `ci.yml:115`; shellcheck-clean (trap opaque in heredoc) | ✅ |
+| **R1.3** `source_url` TAB filter | `/[\r\n\t\0]/` present + tab tests | `source_url.php:34`; `git log -S'\r\n\t\0'` → single hit `18870c4` (#86); `SourceUrlTest.php:84-85` tab cases pass | ✅ |
 | **R1.5** mktemp the `/tmp` paths | `$(mktemp)` not predictable paths | `db_push.sh` `LIVE_FINAL/NEW_DB="$(mktemp)"`; `.backup`/`gunzip >` targets updated | ✅ |
 | **R2.1** claim-vs-source lever | passes at HEAD + non-vacuous | `test_remediation_claims.py` → **3 passed**; re-adding `DELETE FROM pages` → **RED** (break-it) | ✅ |
 | **R3.1–R3.4** doc fixes | grep clean / erratum present | R3.2 grep returns nothing; R3.1 reach.huc note, R3.3 CHANGELOG, R3.4 round-4 erratum all present | ✅ |
@@ -147,9 +155,9 @@ metacharacter, quote-scoped attempt counter) all correctly *don't* fire on its 6
 
 - **MED [process / record integrity — recurrence of the round-5 "out-of-band" class] — two direct-to-`main`
   commits bypassed the PR/worktree workflow; the first broke CI with a misleading subject.** Evidence:
-  `git branch -a --contains 9b428bb` and `… 6007c21` → reachable only from `main`/`origin/main`, not from
-  any open feature branch; `f3ed673..HEAD` is linear (no merge commits), so the `(#NN)` suffix every other
-  commit carries is the PR marker, and both of these lack it. `9b428bb` "Drop new USACE gauges" touches
+  both are **direct commits on `main`** — `f3ed673..HEAD` is linear (no merge commits), and every other commit
+  in the range carries a `(#NN)` squash-merge suffix (the PR marker) that both `9b428bb` and `6007c21` lack,
+  so they reached `main` without a PR. `9b428bb` "Drop new USACE gauges" touches
   **only** `tests/test_scripts/test_migration_csv_reconciliation.py` (it drops no gauges — they were already
   wired by #93/#94 and landed in `source.csv` by snapshot `6e228d4`); it has no conventional `type:` prefix
   and an empty body (against MEMORY `feedback_commit_msg_style`); and it wrote `PENDING_RECONCILIATION: set[str] = {}`
