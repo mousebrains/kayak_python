@@ -1,8 +1,18 @@
-# PLAN: Metadata as a single source of truth (symbolic-FK CSVs)
+# PLAN: Metadata as a single source of truth
 
-**Status:** In progress (design v1). **Supersedes** the later phases of
+**Status:** In progress (design **v2**). **Supersedes** the later phases of
 `project-review-6/PLAN_round6_remediation.md` — the round-6 *review* stands (it surfaced the root cause);
 this is the strategic remediation the maintainer chose over the duality-based plan.
+
+> **v2 simplification (maintainer).** The numeric `id` stays as the **stable, author-assigned** key (not an
+> ephemeral surrogate), so the public URL handle is simply **`base62(id)`** — `decode → id → WHERE id = ?`,
+> with **no separate `hash` column and no lookup table**. New ids come from a **monotonic per-type counter**
+> (only ever increments → a deleted id is never reused → a base-62 handle never silently re-points). Because
+> the id is stable, **foreign keys stay numeric** — so the symbolic-FK CSV conversion + loader rewrite (the v1
+> Phase 3) are **dropped**, and `observation` int FKs stay valid across rebuilds. `name` (made unique in
+> Phase 1a/1b) remains a human-readable handle/lookup; `display_name` is presentation. The architecture below
+> is restated for v2; the per-table-key + phase sections further down still describe the superseded v1
+> (symbolic-FK) shape and are being realigned.
 
 ## Motivation — why round 6 kept generating complexity
 
@@ -18,25 +28,29 @@ dual-edit, and the whole class of drift the review found.
 re-harvestable from their live sources** — so we only need to recreate the *metadata*, then let the pipeline
 re-populate data. That removes the need to preserve numeric ids at all.
 
-## Target architecture (six principles)
+## Target architecture (v2)
 
-1. **Metadata = one CSV per table, with symbolic (natural-key string) foreign keys** — no numeric `id`
-   columns in the CSVs. `gauge_source.csv` carries `(gauge_name, source_key)`, not `(gauge_id, source_id)`.
-2. **Three identifiers per row, cleanly separated.** `name` = a unique, human-readable **symbolic-FK key**
-   (what other CSVs reference the row by — readable when hand-editing); an immutable, opaque **`hash`** column
-   (`[a-z0-9]+`) on the bookmarkable tables (`source`/`gauge`/`reach`) = the **public URL handle**;
-   `display_name` = presentation (what the user sees). The numeric `id` is a **pure ephemeral internal
-   surrogate**, reassigned freely on every rebuild.
-3. **Public URLs and custom pages reference the immutable `hash`, never the row `id`** — so bookmarks and
-   custom-gauge lists survive both a rebuild *and* a later `name` rename (the `hash` decouples the public id
-   from both the ephemeral id and the mutable name). A row is looked up by its `hash` — a unique indexed
-   column, so no separate hash→row table is needed. The constraint forcing this: row ids are baked into `?id=`
-   URLs and the `custom_gauges` `ids=` list today. We switch **now**, early, while few bookmarks exist.
-4. **Observations are not in the CSVs** — a rebuild recreates metadata and the pipeline re-fetches data.
-5. **Migrations become schema-only** (ALTER/CREATE/DROP — the one thing CSVs can't express). No more data
-   migrations; a metadata change is a reviewed **CSV diff**.
-6. **The CSVs are the single source of truth, living in the data repo** (this subsumes the round-6 data-repo
-   split — the data repo *is* the authoritative metadata, reviewed via PRs).
+1. **One CSV per table, keeping the numeric `id` column** — but the id is **author-assigned and stable**, not
+   a prod autoincrement, and never reassigned. **Foreign keys stay numeric** (`gauge_source.csv` =
+   `gauge_id, source_id`), so a rebuild loads rows with their explicit ids and the `observation` int FK stays
+   valid — no symbolic-FK resolution, no key→id loader.
+2. **New ids come from a monotonic per-type counter** (`data/db/id_counters.csv`: `source`/`gauge`/`reach`
+   high-water marks). A new row takes `counter + 1` and bumps the counter; the counter **only increments**, so
+   a deleted id is **never reused**. A CI guard enforces: ids unique per type, and every id ≤ its counter.
+3. **The public URL handle is `base62(id)`** — computed, not stored (`decode(handle) → id → WHERE id = ?`); no
+   `hash` column, no hash→row table. Base-62 `[0-9a-zA-Z]` (case-sensitive — URL query strings and SQLite's
+   `BINARY` collation both preserve case), 1-based so the falsy `"0"` never appears. The id is stable, so the
+   handle survives rebuilds and is decoupled from the mutable `name` (renames don't change it). URLs + custom
+   pages switch from `?id=<decimal>` to the base-62 handle; per-type pages keep per-type id spaces (per-table).
+4. **Observations are not in the CSVs.** A from-scratch rebuild re-fetches them; an incremental metadata
+   change *preserves* them (the id is stable, so the FK stays valid).
+5. **Migrations become schema-only** — a metadata change is a reviewed **CSV diff**, applied to prod by the
+   incremental sync (matching by id, preserving observations).
+6. **The CSVs are the single source of truth, in the data repo** (subsumes the round-6 data-repo split).
+
+`name` (unique after Phase 1a/1b) stays a human-readable handle for lookup and CSV reference; `display_name`
+is presentation; the stable `id` is the PK, the FK target, and — base-62 encoded — the public handle. One
+identifier does the work the v1 design split across `id` + `hash` + `name`.
 
 ## Per-table natural key (the symbolic id)
 
