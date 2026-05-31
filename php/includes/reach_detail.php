@@ -406,7 +406,6 @@ function _render_reach_details_table(array $reach, array $states, array $classes
 {
     echo '<table class="desc-table">';
     $fields = [
-        'ID' => $reach['id'],
         'Name' => $reach['name'],
         'Display Name' => $reach['display_name'],
         'River' => $reach['river'],
@@ -451,15 +450,15 @@ function _render_reach_details_table(array $reach, array $states, array $classes
     $html_fields = ['Put-in', 'Take-out'];
     $autolink_fields = ['Description', 'Notes'];
     foreach ($fields as $label => $value) {
-        if ($value === null || trim((string)$value) === '') {
+        if ($value === null || trim($value) === '') {
             continue;
         }
         if (in_array($label, $html_fields, true)) {
             echo "<tr><td>$label</td><td>$value</td></tr>\n";
         } elseif (in_array($label, $autolink_fields, true)) {
-            echo "<tr><td>$label</td><td>" . nl2br(autolink_urls((string)$value)) . "</td></tr>\n";
+            echo "<tr><td>$label</td><td>" . nl2br(autolink_urls($value)) . "</td></tr>\n";
         } else {
-            $esc = htmlspecialchars((string)$value);
+            $esc = htmlspecialchars($value);
             echo "<tr><td>$label</td><td>$esc</td></tr>\n";
         }
     }

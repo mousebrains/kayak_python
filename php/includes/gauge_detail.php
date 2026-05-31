@@ -759,14 +759,14 @@ function _render_associated_sources(array $sources): void
     }
     echo '<h3 style="margin-top:1rem">Associated Sources</h3>';
     echo '<table class="readings-table">';
-    echo '<tr><th>ID</th><th>Name</th><th>Agency</th><th>Observations</th><th>Latest</th></tr>';
+    echo '<tr><th>Name</th><th>Agency</th><th>Observations</th><th>Latest</th></tr>';
     foreach ($sources as $s) {
         $sname = htmlspecialchars($s['name']);
         $sagency = htmlspecialchars($s['agency'] ?? '');
         $cnt = number_format($s['obs_count']);
         $latest = htmlspecialchars($s['latest_at'] ?? '');
         $shref = pubhash_url('source', $s['id']);
-        echo "<tr><td><a href=\"$shref\">{$s['id']}</a></td><td><a href=\"$shref\">$sname</a></td><td>$sagency</td><td>$cnt</td><td>$latest</td></tr>\n";
+        echo "<tr><td><a href=\"$shref\">$sname</a></td><td>$sagency</td><td>$cnt</td><td>$latest</td></tr>\n";
     }
     echo '</table>';
 }

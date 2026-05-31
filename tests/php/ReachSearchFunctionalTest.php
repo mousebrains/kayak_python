@@ -199,6 +199,15 @@ final class ReachSearchFunctionalTest extends FunctionalTestCase
         // Class column.
         $this->assertStringContainsString('III', $html);
 
+        // ID column is now the base-62 handle, hyperlinked to the reach page
+        // (no bare decimal id on the public search results).
+        $alphaHandle = pubhash_encode(self::$reachAlpha);
+        $this->assertStringContainsString(
+            '<td><a href="/reach.php?h=' . $alphaHandle . '">' . $alphaHandle . '</a></td>',
+            $html,
+        );
+        $this->assertStringNotContainsString('<td>' . self::$reachAlpha . '</td>', $html);
+
         // Map: both reaches have coords → search-map div + deferred scripts.
         $this->assertStringContainsString('id="search-map"', $html);
         $this->assertStringContainsString('search-map.js', $html);

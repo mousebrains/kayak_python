@@ -190,6 +190,8 @@ final class ReachDetailFunctionalTest extends FunctionalTestCase
         $this->assertStringContainsString('low 800 CFS, high 3,000 CFS', $html);  // Flow line
         $this->assertStringContainsString('1,500 CFS', $html);          // Optimal Flow
         $this->assertStringContainsString('Waterfall', $html);          // Features
+        // The internal-ID row was dropped from the details table.
+        $this->assertStringNotContainsString('<th>ID</th>', $html);
 
         // Coordinate anchor fields (Put-in / Take-out) → google maps links.
         $this->assertStringContainsString('Put-in', $html);
