@@ -28,7 +28,11 @@ function pubhash_param_id(): ?int
     $h = filter_input(INPUT_GET, 'h', FILTER_DEFAULT);
     if (is_string($h) && $h !== '') {
         try {
-            return pubhash_decode($h);
+            $n = pubhash_decode($h);
+            // "0"/"00" decode to 0, which encode() never mints (ids are 1-based);
+            // normalize sub-1 to null so the ?h= branch agrees with the ?id= one
+            // below and no caller inherits a latent pubhash_encode(0) throw.
+            return $n >= 1 ? $n : null;
         } catch (InvalidArgumentException) {
             return null; // malformed handle → treat as not-found
         }

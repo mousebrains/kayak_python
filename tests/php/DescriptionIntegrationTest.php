@@ -143,6 +143,18 @@ final class DescriptionIntegrationTest extends IntegrationTestCase
         $this->assertSame(400, $resp['status']);
     }
 
+    public function testZeroHandleTreatedAsMissing(): void
+    {
+        // "0"/"00" decode to 0, which encode() never mints (ids are 1-based).
+        // pubhash_param_id() normalizes that sub-1 result to null — like the
+        // legacy ?id=0 branch — so ?h=0 hits the entry-point "missing id" 400.
+        // (Without the guard it fell through as id=0 to a get_reach_or_404 404.)
+        $resp = $this->request('/description.php', ['h' => '0']);
+
+        $this->assertSame(400, $resp['status']);
+        $this->assertStringContainsString('Missing id parameter', $resp['body']);
+    }
+
     public function testDetailModeRendersGaugedReach(): void
     {
         $resp = $this->request('/description.php', ['h' => pubhash_encode(self::REACH_WITH_GAUGE_ID)]);
