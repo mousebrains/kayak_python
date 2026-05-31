@@ -18,6 +18,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/pubhash_request.php';
 
 /**
  * Return the <link> / <style> block to embed in <head>. Prefers the hashed
@@ -90,8 +91,9 @@ function render_nav(string $active, array $context): string {
 
     // Maintainers still get a prominent Edit shortcut on reach pages.
     // Everyone else reaches the Comment form through the footer.
-    if ($feature && $maint && ($context['type'] ?? null) === 'reach' && ($context['id'] ?? '') !== '') {
-        $left .= '<a href="/edit.php?id=' . (int)$context['id'] . '"' . $comment_cls . '>Edit</a>';
+    $cid = $context['id'] ?? null;
+    if ($feature && $maint && ($context['type'] ?? null) === 'reach' && is_int($cid) && $cid >= 1) {
+        $left .= '<a href="' . pubhash_url('edit', $cid) . '"' . $comment_cls . '>Edit</a>';
     }
     $left .= '</nav>';
 

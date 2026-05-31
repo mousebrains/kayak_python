@@ -26,6 +26,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/pubhash_request.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/sanity.php';
 require_once __DIR__ . '/review_logic.php';
@@ -270,8 +271,8 @@ function _render_review_meta_table(array $cr, array $payload): void
            . htmlspecialchars($src) . '</a></td></tr>';
     }
     echo '<tr><td>Status</td><td>' . htmlspecialchars($cr['status']) . '</td></tr>';
-    if ($cr['target_type'] === 'reach' && $cr['target_id'] !== null) {
-        echo '<tr><td>Reach</td><td><a href="/description.php?id=' . $cr['target_id']
+    if ($cr['target_type'] === 'reach' && is_int($cr['target_id'])) {
+        echo '<tr><td>Reach</td><td><a href="' . pubhash_url('description', $cr['target_id'])
            . '">description</a></td></tr>';
     }
     if (($payload['body'] ?? '') !== '') {
