@@ -13,10 +13,11 @@ declare(strict_types=1);
  * one-click view of a single source's history.
  */
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/pubhash_request.php';
 require_once __DIR__ . '/includes/svg_plot.php';
 require_once __DIR__ . '/includes/validate.php';
 
-$id   = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+$id   = pubhash_param_id();
 $type = filter_input(INPUT_GET, 'type', FILTER_SANITIZE_SPECIAL_CHARS);
 $type = is_string($type) && $type !== '' ? $type : 'flow';
 $days = filter_input(INPUT_GET, 'days', FILTER_VALIDATE_INT);

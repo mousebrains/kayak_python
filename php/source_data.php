@@ -11,11 +11,12 @@ declare(strict_types=1);
  * Linked from source.php's Observations table.
  */
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/pubhash_request.php';
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
 require_once __DIR__ . '/includes/validate.php';
 
-$id         = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+$id         = pubhash_param_id();
 $start_raw  = filter_input(INPUT_GET, 'start', FILTER_SANITIZE_SPECIAL_CHARS);
 $end_raw    = filter_input(INPUT_GET, 'end', FILTER_SANITIZE_SPECIAL_CHARS);
 $start_date = validate_date(is_string($start_raw) ? $start_raw : null);

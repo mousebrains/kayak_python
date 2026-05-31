@@ -6,11 +6,12 @@ declare(strict_types=1);
  * Usage: /data.php?id=<reach_id>[&start=YYYY-MM-DD&end=YYYY-MM-DD]
  */
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/pubhash_request.php';
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
 require_once __DIR__ . '/includes/validate.php';
 
-$id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+$id = pubhash_param_id();
 $start_date = validate_date(filter_input(INPUT_GET, 'start', FILTER_SANITIZE_SPECIAL_CHARS));
 $end_date = validate_date(filter_input(INPUT_GET, 'end', FILTER_SANITIZE_SPECIAL_CHARS));
 $sort = filter_input(INPUT_GET, 'sort', FILTER_SANITIZE_SPECIAL_CHARS) === 'asc' ? 'asc' : 'desc';
