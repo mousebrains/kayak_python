@@ -16,12 +16,12 @@ require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
 require_once __DIR__ . '/includes/validate.php';
+require_once __DIR__ . '/includes/pubhash_request.php';
 require_once __DIR__ . '/includes/gauge_search.php';
 require_once __DIR__ . '/includes/gauge_detail.php';
 
 $db = get_db();
 
-$id_raw = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 $q_raw  = filter_input(INPUT_GET, 'q', FILTER_DEFAULT);
 $start_raw = filter_input(INPUT_GET, 'start', FILTER_SANITIZE_SPECIAL_CHARS);
 $end_raw   = filter_input(INPUT_GET, 'end', FILTER_SANITIZE_SPECIAL_CHARS);
@@ -35,8 +35,11 @@ if ($q_trimmed !== '') {
     handle_gauge_search($db, $q_trimmed);
 }
 
+// --- Detail mode: 301 a legacy ?id= to the canonical ?h=, then resolve ---
+pubhash_redirect_legacy_id();
+$id = pubhash_param_id();
+
 // --- Default: show first gauge ---
-$id = is_int($id_raw) && $id_raw > 0 ? $id_raw : null;
 if ($id === null) {
     $row = db_query($db, 'SELECT id FROM gauge ORDER BY id ASC LIMIT 1')->fetch();
     if ($row === false) {

@@ -75,8 +75,8 @@ final class GaugeSearchFunctionalTest extends FunctionalTestCase
         $this->assertStringContainsString('&ldquo;Willamette&rdquo;', $html);
         $this->assertStringContainsString('Willamette at Salem', $html);
         $this->assertStringContainsString('Willamette near Albany', $html);
-        // Row links to the detail page.
-        $this->assertStringContainsString('/gauge.php?id=', $html);
+        // Row links to the detail page by its base-62 handle.
+        $this->assertStringContainsString('/gauge.php?h=', $html);
         // The located gauge shows its location; the other's cell is blank.
         $this->assertStringContainsString('>Salem<', $html);
         $this->assertStringContainsString('Browse all gauges', $html);
