@@ -461,7 +461,7 @@
         const target = hit || layer;
         target.bindPopup(buildPopup);
         // Two-surface hover tracking for the desktop hover-popup flow.
-        // The popup body wraps in <a href="/description.php?id=...">; we
+        // The popup body wraps in <a href="/description.php?h=...">; we
         // need to let the user move from trace into the popup to click,
         // so close only when neither surface is hovered (with a grace
         // window for normal cursor traversal). Touch devices keep
