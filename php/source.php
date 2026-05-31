@@ -6,12 +6,13 @@ declare(strict_types=1);
  * Usage: /source.php?id=<source_id> or /source.php?q=<search>
  */
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/pubhash_request.php';
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
 
 $db = get_db();
 
-$id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+$id = pubhash_param_id();
 $q  = filter_input(INPUT_GET, 'q', FILTER_DEFAULT);
 
 // --- Search mode ---
@@ -29,7 +30,7 @@ if ($q !== null && $q !== '') {
     $results = $stmt->fetchAll();
 
     if (count($results) === 1) {
-        header('Location: /source.php?id=' . $results[0]['id']);
+        header('Location: ' . pubhash_url('source', $results[0]['id']));
         exit;
     }
 
@@ -46,7 +47,8 @@ if ($q !== null && $q !== '') {
         foreach ($results as $r) {
             $name = htmlspecialchars($r['name']);
             $agency = htmlspecialchars($r['agency'] ?? '');
-            echo "<tr><td>{$r['id']}</td><td><a href=\"/source.php?id={$r['id']}\">$name</a></td><td>$agency</td></tr>\n";
+            $href = pubhash_url('source', $r['id']);
+            echo "<tr><td>{$r['id']}</td><td><a href=\"{$href}\">$name</a></td><td>$agency</td></tr>\n";
         }
         echo '</table>';
     }
@@ -55,6 +57,9 @@ if ($q !== null && $q !== '') {
     include_footer();
     exit;
 }
+
+// --- Detail mode: 301 a legacy ?id= to the canonical ?h=, then resolve ---
+pubhash_redirect_legacy_id();
 
 // --- Default: show first source ---
 if (!is_int($id) || $id < 1) {
@@ -139,13 +144,13 @@ include_header(
 // Navigation bar
 echo '<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">';
 if ($prev !== false) {
-    echo '<a href="/source.php?id=' . $prev['id'] . '">&laquo; Prev</a>';
+    echo '<a href="' . pubhash_url('source', $prev['id']) . '">&laquo; Prev</a>';
 } else {
     echo '<span style="color:#999">&laquo; Prev</span>';
 }
 echo "<span>Source $position of $total</span>";
 if ($next !== false) {
-    echo '<a href="/source.php?id=' . $next['id'] . '">Next &raquo;</a>';
+    echo '<a href="' . pubhash_url('source', $next['id']) . '">Next &raquo;</a>';
 } else {
     echo '<span style="color:#999">Next &raquo;</span>';
 }
@@ -227,10 +232,8 @@ if ($obs_summary !== []) {
         // observed_at comes back as 'YYYY-MM-DD HH:MM:SS.000000'; the microsecond
         // tail is always zero (parsers store at second precision) so trim it.
         $latest = htmlspecialchars(substr($o['latest'] ?? '', 0, 19));
-        $plot_url = '/source_plot.php?id=' . $source['id']
-                  . '&type=' . urlencode($dtype_raw)
-                  . '&embed=1';
-        $data_url = '/source_data.php?id=' . $source['id'];
+        $plot_url = pubhash_url('source_plot', $source['id'], '&type=' . urlencode($dtype_raw) . '&embed=1');
+        $data_url = pubhash_url('source_data', $source['id']);
         $links = '<a href="' . htmlspecialchars($plot_url) . '">plot</a>'
                . ' · <a href="' . htmlspecialchars($data_url) . '">data</a>';
         echo "<tr><td>$dtype</td><td>$cnt</td><td>$latest</td><td>$links</td></tr>\n";
@@ -249,7 +252,7 @@ if ($gauges !== []) {
         $gname = htmlspecialchars($g['name']);
         $gloc = htmlspecialchars($g['location'] ?? '');
         $gusgs = htmlspecialchars($g['usgs_id'] ?? '');
-        $ghref = "/gauge.php?id={$g['id']}";
+        $ghref = pubhash_url('gauge', $g['id']);
         echo "<tr><td><a href=\"$ghref\">{$g['id']}</a></td><td><a href=\"$ghref\">$gname</a></td><td>$gloc</td><td>$gusgs</td></tr>\n";
     }
     echo '</table>';

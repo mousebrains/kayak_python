@@ -4,6 +4,7 @@ declare(strict_types=1);
 use PHPUnit\Framework\TestCase;
 
 require_once __DIR__ . '/../../php/includes/pubhash.php';
+require_once __DIR__ . '/../../php/includes/pubhash_request.php';
 
 /**
  * Unit tests for php/includes/pubhash.php — the PHP half of the base-62
@@ -14,6 +15,17 @@ require_once __DIR__ . '/../../php/includes/pubhash.php';
  */
 final class PubhashTest extends TestCase
 {
+    public function testPubhashUrl(): void
+    {
+        $this->assertSame('/source.php?h=1', pubhash_url('source', 1));
+        $this->assertSame('/gauge.php?h=' . pubhash_encode(140), pubhash_url('gauge', 140));
+        // $extra is appended verbatim after the handle.
+        $this->assertSame(
+            '/source_plot.php?h=' . pubhash_encode(7) . '&type=flow&embed=1',
+            pubhash_url('source_plot', 7, '&type=flow&embed=1'),
+        );
+    }
+
     public function testEncodeKnownValues(): void
     {
         $this->assertSame('1', pubhash_encode(1));

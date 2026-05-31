@@ -68,3 +68,15 @@ function pubhash_redirect_legacy_id(): void
     header('Location: ' . $script . '?' . http_build_query($params));
     http_terminate(301);
 }
+
+/**
+ * Build a canonical public detail URL: `/<page>.php?h=<handle>[<extra>]`.
+ *
+ * $id must be a positive row id (a primary key); $extra is appended verbatim
+ * after the handle (e.g. "&type=gauge", "&amp;hidden=1") and must already be
+ * escaped for its output context.
+ */
+function pubhash_url(string $page, int $id, string $extra = ''): string
+{
+    return '/' . $page . '.php?h=' . pubhash_encode($id) . $extra;
+}
