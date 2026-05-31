@@ -18,6 +18,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/pubhash_request.php';
 require_once __DIR__ . '/header.php';
 require_once __DIR__ . '/footer.php';
 
@@ -457,9 +458,9 @@ function _render_custom_gauges_table(array $rows, array $status_by_gauge): void
     }
     $status_attr = $status_word !== null ? ' data-status="' . htmlspecialchars($status_word) . '"' : '';
 ?>
-<tr class="clickable-row" data-href="/gauge.php?id=<?= $gid ?>"<?= $attrs ?><?= $status_attr ?>>
+<tr class="clickable-row" data-href="/gauge.php?h=<?= pubhash_encode($gid) ?>"<?= $attrs ?><?= $status_attr ?>>
   <td class="td-status" data-label="Status"><?= $status_cell ?></td>
-  <td class="td-name" data-label="River"><a href="/gauge.php?id=<?= $gid ?>"><?= htmlspecialchars($r['river']) ?></a></td>
+  <td class="td-name" data-label="River"><a href="/gauge.php?h=<?= pubhash_encode($gid) ?>"><?= htmlspecialchars($r['river']) ?></a></td>
   <td data-label="Location"><?= htmlspecialchars($r['location']) ?></td>
   <td class="td-date" data-label="Date"><?= $time_html ?></td>
   <td class="td-flow" data-label="Flow"><?= $flow_cell ?></td>

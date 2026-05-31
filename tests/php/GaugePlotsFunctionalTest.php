@@ -199,7 +199,7 @@ final class GaugePlotsFunctionalTest extends FunctionalTestCase
         $latest = mktime(0, 0, 0, 4, 15, 2026);
         $this->assertIsInt($latest);
         $html = $this->capture(fn() => gp_render_date_form(42, null, null, $latest));
-        $this->assertStringContainsString('name="id" value="42"', $html);
+        $this->assertStringContainsString('name="h" value="' . pubhash_encode(42) . '"', $html);
         $this->assertStringContainsString('type="date" name="start"', $html);
         $this->assertStringContainsString('type="date" name="end"', $html);
         // default end = latest date, default start = latest - 10 days.
