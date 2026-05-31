@@ -181,8 +181,8 @@ final class CustomHandlerFunctionalTest extends FunctionalTestCase
         $this->assertStringContainsString('data-group="status"', $html);
         $this->assertStringContainsString('data-group="tier"', $html);
 
-        // Edit-selection link carries resolved ids.
-        $this->assertStringContainsString('/picker.php?ids=', $html);
+        // Edit-selection link carries resolved handles.
+        $this->assertStringContainsString('/picker.php?h=', $html);
     }
 
     public function testSingleStateOmitsStateFilterGroup(): void
@@ -219,11 +219,11 @@ final class CustomHandlerFunctionalTest extends FunctionalTestCase
         $html = $this->capture(fn() => handle_custom_levels($this->pdo(), [self::$reachOkay]));
 
         // Flow int + plot link, gage 2dp, temp 0dp.
-        $this->assertStringContainsString('/plot.php?type=flow&id=' . self::$reachOkay, $html);
+        $this->assertStringContainsString('/plot.php?type=flow&h=' . pubhash_encode(self::$reachOkay), $html);
         $this->assertStringContainsString('>800<', $html);
-        $this->assertStringContainsString('/plot.php?type=gage&id=' . self::$reachOkay, $html);
+        $this->assertStringContainsString('/plot.php?type=gage&h=' . pubhash_encode(self::$reachOkay), $html);
         $this->assertStringContainsString('>4.25<', $html);
-        $this->assertStringContainsString('/plot.php?type=temp&id=' . self::$reachOkay, $html);
+        $this->assertStringContainsString('/plot.php?type=temp&h=' . pubhash_encode(self::$reachOkay), $html);
         $this->assertStringContainsString('>52<', $html);
 
         // 70 obs downsampled → an inline SVG sparkline.

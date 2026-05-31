@@ -11,11 +11,13 @@ declare(strict_types=1);
  */
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/validate.php';
+require_once __DIR__ . '/includes/pubhash_request.php';
 require_once __DIR__ . '/includes/description_detail.php';
 
-$id_raw = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
-$id = is_int($id_raw) && $id_raw > 0 ? $id_raw : 0;
-if ($id === 0) {
+// 301 a legacy ?id= to the canonical ?h=, then resolve.
+pubhash_redirect_legacy_id();
+$id = pubhash_param_id();
+if ($id === null) {
     http_response_code(400);
     exit('Missing id parameter');
 }

@@ -21,6 +21,7 @@ declare(strict_types=1);
  * gauge-metadata fields (location, coordinates, elevation, etc.).
  */
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/pubhash_request.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
@@ -33,7 +34,7 @@ if (!in_array($type, ['reach', 'gauge'], true)) {
     exit('Unsupported edit target type');
 }
 
-$id_get   = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+$id_get   = pubhash_param_id();
 $id_reach = filter_input(INPUT_POST, 'reach_id', FILTER_VALIDATE_INT);
 $id_gauge = filter_input(INPUT_POST, 'gauge_id', FILTER_VALIDATE_INT);
 $id = (is_int($id_get) && $id_get !== 0) ? $id_get
@@ -54,7 +55,7 @@ if ($type === 'reach') {
     ];
     $numeric_fields = ['length', 'gradient', 'elevation_lost', 'optimal_flow'];
     $textarea_fields = ['description', 'difficulties', 'features', 'notes'];
-    $back_url = "/description.php?id=$id";
+    $back_url = pubhash_url('description', $id);
     $back_label = 'View description';
 } else { // gauge
     $stmt = $db->prepare('SELECT * FROM gauge WHERE id = ?');
@@ -74,7 +75,7 @@ if ($type === 'reach') {
         'bank_full', 'flood_stage',
     ];
     $textarea_fields = [];
-    $back_url = "/gauge.php?id=$id";
+    $back_url = pubhash_url('gauge', $id);
     $back_label = 'View gauge';
 }
 
@@ -170,7 +171,7 @@ header('Cache-Control: no-cache');
 include_header("Edit $name", '', '', '', ['type' => $type, 'id' => $id]);
 
 echo '<h2>Edit: ' . htmlspecialchars($name) . '</h2>';
-$action = '/edit.php?id=' . $id . ($type === 'gauge' ? '&amp;type=gauge' : '');
+$action = pubhash_url('edit', $id, $type === 'gauge' ? '&amp;type=gauge' : '');
 echo '<form method="POST" action="' . $action . '" class="edit-form">';
 echo '<input type="hidden" name="target_type" value="' . htmlspecialchars($type) . '">';
 $id_field = $type === 'gauge' ? 'gauge_id' : 'reach_id';

@@ -17,6 +17,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
+require_once __DIR__ . '/includes/pubhash_request.php';
 require_once __DIR__ . '/includes/reach_search.php';
 require_once __DIR__ . '/includes/reach_detail.php';
 
@@ -34,7 +35,6 @@ $compact_css = '<style>'
     . '#search-map{height:65vh !important;min-height:480px !important;margin-top:.5rem !important}'
     . '</style>';
 
-$id_raw = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 $q_raw  = filter_input(INPUT_GET, 'q', FILTER_DEFAULT);
 $st_raw = filter_input(INPUT_GET, 'st', FILTER_DEFAULT);
 $hidden_raw = filter_input(INPUT_GET, 'hidden', FILTER_VALIDATE_INT);
@@ -49,8 +49,11 @@ if ($q_trimmed !== '' || $st !== '') {
     handle_search_mode($db, $q_trimmed, $st, $hidden, $compact_css);
 }
 
+// --- Detail mode: 301 a legacy ?id= to the canonical ?h=, then resolve ---
+pubhash_redirect_legacy_id();
+$id = pubhash_param_id();
+
 // --- Default: show first reach ---
-$id = is_int($id_raw) && $id_raw > 0 ? $id_raw : null;
 if ($id === null) {
     $row = $db->prepare('SELECT id FROM reach WHERE no_show = ? ORDER BY sort_name, id ASC LIMIT 1');
     $row->execute([$hidden]);

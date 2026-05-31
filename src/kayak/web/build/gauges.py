@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from kayak.config import BASE_DIR
 from kayak.db.gauges import get_calculated_gauge_ids
 from kayak.db.models import DataType, Gauge, HucName, LatestGaugeObservation, Reach
+from kayak.utils.pubhash import encode as pubhash_encode
 from kayak.web.build._shared import (
     _ABBR_TO_STATE,
     DATA_EXPIRY_THRESHOLD,
@@ -415,7 +416,7 @@ def _build_gauges_table(rows: list[dict[str, Any]]) -> tuple[str, list[str]]:
         else:
             attrs = ""
         lines.append(
-            f'<tr{letter_id} class="clickable-row{stale}" data-href="/gauge.php?id={gid}"{attrs}>'
+            f'<tr{letter_id} class="clickable-row{stale}" data-href="/gauge.php?h={pubhash_encode(gid)}"{attrs}>'
         )
 
         if status_word:
@@ -430,7 +431,7 @@ def _build_gauges_table(rows: list[dict[str, Any]]) -> tuple[str, list[str]]:
         est = '<span class="est"> (est)</span>' if row.get("is_estimated") else ""
         lines.append(
             f'  <td class="td-name" data-label="River">'
-            f'<a href="/gauge.php?id={gid}">{html_mod.escape(river)}{est}</a></td>'
+            f'<a href="/gauge.php?h={pubhash_encode(gid)}">{html_mod.escape(river)}{est}</a></td>'
         )
         lines.append(f'  <td data-label="Location">{html_mod.escape(location)}</td>')
 

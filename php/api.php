@@ -9,6 +9,7 @@ declare(strict_types=1);
  * Verbose format:         {"data": [{"time": "ISO", "value": 1.0}, ...]}
  */
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/pubhash_request.php';
 require_once __DIR__ . '/includes/lttb.php';
 
 header('Content-Type: application/json');
@@ -18,7 +19,7 @@ header('Cache-Control: max-age=300');
 // pull it freely. The wildcard is intentional.
 header('Access-Control-Allow-Origin: *');
 
-$id     = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+$id     = pubhash_param_id();
 $type   = filter_input(INPUT_GET, 'type', FILTER_SANITIZE_SPECIAL_CHARS);
 $type   = is_string($type) && $type !== '' ? $type : 'flow';
 $days   = filter_input(INPUT_GET, 'days', FILTER_VALIDATE_INT);

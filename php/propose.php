@@ -14,6 +14,7 @@ declare(strict_types=1);
  *   includes/propose_handler.php → handle_propose($db, $ed, $type, $id)
  */
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/pubhash_request.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/propose_handler.php';
 
@@ -21,11 +22,11 @@ require_editor_feature();
 $ed = require_editor();
 
 $type = (string)($_GET['type'] ?? $_POST['target_type'] ?? 'reach');
-$id   = (int)($_GET['id'] ?? $_POST['target_id'] ?? 0);
+$id   = pubhash_param_id() ?? (int)($_POST['target_id'] ?? 0);
 
 // Maintainers skip the queue — use the direct editor for reach edits.
 if (is_maintainer($ed) && $type === 'reach' && $id > 0) {
-    header("Location: /edit.php?id=$id");
+    header('Location: ' . pubhash_url('edit', $id));
     exit;
 }
 

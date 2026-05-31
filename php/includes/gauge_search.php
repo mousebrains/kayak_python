@@ -6,7 +6,7 @@ declare(strict_types=1);
  * Search mode for /gauge.php?q=<term>.
  *
  * Called from gauge.php when ?q= is set (after trim). A single matching
- * gauge auto-redirects to /gauge.php?id=<single>; otherwise renders the
+ * gauge auto-redirects to /gauge.php?h=<handle>; otherwise renders the
  * matched-gauges table and exits.
  *
  * Convention matches the other helpers in this directory: function-only
@@ -17,6 +17,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/header.php';
 require_once __DIR__ . '/footer.php';
 require_once __DIR__ . '/http_exit.php';
+require_once __DIR__ . '/pubhash.php';
 
 /**
  * Dispatch search mode and write the full HTTP response.
@@ -30,8 +31,9 @@ function handle_gauge_search(PDO $db, string $q): never
 {
     $results = _search_gauges($db, $q);
 
-    if (count($results) === 1) {
-        header('Location: /gauge.php?id=' . $results[0]['id']);
+    $single = count($results) === 1 ? $results[0]['id'] : null;
+    if (is_int($single)) {
+        header('Location: /gauge.php?h=' . pubhash_encode($single));
         http_terminate(302);
     }
 
@@ -74,7 +76,7 @@ function _search_gauges(PDO $db, string $q): array
 
 /**
  * Match-count header + 3-col results table. Each row links to
- * /gauge.php?id=N. Renders canonical `name` (not display_name) — see
+ * /gauge.php?h=<handle>. Renders canonical `name` (not display_name) — see
  * `_search_gauges` for rationale.
  *
  * @param list<array<string, mixed>> $results
@@ -85,9 +87,14 @@ function _render_gauge_search_results(array $results, string $q): void
     echo '<table class="desc-table">';
     echo '<tr><th>ID</th><th>Name</th><th>Location</th></tr>';
     foreach ($results as $r) {
+        $gid = $r['id'];
+        if (!is_int($gid)) {
+            continue; // a gauge row always has an int id; skip a malformed row defensively
+        }
+        $h = pubhash_encode($gid);
         $name = htmlspecialchars($r['name']);
         $loc = htmlspecialchars($r['location'] ?? '');
-        echo "<tr><td>{$r['id']}</td><td><a href=\"/gauge.php?id={$r['id']}\">$name</a></td><td>$loc</td></tr>\n";
+        echo "<tr><td>{$gid}</td><td><a href=\"/gauge.php?h={$h}\">$name</a></td><td>$loc</td></tr>\n";
     }
     echo '</table>';
 }

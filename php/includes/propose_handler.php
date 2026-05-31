@@ -38,6 +38,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/pubhash_request.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/mail.php';
 require_once __DIR__ . '/sanity.php';
@@ -463,13 +464,13 @@ function _render_propose_form(
 <p style="font-size:.85rem;color:var(--c-text-muted)">
   Your account is <strong><?= htmlspecialchars($tier) ?></strong>;
   <?= $submitted_today ?> of <?= $cap ?> daily submissions used.
-  <a href="/description.php?id=<?= $id ?>">Back to the reach description</a>.
+  <a href="/description.php?h=<?= pubhash_encode($id) ?>">Back to the reach description</a>.
 </p>
 
 <?php if ($saved): ?>
   <p style="padding:.6rem;background:#e8f4ea;border:1px solid #b7dcc0;border-radius:4px">
     Thanks — your proposal was recorded. The maintainer will review it.
-    <a href="/description.php?id=<?= $id ?>">Return to the reach</a>.
+    <a href="/description.php?h=<?= pubhash_encode($id) ?>">Return to the reach</a>.
   </p>
 <?php else: ?>
   <?php if ($errors !== []): ?>

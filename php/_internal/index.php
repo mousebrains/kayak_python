@@ -14,6 +14,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/pubhash.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/csp_classify.php';
 
@@ -325,7 +326,7 @@ pre { font-size: 12px; background: #f5f5f5; padding: .5rem; overflow-x: auto; ma
 <?php foreach ($source_rows as $r): ?>
     <?php $bucket = age_bucket(is_string($r['latest_at']) ? $r['latest_at'] : null); ?>
         <tr data-age-bucket="<?= $bucket ?>">
-            <td class="num"><a href="/source.php?id=<?= (int)$r['id'] ?>"><?= (int)$r['id'] ?></a></td>
+            <td class="num"><a href="/source.php?h=<?= pubhash_encode((int)$r['id']) ?>"><?= (int)$r['id'] ?></a></td>
             <td><?= htmlspecialchars((string)$r['name']) ?></td>
             <td><?= htmlspecialchars($r['agency'] === null ? '—' : (string)$r['agency']) ?></td>
             <td><?= htmlspecialchars(is_string($r['river']) && $r['river'] !== '' ? $r['river'] : '—') ?></td>

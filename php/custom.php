@@ -5,7 +5,8 @@ declare(strict_types=1);
 /**
  * Custom levels page — renders a levels table for arbitrary reach IDs.
  *
- * URL format: /custom.php?ids=237,339,340  (bookmarkable, shareable)
+ * URL format: /custom.php?h=4u,5x,1e  (base-62 handles; bookmarkable, shareable).
+ * The legacy /custom.php?ids=237,339,340 decimal form 301s to the ?h= canonical.
  *
  * Thin orchestration shim — arg-parse + empty-redirect + dispatch.
  * Everything else lives in includes/custom_handler.php (Tier 5.C.2
@@ -13,13 +14,12 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/pubhash_request.php';
 require_once __DIR__ . '/includes/custom_handler.php';
 
-$raw = (string)(filter_input(INPUT_GET, 'ids', FILTER_DEFAULT) ?? '');
-$ids = array_values(array_unique(array_filter(
-    array_map('intval', explode(',', $raw)),
-    fn($v) => $v > 0,
-)));
+// Canonical list form is ?h=<handle,…>; 301 a legacy ?ids=<decimal,…> to it.
+pubhash_redirect_legacy_ids();
+$ids = pubhash_param_ids();
 
 if ($ids === []) {
     header('Location: /picker.php');

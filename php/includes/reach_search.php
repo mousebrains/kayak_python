@@ -4,7 +4,7 @@ declare(strict_types=1);
  * Search and state-filter mode for /reach.php.
  *
  * Called from reach.php when ?q= or ?st= is set (after trimming). A
- * single matching reach auto-redirects to /reach.php?id=<single>;
+ * single matching reach auto-redirects to /reach.php?h=<handle>;
  * otherwise renders a results table + Leaflet map and exits.
  *
  * Convention matches the other helpers in this directory: function-only
@@ -16,6 +16,7 @@ require_once __DIR__ . '/header.php';
 require_once __DIR__ . '/footer.php';
 require_once __DIR__ . '/gauge_map.php';
 require_once __DIR__ . '/http_exit.php';
+require_once __DIR__ . '/pubhash_request.php';
 
 /**
  * Map-marker color palette. Indexed by result row position; mirrors the
@@ -45,8 +46,9 @@ function handle_search_mode(
 ): never {
     $results = _search_reaches_query($db, $q, $st, $hidden);
 
-    if (count($results) === 1) {
-        header('Location: /reach.php?id=' . $results[0]['id']);
+    $single = count($results) === 1 ? $results[0]['id'] : null;
+    if (is_int($single)) {
+        header('Location: /reach.php?h=' . pubhash_encode($single));
         http_terminate(302);
     }
 
@@ -308,7 +310,8 @@ function _render_search_results_table(
             . $color . ';margin-right:4px" title="Map marker color"></span>';
         $cls = htmlspecialchars(implode(', ', $reach_classes[$r['id']] ?? []));
         $guides = implode(', ', array_keys($reach_guides[$r['id']] ?? []));
-        echo "<tr><td>{$r['id']}</td><td>{$swatch}<a href=\"/reach.php?id={$r['id']}\">$rname</a></td>"
+        $rhref = pubhash_url('reach', $r['id']);
+        echo "<tr><td>{$r['id']}</td><td>{$swatch}<a href=\"{$rhref}\">$rname</a></td>"
             . "<td>$desc</td><td>$cls</td><td>$sname</td><td>$guides</td><td>$reading</td></tr>\n";
     }
     echo '</table>';
@@ -389,6 +392,7 @@ function _build_search_map_reaches(array $results): array
         }
         $map_reaches[] = [
             'id' => $r['id'],
+            'h' => pubhash_encode($r['id']),
             'name' => $r['name'],
             'lat' => $lat,
             'lon' => $lon,

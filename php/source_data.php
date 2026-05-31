@@ -11,11 +11,12 @@ declare(strict_types=1);
  * Linked from source.php's Observations table.
  */
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/pubhash_request.php';
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
 require_once __DIR__ . '/includes/validate.php';
 
-$id         = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+$id         = pubhash_param_id();
 $start_raw  = filter_input(INPUT_GET, 'start', FILTER_SANITIZE_SPECIAL_CHARS);
 $end_raw    = filter_input(INPUT_GET, 'end', FILTER_SANITIZE_SPECIAL_CHARS);
 $start_date = validate_date(is_string($start_raw) ? $start_raw : null);
@@ -81,10 +82,10 @@ echo '<h2>' . htmlspecialchars($name) . ' — Data Inspector</h2>';
 echo '<p style="font-size:.85rem;color:var(--c-text-muted)">'
     . htmlspecialchars((string)($source['agency'] ?? ''))
     . ' source #' . $id
-    . ' · <a href="/source.php?id=' . $id . '">source details</a></p>';
+    . ' · <a href="' . pubhash_url('source', $id) . '">source details</a></p>';
 
 echo '<form method="get" style="margin:.5rem 0;font-size:.85rem">';
-echo '<input type="hidden" name="id" value="' . $id . '">';
+echo '<input type="hidden" name="h" value="' . pubhash_encode($id) . '">';
 echo '<label>Start: <input type="date" name="start" value="' . htmlspecialchars($form_start) . '"></label> ';
 echo '<label>End: <input type="date" name="end" value="' . htmlspecialchars($form_end) . '"></label> ';
 echo '<button type="submit">Update</button>';
@@ -95,7 +96,7 @@ if ($pivoted === []) {
 } else {
     $toggle_sort = $sort === 'desc' ? 'asc' : 'desc';
     $sort_arrow  = $sort === 'desc' ? ' ▼' : ' ▲';
-    $sort_url    = '?id=' . $id
+    $sort_url    = '?h=' . pubhash_encode($id)
                  . '&start=' . urlencode($form_start)
                  . '&end='   . urlencode($form_end)
                  . '&sort='  . $toggle_sort;
@@ -128,7 +129,7 @@ if ($pivoted === []) {
 }
 
 echo '<p style="margin-top:1rem">';
-echo '<a href="/source.php?id=' . $id . '">Back to source</a>';
+echo '<a href="' . pubhash_url('source', $id) . '">Back to source</a>';
 echo ' | <a href="/index.html">Back to main page</a></p>';
 
 include_footer();

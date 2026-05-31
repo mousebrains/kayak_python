@@ -70,7 +70,7 @@ final class DescriptionFooterFunctionalTest extends FunctionalTestCase
         $html = $this->capture(
             fn() => handle_description_detail($this->pdo(), self::$reachId, null, null, 0)
         );
-        $this->assertStringContainsString('/edit.php?id=' . self::$reachId, $html);
+        $this->assertStringContainsString('/edit.php?h=' . pubhash_encode(self::$reachId), $html);
         $this->assertStringNotContainsString('Suggest an edit', $html);
     }
 
@@ -84,8 +84,8 @@ final class DescriptionFooterFunctionalTest extends FunctionalTestCase
             fn() => handle_description_detail($this->pdo(), self::$reachId, null, null, 0)
         );
         $this->assertStringContainsString('Suggest an edit', $html);
-        $this->assertStringContainsString('/propose.php?type=reach&amp;id=' . self::$reachId, $html);
-        $this->assertStringNotContainsString('/edit.php?id=', $html);
+        $this->assertStringContainsString('/propose.php?type=reach&amp;h=' . pubhash_encode(self::$reachId), $html);
+        $this->assertStringNotContainsString('/edit.php?', $html);
     }
 
     #[RunInSeparateProcess]

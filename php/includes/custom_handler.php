@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 /**
  * Handler for /custom.php — renders a levels table for arbitrary
- * reach IDs supplied via `?ids=CSV`.
+ * reach handles supplied via `?h=<handle,…>` (decoded to ids upstream).
  *
  * Called from custom.php after arg-parse + empty-redirect. Loads
  * reach summary rows + classes + sparkline data, reorders by URL
@@ -19,6 +19,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/pubhash_request.php';
 require_once __DIR__ . '/header.php';
 require_once __DIR__ . '/footer.php';
 require_once __DIR__ . '/class_tiers.php';
@@ -390,14 +391,17 @@ function _render_custom_header(array $reaches, array $tiers_by_reach): void
         . '<button type="button" data-none>None</button>'
         . '</span>';
     $reach_count = count($reaches);
-    // "Edit selection" carries the resolved reach ids so picker.php
-    // pre-checks them — picker.js:readIdsFromUrl() does the auto-check
-    // when ?ids= is present. Rebuild from $reaches rather than threading
-    // the original $ids through _render_custom_header's signature; that
-    // naturally drops any ids the DB couldn't resolve (which the picker
-    // wouldn't pre-check anyway). Per docs/done/PLAN_map_and_ui_tweaks.md Item 3.
-    $id_csv = implode(',', array_map(static fn(array $r): int => $r['id'], $reaches));
-    $picker_href = '/picker.php' . ($id_csv !== '' ? '?ids=' . $id_csv : '');
+    // "Edit selection" carries the resolved reach handles so picker.php
+    // pre-checks them — picker.js reads ?h= on load and auto-checks. Rebuild
+    // from $reaches rather than threading the original $ids through
+    // _render_custom_header's signature; that naturally drops any ids the DB
+    // couldn't resolve (which the picker wouldn't pre-check anyway). Per
+    // docs/done/PLAN_map_and_ui_tweaks.md Item 3.
+    $handle_csv = implode(',', array_map(
+        static fn(array $r): string => pubhash_encode($r['id']),
+        $reaches,
+    ));
+    $picker_href = '/picker.php' . ($handle_csv !== '' ? '?h=' . $handle_csv : '');
     ?>
 <h2>Custom Levels Page</h2>
 <p style="margin:.3rem 0 .5rem;font-size:.85rem">
@@ -519,9 +523,10 @@ function _render_custom_table(
     }
 
     $flow_val = $s['flow'] !== null ? number_format($s['flow'], 0) : '';
-    $flow = $flow_val !== '' ? '<a href="/plot.php?type=flow&id=' . $id . '">' . $flow_val . '</a>' . $spark : '';
-    $gage = $s['gage'] !== null ? '<a href="/plot.php?type=gage&id=' . $id . '">' . number_format($s['gage'], 2) . '</a>' : '';
-    $temp = $s['temperature'] !== null ? '<a href="/plot.php?type=temp&id=' . $id . '">' . number_format($s['temperature'], 0) . '</a>' : '';
+    $ph = pubhash_encode($id);
+    $flow = $flow_val !== '' ? '<a href="/plot.php?type=flow&h=' . $ph . '">' . $flow_val . '</a>' . $spark : '';
+    $gage = $s['gage'] !== null ? '<a href="/plot.php?type=gage&h=' . $ph . '">' . number_format($s['gage'], 2) . '</a>' : '';
+    $temp = $s['temperature'] !== null ? '<a href="/plot.php?type=temp&h=' . $ph . '">' . number_format($s['temperature'], 0) . '</a>' : '';
     $drain = htmlspecialchars($s['drainage'] ?? '');
     $class = htmlspecialchars($classes[$id] ?? '');
 
@@ -531,13 +536,13 @@ function _render_custom_table(
     $basin_attr = htmlspecialchars($s['drainage'] ?? '');
     $status_attr = htmlspecialchars($s['status'] ?? 'unknown');
 ?>
-<tr class="clickable-row" data-href="/description.php?id=<?= $id ?>"
+<tr class="clickable-row" data-href="/description.php?h=<?= pubhash_encode($id) ?>"
     data-state="<?= $state_attr ?>"
     data-basin="<?= $basin_attr ?>"
     data-status="<?= $status_attr ?>"
     data-tier="<?= htmlspecialchars($tier_attr) ?>">
   <td class="td-status" data-label="Status"><?= $status ?></td>
-  <td class="td-name" data-label="Name"><a href="/description.php?id=<?= $id ?>"><?= $name ?></a></td>
+  <td class="td-name" data-label="Name"><a href="/description.php?h=<?= pubhash_encode($id) ?>"><?= $name ?></a></td>
   <td data-label="Location"><?= $loc ?></td>
   <td class="td-date" data-label="Date"><?= $time_html ?></td>
   <td class="td-flow" data-label="Flow"><?= $flow ?></td>

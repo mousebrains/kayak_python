@@ -8,6 +8,7 @@ from kayak.config_data import load_builder_columns
 from kayak.db.models import DataType, LatestGaugeObservation, Reach
 from kayak.db.reaches import classify_level
 from kayak.utils.class_tiers import parse_class_tiers
+from kayak.utils.pubhash import encode as pubhash_encode
 from kayak.web.build._shared import (
     _STATE_ABBREVS,
     DATA_EXPIRY_THRESHOLD,
@@ -160,7 +161,7 @@ def _format_cell_value(col: dict[str, Any], row: dict, reach_id: int, gauge_id: 
 
     if col["type"] == "name":
         est = '<span class="est"> (est)</span>' if row.get("is_estimated") else ""
-        return f'<a href="/description.php?id={reach_id}">{html_mod.escape(str(val))}{est}</a>'
+        return f'<a href="/description.php?h={pubhash_encode(reach_id)}">{html_mod.escape(str(val))}{est}</a>'
     elif col["type"] == "flow":
         # The sparkline slot lives in the flow column regardless of which
         # series drives it — flow, inflow, or (fallback) gauge height. The
@@ -270,7 +271,7 @@ def _build_html_table(
         stale = " stale" if row.get("stale") else ""
         lines.append(
             f'<tr{letter_id} class="clickable-row{stale}"'
-            f' data-href="/description.php?id={reach_id}"'
+            f' data-href="/description.php?h={pubhash_encode(reach_id)}"'
             f"{_row_filter_attrs(reach, row)}>"
         )
 

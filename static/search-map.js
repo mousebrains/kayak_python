@@ -62,11 +62,7 @@
     });
     const m = L.marker(markerLL, { icon: ic }).addTo(map);
     m.bindPopup(
-      '<a href="/reach.php?id=' +
-        parseInt(r.id, 10) +
-        '">' +
-        esc(r.name || '') +
-        '</a>',
+      '<a href="/reach.php?h=' + r.h + '">' + esc(r.name || '') + '</a>',
     );
     bounds.push(markerLL);
     if (r.track && r.track.length > 1) {

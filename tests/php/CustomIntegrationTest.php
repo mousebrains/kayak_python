@@ -3,17 +3,18 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/IntegrationTestCase.php';
+require_once __DIR__ . '/../../php/includes/pubhash.php';
 
 /**
  * Baseline integration tests for custom.php (Phase 5.C.1 of
- * php_layer_split). Single-mode entry point — `?ids=CSV` of reach
- * IDs renders a custom levels table; empty or missing ids redirects
- * to /picker.php.
+ * php_layer_split). Single-mode entry point — `?h=<handle,…>` of reach
+ * handles renders a custom levels table; empty or missing handles
+ * redirect to /picker.php. A legacy `?ids=<decimal,…>` 301s to `?h=`.
  *
  * Covers:
- *  - Missing/empty ids → 302 to /picker.php
- *  - Invalid ids (negative, non-numeric) filtered → 302 (effectively
- *    empty)
+ *  - Missing/empty handles → 302 to /picker.php
+ *  - Invalid handles filtered → 302 (effectively empty)
+ *  - Legacy ?ids= decimal list → 301 to the ?h= canonical
  *  - Single reach: renders the reach in the table with display name
  *  - Multi-reach in URL order: reaches appear in CSV order, not DB
  *    sort_name order (drag-reorder contract from picker.php)
@@ -80,7 +81,8 @@ final class CustomIntegrationTest extends IntegrationTestCase
 
     public function testInvalidIdsRedirectsToPicker(): void
     {
-        // intval('abc') === 0; the > 0 filter drops them.
+        // Legacy ?ids= path, all-invalid tokens: filter_var rejects the
+        // non-ints and drops < 1, so no 301 fires and the empty list 302s.
         $resp = $this->request('/custom.php', ['ids' => 'abc,-5,0,xyz']);
 
         $this->assertSame(302, $resp['status']);
@@ -91,7 +93,7 @@ final class CustomIntegrationTest extends IntegrationTestCase
     {
         $resp = $this->request(
             '/custom.php',
-            ['ids' => (string)self::REACH_GAUGED_WITH_READINGS],
+            ['h' => pubhash_encode(self::REACH_GAUGED_WITH_READINGS)],
         );
 
         $this->assertSame(200, $resp['status']);
@@ -110,7 +112,7 @@ final class CustomIntegrationTest extends IntegrationTestCase
         // come back 6001, 6002, 6003. URL order means: 6003 first,
         // then 6001, then 6002.
         $resp = $this->request('/custom.php', [
-            'ids' => implode(',', [self::REACH_NO_GAUGE, self::REACH_GAUGED_WITH_READINGS, self::REACH_GAUGED_NO_READINGS]),
+            'h' => implode(',', array_map('pubhash_encode', [self::REACH_NO_GAUGE, self::REACH_GAUGED_WITH_READINGS, self::REACH_GAUGED_NO_READINGS])),
         ]);
 
         $this->assertSame(200, $resp['status']);
@@ -133,7 +135,7 @@ final class CustomIntegrationTest extends IntegrationTestCase
     {
         $resp = $this->request(
             '/custom.php',
-            ['ids' => (string)self::REACH_GAUGED_WITH_READINGS],
+            ['h' => pubhash_encode(self::REACH_GAUGED_WITH_READINGS)],
         );
 
         $this->assertSame(200, $resp['status']);
@@ -149,7 +151,7 @@ final class CustomIntegrationTest extends IntegrationTestCase
     {
         $resp = $this->request(
             '/custom.php',
-            ['ids' => (string)self::REACH_NO_GAUGE],
+            ['h' => pubhash_encode(self::REACH_NO_GAUGE)],
         );
 
         $this->assertSame(200, $resp['status']);
@@ -158,5 +160,36 @@ final class CustomIntegrationTest extends IntegrationTestCase
             'Custom No-Gauge Reach',
             '1 reach',
         );
+    }
+
+    public function testLegacyIdsRedirectsToHandles(): void
+    {
+        // A legacy decimal ?ids= bookmark 301s to the canonical ?h= list,
+        // preserving order, so old custom-page links keep resolving.
+        $resp = $this->request('/custom.php', [
+            'ids' => implode(',', [self::REACH_NO_GAUGE, self::REACH_GAUGED_WITH_READINGS]),
+        ]);
+
+        $this->assertSame(301, $resp['status']);
+        $this->assertSame(
+            '/custom.php?h=' . pubhash_encode(self::REACH_NO_GAUGE)
+                . ',' . pubhash_encode(self::REACH_GAUGED_WITH_READINGS),
+            $resp['headers']['location'] ?? '',
+        );
+    }
+
+    public function testLegacyIdsRedirectCapsHandlesAt200(): void
+    {
+        // The redirect encodes every ?ids= token, then caps the handle list at
+        // 200 to match the destination's array_slice — so a pathological list
+        // can't emit an oversized Location header. Encoding is DB-free, so the
+        // ids needn't exist.
+        $resp = $this->request('/custom.php', ['ids' => implode(',', range(1, 250))]);
+
+        $this->assertSame(301, $resp['status']);
+        $loc = $resp['headers']['location'] ?? '';
+        $this->assertStringStartsWith('/custom.php?h=', $loc);
+        $handles = explode(',', substr($loc, strlen('/custom.php?h=')));
+        $this->assertCount(200, $handles, 'redirect handle list must be capped at 200');
     }
 }

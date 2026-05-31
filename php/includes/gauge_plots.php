@@ -23,6 +23,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/svg_plot.php';
+require_once __DIR__ . '/pubhash.php';
 require_once __DIR__ . '/gauge_plots_data.php';
 
 /**
@@ -146,7 +147,7 @@ function gp_render_date_form(
     $form_end = ($end_date !== null && $end_date !== '') ? $end_date : $default_end;
 
     echo '<form method="get" style="margin:.5rem 0;font-size:.85rem;display:flex;align-items:center;flex-wrap:wrap;gap:.5rem">';
-    echo '<input type="hidden" name="id" value="' . $id . '">';
+    echo '<input type="hidden" name="h" value="' . pubhash_encode($id) . '">';
     echo '<label style="display:inline-flex;align-items:center;gap:.3rem;min-height:44px">Start: <input type="date" name="start" value="' . htmlspecialchars($form_start) . '" style="min-height:44px;padding:4px 8px"></label>';
     echo '<label style="display:inline-flex;align-items:center;gap:.3rem;min-height:44px">End: <input type="date" name="end" value="' . htmlspecialchars($form_end) . '" style="min-height:44px;padding:4px 8px"></label>';
     echo '<button type="submit" style="min-height:44px;padding:8px 16px">Update</button>';

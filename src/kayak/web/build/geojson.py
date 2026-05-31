@@ -7,6 +7,7 @@ from typing import Any
 
 from kayak.db.models import DataType, Gauge, LatestGaugeObservation, Reach
 from kayak.utils.class_tiers import parse_class_tiers
+from kayak.utils.pubhash import encode as pubhash_encode
 from kayak.utils.simplify import parse_geom, simplify
 from kayak.web.build._shared import _LICENSE_META
 from kayak.web.build.gauges import (
@@ -84,6 +85,7 @@ def _build_reaches_static(
         ordered_tiers = sorted(tiers, key=lambda t: ("I", "II", "III", "IV", "V").index(t))
         props = {
             "id": reach.id,
+            "h": pubhash_encode(reach.id),
             "name": reach.display_name or reach.name or "",
             "tiers": ordered_tiers or ["?"],
             "state": reach.states[0].name if reach.states else "",
@@ -192,6 +194,7 @@ def _build_gauges_static(gauges: list[Gauge]) -> str:
             {
                 "type": "Feature",
                 "id": g.id,
+                "h": pubhash_encode(g.id),
                 "properties": props,
                 "geometry": {
                     "type": "Point",

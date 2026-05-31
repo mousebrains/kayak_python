@@ -403,8 +403,8 @@
         function buildPopup() {
           const dotColor = COLORS[s] || COLORS.unknown;
           let html =
-            '<a class="reach-popup" href="/description.php?id=' +
-            parseInt(p.id, 10) +
+            '<a class="reach-popup" href="/description.php?h=' +
+            p.h +
             '">' +
             '<div class="rp-name">' +
             esc(p.name) +
@@ -461,7 +461,7 @@
         const target = hit || layer;
         target.bindPopup(buildPopup);
         // Two-surface hover tracking for the desktop hover-popup flow.
-        // The popup body wraps in <a href="/description.php?id=...">; we
+        // The popup body wraps in <a href="/description.php?h=...">; we
         // need to let the user move from trace into the popup to click,
         // so close only when neither surface is hovered (with a grace
         // window for normal cursor traversal). Touch devices keep
@@ -521,7 +521,7 @@
         // the popup body is itself an <a href> for the second tap.
         if (DESKTOP_HOVER) {
           target.on('click', function () {
-            window.location.href = '/description.php?id=' + parseInt(p.id, 10);
+            window.location.href = '/description.php?h=' + p.h;
           });
         }
       },
@@ -619,10 +619,7 @@
         function buildPopup() {
           const ageMs = entry.ts ? Date.now() - Date.parse(entry.ts) : -1;
           const ageStr = ageMs >= 0 ? fmtAge(ageMs) : '';
-          let html =
-            '<a class="reach-popup" href="/gauge.php?id=' +
-            parseInt(gid, 10) +
-            '">';
+          let html = '<a class="reach-popup" href="/gauge.php?h=' + f.h + '">';
           html += '<div class="rp-name">' + esc(props.name || '') + '</div>';
           const subtitleParts = [];
           if (props.river) subtitleParts.push(props.river);
@@ -714,7 +711,7 @@
         // commits to /gauge.php instead of toggling the popup closed.
         if (DESKTOP_HOVER) {
           hit.on('click', function () {
-            window.location.href = '/gauge.php?id=' + parseInt(gid, 10);
+            window.location.href = '/gauge.php?h=' + f.h;
           });
         }
       }

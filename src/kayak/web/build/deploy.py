@@ -25,6 +25,7 @@ from kayak.db.engine import get_session
 from kayak.db.gauges import get_calculated_gauge_ids
 from kayak.db.models import DataType, Gauge, HucName, LatestGaugeObservation, Reach
 from kayak.db.reaches import all_state_names, reaches_query
+from kayak.utils.pubhash import encode as pubhash_encode
 from kayak.web.build._shared import (
     _CSS_PATH,
     _FILTERS_JS_PATH,
@@ -456,10 +457,10 @@ def _emit_sitemap(
     urls.append((f"{site}/contact.php", "monthly", "0.4"))
 
     for r in reaches:
-        urls.append((f"{site}/description.php?id={r.id}", "hourly", "0.7"))
+        urls.append((f"{site}/description.php?h={pubhash_encode(r.id)}", "hourly", "0.7"))
 
     for gid in session.scalars(select(Gauge.id).order_by(Gauge.id)).all():
-        urls.append((f"{site}/gauge.php?id={gid}", "hourly", "0.6"))
+        urls.append((f"{site}/gauge.php?h={pubhash_encode(gid)}", "hourly", "0.6"))
 
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',

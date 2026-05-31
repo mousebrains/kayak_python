@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/IntegrationTestCase.php';
+require_once __DIR__ . '/../../php/includes/pubhash.php';
 
 /**
  * Baseline integration tests for reach.php (Phase 2.1 of php_layer_split).
@@ -114,10 +115,10 @@ final class ReachIntegrationTest extends IntegrationTestCase
         $this->assertSame(
             302,
             $resp['status'],
-            'single search-result match should 302 to /reach.php?id=<single>',
+            'single search-result match should 302 to /reach.php?h=<handle>',
         );
         $this->assertSame(
-            '/reach.php?id=' . self::REACH_WITH_GAUGE_ID,
+            '/reach.php?h=' . pubhash_encode(self::REACH_WITH_GAUGE_ID),
             $resp['headers']['location'] ?? '',
         );
     }
@@ -181,7 +182,7 @@ final class ReachIntegrationTest extends IntegrationTestCase
 
     public function testDetailModeRendersGaugedReach(): void
     {
-        $resp = $this->request('/reach.php', ['id' => self::REACH_WITH_GAUGE_ID]);
+        $resp = $this->request('/reach.php', ['h' => pubhash_encode(self::REACH_WITH_GAUGE_ID)]);
 
         $this->assertSame(200, $resp['status']);
         $this->assertResponseContains(
@@ -206,7 +207,7 @@ final class ReachIntegrationTest extends IntegrationTestCase
         // profile, so reach_detail.php renders the four consolidated lines and
         // the gradient chart with the themed elevation overlay (the #22/#24
         // surface that previously had no end-to-end coverage).
-        $resp = $this->request('/reach.php', ['id' => self::REACH_WITH_GAUGE_ID]);
+        $resp = $this->request('/reach.php', ['h' => pubhash_encode(self::REACH_WITH_GAUGE_ID)]);
 
         $this->assertSame(200, $resp['status']);
         $this->assertResponseContains(
@@ -222,7 +223,7 @@ final class ReachIntegrationTest extends IntegrationTestCase
 
     public function testDetailModeRendersNoGaugeReach(): void
     {
-        $resp = $this->request('/reach.php', ['id' => self::REACH_NO_GAUGE_ID]);
+        $resp = $this->request('/reach.php', ['h' => pubhash_encode(self::REACH_NO_GAUGE_ID)]);
 
         $this->assertSame(200, $resp['status']);
         $this->assertResponseContains(
@@ -240,5 +241,27 @@ final class ReachIntegrationTest extends IntegrationTestCase
         $this->assertStringNotContainsString('id="reach-map"', $resp['body']);
         $this->assertStringNotContainsString('Put-in', $resp['body']);
         $this->assertNoBareInlineScript($resp['body']);
+    }
+
+    public function testHandleResolvesDetail(): void
+    {
+        // The canonical ?h=<handle> resolves the same row a ?id= would.
+        $resp = $this->request('/reach.php', ['h' => pubhash_encode(self::REACH_WITH_GAUGE_ID)]);
+
+        $this->assertSame(200, $resp['status']);
+        $this->assertStringContainsString(self::REACH_WITH_GAUGE_NAME, $resp['body']);
+        $this->assertNoBareInlineScript($resp['body']);
+    }
+
+    public function testLegacyIdRedirectsToHandle(): void
+    {
+        // A legacy ?id=<decimal> 301s to the canonical ?h=<handle> (stable id).
+        $resp = $this->request('/reach.php', ['id' => self::REACH_WITH_GAUGE_ID]);
+
+        $this->assertSame(301, $resp['status']);
+        $this->assertSame(
+            '/reach.php?h=' . pubhash_encode(self::REACH_WITH_GAUGE_ID),
+            $resp['headers']['location'] ?? '',
+        );
     }
 }

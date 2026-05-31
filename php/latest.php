@@ -7,6 +7,7 @@ declare(strict_types=1);
  * Returns JSON with latest value for each data type.
  */
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/pubhash_request.php';
 
 header('Content-Type: application/json');
 header('Cache-Control: max-age=60');
@@ -15,7 +16,7 @@ header('Cache-Control: max-age=60');
 // pull it freely. The wildcard is intentional.
 header('Access-Control-Allow-Origin: *');
 
-$id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+$id = pubhash_param_id();
 if (!is_int($id) || $id < 1) { http_response_code(400); echo json_encode(['error' => 'Missing id']); exit; }
 
 $db = get_db();

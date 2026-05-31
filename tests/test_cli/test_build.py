@@ -439,7 +439,12 @@ class TestBuildHTMLTable:
             mock.patch("kayak.web.build.levels._get_row_data", return_value=fake_row),
         ):
             result, _ = _build_html_table(reaches, COLS_SIMPLE, set(), {})
-        assert "description.php" in result
+        from kayak.utils.pubhash import encode as pubhash_encode
+
+        # Public links carry the base-62 handle of the (stable) reach id, not
+        # the raw decimal id — the non-transitional Phase-2 surface.
+        assert f"description.php?h={pubhash_encode(reaches[0].id)}" in result
+        assert "description.php?id=" not in result
         assert "White Salmon" in result
 
     def test_expired_rows_filtered(self, session):

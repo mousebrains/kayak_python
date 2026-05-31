@@ -307,20 +307,8 @@ parameters:
 			path: php/includes/gauge_plots.php
 
 		-
-			message: '#^Binary operation "\." between ''Location\: /gauge…'' and mixed results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: php/includes/gauge_search.php
-
-		-
 			message: '#^Parameter \#1 \$string of function htmlspecialchars expects string, mixed given\.$#'
 			identifier: argument.type
-			count: 2
-			path: php/includes/gauge_search.php
-
-		-
-			message: '#^Part \$r\[''id''\] \(mixed\) of encapsed string cannot be cast to string\.$#'
-			identifier: encapsedStringPart.nonString
 			count: 2
 			path: php/includes/gauge_search.php
 
@@ -333,12 +321,6 @@ parameters:
 		-
 			message: '#^Binary operation "\." between mixed and ''/style\.css'' results in an error\.$#'
 			identifier: binaryOp.invalid
-			count: 1
-			path: php/includes/header.php
-
-		-
-			message: '#^Cannot cast mixed to int\.$#'
-			identifier: cast.int
 			count: 1
 			path: php/includes/header.php
 

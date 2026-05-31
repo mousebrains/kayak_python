@@ -331,6 +331,7 @@
     'Take-out': '#b30000',
   };
   const gaugeId = parseInt(el.dataset.gaugeId || '0', 10);
+  const gaugeH = el.dataset.gaugeH || '';
   for (const k in pts) {
     const c = pts[k].split(',');
     const ll = [parseFloat(c[0]), parseFloat(c[1])];
@@ -353,7 +354,7 @@
     (function (lat, lon, label) {
       const onClick = function () {
         if (label === 'Gauge' && gaugeId) {
-          window.location.href = '/gauge.php?id=' + gaugeId;
+          window.location.href = '/gauge.php?h=' + gaugeH;
         } else {
           window.open(
             'https://www.google.com/maps?q=' + lat + ',' + lon,
@@ -442,8 +443,8 @@
       }).addTo(map);
 
       const html =
-        '<a class="reach-popup" href="/description.php?id=' +
-        parseInt(rt.id, 10) +
+        '<a class="reach-popup" href="/description.php?h=' +
+        rt.h +
         '">' +
         '<div class="rp-name">' +
         esc(rt.name) +

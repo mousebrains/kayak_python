@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/IntegrationTestCase.php';
+require_once __DIR__ . '/../../php/includes/pubhash.php';
 
 /**
  * Baseline integration tests for gauge.php (Phase 5.G.1 of
@@ -127,12 +128,37 @@ final class GaugeIntegrationTest extends IntegrationTestCase
         $this->assertNoBareInlineScript($resp['body']);
     }
 
-    public function testInvalidIdReturns404(): void
+    public function testCanonicalHandleNotFoundReturns404(): void
     {
-        $resp = $this->request('/gauge.php', ['id' => 999999]);
+        // The canonical ?h= form for a nonexistent id 404s (a legacy ?id= for
+        // the same id first 301s here — see testLegacyIdRedirectsToHandle).
+        $resp = $this->request('/gauge.php', ['h' => pubhash_encode(999999)]);
 
         $this->assertSame(404, $resp['status']);
         $this->assertStringContainsString('Gauge not found', $resp['body']);
+    }
+
+    public function testHandleResolvesDetail(): void
+    {
+        // The canonical ?h=<handle> resolves the same row a ?id= would.
+        $resp = $this->request('/gauge.php', ['h' => pubhash_encode(self::GAUGE_WITH_DATA_ID)]);
+
+        $this->assertSame(200, $resp['status']);
+        $this->assertStringContainsString(self::GAUGE_WITH_DATA_NAME, $resp['body']);
+        $this->assertNoBareInlineScript($resp['body']);
+    }
+
+    public function testLegacyIdRedirectsToHandle(): void
+    {
+        // A legacy ?id=<decimal> 301s to the canonical ?h=<handle>: the id is
+        // stable, so old bookmarks keep working — they just canonicalize.
+        $resp = $this->request('/gauge.php', ['id' => self::GAUGE_WITH_DATA_ID]);
+
+        $this->assertSame(301, $resp['status']);
+        $this->assertSame(
+            '/gauge.php?h=' . pubhash_encode(self::GAUGE_WITH_DATA_ID),
+            $resp['headers']['location'] ?? '',
+        );
     }
 
     public function testSearchModeNoMatch(): void
@@ -153,7 +179,7 @@ final class GaugeIntegrationTest extends IntegrationTestCase
 
         $this->assertSame(302, $resp['status']);
         $this->assertSame(
-            '/gauge.php?id=' . self::GAUGE_WITH_DATA_ID,
+            '/gauge.php?h=' . pubhash_encode(self::GAUGE_WITH_DATA_ID),
             $resp['headers']['location'] ?? '',
         );
     }
@@ -181,7 +207,7 @@ final class GaugeIntegrationTest extends IntegrationTestCase
 
     public function testDetailModeWithReadings(): void
     {
-        $resp = $this->request('/gauge.php', ['id' => self::GAUGE_WITH_DATA_ID]);
+        $resp = $this->request('/gauge.php', ['h' => pubhash_encode(self::GAUGE_WITH_DATA_ID)]);
 
         $this->assertSame(200, $resp['status']);
         $this->assertResponseContains(
@@ -210,7 +236,7 @@ final class GaugeIntegrationTest extends IntegrationTestCase
 
     public function testDetailModeNoReadingsRendersStaleBanner(): void
     {
-        $resp = $this->request('/gauge.php', ['id' => self::GAUGE_NO_DATA_ID]);
+        $resp = $this->request('/gauge.php', ['h' => pubhash_encode(self::GAUGE_NO_DATA_ID)]);
 
         $this->assertSame(200, $resp['status']);
         $this->assertResponseContains(

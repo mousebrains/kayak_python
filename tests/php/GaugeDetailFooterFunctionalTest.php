@@ -70,7 +70,7 @@ final class GaugeDetailFooterFunctionalTest extends FunctionalTestCase
             fn() => handle_gauge_detail($this->pdo(), self::$gaugeId, null, null)
         );
         // Maintainer → the gauge-typed Edit anchor renders.
-        $this->assertStringContainsString('/edit.php?id=' . self::$gaugeId . '&amp;type=gauge', $html);
+        $this->assertStringContainsString('/edit.php?h=' . pubhash_encode(self::$gaugeId) . '&amp;type=gauge', $html);
     }
 
     #[RunInSeparateProcess]
@@ -84,7 +84,7 @@ final class GaugeDetailFooterFunctionalTest extends FunctionalTestCase
         );
         // editor_feature on + signed in but not a maintainer → is_maintainer()
         // false → no Edit button (gauges have no "Suggest" path).
-        $this->assertStringNotContainsString('/edit.php?id=', $html);
+        $this->assertStringNotContainsString('/edit.php?', $html);
         // The standard footer links still render.
         $this->assertStringContainsString('All gauges', $html);
     }

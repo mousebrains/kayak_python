@@ -6,10 +6,11 @@ declare(strict_types=1);
  * Usage: /plot.php?type=flow&id=<reach_id>[&days=60]
  */
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/pubhash_request.php';
 require_once __DIR__ . '/includes/svg_plot.php';
 require_once __DIR__ . '/includes/validate.php';
 
-$id   = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+$id   = pubhash_param_id();
 $type = filter_input(INPUT_GET, 'type', FILTER_SANITIZE_SPECIAL_CHARS);
 $type = is_string($type) && $type !== '' ? $type : 'flow';
 $days = filter_input(INPUT_GET, 'days', FILTER_VALIDATE_INT);
@@ -108,7 +109,7 @@ if (is_int($embed) && $embed !== 0) {
     include_header("$name - $y_label");
     echo '<h2>' . htmlspecialchars($name) . '</h2>';
     echo '<form method="get" style="margin-bottom:.5rem;font-size:.85rem">';
-    echo '<input type="hidden" name="id" value="' . $id . '">';
+    echo '<input type="hidden" name="h" value="' . pubhash_encode($id) . '">';
     echo '<input type="hidden" name="type" value="' . htmlspecialchars($type) . '">';
     echo '<input type="hidden" name="embed" value="1">';
     echo '<label>Start: <input type="date" name="start" value="' . htmlspecialchars($form_start) . '"></label> ';
@@ -117,8 +118,8 @@ if (is_int($embed) && $embed !== 0) {
     echo '</form>';
     echo '<div class="plot-container">' . $svg . '</div>';
     echo '<p style="margin-top:.5rem;font-size:.85rem">';
-    echo '<a href="/description.php?id=' . $id . '">Description</a>';
-    echo ' | <a href="/api.php?type=' . $type . '&id=' . $id . '&days=' . $days . '">JSON data</a>';
+    echo '<a href="' . pubhash_url('description', $id) . '">Description</a>';
+    echo ' | <a href="/api.php?type=' . $type . '&h=' . pubhash_encode($id) . '&days=' . $days . '">JSON data</a>';
     echo ' | <a href="/index.html">Back</a></p>';
     include_footer();
 } else {

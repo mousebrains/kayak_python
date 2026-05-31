@@ -19,6 +19,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/header.php';
+require_once __DIR__ . '/pubhash_request.php';
 require_once __DIR__ . '/footer.php';
 require_once __DIR__ . '/html.php';
 require_once __DIR__ . '/gauge_map.php';
@@ -78,7 +79,7 @@ function handle_reach_detail(
     if ($location !== '') {
         $h2_text .= ' -- ' . htmlspecialchars($location);
     }
-    echo '<h2><a href="/description.php?id=' . $id . '">' . $h2_text . '</a></h2>';
+    echo '<h2><a href="' . pubhash_url('description', $id) . '">' . $h2_text . '</a></h2>';
 
     _render_reach_details_table($reach, $related['states'], $related['classes'], $related['flow_levels']);
     _render_reach_class_ranges($related['classes']);
@@ -106,8 +107,8 @@ function handle_reach_detail(
     }
 
     echo '<p style="margin-top:1rem">';
-    echo '<a href="/description.php?id=' . $id . '">Description</a>';
-    echo ' | <a href="/data.php?id=' . $id . '">Data inspector</a>';
+    echo '<a href="' . pubhash_url('description', $id) . '">Description</a>';
+    echo ' | <a href="' . pubhash_url('data', $id) . '">Data inspector</a>';
     echo ' | <a href="/index.html">Back to main page</a></p>';
 
     if ($has_map) {
@@ -347,13 +348,13 @@ function _render_reach_nav_bar(
     echo '<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">';
     $hq = $hidden !== 0 ? '&amp;hidden=1' : '';
     if ($prev !== false) {
-        echo '<a href="/reach.php?id=' . $prev['id'] . $hq . '">&laquo; Prev</a>';
+        echo '<a href="' . pubhash_url('reach', $prev['id'], $hq) . '">&laquo; Prev</a>';
     } else {
         echo '<span style="color:#999">&laquo; Prev</span>';
     }
     echo "<span>Reach $position of $total</span>";
     if ($next !== false) {
-        echo '<a href="/reach.php?id=' . $next['id'] . $hq . '">Next &raquo;</a>';
+        echo '<a href="' . pubhash_url('reach', $next['id'], $hq) . '">Next &raquo;</a>';
     } else {
         echo '<span style="color:#999">Next &raquo;</span>';
     }
@@ -377,7 +378,7 @@ function _render_reach_nav_bar(
     echo '</form>';
     $toggle_hidden = $hidden !== 0 ? 0 : 1;
     $toggle_label = $hidden !== 0 ? 'Show visible' : 'Show hidden';
-    echo "<a href=\"/reach.php?id=$id&amp;hidden=$toggle_hidden\">$toggle_label</a>";
+    echo '<a href="' . pubhash_url('reach', $id, "&amp;hidden=$toggle_hidden") . '">' . $toggle_label . '</a>';
     echo '</div>';
 }
 
@@ -571,7 +572,8 @@ function _render_reach_linked_gauge(?array $gauge): void
     echo '<table class="desc-table">';
     $gname = htmlspecialchars((string)(($gauge['display_name'] ?? '') !== '' ? $gauge['display_name'] : $gauge['name']));
     $gloc = htmlspecialchars($gauge['location'] ?? '');
-    echo "<tr><td>Gauge</td><td><a href=\"/gauge.php?id={$gauge['id']}\">$gname</a></td></tr>\n";
+    $ghref = pubhash_url('gauge', $gauge['id']);
+    echo "<tr><td>Gauge</td><td><a href=\"{$ghref}\">$gname</a></td></tr>\n";
     if ($gloc !== '') {
         echo "<tr><td>Location</td><td>$gloc</td></tr>\n";
     }

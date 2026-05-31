@@ -177,7 +177,7 @@ final class ReachDetailFunctionalTest extends FunctionalTestCase
 
         // Title + linked description anchor + h2 with description suffix.
         $this->assertStringContainsString('Middle Full Reach', $html);
-        $this->assertStringContainsString('/description.php?id=' . self::$fullId, $html);
+        $this->assertStringContainsString('/description.php?h=' . pubhash_encode(self::$fullId), $html);
         $this->assertStringContainsString('A fully populated reach', $html);
 
         // Details-table fields.
@@ -226,7 +226,7 @@ final class ReachDetailFunctionalTest extends FunctionalTestCase
         $this->assertStringContainsString('/static/leaflet.js', $html);
 
         // Footer nav links.
-        $this->assertStringContainsString('/data.php?id=' . self::$fullId, $html);
+        $this->assertStringContainsString('/data.php?h=' . pubhash_encode(self::$fullId), $html);
         $this->assertStringContainsString('Back to main page', $html);
     }
 
