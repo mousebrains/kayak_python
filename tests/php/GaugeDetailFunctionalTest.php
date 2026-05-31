@@ -482,7 +482,7 @@ final class GaugeDetailFunctionalTest extends FunctionalTestCase
 
         // Associated Sources — counts, latest date, links.
         $this->assertStringContainsString('Associated Sources', $html);
-        $this->assertStringContainsString('/source.php?id=', $html);
+        $this->assertStringContainsString('/source.php?h=', $html);
         $this->assertStringContainsString('full_obs_src', $html);
         $this->assertStringContainsString('full_empty_src', $html);
 
@@ -502,7 +502,7 @@ final class GaugeDetailFunctionalTest extends FunctionalTestCase
         $this->assertStringContainsString('Regression analysis', $html);
         $this->assertStringContainsString('Estimated from USGS 14999999, USGS 15000000', $html);  // target intro
         $this->assertStringContainsString('Used as a predictor for', $html);                       // predictor intro
-        $this->assertStringContainsString('/gauge.php?id=' . self::$predId . '"', $html);          // predictor link
+        $this->assertStringContainsString('/gauge.php?h=' . pubhash_encode(self::$predId) . '"', $html);          // predictor link
         $this->assertStringContainsString('regression-facts', $html);
         $this->assertStringContainsString('<dt>intercept</dt>', $html);
         $this->assertStringContainsString('12.3456', $html);                      // large coef → number_format
@@ -517,7 +517,7 @@ final class GaugeDetailFunctionalTest extends FunctionalTestCase
         $this->assertStringContainsString('/static/leaflet.js', $html);
         $this->assertStringContainsString('/static/feature-map.js', $html);
         // No editor feature (default Config) → no Edit button.
-        $this->assertStringNotContainsString('/edit.php?id=', $html);
+        $this->assertStringNotContainsString('/edit.php?', $html);
         $this->assertStringContainsString('All gauges', $html);
     }
 

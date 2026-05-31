@@ -329,7 +329,7 @@ final class DescriptionDetailFunctionalTest extends FunctionalTestCase
         $this->assertStringContainsString('1,000 ft to 500 ft, loss 500 ft', $html);
 
         // Gauge field links to /gauge.php using the location label.
-        $this->assertStringContainsString('/gauge.php?id=' . self::$fullGaugeId, $html);
+        $this->assertStringContainsString('/gauge.php?h=' . pubhash_encode(self::$fullGaugeId), $html);
         $this->assertStringContainsString('at Mehama', $html);
 
         // Coordinate trio + map + gradient profile.
@@ -355,7 +355,7 @@ final class DescriptionDetailFunctionalTest extends FunctionalTestCase
         // calc token flow::SANTIAM_GAUGE::mean resolves to this reach (anchor
         // back to /description.php?id=<fullId>); the UNKNOWN_GAUGE token has
         // no matching gauge, so it stays verbatim.
-        $this->assertStringContainsString('/description.php?id=' . self::$fullId . '"', $html);
+        $this->assertStringContainsString('/description.php?h=' . pubhash_encode(self::$fullId) . '"', $html);
         $this->assertStringContainsString('flow::UNKNOWN_GAUGE::mean', $html);
 
         // Guidebooks: AW row + the seeded book.
@@ -367,7 +367,7 @@ final class DescriptionDetailFunctionalTest extends FunctionalTestCase
 
         // Footer (editor feature disabled by default → no Edit/Suggest button).
         $this->assertStringContainsString('Reach details', $html);
-        $this->assertStringContainsString('/reach.php?id=' . self::$fullId, $html);
+        $this->assertStringContainsString('/reach.php?h=' . pubhash_encode(self::$fullId), $html);
         $this->assertStringNotContainsString('Suggest an edit', $html);
 
         // Map present → leaflet + feature-map scripts; gradient script always.
@@ -466,7 +466,7 @@ final class DescriptionDetailFunctionalTest extends FunctionalTestCase
         );
         // Gauge-name fallback anchor text + link to the blank-display reach.
         $this->assertStringContainsString('>BLANK_GAUGE</a>', $html);
-        $this->assertStringContainsString('/description.php?id=' . self::$blankId . '"', $html);
+        $this->assertStringContainsString('/description.php?h=' . pubhash_encode(self::$blankId) . '"', $html);
 
         // Rendering the blank reach directly exercises the handler's name
         // fallback: display_name '' → the page title uses reach.name.

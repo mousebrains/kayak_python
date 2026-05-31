@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/IntegrationTestCase.php';
+require_once __DIR__ . '/../../php/includes/pubhash.php';
 
 /**
  * Baseline integration tests for propose.php (Phase 5.P.1 of
@@ -67,7 +68,7 @@ final class ProposeIntegrationTest extends IntegrationTestCase
 
         $this->assertSame(302, $resp['status']);
         $this->assertSame(
-            '/edit.php?id=' . self::REACH_ID,
+            '/edit.php?h=' . pubhash_encode(self::REACH_ID),
             $resp['headers']['location'] ?? '',
         );
     }

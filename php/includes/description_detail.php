@@ -16,6 +16,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/header.php';
+require_once __DIR__ . '/pubhash_request.php';
 require_once __DIR__ . '/footer.php';
 require_once __DIR__ . '/html.php';
 require_once __DIR__ . '/svg_plot.php';
@@ -288,13 +289,13 @@ function _render_description_nav_bar(
         . 'gap:1rem;margin-bottom:.5rem;flex-wrap:wrap">';
     $hq = $hidden !== 0 ? '&amp;hidden=1' : '';
     if ($prev !== false) {
-        echo '<a href="/description.php?id=' . $prev['id'] . $hq . '">&laquo; Prev</a>';
+        echo '<a href="' . pubhash_url('description', $prev['id'], $hq) . '">&laquo; Prev</a>';
     } else {
         echo '<span style="color:#999">&laquo; Prev</span>';
     }
     echo "<span>Reach $position of $total</span>";
     if ($next !== false) {
-        echo '<a href="/description.php?id=' . $next['id'] . $hq . '">Next &raquo;</a>';
+        echo '<a href="' . pubhash_url('description', $next['id'], $hq) . '">Next &raquo;</a>';
     } else {
         echo '<span style="color:#999">Next &raquo;</span>';
     }
@@ -381,7 +382,7 @@ function _render_description_date_form_and_plots(
         $start_date,
         $end_date,
         $latest_ts,
-        [['label' => 'Data inspector', 'url' => "/data.php?id=$id"]]
+        [['label' => 'Data inspector', 'url' => pubhash_url('data', $id)]]
     );
     gp_render_plots(
         $db,
@@ -431,7 +432,7 @@ function _render_description_fields_and_map(array $reach, array $related, array 
         $gauge_label = ($gauge['location'] ?? '') !== ''
             ? $gauge['location']
             : (($gauge['display_name'] ?? '') !== '' ? $gauge['display_name'] : $gauge['name']);
-        $gauge_html = '<a href="/gauge.php?id=' . $gauge['id'] . '">'
+        $gauge_html = '<a href="' . pubhash_url('gauge', $gauge['id']) . '">'
             . htmlspecialchars((string)$gauge_label) . '</a>';
     }
     $fields = [
@@ -701,7 +702,8 @@ function _render_data_sources(PDO $db, ?array $gauge): void
                                 ? $r['display_name']
                                 : $gauge_name
                         );
-                        return "<a href=\"/description.php?id={$r['id']}\" title=\"{$m[0]}\">$display</a>::{$m[3]}";
+                        $rhref = pubhash_url('description', $r['id']);
+                        return "<a href=\"{$rhref}\" title=\"{$m[0]}\">$display</a>::{$m[3]}";
                     }
                     return $m[0];
                 },
@@ -792,16 +794,16 @@ function _render_description_footer(int $id): void
     $btn_style = 'display:inline-flex;align-items:center;min-height:44px;padding:8px 12px';
     echo '<nav style="margin-top:1rem;display:flex;flex-wrap:wrap;gap:.5rem">';
     echo '<a href="/index.html" style="' . $btn_style . '">Back to main page</a>';
-    echo '<a href="/reach.php?id=' . $id . '" style="' . $btn_style . '">Reach details</a>';
+    echo '<a href="' . pubhash_url('reach', $id) . '" style="' . $btn_style . '">Reach details</a>';
     if (editor_feature_enabled()) {
         $editor = current_editor();
         if (is_maintainer($editor)) {
-            echo '<a href="/edit.php?id=' . $id . '" style="' . $btn_style . '">Edit</a>';
+            echo '<a href="' . pubhash_url('edit', $id) . '" style="' . $btn_style . '">Edit</a>';
         } elseif ($editor !== null) {
-            echo '<a href="/propose.php?type=reach&amp;id=' . $id
+            echo '<a href="/propose.php?type=reach&amp;h=' . pubhash_encode($id)
                 . '" style="' . $btn_style . '">Suggest an edit</a>';
         } else {
-            $next = rawurlencode("/propose.php?type=reach&id=$id");
+            $next = rawurlencode("/propose.php?type=reach&h=" . pubhash_encode($id));
             echo '<a href="/login.php?next=' . $next . '" style="'
                 . $btn_style . '">Sign in to suggest an edit</a>';
         }

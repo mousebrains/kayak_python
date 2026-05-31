@@ -17,6 +17,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/header.php';
+require_once __DIR__ . '/pubhash_request.php';
 require_once __DIR__ . '/footer.php';
 require_once __DIR__ . '/gauge_plots.php';
 require_once __DIR__ . '/gauge_map.php';
@@ -336,13 +337,13 @@ function _render_gauge_nav_bar(int $position, int $total, array|false $prev, arr
 {
     echo '<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">';
     if ($prev !== false) {
-        echo '<a href="/gauge.php?id=' . $prev['id'] . '">&laquo; Prev</a>';
+        echo '<a href="' . pubhash_url('gauge', $prev['id']) . '">&laquo; Prev</a>';
     } else {
         echo '<span style="color:#999">&laquo; Prev</span>';
     }
     echo "<span>Gauge $position of $total</span>";
     if ($next !== false) {
-        echo '<a href="/gauge.php?id=' . $next['id'] . '">Next &raquo;</a>';
+        echo '<a href="' . pubhash_url('gauge', $next['id']) . '">Next &raquo;</a>';
     } else {
         echo '<span style="color:#999">Next &raquo;</span>';
     }
@@ -699,7 +700,7 @@ function _render_gauge_regression(PDO $db, string $gauge_name, array $sources): 
         if ($predictor_of !== []) {
             $links = [];
             foreach ($predictor_of as $g) {
-                $links[] = '<a href="/gauge.php?id=' . $g['gauge_id'] . '">'
+                $links[] = '<a href="' . pubhash_url('gauge', $g['gauge_id']) . '">'
                     . htmlspecialchars($g['gauge_name']) . '</a>';
             }
             $intro_parts[] = 'Used as a predictor for ' . implode(', ', $links) . '.';
@@ -764,7 +765,7 @@ function _render_associated_sources(array $sources): void
         $sagency = htmlspecialchars($s['agency'] ?? '');
         $cnt = number_format($s['obs_count']);
         $latest = htmlspecialchars($s['latest_at'] ?? '');
-        $shref = "/source.php?id={$s['id']}";
+        $shref = pubhash_url('source', $s['id']);
         echo "<tr><td><a href=\"$shref\">{$s['id']}</a></td><td><a href=\"$shref\">$sname</a></td><td>$sagency</td><td>$cnt</td><td>$latest</td></tr>\n";
     }
     echo '</table>';
@@ -808,7 +809,7 @@ function _render_associated_reaches(array $reaches, array $reach_status_by_id): 
         $status_html = $status === 'unknown'
             ? '<span style="color:var(--c-text-muted)">unknown</span>'
             : '<span class="level-' . $status . '">' . $status . '</span>';
-        $rhref = "/description.php?id={$r['id']}";
+        $rhref = pubhash_url('description', $r['id']);
         echo "<tr data-status=\"$status_attr\">"
             . "<td class=\"td-name\" data-label=\"Name\"><a href=\"$rhref\">$rname</a></td>"
             . "<td data-label=\"Location\"><a href=\"$rhref\">$location</a></td>"
@@ -837,7 +838,7 @@ function _render_gauge_footer(int $id, bool $has_map): void
     if (editor_feature_enabled()) {
         $editor = current_editor();
         if (is_maintainer($editor)) {
-            echo '<a href="/edit.php?id=' . $id . '&amp;type=gauge" style="' . $btn_style . '">Edit</a>';
+            echo '<a href="' . pubhash_url('edit', $id, '&amp;type=gauge') . '" style="' . $btn_style . '">Edit</a>';
         }
     }
     echo '</nav>';
