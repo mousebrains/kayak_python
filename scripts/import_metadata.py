@@ -44,6 +44,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
+from kayak.config import METADATA_DIR
 from kayak.db import metadata_csv as mc
 
 REPO_DIR = Path(__file__).resolve().parent.parent
@@ -172,8 +173,9 @@ def main() -> int:
     parser.add_argument(
         "--in",
         dest="in_dir",
-        default=str(REPO_DIR / "data" / "db"),
-        help="Input directory (default: data/db)",
+        default=str(METADATA_DIR),
+        help="Input directory (default: the configured METADATA_DIR — data/db, "
+        "or the kayak_data clone post-split)",
     )
     parser.add_argument(
         "--geom-only",

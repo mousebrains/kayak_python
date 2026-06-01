@@ -1,17 +1,23 @@
 # Editing gauges and reaches — metadata via CSV + sync
 
 **Status:** Active runbook (metadata-single-source). Supersedes the migration-based
-add flow: metadata now lives **only** in `data/db/*.csv` and lands on prod via
-`levels sync-metadata`, matched by stable id. Covers **adding**, **updating**,
-**splitting**, and **dropping** gauges and reaches.
+add flow: metadata now lives **only** in the **`kayak_data`** repo's `*.csv` and
+lands on prod via `levels sync-metadata`, matched by stable id. Covers **adding**,
+**updating**, **splitting**, and **dropping** gauges and reaches.
+
+> **Where the files are (data-repo split).** The CSVs + `reaches*.json` live in the
+> separate `kayak_data` repo (the code reads it via `METADATA_DIR`); only schema
+> migrations stay in the code repo. **Edit them via a PR to `kayak_data`.** All
+> filenames below (`source.csv`, `reaches.json`, …) are relative to that repo's
+> root, i.e. your `METADATA_DIR` clone.
 
 ## The model (one source of truth)
 
-- **`data/db/*.csv` *are* the metadata.** A change — add / edit / rename / remove a
+- **The `*.csv` *are* the metadata.** A change — add / edit / rename / remove a
   `source` / `gauge` / `reach` / junction row — is a reviewed **CSV diff**. There
   is no SQL data migration; `levels migrate` carries **schema** changes only
   (guard: `tests/test_scripts/test_migrations_schema_only.py`).
-- **A new row takes a stable id** from `data/db/id_counters.csv`: read the table's
+- **A new row takes a stable id** from `id_counters.csv`: read the table's
   `next_id`, use it, bump the counter. Ids **only ever increment** — a deleted id
   is never reused, so a `base62(id)` public handle never silently re-points.
   Guard: `tests/test_id_counters.py` (ids unique per table, every id `< next_id`).
@@ -19,13 +25,13 @@ add flow: metadata now lives **only** in `data/db/*.csv` and lands on prod via
   `reach.csv` carries `gauge_id`. You wire a new row by writing the id you just
   assigned — no "resolve by name" dance.
 - **Apply path:** `scripts/deploy.sh` step 3.1 runs `levels sync-metadata` when
-  `data/db/*.csv` changed: INSERT new / UPDATE changed / DELETE removed, **by id**,
+  `*.csv` changed: INSERT new / UPDATE changed / DELETE removed, **by id**,
   **preserving observations** (a rename is an UPDATE — the source's id never moves,
   so its observations stay valid). Deletes are gated behind `--allow-deletes`,
   which prints the per-source observation-drop counts first.
 - **The two big reach blobs stay out of `reach.csv`:** `geom` →
-  `data/db/reaches.json` (`import_metadata.py --geom-only`, deploy step 3.25);
-  `gradient_profile` → `data/db/reaches-gradient.json` (`--gradient-only`, step
+  `reaches.json` (`import_metadata.py --geom-only`, deploy step 3.25);
+  `gradient_profile` → `reaches-gradient.json` (`--gradient-only`, step
   3.26). They're large, machine-generated, and not regenerable on prod. `reach.huc`
   is tool-derived (`levels assign-huc`) but a single code, so it rides **in**
   `reach.csv` like any other column.
@@ -128,9 +134,9 @@ Reach data splits across **three files by size:**
    - **`reach_class.csv`** (`id`, `reach_id`, `name`) — **required** for the class
      pills; `name` NOT NULL; CHECK `low ≤ high`.
    - **`reach_guidebook.csv`** — link to the canonical state guide where indexed.
-2. **`geom` → `data/db/reaches.json`** (large, lon-first `"lon lat,lon lat,…"`, no
+2. **`geom` → `reaches.json`** (large, lon-first `"lon lat,lon lat,…"`, no
    wrapper) → applied on prod by `import_metadata.py --geom-only` (deploy 3.25).
-3. **`gradient_profile` → `data/db/reaches-gradient.json`** → `--gradient-only`
+3. **`gradient_profile` → `reaches-gradient.json`** → `--gradient-only`
    (deploy 3.26). `max_gradient` (a scalar) stays in `reach.csv`.
 
 `reaches.json` / `reaches-gradient.json` are keyed by `reach.id` — the **same**
@@ -178,8 +184,8 @@ correctly. `SELECT COUNT(*) FROM observation WHERE source_id = …` is unchanged
   the blobs:
   1. Update the four endpoint columns in `reach.csv` and re-trace (the geom must
      stay within 0.003° of the endpoints or `check-reaches` fails).
-  2. Replace the reach's entry in `data/db/reaches.json` (geom) and
-     `data/db/reaches-gradient.json` (gradient_profile).
+  2. Replace the reach's entry in `reaches.json` (geom) and
+     `reaches-gradient.json` (gradient_profile).
   3. Recompute `elevation` / `elevation_lost` / `length` / `gradient` /
      `max_gradient` (`refresh_reach_elevations.py`, the DEM pipeline) and write them
      to `reach.csv`.
@@ -227,7 +233,7 @@ gap/overlap on the dev map.
 
 ## Scenario: drop a gauge
 
-Remove the gauge's rows from `data/db/*.csv` and let `sync-metadata --allow-deletes`
+Remove the gauge's rows from `*.csv` and let `sync-metadata --allow-deletes`
 apply the deletion by id:
 
 - Remove the row(s) from `gauge.csv`, `source.csv`, and `gauge_source.csv` (and

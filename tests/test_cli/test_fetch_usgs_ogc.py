@@ -131,9 +131,9 @@ def test_usgs_source_names_are_station_ids():
     source.csv."""
     import csv
 
-    from kayak.config import DATA_DIR
+    from kayak.config import METADATA_DIR
 
-    with (DATA_DIR / "db" / "source.csv").open(encoding="utf-8") as fh:
+    with (METADATA_DIR / "source.csv").open(encoding="utf-8") as fh:
         offenders = [
             row["name"]
             for row in csv.DictReader(fh)

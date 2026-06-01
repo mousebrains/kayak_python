@@ -22,6 +22,7 @@ import csv
 import re
 from pathlib import Path
 
+from kayak.config import METADATA_DIR
 from kayak.db.models import Base
 
 _DOC = Path(__file__).resolve().parents[1] / "docs" / "database-schema.md"
@@ -103,7 +104,7 @@ def test_source_agency_enum_documents_every_value() -> None:
     """The source.agency Notes enum must list every distinct agency in the
     committed source.csv — the authoritative set (review-4 R2.4 / R3.4). The
     forward/reverse column checks only see column *names*, not enum prose."""
-    csv_path = Path(__file__).resolve().parents[1] / "data" / "db" / "source.csv"
+    csv_path = METADATA_DIR / "source.csv"
     with csv_path.open(encoding="utf-8") as fh:
         agencies = {
             (row.get("agency") or "").strip()

@@ -249,12 +249,26 @@ jobs:
 
   test:
     runs-on: ubuntu-24.04
+    # The metadata CSVs live in the private kayak_data repo (data-repo split); the
+    # data-reading tests (test_id_counters, test_reach_names, test_schema_doc_sync,
+    # test_committed_reach_geom, test_fetch_usgs_ogc) read them via METADATA_DIR,
+    # pointed at the second checkout below. The default GITHUB_TOKEN can't read
+    # another private repo, so the checkout uses a read-only deploy key stored as
+    # the KAYAK_DATA_DEPLOY_KEY secret.
+    env:
+      METADATA_DIR: ${{ github.workspace }}/kayak_data
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.13", "3.14"]
     steps:
       - uses: actions/checkout@v6
+      - name: Checkout kayak_data (private metadata snapshot)
+        uses: actions/checkout@v6
+        with:
+          repository: mousebrains/kayak_data
+          ssh-key: ${{ secrets.KAYAK_DATA_DEPLOY_KEY }}
+          path: kayak_data
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           enable-cache: true

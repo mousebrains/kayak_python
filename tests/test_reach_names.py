@@ -12,9 +12,9 @@ from __future__ import annotations
 import csv
 from collections import Counter
 
-from kayak.config import DATA_DIR
+from kayak.config import METADATA_DIR
 
-REACH_CSV = DATA_DIR / "db" / "reach.csv"
+REACH_CSV = METADATA_DIR / "reach.csv"
 
 
 def _reach_names() -> list[str]:

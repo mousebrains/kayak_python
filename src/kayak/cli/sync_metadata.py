@@ -50,7 +50,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from kayak.config import DATA_DIR, DATABASE_URL
+from kayak.config import DATABASE_URL, METADATA_DIR
 from kayak.db import metadata_csv as mc
 
 
@@ -119,7 +119,7 @@ def _print_plan(plan: mc.SyncPlan, db_path: Path, csv_dir: Path) -> None:
 def sync_metadata(args: argparse.Namespace) -> int:
     """Entry point for ``levels sync-metadata``."""
     db_path = _resolve_db_path(args.database_url)
-    csv_dir = Path(args.csv_dir).resolve() if args.csv_dir else DATA_DIR / "db"
+    csv_dir = Path(args.csv_dir).resolve() if args.csv_dir else METADATA_DIR
 
     if not db_path.exists():
         print(
