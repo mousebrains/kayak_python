@@ -1,6 +1,7 @@
 # PLAN: Metadata as a single source of truth
 
-**Status:** In progress (design **v2**). **Supersedes** the later phases of
+**Status:** In progress (design **v2**) — **Phases 1–5 landed** (#100 / #103 / #104 / #105 + the
+schema-only-migration retirement); **Phase 6 (data-repo split) remains**. **Supersedes** the later phases of
 `project-review-6/PLAN_round6_remediation.md` — the round-6 *review* stands (it surfaced the root cause);
 this is the strategic remediation the maintainer chose over the duality-based plan.
 
@@ -116,23 +117,33 @@ but unnecessary — and is exactly the complexity we're removing.)
   dual-edit, no rebuild-staleness.
 - **`seed_gauge_display` clobber** → the tool becomes a CSV-*generation* helper; its output is a reviewable
   diff, not a prod-DB mutation. (Its fill-only/`--gauge` safety is moot once it edits the reviewed CSV.)
-- **`PENDING_RECONCILIATION` / the reconciliation guard / the dual-edit** → gone (no id chicken-and-egg, one
-  source of truth).
+- **`PENDING_RECONCILIATION` / the reconciliation guard / the dual-edit** → **gone** (Phase 5): the
+  `test_migration_csv_reconciliation` guard is replaced by `test_migrations_schema_only` (new migrations may
+  not touch metadata tables); no id chicken-and-egg, one source of truth.
 - **The data-repo split / branch protection (review §1 #1)** → still wanted, and now the data repo simply
   holds the authoritative symbolic-FK CSVs.
 - **CHANGELOG / 0069 header** (review §3) → fold in as part of the redesign PRs.
 
-## Migration path (phased, to be detailed)
+## Migration path (phased) — v2 actual
 
-1. **Introduce keys + uniqueness.** Make `name` unique on `source` (resolve any collisions); assign keys to
-   NULL-name reaches; add the `calc_expression` slug. Schema migration(s) — the *last* data-touching ones.
-2. **Switch the public surface to keys.** PHP detail-page + custom-page URLs use `key`; transitional id
-   redirect.
-3. **Convert the CSVs to symbolic-FK form** (drop `id` columns, rewrite FK columns as key refs) and **rewrite
-   the loader** to resolve symbolically + maintain the keymap. Add a round-trip test (export→import→export is
-   stable).
-4. **Retire data migrations** — `levels migrate` handles schema only; document the new "edit the CSV" flow.
-5. **Move the CSVs to the data repo** (the round-6 split) + branch-protect the code repo.
+The v1 list here described the symbolic-FK shape (the old Phase 3) that **v2
+dropped** — ids stay numeric and stable, FKs stay numeric. The sequence as actually
+executed:
+
+1. **✓ Phase 1 — normalization + stable-id foundation** (#100): `id_counters.csv`,
+   the `test_id_counters` guard, the stable author-assigned id.
+2. **✓ Phase 2 — base-62 `?h=` public handles** (#103) + **drop internal-id columns
+   from public pages** (#104). `base62(id)`, no `hash` column, no lookup table.
+3. **✓ Prod-apply sync** (#105): `levels sync-metadata` applies a reviewed CSV diff
+   to the live DB by stable id, preserving observations; wired into `deploy.sh`
+   step 3.1.
+4. **✓ Phase 5 — retire data migrations**: `levels migrate` is schema-only
+   (`test_migrations_schema_only` replaces `test_migration_csv_reconciliation` +
+   `PENDING_RECONCILIATION`); the metadata-edit flow is documented in
+   `docs/PLAN_add_gauges_reaches.md` (add / update / split / drop via CSV + sync),
+   `docs/migrations.md`, and `CLAUDE.md`.
+5. **☐ Phase 6 — data-repo split**: move `data/db/*.csv` to the data repo +
+   branch-protect the code repo (the round-6 split).
 
 ## Decisions (resolved with the maintainer)
 
