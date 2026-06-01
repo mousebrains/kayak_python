@@ -117,7 +117,7 @@ checkout: those will linger until the next clean deploy or a manual
 
 #### Generator change
 
-`scripts/generate_mt_migration.py` currently reads
+`docs/one-offs/generate_mt_migration.py` currently reads
 `data/discover/montana_candidates.csv` (the gitignored discovery output).
 Switch it to read `docs/one-offs/mt.list` directly and pull metadata from
 `Gauge-metadata-cache/gauges.db::usgs_site`:
@@ -176,7 +176,7 @@ sqlite3 Gauge-metadata-cache/gauges.db \
 # Expected: 13. If less, refresh: python3 scripts/fetch_usgs_sites.py
 
 # Regenerate the migration from mt.list
-python3 scripts/generate_mt_migration.py
+python3 docs/one-offs/generate_mt_migration.py
 
 # Sanity: 13 of each insert
 grep -c "INSERT INTO source"               data/db/migrations/0036_montana_usgs_gauges.sql  # 13
@@ -384,7 +384,7 @@ in the last week" detector once per run). Mention in the PR description.
 | Path | Change |
 |---|---|
 | `docs/one-offs/mt.list` | new — curated 13-site list, source of truth |
-| `scripts/generate_mt_migration.py` | **edit** — read `docs/one-offs/mt.list` + `Gauge-metadata-cache/gauges.db` instead of `data/discover/montana_candidates.csv`; drop REVIEW-hint heuristic; refresh leading comment |
+| `docs/one-offs/generate_mt_migration.py` | **edit** — read `docs/one-offs/mt.list` + `Gauge-metadata-cache/gauges.db` instead of `data/discover/montana_candidates.csv`; drop REVIEW-hint heuristic; refresh leading comment |
 | `data/db/migrations/0036_montana_usgs_gauges.sql` | **rewrite** — regenerate from mt.list (13 sites; was 62 HUC4-1701 sites) |
 
 ### Phase 3 (revert state-scoped pages + landing-page cross-links)

@@ -15,6 +15,11 @@ archived): the field regex anchors on a BARE ``**Verify:**`` so backtick-wrapped
 prose mentions don't open spurious fields, captures the field as a DOTALL block so
 a wrapped continuation-line command isn't dropped, and counter (b) flags only a
 ``grep -c`` span that carries a quote (a real command attempt, not a prose mention).
+
+A plan carrying a whole-plan ``**SUPERSEDED`` banner is excluded: it was never
+executed (the maintainer pivoted to a replacement), so its forward-looking Verifies
+aren't assertions about HEAD — e.g. round-6's planned restore migration, dissolved
+by the metadata-single-source redesign.
 """
 
 from __future__ import annotations
@@ -35,10 +40,23 @@ _RUNNABLE = re.compile(r"`grep -c '([^']*)' (\S+?)`\s*(?:→|->)\s*`?(\d+)`?")
 # A genuine command ATTEMPT: grep -c + a quote (vs a bare prose mention of the token).
 _ATTEMPT = re.compile(r"`grep -c\s+['\"]")
 _BRE_META = {".", "*", "[", "]", "^", "$", "\\"}
+# A whole-plan **SUPERSEDED banner (bold all-caps, as round-6 carries) marks a plan
+# that was NEVER executed — its forward-looking Verifies reference fixes abandoned
+# for the replacement (round-6's planned 0072_restore_canyon_creek_sort_name
+# migration was dissolved by the metadata-single-source redesign), so they are not
+# HEAD assertions and are excluded. A lowercase prose "superseded" (round-3 has one)
+# is NOT the banner and stays in scope.
+_SUPERSEDED = re.compile(r"\*\*SUPERSEDED\b")
 
 
 def _fields() -> list[tuple[str, str]]:
-    return [(p.name, f) for p in _PLANS for f in _FIELD.findall(p.read_text("utf-8"))]
+    out: list[tuple[str, str]] = []
+    for p in _PLANS:
+        text = p.read_text("utf-8")
+        if _SUPERSEDED.search(text):  # never-executed plan — its Verifies aren't HEAD claims
+            continue
+        out.extend((p.name, f) for f in _FIELD.findall(text))
+    return out
 
 
 def _count(pattern: str, path: str) -> int:  # == grep -Fc: substring line-count

@@ -37,6 +37,10 @@ material rather than a deletable graveyard. For work *in flight*, see the
 | `REVIEW_round5_2026-05-29.md` | Round-5 deep project review (graded B−, ▼ from B) — verification-integrity downgrade: round-4's R1.1/R1.2/R1.3 recorded done but never landed; remediated #85–#91, kept for trend |
 | `PLAN_round5_remediation.md` | Round-5 remediation plan — as-built: landed #85–#91, each fix shipping a committed guard; the R2.1 claim-vs-source lever (`test_remediation_claims.py`) now enforces archived Verifies |
 | `IMPL_round5.md` | Round-5 PR-by-PR implementation playbook — the as-executed sequence for the round-5 plan |
+| `REVIEW_round6_2026-05-30.md` | Round-6 deep project review (graded B+, ▲ from B−) — first clean recursive pass; merged #99; surfaced the metadata migration↔CSV duality root cause |
+| `PLAN_round6_remediation.md` | Round-6 remediation plan (the v1→v5 red-team record) — **superseded** by the metadata-single-source redesign (`PLAN_metadata_single_source.md`); kept for provenance |
+| `PLAN_metadata_single_source.md` | The metadata-single-source-of-truth redesign (design v2) — COMPLETE: stable ids + base-62 `?h=` handles, `sync-metadata`, retire data migrations, data-repo split (`kayak_data`) + branch protection (#100–#107) |
+| `preflight-2026-05-10.md` | Pre-production preflight / closing record for the 2026-05-20 cutover to `levels.wkcc.org` (all P0/P1 items resolved) |
 
 > `docs/PLAN_production_discipline.md` lives in `docs/` (not here) on purpose:
 > it is a landed plan but remains a live cross-reference target for the systemd
