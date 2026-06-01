@@ -382,6 +382,8 @@ changes; PHP re-reads the file once per request.
 ```bash
 # The backup units write to /home/pat/backups (out of the repo, review-4 R5.6);
 # create it pat-owned before install — ReadWritePaths= needs it at unit start.
+# kayak-metadata-snapshot.service likewise binds /home/pat/kayak_data
+# (ReadWritePaths=) — the §2.5 clone above must already exist here.
 sudo -u pat mkdir -p /home/pat/backups
 sudo /home/pat/kayak/systemd/install.service.sh
 ```

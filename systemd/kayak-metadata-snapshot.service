@@ -1,5 +1,5 @@
 [Unit]
-Description=Snapshot kayak DB metadata to data/db/*.csv and push to origin
+Description=Snapshot kayak DB metadata to the kayak_data repo's *.csv and push to its origin
 After=network-online.target
 Wants=network-online.target
 OnFailure=kayak-notify-failure@%n.service
@@ -25,14 +25,20 @@ TimeoutStartSec=300
 Nice=15
 
 # Sandboxing. The script reads kayak.db (SQLite WAL mode wants write to its
-# dir even for readers), writes regenerated CSVs into the repo, and uses git
-# over SSH for fetch/push -> needs ~/.ssh (read) + ~/.cache/pre-commit (write).
+# dir even for readers -> /home/pat/DB) and, since the Phase 6 data-repo split,
+# regenerates the metadata CSVs into the SEPARATE kayak_data clone, which it
+# then fetch/pull/commit/pushes over git+SSH (-> /home/pat/kayak_data write;
+# ~/.ssh read via ProtectHome=read-only; ~/.cache/pre-commit write). The code
+# repo (this script + export_metadata.py + the editable kayak package) is only
+# READ — ProtectHome=read-only covers that, so /home/pat/kayak needs no write
+# grant (CPython just skips its best-effort __pycache__ write under the
+# read-only mount; harmless for a daily oneshot).
 NoNewPrivileges=yes
 PrivateTmp=yes
 PrivateDevices=yes
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/home/pat/DB /home/pat/kayak /home/pat/.cache/pre-commit
+ReadWritePaths=/home/pat/DB /home/pat/kayak_data /home/pat/.cache/pre-commit
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes
