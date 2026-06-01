@@ -107,6 +107,29 @@ echo ">>> levels validate-config"
 echo ">>> levels migrate"
 "$LEVELS" migrate
 
+# --- 3.1. sync metadata CSVs (only if data/db/*.csv changed) -----------
+#
+# Apply the reviewed data/db/*.csv diff to the live DB by stable id: INSERT
+# new, UPDATE changed (a rename is an UPDATE — matched by id, so the source's
+# observations are preserved). --backup snapshots the DB to <db>.pre-sync first:
+# a FK-valid but logically-wrong CSV edit (e.g. a bad threshold UPDATE) commits
+# and is NOT undoable from the one-line diff. Runs WITHOUT --allow-deletes: a
+# diff that REMOVES a row prints the per-source observation-drop plan and exits
+# non-zero, so this `set -e`d deploy ABORTS — but note the safe insert/update
+# half is already COMMITTED at that point. The operator reviews the drop counts,
+# runs `levels sync-metadata --allow-deletes` by hand (the committed upserts are
+# idempotent, so re-running deploy.sh is safe), then re-runs deploy.sh. Runs
+# after migrate (schema current) and before the geom/gradient applies (which
+# UPDATE the same reach rows). Gated on the CSVs actually changing.
+
+if [[ "$old_sha" != "$new_sha" ]] && \
+        ! git diff --quiet "$old_sha" "$new_sha" -- 'data/db/*.csv'; then
+    echo ">>> data/db/*.csv changed — applying metadata sync (levels sync-metadata --backup)"
+    "$LEVELS" sync-metadata --backup
+else
+    echo "(data/db/*.csv unchanged — skipping metadata sync)"
+fi
+
 # --- 3.25. apply reach geometry (only if reaches.json changed) --------
 #
 # reach.geom lives in data/db/reaches.json (excluded from reach.csv —

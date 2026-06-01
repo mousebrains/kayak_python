@@ -25,6 +25,7 @@ from kayak.cli import (
     pipeline,
     seed_maintainer,
     status,
+    sync_metadata,
     trace_reach,
     validate_config,
 )
@@ -66,6 +67,7 @@ def main() -> None:
     validate_config.addArgs(subparsers)
     analyze_logs.addArgs(subparsers)
     status.addArgs(subparsers)
+    sync_metadata.addArgs(subparsers)
 
     args = parser.parse_args()
     mkLogger(args)

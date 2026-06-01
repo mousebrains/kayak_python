@@ -39,11 +39,12 @@ Usage:
 """
 
 import argparse
-import csv
 import json
 import sqlite3
 import sys
 from pathlib import Path
+
+from kayak.db import metadata_csv as mc
 
 REPO_DIR = Path(__file__).resolve().parent.parent
 
@@ -71,89 +72,15 @@ def _default_db_path() -> Path:
     return REPO_DIR.parent / "DB" / "kayak.db"
 
 
-# Load order respects foreign-key dependencies: parents before children.
-LOAD_ORDER = [
-    "state",
-    "class_description",
-    "guidebook",
-    "fetch_url",
-    "calc_expression",
-    "rating",
-    "rating_data",
-    "source",
-    "gauge",
-    "gauge_source",
-    "reach",
-    "reach_state",
-    "reach_class",
-    "reach_guidebook",
-    "huc_name",
-]
-
-
-def _build_upsert_sql(conn: sqlite3.Connection, table: str, header: list[str]) -> str:
-    """Build an upsert keyed on the table's primary key.
-
-    ``INSERT … ON CONFLICT(<pk>) DO UPDATE SET <non-pk cols>`` so columns the
-    CSV omits (``reach.geom``, ``fetch_url.last_fetched_at``) survive on
-    existing rows — unlike ``INSERT OR REPLACE``, which deletes+reinserts and
-    nulls them. Assumes conflicts arrive on the PK, which holds for these
-    stable-id snapshots; a table with no PK falls back to the old REPLACE.
-    """
-    info = conn.execute(f"PRAGMA table_info({table})").fetchall()
-    # table_info row: (cid, name, type, notnull, dflt_value, pk); pk>0 marks a
-    # primary-key column, numbered by its position within a composite key.
-    pk_cols = [r[1] for r in sorted((c for c in info if c[5]), key=lambda c: c[5])]
-    cols = ", ".join(f'"{c}"' for c in header)
-    placeholders = ", ".join("?" for _ in header)
-    insert = f"INSERT INTO {table} ({cols}) VALUES ({placeholders})"
-    if not pk_cols:
-        return f"INSERT OR REPLACE INTO {table} ({cols}) VALUES ({placeholders})"
-    conflict = ", ".join(f'"{c}"' for c in pk_cols)
-    update_cols = [c for c in header if c not in pk_cols]
-    if not update_cols:
-        # Every CSV column is part of the PK — a conflict is an identical row.
-        return f"{insert} ON CONFLICT({conflict}) DO NOTHING"
-    set_clause = ", ".join(f'"{c}" = excluded."{c}"' for c in update_cols)
-    return f"{insert} ON CONFLICT({conflict}) DO UPDATE SET {set_clause}"
-
-
-def import_table(conn: sqlite3.Connection, csv_path: Path) -> int:
-    table = csv_path.stem
-    with csv_path.open(newline="", encoding="utf-8") as f:
-        reader = csv.reader(f)
-        header = next(reader, None)
-        if not header:
-            return 0
-        sql = _build_upsert_sql(conn, table, header)
-
-        rows = 0
-        batch: list[tuple[str | None, ...]] = []
-        for row in reader:
-            # Convert empty strings to NULL; sqlite3 would otherwise store "".
-            batch.append(tuple(v if v != "" else None for v in row))
-            if len(batch) >= 1000:
-                conn.executemany(sql, batch)
-                rows += len(batch)
-                batch = []
-        if batch:
-            conn.executemany(sql, batch)
-            rows += len(batch)
-    return rows
-
-
 def _load_csvs(conn: sqlite3.Connection, in_dir: Path) -> int:
-    """Upsert every metadata CSV present, in FK-dependency order. Prints a
-    per-table line and returns the total rows processed."""
-    total = 0
-    for table in LOAD_ORDER:
-        csv_path = in_dir / f"{table}.csv"
-        if not csv_path.exists():
-            continue
-        rows = import_table(conn, csv_path)
+    """Upsert every metadata CSV present via ``kayak.db.metadata_csv``, print a
+    per-table line, and return the total rows processed. (The upsert helpers
+    moved into the package so ``levels sync-metadata`` shares one
+    implementation; this stays a thin wrapper for the script's output.)"""
+    counts = mc.upsert_csvs(conn, in_dir)
+    for table, rows in counts.items():
         print(f"{table:<20} {rows:>10}")
-        total += rows
-    return total
+    return sum(counts.values())
 
 
 def _apply_geom(conn: sqlite3.Connection, in_dir: Path) -> None:
