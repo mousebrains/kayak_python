@@ -121,6 +121,15 @@ echo ">>> levels migrate"
 # on the metadata actually changing (the code-repo SHA no longer moves when only
 # metadata changes). --ff-only mirrors the code-repo pull: no merge, no rebase.
 
+# Pre-flight: a fresh/unprovisioned host has no clone yet — fail with an
+# actionable message instead of a raw `fatal: … HEAD` / publickey abort.
+if [[ ! -e "$KAYAK_DATA/.git" ]] || ! git -C "$KAYAK_DATA" rev-parse HEAD >/dev/null 2>&1; then
+    echo "ERR: kayak_data clone missing or empty at $KAYAK_DATA" >&2
+    echo "  Complete the metadata-repo setup first (deploy/SETUP.md § 2.5):" >&2
+    echo "    git clone git@github.com:mousebrains/kayak_data.git $KAYAK_DATA" >&2
+    exit 1
+fi
+
 echo ">>> git -C $KAYAK_DATA pull --ff-only"
 data_old_sha=$(git -C "$KAYAK_DATA" rev-parse HEAD)
 git -C "$KAYAK_DATA" pull --ff-only

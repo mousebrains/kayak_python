@@ -119,11 +119,11 @@ class KayakConfig(BaseSettings):
     output_dir: Path = Field(default_factory=_default_output_dir)
 
     # Metadata-snapshot directory — the ``*.csv`` + ``reaches*.json`` that the
-    # metadata-single-source flow treats as the source of truth. Defaults to the
-    # in-repo ``data/db`` (single-repo checkout); the data-repo split points it at
-    # the external ``kayak_data`` clone (e.g. ``/home/pat/kayak_data``) via the
-    # ``METADATA_DIR`` env var. Migrations (``data/db/migrations``) stay in the
-    # code repo and are NOT under this dir.
+    # metadata-single-source flow treats as the source of truth. The default
+    # *value* stays ``data/db`` so path resolution is unchanged, but the CSVs no
+    # longer live in the code repo: clone ``kayak_data`` and set ``METADATA_DIR``
+    # to it (e.g. ``/home/pat/kayak_data``; deploy/SETUP.md § 2.5). Migrations
+    # (``data/db/migrations``) stay in the code repo and are NOT under this dir.
     metadata_dir: Path = Field(default_factory=lambda: DATA_DIR / "db")
 
     # Fetch pipeline
