@@ -1,9 +1,11 @@
 # PLAN: Metadata as a single source of truth
 
-**Status:** In progress (design **v2**) — **Phases 1–5 landed** (#100 / #103 / #104 / #105 + the
-schema-only-migration retirement); **Phase 6 (data-repo split) remains**. **Supersedes** the later phases of
-`project-review-6/PLAN_round6_remediation.md` — the round-6 *review* stands (it surfaced the root cause);
-this is the strategic remediation the maintainer chose over the duality-based plan.
+**Status:** **COMPLETE** (design **v2**) — all phases merged: #100 / #103 / #104 (stable ids + base-62 `?h=`
+handles), #105 (`sync-metadata`), #106 (retire data migrations), #107 (data-repo split → `kayak_data` +
+`METADATA_DIR`); branch protection applied to `kayak_python` main 2026-06-01 (the round-6 lever). Archived as
+the design record. **Superseded** the later phases of `PLAN_round6_remediation.md` — the round-6 *review*
+stands (it surfaced the root cause); this was the strategic remediation the maintainer chose over the
+duality-based plan.
 
 > **v2 simplification (maintainer).** The numeric `id` stays as the **stable, author-assigned** key (not an
 > ephemeral surrogate), so the public URL handle is simply **`base62(id)`** — `decode → id → WHERE id = ?`,
@@ -142,11 +144,12 @@ executed:
    `PENDING_RECONCILIATION`); the metadata-edit flow is documented in
    `docs/PLAN_add_gauges_reaches.md` (add / update / split / drop via CSV + sync),
    `docs/migrations.md`, and `CLAUDE.md`.
-5. **▸ Phase 6 — data-repo split** (in progress): `data/db/*.csv` + `reaches*.json`
-   moved to the private `kayak_data` repo, read by the code via `METADATA_DIR`; the
-   nightly snapshot targets `kayak_data` (not code-repo `main`); CI reads it via a
-   read-only deploy key. Remaining: branch-protect the code repo's `main` (the
-   round-6 lever) + downgrade the prod host's code-repo deploy key to read-only.
+5. **✓ Phase 6 — data-repo split** (#107): `data/db/*.csv` + `reaches*.json` moved
+   to the private `kayak_data` repo, read by the code via `METADATA_DIR`; the nightly
+   snapshot targets `kayak_data` (not code-repo `main`); CI reads it via a read-only
+   deploy key. **Branch protection** applied to `kayak_python` main 2026-06-01 (the
+   round-6 lever: require-PR + CI + enforce_admins); the prod host's code-repo deploy
+   key downgraded to read-only, a scoped write key handles the `kayak_data` snapshot.
 
 ## Decisions (resolved with the maintainer)
 

@@ -50,10 +50,17 @@ python3 -m venv .venv
 # 2. Activate it — every subsequent step assumes `levels` resolves to .venv/bin/levels.
 source .venv/bin/activate
 
+# 2b. Clone the metadata repo and point the code at it. The metadata CSVs +
+#     reaches*.json live in the separate `kayak_data` repo (data-repo split),
+#     NOT in this code repo (only data/db/migrations/ stays here). The code
+#     finds them via METADATA_DIR.
+git clone git@github.com:mousebrains/kayak_data.git ../kayak_data
+export METADATA_DIR="$(cd ../kayak_data && pwd)"   # or persist in ~/.config/kayak/.env
+
 # 3. Create the schema (empty tables + stamped migrations)
 levels init-db --no-seed
 
-# 4. Load gauge/reach/source metadata from the tracked CSV snapshots.
+# 4. Load gauge/reach/source metadata from the kayak_data repo (METADATA_DIR).
 #    init-db alone seeds only states + sources/fetch_urls from sources.yaml;
 #    with no gauge_source links the pipeline's orphan-check fails and the site
 #    renders empty. This loads the real gauges, reaches, and source -> gauge
@@ -143,7 +150,7 @@ Key systemd timers:
 - **kayak-decimate** — daily at 02:32 (thin old observations)
 - **kayak-cert-expiry** — daily at 06:30 (Let's Encrypt cert health probe; pages on <21 days remaining)
 - **kayak-editor-retention** — daily at 03:45 (prune expired editor sessions + magic links)
-- **kayak-metadata-snapshot** — daily at 04:30 (commit metadata-table drift to `data/db/*.csv`)
+- **kayak-metadata-snapshot** — daily at 04:30 (commit metadata-table drift to the separate `kayak_data` repo)
 - **kayak-status** — daily at 03:30 (renders the `/_internal/status` operator dashboard to `var/status.html`)
 - **kayak-fetch-osmb** — daily at 03:30 (fetches Oregon State Marine Board hazard/access GeoJSON overlays)
 - **kayak-cert-renewal-test** — weekly Monday 04:15 (`certbot renew --dry-run`)

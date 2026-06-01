@@ -4,6 +4,18 @@
 **git workspace**. This doc explains why that's a trap, the workaround we use,
 and how to recover if you find the live tree in a bad state.
 
+> **Update — data-repo split (Phase 6).** Two things below changed: (1) the nightly
+> metadata snapshot (`snapshot_metadata.sh`) now commits/pushes to the **separate
+> `kayak_data` repo**, never this code repo — so the code-repo live tree is no
+> longer git-*mutated* by any scheduled job, and the "snapshot on the wrong branch"
+> risk + its on-`main` guard now concern the `kayak_data` clone, not here. (2) The
+> live host's `kayak_python` deploy key is now **read-only** (deploy `git pull`
+> only), so you **cannot push from the live host** — worktrees inherit that, so
+> branch/PR pushes happen on a **separate dev machine**. To push from the host in a
+> pinch, `git -C /home/pat/kayak config --unset core.sshCommand` (reverts to the
+> personal key). The worktree discipline below still keeps the live tree on `main`;
+> only the *push* leg moved off-host.
+
 ## TL;DR
 
 - The venv is an **editable install** (`…/site-packages/_editable_impl_kayak.pth`
@@ -42,7 +54,9 @@ and how to recover if you find the live tree in a bad state.
 - **`snapshot_metadata.sh` on the wrong branch.** It hardcodes `BRANCH=main` but
   committed on the *checked-out* branch and pushed `origin/main`. On a feature
   branch it would have committed the nightly metadata snapshot off-main and
-  silently pushed nothing. Now guarded (see below).
+  silently pushed nothing. Now guarded (see below). *(Pre-split history: the
+  snapshot now operates on the separate `kayak_data` clone, not this repo — see
+  the update note at the top.)*
 - **In general:** every scheduled job silently runs whatever is checked out —
   usually harmless for the read-mostly, idempotent jobs (fetch, build, status),
   but corrupting for the git-mutating one.
@@ -62,9 +76,10 @@ live checkout:
 
 - **Deploy = merge + pull.** Merge the PR on GitHub, then in the live tree run
   `git pull --ff-only` on `main`. That — and only that — changes what prod runs.
-- **Guardrail.** `scripts/snapshot_metadata.sh` refuses to run unless the live
-  tree is on `main` (bails non-zero → the existing `OnFailure` email/ntfy fires),
-  so the one git-mutating job can never commit to the wrong branch.
+- **Guardrail.** `scripts/snapshot_metadata.sh` refuses to run unless the
+  **`kayak_data` clone** is on `main` (bails non-zero → the existing `OnFailure`
+  email/ntfy fires), so the one git-mutating job — which now targets `kayak_data`,
+  not this repo — can never commit to the wrong branch.
 
 ## Recovery: I found the live tree on a feature branch
 

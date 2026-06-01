@@ -1,6 +1,6 @@
 # Round-6 Remediation Plan
 
-> **SUPERSEDED by [`docs/PLAN_metadata_single_source.md`](../docs/PLAN_metadata_single_source.md) (v2).** The
+> **SUPERSEDED by [`PLAN_metadata_single_source.md`](PLAN_metadata_single_source.md) (v2).** The
 > maintainer pivoted from this duality-based remediation to the metadata-single-source redesign. Kept for
 > provenance — this is the v1→v5 red-team iteration record that converged on the pivot.
 
