@@ -25,6 +25,22 @@ back the whole transaction rather than silently orphaning rows. The SQLAlchemy
 engine forces ``foreign_keys=ON`` too but yields a wrapped connection mid-pool;
 the raw connection lets the upsert helpers (``kayak.db.metadata_csv``) run
 directly and lets us own the PRAGMA timing.
+
+**Limitations — split the CSV diff across two syncs if you hit these:**
+
+* **A unique value can't move across a delete in one pass.** The upsert
+  (INSERT/UPDATE) runs entirely *before* the delete pass, so a diff that frees a
+  ``UNIQUE`` value by removing one row and reuses it on another in the *same*
+  diff hits the unique index while the old row still exists → the whole
+  transaction rolls back (``rc 1``, even with ``--allow-deletes``). The unique
+  columns this bites are ``gauge.name`` / ``fetch_url.url`` / ``state.name``
+  (``source.name`` is intentionally *not* unique, so source renames are safe).
+  Do it in two syncs: delete in one, re-add in the next.
+* **The CSV must be internally consistent about parent/child removals.** Under
+  ``foreign_keys=ON`` a removed parent cascades its junction/cache rows even if
+  the CSV still lists them; such a CSV then diverges from the DB and the *next*
+  sync FK-fails on the now-orphaned child. ``export_metadata`` writes consistent
+  CSVs; hand edits must keep parent and child removals together.
 """
 
 from __future__ import annotations
@@ -115,8 +131,23 @@ def sync_metadata(args: argparse.Namespace) -> int:
         print(f"error: csv dir does not exist: {csv_dir}", file=sys.stderr)
         return 1
 
+    # Snapshot the live DB before mutating it (opt-in; deploy.sh passes --backup).
+    # The online-backup API is correct even when the pipeline writer is
+    # mid-transaction (a plain cp could copy a torn page or miss the -wal); a
+    # fresh source connection keeps it independent of the sync connection's
+    # PRAGMA/transaction state below. Skipped under --dry-run (nothing changes).
+    if args.backup and not args.dry_run:
+        backup_path = db_path.with_name(db_path.name + ".pre-sync")
+        with sqlite3.connect(db_path) as bsrc, sqlite3.connect(backup_path) as bdst:
+            bsrc.backup(bdst)
+        print(f"backed up live DB → {backup_path}")
+
     conn = sqlite3.connect(db_path)
     try:
+        # A concurrent pipeline/decimate write would otherwise make the first DML
+        # below fail instantly with "database is locked" (sqlite3 doesn't wait by
+        # default); wait up to 30s instead, matching the editor-E2E busy-timeout.
+        conn.execute("PRAGMA busy_timeout = 30000")
         # FK enforcement must be enabled BEFORE any transaction opens — SQLite
         # silently ignores the PRAGMA mid-transaction. A fresh connection has no
         # open transaction, and PRAGMA/SELECT don't auto-begin one in Python's
@@ -126,7 +157,13 @@ def sync_metadata(args: argparse.Namespace) -> int:
             print("error: could not enable foreign_keys (an open transaction?)", file=sys.stderr)
             return 1
 
-        plan = mc.compute_plan(conn, csv_dir)
+        try:
+            plan = mc.compute_plan(conn, csv_dir)
+        except ValueError as exc:
+            # A malformed CSV (e.g. missing a primary-key column) — fail loud
+            # before touching the DB rather than churning every row.
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
         _print_plan(plan, db_path, csv_dir)
 
         if args.dry_run:
@@ -137,7 +174,7 @@ def sync_metadata(args: argparse.Namespace) -> int:
         try:
             with conn:  # commit on success; ROLLBACK on any raise
                 mc.upsert_csvs(conn, csv_dir)
-                if plan.has_deletes and not refuse_deletes:
+                if plan.has_deletes and args.allow_deletes:
                     deleted = mc.apply_deletions(conn, plan)
                     print(f"deleted {sum(deleted.values())} row(s) across {len(deleted)} table(s)")
                 _audit_or_raise(conn)
@@ -182,6 +219,13 @@ def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> 
         action="store_true",
         help="Apply DELETEs (rows absent from the CSVs). Without it, deletions are "
         "refused (exit 2) after printing the per-source observation-drop counts.",
+    )
+    parser.add_argument(
+        "--backup",
+        action="store_true",
+        help="Snapshot the DB to <db>.pre-sync (online backup) before applying — "
+        "cheap insurance against a FK-valid but logically-wrong CSV edit. deploy.sh "
+        "passes this; ignored under --dry-run.",
     )
     parser.add_argument(
         "--dry-run",

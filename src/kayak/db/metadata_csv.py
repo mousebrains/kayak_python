@@ -33,6 +33,7 @@ import csv
 import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import cast
 
 # Parents before children (FK-dependency topological order).
 LOAD_ORDER: list[str] = [
@@ -182,7 +183,19 @@ def csv_pks(conn: sqlite3.Connection, in_dir: Path, table: str) -> set[tuple[obj
     names = [c for c, _ in pk]
     out: set[tuple[object, ...]] = set()
     with csv_path.open(newline="", encoding="utf-8") as f:
-        for row in csv.DictReader(f):
+        reader = csv.DictReader(f)
+        if reader.fieldnames is None:
+            return set()  # header-less/empty file — nothing to diff (like absent)
+        missing = [c for c in names if c not in reader.fieldnames]
+        if missing:
+            # Without every PK column, row.get() yields (None, …) tuples that
+            # match nothing → every CSV row reads as an insert and every DB row
+            # as a delete. Refuse loudly rather than churn the table.
+            raise ValueError(
+                f"{table}.csv is missing primary-key column(s) {missing} "
+                "— refusing to diff (every row would read as both insert and delete)"
+            )
+        for row in reader:
             out.add(tuple(_cast_pk(row.get(c), types[c]) for c in names))
     return out
 
@@ -196,7 +209,7 @@ def db_pks(conn: sqlite3.Connection, table: str) -> set[tuple[object, ...]]:
     return {tuple(r) for r in conn.execute(f"SELECT {cols} FROM {table}").fetchall()}
 
 
-def source_observation_counts(conn: sqlite3.Connection, source_ids: set[object]) -> dict[int, int]:
+def source_observation_counts(conn: sqlite3.Connection, source_ids: set[int]) -> dict[int, int]:
     """``{source_id: observation count}`` — the loud, irreversible number a
     source delete would drop."""
     out: dict[int, int] = {}
@@ -204,7 +217,7 @@ def source_observation_counts(conn: sqlite3.Connection, source_ids: set[object])
         (n,) = conn.execute(
             "SELECT COUNT(*) FROM observation WHERE source_id = ?", (sid,)
         ).fetchone()
-        out[int(sid)] = int(n)  # type: ignore[call-overload]
+        out[sid] = int(n)
     return out
 
 
@@ -253,7 +266,8 @@ def compute_plan(conn: sqlite3.Connection, in_dir: Path) -> SyncPlan:
             plan.insert_pks[table] = inserts
         if deletes:
             plan.delete_pks[table] = deletes
-    removed_source_ids = {pk[0] for pk in plan.delete_pks.get("source", set())}
+    # source.id is INTEGER, so _cast_pk already typed these as int at runtime.
+    removed_source_ids = {cast(int, pk[0]) for pk in plan.delete_pks.get("source", set())}
     if removed_source_ids:
         plan.source_obs_drops = source_observation_counts(conn, removed_source_ids)
     return plan
