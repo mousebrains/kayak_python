@@ -1,484 +1,372 @@
-# Adding gauges and reaches — methodology + initial batches
+# Editing gauges and reaches — metadata via CSV + sync
 
-**Status:** In progress (2026-05-27). Active runbook for adding new data — *not* a
-completed/archived plan (keep in `docs/`, not `docs/done/`).
+**Status:** Active runbook (metadata-single-source). Supersedes the migration-based
+add flow: metadata now lives **only** in `data/db/*.csv` and lands on prod via
+`levels sync-metadata`, matched by stable id. Covers **adding**, **updating**,
+**splitting**, and **dropping** gauges and reaches.
 
-## Purpose & scope
+## The model (one source of truth)
 
-A repeatable, trackable way to add three entry shapes — **gauge-only**,
-**reach-only**, **reach+gauge** — and to **drop** a gauge (Shape 4), via
-`dev → migration PR → merge → prod`, without reintroducing the drift/guard
-regressions closed across review rounds 2–4.
+- **`data/db/*.csv` *are* the metadata.** A change — add / edit / rename / remove a
+  `source` / `gauge` / `reach` / junction row — is a reviewed **CSV diff**. There
+  is no SQL data migration; `levels migrate` carries **schema** changes only
+  (guard: `tests/test_scripts/test_migrations_schema_only.py`).
+- **A new row takes a stable id** from `data/db/id_counters.csv`: read the table's
+  `next_id`, use it, bump the counter. Ids **only ever increment** — a deleted id
+  is never reused, so a `base62(id)` public handle never silently re-points.
+  Guard: `tests/test_id_counters.py` (ids unique per table, every id `< next_id`).
+- **FKs are the stable ids**, not names: `gauge_source.csv = gauge_id,source_id`;
+  `reach.csv` carries `gauge_id`. You wire a new row by writing the id you just
+  assigned — no "resolve by name" dance.
+- **Apply path:** `scripts/deploy.sh` step 3.1 runs `levels sync-metadata` when
+  `data/db/*.csv` changed: INSERT new / UPDATE changed / DELETE removed, **by id**,
+  **preserving observations** (a rename is an UPDATE — the source's id never moves,
+  so its observations stay valid). Deletes are gated behind `--allow-deletes`,
+  which prints the per-source observation-drop counts first.
+- **The two big reach blobs stay out of `reach.csv`:** `geom` →
+  `data/db/reaches.json` (`import_metadata.py --geom-only`, deploy step 3.25);
+  `gradient_profile` → `data/db/reaches-gradient.json` (`--gradient-only`, step
+  3.26). They're large, machine-generated, and not regenerable on prod. `reach.huc`
+  is tool-derived (`levels assign-huc`) but a single code, so it rides **in**
+  `reach.csv` like any other column.
 
-Initial batches: the **Columbia-River mainstem corridor** (gauge-only) and the
-**WA Lewis-system reaches** (reach+gauge), both sourced from data we already have
-(the USGS auto-fetch path; the `aw_reach` cache).
+> **No more id race.** Because ids are author-assigned and stable, the old "the
+> dev autoincrement id must equal the prod id, so don't let another reach land
+> between trace and deploy" constraint is **gone**. You pick the id in the CSV; the
+> same id keys `reaches.json` / `reaches-gradient.json`. Concurrent reach PRs only
+> have to avoid grabbing the *same* `next_id` (the id-counter guard catches a
+> collision at CI).
 
-## The spine (why every add is two things)
-
-- A **SQL migration** (`data/db/migrations/NNNN_*.sql`) creates the rows on the
-  **live** DB when `levels migrate` runs on deploy. Rows link **by name/URL,
-  never by hardcoded id** (autoincrement ids are prod-assigned).
-- The **nightly metadata snapshot** (`kayak-metadata-snapshot.timer` →
-  `scripts/snapshot_metadata.sh` → `export_metadata.py`) dumps prod's metadata
-  into `data/db/*.csv` and auto-commits. This is what carries the new rows to a
-  **from-scratch rebuild** — `init-db` *stamps* migrations without running them,
-  so a fresh DB gets all metadata from the CSVs.
-- So a new gauge/reach needs **both**: the migration (for prod) **and** the CSV
-  reconciliation (for rebuilds). We never hand-write CSV rows — the snapshot does
-  it with the real prod ids.
-
-## Guard checklist (clear all of these, every PR)
+## Guard checklist (clear all of these, every metadata PR)
 
 | Guard | Fails when | What we do |
 |---|---|---|
-| **orphan-check** | a fetch-active `source` has no `gauge_source` link | always wire the `gauge_source` join; sandbox-verify |
-| **R4.4** (`test_migration_csv_reconciliation`) | a migration-wired source name isn't in `source.csv` | add the source name to `PENDING_RECONCILIATION` in the **same PR**; remove it in a follow-up after the nightly snapshot lands it (the stale-allowlist test forces this) |
+| **id-counters** (`test_id_counters`) | a duplicate id, or `next_id` ≤ an existing id | each new row takes the current `next_id` and bumps it; never reuse a deleted id |
+| **orphan-check** | a fetch-active `source` has no `gauge_source` link | always add the `gauge_source.csv` join row; sandbox-verify |
 | **check-reaches** | `geom` has a `LINESTRING(` wrapper, <2 vertices, out-of-range coords, or endpoints drift >0.003° from the `lat/lon_start/end` columns | the tracer writes correct lon-first, no-wrapper geom; keep the endpoint columns in sync with the geom |
-| **dup-prefix** (R5.2) | two migrations share the `NNNN` prefix | next free prefix is **0068** (0067 highest across open PRs — 0065 source-based, 0066 Batch A, 0067 Batch B); re-check open PRs before numbering |
-| **model/schema lockstep** | a new column lands without a `models.py` update | N/A here — these batches add no columns |
-| **reach HUC** (added after Batch B/C shipped without it) | a new `reach` has NULL or hand-typed `huc` | run `levels assign-huc` on dev → 12-digit `reach.huc` + HUC8-name `reach.basin`, baked into the migration INSERT (Shape 2). A NULL `huc` drops the reach from the watershed filter; verify the new reaches show a 12-digit `huc` |
+| **reach HUC** | a new/edited `reach` has NULL or hand-typed `huc` | run `levels assign-huc` on dev → 12-digit `reach.huc` + HUC8-name `reach.basin` into `reach.csv`. A NULL `huc` drops the reach from the watershed filter |
+| **canonical `agency`** | a `source.agency` uses a raw parser slug | use `'USGS'` / `'WA DOE'` / `'NWRFC'` / `'USBR'` / `'Calculation'` etc. |
+| **schema-only migrations** (`test_migrations_schema_only`) | a *metadata* change is written as a migration | metadata goes via CSV — a migration only appears here if you're **also** adding a column (schema), kept in `models.py` lockstep |
 
-Plus: **canonical `agency` strings** in migrations (`'USGS'`, `'WA DOE'`,
-`'NWRFC'`, `'USBR'`, `'Calculation'` — never the raw parser slug); and the
-**universal sandbox check** before every migration PR:
+**The universal sandbox check** before every metadata PR — apply the CSV diff to a
+fresh copy of prod and confirm the graph is clean:
 
 ```bash
 cp /path/to/prod-or-fresh.db /tmp/sandbox.db
-KAYAK_DB=/tmp/sandbox.db .venv/bin/levels migrate
-KAYAK_DB=/tmp/sandbox.db .venv/bin/levels orphan-check   # expect: No orphan sources.
-KAYAK_DB=/tmp/sandbox.db .venv/bin/levels check-reaches   # if the migration touches reaches
+DATABASE_URL=sqlite:////tmp/sandbox.db levels sync-metadata --dry-run        # review the plan
+DATABASE_URL=sqlite:////tmp/sandbox.db levels sync-metadata [--allow-deletes] # apply
+DATABASE_URL=sqlite:////tmp/sandbox.db levels orphan-check                    # No orphan sources.
+DATABASE_URL=sqlite:////tmp/sandbox.db levels check-reaches                   # if reaches changed
+# geom/gradient applies, if the JSONs changed:
+DATABASE_URL=sqlite:////tmp/sandbox.db python scripts/import_metadata.py --geom-only --gradient-only
 ```
 
 ---
 
-## Shape 1 — gauge-only
+## Scenario: add a gauge (gauge-only)
 
-A "gauge" is a `gauge` row + ≥1 `source` (+ `gauge_source` link). The idempotent
-idiom (link by name/URL; `0036`/`0063` templates):
+A "gauge" is a `gauge` row + ≥1 `source` (+ a `gauge_source` link). Assign ids from
+`id_counters.csv` and add the rows:
 
-```sql
--- fetch source only: fetch_url.url is UNIQUE
-INSERT OR IGNORE INTO fetch_url (parser, url, hours, is_active) VALUES (…);
-
--- gauge: name is UNIQUE
-INSERT OR IGNORE INTO gauge (name, usgs_id, display_name, latitude, longitude,
-    river, state, …) VALUES (…);
-
--- source: name is NOT unique → guard on name (+ fetch_url_id / agency)
-INSERT INTO source (name, agency, fetch_url_id, timezone)
-SELECT '<name>', '<canonical agency>', <fu.id or NULL>, '<tz or NULL>'
-WHERE NOT EXISTS (SELECT 1 FROM source s WHERE s.name = '<name>' AND …);
-
--- link
-INSERT OR IGNORE INTO gauge_source (gauge_id, source_id)
-SELECT g.id, s.id FROM gauge g, source s WHERE g.name = '<gauge>' AND s.name = '<source>';
-```
+- **`gauge.csv`** — new `id` (bump `gauge` counter), `name` (UNIQUE),
+  `display_name`, `sort_name`, `latitude`/`longitude`, `river`, `state`, `huc`, and
+  (USGS) `usgs_id`.
+- **`source.csv`** — new `id` (bump `source` counter), `name`, `agency`,
+  `fetch_url_id` (or blank), `timezone`.
+- **`gauge_source.csv`** — the join row `gauge_id,source_id` (the two ids above).
+- **`fetch_url.csv`** — only for a fetch source: new `id`, `url` (UNIQUE),
+  `parser`, `hours`, `is_active` — **and** the URL must also be in
+  `data/sources.yaml` (the pipeline only fetches URLs present there).
+- **`id_counters.csv`** — bump `next_id` for every table you added an id to.
 
 **USGS is the easy case (zero extra wiring):** set `gauge.usgs_id`, add a source
-`agency='USGS', fetch_url_id=NULL` named the digit station id, link it.
+`agency='USGS'`, `fetch_url_id` blank, named the digit station id, link it.
 `fetch-usgs-ogc` then auto-fetches params `00060`/`00065`/`00010` (flow / gage /
-**temperature**, °C→°F) for any gauge with `usgs_id`. No `fetch_url`, nothing in
-`data/sources.yaml`.
+**temperature**, °C→°F) for any gauge with `usgs_id`. No `fetch_url.csv` row,
+nothing in `data/sources.yaml`.
 
 **Fetch sources** (WA DOE `_WTM_`, USBR, USACE) additionally need the URL in
-`data/sources.yaml` (the pipeline only fetches URLs present there), and USACE
-temperature would first need `"Temp-Water": DataType.temperature` added to
-`usace_cda.py::_PARAM_MAP` (its own small PR).
-
-**Every wired source name → `PENDING_RECONCILIATION`** in the same PR, removed
-after the snapshot.
+`data/sources.yaml`, and USACE temperature would first need `"Temp-Water":
+DataType.temperature` added to `usace_cda.py::_PARAM_MAP` (its own small PR).
 
 **State + HUC are required for the browser filter.** `gauges.html` emits a row's
 state/watershed filter attributes only when **both** `gauge.state` and `gauge.huc`
-(≥8 digits) are set — a gauge missing either is *unfilterable* and shows under
-every state. So set `gauge.huc` (the 8-digit HUC8, from the USGS site's `huc_cd`)
-**and** `gauge.state` on every gauge-only entry. For a **border gauge** on a
-state-line river, set `gauge.state` as a comma list (`OR,WA`): the build splits it
-into one `data-state` per state (mirroring how the reach table joins
-`reach.states`), and `filters.js` already splits comma `data-state`, so the gauge
-filters under each — **no `gauge_state` table needed**. (`gauges.html` reads
-state/HUC from the gauge's own columns, not its reaches, so a gauge-only entry
-must carry both itself.)
+(≥8 digits) are set — a gauge missing either is *unfilterable* and shows under every
+state. So set `gauge.huc` (the 8-digit HUC8, from the USGS site's `huc_cd`) **and**
+`gauge.state`. For a **border gauge** on a state-line river, set `gauge.state` as a
+comma list (`OR,WA`): the build splits it into one `data-state` per state and
+`filters.js` splits comma `data-state`, so the gauge filters under each — no
+`gauge_state` table needed.
 
-### Reproduce / verify
-- Sandbox: `levels migrate` + `levels orphan-check` → "No orphan sources."
-- `pytest tests/test_scripts/test_migration_csv_reconciliation.py`
-- After prod deploy: `levels fetch-usgs-ogc` (USGS) populates flow/temp.
-- Build + confirm the gauge filters under its state(s) in `gauges.html` (needs
-  both `state` and `huc8`).
+### Verify
+- Sandbox sync + `levels orphan-check` → "No orphan sources."
+- After prod deploy: `levels fetch-usgs-ogc` (USGS) populates flow/temp; the gauge
+  filters under its state(s) in `gauges.html` (needs both `state` and `huc8`).
 
 ---
 
-## Shape 2 — reach-only
+## Scenario: add a reach (reach-only)
 
-**Source of truth for AW reaches: the `aw_reach` cache**
-(`Gauge-metadata-cache/gauges.db`, 2029 runs / 12 states, populated by
-`match_aw_reaches.py`). `docs/one-offs/import_mt_reaches.py` is the working
-template (pull from cache → insert rows → trace).
+The dev-only geometry toolchain (trace / DEM / `assign-huc` / elevations) is
+**unchanged** — see [*The dev-only toolchain*](#the-dev-only-toolchain-prod-cant)
+and [*Per-reach review*](#per-reach-review--coords--aw-metadata-cleanup) below. Only
+the *delivery* changed: the computed values become CSV rows + JSON blobs, not a
+migration.
 
-Reach data splits across **three paths by size:**
+Reach data splits across **three files by size:**
 
-1. **Scalar metadata** → the **migration** (`0039` reach + `0040` links idiom,
-   keyed by `aw_id`):
-   - `reach`: `name='aw_<id>'`, `display_name`, `sort_name` (keyed by put-in
-     `elevation`, high→low ⇒ upstream→downstream — not `aw_id`), the four endpoint
-     coords, `river`, `gauge_id` (by gauge name), `description`(=section),
-     `difficulties`(=class), `length`, `gradient`, `max_gradient`, `elevation`,
-     `elevation_lost`, `aw_id`, plus **`huc` (12-digit HUC12) and `basin` (the
-     HUC8 name)** — obtained from `levels assign-huc` (dev-only toolchain below),
-     **not** hand-typed: a NULL `huc` drops the reach out of the watershed filter
-     (`levels.py` gates the pills on `len(huc) >= 8`) and an 8-digit guess
-     diverges from the HUC12 the other ~400 reaches carry. (AW's
-     `river`/`display_name`/`description` are inconsistent — normalize them; see
-     *Per-reach review* below.)
-   - `reach_state` (**required** or it's hidden from state filters).
-   - `reach_class` (**required** for the class pills; `name` NOT NULL; CHECK
-     `low ≤ high`; set `low`/`high` from AW's runnable range if present).
-2. **`geom`** (large, lon-first `"lon lat,lon lat,…"`, no wrapper) → committed to
-   `data/db/reaches.json` → applied on prod by `deploy.sh --geom-only`.
-3. **`gradient_profile`** (large JSON) → `data/db/reaches-gradient.json` →
-   `deploy.sh --gradient-only`. (`max_gradient`, a scalar, stays in the migration.)
+1. **Scalar metadata → `reach.csv`** (new `id` from the `reach` counter; keyed by
+   `aw_id` in spirit, but the PK is the stable `id`):
+   - `name='aw_<id>'`, `display_name`, `sort_name` (by put-in `elevation`,
+     high→low ⇒ upstream→downstream — *not* `aw_id`), the four endpoint coords,
+     `river`, `gauge_id` (the gauge's stable id), `description` (=section),
+     `difficulties` (=class), `length`, `gradient`, `max_gradient`, `elevation`,
+     `elevation_lost`, `aw_id`, plus **`huc` (12-digit HUC12) and `basin` (the HUC8
+     name)** — from `levels assign-huc`, **not** hand-typed.
+   - **`reach_state.csv`** (`reach_id,state_id`) — **required** or it's hidden from
+     state filters.
+   - **`reach_class.csv`** (`id`, `reach_id`, `name`) — **required** for the class
+     pills; `name` NOT NULL; CHECK `low ≤ high`.
+   - **`reach_guidebook.csv`** — link to the canonical state guide where indexed.
+2. **`geom` → `data/db/reaches.json`** (large, lon-first `"lon lat,lon lat,…"`, no
+   wrapper) → applied on prod by `import_metadata.py --geom-only` (deploy 3.25).
+3. **`gradient_profile` → `data/db/reaches-gradient.json`** → `--gradient-only`
+   (deploy 3.26). `max_gradient` (a scalar) stays in `reach.csv`.
 
-**Dev-only toolchain (prod can't):**
-- Trace: `levels trace --putin LAT,LON --takeout LAT,LON --name "…"` under
+`reaches.json` / `reaches-gradient.json` are keyed by `reach.id` — the **same**
+stable id you assigned in `reach.csv` — so they line up by construction.
+
+### Verify
+- `levels check-reaches` (no wrapper, ≥2 vertices, endpoints within 0.003°).
+- Render on the dev `reach.php` / `description.php` map; the trace PNG.
+
+---
+
+## Scenario: add a reach + gauge
+
+Add the gauge (and its source/link) first, then the reach with `gauge_id` set to the
+gauge's stable id. It's the union of the two scenarios above — assign all the ids
+up front from `id_counters.csv` so the FKs resolve.
+
+---
+
+## Scenario: update gauge metadata
+
+Edit the gauge's existing row in `gauge.csv` in place — `display_name`, `sort_name`,
+`river`, `state`, `huc`, `latitude`/`longitude`, etc. The id is unchanged, so
+`sync-metadata` applies it as an **UPDATE** and the gauge's observations are
+untouched. (This is what the gauge-217 `sort_name` fix becomes: a one-line
+`gauge.csv` edit, reviewed — no migration, no dual-edit.) `seed_gauge_display` is now
+a CSV-*generation* helper: run it to draft the normalized `display_name`/`sort_name`,
+review the diff, commit. No prod-DB mutation.
+
+If a column you need doesn't exist yet, that's a **schema** change first (a migration
++ `models.py` in lockstep), then the values via `gauge.csv`.
+
+### Verify
+Sandbox sync; confirm the gauge still renders and (if `state`/`huc` changed) filters
+correctly. `SELECT COUNT(*) FROM observation WHERE source_id = …` is unchanged.
+
+---
+
+## Scenario: update reach metadata
+
+- **Scalar fields only** (`display_name`, `sort_name`, `river`, `description`,
+  `difficulties`, `reach_class`/`reach_state`/`reach_guidebook` links): edit
+  `reach.csv` (and the junction CSVs) in place. Same id → UPDATE.
+- **Geometry changes** (endpoints moved, re-traced): re-run the toolchain and update
+  the blobs:
+  1. Update the four endpoint columns in `reach.csv` and re-trace (the geom must
+     stay within 0.003° of the endpoints or `check-reaches` fails).
+  2. Replace the reach's entry in `data/db/reaches.json` (geom) and
+     `data/db/reaches-gradient.json` (gradient_profile).
+  3. Recompute `elevation` / `elevation_lost` / `length` / `gradient` /
+     `max_gradient` (`refresh_reach_elevations.py`, the DEM pipeline) and write them
+     to `reach.csv`.
+  4. If the **put-in** moved, re-run `levels assign-huc` (it's idempotent) — it may
+     update `huc`/`basin` in `reach.csv`.
+
+The cleanest way to regenerate the CSV + JSONs after dev edits is
+`scripts/export_metadata.py` (writes `reach.csv` + both JSONs from the dev DB); diff
+and commit.
+
+### Verify
+`levels check-reaches`; render the updated geom/profile on the dev map.
+
+---
+
+## Scenario: split a reach
+
+A split is exactly **one update + one add**: shorten the existing reach to the new
+boundary, and add a new reach for the downstream half.
+
+1. **Pick the split point** on the dev map (the right-click lat/lon tool) — it is
+   reach A's new take-out *and* reach B's put-in.
+2. **Update reach A** (existing id): set its take-out to the split point; re-trace;
+   recompute `length` / `elevation_lost` / `gradient` / `max_gradient`; replace its
+   geom in `reaches.json` and gradient in `reaches-gradient.json`. (Per *update reach
+   metadata*, geometry branch.)
+3. **Add reach B** (new id from the `reach` counter, bump it): put-in = the split
+   point, take-out = the old downstream end; trace; full scalar metadata; its own
+   `reach_state` / `reach_class` / `reach_guidebook` rows; geom → `reaches.json`,
+   gradient → `reaches-gradient.json`. `gauge_id` may differ from A's if a different
+   gauge governs the lower half.
+4. **Re-derive both `huc`s** with `levels assign-huc` (their put-ins differ) and
+   **re-key `sort_name`** so A and B sit in upstream→downstream order with their
+   neighbours (by put-in `elevation`, high→low).
+
+Both halves are independent rows after this — A keeps its id (and any inbound
+references), B is brand-new. No observations are involved (reaches don't carry
+observations; the gauge link does).
+
+### Verify
+`levels check-reaches` on both; the two segments abut at the split point with no
+gap/overlap on the dev map.
+
+---
+
+## Scenario: drop a gauge
+
+Remove the gauge's rows from `data/db/*.csv` and let `sync-metadata --allow-deletes`
+apply the deletion by id:
+
+- Remove the row(s) from `gauge.csv`, `source.csv`, and `gauge_source.csv` (and
+  `fetch_url.csv` + the URL from `data/sources.yaml` if it's a fetch source — else
+  `sync_sources` recreates the `fetch_url`). A USGS source has no URL to remove.
+- **Pre-flight (per [`migrations.md`](migrations.md) *Removing a source safely*):**
+  confirm nothing else needs the source — no `calc_expression` input, no
+  `reach.gauge_id` — and if the source feeds a *calc* input on another gauge, relink
+  that gauge to a live source first (the 0018/0020/0021 orphan-incident lesson).
+- `sync-metadata` runs `observation`-first for a removed source (its FK is
+  RESTRICT), then cascades `gauge_source` / `latest_*`. Without `--allow-deletes` it
+  refuses and prints the observation-drop counts (deploy aborts until a human runs
+  the delete by hand) — by design.
+
+Deletions assign no id and the id counter never decrements, so the dropped id is
+simply retired (never reused). No reconciliation dance — the CSV is the truth.
+
+### Verify
+Sandbox sync `--allow-deletes` + `levels orphan-check` → "No orphan sources." After
+deploy: the gauge is gone from the build, and `fetch-usgs-ogc` no longer fetches it.
+Worked example: Bridgeport (`12438000`) — historically migration `0071`, now a CSV
+delete.
+
+---
+
+## The dev-only toolchain (prod can't)
+
+These produce the values that go into the CSV/JSON — unchanged by the delivery
+switch:
+
+- **Trace:** `levels trace --putin LAT,LON --takeout LAT,LON --name "…"` under
   **brew python** (GDAL/osgeo, not `.venv`), against `Trace-cache/`. Emits the
-  no-wrapper geom string. (`import_mt_reaches.py --trace` does this in bulk.)
-- Elevation/elevation_lost/gradient: `scripts/refresh_reach_elevations.py
+  no-wrapper, lon-first geom string.
+- **Elevation / elevation_lost / gradient:** `scripts/refresh_reach_elevations.py
   --reach-ids … --apply` (USGS 3DEP, httpx — dev-only).
-- `max_gradient` + `gradient_profile`: the 3-stage `docs/one-offs/` DEM pipeline
+- **`max_gradient` + `gradient_profile`:** the 3-stage `docs/one-offs/` DEM pipeline
   (`fetch_dem_tiles` → `sample_reach_elevations` → `compute_reach_gradient`),
   `DEM-cache/`.
-- `huc` + `basin`: `levels assign-huc` (brew python — needs the `[geo]` extra and
-  the WBD GPKG in `Trace-cache/`; prod can't run it). Point-in-polygons each
-  put-in (`latitude_start`/`longitude_start`) → writes the 12-digit HUC12 to
-  `reach.huc` and mirrors the HUC8 name into `reach.basin`; idempotent, so it
-  leaves already-correct reaches untouched. Run it once endpoints are final, then
-  read the resulting `huc`/`basin` off the dev DB and bake them into the
-  migration's reach INSERT. `huc_name` already covers the PNW, so the basin label
-  resolves. **Batch B/C (0067/0068) shipped without this step** — 12 reaches
-  landed with NULL `huc`, one with an 8-digit guess; backfilled after the fact.
+- **`huc` + `basin`:** `levels assign-huc` (brew python — needs the `[geo]` extra and
+  the WBD GPKG in `Trace-cache/`; prod can't run it). Point-in-polygons each put-in
+  (`latitude_start`/`longitude_start`) → 12-digit HUC12 into `reach.huc`, HUC8 name
+  into `reach.basin`; idempotent. Run it once endpoints are final, then read the
+  resulting `huc`/`basin` off the dev DB into `reach.csv`.
 
-### Reproduce / verify
-- `levels check-reaches` (no wrapper, ≥2 vertices, endpoints within 0.003°).
-- Render on the dev `reach.php`/`description.php` map; the trace PNG.
-
----
-
-## Shape 3 — reach+gauge
-
-Shape 1 (gauge) + Shape 2 (reach) — gauge/source first in the migration, then the
-reach with `gauge_id` linked by gauge name. Batch B is this shape.
-
----
-
-## Shape 4 — dropping a gauge
-
-The inverse of Shape 1, and the one case where we **do** hand-edit
-`data/db/*.csv`. A drop is a migration (`0026`/`0071` templates) **plus** removing
-the gauge's CSV rows: a deletion assigns no prod id, and the rows must leave the
-snapshot or a from-scratch rebuild — which *stamps* the drop migration without
-running it — resurrects the gauge.
-
-**Pre-flight** (per [`docs/migrations.md`](migrations.md)): confirm nothing else
-needs the source — no `calc_expression` input, no `reach.gauge_id` — and if it's
-a fetch source, delete its URL from `data/sources.yaml` in the same change (else
-`sync_sources` recreates the `fetch_url`). A USGS source (`fetch_url_id` NULL,
-fetched by `fetch-usgs-ogc`) has no URL to remove. If the source feeds a *calc*
-input on another gauge, relink that gauge to a live source first (the
-0018/0020/0021 orphan-incident lesson).
-
-**The migration** — delete **by name** (portable across DBs, and the
-reconciliation guard keys on it — see below), in FK order:
-
-```sql
--- observation.source_id is ON DELETE RESTRICT -> clear its rows first
-DELETE FROM observation
-WHERE source_id IN (SELECT id FROM source WHERE name = '<name>' AND agency = '<agency>');
--- gauge_source + latest_observation cascade on the source delete
-DELETE FROM source WHERE name = '<name>' AND agency = '<agency>';
--- latest_gauge_observation cascades on the gauge delete
-DELETE FROM gauge WHERE name = '<gauge_name>';
-```
-
-**CSV rows**: remove the `gauge` / `source` / `gauge_source` rows from
-`data/db/*.csv` in the same PR (deletions assign no id, so this hand-edit is
-safe — the inverse of the "never hand-write CSV rows" rule, which is about *adds*).
-
-**Reconciliation-guard interaction** (R4.4): a source added by an *earlier*
-migration's `INSERT INTO source` stays in `_wired_sources()` forever (applied
-migrations are immutable), so removing its `source.csv` row would read as drift.
-`test_migration_csv_reconciliation.py::_deleted_sources()` subtracts sources a
-later migration deletes **by name** — which is *why* the drop must use the
-`name = '...'` form, not `id = ...`.
-
-### Reproduce / verify
-- Sandbox: `levels migrate` + `levels orphan-check` → "No orphan sources."
-- `pytest tests/test_scripts/test_migration_csv_reconciliation.py`
-- After deploy: the gauge is gone from the build, and `fetch-usgs-ogc` no longer
-  fetches it (the `usgs_id` left with the gauge). Worked example: Bridgeport
-  (`12438000`, RM 544) — migration `0071`.
-
----
+**Source of truth for AW reaches: the `aw_reach` cache**
+(`Gauge-metadata-cache/gauges.db`, populated by `match_aw_reaches.py`).
+`docs/one-offs/import_mt_reaches.py` is the working stage-from-cache template.
 
 ## Per-reach review — coords + AW metadata cleanup
 
-The refine loop is iterative — endpoints first on the map, then trace quality,
-then names — and the final state matches what's served on the dev
-`description.php` before any migration row is written.
+The refine loop is iterative — endpoints first on the map, then trace quality, then
+names — and the final state matches what's served on the dev `description.php`
+before any CSV row is written.
 
-1. I **stage** the run on the dev DB from the `aw_reach` cache (AW's raw coords)
-   so put-in/take-out markers render on the dev `reach.php`/`description.php`.
-2. You **refine endpoints**: **right-click any point on the dev map** —
-   `feature-map.js` exposes a contextmenu popup with the cursor lat/lon and a
-   Copy button (`map-right-click-latlon` PR). The satellite base map is the
-   most accurate for channel placement; topo confirms named landmarks. Send
-   the coords; I update the endpoint columns and re-trace.
-3. I **re-trace and inspect** on the dev map. NHD HR is "the blue line on USGS
-   topo," so a clean trace follows the topo blue line. Common problems + fixes:
-   - **Endpoint snapped to wrong flowline** (short straight detour right at
-     the put-in / take-out): nudge the endpoint a few metres onto the
-     unambiguous main channel; re-trace.
-   - **Trace orientation reversed** (a >100 m "jump" between consecutive
-     vertices at a splice seam): post-process by reversing the segment
-     before the jump.
-   - **NHD routes through a side channel** (braided lowland / oxbow areas
-     where NHD's "main" path threads through anastomosing channels — EF
-     Lewis §5 in Batch B was the canonical case): use the splice in step 4.
+1. **Stage** the run on the dev DB from the `aw_reach` cache (AW's raw coords) so
+   put-in/take-out markers render on the dev `reach.php`/`description.php`.
+2. **Refine endpoints**: right-click any point on the dev map — `feature-map.js`
+   exposes a contextmenu popup with the cursor lat/lon and a Copy button. The
+   satellite base map is most accurate for channel placement; topo confirms named
+   landmarks. Update the endpoint columns and re-trace.
+3. **Re-trace and inspect** on the dev map. NHD HR is "the blue line on USGS topo,"
+   so a clean trace follows the topo blue line. Common problems + fixes:
+   - **Endpoint snapped to wrong flowline** (short straight detour at the put-in /
+     take-out): nudge the endpoint a few metres onto the unambiguous main channel;
+     re-trace.
+   - **Trace orientation reversed** (a >100 m "jump" between consecutive vertices at
+     a splice seam): reverse the segment before the jump.
+   - **NHD routes through a side channel** (braided lowland / oxbow): use the splice
+     in step 4.
 4. **Trace splice through main-channel waypoints**: drop waypoints with the
-   right-click tool (one every ~100–200 m through the problematic stretch).
-   I trace `pi → via1 → ... → take-out` and stitch:
-   - For *sparse* gaps (>500 m between adjacent waypoints), `trace_reach`
-     fills in along NHD HR — clean for well-behaved stretches.
-   - For *dense* waypoints (<200 m apart), I join with a direct polyline;
-     `trace_reach` between sub-200 m endpoints can route through a long
-     NHD HR detour and inflate the segment length 5–10×.
-   - The hybrid (NHD HR on long gaps, polyline on dense groups) is what
-     produced reach 417's final geom.
+   right-click tool (one every ~100–200 m through the problem stretch). Trace
+   `pi → via1 → … → take-out` and stitch:
+   - *Sparse* gaps (>500 m): `trace_reach` fills along NHD HR — clean for
+     well-behaved stretches.
+   - *Dense* waypoints (<200 m): join with a direct polyline; `trace_reach` between
+     sub-200 m endpoints can route through a long NHD HR detour and inflate length
+     5–10×.
+   - The hybrid (NHD HR on long gaps, polyline on dense groups) produced reach 417's
+     final geom.
 5. **DEM channel-min snap** (canyon-shaped reaches only):
-   `docs/one-offs/snap_reach_to_channel_min.py` walks each vertex
-   perpendicular to flow, samples the DEM (1 m LIDAR if cached, else 10 m
-   3DEP — covers WA/OR/ID), and nudges to the local minimum. Dry-run first;
-   the per-reach stats are the gate: **apply** when mean drop ≥ ~10 ft and
-   snap rate ≥50% (canyon reaches — Batch B: Lewis NF §1–3, Canyon §1; snap
-   43–73%, drop 5–14 ft); **skip** when ≤ ~4 ft / ≤30% (braided lowland — at
-   the 10 m DEM's ~8 ft RMSE noise floor; EF Lewis §5 declined). The 1 m
-   LIDAR product index has spotty WA Lewis coverage, so all Batch B snaps
-   fell through to 10 m.
+   `docs/one-offs/snap_reach_to_channel_min.py` walks each vertex perpendicular to
+   flow, samples the DEM (1 m LIDAR if cached, else 10 m 3DEP — WA/OR/ID), nudges to
+   the local minimum. Dry-run first; **apply** when mean drop ≥ ~10 ft and snap rate
+   ≥50% (canyons), **skip** when ≤ ~4 ft / ≤30% (braided lowland — at the 10 m DEM's
+   ~8 ft RMSE noise floor).
 6. **Compute elevation + gradient_profile** once geoms are final:
-   `scripts/refresh_reach_elevations.py --apply` (3DEP EPQS web), then
-   `docs/one-offs/sample_reach_elevations.py` (DEM samples along geom) +
-   `compute_reach_gradient.py --apply` (max_gradient + gradient_profile).
-   `sig_frac ≥75%` per reach indicates real signal. **Reservoir-ending
-   reaches** (e.g. Lewis §5 → Swift, Canyon §2 → Merwin) produce a trailing
-   non-significant bar for the flat reservoir surface; the
-   `svg-plot-keep-reservoir-tail` PR keeps bars ≥0.5 mi wide so the chart
-   reads correctly (shorter trailing bars stay suppressed as
-   bridge/dam/road DEM artifacts).
+   `refresh_reach_elevations.py --apply` (3DEP EPQS), then
+   `sample_reach_elevations.py` + `compute_reach_gradient.py --apply`. `sig_frac
+   ≥75%` per reach indicates real signal. Reservoir-ending reaches produce a
+   trailing non-significant bar; the plot keeps bars ≥0.5 mi wide.
 7. **Normalize names** — see *Naming and AW cleanup* below.
-8. **Final scalar metadata → migration**; **geom → `reaches.json`**;
-   **`gradient_profile` → `reaches-gradient.json`**; **`reach_guidebook` rows**
-   linking each reach to its canonical state guide (Bennett's WA whitewater
-   guide for WA reaches; resolved in the migration by `(title, edition,
-   author)` so the row link is portable across DBs).
+8. **Final scalar metadata → `reach.csv`**; **geom → `reaches.json`**;
+   **`gradient_profile` → `reaches-gradient.json`**; **`reach_guidebook.csv` rows**
+   linking each reach to its canonical state guide.
 
 ### Naming and AW cleanup
 
 AW's `river`/`display_name`/`description` vary run-to-run; normalize during the
 review pass:
 
-- **`river`**: one canonical value per **branch** so reaches group in the
-  table. For sibling forks that share a basin, **share the `river` between
-  them** and let `display_name` discriminate (Batch B: `river='Lewis'` for
-  both NF and EF; `display_name='NF Lewis'`/`'EF Lewis'`). Tribs with their
-  own river name keep it (`river='Canyon Creek'` for the Lewis-trib Canyon
-  Creek — clusters in the table with same-named reaches elsewhere, which is
-  fine because `sort_name` disambiguates).
-- **`description`**: bare location ("Twin Falls to FR 88"), no leading
-  section number (`1.`), no trailing parenthetical (`(Upper)`). The leading
-  number is implicit in `sort_name`; parentheticals belong in `notes`.
-- **`sort_name`**: Sandy-basin convention `<Basin> <letter> NN <section>`.
-  Within a basin the letter is the branch (NF=`a`, EF=`b`, sub-tribs=`c`
-  onward); NN is the section sequence ordered upstream→downstream by put-in
-  `elevation` descending (verify after `refresh_reach_elevations.py`). To
-  slot reaches after an existing single-letter sort (`Canyon ad`), use a
-  two-letter suffix (`Canyon ae 01`, `Canyon ae 02`).
-- The **linked gauge** gets the same `river`/`location`/`display_name`
-  cleanup (`seed_gauge_display`'s normalizer is a starting point, not the
-  last word). Gauge `sort_name` follows the pipe-delimited convention
-  `<river>|<branch-code>|<NNNNNN>|<NNNNNN>` (branch-code `9` for mainstem,
-  `0<short>` for sub-rivers — Batch B: `lewis|0north|005000|000000` for
-  the new NF Lewis gauge, `lewis|0canyon|005000|000000` for Canyon).
-- **`reach_guidebook`**: link each reach to its canonical guidebook with
-  `page` + `run`. Skip reaches that aren't indexed (Lewis NF §3 has no
-  Bennett entry — fine, no row needed).
+- **`river`**: one canonical value per **branch** so reaches group in the table. For
+  sibling forks that share a basin, **share the `river`** and let `display_name`
+  discriminate (`river='Lewis'` for both NF and EF; `display_name='NF Lewis'` /
+  `'EF Lewis'`). Tribs with their own river name keep it.
+- **`description`**: bare location ("Twin Falls to FR 88"), no leading section number
+  (`1.`), no trailing parenthetical (`(Upper)`) — the number is implicit in
+  `sort_name`, parentheticals belong in `notes`.
+- **`sort_name`**: Sandy-basin convention `<Basin> <letter> NN <section>`. Within a
+  basin the letter is the branch (NF=`a`, EF=`b`, sub-tribs=`c` on); NN is the
+  section sequence ordered upstream→downstream by put-in `elevation` descending. Use
+  a two-letter suffix to slot after an existing single-letter sort (`Canyon ae 01`).
+- The **linked gauge** gets the same `river`/`location`/`display_name` cleanup. Gauge
+  `sort_name` follows the pipe-delimited convention
+  `<river>|<branch-code>|<NNNNNN>|<NNNNNN>` (branch-code `9` for mainstem, `0<short>`
+  for sub-rivers).
+- **`reach_guidebook`**: link each reach to its guidebook with `page` + `run`; skip
+  reaches that aren't indexed.
 
-`reach` has no `location` column of its own — its geographic "location" is
-the put-in/take-out coords from the loop above.
-
-## The id-matching constraint (read before tracing)
-
-`reaches.json` / `reaches-gradient.json` are keyed by `reach.id`, so the
-dev-computed ids **must equal** the prod ids. This holds because: the dev DB is
-a **fresh prod copy** (refreshed before the migration is generated), our
-migration is the **sole** reach-adder in the gap, and we deploy promptly. Don't
-let another reach-adding change land on prod between the dev trace and the
-deploy.
-
-**Migration generation**: emit reach `INSERT` statements **in `reach.id` order**
-from the sandbox so prod's auto-increment lands the same ids. The migration
-shouldn't hardcode ids; use `INSERT OR IGNORE INTO reach (...) SELECT ..., g.id,
-... FROM gauge g WHERE g.name = '<gauge_name>'` to resolve `gauge_id` by name.
-After generating, **verify on a fresh copy of prod**:
-
-```bash
-cp ~/tpw/DB/kayak.db /tmp/sandbox_fresh.db
-DATABASE_URL=sqlite:////tmp/sandbox_fresh.db levels migrate
-DATABASE_URL=sqlite:////tmp/sandbox_fresh.db levels orphan-check   # No orphan sources.
-DATABASE_URL=sqlite:////tmp/sandbox_fresh.db levels check-reaches  # 0 with issues
-pytest tests/test_scripts/test_migration_csv_reconciliation.py     # 3 passed
-DATABASE_URL=sqlite:////tmp/sandbox_fresh.db python scripts/import_metadata.py --geom-only
-DATABASE_URL=sqlite:////tmp/sandbox_fresh.db python scripts/import_metadata.py --gradient-only
-# Spot-check that new reach.ids match the sandbox ids:
-sqlite3 /tmp/sandbox_fresh.db "SELECT id, aw_id FROM reach WHERE aw_id IN (...) ORDER BY id;"
-```
+`reach` has no `location` column — its geographic "location" is the put-in/take-out
+coords.
 
 ---
 
-## Batch A — Columbia mainstem corridor (Shape 1, gauge-only)
+## Executed batches (historical — via the old migration flow)
 
-Mainstem gauges, river-mile-ordered, grouped by wiring class.
+These initial batches predate the CSV+sync flow and landed as SQL migrations; the
+rows now live in the CSVs (reconciled by snapshot). Kept for reference:
 
-> **Executed (migration `0066`):** the temperature subset only — **4 gauges**:
-> Bridgeport, below John Day Dam, The Dalles, and `Bonneville_merge` — a
-> 2-source merge of stage `14128870` (tailwater) + Cascade Island temperature
-> `453845121564001` on a single gauge (the Wind pattern), enabled by the
-> source-based fetcher refactor in companion migration `0065`. Flow/stage-only
-> sites (International Boundary, Priest Rapids) and the NWS stage gauges were
-> dropped/deferred — temperature was the goal. For John Day Dam the temp
-> monitor is the **downstream** WQ site, not the forebay/nav-lock:
-> `454249120423500` ("near Cliffs"). All carry `huc8`; the three border gauges
-> below McNary set `state='OR,WA'` (multi-state via comma `gauge.state`, no new
-> table). The tables below are the original corridor survey, kept for
-> reference.
+- **Batch A — Columbia mainstem corridor** (gauge-only): the temperature subset —
+  4 gauges (Bridgeport, below John Day Dam, The Dalles, `Bonneville_merge`) via
+  migration `0066` (source-based fetcher refactor in companion `0065`); the lower
+  NWS stage gauges (Vancouver `VAPW1`, St. Helens `SHNO3`) via `0070`; USACE dam
+  flow/temp via `0069`. All carry `huc8`; the three border gauges below McNary set
+  `state='OR,WA'`.
+- **Batch B — WA Lewis system** (reach+gauge): 2 new USGS gauges (NF Lewis
+  `14216000`, Canyon Creek `14219000`) + 12 reaches + their state/class/guidebook
+  rows via migration `0067`; `gradient_profile` from the DEM pipeline; geoms refined
+  via the right-click loop with waypoint splice on EF Lewis §5 and DEM channel-min
+  snap on the four canyon reaches.
 
-**USGS — zero code** (flow `00060` / gage `00065` / temp `00010` auto-fetched for
-any gauge with `usgs_id`; `agency='USGS'`, `fetch_url_id=NULL`, source name = the
-station id):
-
-| usgs_id | location | ~RM | data |
-|---|---|---|---|
-| `12399500` | International Boundary (Northport) | 745 | flow + stage |
-| `12438000` | Bridgeport | 544 | temp |
-| `12472800` | below Priest Rapids Dam | 397 | flow + stage |
-| `454314120413701` | John Day Dam nav lock | 216 | temp |
-| `14105700` | The Dalles | 192 | flow + stage + temp |
-| `14128870` | Bonneville Dam | 146 | stage + temp |
-| `453845121562000` | Bonneville forebay | 146 | temp |
-
-**NWS — fetch source** (`nwps` parser, `agency='NWS'`; needs a `fetch_url` row +
-the NWPS URL in `data/sources.yaml`; stage only):
-
-| lid | location | ~RM | data |
-|---|---|---|---|
-| `VAPW1` | Vancouver | 106 | stage |
-| `SHNO3` | St. Helens | 86 | stage |
-| `KLMW1` | Kalama | 74 | stage |
-| `LOPW1` | Longview | 66 | stage |
-| `CBAO3` | Port Westward (Clatskanie) | 53 | stage |
-| `WAUO3` | Wauna | 42 | stage |
-| `SKAW1` | Skamokawa | 33 | stage |
-| `ASTO3` | Tongue Point (Astoria) | 18 | tidal stage |
-
-(McNary Dam, RM 292: USACE-only — deferred; would first need `"Temp-Water"` added
-to `usace_cda.py::_PARAM_MAP`, its own small PR.) Every USGS *and* NWS source name
-goes into `PENDING_RECONCILIATION` until the snapshot reconciles it.
-
-**Ordering — upstream→downstream.** River miles increase *upstream* (mouth = RM 0),
-so upstream→downstream is *descending* RM (Northport 745 → Astoria 18 — the table
-order above). Gauges display sorted by `gauge.sort_name`; the default
-`seed_gauge_display` key (`10000−elevation`, then drainage) only *approximates*
-this and breaks here — the tidal lower river is all ~sea level, and the NWS gauges
-carry no elevation/drainage (→ the `999999` sentinel, which sinks them to the end
-in arbitrary order). So this batch sets `sort_name` **directly in the migration
-from river mile** (`columbia river|9|<NNNNNN>|` with `NNNNNN` a descending-RM key
-— high RM sorts first), alongside `river`/`display_name`. Safe because `build`
-reads `sort_name` and never recomputes it, and `seed_gauge_display` is a manual
-script (don't run it on these gauges — it would clobber the RM order).
-
-## Batch B — WA Lewis system (Shape 3, reach+gauge)
-
-> **Executed (migration `0067`):** **2 new USGS gauges** (NF Lewis `14216000`,
-> Canyon Creek `14219000`; EF Lewis `14222500` was already prod gauge 53) +
-> **12 reaches** + their `reach_state` / `reach_class` / `reach_guidebook`
-> rows. `gradient_profile` for all 12 from the DEM pipeline; geoms refined via
-> the right-click loop, with **waypoint splice** on EF Lewis §5 (the lower
-> braided river) and **DEM channel-min snap** on the four canyon-shaped
-> reaches (Lewis NF §1–3, Canyon §1 — see *Per-reach review* above). 11 of 12
-> reaches link to Bennett's WA whitewater guide (NF §3 is the exception, not
-> indexed there). Sort keys actually used: `Lewis a 01..05` (NF), `Lewis b
-> 01..05` (EF), and `Canyon ae 01..02` (slotting after the existing `Canyon
-> ad` on OR reach 179). Per-table CSVs deliberately not updated in this PR —
-> same surgical pattern as Batch A; the nightly snapshot PR handles
-> `source.csv`/`gauge.csv`/`reach.csv` reconciliation. A follow-up session
-> will add 2 more gauges/reaches on the same branch
-> (`lewis-reaches`, `import_lewis_reaches.py`'s `REFINED_COORDS` dict already
-> carries the post-refine endpoints of the 12 below).
-
-**3 USGS gauges** (Shape 1, same as Batch A) — `14222500` was already in prod
-as gauge 53; only `14216000` and `14219000` are new:
-
-| usgs_id | display | serves |
-|---|---|---|
-| `14216000` | Lewis R above Muddy R near Cougar, WA | NF Lewis runs |
-| `14222500` | EF Lewis R near Heisson, WA *(gauge 53, existing)* | EF Lewis runs |
-| `14219000` | Canyon Creek near Amboy, WA | Canyon Creek runs |
-
-**12 reaches** (Shape 2, from `aw_reach`), each `gauge_id`-linked:
-
-| Group | AW ids | gauge |
-|---|---|---|
-| NF Lewis | 3531, 3495, 5711, 2151, 2152 | 14216000 |
-| EF Lewis | 2149, 2147, 2150, 2148, 3530 | 14222500 |
-| Canyon Creek | 2073, 3066 | 14219000 |
-
-(Rock Creek `2188` set aside — gaugeless; add on request. Other Lewis-basin tribs
-under non-"Lewis" names can be pulled from the cache by HUC if wanted.)
-
-The AW-id lists above are just the run inventory — **AW ids and section numbers
-are *not* a reliable geographic order.** Order each branch's runs by the **put-in
-DEM elevation, high → low (= upstream → downstream)**: after
-`refresh_reach_elevations.py` sets `reach.elevation` (the put-in DEM sample), sort
-each branch's reaches by `elevation` descending and encode that in
-`reach.sort_name` (a `10000−elevation`-style key, like the gauge sort) — **not**
-the `aw_id`-based key `import_mt_reaches.py` used. Put-in `elevation` orders any
-run with gradient correctly; the lone gap is a **truly flat-water** stretch
-(near-equal endpoint elevations) — not foreseen for these branches, but such a run
-would need a hand-set `sort_name`.
-
----
-
-## Execution order (one PR per step, easiest first)
-
-1. **Batch A USGS** (7 Columbia USGS gauges) — exercises the full Shape-1 loop
-   end to end: migration + `PENDING_RECONCILIATION` → sandbox → PR → merge → prod
-   migrate → nightly snapshot reconciles `source.csv`/`gauge.csv` → follow-up PR
-   drops the allowlist entries.
-2. **Batch A NWS** (8 lower-river stage gauges) — Shape 1 fetch sources: a second
-   migration + the NWPS URLs in `data/sources.yaml`.
-3. **Batch B gauges** (3 USGS) — Shape 1, same loop.
-4. **Batch B reaches** (12) — Shape 3, executed in migration `0067`. The
-   workflow: stage from cache → right-click endpoint refine on the dev map →
-   trace + waypoint splice (for braided routes) + DEM channel-min snap (for
-   canyons) → elevation + gradient → `assign-huc` (HUC12 + basin) → name +
-   AW-metadata normalize + `reach_guidebook` entries → sort each branch by
-   put-in elevation → migration
-   (metadata + links + guidebooks) + `reaches.json` + `reaches-gradient.json`
-   → fresh-prod-copy verify → PR → deploy applies the JSONs.
-
-## Migration numbering
-
-Next free prefix: **0072** (0069–0071 are the Columbia lower-river retrim —
-USACE dam flow/temp, NWS Vancouver/St. Helens, Bridgeport drop). Re-check open
-PRs before numbering (R5.2 dup-prefix guard). Keep `models.py` in lockstep if any
-column is ever added.
+The full corridor survey tables and per-reach details are preserved in git history
+(this file pre-Phase-5) and in the migrations themselves (`0065`–`0070`).

@@ -1,6 +1,6 @@
 # Database Schema Reference
 
-This document describes the SQLite database schema used by the Kayak river levels system. The schema is defined in `src/kayak/db/models.py` using SQLAlchemy 2.x ORM. Fresh databases are created via `levels init-db` (which runs `Base.metadata.create_all()` and stamps every discovered migration as applied). Existing databases evolve via `data/db/migrations/NNNN_*.sql` files applied by `levels migrate` and tracked in `schema_migrations`.
+This document describes the SQLite database schema used by the Kayak river levels system. The schema is defined in `src/kayak/db/models.py` using SQLAlchemy 2.x ORM. Fresh databases are created via `levels init-db` (which runs `Base.metadata.create_all()` and stamps every discovered migration as applied). Existing databases evolve via `data/db/migrations/NNNN_*.sql` files applied by `levels migrate` and tracked in `schema_migrations` (schema-only — metadata *rows* change via a `data/db/*.csv` diff + `levels sync-metadata`; see [`PLAN_add_gauges_reaches.md`](PLAN_add_gauges_reaches.md)).
 
 ## Entity-relationship overview
 

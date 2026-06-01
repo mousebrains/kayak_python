@@ -1,19 +1,34 @@
-# Migrations — writing and triaging
+# Migrations and metadata edits — writing and triaging
 
-This doc covers two scenarios that touch `data/db/migrations/`:
+Schema and metadata changes now travel by **different paths**:
 
-- **Writing a migration that deletes source rows** — pre-flight
-  checklist so the deletion doesn't leave fetch_url rows pointing at
-  nothing, which is how the May 2026 orphan-source incident happened.
+- **Schema** (table shape: ALTER / DROP / CHECK / index) → a
+  `data/db/migrations/NNNN_*.sql` applied by `levels migrate`.
+  **Schema-only** since the metadata-single-source redesign — a new
+  migration may not INSERT/UPDATE/DELETE a metadata table (guard:
+  `tests/test_scripts/test_migrations_schema_only.py`).
+- **Metadata** (source / gauge / reach / junction rows) → a reviewed
+  `data/db/*.csv` diff applied by `levels sync-metadata` (deploy.sh
+  step 3.1), matched by stable id. See
+  [`PLAN_add_gauges_reaches.md`](PLAN_add_gauges_reaches.md) for the
+  add / update / remove / split runbooks.
+
+This doc covers the hazards that outlive that mechanism change:
+
+- **Removing a source safely** — the calc-input / fetch_url pre-flight
+  so a delete doesn't leave a fetch_url pointing at nothing or a calc
+  dangling (the May 2026 orphan incident). It's a CSV delete via
+  `sync-metadata --allow-deletes` now, not a `DELETE FROM source`
+  migration — the mechanism changed, the hazards didn't.
 - **Reacting to an `orphan-check` pipeline alert** — what to do when
   `kayak-pipeline.service` fails with `RuntimeError: N orphan
   source(s) found`.
 
-For the migration mechanics themselves (where files live, how
-`levels migrate` applies them, the `schema_migrations` table), see
-the **Schema evolution** bullet block in [`CLAUDE.md`](../CLAUDE.md).
+For the schema-migration mechanics (where files live, how
+`levels migrate` applies them, the `schema_migrations` table), see the
+**evolution** bullet block in [`CLAUDE.md`](../CLAUDE.md).
 
-## Writing a migration that deletes sources
+## Removing a source safely (CSV + sync)
 
 The 0018 anti-pattern: deleted 19 source rows, touched no
 `fetch_url` row, didn't verify calc inputs still had a live source.
@@ -21,7 +36,9 @@ The next `levels fetch` auto-created replacement source rows
 (parsers/base.py::`_auto_create_source`) without `gauge_source`
 links, and calc gauges that read from the deleted sources stayed
 frozen for three days. The fix is a checklist, not a tool — run
-through this before adding `DELETE FROM source` to any migration.
+through this before deleting a source's row from `data/db/source.csv`
+(plus its `gauge_source.csv` link, and `fetch_url.csv` /
+`data/sources.yaml` if it's a fetch source).
 
 ### 1. List every fetch_url referenced by the deleted sources
 
@@ -92,18 +109,19 @@ calc to a different gauge — but do **not** ship a deletion that
 leaves a calc dangling. The May 2026 incident root-caused to a
 missing check here.
 
-### 4. Run `levels orphan-check` against the post-migration sandbox
+### 4. Apply to a sandbox and run `levels orphan-check`
 
 ```bash
 sqlite3 /tmp/sandbox.db ".restore '/home/pat/DB/kayak.db'"
-DATABASE_URL=sqlite:////tmp/sandbox.db /home/pat/.venv/bin/levels migrate
+# Review the irreversible per-source observation-drop counts first:
+DATABASE_URL=sqlite:////tmp/sandbox.db /home/pat/.venv/bin/levels sync-metadata --dry-run
+DATABASE_URL=sqlite:////tmp/sandbox.db /home/pat/.venv/bin/levels sync-metadata --allow-deletes
 DATABASE_URL=sqlite:////tmp/sandbox.db /home/pat/.venv/bin/levels orphan-check
 ```
 
 `levels orphan-check` exits 0 with `No orphan sources.` on a clean
-post-migration DB. Any non-empty output means step 2 missed
-something — go back and decide each surfaced row before committing
-the migration.
+post-sync DB. Any non-empty output means step 2 missed something — go
+back and decide each surfaced row before committing the CSV diff.
 
 Cleanup: `rm /tmp/sandbox.db /tmp/sandbox.db-wal /tmp/sandbox.db-shm`.
 
@@ -128,38 +146,41 @@ sudo journalctl -u kayak-pipeline --since '1 hour ago' --no-pager | grep -A1 orp
 
 `--json` if you want to script over the result.
 
-### 2. Decide and write a follow-up migration
+### 2. Decide the fix and edit the CSV
 
 For each orphan source, pick one of:
 
 - **Link to a gauge** — the preferred move when the source is still
   emitting useful data. Live data is cheap to keep wired and
   expensive to lose; deactivating a URL only to have auto-create
-  re-orphan it next deploy is the mistake we're trying to avoid.
-  Example:
+  re-orphan it next deploy is the mistake we're trying to avoid. Add
+  the join row to `data/db/gauge_source.csv`:
 
-  ```sql
-  INSERT OR IGNORE INTO gauge_source (gauge_id, source_id) VALUES (<gauge>, <source>);
+  ```
+  gauge_id,source_id
+  <gauge>,<source>
   ```
 
-  See migrations 0020 and 0021 for real examples.
+  (Migrations 0020/0021 are the historical `INSERT OR IGNORE INTO
+  gauge_source` equivalents.) `levels sync-metadata` inserts it by id.
 
-- **Deactivate the URL** — when the agency has retired the
-  endpoint or the data is genuinely duplicative and unwanted. As
-  with step 2 of the writing checklist above, the preferred path is
-  to remove the URL from `data/sources.yaml` (the next `levels
-  fetch` flips `is_active=0` automatically). Only write an explicit
-  `UPDATE fetch_url SET is_active = 0` migration when the URL must
-  stay in the YAML for unrelated reasons.
+- **Deactivate the URL** — when the agency has retired the endpoint
+  or the data is genuinely duplicative. Preferred: remove the URL from
+  `data/sources.yaml` (the next `levels fetch` flips `is_active=0`
+  automatically). Only set `is_active=0` in `data/db/fetch_url.csv`
+  directly when the URL must stay in the YAML for unrelated reasons.
 
-- **Delete the source row** — only when the row's history is not
-  worth preserving on another gauge, and only with the 0018-style
-  observation re-pointing dance done correctly this time
-  (re-point observations to a sibling **and** deactivate / remove
-  the fetch_url, then verify with `levels orphan-check`).
+- **Delete the source row** — only when the row's history isn't worth
+  preserving on another gauge. Remove it from `source.csv` (plus its
+  `gauge_source.csv` link) and run the *Removing a source safely*
+  checklist above; `sync-metadata --allow-deletes` drops it (printing
+  the observation-drop count) and cascades the `gauge_source` /
+  `latest_*` rows. Re-point observations to a sibling first if the
+  history matters.
 
-After applying the migration, run `levels orphan-check` on prod to
-confirm zero rows, and the next pipeline run will exit clean.
+After the CSV diff merges and deploys (`sync-metadata` at step 3.1),
+run `levels orphan-check` on prod to confirm zero rows; the next
+pipeline run exits clean.
 
 ## Future work — known graph-integrity gaps
 
