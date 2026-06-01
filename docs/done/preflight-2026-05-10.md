@@ -148,7 +148,7 @@ or an outstanding action.
 ## Files produced this pass
 
 - `scripts/sysinfo-for-review.sh` — read-only sysinfo dump.
-- `docs/preflight-2026-05-10.md` — this file.
+- `docs/done/preflight-2026-05-10.md` — this file.
 - Plus the eleven edits across `deploy/`, `conf/`, `src/kayak/`,
   `systemd/`, and `.gitignore` in commits `6abdc48` and `07e2f33`.
 

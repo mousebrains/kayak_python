@@ -16,10 +16,12 @@ prose mentions don't open spurious fields, captures the field as a DOTALL block 
 a wrapped continuation-line command isn't dropped, and counter (b) flags only a
 ``grep -c`` span that carries a quote (a real command attempt, not a prose mention).
 
-A plan carrying a whole-plan ``**SUPERSEDED`` banner is excluded: it was never
-executed (the maintainer pivoted to a replacement), so its forward-looking Verifies
-aren't assertions about HEAD — e.g. round-6's planned restore migration, dissolved
-by the metadata-single-source redesign.
+A plan carrying a whole-plan ``**SUPERSEDED`` banner near the top (title / leading
+blockquote) is excluded: it was never executed (the maintainer pivoted to a
+replacement), so its forward-looking Verifies aren't assertions about HEAD — e.g.
+round-6's planned restore migration, dissolved by the metadata-single-source redesign.
+The head-only anchor keeps a `**SUPERSEDED**` bold-mark on one sub-item of an
+*executed* plan from silently dropping that whole plan's Verifies.
 """
 
 from __future__ import annotations
@@ -49,11 +51,19 @@ _BRE_META = {".", "*", "[", "]", "^", "$", "\\"}
 _SUPERSEDED = re.compile(r"\*\*SUPERSEDED\b")
 
 
+def _is_superseded(text: str) -> bool:
+    """A whole-plan **SUPERSEDED banner lives in the title / leading blockquote, so
+    only the file HEAD counts. A `**SUPERSEDED**` bold-mark on ONE sub-item deep in
+    an *executed* plan's body must NOT silently drop that plan's whole Verify set."""
+    head = "\n".join(text.splitlines()[:10])
+    return bool(_SUPERSEDED.search(head))
+
+
 def _fields() -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
     for p in _PLANS:
         text = p.read_text("utf-8")
-        if _SUPERSEDED.search(text):  # never-executed plan — its Verifies aren't HEAD claims
+        if _is_superseded(text):  # never-executed plan — its Verifies aren't HEAD claims
             continue
         out.extend((p.name, f) for f in _FIELD.findall(text))
     return out
@@ -101,3 +111,13 @@ def test_guard_is_non_vacuous() -> None:
     assert any("DELETE FROM pages" in p for p in patterns), (
         "extractor failed to find round-4 R1.1's `grep -c 'DELETE FROM pages' …` Verify"
     )
+
+
+def test_superseded_exclusion_is_head_anchored() -> None:
+    """The whole-plan banner excludes only at the top (title / leading blockquote);
+    a `**SUPERSEDED**` mark deep in an *executed* plan's body must not — else one
+    bolded sub-item would silently drop that plan's entire Verify set."""
+    head = "# Plan\n\n> **SUPERSEDED by X.** pivoted.\n\n" + "body line\n" * 20
+    body = "# Plan\n\n" + "real content\n" * 20 + "- this sub-item was **SUPERSEDED** later\n"
+    assert _is_superseded(head)
+    assert not _is_superseded(body)
