@@ -30,10 +30,11 @@ from types import ModuleType
 from sqlalchemy import create_engine
 
 from kayak.cli.check_reaches import scan_for_issues
+from kayak.config import METADATA_DIR
 from kayak.db.models import Base
 
 REPO_DIR = Path(__file__).resolve().parents[1]
-DATA_DB_DIR = REPO_DIR / "data" / "db"
+DATA_DB_DIR = METADATA_DIR
 SCRIPTS_DIR = REPO_DIR / "scripts"
 
 # The committed snapshot the loaders read. Asserted explicitly so the test

@@ -23,6 +23,8 @@ import sqlite3
 import sys
 from pathlib import Path
 
+from kayak.config import METADATA_DIR
+
 REPO_DIR = Path(__file__).resolve().parent.parent
 
 METADATA_TABLES = [
@@ -138,8 +140,9 @@ def main() -> int:
     )
     parser.add_argument(
         "--out",
-        default=str(REPO_DIR / "data" / "db"),
-        help="Output directory (default: data/db)",
+        default=str(METADATA_DIR),
+        help="Output directory (default: the configured METADATA_DIR — data/db, "
+        "or the kayak_data clone post-split)",
     )
     args = parser.parse_args()
 

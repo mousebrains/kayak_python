@@ -57,6 +57,36 @@ python3 -m venv /home/pat/.venv
 /home/pat/.venv/bin/pip install -e .
 ```
 
+## 2.5 Metadata repo (`kayak_data`) — the data-repo split
+
+The metadata snapshots (the `*.csv` + `reaches*.json`) live in a **separate**
+private repo, `kayak_data`, cloned alongside the code repo. Only schema migrations
+(`data/db/migrations/`) stay in the code repo. The code finds the clone via
+`METADATA_DIR` (§3).
+
+```bash
+# Clone the metadata repo as pat
+sudo -u pat git clone git@github.com:mousebrains/kayak_data.git /home/pat/kayak_data
+```
+
+**Snapshot write key.** The nightly `kayak-metadata-snapshot` timer pushes prod's
+metadata back to `kayak_data` (reconciling editor-approved prod edits). Give the
+prod host a **write** deploy key scoped to that one repo:
+
+```bash
+sudo -u pat ssh-keygen -t ed25519 -f /home/pat/.ssh/kayak_data_deploy -N "" -C "kayak-snapshot@prod"
+# Add /home/pat/.ssh/kayak_data_deploy.pub to kayak_data → Settings → Deploy keys
+#   → ☑ Allow write access
+sudo -u pat git -C /home/pat/kayak_data config core.sshCommand \
+  'ssh -i /home/pat/.ssh/kayak_data_deploy -o IdentitiesOnly=yes'
+```
+
+The code repo's CI reads `kayak_data` via a *separate* **read-only** deploy key
+whose private half is the `KAYAK_DATA_DEPLOY_KEY` Actions secret on `kayak_python`
+(one-time, already configured). The code repo's `main` is branch-protected — nothing
+pushes to it except merged PRs, since the snapshot targets `kayak_data`, not the code
+repo.
+
 ## 3. Environment file
 
 Create the database directory and the config file at `~/.config/kayak/.env` —
@@ -74,6 +104,7 @@ cat > /home/pat/.config/kayak/.env <<'EOF'
 DATABASE_URL=sqlite:////home/pat/DB/kayak.db
 SQLITE_PATH=/home/pat/DB/kayak.db
 OUTPUT_DIR=/home/pat/public_html
+METADATA_DIR=/home/pat/kayak_data
 EDITOR_FEATURE=1
 EOF
 ```
@@ -86,7 +117,8 @@ sign in via `/login.php` with an email promoted to `status='maintainer'` (see
 
 `init-db --no-seed` creates the schema and stamps migrations without the
 `sources.yaml` seed; `import_metadata.py` then loads the gauges, reaches,
-sources, and `gauge_source` links from the tracked `data/db/*.csv` snapshots.
+sources, and `gauge_source` links from the `kayak_data` metadata snapshots
+(`METADATA_DIR`, §2.5).
 Without those links the pipeline's `orphan-check` fails and the site renders
 empty, so this order matters:
 
@@ -105,13 +137,13 @@ ls /home/pat/public_html/*.html
 
 **Reach geometry (`reaches.json`).** `reach.geom` is excluded from
 `reach.csv` (large, and not regenerable on prod — the DEM/NHD trace stack
-is dev-only) and snapshotted to `data/db/reaches.json`. The
+is dev-only) and snapshotted to `kayak_data`'s `reaches.json`. The
 `import_metadata.py` call above applies it on a fresh install. It is
 *not* migration-managed — the documented exception to "reach changes go
 via a migration" — so a dev re-trace reaches prod like this:
 
 1. dev: re-trace, then `python scripts/export_metadata.py` to refresh
-   `data/db/reaches.json`; commit it.
+   `reaches.json`; commit it to `kayak_data`.
 2. prod: `scripts/deploy.sh` sees the changed `reaches.json` and runs
    `import_metadata.py --geom-only` automatically.
 
@@ -368,7 +400,7 @@ Expected schedule (15 timers; most jittered via `RandomizedDelaySec=`):
 - **kayak-healthcheck.timer** — every hour at `:45` (data-freshness check)
 - **kayak-decimate.timer** — daily at 02:32 (thins old observations, VACUUM)
 - **kayak-editor-retention.timer** — daily at 03:45 (prunes expired editor sessions + magic links)
-- **kayak-metadata-snapshot.timer** — daily at 04:30 (commits metadata-table drift to `data/db/*.csv`)
+- **kayak-metadata-snapshot.timer** — daily at 04:30 (commits metadata-table drift to the `kayak_data` repo)
 - **kayak-status.timer** — daily at 03:30 (renders the `/_internal/status` operator dashboard to `/home/pat/var/status.html`)
 - **kayak-fetch-osmb.timer** — daily at 03:30 (fetches Oregon State Marine Board hazard/access GeoJSON overlays)
 - **kayak-cert-expiry.timer** — daily at 06:30 (Let's Encrypt cert health probe; pages on <21 days remaining)

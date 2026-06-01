@@ -118,6 +118,14 @@ class KayakConfig(BaseSettings):
     database_url: str = Field(default_factory=_default_database_url)
     output_dir: Path = Field(default_factory=_default_output_dir)
 
+    # Metadata-snapshot directory — the ``*.csv`` + ``reaches*.json`` that the
+    # metadata-single-source flow treats as the source of truth. Defaults to the
+    # in-repo ``data/db`` (single-repo checkout); the data-repo split points it at
+    # the external ``kayak_data`` clone (e.g. ``/home/pat/kayak_data``) via the
+    # ``METADATA_DIR`` env var. Migrations (``data/db/migrations``) stay in the
+    # code repo and are NOT under this dir.
+    metadata_dir: Path = Field(default_factory=lambda: DATA_DIR / "db")
+
     # Fetch pipeline
     fetch_timeout: int = Field(default=300, gt=0, le=600)
     fetch_budget: int = Field(default=240, gt=0, le=600)
@@ -206,6 +214,8 @@ _config = get_config()
 # ``get_config()``.
 DATABASE_URL: str = _config.database_url
 OUTPUT_DIR: str = str(_config.output_dir)
+# The metadata-snapshot dir (data/db by default; the kayak_data clone post-split).
+METADATA_DIR: Path = _config.metadata_dir
 FETCH_TIMEOUT: int = _config.fetch_timeout
 FETCH_BUDGET: int = _config.fetch_budget
 FETCH_USER_AGENT: str = _config.fetch_user_agent

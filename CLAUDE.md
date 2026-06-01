@@ -16,8 +16,11 @@ The development environment uses these paths (configured in `~/.config/kayak/.en
 | Configuration | `~/.config/kayak/.env` |
 | SQLite database | `/home/pat/DB/kayak.db` |
 | Document root | `/home/pat/public_html` (regular directory; populated by `levels build`) |
+| Metadata repo (`METADATA_DIR`) | `/home/pat/kayak_data` (separate clone — the CSVs + `reaches*.json`) |
 
 `config.py` checks `~/.config/kayak/.env` before falling back to the default `load_dotenv()` search. PHP gets `SQLITE_PATH` from nginx `fastcgi_param`.
+
+**Metadata repo (data-repo split):** the metadata CSVs + `reaches*.json` live in a **separate** repo, `kayak_data`, cloned alongside the code repo and located via the `METADATA_DIR` env var (default `data/db` for a single-repo checkout). Only `data/db/migrations/` (schema) stays in the code repo. `levels sync-metadata` / `import_metadata` / `export_metadata` all read/write `METADATA_DIR`. Humans edit metadata via a PR to `kayak_data`; the prod host auto-snapshots editor-approved prod edits there nightly. So the code repo's `main` can be branch-protected without the snapshot needing to push to it. See [`deploy/SETUP.md`](deploy/SETUP.md).
 
 **`OUTPUT_DIR` convention:** the live host sets `OUTPUT_DIR=/home/pat/public_html` (outside the repo), so `levels build` writes to the nginx docroot and never touches the repo tree. On a separate dev machine, set `OUTPUT_DIR=/home/<user>/public_html_dev` (or similar non-repo path) in `~/.config/kayak/.env` and serve with `php -S localhost:8000 -t "$OUTPUT_DIR"`. The default (unset) writes back into the repo's `public_html/`, which clobbers tracked dev symlinks and drops stray artifacts under `static/`. See `.env.example` for the full rationale.
 
@@ -28,14 +31,16 @@ POSIX ACLs grant `www-data`: traverse on `/home/pat` (not `/home/pat/kayak`), re
 ```bash
 python3 -m venv /home/pat/.venv
 /home/pat/.venv/bin/pip install -e ".[dev]"
+git clone git@github.com:mousebrains/kayak_data.git /home/pat/kayak_data  # the metadata snapshot
+echo 'METADATA_DIR=/home/pat/kayak_data' >> ~/.config/kayak/.env          # point the code at it
 /home/pat/.venv/bin/levels init-db --no-seed            # Empty schema + stamp migrations
-/home/pat/.venv/bin/python scripts/import_metadata.py   # Load gauges/reaches/sources from data/db/*.csv
+/home/pat/.venv/bin/python scripts/import_metadata.py   # Load gauges/reaches/sources from METADATA_DIR
 /home/pat/.venv/bin/levels pipeline                     # Fetch live data and generate HTML
 ```
 
 `init-db` creates the schema and stamps migrations; `--no-seed` skips the
-`sources.yaml` state/source seed so the canonical rows from `data/db/*.csv`
-(loaded by `import_metadata.py`) import without duplicate-by-name sources.
+`sources.yaml` state/source seed so the canonical rows from the metadata CSVs
+(`METADATA_DIR`, loaded by `import_metadata.py`) import without duplicate-by-name sources.
 Without the metadata load every source is an orphan with no `gauge_source`
 link, so `levels pipeline` fails at `orphan-check` and the site renders empty.
 A plain `levels init-db` (seeded from `data/sources.yaml`) is enough for a
@@ -206,9 +211,9 @@ Evolution splits into two distinct flows — **schema** changes (table shape) go
 2. For a fresh-DB shape only, `levels init-db` (re)creates tables via `Base.metadata.create_all()` and stamps every discovered migration file as applied.
 3. To land on an existing DB, add a `data/db/migrations/NNNN_description.sql` and run `levels migrate` — SQL runs in file-order inside a transaction; the `schema_migrations` row records completion. **Migrations are schema-only**: a new migration (number > 0074) may not `INSERT`/`UPDATE`/`DELETE` a metadata table — enforced by `tests/test_scripts/test_migrations_schema_only.py` (the wire-via-migration era ≤ 0074 is grandfathered immutable history).
 
-**Metadata changes** (rows in `source` / `gauge` / `gauge_source` / `reach` / the junctions / `fetch_url` / `calc_expression` / …): edit the reviewed `data/db/*.csv` directly — **no migration**. A *new* row takes a stable id from `data/db/id_counters.csv` (bump `next_id`; ids only ever increment, never reuse — guarded by `tests/test_id_counters.py`). On deploy, `scripts/deploy.sh` step 3.1 runs `levels sync-metadata`, which applies the CSV diff to the live DB **by id** (INSERT new / UPDATE changed / DELETE removed) while **preserving observations** — a rename is an UPDATE, so a source's observations stay valid. Deletes are gated behind `--allow-deletes` (it prints the per-source observation-drop counts first). See [`docs/PLAN_add_gauges_reaches.md`](docs/PLAN_add_gauges_reaches.md) for the add / update / remove / split-a-reach runbooks and [`docs/migrations.md`](docs/migrations.md) for `orphan-check` triage (orphans can still arise from a CSV edit).
+**Metadata changes** (rows in `source` / `gauge` / `gauge_source` / `reach` / the junctions / `fetch_url` / `calc_expression` / …): edit the reviewed CSV in the **`kayak_data`** repo (`METADATA_DIR`) — **no migration**. A *new* row takes a stable id from `id_counters.csv` (bump `next_id`; ids only ever increment, never reuse — guarded by `tests/test_id_counters.py`, reading `METADATA_DIR`). On deploy, `scripts/deploy.sh` step 3.1 runs `levels sync-metadata`, which applies the CSV diff to the live DB **by id** (INSERT new / UPDATE changed / DELETE removed) while **preserving observations** — a rename is an UPDATE, so a source's observations stay valid. Deletes are gated behind `--allow-deletes` (it prints the per-source observation-drop counts first). See [`docs/PLAN_add_gauges_reaches.md`](docs/PLAN_add_gauges_reaches.md) for the add / update / remove / split-a-reach runbooks and [`docs/migrations.md`](docs/migrations.md) for `orphan-check` triage (orphans can still arise from a CSV edit).
 
-**`reach.geom` and `reach.gradient_profile` are excluded from `reach.csv`** — large, machine-generated, and not regenerable on prod (the dev-only DEM/NHD trace stack) — so each is snapshotted to its own JSON (`data/db/reaches.json` / `data/db/reaches-gradient.json`, review-3 R6.1) and applied with `scripts/import_metadata.py --geom-only` / `--gradient-only` (deploy.sh steps 3.25 / 3.26), **not** by the CSV sync. `reach.huc` is tool-derived (`levels assign-huc`, a deterministic point-in-polygon over the WBD HUC12 layer — `kayak.huc.assign`) but a single code diffs cleanly, so it rides **in** `reach.csv` like any other column (no separate JSON). After a dev re-trace: run `scripts/export_metadata.py`, commit `reach.csv` + the two JSONs; `scripts/deploy.sh` applies them on prod automatically. See [`deploy/SETUP.md`](deploy/SETUP.md) § 4.
+**`reach.geom` and `reach.gradient_profile` are excluded from `reach.csv`** — large, machine-generated, and not regenerable on prod (the dev-only DEM/NHD trace stack) — so each is snapshotted to its own JSON in `kayak_data` (`reaches.json` / `reaches-gradient.json`, review-3 R6.1) and applied with `scripts/import_metadata.py --geom-only` / `--gradient-only` (deploy.sh steps 3.25 / 3.26, reading `METADATA_DIR`), **not** by the CSV sync. `reach.huc` is tool-derived (`levels assign-huc`, a deterministic point-in-polygon over the WBD HUC12 layer — `kayak.huc.assign`) but a single code diffs cleanly, so it rides **in** `reach.csv` like any other column (no separate JSON). After a dev re-trace: run `scripts/export_metadata.py`, commit `reach.csv` + the two JSONs to `kayak_data`; `scripts/deploy.sh` applies them on prod automatically. See [`deploy/SETUP.md`](deploy/SETUP.md) § 4.
 
 ### Parser System
 

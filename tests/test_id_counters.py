@@ -20,9 +20,9 @@ from __future__ import annotations
 import csv
 from collections import Counter
 
-from kayak.config import DATA_DIR
+from kayak.config import METADATA_DIR
 
-DB_DIR = DATA_DIR / "db"
+DB_DIR = METADATA_DIR
 COUNTERS = DB_DIR / "id_counters.csv"
 
 

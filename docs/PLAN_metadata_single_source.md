@@ -142,8 +142,11 @@ executed:
    `PENDING_RECONCILIATION`); the metadata-edit flow is documented in
    `docs/PLAN_add_gauges_reaches.md` (add / update / split / drop via CSV + sync),
    `docs/migrations.md`, and `CLAUDE.md`.
-5. **☐ Phase 6 — data-repo split**: move `data/db/*.csv` to the data repo +
-   branch-protect the code repo (the round-6 split).
+5. **▸ Phase 6 — data-repo split** (in progress): `data/db/*.csv` + `reaches*.json`
+   moved to the private `kayak_data` repo, read by the code via `METADATA_DIR`; the
+   nightly snapshot targets `kayak_data` (not code-repo `main`); CI reads it via a
+   read-only deploy key. Remaining: branch-protect the code repo's `main` (the
+   round-6 lever) + downgrade the prod host's code-repo deploy key to read-only.
 
 ## Decisions (resolved with the maintainer)
 

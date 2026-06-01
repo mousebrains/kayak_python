@@ -30,6 +30,12 @@ VENV_PIP="${KAYAK_HOME}/.venv/bin/pip"
 VENV_PY="${KAYAK_HOME}/.venv/bin/python"
 LEVELS="${KAYAK_HOME}/.venv/bin/levels"
 
+# The metadata snapshot (CSVs + reaches*.json) lives in a separate repo cloned
+# alongside the code repo (data-repo split). levels/import_metadata read it via
+# METADATA_DIR; export it here so they find it regardless of ~/.config/kayak/.env.
+KAYAK_DATA="${KAYAK_DATA:-${KAYAK_HOME}/kayak_data}"
+export METADATA_DIR="$KAYAK_DATA"
+
 # --- preconditions -----------------------------------------------------
 
 if [[ "$(id -un)" != "pat" ]]; then
@@ -107,60 +113,73 @@ echo ">>> levels validate-config"
 echo ">>> levels migrate"
 "$LEVELS" migrate
 
-# --- 3.1. sync metadata CSVs (only if data/db/*.csv changed) -----------
+# --- 3.05. pull the metadata repo (kayak_data) -------------------------
 #
-# Apply the reviewed data/db/*.csv diff to the live DB by stable id: INSERT
-# new, UPDATE changed (a rename is an UPDATE — matched by id, so the source's
-# observations are preserved). --backup snapshots the DB to <db>.pre-sync first:
-# a FK-valid but logically-wrong CSV edit (e.g. a bad threshold UPDATE) commits
-# and is NOT undoable from the one-line diff. Runs WITHOUT --allow-deletes: a
-# diff that REMOVES a row prints the per-source observation-drop plan and exits
-# non-zero, so this `set -e`d deploy ABORTS — but note the safe insert/update
-# half is already COMMITTED at that point. The operator reviews the drop counts,
-# runs `levels sync-metadata --allow-deletes` by hand (the committed upserts are
+# The metadata snapshot (CSVs + reaches*.json) lives in a separate repo
+# (data-repo split); steps 3.1/3.25/3.26 apply whatever it now holds, read via
+# METADATA_DIR. Pull it here and record its old/new SHA so those steps can gate
+# on the metadata actually changing (the code-repo SHA no longer moves when only
+# metadata changes). --ff-only mirrors the code-repo pull: no merge, no rebase.
+
+echo ">>> git -C $KAYAK_DATA pull --ff-only"
+data_old_sha=$(git -C "$KAYAK_DATA" rev-parse HEAD)
+git -C "$KAYAK_DATA" pull --ff-only
+data_new_sha=$(git -C "$KAYAK_DATA" rev-parse HEAD)
+
+# --- 3.1. sync metadata CSVs (only if kayak_data's *.csv changed) ------
+#
+# Apply the reviewed CSV diff to the live DB by stable id: INSERT new, UPDATE
+# changed (a rename is an UPDATE — matched by id, so the source's observations
+# are preserved). --backup snapshots the DB to <db>.pre-sync first: a FK-valid
+# but logically-wrong CSV edit (e.g. a bad threshold UPDATE) commits and is NOT
+# undoable from the one-line diff. Runs WITHOUT --allow-deletes: a diff that
+# REMOVES a row prints the per-source observation-drop plan and exits non-zero,
+# so this `set -e`d deploy ABORTS — but note the safe insert/update half is
+# already COMMITTED at that point. The operator reviews the drop counts, runs
+# `levels sync-metadata --allow-deletes` by hand (the committed upserts are
 # idempotent, so re-running deploy.sh is safe), then re-runs deploy.sh. Runs
 # after migrate (schema current) and before the geom/gradient applies (which
-# UPDATE the same reach rows). Gated on the CSVs actually changing.
+# UPDATE the same reach rows). Gated on the metadata CSVs actually changing.
 
-if [[ "$old_sha" != "$new_sha" ]] && \
-        ! git diff --quiet "$old_sha" "$new_sha" -- 'data/db/*.csv'; then
-    echo ">>> data/db/*.csv changed — applying metadata sync (levels sync-metadata --backup)"
+if [[ "$data_old_sha" != "$data_new_sha" ]] && \
+        ! git -C "$KAYAK_DATA" diff --quiet "$data_old_sha" "$data_new_sha" -- '*.csv'; then
+    echo ">>> metadata CSVs changed — applying metadata sync (levels sync-metadata --backup)"
     "$LEVELS" sync-metadata --backup
 else
-    echo "(data/db/*.csv unchanged — skipping metadata sync)"
+    echo "(metadata CSVs unchanged — skipping metadata sync)"
 fi
 
 # --- 3.25. apply reach geometry (only if reaches.json changed) --------
 #
-# reach.geom lives in data/db/reaches.json (excluded from reach.csv —
+# reach.geom lives in kayak_data's reaches.json (excluded from reach.csv —
 # large, and not regenerable on prod without the dev-only DEM/NHD trace
 # stack). It is NOT migration-managed, so a dev re-trace reaches prod
 # only by re-running this snapshot apply. --geom-only skips the CSV
-# upsert and just runs `UPDATE reach SET geom` from the committed JSON.
+# upsert and just runs `UPDATE reach SET geom` from METADATA_DIR's JSON.
 # Runs after migrate (reach table is current) and is gated on the file
-# actually changing between SHAs (mirrors the pyproject.toml guard) so an
-# unchanged deploy does no DB writes.
+# actually changing between the kayak_data SHAs so an unchanged deploy
+# does no DB writes.
 
-if [[ "$old_sha" != "$new_sha" ]] && \
-        ! git diff --quiet "$old_sha" "$new_sha" -- data/db/reaches.json; then
-    echo ">>> data/db/reaches.json changed — applying geom (import_metadata.py --geom-only)"
+if [[ "$data_old_sha" != "$data_new_sha" ]] && \
+        ! git -C "$KAYAK_DATA" diff --quiet "$data_old_sha" "$data_new_sha" -- reaches.json; then
+    echo ">>> reaches.json changed — applying geom (import_metadata.py --geom-only)"
     "$VENV_PY" scripts/import_metadata.py --geom-only
 else
-    echo "(data/db/reaches.json unchanged — skipping geom apply)"
+    echo "(reaches.json unchanged — skipping geom apply)"
 fi
 
 # --- 3.26. apply reach gradient (only if reaches-gradient.json changed) -
 #
-# reach.gradient_profile lives in data/db/reaches-gradient.json (excluded from
-# reach.csv — large, not regenerable on prod), the same snapshot pattern as
+# reach.gradient_profile lives in kayak_data's reaches-gradient.json (excluded
+# from reach.csv — large, not regenerable on prod), the same snapshot pattern as
 # geom above. review-3 R6.1.
 
-if [[ "$old_sha" != "$new_sha" ]] && \
-        ! git diff --quiet "$old_sha" "$new_sha" -- data/db/reaches-gradient.json; then
-    echo ">>> data/db/reaches-gradient.json changed — applying gradient (import_metadata.py --gradient-only)"
+if [[ "$data_old_sha" != "$data_new_sha" ]] && \
+        ! git -C "$KAYAK_DATA" diff --quiet "$data_old_sha" "$data_new_sha" -- reaches-gradient.json; then
+    echo ">>> reaches-gradient.json changed — applying gradient (import_metadata.py --gradient-only)"
     "$VENV_PY" scripts/import_metadata.py --gradient-only
 else
-    echo "(data/db/reaches-gradient.json unchanged — skipping gradient apply)"
+    echo "(reaches-gradient.json unchanged — skipping gradient apply)"
 fi
 
 # --- 3.5. emit /etc/kayak/runtime-config.json -------------------------
