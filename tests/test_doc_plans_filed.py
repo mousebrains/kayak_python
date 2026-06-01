@@ -11,8 +11,9 @@ docs/done/" pattern. This asserts:
   2. every ``docs/done/PLAN_*.md`` / ``REVIEW_*.md`` is referenced in the index.
 
 The trigger is the narrow Implemented/completed/done — *not* merged/landed/revised
-— so it doesn't false-positive ``PLAN_montana_gauges`` (Revised, in-progress) or
-the landed-but-kept ``PLAN_production_discipline``.
+— so it doesn't false-positive a ``revised``/``landed`` status, e.g. the
+landed-but-kept ``PLAN_production_discipline`` deliberately retained in ``docs/``
+root (see ``_ROOT_ALLOWED``).
 """
 
 from __future__ import annotations
@@ -63,7 +64,7 @@ def test_docs_done_plans_are_indexed() -> None:
 
 def test_status_trigger_distinguishes_done_from_in_progress() -> None:
     """The trigger must fire on a completed plan and ignore in-progress/landed —
-    so the main test isn't vacuous and won't false-positive montana/production."""
+    so the main test isn't vacuous and won't false-positive a Revised/landed status."""
     assert _DONE_STATUS.search(_status_blob("## Status\nImplemented in this PR.\n"))
     assert _DONE_STATUS.search(_status_blob("## Status\n\nImplemented after a blank line.\n"))
     assert not _DONE_STATUS.search(_status_blob("**Status:** Revised 2026-05-19\n"))

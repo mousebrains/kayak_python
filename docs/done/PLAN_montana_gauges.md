@@ -1,11 +1,20 @@
 # Plan — Montana USGS gauges (curated list, 13 sites)
 
+> **ARCHIVED — COMPLETE.** Montana coverage shipped in **release 1.1.0** (#10, #13);
+> migration `0036_montana_usgs_gauges.sql` is committed and applied. This
+> third-revision plan (historical status below, 2026-05-19) is kept for provenance —
+> its remaining "what's left" was overtaken by events: the state-scoped
+> `gauges.<state>.html` pages were **kept** (not reverted as this revision proposed),
+> and the Phase-2 `0036` regeneration is **moot** under the metadata-single-source
+> redesign (data migrations retired in Phase 6; Montana's metadata now lives in the
+> `kayak_data` CSVs, edited via `levels sync-metadata`).
+
 **Status:** Revised 2026-05-19 (third revision). Two scope changes from
 the previous draft:
 
 1. Original site scope (HUC4 1701, 62 auto-discovered sites) narrowed to
    a hand-picked list of 13 USGS gauges from
-   [`docs/one-offs/mt.list`](../docs/one-offs/mt.list).
+   [`docs/one-offs/mt.list`](../one-offs/mt.list).
 2. The Phase-3 `gauges.<state>.html` builder (already merged for OR/WA/ID
    on this branch) is being **reverted** in favor of the existing
    fragment-filter mechanism (`filters.js` honors `#st=<state>` on
@@ -44,7 +53,7 @@ follow-up reach-import PR.
 
 ## Curated list
 
-[`docs/one-offs/mt.list`](../docs/one-offs/mt.list) — transcribed by Pat 2026-05-19
+[`docs/one-offs/mt.list`](../one-offs/mt.list) — transcribed by Pat 2026-05-19
 from the entries circled on
 <https://levels-legacy.wkcc.org/?P=Montana.html>. Two-column TSV (third
 column is a human-readable label, ignored by tooling):
