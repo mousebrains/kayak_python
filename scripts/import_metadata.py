@@ -28,7 +28,8 @@ reach.geom and reach.gradient_profile are excluded from reach.csv and loaded
 from data/db/reaches.json and data/db/reaches-gradient.json via
 ``UPDATE reach SET geom`` / ``SET gradient_profile``. To apply just one to a
 live prod DB without re-syncing metadata from the CSVs — e.g. after a re-trace —
-use ``--geom-only`` or ``--gradient-only``.
+use ``--geom-only`` or ``--gradient-only``; pass **both** to apply both JSONs
+while still skipping the CSV upsert (it is *not* a no-op).
 
 Usage:
     python3 scripts/import_metadata.py                  # uses ../DB/kayak.db
@@ -187,7 +188,8 @@ def main() -> int:
         "--gradient-only",
         action="store_true",
         help="Load only reaches-gradient.json (reach.gradient_profile); skip the "
-        "CSV upsert. Parallel to --geom-only.",
+        "CSV upsert. Parallel to --geom-only. Passing both --geom-only and "
+        "--gradient-only applies both JSONs and still skips the CSV upsert.",
     )
     args = parser.parse_args()
 
@@ -211,11 +213,16 @@ def main() -> int:
         print(f"{'Table':<20} {'Rows':>10}")
         print(f"{'-' * 20} {'-' * 10:>10}")
         with conn:
+            # --geom-only / --gradient-only each skip the CSV upsert; passing
+            # BOTH means "apply both JSON blobs, still skip the CSV" — not a
+            # silent no-op. A blob loads unless the *other* "-only" flag selected
+            # exclusively away from it: geom loads unless gradient-only-and-not-
+            # geom-only, gradient loads unless geom-only-and-not-gradient-only.
             snapshot_only = args.geom_only or args.gradient_only
             total_rows = 0 if snapshot_only else _load_csvs(conn, in_dir)
-            if not args.gradient_only:
+            if args.geom_only or not args.gradient_only:
                 _apply_geom(conn, in_dir)
-            if not args.geom_only:
+            if args.gradient_only or not args.geom_only:
                 _apply_gradient(conn, in_dir)
         print(f"{'-' * 20} {'-' * 10:>10}")
         print(f"{'TOTAL':<20} {total_rows:>10}")
