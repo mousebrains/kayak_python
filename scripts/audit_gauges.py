@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import math
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -47,6 +48,65 @@ def haversine_miles(lat1, lon1, lat2, lon2):
         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
     )
     return R * 2 * math.asin(math.sqrt(a))
+
+
+# Generic geography / locative tokens that carry no river identity. Stripping
+# these before comparing a gauge station name to a reach river name is what
+# lets us tell "ROCK CREEK NEAR GLIDE" ↔ reach "Rock Creek (Umpqua)" (shared
+# token "rock") apart from "QUARTZVILLE CREEK BLW GALENA CREEK" ↔ reach "Canal
+# Creek" (no shared identity token — only the generic word "creek").
+# fmt: off
+_GENERIC_NAME_TOKENS = frozenset({
+    # waterbody / feature words
+    "river", "creek", "ck", "cr", "crk", "fork", "nf", "sf", "ef", "wf", "mf",
+    "dam", "tailwater", "tailrace", "reservoir", "res", "lake", "lk", "pond",
+    "slough", "falls", "fall", "canyon", "gorge", "run", "branch", "prong",
+    "brook", "bayou", "outlet", "inflow",
+    # position / direction / size
+    "north", "south", "east", "west", "n", "s", "e", "w", "middle", "mid",
+    "upper", "lower", "little", "big", "main", "mainstem",
+    # connectors / locatives
+    "near", "nr", "above", "abv", "below", "blw", "bl", "at", "of", "the",
+    "to", "and", "by", "on", "road", "rd", "bridge", "br", "hwy", "highway",
+    "st", "ave",
+    # state / admin abbreviations
+    "or", "wa", "ca", "id", "mt", "co", "oreg", "ore", "wash", "calif",
+    # misc station-name filler
+    "site", "station", "gage", "gauge", "trib", "tributary",
+})
+# fmt: on
+
+
+def _name_tokens(text: str | None) -> set[str]:
+    """Lowercase identity tokens of ``text`` with generic geography words dropped.
+
+    Splits on any non-alphanumeric run, lowercases, then keeps tokens of length
+    >= 3 that aren't in ``_GENERIC_NAME_TOKENS`` and aren't pure digits.
+    """
+    if not text:
+        return set()
+    out = set()
+    for raw in re.split(r"[^0-9a-zA-Z]+", text.lower()):
+        if len(raw) >= 3 and not raw.isdigit() and raw not in _GENERIC_NAME_TOKENS:
+            out.add(raw)
+    return out
+
+
+def _shares_river_identity(gauge_name: str | None, *reach_names: str | None) -> bool:
+    """True if the gauge station name shares an identity token with any reach name.
+
+    Used to suppress candidates where a gauge happens to sit near a reach's
+    midpoint but is plainly on a different stream (a tributary, a neighbouring
+    drainage, a dam tailwater). Returns False when either side has no identity
+    token, so a same-distance no-overlap pair is dropped rather than guessed.
+    """
+    gtoks = _name_tokens(gauge_name)
+    if not gtoks:
+        return False
+    rtoks: set[str] = set()
+    for name in reach_names:
+        rtoks |= _name_tokens(name)
+    return bool(gtoks & rtoks)
 
 
 def refresh_caches():
@@ -132,14 +192,50 @@ def load_audit_ignore(path: Path | None = None) -> set[tuple[str, str, int]]:
     return out
 
 
+# A candidate within this many miles of a reach midpoint is surfaced even when
+# its station name shares no identity token with the reach — a gauge sitting
+# essentially on top of the run is worth a look regardless of how it's named.
+_NAME_OVERRIDE_MILES = 0.5
+
+
+def _match_candidate(
+    gid, gname, glat, glon, reach, *, kind, max_dist_miles, include_gauged, ignore
+):
+    """Score one (gauge, reach) pair; return a candidate tuple or None.
+
+    Applies, in order: skip already-gauged reaches (unless ``include_gauged``),
+    the per-pair ignore list, the distance cap, and the river-identity name
+    check (waived within ``_NAME_OVERRIDE_MILES``). Factored out of
+    ``find_candidates_near_reaches`` to keep that loop's branching readable.
+    """
+    rid, dname, rname, river, rgauge, slat, slon, elat, elon = reach
+    if slat is None or elat is None or slon is None or elon is None:
+        return None
+    if not include_gauged and rgauge:
+        return None
+    if (kind, str(gid), rid) in ignore:
+        return None
+
+    # Distance to midpoint of reach
+    dist = haversine_miles(glat, glon, (slat + elat) / 2, (slon + elon) / 2)
+    if dist > max_dist_miles:
+        return None
+    if dist > _NAME_OVERRIDE_MILES and not _shares_river_identity(gname, river, dname):
+        return None
+
+    has_gauge = "yes" if rgauge else "NO"
+    return (dist, gid, gname, rid, dname or rname, has_gauge)
+
+
 def find_candidates_near_reaches(
     new_gauges,
     kayak,
-    max_dist_miles=15,
+    max_dist_miles=3,
     kind: str = "USGS",
     ignore: set[tuple[str, str, int]] | None = None,
+    include_gauged: bool = False,
 ):
-    """Find new gauges near reaches that have no gauge or a distant gauge.
+    """Find new gauges near reaches that have no gauge (or, opt-in, a distant one).
 
     ``kind`` is "USGS" or "NWPS" — used to key into ``ignore``, which
     suppresses specific (kind, gauge_id, reach_id) pairs marked as
@@ -147,6 +243,17 @@ def find_candidates_near_reaches(
     happens before the per-gauge dedup so a gauge that's wrong for the
     closest reach can still surface against a more-distant reach where
     it'd actually fit.
+
+    Three precision filters keep this from drowning in proximity noise:
+      * ``include_gauged=False`` (default) drops reaches that already have a
+        linked gauge — a second nearby gauge for an already-served reach is
+        rarely actionable and was ~94% of the historical output.
+      * ``max_dist_miles`` defaults to 3 (was 15): a gauge >3 mi from a run's
+        midpoint is almost never the right gauge for it.
+      * the gauge station name must share a river-identity token with the
+        reach (``_shares_river_identity``), unless it's within
+        ``_NAME_OVERRIDE_MILES`` — this drops tributary / wrong-drainage /
+        dam-tailwater matches that only coincide spatially.
     """
     ignore = ignore or set()
     reaches = kayak.execute("""
@@ -171,22 +278,19 @@ def find_candidates_near_reaches(
             continue
 
         for reach in reaches:
-            rid, dname, rname, _river, rgauge, slat, slon, elat, elon = reach
-            label = dname or rname
-
-            if slat is None or elat is None or slon is None or elon is None:
-                continue
-            if (kind, str(gid), rid) in ignore:
-                continue
-
-            # Distance to midpoint of reach
-            mid_lat = (slat + elat) / 2
-            mid_lon = (slon + elon) / 2
-            dist = haversine_miles(glat, glon, mid_lat, mid_lon)
-
-            if dist <= max_dist_miles:
-                has_gauge = "yes" if rgauge else "NO"
-                candidates.append((dist, gid, gname, rid, label, has_gauge))
+            match = _match_candidate(
+                gid,
+                gname,
+                glat,
+                glon,
+                reach,
+                kind=kind,
+                max_dist_miles=max_dist_miles,
+                include_gauged=include_gauged,
+                ignore=ignore,
+            )
+            if match is not None:
+                candidates.append(match)
 
     # Sort by distance, deduplicate by gauge
     candidates.sort()
@@ -251,6 +355,13 @@ def check_data_status(kayak, days=7):
     # WHERE looks back 2*N days so the HAVING min > cutoff actually rules
     # out a sibling source carrying pre-cutoff data; the prior `> cutoff`
     # filter made the HAVING trivially true.
+    #
+    # The EXISTS guard requires flow history *older* than the 2*N window so
+    # "started" means an established feed that went quiet >=N days then
+    # resumed — NOT a gauge that was just added to the DB. Without it, every
+    # newly-wired gauge (whose entire history begins inside the window) has
+    # min(observed_at) > cutoff exactly like a restarted feed and floods the
+    # section after any metadata import.
     started = kayak.execute(
         """
         SELECT g.id, g.name, g.usgs_id,
@@ -264,8 +375,16 @@ def check_data_status(kayak, days=7):
           AND o.observed_at > ?
         GROUP BY g.id
         HAVING min(o.observed_at) > ?
+           AND EXISTS (
+               SELECT 1
+               FROM observation o2
+               JOIN gauge_source gs2 ON gs2.source_id = o2.source_id
+               WHERE gs2.gauge_id = g.id
+                 AND o2.data_type = 'flow'
+                 AND o2.observed_at <= ?
+           )
     """,
-        (week_ago, cutoff_str),
+        (week_ago, cutoff_str, week_ago),
     ).fetchall()
 
     # Reach-linked gauges where NEITHER flow NOR gauge data has been recent
@@ -451,6 +570,18 @@ def main():  # noqa: C901 — pre-existing complexity; tracked in task #45 refac
         default=os.environ.get("AUDIT_EMAIL"),
         help="Email digest to this address (or set AUDIT_EMAIL). Always sends if set.",
     )
+    parser.add_argument(
+        "--candidate-miles",
+        type=float,
+        default=3.0,
+        help="Max distance (mi) from a reach midpoint for a candidate gauge (default: 3)",
+    )
+    parser.add_argument(
+        "--include-gauged",
+        action="store_true",
+        help="Also list candidates for reaches that already have a linked gauge "
+        "(off by default — these are rarely actionable)",
+    )
     args = parser.parse_args()
 
     if not args.no_refresh:
@@ -474,10 +605,18 @@ def main():  # noqa: C901 — pre-existing complexity; tracked in task #45 refac
 
     # --- Candidates near reaches ---
     ignore = load_audit_ignore()
+    gauged_note = "" if args.include_gauged else " (ungauged reaches only)"
     print("\n" + "=" * 60)
-    print("New USGS gauges within 15 miles of a reach")
+    print(f"New USGS gauges within {args.candidate_miles:g} miles of a reach{gauged_note}")
     print("=" * 60)
-    usgs_candidates = find_candidates_near_reaches(new_usgs, kayak, kind="USGS", ignore=ignore)
+    usgs_candidates = find_candidates_near_reaches(
+        new_usgs,
+        kayak,
+        max_dist_miles=args.candidate_miles,
+        kind="USGS",
+        ignore=ignore,
+        include_gauged=args.include_gauged,
+    )
     if usgs_candidates:
         print(f"{'Dist':>5}  {'USGS ID':<12} {'Station':<45} {'Reach':<30} {'Gauged'}")
         print("-" * 105)
@@ -489,9 +628,16 @@ def main():  # noqa: C901 — pre-existing complexity; tracked in task #45 refac
         print("  None found")
 
     print("\n" + "=" * 60)
-    print("New NWPS gauges within 15 miles of a reach")
+    print(f"New NWPS gauges within {args.candidate_miles:g} miles of a reach{gauged_note}")
     print("=" * 60)
-    nwps_candidates = find_candidates_near_reaches(new_nwps, kayak, kind="NWPS", ignore=ignore)
+    nwps_candidates = find_candidates_near_reaches(
+        new_nwps,
+        kayak,
+        max_dist_miles=args.candidate_miles,
+        kind="NWPS",
+        ignore=ignore,
+        include_gauged=args.include_gauged,
+    )
     if nwps_candidates:
         print(f"{'Dist':>5}  {'LID':<12} {'Name':<45} {'Reach':<30} {'Gauged'}")
         print("-" * 105)
