@@ -40,7 +40,7 @@ SCRIPTS_DIR = REPO_DIR / "scripts"
 # The committed snapshot the loaders read. Asserted explicitly so the test
 # fails loudly (rather than vacuously passing on an empty DB) if the snapshot
 # ever shrinks or the fixtures move.
-EXPECTED_REACH_COUNT = 420
+EXPECTED_REACH_COUNT = 421
 
 
 def _load_import_metadata() -> ModuleType:
