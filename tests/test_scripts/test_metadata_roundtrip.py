@@ -239,3 +239,27 @@ def test_gradient_only_applies_gradient_leaves_metadata(tmp_path, monkeypatch):
         names = dict(c.execute(text("SELECT id, name FROM reach ORDER BY id")).all())
     eng.dispose()
     assert names == {1: "orig1", 2: "orig2"}  # names untouched (CSV upsert skipped)
+
+
+def test_geom_and_gradient_only_together_applies_both_skips_csv(tmp_path, monkeypatch):
+    """Passing BOTH --geom-only and --gradient-only applies both JSON blobs and
+    still skips the CSV upsert — it must NOT be the silent no-op the original
+    ``if not the_other_flag`` guards produced (each branch cancelled the other)."""
+    imp = _load("import_metadata")
+    dst, snap = tmp_path / "dst.db", tmp_path / "snap"
+    snap.mkdir()
+    _make_db(dst)
+    _seed_reaches(dst, [{"id": 1, "name": "orig1"}, {"id": 2, "name": "orig2"}])
+    (snap / "reaches.json").write_text(json.dumps({"1": "G1 g1", "2": "G2 g2"}))
+    (snap / "reaches-gradient.json").write_text(json.dumps({"1": "GP1", "2": "GP2"}))
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["import_metadata", "--db", str(dst), "--in", str(snap), "--geom-only", "--gradient-only"],
+    )
+    assert imp.main() == 0
+
+    assert _reach_rows(dst) == {1: ("orig1", "G1 g1"), 2: ("orig2", "G2 g2")}  # geom applied
+    assert _reach_gradients(dst) == {1: "GP1", 2: "GP2"}  # gradient applied
+    # names untouched ⇒ CSV upsert was skipped (no *.csv in snap dir to load anyway)
