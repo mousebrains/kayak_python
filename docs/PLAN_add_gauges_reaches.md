@@ -60,12 +60,32 @@ fresh copy of prod and confirm the graph is clean:
 ```bash
 cp /path/to/prod-or-fresh.db /tmp/sandbox.db
 DATABASE_URL=sqlite:////tmp/sandbox.db levels sync-metadata --dry-run        # review the plan
-DATABASE_URL=sqlite:////tmp/sandbox.db levels sync-metadata [--allow-deletes] # apply
+DATABASE_URL=sqlite:////tmp/sandbox.db levels sync-metadata [--allow-deletes] # apply inserts + updates
 DATABASE_URL=sqlite:////tmp/sandbox.db levels orphan-check                    # No orphan sources.
-DATABASE_URL=sqlite:////tmp/sandbox.db levels check-reaches                   # if reaches changed
-# geom/gradient applies, if the JSONs changed:
-DATABASE_URL=sqlite:////tmp/sandbox.db python scripts/import_metadata.py --geom-only --gradient-only
+# geom/gradient apply, if the JSONs changed — run the two flags SEPARATELY (see warning below):
+DATABASE_URL=sqlite:////tmp/sandbox.db python scripts/import_metadata.py --geom-only
+DATABASE_URL=sqlite:////tmp/sandbox.db python scripts/import_metadata.py --gradient-only
+DATABASE_URL=sqlite:////tmp/sandbox.db levels check-reaches                   # if reaches changed — run AFTER the geom apply (below)
 ```
+
+> **Three things the first CSV-flow change (McKenzie split, 2026-06) surfaced:**
+> 1. **`--geom-only` + `--gradient-only` together applies *both* JSONs** (still
+>    skipping the CSV upsert). It *used* to load **neither** — each branch was
+>    guarded by `not the_other_flag`, so they cancelled out into a silent no-op
+>    ("TOTAL 0") — now fixed so the combined form does the obvious thing. The
+>    snippet above runs them as two commands to mirror `deploy.sh` steps
+>    3.25/3.26 (which apply each only if its JSON changed); a single combined
+>    call now works too. (Plain `import_metadata.py` with no flags does the CSV
+>    upsert **and** both JSONs.)
+> 2. **`check-reaches` must run *after* the geom apply.** `geom` lives in
+>    `reaches.json`, not `reach.csv`, so right after `sync-metadata` a re-traced
+>    or **split** reach has its `lat/lon_*` endpoint columns moved but its geom
+>    still the *old* shape → `check-reaches` fails with a multi-km endpoint
+>    drift. Apply the geom JSON first, then check.
+> 3. **`sync-metadata --dry-run`'s plan tallies INSERT/DELETE PKs only.** A pure
+>    *update* (e.g. a flow-range or rename edit with no new/removed rows) shows
+>    "no changes" in that summary yet **is** applied by the upsert pass — verify
+>    updates by reading the row back, not by the dry-run count.
 
 ---
 
@@ -212,14 +232,28 @@ boundary, and add a new reach for the downstream half.
    recompute `length` / `elevation_lost` / `gradient` / `max_gradient`; replace its
    geom in `reaches.json` and gradient in `reaches-gradient.json`. (Per *update reach
    metadata*, geometry branch.)
-3. **Add reach B** (new id from the `reach` counter, bump it): put-in = the split
-   point, take-out = the old downstream end; trace; full scalar metadata; its own
-   `reach_state` / `reach_class` / `reach_guidebook` rows; geom → `reaches.json`,
-   gradient → `reaches-gradient.json`. `gauge_id` may differ from A's if a different
-   gauge governs the lower half.
-4. **Re-derive both `huc`s** with `levels assign-huc` (their put-ins differ) and
-   **re-key `sort_name`** so A and B sit in upstream→downstream order with their
-   neighbours (by put-in `elevation`, high→low).
+3. **Add reach B** (new id from the `reach` counter, bump it in
+   `id_counters.csv` — it isn't a DB table, so `export_metadata.py` won't touch
+   it): put-in = the split point, take-out = the old downstream end; trace; full
+   scalar metadata; its own `reach_state` / `reach_class` / `reach_guidebook`
+   rows; geom → `reaches.json`, gradient → `reaches-gradient.json`. `gauge_id`
+   may differ from A's if a different gauge governs the lower half.
+   - **`reach.name` is UNIQUE** (partial index, `name IS NOT NULL`) — B needs a
+     *distinct* `name` even though it shares A's `aw_id` (which is **not**
+     unique). The McKenzie split used `aw_10888` (A) / `aw_10888b` (B).
+   - **`reach_class.id` is not in `id_counters.csv`** — it plain-autoincrements,
+     so a new class row takes `MAX(id)+1`.
+   - **`basin_area`** tracks the *governing gauge's* `drainage_area` for ~⅔ of
+     reaches — set each half to its own gauge's drainage where known (the split
+     set A=348 to match its new McKenzie-Bridge gauge; B kept the old value, its
+     South Fork gauge having no `drainage_area`).
+4. **Re-derive both `huc`s** with `levels assign-huc` (their put-ins differ),
+   **recompute the arc-length midpoint** (`reach.latitude/longitude`) for both —
+   `recompute_midpoints.py` has no `--reach-ids`, so either scope it inline or
+   accept that `--all` only rewrites already-drifted reaches — and **re-key
+   `sort_name`** so A and B sit in upstream→downstream order with their
+   neighbours (by put-in `elevation`, high→low). The split slotted B as
+   `…aa aa 0a` between A (`…aa aa 0`) and the next reach down (`…aa aa 1`).
 
 Both halves are independent rows after this — A keeps its id (and any inbound
 references), B is brand-new. No observations are involved (reaches don't carry
@@ -266,7 +300,18 @@ switch:
 
 - **Trace:** `levels trace --putin LAT,LON --takeout LAT,LON --name "…"` under
   **brew python** (GDAL/osgeo, not `.venv`), against `Trace-cache/`. Emits the
-  no-wrapper, lon-first geom string.
+  no-wrapper, lon-first geom string. **`levels trace` writes files** (`.csv`,
+  `.geom.sql.txt`, `.png`) — it does **not** touch the DB. To land the geom +
+  `length` (+ arc-length midpoint) into `reach`, run a small stage script that
+  calls `kayak.tracing.trace.trace_reach` and `UPDATE`s the row — model:
+  `docs/one-offs/import_mt_reaches.py` (Phase 2), or the McKenzie-split one-off
+  `docs/one-offs/trace_mckenzie_split.py`.
+- **Interpreter split (dev Mac).** No single interpreter has the whole stack:
+  **trace** needs brew python (has `osgeo`, lacks `geopandas`); **`assign-huc`**
+  needs `.venv` (has `geopandas`, lacks `osgeo`); elevations / DEM gradient /
+  `build` / `export_metadata` / `sync-metadata` all run under `.venv`. Running
+  `assign-huc` under brew python (or `trace` under `.venv`) fails on the missing
+  import.
 - **Elevation / elevation_lost / gradient:** `scripts/refresh_reach_elevations.py
   --reach-ids … --apply` (USGS 3DEP, httpx — dev-only).
 - **`max_gradient` + `gradient_profile`:** the 3-stage `docs/one-offs/` DEM pipeline
