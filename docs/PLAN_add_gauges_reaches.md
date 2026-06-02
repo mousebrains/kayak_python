@@ -247,7 +247,8 @@ boundary, and add a new reach for the downstream half.
    - **`basin_area`** tracks the *governing gauge's* `drainage_area` for ~⅔ of
      reaches — set each half to its own gauge's drainage where known (the split
      set A=348 to match its new McKenzie-Bridge gauge; B kept the old value, its
-     South Fork gauge having no `drainage_area`).
+     gauge (177, `McKenzie_Rainbow` / NWRFC `CMRO3`, mainstem) having no
+     `drainage_area`).
 4. **Re-derive both `huc`s** with `levels assign-huc` (their put-ins differ),
    **recompute the arc-length midpoint** (`reach.latitude/longitude`) for both —
    `recompute_midpoints.py` has no `--reach-ids`, so either scope it inline or
