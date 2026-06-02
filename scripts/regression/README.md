@@ -87,8 +87,12 @@ The markdown report contains:
 - **Window stability table** at five default start dates around
   `--start` plus 1990-01-01 and earliest-overlap. Lets you eyeball how
   the fit drifts.
-- **Residual diagnostics:** percentile distribution and mean/std/n by
-  predictor-1 quintile.
+- **Residual diagnostics:** percentile distribution, mean/std/n by
+  predictor-1 quintile, and a **by-hydrologic-season** bias table
+  (heavy-rain Nov–Dec / light-rain Jan–Feb / rain-on-snow Mar–Apr /
+  dry-season May–Oct). Seasonal bias that the pooled diagnostics
+  average away — common in this PNW monsoonal basin — shows up here as a
+  large mean residual relative to σ̂ in one season.
 - **SQL stub** for `calc_expression`, with the right `prefix::gauge`
   reference handles and a `WHERE NOT EXISTS` idempotency guard. The
   note text is escaped of `;` since the migration runner splits on
@@ -101,6 +105,38 @@ Output also goes to stderr as a one-line summary so it's easy to grep:
 ```
 SUMMARY: 14328000 ~ intercept=-292.7±2.762, x1=+0.8285±0.001883, r²=0.9575, RMSE=117.1, n=8599
 ```
+
+## Companion: sub-daily lead/lag (`gauge_lead_lag.py`)
+
+The daily-mean fit above is applied in production to the *latest
+instantaneous* predictor readings, so the 1–12 h travel time between
+gauges is a timing error the daily fit never sees.
+[`gauge_lead_lag.py`](gauge_lead_lag.py) quantifies it from USGS **unit
+values** (sub-hourly), resampled to a common hourly UTC grid:
+
+```bash
+python3 scripts/regression/gauge_lead_lag.py \
+    --predictor 14162500 --predictor 14158850 \
+    --predictor 14159500 --predictor 14161500 \
+    --target 14159000 --start 1987-10-01 --end 1994-09-30 \
+    --name mckenzie_14159000_leadlag \
+    --out  docs/regression/mckenzie_14159000_leadlag.md
+```
+
+It estimates each predictor's travel-time lag by cross-correlating hourly
+**first differences** (flow *changes* propagate; baseline levels are
+near-identical across neighbours), holds unidentifiable predictors
+contemporaneous, then compares regression RMSE with predictors aligned
+contemporaneously vs travel-time-shifted — on one shared hold-out grid,
+under both daily-trained (deployed-style) and hourly-refit coefficients —
+plus a storm-rise subset and a deployability verdict. Writes
+`<name>.md` + a CCF-vs-lag `.svg`. **Diagnostic only**: it changes no
+deployed calc. Defaults reproduce the McKenzie Bridge analysis.
+
+Data note: pre-2007 unit values are served only by the
+`nwis.waterservices.usgs.gov` host, and the `parameterCd` filter
+suppresses some old discharge series — the script fetches unfiltered and
+picks the `*_00060` column by name (cached to `/tmp/leadlag_<site>_<year>.tsv`).
 
 ## Caveats
 

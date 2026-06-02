@@ -219,6 +219,65 @@ def residual_percentiles(fit: Fit) -> dict[int, float]:
     return {p: r[max(0, min(n - 1, int(p / 100 * n)))] for p in (1, 5, 25, 50, 75, 95, 99)}
 
 
+# Hydrologic ("monsoonal") season buckets for the residual table. Most kayak
+# gauges sit in a Pacific-Northwest monsoonal regime, so bucketing residuals
+# by season exposes seasonal bias the pooled diagnostics average away — e.g.,
+# a fit trained on the long record can systematically under-predict during
+# spring rain-on-snow if the upstream→target routing/gains in that season
+# differ from the annual mean. Months are contiguous and non-overlapping;
+# the water year (starts Oct 1) is split heavy-rain → light-rain →
+# rain-on-snow → dry season.
+SEASONS: list[tuple[str, tuple[int, ...]]] = [
+    ("Heavy rain (Nov-Dec)", (11, 12)),
+    ("Light rain (Jan-Feb)", (1, 2)),
+    ("Rain-on-snow (Mar-Apr)", (3, 4)),
+    ("Dry season (May-Oct)", (5, 6, 7, 8, 9, 10)),
+]
+
+
+def seasonal_residuals(
+    window_keys: list[str],
+    fit: Fit,
+    y_values: list[float],
+) -> list[dict]:
+    """Bucket residuals by hydrologic season (see ``SEASONS``).
+
+    ``window_keys[i]`` is the ``YYYY-MM-DD`` date of residual
+    ``fit.residuals[i]`` and target value ``y_values[i]`` — the three share
+    the ordering used to build the design matrix. Returns one row per season
+    with n, mean/median bias, std, RMSE, the mean target value, and the
+    percent bias (mean residual / mean target) so seasonal over/under-fit is
+    directly comparable across gauges of different magnitudes.
+    """
+    month_to_season = {m: name for name, months in SEASONS for m in months}
+    buckets: dict[str, list[int]] = {name: [] for name, _ in SEASONS}
+    for i, k in enumerate(window_keys):
+        buckets[month_to_season[int(k[5:7])]].append(i)
+    out: list[dict] = []
+    for name, _months in SEASONS:
+        idx = buckets[name]
+        if not idx:
+            out.append({"season": name, "n": 0})
+            continue
+        r = [float(fit.residuals[i]) for i in idx]
+        yv = [y_values[i] for i in idx]
+        y_mean = statistics.mean(yv)
+        out.append(
+            {
+                "season": name,
+                "n": len(r),
+                "mean_residual": statistics.mean(r),
+                "median_residual": statistics.median(r),
+                "std_residual": statistics.stdev(r) if len(r) > 1 else 0.0,
+                "rmse": math.sqrt(sum(v * v for v in r) / len(r)),
+                "y_mean": y_mean,
+                "y_median": statistics.median(yv),
+                "pct_bias": 100.0 * statistics.mean(r) / y_mean if y_mean else float("nan"),
+            }
+        )
+    return out
+
+
 def design_row(predictor_values: list[float], quadratic: bool) -> np.ndarray:
     """Build the design-row vector for a single x* — same column layout as
     `build_design_matrix`."""
@@ -284,6 +343,7 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
     target_data: dict[str, float],
     predictor_data: list[dict[str, float]],
     overlap_keys: list[str],
+    window_keys: list[str],
     pts_predictors: list[list[float]],
     pts_y: list[float],
     fit: Fit,
@@ -463,6 +523,41 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
         )
     L("")
 
+    L("### By hydrologic season\n")
+    L(
+        "Residuals bucketed by monsoonal season (most kayak gauges sit in a "
+        "PNW monsoonal regime). **Mean / median flow** give each season's "
+        "target-flow magnitude. **Bias** is the mean residual (y - y_hat); a "
+        "non-zero bias means the pooled fit systematically over- (negative) "
+        "or under-predicts (positive) in that season. **% of flow** "
+        "normalizes the bias by the season's mean flow so it's comparable "
+        "across gauges. The remaining columns (median residual, std, RMSE) "
+        "are residual statistics in cfs.\n"
+    )
+    seas = seasonal_residuals(window_keys, fit, pts_y)
+    L(
+        "| Season | n | mean flow | median flow | bias (cfs) | % of flow | "
+        "median resid | std | RMSE |"
+    )
+    L("|---|---|---|---|---|---|---|---|---|")
+    for s in seas:
+        if s["n"] == 0:
+            L(f"| {s['season']} | 0 | — | — | — | — | — | — | — |")
+            continue
+        L(
+            f"| {s['season']} | {s['n']} | {s['y_mean']:.0f} | {s['y_median']:.0f} | "
+            f"{s['mean_residual']:+.1f} | {s['pct_bias']:+.1f}% | "
+            f"{s['median_residual']:+.1f} | {s['std_residual']:.1f} | {s['rmse']:.1f} |"
+        )
+    L("")
+    L(
+        "A season whose bias is large relative to `sigma_hat` (the pooled "
+        "1-sigma residual scatter) is a candidate for a season-specific "
+        "intercept or a separate seasonal fit; a season with elevated `std`/"
+        "`RMSE` but near-zero bias is just noisier (e.g., flashy storm "
+        "response), not mis-calibrated.\n"
+    )
+
     L("## Predictions at example x values\n")
     L(
         "For each row, `y_hat` is the fitted value and the two CIs are 95% "
@@ -580,6 +675,14 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
         "- **Re-running** when the active predictor's rating curve drifts. "
         "USGS occasionally updates stage-discharge ratings; the `Reproduce` "
         "snippet above re-pulls the full period of record on demand."
+    )
+    L(
+        "- **Sub-daily lead/lag.** This fit is on daily means, but the "
+        "`calc_expression` applies its coefficients to the *latest instantaneous* "
+        "predictor readings — so inter-gauge travel time (1-12 h) becomes a timing "
+        "error the daily fit never sees. `gauge_lead_lag.py` (same directory) "
+        "quantifies that error from USGS unit values; worth a look when predictors "
+        "are many river-miles from the target."
     )
 
     return "\n".join(lines) + "\n"
@@ -1057,6 +1160,7 @@ def main() -> int:
         target_data=target_data,
         predictor_data=predictor_data,
         overlap_keys=overlap_all,
+        window_keys=keys,
         pts_predictors=pts_predictors,
         pts_y=pts_y,
         fit=fit,

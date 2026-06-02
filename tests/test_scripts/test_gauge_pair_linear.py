@@ -175,6 +175,47 @@ def test_nice_axis_round_ticks():
     assert any(abs(mantissa - m) < 1e-6 for m in (1.0, 2.0, 5.0))
 
 
+def test_seasonal_residuals_buckets_by_month():
+    gpl = _load_script()
+    from datetime import date, timedelta
+
+    import numpy as np
+
+    # Two years of daily keys so every season is well populated.
+    start = date.fromisoformat("2011-01-01")
+    keys = [(start + timedelta(days=i)).isoformat() for i in range(730)]
+    # Plant a known +100 cfs bias in Mar/Apr (rain-on-snow), 0 elsewhere.
+    resid = np.array([100.0 if int(k[5:7]) in (3, 4) else 0.0 for k in keys])
+    y_values = [1000.0] * len(keys)
+    fit = gpl.Fit(
+        n=len(keys),
+        coef_names=["intercept", "x1"],
+        coefs=np.array([0.0, 1.0]),
+        cov=np.eye(2),
+        r2=0.9,
+        rmse=1.0,
+        sigma_hat=1.0,
+        residuals=resid,
+        x_means=np.array([0.0]),
+    )
+    rows = {r["season"]: r for r in gpl.seasonal_residuals(keys, fit, y_values)}
+    # Every day lands in exactly one season.
+    assert sum(r["n"] for r in rows.values()) == len(keys)
+    # The Mar-Apr bucket carries the planted bias; others are unbiased.
+    ros_label = next(name for name, months in gpl.SEASONS if set(months) == {3, 4})
+    ros = rows[ros_label]
+    assert ros["n"] == sum(1 for k in keys if int(k[5:7]) in (3, 4))
+    assert abs(ros["mean_residual"] - 100.0) < 1e-9
+    assert abs(ros["pct_bias"] - 10.0) < 1e-9  # 100 / 1000
+    assert abs(ros["rmse"] - 100.0) < 1e-9
+    # Per-season flow magnitude (constant 1000 here) is reported as mean + median.
+    assert abs(ros["y_mean"] - 1000.0) < 1e-9
+    assert abs(ros["y_median"] - 1000.0) < 1e-9
+    for name, months in gpl.SEASONS:
+        if set(months) != {3, 4}:
+            assert abs(rows[name]["mean_residual"]) < 1e-9
+
+
 def test_predict_returns_three_uncertainties():
     gpl = _load_script()
     pred, targ = _toy_series()

@@ -26,11 +26,11 @@ All series are USGS daily-mean flow (`parameterCd=00060`, `statCd=00003`).
 | Gauge | Period of record | Daily means |
 |---|---|---|
 | `14159000` (target) | 1910-08-01 → **1994-09-29** | 30741 |
-| `14162500` (predictor) | 1910-07-01 → 2026-05-21 | 37427 |
-| `14158850` (predictor) | 1959-10-01 → 2026-05-21 | 24340 |
-| `14159500` (predictor) | 1947-10-01 → 2026-05-21 | 28723 |
-| `14159200` (predictor) | 1957-10-01 → 2026-05-21 | 20320 |
-| `14161500` (predictor) | 1949-10-01 → 2026-05-21 | 25099 |
+| `14162500` (predictor) | 1910-07-01 → 2026-06-01 | 37438 |
+| `14158850` (predictor) | 1959-10-01 → 2026-06-01 | 24351 |
+| `14159500` (predictor) | 1947-10-01 → 2026-06-01 | 28734 |
+| `14159200` (predictor) | 1957-10-01 → 2026-06-01 | 20331 |
+| `14161500` (predictor) | 1949-10-01 → 2026-06-01 | 25110 |
 | **Overlap (full)** | 1963-09-01 → 1987-09-29 | **8795** |
 
 Note: USGS records can be **non-contiguous** (instrumentation outages).
@@ -126,6 +126,19 @@ Re-fit at multiple start dates (endpoint fixed at `1994-09-29`):
 | Q4 | 4380 | -11.5 | 87.1 | 1387 |
 | Q5 | 7430 | -3.9 | 167.3 | 1390 |
 
+### By hydrologic season
+
+Residuals bucketed by monsoonal season (most kayak gauges sit in a PNW monsoonal regime). **Mean / median flow** give each season's target-flow magnitude. **Bias** is the mean residual (y - y_hat); a non-zero bias means the pooled fit systematically over- (negative) or under-predicts (positive) in that season. **% of flow** normalizes the bias by the season's mean flow so it's comparable across gauges. The remaining columns (median residual, std, RMSE) are residual statistics in cfs.
+
+| Season | n | mean flow | median flow | bias (cfs) | % of flow | median resid | std | RMSE |
+|---|---|---|---|---|---|---|---|---|
+| Heavy rain (Nov-Dec) | 1159 | 1987 | 1710 | -22.8 | -1.1% | -21.3 | 115.3 | 117.5 |
+| Light rain (Jan-Feb) | 1125 | 2222 | 2000 | +15.7 | +0.7% | +12.3 | 146.6 | 147.4 |
+| Rain-on-snow (Mar-Apr) | 1159 | 1994 | 1870 | -5.3 | -0.3% | -0.0 | 72.4 | 72.6 |
+| Dry season (May-Oct) | 3495 | 1490 | 1330 | +4.3 | +0.3% | +11.4 | 67.4 | 67.6 |
+
+A season whose bias is large relative to `sigma_hat` (the pooled 1-sigma residual scatter) is a candidate for a season-specific intercept or a separate seasonal fit; a season with elevated `std`/`RMSE` but near-zero bias is just noisier (e.g., flashy storm response), not mis-calibrated.
+
 ## Predictions at example x values
 
 For each row, `y_hat` is the fitted value and the two CIs are 95% two-sided bands. The **mean-response CI** is the uncertainty in `E[y | x]` (use for plotting the fit line's confidence band). The **prediction CI** is for a *single new observation* — bounded below by `sigma_hat` regardless of how precisely the parameters are estimated.
@@ -171,3 +184,4 @@ WHERE NOT EXISTS (
 
 - **Piecewise-linear fit by predictor-1 quintile.** If the residual table above shows systematic mean drift across quintiles (e.g., consistently under-estimating at low flow and over-estimating at high flow), splitting the predictor range into 2-3 regimes and fitting one linear model per regime can halve RMSE without adding free parameters beyond what `calc_expression` already supports via `greatest(low_estimate, high_estimate)` or `if(x < threshold, ..., ...)`-style composition. Worth trying when RMSE > ~10% of the mean target value.
 - **Re-running** when the active predictor's rating curve drifts. USGS occasionally updates stage-discharge ratings; the `Reproduce` snippet above re-pulls the full period of record on demand.
+- **Sub-daily lead/lag.** This fit is on daily means, but the `calc_expression` applies its coefficients to the *latest instantaneous* predictor readings — so inter-gauge travel time (1-12 h) becomes a timing error the daily fit never sees. `gauge_lead_lag.py` (same directory) quantifies that error from USGS unit values; worth a look when predictors are many river-miles from the target.
