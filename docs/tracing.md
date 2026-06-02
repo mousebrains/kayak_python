@@ -59,17 +59,42 @@ BFS fails because it has connectivity gaps. The `NHDPlusFlowlineVAA` table's
 
 ### NHD vs OSM
 
-We compared NHD and OSM traces on two test reaches:
+NHD is DEM/lidar-derived with broad, dense coverage for rural PNW streams, so it's
+the default trace and the reliable floor. But it has one systematic failure mode:
+wide/braided/regulated rivers are mapped as **`FType=558` ArtificialPath** centerlines
+through NHD's river-polygons, and at islands/braids that centerline takes a different
+channel than the one you paddle — off up to ~290 m on the McKenzie (Paradise→Finn
+Rock). The trace isn't mis-walking the network (every segment is the main-stem
+`DnHydroSeq`, `Divergence` 0/1); the *geometry itself* is wrong there.
 
-- **Battle Creek, ID (60 mi):** NHD has no OSM coverage at all in this area.
-  NHD trace: 60.7 mi (4,443 pts). AW reference: 60.5 mi.
-- **Grande Ronde, OR (59 mi):** NHD is 3.4× denser than OSM (22.7 vs 6.6 pts/km).
-  OSM has large gaps in the rural middle section. NHD wins on both coverage and density.
+**OSM's named `waterway` channel matches the paddled line** at exactly those spots —
+~5–8 m vs a hand-surveyed KML on the McKenzie, and a median ~8 m agreement with the
+NHD trace across 344 reaches (91 % within 30 m). So the `--osm` mode
+(`kayak.tracing.osm`) walks a put-in→take-out shortest path over the OSM waterway
+graph and uses it **when it passes a gate against NHD**, else falls back to NHD:
 
-NHD is DEM/lidar-derived and has better coverage and resolution than OSM for rural
-streams in the Pacific Northwest. NHD may still miss tight meanders due to DEM
-resolution limits. OSM PBF files are retained in `Trace-cache/OSM/` in case they
-prove useful for urban/suburban streams where OSM contributors have traced detail.
+- **Noded graph.** The linework is split at every intersection (`unary_union`) before
+  the walk, so a tributary joining the main channel *mid-way* connects. Without this,
+  ~84 % of OSM "no path" failures occur (endpoint-only graphs miss mid-way junctions).
+- **Gate + fallback.** OSM is kept only if its length is within 0.7–1.4× the NHD
+  trace **and** its **symmetric (Hausdorff)** deviation from NHD ≤ 500 m — close in
+  *both* directions. The two-directional check matters: "every OSM vertex is near the
+  NHD line" alone passes a *partial* OSM trace that skipped a section (its points
+  still lie on the long NHD line), so the reverse direction (NHD→OSM) is required.
+  This rejects wrong-fork, partial, and coverage-gap OSM results (e.g. a Grande Ronde
+  trace covering only 78% of the reach, or a CF Willamette one up a tributary).
+  Otherwise the NHD trace is used. **So `--osm` is never worse than NHD.**
+- **Coverage.** Of 421 reaches (OR/WA/ID/CA/NV), OSM traced ~98 % once noded; the
+  residual ~2 % are genuine OSM gaps (remote wilderness/desert — Owyhee, Salmon ID),
+  which fall back to NHD. The earlier Battle Creek / Grande Ronde comparisons are
+  examples of such gaps.
+
+Usage: `levels trace --putin LAT,LON --takeout LAT,LON --name "<river>" --osm`
+(reads `Trace-cache/OSM/named_waterways.gpkg`, built by
+`scripts/extract_osm_waterways.sh` from the per-state PBFs in `Trace-cache/OSM/`).
+The `--name` is matched leniently against OSM's river name to prefer the main channel
+at confluences. The KML/waypoint splice (`docs/one-offs/splice_mckenzie_kml.py`)
+remains the manual last resort for the rare spot OSM also gets wrong.
 
 ## Algorithm
 

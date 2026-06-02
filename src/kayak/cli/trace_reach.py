@@ -33,6 +33,17 @@ def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> 
     parser.add_argument(
         "--csv-only", action="store_true", help="Output CSV only, skip map generation"
     )
+    parser.add_argument(
+        "--osm",
+        action="store_true",
+        help="Prefer the OSM main-channel trace (better at braids/islands), falling "
+        "back to the NHD trace via a gate. See kayak.tracing.osm.",
+    )
+    parser.add_argument(
+        "--osm-source",
+        default="Trace-cache/OSM/named_waterways.gpkg",
+        help="OSM waterway GPKG (built by scripts/extract_osm_waterways.sh)",
+    )
 
 
 def trace(args: argparse.Namespace) -> None:
@@ -50,8 +61,10 @@ def trace(args: argparse.Namespace) -> None:
         )
         sys.exit(2)
 
-    putin = tuple(float(x) for x in args.putin.split(","))
-    takeout = tuple(float(x) for x in args.takeout.split(","))
+    _pi = [float(x) for x in args.putin.split(",")]
+    _to = [float(x) for x in args.takeout.split(",")]
+    putin: tuple[float, float] = (_pi[0], _pi[1])
+    takeout: tuple[float, float] = (_to[0], _to[1])
 
     if args.output:
         base = args.output
@@ -60,7 +73,23 @@ def trace(args: argparse.Namespace) -> None:
     else:
         base = "trace"
 
-    coords = impl.trace_reach(putin, takeout, huc4=args.huc4, verbose=True)
+    if args.osm:
+        from kayak.tracing import osm as osm_impl
+
+        coords, source = osm_impl.trace_reach(
+            putin,
+            takeout,
+            river=args.name,
+            osm_source=args.osm_source,
+            huc4=args.huc4,
+            verbose=True,
+        )
+        if not coords:
+            print("error: no trace produced (OSM and NHD both unavailable)", file=sys.stderr)
+            sys.exit(2)
+        print(f"Geometry source: {source}")
+    else:
+        coords = impl.trace_reach(putin, takeout, huc4=args.huc4, verbose=True)
     miles = impl.total_distance(coords)
 
     csv_file = f"{base}.csv"
