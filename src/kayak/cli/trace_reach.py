@@ -63,6 +63,9 @@ def trace(args: argparse.Namespace) -> None:
 
     _pi = [float(x) for x in args.putin.split(",")]
     _to = [float(x) for x in args.takeout.split(",")]
+    if len(_pi) != 2 or len(_to) != 2:
+        print("error: --putin and --takeout must each be LAT,LON", file=sys.stderr)
+        sys.exit(2)
     putin: tuple[float, float] = (_pi[0], _pi[1])
     takeout: tuple[float, float] = (_to[0], _to[1])
 
