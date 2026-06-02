@@ -36,6 +36,17 @@ def test_gate_rejects_large_lateral_offset():
     assert not osm.gate_ok(osm_far, nhd)
 
 
+def test_bbox_pad_grows_with_endpoint_separation():
+    """The read window pads by a floor for short reaches but scales up with the
+    endpoint separation so a long, laterally-bowing reach isn't clipped."""
+    # short reach: pad stays at the 0.05 floor.  bbox = (minlon, minlat, maxlon, maxlat)
+    b = osm._bbox((44.0, -122.00), (44.0, -122.01))
+    assert b[2] - (-122.0) == pytest.approx(0.05) and -122.01 - b[0] == pytest.approx(0.05)
+    # long reach (0.5 deg lon span): pad grows to 0.25 * 0.5 = 0.125
+    b = osm._bbox((44.0, -122.0), (44.0, -122.5))
+    assert b[2] - (-122.0) == pytest.approx(0.125)
+
+
 def test_gate_rejects_length_mismatch():
     nhd = [(44.0, -122.0), (44.0, -122.05)]  # ~4 km
     osm_short = [(44.0, -122.0), (44.0, -122.005)]  # ~10% of it

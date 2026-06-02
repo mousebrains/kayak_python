@@ -193,7 +193,9 @@ def _walk(
     segs: list[Way], pp: Any, tp: Any, pool: list[int], river: str | None
 ) -> list[Coord] | None:
     """Snap put-in/take-out (shapely Points ``pp``/``tp``) to the nearest segment in
-    ``pool``, then shortest-path over the noded graph. Returns (lon, lat) coords or
+    ``pool``, then shortest-path over the noded graph. ``pool`` only restricts which
+    segments the endpoints *snap* to; the traversable graph is built over **all**
+    ``segs`` (connectivity must not depend on the pool). Returns (lon, lat) coords or
     None (no connected path, or a degenerate clip)."""
     from shapely.ops import substring
 
@@ -313,6 +315,12 @@ def gate_ok(osm_coords: Sequence[Coord], nhd_coords: Sequence[Coord]) -> bool:
 
 
 def _bbox(putin: Coord, takeout: Coord, pad: float = 0.05) -> tuple[float, float, float, float]:
+    """Lon/lat bbox around the endpoints. ``pad`` is a floor; it grows with the
+    endpoint separation so a reach that bows laterally well outside the put-in/
+    take-out box (a horseshoe/oxbow) still has its channel inside the read window
+    rather than clipped (which would silently no-path OSM → NHD fallback)."""
+    sep = max(abs(putin[0] - takeout[0]), abs(putin[1] - takeout[1]))
+    pad = max(pad, 0.25 * sep)
     return (
         min(putin[1], takeout[1]) - pad, min(putin[0], takeout[0]) - pad,
         max(putin[1], takeout[1]) + pad, max(putin[0], takeout[0]) + pad,
@@ -330,7 +338,9 @@ def trace_reach(
     """Trace a reach, preferring OSM but falling back to NHD via the gate.
 
     Returns ``(coords, source)`` where ``coords`` is [(lat, lon), ...] and
-    ``source`` is ``"osm"`` or ``"nhd"``. ``putin``/``takeout`` are (lat, lon)."""
+    ``source`` is ``"osm"`` (gated against NHD), ``"osm (ungated)"`` (NHD was
+    unavailable, so OSM couldn't be cross-checked — eyeball it), or ``"nhd"``.
+    ``putin``/``takeout`` are (lat, lon)."""
     from . import trace as nhd
 
     log: Callable[..., None] = print if verbose else (lambda *a, **k: None)
@@ -350,8 +360,8 @@ def trace_reach(
 
     if osm_coords:
         if nhd_coords is None:
-            log("using OSM (NHD unavailable)")
-            return osm_coords, "osm"
+            log("WARNING: NHD trace unavailable -- using UNGATED OSM (no cross-check; verify it)")
+            return osm_coords, "osm (ungated)"
         if gate_ok(osm_coords, nhd_coords):
             log("using OSM (passed gate vs NHD)")
             return osm_coords, "osm"
