@@ -315,16 +315,25 @@ def gate_ok(osm_coords: Sequence[Coord], nhd_coords: Sequence[Coord]) -> bool:
 
 
 def _bbox(putin: Coord, takeout: Coord, pad: float = 0.05) -> tuple[float, float, float, float]:
-    """Lon/lat bbox around the endpoints. ``pad`` is a floor; it grows with the
-    endpoint separation so a reach that bows laterally well outside the put-in/
-    take-out box (a horseshoe/oxbow) still has its channel inside the read window
-    rather than clipped (which would silently no-path OSM → NHD fallback)."""
+    """Lon/lat bbox around the endpoints (the OSM read-window *fallback*, used only
+    when there's no NHD trace to bound by). ``pad`` is a floor that grows with the
+    endpoint separation so a long reach bowing outside the put-in/take-out box
+    still has its channel inside the window. (When the NHD trace exists,
+    :func:`_coords_bbox` of it is used instead -- robust to *any* shape, incl. a
+    tight oxbow whose endpoints are close, which this endpoint box can't cover.)"""
     sep = max(abs(putin[0] - takeout[0]), abs(putin[1] - takeout[1]))
     pad = max(pad, 0.25 * sep)
     return (
         min(putin[1], takeout[1]) - pad, min(putin[0], takeout[0]) - pad,
         max(putin[1], takeout[1]) + pad, max(putin[0], takeout[0]) + pad,
     )  # fmt: skip
+
+
+def _coords_bbox(coords: Sequence[Coord], pad: float) -> tuple[float, float, float, float]:
+    """Lon/lat bbox enclosing a (lat, lon) polyline, padded by ``pad`` degrees."""
+    lats = [c[0] for c in coords]
+    lons = [c[1] for c in coords]
+    return (min(lons) - pad, min(lats) - pad, max(lons) + pad, max(lats) + pad)
 
 
 def trace_reach(
@@ -353,7 +362,12 @@ def trace_reach(
 
     osm_coords: list[Coord] | None = None
     try:
-        ways = read_waterways(osm_source, _bbox(putin, takeout))
+        # Read OSM within the NHD trace's bbox when we have one: it bounds the
+        # actual channel for *any* reach shape (incl. a tight oxbow whose endpoints
+        # are close), so the OSM main channel can't be clipped out of the window.
+        # Fall back to the endpoint bbox only when there's no NHD trace.
+        window = _coords_bbox(nhd_coords, 0.02) if nhd_coords else _bbox(putin, takeout)
+        ways = read_waterways(osm_source, window)
         osm_coords = osm_trace_reach(putin, takeout, ways, river)
     except Exception as exc:  # OSM is best-effort; NHD is the floor
         log(f"OSM trace unavailable: {exc}")

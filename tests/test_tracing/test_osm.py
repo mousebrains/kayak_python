@@ -47,6 +47,16 @@ def test_bbox_pad_grows_with_endpoint_separation():
     assert b[2] - (-122.0) == pytest.approx(0.125)
 
 
+def test_coords_bbox_encloses_lateral_bow():
+    """The NHD-trace read window encloses a channel that bows far from the
+    (close) endpoints — the tight-oxbow case the endpoint bbox can't cover."""
+    # endpoints at lat 44.0 but the trace bows north to 44.2
+    nhd = [(44.0, -122.00), (44.2, -122.01), (44.0, -122.02)]  # (lat, lon)
+    b = osm._coords_bbox(nhd, 0.02)  # (minlon, minlat, maxlon, maxlat)
+    assert b[3] == pytest.approx(44.2 + 0.02)  # the bow is inside, not clipped
+    assert b[1] == pytest.approx(44.0 - 0.02)
+
+
 def test_gate_rejects_length_mismatch():
     nhd = [(44.0, -122.0), (44.0, -122.05)]  # ~4 km
     osm_short = [(44.0, -122.0), (44.0, -122.005)]  # ~10% of it
