@@ -62,7 +62,12 @@ timing structure from USGS unit values — resampled to a **30-min** grid,
 lags from a first-difference cross-correlation, gain tested with a
 **block-bootstrap CI** (residuals are ~0.97 autocorrelated, so the nominal n
 hugely overstates the evidence). It is **diagnostic only** (changes no deployed
-calc) and writes a `<slug>_leadlag.md` sibling.
+calc) and writes a `<slug>_leadlag.md` sibling plus a `<slug>_leadlag.json`
+summary. Regenerating the daily report with
+`gauge_pair_linear.py --leadlag <slug>` embeds that summary as a
+**Sub-daily lead/lag** section (the lags + full/deployable gain + verdict, with
+a link to the full companion), so the regression analysis is self-contained on
+timing.
 
 The key distinction it reports is **full vs deployable** alignment: *full* shifts
 every predictor to its best lag (including *downstream* gauges to a *future*

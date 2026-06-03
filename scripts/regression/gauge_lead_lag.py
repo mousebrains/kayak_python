@@ -47,6 +47,7 @@ Standalone — numpy + curl + Python stdlib, no kayak imports (same contract as
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import subprocess
 import sys
@@ -440,6 +441,27 @@ def _excludes_zero(ci: dict) -> bool:
     return bool(ci["lo"] > 0 or ci["hi"] < 0)
 
 
+# Verdict categories, shared by the rendered prose and the JSON summary that
+# gauge_pair_linear.py embeds into the daily report.
+VERDICT_LABEL = {
+    "no_lag": "no resolvable sub-daily lag",
+    "usable": "deployable sub-daily gain exists",
+    "look_ahead": "real signal, but downstream look-ahead only (deployable gain nil)",
+    "unresolved": "negligible / statistically unresolved",
+    "stage_only": "lags only (RMSE comparison needs flow)",
+}
+
+
+def classify_verdict(any_lag: bool, deploy_sig: bool, deploy_gain: float, full_sig: bool) -> str:
+    if not any_lag:
+        return "no_lag"
+    if deploy_sig and deploy_gain >= 2.0:
+        return "usable"
+    if full_sig and not deploy_sig:
+        return "look_ahead"
+    return "unresolved"
+
+
 def render_markdown(
     *,
     name: str,
@@ -616,8 +638,9 @@ def render_markdown(
     full_sig = _excludes_zero(bf)
     any_lag = any(r.applied_lag_steps != 0 for r in lag_results)
     any_upstream = any(r.deployable for r in lag_results)
+    key = classify_verdict(any_lag, deploy_sig, deploy_gain, full_sig)
     a("## Verdict\n")
-    if not any_lag:
+    if key == "no_lag":
         a(
             f"**No resolvable sub-daily lag.** Every predictor is co-located within the "
             f"{step_min}-min grid or below the identifiability floor "
@@ -625,14 +648,14 @@ def render_markdown(
             "deployable alignment are both identical to contemporaneous. **Keep "
             "contemporaneous readings.**\n"
         )
-    elif deploy_sig and deploy_gain >= 2.0:
+    elif key == "usable":
         a(
             f"**A usable sub-daily gain exists here.** The deployable (causal, upstream) "
             f"alignment lowers RMSE by **{deploy_gain:+.1f}%** with a 95% CI that excludes "
             f"zero ([{bd['lo']:+.2f}, {bd['hi']:+.2f}] cfs) — worth considering for a "
             "real-time estimate (see deployability below).\n"
         )
-    elif full_sig and not deploy_sig:
+    elif key == "look_ahead":
         deploy_clause = (
             "Here there are **no upstream predictors** at all, so the deployable "
             "alignment is simply contemporaneous — nothing is usable in real time."
@@ -875,6 +898,55 @@ def main() -> int:
             "lag_rmse": s_lag,
         }
 
+    # Compact summary for gauge_pair_linear.py to embed into the daily report.
+    summary: dict = {
+        "slug": args.name,
+        "target": args.target,
+        "daily_doc": args.daily_doc,
+        "grid_minutes": args.grid_minutes,
+        "window": [args.start, args.end],
+        "n_points": len(points),
+        "rmse_valid": rmse_valid,
+        "lags": [
+            {
+                "site": r.site,
+                "label": LABELS.get(r.site, r.site),
+                "applied_lag_h": round(r.applied_lag_h, 2),
+                "corr": round(r.best_corr, 3) if math.isfinite(r.best_corr) else None,
+                "identifiable": r.identifiable,
+                "deployable": r.deployable,
+                "note": r.travel_note,
+            }
+            for r in lag_results
+        ],
+    }
+    if rmse_valid:
+        con_rmse = next(r["rmse"] for r in rows if r["align_key"] == "con")
+        full_rmse = next(
+            r["rmse"] for r in rows if r["align_key"] == "full" and r["coefs"] == "daily-trained"
+        )
+        deploy_rmse = next(r["rmse"] for r in rows if r["align_key"] == "deploy")
+        full_gain = _pct(con_rmse, full_rmse)
+        deploy_gain = _pct(con_rmse, deploy_rmse)
+        any_lag = any(r.applied_lag_steps != 0 for r in lag_results)
+        vkey = classify_verdict(
+            any_lag, _excludes_zero(boot["deploy"]), deploy_gain, _excludes_zero(boot["full"])
+        )
+        summary["full"] = {
+            "gain_pct": round(full_gain, 2),
+            "ci": [round(boot["full"]["lo"], 2), round(boot["full"]["hi"], 2)],
+            "resolved": _excludes_zero(boot["full"]),
+        }
+        summary["deploy"] = {
+            "gain_pct": round(deploy_gain, 2),
+            "ci": [round(boot["deploy"]["lo"], 2), round(boot["deploy"]["hi"], 2)],
+            "resolved": _excludes_zero(boot["deploy"]),
+        }
+        summary["verdict"] = vkey
+    else:
+        summary["verdict"] = "stage_only"
+    summary["verdict_label"] = VERDICT_LABEL[summary["verdict"]]
+
     md = render_markdown(
         name=args.name,
         daily_doc=args.daily_doc,
@@ -901,7 +973,8 @@ def main() -> int:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(md)
         args.out.with_suffix(".svg").write_text(_render_ccf_svg(lag_results))
-        print(f"Wrote {args.out} and {args.out.with_suffix('.svg')}", file=sys.stderr)
+        args.out.with_suffix(".json").write_text(json.dumps(summary, indent=2) + "\n")
+        print(f"Wrote {args.out} (+ .svg, .json)", file=sys.stderr)
     else:
         print(md)
     return 0

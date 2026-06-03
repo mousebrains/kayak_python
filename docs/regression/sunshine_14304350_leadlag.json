@@ -1,0 +1,41 @@
+{
+  "slug": "sunshine_14304350_leadlag",
+  "target": "14304350",
+  "daily_doc": "sunshine_14304350_from_14305500",
+  "grid_minutes": 30,
+  "window": [
+    "1986-10-01",
+    "1991-09-30"
+  ],
+  "n_points": 19519,
+  "rmse_valid": true,
+  "lags": [
+    {
+      "site": "14305500",
+      "label": "14305500",
+      "applied_lag_h": -3.0,
+      "corr": 0.851,
+      "identifiable": true,
+      "deployable": false,
+      "note": "downstream \u2014 target leads it by ~3.0 h (future read, not deployable)"
+    }
+  ],
+  "full": {
+    "gain_pct": 10.72,
+    "ci": [
+      2.11,
+      7.18
+    ],
+    "resolved": true
+  },
+  "deploy": {
+    "gain_pct": 0.0,
+    "ci": [
+      0.0,
+      0.0
+    ],
+    "resolved": false
+  },
+  "verdict": "look_ahead",
+  "verdict_label": "real signal, but downstream look-ahead only (deployable gain nil)"
+}

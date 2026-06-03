@@ -1,0 +1,41 @@
+{
+  "slug": "rogue_14328000_leadlag",
+  "target": "14328000",
+  "daily_doc": "rogue_14328000_from_14330000",
+  "grid_minutes": 30,
+  "window": [
+    "2014-10-01",
+    "2024-06-09"
+  ],
+  "n_points": 167823,
+  "rmse_valid": true,
+  "lags": [
+    {
+      "site": "14330000",
+      "label": "14330000",
+      "applied_lag_h": -0.5,
+      "corr": 0.218,
+      "identifiable": true,
+      "deployable": false,
+      "note": "downstream \u2014 target leads it by ~0.5 h (future read, not deployable)"
+    }
+  ],
+  "full": {
+    "gain_pct": 0.31,
+    "ci": [
+      0.24,
+      0.56
+    ],
+    "resolved": true
+  },
+  "deploy": {
+    "gain_pct": 0.0,
+    "ci": [
+      0.0,
+      0.0
+    ],
+    "resolved": false
+  },
+  "verdict": "look_ahead",
+  "verdict_label": "real signal, but downstream look-ahead only (deployable gain nil)"
+}

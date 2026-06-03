@@ -1,0 +1,50 @@
+{
+  "slug": "horse_14159100_leadlag",
+  "target": "14159100",
+  "daily_doc": "horse_14159100_from_sfcougar_trailbridge",
+  "grid_minutes": 30,
+  "window": [
+    "2023-08-24",
+    "2026-04-02"
+  ],
+  "n_points": 45302,
+  "rmse_valid": true,
+  "lags": [
+    {
+      "site": "14159200",
+      "label": "14159200",
+      "applied_lag_h": 0.0,
+      "corr": 0.395,
+      "identifiable": true,
+      "deployable": false,
+      "note": "co-located / sub-grid travel"
+    },
+    {
+      "site": "14158850",
+      "label": "McKenzie at Trail Bridge Dam (upstream, dominant)",
+      "applied_lag_h": 0.0,
+      "corr": 0.14,
+      "identifiable": false,
+      "deployable": false,
+      "note": "not identifiable (peak \u0394-corr 0.14); held contemporaneous"
+    }
+  ],
+  "full": {
+    "gain_pct": 0.0,
+    "ci": [
+      0.0,
+      0.0
+    ],
+    "resolved": false
+  },
+  "deploy": {
+    "gain_pct": 0.0,
+    "ci": [
+      0.0,
+      0.0
+    ],
+    "resolved": false
+  },
+  "verdict": "no_lag",
+  "verdict_label": "no resolvable sub-daily lag"
+}

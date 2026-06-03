@@ -255,3 +255,92 @@ def test_predict_returns_three_uncertainties():
     assert abs(y_hat - 610.0) < 5.0
     # Prediction SE is strictly larger than mean-response SE.
     assert se_pred > se_mean > 0.0
+
+
+def test_load_leadlag(tmp_path: Path):
+    import json
+
+    gpl = _load_script()
+    out = tmp_path / "daily.md"
+    (tmp_path / "slug.json").write_text(json.dumps({"slug": "slug", "x": 1}))
+    assert gpl._load_leadlag("slug", out) == {"slug": "slug", "x": 1}
+    assert gpl._load_leadlag("missing", out) is None  # absent file
+    assert gpl._load_leadlag(None, out) is None  # no slug
+    assert gpl._load_leadlag("slug", None) is None  # no --out
+
+
+def test_render_leadlag_section():
+    gpl = _load_script()
+    ll = {
+        "slug": "x_leadlag",
+        "grid_minutes": 30,
+        "n_points": 1000,
+        "rmse_valid": True,
+        "verdict": "look_ahead",
+        "verdict_label": "real signal, but downstream look-ahead only (deployable gain nil)",
+        "lags": [
+            {
+                "site": "111",
+                "label": "Up",
+                "applied_lag_h": 1.5,
+                "corr": 0.56,
+                "identifiable": True,
+                "deployable": True,
+                "note": "",
+            },
+            {
+                "site": "222",
+                "label": "Down",
+                "applied_lag_h": -2.5,
+                "corr": 0.34,
+                "identifiable": True,
+                "deployable": False,
+                "note": "",
+            },
+            {
+                "site": "333",
+                "label": "Noise",
+                "applied_lag_h": 0.0,
+                "corr": 0.04,
+                "identifiable": False,
+                "deployable": False,
+                "note": "",
+            },
+        ],
+        "full": {"gain_pct": 2.2, "ci": [0.46, 3.23], "resolved": True},
+        "deploy": {"gain_pct": 0.1, "ci": [-3.19, 2.51], "resolved": False},
+    }
+    md = "\n".join(gpl._render_leadlag_section(ll))
+    assert "## Sub-daily lead/lag" in md
+    assert "[`x_leadlag.md`](./x_leadlag.md)" in md  # link to companion
+    assert "+1.5" in md and "-2.5" in md  # lag values present
+    assert "upstream — deployable" in md and "downstream — look-ahead" in md
+    assert "held (not identifiable)" in md
+    assert "CI through 0" in md  # deployable not resolved
+    assert "look-ahead only" in md  # verdict label embedded
+
+
+def test_render_leadlag_section_stage_only():
+    gpl = _load_script()
+    ll = {
+        "slug": "y_leadlag",
+        "grid_minutes": 30,
+        "n_points": 500,
+        "rmse_valid": False,
+        "verdict": "stage_only",
+        "verdict_label": "lags only (RMSE comparison needs flow)",
+        "lags": [
+            {
+                "site": "1",
+                "label": "A",
+                "applied_lag_h": 1.0,
+                "corr": 0.5,
+                "identifiable": True,
+                "deployable": True,
+                "note": "",
+            }
+        ],
+    }
+    md = "\n".join(gpl._render_leadlag_section(ll))
+    assert "RMSE comparison was omitted" in md
+    assert "## Sub-daily lead/lag" in md

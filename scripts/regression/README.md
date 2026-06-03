@@ -144,9 +144,14 @@ hold-out grid:
 The RMSE difference for each is wrapped in a **block-bootstrap CI** (7-day
 blocks) — grid residuals are ~0.97 autocorrelated, so the bare difference is far
 less precise than its decimals suggest. **Diagnostic only**; writes `<name>.md`
-+ a CCF-vs-lag `.svg`. Across every kayak calc reach analysed the *deployable*
-gain is nil (the active predictors are downstream), so the verdict is always
-"keep contemporaneous readings".
++ a CCF-vs-lag `.svg` + a `<name>.json` summary. Across every kayak calc reach
+analysed the *deployable* gain is nil (the active predictors are downstream), so
+the verdict is always "keep contemporaneous readings".
+
+**Embedding into the daily report:** run `gauge_lead_lag.py` first (it writes the
+JSON), then regenerate the daily report with `gauge_pair_linear.py --leadlag
+<slug>` to pull the lags + verdict into a *Sub-daily lead/lag* section. Order
+matters — the JSON must exist before the daily regen.
 
 Notes:
 - **Resolution** is capped by the *coarser* series — a 30-min target can't be

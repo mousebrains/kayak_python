@@ -117,6 +117,16 @@ Residuals bucketed by monsoonal season (most kayak gauges sit in a PNW monsoonal
 
 A season whose bias is large relative to `sigma_hat` (the pooled 1-sigma residual scatter) is a candidate for a season-specific intercept or a separate seasonal fit; a season with elevated `std`/`RMSE` but near-zero bias is just noisier (e.g., flashy storm response), not mis-calibrated.
 
+## Sub-daily lead/lag
+
+Inter-gauge travel-time structure from USGS unit values (30-min grid, 90,987 points); full analysis in [`salmon_14146500_leadlag.md`](./salmon_14146500_leadlag.md). The daily coefficients above are applied in production to *instantaneous* readings, so these lags are the timing error a correction would address. **+τ** = upstream (a past read, deployable in real time); **-τ** = downstream (a future read — non-causal look-ahead).
+
+| Predictor | applied τ (h) | Δ-corr | direction |
+|---|---|---|---|
+| 14147500 `14147500` | -0.5 | 0.570 | downstream — look-ahead |
+
+**Full** alignment (incl. downstream → future): +0.5% RMSE, 95% CI [-0.01, +0.76] cfs (CI through 0). **Deployable** (causal, upstream-only): +0.0%, [+0.00, +0.00] cfs (CI through 0). **Verdict: negligible / statistically unresolved** — keep using contemporaneous readings.
+
 ## Predictions at example x values
 
 For each row, `y_hat` is the fitted value and the two CIs are 95% two-sided bands. The **mean-response CI** is the uncertainty in `E[y | x]` (use for plotting the fit line's confidence band). The **prediction CI** is for a *single new observation* — bounded below by `sigma_hat` regardless of how precisely the parameters are estimated.
@@ -170,4 +180,3 @@ WHERE NOT EXISTS (
 
 - **Piecewise-linear fit by predictor-1 quintile.** If the residual table above shows systematic mean drift across quintiles (e.g., consistently under-estimating at low flow and over-estimating at high flow), splitting the predictor range into 2-3 regimes and fitting one linear model per regime can halve RMSE without adding free parameters beyond what `calc_expression` already supports via `greatest(low_estimate, high_estimate)` or `if(x < threshold, ..., ...)`-style composition. Worth trying when RMSE > ~10% of the mean target value.
 - **Re-running** when the active predictor's rating curve drifts. USGS occasionally updates stage-discharge ratings; the `Reproduce` snippet above re-pulls the full period of record on demand.
-- **Sub-daily lead/lag.** This fit is on daily means, but the `calc_expression` applies its coefficients to the *latest instantaneous* predictor readings — so inter-gauge travel time (1-12 h) becomes a timing error the daily fit never sees. `gauge_lead_lag.py` (same directory) quantifies that error from USGS unit values; worth a look when predictors are many river-miles from the target.
