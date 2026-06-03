@@ -7,9 +7,13 @@ declare(strict_types=1);
  * When disabled, turnstile_verify() returns true — useful for dev and for
  * pre-rollout before keys are obtained.
  *
- * Both keys resolve via Config (JSON snapshot + getenv-uppercase fallback
- * baked into Config::str). The secret is stored plaintext in the JSON
- * because /etc/kayak/runtime-config.json is mode 0640 root:www-data —
+ * Both keys resolve via Config — the JSON snapshot ONLY (T3.3 Phase 4
+ * removed the getenv fallback; the FPM-pool env[TURNSTILE_*] re-export
+ * is unread legacy). In production they reach the JSON via the install
+ * wrapper's /etc/kayak/secrets.env merge (the unprivileged emit-config
+ * render can't read that root-only file — gpt-5.5 take-2, 2026-06-03).
+ * The secret is stored plaintext in the JSON because
+ * /etc/kayak/runtime-config.json is mode 0640 root:www-data —
  * readable only by root and php-fpm.
  */
 

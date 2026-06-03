@@ -459,6 +459,13 @@ Manual refresh uses the same pipeline:
     | sudo -n /usr/local/sbin/kayak-install-runtime-config
 ```
 
+The wrapper also **merges `/etc/kayak/secrets.env`** (root-only —
+`TURNSTILE_*`) into the JSON: the pat-side render can't read that file,
+so without the merge the keys silently vanish from the snapshot and
+captcha turns off (fired in prod; gpt-5.5 take-2 2026-06-03). Rendered
+(operator-env) values win over secrets.env, mirroring `config.py`'s
+`override=False` precedence.
+
 PHP picks up the new JSON on the next request (per-request `Config`
 singleton; no FPM reload needed).
 

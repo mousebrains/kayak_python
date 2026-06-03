@@ -202,8 +202,10 @@ fi
 #
 # Writes the typed-config JSON snapshot consumed by PHP. emit-config renders
 # the JSON UNPRIVILEGED (as pat, to stdout via --dry-run); the root-owned
-# /usr/local/sbin/kayak-install-runtime-config wrapper validates + atomically
-# installs it (0640 root:www-data). The sudoers grant runs only that fixed
+# /usr/local/sbin/kayak-install-runtime-config wrapper validates it, merges
+# /etc/kayak/secrets.env (root-only TURNSTILE_* — the pat render can't read
+# it; gpt-5.5 take-2 2026-06-03), and atomically installs it (0640
+# root:www-data). The sudoers grant runs only that fixed
 # wrapper, never the pat-writable venv binary (review-3 R1.5). Requires the
 # deploy/sudoers.d/kayak-emit-config grant + the wrapper installed (one-time
 # operator setup; see deploy/SETUP.md). No php-fpm reload needed — PHP re-reads

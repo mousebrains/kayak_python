@@ -55,14 +55,19 @@ load_dotenv(_config_env_path())
 
 # /etc/kayak/secrets.env (mode 0600 root:www-data) carries production
 # secrets — TURNSTILE_SITE_KEY, TURNSTILE_SECRET — that are
-# intentionally NOT in the operator's ~/.config/kayak/.env. The
-# FPM-pool channel injects them into PHP workers, but `levels
-# emit-config` running as root via sudo also needs to see them so
-# they land in /etc/kayak/runtime-config.json — otherwise PHP's
-# Config::str('turnstile_secret') returns empty and turnstile.php's
-# `turnstile_enabled()` false-paths to `turnstile_verify() === true`,
-# silently bypassing captcha. `override=False` keeps the operator's
-# .env (and the OS env, which tests use) winning over secrets.env.
+# intentionally NOT in the operator's ~/.config/kayak/.env. pat can't
+# read it, so the unprivileged `levels emit-config --dry-run` render
+# (scripts/deploy.sh step 3.5, review-3 R1.5) never sees these values;
+# the root-owned /usr/local/sbin/kayak-install-runtime-config wrapper
+# merges them into the JSON before installing — without that merge,
+# PHP's Config::str('turnstile_secret') returns empty and
+# turnstile.php's `turnstile_enabled()` false-paths to
+# `turnstile_verify() === true`, silently bypassing captcha (fired in
+# prod; gpt-5.5 take-2 review 2026-06-03). This loader still applies
+# for any privileged KayakConfig construction. `override=False` keeps
+# the operator's .env (and the OS env, which tests use) winning over
+# secrets.env — the wrapper's fill-if-absent merge mirrors the same
+# precedence.
 # Gate on os.access(): `load_dotenv` silently no-ops on a missing
 # path but RAISES PermissionError when the file exists but isn't
 # readable (dev shells where pat can't read root:www-data 0600

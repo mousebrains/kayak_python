@@ -251,7 +251,10 @@ Each tier is several phases; **review gate between tiers**, not between phases.
    - **Disk full:** `levels decimate`; check `~/logs/`; check `/tmp/`
    - **nginx misconfig after deploy:** `sudo nginx -t` to diagnose; revert via Phase 3.4 rollback
    - **healthchecks.io firing but everything looks fine:** check timer cadence vs healthchecks.io expected schedule
-3. **Phase 4.3 — SLO definition.** `docs/slo.md`:
+3. **Phase 4.3 — SLO definition.** `docs/slo.md` (draft targets as
+   proposed here; `docs/slo.md` is canonical and has since diverged —
+   e.g. data freshness is now a 3 h global window plus a 14 d
+   per-source dead-feed detector, 2026-06-03):
    - **Uptime:** 99% / month (allows ~7h downtime). Measured by Better Stack monitor.
    - **Build cadence:** ≥1 successful build/h, 95% of hours/month. Measured by `kayak-pipeline.service`'s healthchecks.io heartbeat (build runs as the last stage of the pipeline since the build.py split).
    - **Data freshness:** ≥1 fresh observation per active source within 2h, 90% of the time. Measured by `/status.json` historical scrape.

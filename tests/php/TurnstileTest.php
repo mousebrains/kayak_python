@@ -103,6 +103,56 @@ final class TurnstileTest extends TestCase
     }
 
     // -----------------------------------------------------------------
+    // end-to-end: the install wrapper merges secrets.env into the JSON
+    // -----------------------------------------------------------------
+
+    public function testWrapperMergedJsonEnablesTurnstile(): void
+    {
+        // The production shape (gpt-5.5 take-2 review, 2026-06-03): the
+        // pat-rendered JSON lacks both turnstile keys (pat can't read
+        // /etc/kayak/secrets.env, 0600 root:www-data), the root-owned
+        // install wrapper merges them in, and turnstile_enabled() must
+        // come out true on the wrapper's output. Before the merge step
+        // this exact flow silently disabled captcha in production.
+        if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
+            self::markTestSkipped('wrapper test hooks are non-root-only');
+        }
+        $dir = sys_get_temp_dir() . '/kayak-wrapper-' . uniqid('', true);
+        $this->assertTrue(mkdir($dir));
+        $dest = $dir . '/runtime-config.json';
+        $secrets = $dir . '/secrets.env';
+        $this->tmpFiles[] = $dest;
+        $this->tmpFiles[] = $secrets;
+        $this->assertNotFalse(
+            file_put_contents($secrets, "TURNSTILE_SITE_KEY=0xSITE\nTURNSTILE_SECRET=0xSECRET\n")
+        );
+
+        $wrapper = __DIR__ . '/../../deploy/kayak-install-runtime-config.sh';
+        $cmd = 'KAYAK_INSTALL_DEST=' . escapeshellarg($dest)
+             . ' KAYAK_INSTALL_SECRETS=' . escapeshellarg($secrets)
+             . ' bash ' . escapeshellarg($wrapper) . ' 2>&1';
+        $proc = proc_open($cmd, [0 => ['pipe', 'r'], 1 => ['pipe', 'w']], $pipes);
+        $this->assertIsResource($proc);
+        fwrite($pipes[0], '{"database_path": "/x.db"}');  // pat-shaped: no turnstile keys
+        fclose($pipes[0]);
+        $out = stream_get_contents($pipes[1]);
+        fclose($pipes[1]);
+        $rc = proc_close($proc);
+        $this->assertSame(0, $rc, is_string($out) ? $out : 'no wrapper output');
+
+        try {
+            Config::for_test($dest);
+            $this->assertTrue(turnstile_enabled());
+            $this->assertSame('0xSECRET', turnstile_secret());
+            $this->assertSame('0xSITE', turnstile_site_key());
+        } finally {
+            @unlink($dest);
+            @unlink($secrets);
+            @rmdir($dir);
+        }
+    }
+
+    // -----------------------------------------------------------------
     // turnstile_script_tag / turnstile_widget — gated on enabled
     // -----------------------------------------------------------------
 
