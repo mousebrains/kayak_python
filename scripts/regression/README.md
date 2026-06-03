@@ -117,39 +117,51 @@ SUMMARY: 14328000 ~ intercept=-292.7±2.762, x1=+0.8285±0.001883, r²=0.9575, R
 
 ## Companion: sub-daily lead/lag (`gauge_lead_lag.py`)
 
-The daily-mean fit above is applied in production to the *latest
-instantaneous* predictor readings, so the 1–12 h travel time between
-gauges is a timing error the daily fit never sees.
-[`gauge_lead_lag.py`](gauge_lead_lag.py) quantifies it from USGS **unit
-values** (sub-hourly), resampled to a common hourly UTC grid:
+[`gauge_lead_lag.py`](gauge_lead_lag.py) measures the sub-daily travel-time
+structure a daily fit averages away, from USGS **unit values** resampled to a
+**30-min** grid (`--grid-minutes`):
 
 ```bash
 python3 scripts/regression/gauge_lead_lag.py \
     --predictor 14162500 --predictor 14158850 \
     --predictor 14159500 --predictor 14161500 \
     --target 14159000 --start 1987-10-01 --end 1994-09-30 \
-    --name mckenzie_14159000_leadlag \
+    --grid-minutes 30 --name mckenzie_14159000_leadlag \
     --out  docs/regression/mckenzie_14159000_leadlag.md
 ```
 
-It estimates each predictor's travel-time lag by cross-correlating hourly
-**first differences** (flow *changes* propagate; baseline levels are
-near-identical across neighbours), holds unidentifiable predictors
-contemporaneous, then compares regression RMSE with predictors aligned
-contemporaneously vs travel-time-shifted — on one shared hold-out grid,
-under both daily-trained (deployed-style) and hourly-refit coefficients —
-plus a storm-rise subset and a deployability verdict. Crucially, the RMSE
-difference is wrapped in a **block-bootstrap CI** (7-day blocks):
-hourly residuals are ~0.97 autocorrelated, so the bare difference is far
-less precise than its decimals suggest, and the CI tells you whether the
-gain is statistically real. Writes `<name>.md` + a CCF-vs-lag `.svg`.
-**Diagnostic only**: it changes no deployed calc. Defaults reproduce the
-McKenzie Bridge analysis.
+It estimates each predictor's lag by cross-correlating **first differences**
+(flow *changes* propagate; baseline levels are near-identical across
+neighbours), then compares regression RMSE for two alignments on one shared
+hold-out grid:
 
-Data note: pre-2007 unit values are served only by the
-`nwis.waterservices.usgs.gov` host, and the `parameterCd` filter
-suppresses some old discharge series — the script fetches unfiltered and
-picks the `*_00060` column by name (cached to `/tmp/leadlag_<site>_<year>.tsv`).
+- **full** — every identifiable predictor at its best lag, including
+  *downstream* gauges shifted to a *future* reading (real timing signal, but
+  non-causal look-ahead — not realisable in real time);
+- **deployable (causal)** — only *upstream* predictors shifted (a *past*
+  reading, usable in a nowcast); downstream/unidentifiable held contemporaneous.
+
+The RMSE difference for each is wrapped in a **block-bootstrap CI** (7-day
+blocks) — grid residuals are ~0.97 autocorrelated, so the bare difference is far
+less precise than its decimals suggest. **Diagnostic only**; writes `<name>.md`
++ a CCF-vs-lag `.svg` + a `<name>.json` summary. Across every kayak calc reach
+analysed the *deployable* gain is nil (the active predictors are downstream), so
+the verdict is always "keep contemporaneous readings".
+
+**Embedding into the daily report:** run `gauge_lead_lag.py` first (it writes the
+JSON), then regenerate the daily report with `gauge_pair_linear.py --leadlag
+<slug>` to pull the lags + verdict into a *Sub-daily lead/lag* section. Order
+matters — the JSON must exist before the daily regen.
+
+Notes:
+- **Resolution** is capped by the *coarser* series — a 30-min target can't be
+  resolved finer than 30 min; finer grids add noise without information.
+- **Flow vs stage:** prefers discharge (`00060`), falls back to gage height
+  (`00065`) per gauge — fine for timing (USGS derives flow from stage
+  instantaneously, so they're time-locked); the RMSE comparison is only emitted
+  when every series is flow (it applies flow coefficients).
+- Pre-2007 unit values are served only by the `nwis.waterservices.usgs.gov`
+  host; the script fetches unfiltered (cached to `/tmp/leadlag_<site>_<year>.tsv`).
 
 ## Caveats
 

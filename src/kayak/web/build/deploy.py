@@ -11,6 +11,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import shutil
 from contextlib import suppress
 from pathlib import Path
@@ -155,7 +156,11 @@ def _filter_regression_md_for_html(md_text: str) -> str:
             saw_open_fence = False
             continue
         out.append(line)
-    return "\n".join(out)
+    rendered = "\n".join(out)
+    # Sibling cross-links in the source point at the `.md` (correct for GitHub /
+    # in-repo viewing), but the published site serves each report as `.html`, so
+    # rewrite `](./slug.md)` -> `](./slug.html)` so those links resolve.
+    return re.sub(r"\]\(\./([\w-]+)\.md\)", r"](./\1.html)", rendered)
 
 
 def _deploy_regression_artifacts(static_dir: Path) -> None:

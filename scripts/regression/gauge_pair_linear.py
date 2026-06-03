@@ -395,6 +395,72 @@ def stability_windows(
     return out
 
 
+def _load_leadlag(slug: str | None, out: Path | None) -> dict | None:
+    """Load a gauge_lead_lag.py JSON summary (a sibling of ``out``) by slug."""
+    if not slug or not out:
+        return None
+    path = out.parent / f"{slug}.json"
+    if not path.exists():
+        print(f"--leadlag: {path} not found; skipping section", file=sys.stderr)
+        return None
+    loaded: dict = _json.loads(path.read_text())
+    return loaded
+
+
+def _render_leadlag_section(leadlag: dict) -> list[str]:
+    """Render the 'Sub-daily lead/lag' section from a gauge_lead_lag.py summary.
+
+    Embeds the travel-time lags + full/deployable gain so the daily report is
+    self-contained on timing, with a link to the full companion analysis.
+    """
+    out: list[str] = []
+    a = out.append
+    slug = leadlag["slug"]
+    a("## Sub-daily lead/lag\n")
+    a(
+        f"Inter-gauge travel-time structure from USGS unit values "
+        f"({leadlag['grid_minutes']}-min grid, {leadlag['n_points']:,} points); full "
+        f"analysis in [`{slug}.md`](./{slug}.md). The daily coefficients above are "
+        "applied in production to *instantaneous* readings, so these lags are the timing "
+        "error a correction would address. **+τ** = upstream (a past read, deployable in "
+        "real time); **-τ** = downstream (a future read — non-causal look-ahead).\n"
+    )
+    a("| Predictor | applied τ (h) | Δ-corr | direction |")
+    a("|---|---|---|---|")
+    for lg in leadlag["lags"]:
+        if not lg["identifiable"]:
+            direction = "held (not identifiable)"
+        elif lg["applied_lag_h"] > 0:
+            direction = "upstream — deployable"
+        elif lg["applied_lag_h"] < 0:
+            direction = "downstream — look-ahead"
+        else:
+            direction = "co-located"
+        corr = f"{lg['corr']:.3f}" if lg["corr"] is not None else "—"
+        a(f"| {lg['label']} `{lg['site']}` | {lg['applied_lag_h']:+.1f} | {corr} | {direction} |")
+    a("")
+    if leadlag.get("rmse_valid") and "full" in leadlag:
+        f, d = leadlag["full"], leadlag["deploy"]
+        rec = (
+            "a deployable gain worth considering"
+            if leadlag["verdict"] == "usable"
+            else "keep using contemporaneous readings"
+        )
+        a(
+            f"**Full** alignment (incl. downstream → future): {f['gain_pct']:+.1f}% RMSE, "
+            f"95% CI [{f['ci'][0]:+.2f}, {f['ci'][1]:+.2f}] cfs "
+            f"({'resolved' if f['resolved'] else 'CI through 0'}). **Deployable** (causal, "
+            f"upstream-only): {d['gain_pct']:+.1f}%, [{d['ci'][0]:+.2f}, {d['ci'][1]:+.2f}] "
+            f"cfs ({'resolved' if d['resolved'] else 'CI through 0'}). "
+            f"**Verdict: {leadlag['verdict_label']}** — {rec}.\n"
+        )
+    else:
+        a(
+            f"Lags shown for timing only; the RMSE comparison was omitted ({leadlag['verdict_label']}).\n"
+        )
+    return out
+
+
 def render_markdown(  # noqa: C901 — assembly of many table sections; refactor not worth it
     *,
     name: str,
@@ -413,6 +479,7 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
     coef_unc: CoefUncertainty,
     stab: list[tuple[str, Fit | None]],
     calc_handles: list[str],
+    leadlag: dict | None = None,
 ) -> str:
     """Build the markdown analysis report."""
     pct = residual_percentiles(fit)
@@ -649,6 +716,9 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
         "response), not mis-calibrated.\n"
     )
 
+    if leadlag is not None:
+        lines.extend(_render_leadlag_section(leadlag))
+
     L("## Predictions at example x values\n")
     L(
         "For each row, `y_hat` is the fitted value and the two CIs are 95% "
@@ -767,14 +837,16 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
         "USGS occasionally updates stage-discharge ratings; the `Reproduce` "
         "snippet above re-pulls the full period of record on demand."
     )
-    L(
-        "- **Sub-daily lead/lag.** This fit is on daily means, but the "
-        "`calc_expression` applies its coefficients to the *latest instantaneous* "
-        "predictor readings — so inter-gauge travel time (1-12 h) becomes a timing "
-        "error the daily fit never sees. `gauge_lead_lag.py` (same directory) "
-        "quantifies that error from USGS unit values; worth a look when predictors "
-        "are many river-miles from the target."
-    )
+    if leadlag is None:
+        L(
+            "- **Sub-daily lead/lag.** This fit is on daily means, but the "
+            "`calc_expression` applies its coefficients to the *latest instantaneous* "
+            "predictor readings — so inter-gauge travel time (1-12 h) becomes a timing "
+            "error the daily fit never sees. `gauge_lead_lag.py` (same directory) "
+            "quantifies that error from USGS unit values; worth a look when predictors "
+            "are many river-miles from the target. (Run it to embed a summary here via "
+            "`--leadlag`.)"
+        )
 
     return "\n".join(lines) + "\n"
 
@@ -1177,7 +1249,16 @@ def main() -> int:
             "earliest-overlap, 1990-01-01}."
         ),
     )
+    ap.add_argument(
+        "--leadlag",
+        default=None,
+        help=(
+            "Slug of a gauge_lead_lag.py JSON summary (a sibling of --out) to embed "
+            "as a 'Sub-daily lead/lag' section, e.g. mckenzie_14159000_leadlag."
+        ),
+    )
     args = ap.parse_args()
+    leadlag = _load_leadlag(args.leadlag, args.out)
 
     predictors: list[str] = args.predictor
     print(
@@ -1259,6 +1340,7 @@ def main() -> int:
         coef_unc=coef_unc,
         stab=stab,
         calc_handles=calc_handles,
+        leadlag=leadlag,
     )
 
     if args.out:

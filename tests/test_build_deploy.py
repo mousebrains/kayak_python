@@ -68,6 +68,22 @@ def test_filter_regression_md_drops_generated_by_block() -> None:
     assert "stuff" in out
 
 
+def test_filter_regression_md_rewrites_sibling_md_links() -> None:
+    # Sibling cross-links must become .html (the published site serves .html);
+    # external/absolute links and code spans are left alone.
+    md = (
+        "See [`foo_leadlag.md`](./foo_leadlag.md) and "
+        "[the daily fit](./bar_from_baz.md).\n"
+        "Not a link: `gauge_lead_lag.py`. External: [x](https://e.org/a.md).\n"
+    )
+    out = _filter_regression_md_for_html(md)
+    assert "](./foo_leadlag.html)" in out
+    assert "](./bar_from_baz.html)" in out
+    assert "./foo_leadlag.md)" not in out
+    assert "`gauge_lead_lag.py`" in out  # code span untouched
+    assert "https://e.org/a.md" in out  # external link untouched
+
+
 def _write(p: Path, content: str, mode: int = 0o644) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(content)

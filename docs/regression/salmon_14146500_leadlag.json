@@ -1,0 +1,41 @@
+{
+  "slug": "salmon_14146500_leadlag",
+  "target": "14146500",
+  "daily_doc": "salmon_14146500_from_nfmf",
+  "grid_minutes": 30,
+  "window": [
+    "1987-10-01",
+    "1994-06-13"
+  ],
+  "n_points": 90987,
+  "rmse_valid": true,
+  "lags": [
+    {
+      "site": "14147500",
+      "label": "14147500",
+      "applied_lag_h": -0.5,
+      "corr": 0.57,
+      "identifiable": true,
+      "deployable": false,
+      "note": "downstream \u2014 target leads it by ~0.5 h (future read, not deployable)"
+    }
+  ],
+  "full": {
+    "gain_pct": 0.5,
+    "ci": [
+      -0.01,
+      0.76
+    ],
+    "resolved": false
+  },
+  "deploy": {
+    "gain_pct": 0.0,
+    "ci": [
+      0.0,
+      0.0
+    ],
+    "resolved": false
+  },
+  "verdict": "unresolved",
+  "verdict_label": "negligible / statistically unresolved"
+}

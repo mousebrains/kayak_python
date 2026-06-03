@@ -143,6 +143,19 @@ Residuals bucketed by monsoonal season (most kayak gauges sit in a PNW monsoonal
 
 A season whose bias is large relative to `sigma_hat` (the pooled 1-sigma residual scatter) is a candidate for a season-specific intercept or a separate seasonal fit; a season with elevated `std`/`RMSE` but near-zero bias is just noisier (e.g., flashy storm response), not mis-calibrated.
 
+## Sub-daily lead/lag
+
+Inter-gauge travel-time structure from USGS unit values (30-min grid, 41,834 points); full analysis in [`mckenzie_14159000_leadlag.md`](./mckenzie_14159000_leadlag.md). The daily coefficients above are applied in production to *instantaneous* readings, so these lags are the timing error a correction would address. **+τ** = upstream (a past read, deployable in real time); **-τ** = downstream (a future read — non-causal look-ahead).
+
+| Predictor | applied τ (h) | Δ-corr | direction |
+|---|---|---|---|
+| McKenzie nr Springfield / Vida (downstream) `14162500` | -2.5 | 0.345 | downstream — look-ahead |
+| McKenzie at Trail Bridge Dam (upstream, dominant) `14158850` | +1.5 | 0.563 | upstream — deployable |
+| SF McKenzie nr Rainbow `14159500` | +0.0 | 0.039 | held (not identifiable) |
+| Lookout Cr nr Blue River `14161500` | +0.5 | 0.457 | upstream — deployable |
+
+**Full** alignment (incl. downstream → future): +2.2% RMSE, 95% CI [+0.46, +3.23] cfs (resolved). **Deployable** (causal, upstream-only): +0.1%, [-3.19, +2.51] cfs (CI through 0). **Verdict: real signal, but downstream look-ahead only (deployable gain nil)** — keep using contemporaneous readings.
+
 ## Predictions at example x values
 
 For each row, `y_hat` is the fitted value and the two CIs are 95% two-sided bands. The **mean-response CI** is the uncertainty in `E[y | x]` (use for plotting the fit line's confidence band). The **prediction CI** is for a *single new observation* — bounded below by `sigma_hat` regardless of how precisely the parameters are estimated.
@@ -188,4 +201,3 @@ WHERE NOT EXISTS (
 
 - **Piecewise-linear fit by predictor-1 quintile.** If the residual table above shows systematic mean drift across quintiles (e.g., consistently under-estimating at low flow and over-estimating at high flow), splitting the predictor range into 2-3 regimes and fitting one linear model per regime can halve RMSE without adding free parameters beyond what `calc_expression` already supports via `greatest(low_estimate, high_estimate)` or `if(x < threshold, ..., ...)`-style composition. Worth trying when RMSE > ~10% of the mean target value.
 - **Re-running** when the active predictor's rating curve drifts. USGS occasionally updates stage-discharge ratings; the `Reproduce` snippet above re-pulls the full period of record on demand.
-- **Sub-daily lead/lag.** This fit is on daily means, but the `calc_expression` applies its coefficients to the *latest instantaneous* predictor readings — so inter-gauge travel time (1-12 h) becomes a timing error the daily fit never sees. `gauge_lead_lag.py` (same directory) quantifies that error from USGS unit values; worth a look when predictors are many river-miles from the target.
