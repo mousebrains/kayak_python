@@ -317,9 +317,10 @@ def common_hours(
 # ---------------------------------------------------------------------------
 # Rendering
 # ---------------------------------------------------------------------------
-def _render_ccf_svg(slug: str, lag_results: list[LagResult], labels: dict[str, str]) -> str:
+def _render_ccf_svg(lag_results: list[LagResult]) -> str:
     """Lag (h) on x, first-difference correlation on y; one line per
-    predictor with a marker at its peak. Standalone (img src)."""
+    predictor with a marker at its peak. The legend uses each predictor's
+    USGS id (the report's table maps ids to names). Standalone (img src)."""
     palette = ["#1b5591", "#c0392b", "#27ae60", "#8e44ad", "#d35400", "#16a085"]
     all_lags = sorted({lag for r in lag_results for lag, _ in r.curve})
     all_corr = [c for r in lag_results for _, c in r.curve]
@@ -840,7 +841,7 @@ def main() -> int:
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(md)
-        args.out.with_suffix(".svg").write_text(_render_ccf_svg(args.name, lag_results, labels))
+        args.out.with_suffix(".svg").write_text(_render_ccf_svg(lag_results))
         print(f"Wrote {args.out} and {args.out.with_suffix('.svg')}", file=sys.stderr)
     else:
         print(md)

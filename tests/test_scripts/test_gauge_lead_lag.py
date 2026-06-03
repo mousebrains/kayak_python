@@ -128,9 +128,28 @@ def test_render_ccf_svg_well_formed():
         ),
         gll.LagResult("14159500", -17, 0.04, [(-2, 0.02), (0, 0.03), (2, 0.04)], False, 0, "n/a"),
     ]
-    svg = gll._render_ccf_svg("slug", results, {"14158850": "Trail Br", "14159500": "SF Rainbow"})
+    svg = gll._render_ccf_svg(results)
     root = ET.fromstring(svg)
     assert root.tag.endswith("svg")
     # Identifiable series gets a peak marker; unidentifiable is dashed, no marker.
     assert "stroke-dasharray" in svg  # the unidentifiable curve
     assert "14158850" in svg and "14159500" in svg
+
+
+def test_render_ccf_svg_degenerate_inputs_dont_crash():
+    gll = _load()
+    # Empty results -> placeholder svg, still valid XML.
+    ET.fromstring(gll._render_ccf_svg([]))
+    # Single lag + all-zero correlations: the axis guards must avoid div-by-zero.
+    flat = [gll.LagResult("X", 0, 0.0, [(0, 0.0)], False, 0, "n/a")]
+    ET.fromstring(gll._render_ccf_svg(flat))
+
+
+def test_eval_fit_empty_returns_nan():
+    import math
+
+    import numpy as np
+
+    gll = _load()
+    rmse, r2 = gll.eval_fit([np.array([])], np.array([]), np.array([0.0, 1.0]))
+    assert math.isnan(rmse) and math.isnan(r2)
