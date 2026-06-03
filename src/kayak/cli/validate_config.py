@@ -49,6 +49,8 @@ _CONFIG_PREFIXES = (
     "CSP_",
     "AUDIT_",
     "KAYAK_",
+    "METADATA_",
+    "USGS_",
 )
 
 # Env-var names the CLI reads but that don't correspond to a model field
@@ -59,6 +61,13 @@ _EXTRA_KNOWN = frozenset(
         "KAYAK_CONFIG_PATH",  # Phase 1 reader override for /etc/kayak/runtime-config.json
         "KAYAK_LEVELS_BIN",  # Phase 2.3 test scaffolding (tests/php/ConfigTest.php)
         "KAYAK_HOME",  # Phase 5 (T3.4) — declared early so this scan doesn't false-positive
+        "KAYAK_DATA",  # scripts/deploy.sh export — path of the kayak_data metadata clone
+        "KAYAK_VENV",  # scripts/regenerate_schema_svg.sh dev-side venv override
+        # Read via os.environ by fetch_usgs_ogc.py / fetch_usgs_sites.py.
+        # Deliberately NOT a KayakConfig field: emit-config would write it
+        # into the www-data-readable runtime-config.json, and PHP has no
+        # use for it.
+        "USGS_API_KEY",
     }
 )
 

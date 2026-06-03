@@ -187,6 +187,8 @@ class KayakConfig(BaseSettings):
     hc_config_drift: AnyHttpUrl | None = None
     hc_metadata_snapshot: AnyHttpUrl | None = None
     hc_recap: AnyHttpUrl | None = None
+    hc_fetch_osmb: AnyHttpUrl | None = None
+    hc_status: AnyHttpUrl | None = None
 
     @field_validator("maintainer_emails", mode="before")
     @classmethod

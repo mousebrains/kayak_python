@@ -238,13 +238,22 @@ function review_notify_editor(PDO $db, array $cr, string $decision, string $note
 
 /**
  * Send a maintainer reply without changing the request's status.
+ * Returns true on success, false if another maintainer already moved the
+ * request out of `pending` (race between two review tabs) — in that case
+ * nothing is written and no "still pending" email is sent.
  *
  * @param array{id: int, target_type: string, target_id: int|null, editor_id: int, submitted_at: string, subject: string|null, payload_json: string, notes_to_maint: string|null, status: string, reviewed_at: string|null, reviewed_by: int|null, reviewer_note: string|null, applied_json: string|null, source_url: string|null} $cr change_request row.
  */
-function review_send_reply(PDO $db, array $cr, string $reply, int $maint_id): void {
+function review_send_reply(PDO $db, array $cr, string $reply, int $maint_id): bool {
     $merged = merge_reviewer_note($cr['reviewer_note'] ?? '', $reply);
-    $db->prepare('UPDATE change_request SET reviewer_note = ? WHERE id = ?')
-        ->execute([$merged, $cr['id']]);
+    // Same atomic predicate as the terminal actions (approve/reject/
+    // resolve/reply-and-close): re-check `pending` inside the UPDATE so a
+    // stale tab can't append a note to an already-reviewed row.
+    $stmt = $db->prepare(
+        "UPDATE change_request SET reviewer_note = ? WHERE id = ? AND status = 'pending'"
+    );
+    $stmt->execute([$merged, $cr['id']]);
+    if ($stmt->rowCount() === 0) return false;
 
     $st = $db->prepare('SELECT email FROM editor WHERE id = ?');
     $st->execute([$cr['editor_id']]);
@@ -259,6 +268,7 @@ function review_send_reply(PDO $db, array $cr, string $reply, int $maint_id): vo
             render_editor_reply_email($target_label, $reply)
         );
     }
+    return true;
 }
 
 /**

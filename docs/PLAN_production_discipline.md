@@ -62,7 +62,7 @@ Goal: detect failures within minutes (not "next time you check"); make recovery 
 - **Push:** [ntfy.sh](https://ntfy.sh) public service. Self-hostable later if needed. Pushover ($5 one-time per platform) is the paid alternative.
 - **Internal dashboard:** Hand-rolled HTML page reading `kayak.db` directly. No Grafana stack at this scale — a 100-line PHP/Python page beats a metrics-pipeline for the metrics we actually need.
 - **Public status page DNS:** `status.mousebrains.com` (new CNAME under Cloudflare; `mousebrains.com` is at `liv.ns.cloudflare.com` / `dale.ns.cloudflare.com`).
-- **Internal dashboard DNS:** `levels.wkcc.org/_internal/` (also `levels-test.wkcc.org/_internal/`; vhost subpath, maintainer-auth via the existing `editor_session` cookie, `noindex`). No new DNS, no new credential. Lives on the wkcc hosts because `SITE_URL=levels.wkcc.org` drives the magic-link round-trip — anchoring the dashboard to a different host would break login.
+- **Internal dashboard DNS:** `levels.wkcc.org/_internal/` (vhost subpath, maintainer-auth via the existing `editor_session` cookie, `noindex`; `levels-test.wkcc.org` has since been 301-redirected wholesale to the canonical host, 2026-05-19). No new DNS, no new credential. Lives on the wkcc hosts because `SITE_URL=levels.wkcc.org` drives the magic-link round-trip — anchoring the dashboard to a different host would break login.
 - **Per [feedback_no_sudo]:** all `/etc/` edits (systemd units, nginx vhosts, certbot) get prepared as diffs that you apply. Per [feedback_systemd_in_tree_copy]: every `/etc/systemd/system/kayak-*` patch also goes into the repo's installed location at the same time.
 
 ## Target shape

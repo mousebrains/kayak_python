@@ -104,9 +104,16 @@ fi
 # apply schema changes. Runs after `pip install -e .` so the latest
 # model is loaded. Exit 1 = field invalid; exit 2 = runner failure;
 # either fails the deploy.
+#
+# --known-env --strict additionally fails on any config-shaped env var
+# (KAYAK_* / FETCH_* / MAIL_* / HC_* / METADATA_* / …) that isn't a
+# declared KayakConfig field — typos like METADATA_DRI otherwise
+# silently fall back to the default. Legit non-field names (KAYAK_DATA,
+# KAYAK_HOME, …) live in validate_config._EXTRA_KNOWN; a false positive
+# here means adding the name there, not dropping --strict.
 
-echo ">>> levels validate-config"
-"$LEVELS" validate-config
+echo ">>> levels validate-config --known-env --strict"
+"$LEVELS" validate-config --known-env --strict
 
 # --- 3. migrate --------------------------------------------------------
 

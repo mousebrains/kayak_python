@@ -34,6 +34,29 @@ class TestKnownEnvNames:
         assert "KAYAK_LEVELS_BIN" in names
         assert "KAYAK_HOME" in names
 
+    def test_includes_metadata_dir_and_deploy_extras(self) -> None:
+        # METADATA_DIR is the data-repo-split pointer; KAYAK_DATA is the
+        # deploy.sh export it's derived from; KAYAK_VENV is the
+        # regenerate_schema_svg.sh dev override. All must be known or
+        # `deploy.sh`'s --known-env --strict run would fail the deploy.
+        names = _known_env_names()
+        assert "METADATA_DIR" in names
+        assert "KAYAK_DATA" in names
+        assert "KAYAK_VENV" in names
+
+    def test_includes_systemd_heartbeat_urls(self) -> None:
+        # Every ${HC_*} referenced by a systemd unit must be a declared
+        # field — these two were missed when their units were added.
+        names = _known_env_names()
+        assert "HC_FETCH_OSMB" in names
+        assert "HC_STATUS" in names
+
+    def test_includes_usgs_api_key(self) -> None:
+        # Read via os.environ by the OGC fetch (not a model field — the
+        # secret must stay out of the www-data-readable config JSON),
+        # but set in prod's .env, so strict mode must know it.
+        assert "USGS_API_KEY" in _known_env_names()
+
 
 class TestValidateConfig:
     """`validate-config` returns the right exit code per scenario."""
@@ -71,6 +94,32 @@ class TestValidateConfig:
         with pytest.raises(SystemExit) as exc:
             validate_config(_args(known_env=True, strict=True))
         assert exc.value.code == 1
+
+    def test_known_env_warns_on_metadata_typo(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # The METADATA_ prefix is scanned (gpt-5.5 review): a same-prefix
+        # typo of the load-bearing METADATA_DIR must be flagged.
+        monkeypatch.setenv("METADATA_DRI", "/tmp/kayak_data")
+        with pytest.raises(SystemExit) as exc:
+            validate_config(_args(known_env=True))
+        assert exc.value.code == 0
+        assert "METADATA_DRI" in capsys.readouterr().err
+
+    def test_known_env_warns_on_usgs_typo_but_not_real_key(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # USGS_API_KEY drives the hourly OGC fetch via os.environ; a
+        # same-prefix typo silently degrades it, so the scanner must
+        # flag the typo while accepting the real name.
+        monkeypatch.setenv("USGS_API_KEY", "real")
+        monkeypatch.setenv("USGS_APIKEY", "typo")
+        with pytest.raises(SystemExit) as exc:
+            validate_config(_args(known_env=True))
+        assert exc.value.code == 0
+        err = capsys.readouterr().err
+        assert "USGS_APIKEY" in err
+        assert "USGS_API_KEY " not in err  # trailing space: exact-name check
 
     def test_known_env_silent_on_known_var(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]

@@ -51,7 +51,9 @@ sudo usermod -aG adm pat
 sudo -u pat git clone git@github.com:mousebrains/kayak_python.git /home/pat/kayak
 
 # The venv lives at ~/.venv, NOT inside the repo — every kayak-*.service unit's
-# ExecStart= and the §7 sudoers grant invoke /home/pat/.venv/bin/levels.
+# ExecStart= invokes /home/pat/.venv/bin/levels. (The §7 sudoers grant does
+# NOT — it runs only the root-owned kayak-install-runtime-config wrapper;
+# granting sudo on the pat-writable venv binary was the review-3 R1.5 RCE.)
 cd /home/pat/kayak
 python3 -m venv /home/pat/.venv
 /home/pat/.venv/bin/pip install -e .

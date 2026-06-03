@@ -402,7 +402,7 @@ final class ReviewLogicFunctionalTest extends FunctionalTestCase
         $cr = $this->seedCr($editor, $reach, ['reach' => ['description' => 'x']]);
 
         $before = count(glob(self::$mailDir . '/*') ?: []);
-        review_send_reply($db, $cr, 'a question for you', $maint);
+        $this->assertTrue(review_send_reply($db, $cr, 'a question for you', $maint));
 
         $after = $this->fetchCr($cr['id']);
         $this->assertSame('pending', $after['status'], 'reply keeps the CR pending');
@@ -412,6 +412,29 @@ final class ReviewLogicFunctionalTest extends FunctionalTestCase
             count(glob(self::$mailDir . '/*') ?: []),
             'reply emails the editor',
         );
+    }
+
+    public function testSendReplyRaceDoesNotMutateTerminalRowOrEmail(): void
+    {
+        // Two maintainer tabs: tab A rejected the CR, tab B's stale "reply,
+        // keep pending" submit must not append a note to the terminal row
+        // nor email the editor a misleading "still pending" message.
+        $db = $this->pdo();
+        $maint = Fixtures::editor($db, ['status' => 'maintainer']);
+        $editor = Fixtures::editor($db, ['email' => 'raced@example.com']);
+        $reach = Fixtures::reach($db, ['river' => 'R']);
+        $cr = $this->seedCr($editor, $reach, ['reach' => ['description' => 'x']], [
+            'status' => 'rejected',
+            'reviewer_note' => 'original decision note',
+        ]);
+
+        $before = count(glob(self::$mailDir . '/*') ?: []);
+        $this->assertFalse(review_send_reply($db, $cr, 'too late', $maint));
+
+        $after = $this->fetchCr($cr['id']);
+        $this->assertSame('rejected', $after['status']);
+        $this->assertSame('original decision note', $after['reviewer_note'], 'terminal note untouched');
+        $this->assertSame($before, count(glob(self::$mailDir . '/*') ?: []), 'no email sent');
     }
 
     // -----------------------------------------------------------------------
