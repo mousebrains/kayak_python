@@ -27,6 +27,10 @@ def _load_script() -> Any:
     name = "gauge_pair_linear_under_test"
     if name in sys.modules:
         return sys.modules[name]
+    # The script imports its sibling `_resample` module; put the script dir on
+    # sys.path so that resolves when we exec it outside its own directory.
+    if str(_SCRIPT_PATH.parent) not in sys.path:
+        sys.path.insert(0, str(_SCRIPT_PATH.parent))
     spec = importlib.util.spec_from_file_location(name, _SCRIPT_PATH)
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
@@ -214,6 +218,29 @@ def test_seasonal_residuals_buckets_by_month():
     for name, months in gpl.SEASONS:
         if set(months) != {3, 4}:
             assert abs(rows[name]["mean_residual"]) < 1e-9
+
+
+def test_coef_uncertainty_shapes_and_determinism():
+    import numpy as np
+
+    gpl = _load_script()
+    pred, targ = _toy_series()
+    keys = sorted(set(pred) & set(targ))
+    xs = [pred[k] for k in keys]
+    ys = [targ[k] for k in keys]
+    fit = gpl.fit_ols([xs], ys, quadratic=False)
+    cu = gpl.coef_uncertainty([xs], ys, keys, False, fit, n_boot=100, seed=0)
+    p = len(fit.coefs)
+    assert cu.boot_se.shape == (p,)
+    assert cu.boot_lo.shape == (p,) and cu.boot_hi.shape == (p,)
+    assert np.all(cu.boot_se > 0)
+    assert len(cu.vifs) == 1  # single predictor -> VIF ~ 1
+    assert abs(cu.vifs[0] - 1.0) < 0.01
+    assert -1.0 <= cu.resid_rho1 <= 1.0
+    assert cu.n_blocks > 1
+    # Deterministic under a fixed seed.
+    cu2 = gpl.coef_uncertainty([xs], ys, keys, False, fit, n_boot=100, seed=0)
+    assert np.allclose(cu.boot_se, cu2.boot_se)
 
 
 def test_predict_returns_three_uncertainties():

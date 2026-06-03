@@ -63,6 +63,10 @@ Both alignments are evaluated on the **same** hourly hold-out grid (the only dif
 - **Ceiling (hourly-refit coefficients):** **75.6** → **75.1 cfs** (+0.6%). Refitting on hourly data and aligning together is the most accuracy available from this predictor set.
 - **Daily-mean reference (same 4 predictors, 1968-10-01→1994-09-29, n=9,495):** RMSE **90.5 cfs**, r² 0.9846. Daily means are intrinsically smoother than instantaneous values, so this sits below the hourly RMSEs — it is *not* directly comparable to them, only a reference for the deployed product's daily accuracy.
 
+### Is the gain statistically real?
+
+The bare RMSE difference has far fewer decimals' worth of precision than it looks: hourly residuals are near-perfectly autocorrelated (lag-1 **0.97**), so the 23,155 hours carry only a few hundred *independent* observations. A **block bootstrap** over whole ISO-weeks (143 weeks, B=2000) puts the production-style RMSE reduction (contemporaneous minus aligned) at **+0.89 cfs**, 95% CI **[-1.00, +2.40]**, with alignment better in only **83%** of resamples. **The interval straddles zero — the improvement is not statistically distinguishable from no effect.**
+
 ### During rapid flow changes (storm rises/falls)
 
 Travel-time misalignment should hurt most when flow is *changing* fast — most hours are slowly-varying regulated baseflow where a 1-3 h shift barely moves the value. Restricting to the **most rapidly changing 20% of hours** (|Δtarget| ≥ 10 cfs/h — the threshold is the 90th percentile of |Δ|, but discrete USGS values tie at it so the subset is wider than a tenth; n = 4,645 hours), with the daily-trained coefficients:
@@ -72,11 +76,11 @@ Travel-time misalignment should hurt most when flow is *changing* fast — most 
 | fastest-changing 20% | contemporaneous | 4,645 | 0.9822 | 120.7 |
 | fastest-changing 20% | travel-time-aligned | 4,645 | 0.9826 | 119.5 |
 
-Alignment changes storm-subset RMSE by **+1.0%** (120.7 → 119.5 cfs). So even where misalignment should bite hardest the lags buy little: at this reach's short travel times and heavily regulated, slowly-varying flow, sub-daily alignment carries essentially no usable signal.
+Alignment changes storm-subset RMSE by **+1.0%** (120.7 → 119.5 cfs); block-bootstrap reduction **+1.25 cfs**, 95% CI **[-4.63, +5.93]** (straddles zero). So even where misalignment should bite hardest the lags buy nothing resolvable: at this reach's short travel times and heavily regulated, slowly-varying flow, sub-daily alignment carries essentially no usable signal.
 
 ## Verdict & recommendation
 
-Travel-time alignment yields a **negligible** gain here: +1.1% RMSE overall and +1.0% even on the fastest-changing 20% of hours (production-style coefficients), both well inside the residual scatter. **Recommendation: do not wire lead/lag into this reach's estimate** — the complexity (below) buys nothing measurable. Keep using contemporaneous latest readings.
+Travel-time alignment yields a **negligible and statistically unresolved** gain here: +1.1% RMSE overall and +1.0% even on the fastest-changing 20% of hours, and the block-bootstrap CI on the reduction (**[-1.00, +2.40] cfs**) **straddles zero** — once the residual autocorrelation is accounted for, the improvement isn't distinguishable from no effect. **Recommendation: do not wire lead/lag into this reach's estimate** — keep using contemporaneous latest readings.
 
 **Why the effect is bounded for this reach:** the dominant term is Trail Bridge (coefficient ≈ 1.21), only ~7 river miles upstream, so its lead is just a few hours; the smaller-coefficient tributaries contribute little even when mis-aligned. The downstream term (Vida) would need *future* readings to align perfectly, which a real-time estimate cannot have — so its share of the gain is **not deployable** (see below).
 
@@ -93,5 +97,6 @@ Recorded for completeness and for reaches where the gain is larger. Applying lag
 - **Unit values** pulled unfiltered from `nwis.waterservices.usgs.gov` (the only host serving pre-2007 UV) and resampled to hourly means; 15-min (Trail Bridge) and 30-min sites land on the same grid.
 - **Lag estimation** maximizes the correlation of hourly first differences (flow *changes* propagate; baseline levels are near-identical across neighbours and would pin the peak at τ≈0).
 - **Fair comparison:** contemporaneous and aligned RMSE use one shared hold-out grid — the hours where every contemporaneous *and* every shifted predictor value exists — so only alignment varies.
+- **Significance:** the RMSE difference is tested with a block bootstrap over ISO-weeks (B=2000) rather than treating the autocorrelated hours as independent; the reported CI reflects the effective, not nominal, sample size.
 - **Caveat:** the hourly hold-out (1987-10-01..1994-09-30, ~2.6 yr of overlap) is far shorter than the daily fit's multi-decade record and excludes SF Cougar; the daily-reference row controls for the predictor-set change but not the window.
 

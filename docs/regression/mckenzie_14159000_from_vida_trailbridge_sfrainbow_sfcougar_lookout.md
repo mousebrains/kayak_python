@@ -40,16 +40,18 @@ The chosen window is selected for *data points*, not calendar span.
 
 Window: **1968-10-01 → 1994-09-29**, n = **6938** daily means (~19.0 years of data).
 
-### Coefficients (1-sigma uncertainty)
+### Coefficients (with honest, autocorrelation-aware uncertainty)
 
-| Term | Estimate | SE | 95% CI |
-|---|---|---|---|
-| intercept | +162.095 | 4.134 | [+154, +170.2] |
-| vd::MCKENZIE_VIDA_merge (predictor 1: 14162500) | +0.0691955 | 0.002215 | [+0.06485, +0.07354] |
-| tb::14158850 (predictor 2: 14158850) | +1.21419 | 0.007026 | [+1.2, +1.228] |
-| sr::SF_McKenzie_near_Rainbow (predictor 3: 14159500) | -0.0930529 | 0.003786 | [-0.1005, -0.08563] |
-| sc::SF_McKenzie_Cougar_merge (predictor 4: 14159200) | +0.116552 | 0.007893 | [+0.1011, +0.132] |
-| lk::Lookout_Blue_merge (predictor 5: 14161500) | +0.561507 | 0.02399 | [+0.5145, +0.6085] |
+Daily streamflow residuals are strongly autocorrelated (lag-1 **0.71** here), which violates the IID assumption behind the OLS standard errors — so **SE (OLS)** is optimistic. **SE (block-boot)** resamples whole monthly blocks (228 months, B=1000), preserving the serial correlation; it is the realistic figure and runs about **3.5x** the OLS SE. The **95% CI** below is the block-bootstrap percentile interval. **VIF** is the variance-inflation factor (collinearity with the other predictors); VIF > 10 means the individual coefficient is poorly determined and should not be read as a physical sensitivity.
+
+| Term | Estimate | SE (OLS) | SE (block-boot) | 95% CI (block-boot) | VIF |
+|---|---|---|---|---|---|
+| intercept | +162.095 | 4.134 | 13.63 | [+134, +186.7] | — |
+| vd::MCKENZIE_VIDA_merge (predictor 1: 14162500) | +0.0691955 | 0.002215 | 0.007693 | [+0.05428, +0.08345] | 23.1 |
+| tb::14158850 (predictor 2: 14158850) | +1.21419 | 0.007026 | 0.02418 | [+1.169, +1.263] | 6.3 |
+| sr::SF_McKenzie_near_Rainbow (predictor 3: 14159500) | -0.0930529 | 0.003786 | 0.01407 | [-0.1199, -0.06622] | 5.5 |
+| sc::SF_McKenzie_Cougar_merge (predictor 4: 14159200) | +0.116552 | 0.007893 | 0.02655 | [+0.06618, +0.1714] | 16.3 |
+| lk::Lookout_Blue_merge (predictor 5: 14161500) | +0.561507 | 0.02399 | 0.08793 | [+0.3914, +0.7211] | 12.6 |
 
 r² = **0.9847**, RMSE = **94.91 cfs** (sigma_hat = 94.95 cfs unbiased).
 
@@ -90,7 +92,9 @@ Correlation matrix:
           x5  +0.0974      -0.5450      +0.4508      +0.4913      -0.6007      +1.0000    
 ```
 
-**Caveat**: these uncertainties capture *parameter* precision only. For a single-day prediction at new `x`, the prediction interval is dominated by the residual scatter `sigma_hat` (about 95 cfs at 1-sigma here), not by parameter SEs.
+**Caveat 1 (autocorrelation)**: this is the **OLS** covariance, which assumes IID residuals; with lag-1 residual autocorrelation **0.71** it understates the true parameter variance by roughly **3.5x** (in SE terms). Use the block-bootstrap SEs/CIs in the coefficients table for inference, not these.
+
+**Caveat 2 (prediction vs parameter)**: even with correct parameter SEs, a single-day prediction at new `x` is dominated by the residual scatter `sigma_hat` (about 95 cfs at 1-sigma here), not by parameter uncertainty. `sigma_hat` is a valid *marginal* description of single-day error (autocorrelation barely biases it); what autocorrelation breaks is treating the n days as n independent observations.
 
 ## Window stability
 

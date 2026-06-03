@@ -77,11 +77,20 @@ For every run, the script writes three sibling files to `--out`'s directory:
 
 The markdown report contains:
 
-- **Coefficients with 1σ uncertainty** and 95% CIs.
+- **Coefficients with autocorrelation-aware uncertainty.** Each term
+  shows the OLS SE *and* a **block-bootstrap SE/95% CI** (resample whole
+  monthly blocks), plus a **VIF**. Daily streamflow residuals are
+  strongly autocorrelated, so the OLS SEs are optimistic — typically
+  ~2–3× too small — and the block-bootstrap figures are the ones to
+  quote. VIF > 10 flags a predictor whose individual coefficient is not
+  safely interpretable (multicollinearity), which is common when the
+  predictors are gauges on the same river.
 - **Full parameter variance-covariance matrix** plus the correlation
-  matrix. High off-diagonal correlations (|ρ| > 0.7) are flagged with
-  an explanatory note — typically OLS where `mean(x) ≠ 0`, which
-  recentering would decouple.
+  matrix. This is the **OLS** (IID) covariance — optimistic for the same
+  autocorrelation reason; the caveat block restates the measured lag-1
+  residual autocorrelation and SE inflation. High off-diagonal
+  correlations (|ρ| > 0.7) are flagged — typically OLS where
+  `mean(x) ≠ 0`, which recentering would decouple.
 - **Goodness-of-fit:** r², plain RMSE (sqrt(RSS/n)), and the unbiased
   σ̂ (sqrt(RSS/(n−p))).
 - **Window stability table** at five default start dates around
@@ -129,9 +138,13 @@ near-identical across neighbours), holds unidentifiable predictors
 contemporaneous, then compares regression RMSE with predictors aligned
 contemporaneously vs travel-time-shifted — on one shared hold-out grid,
 under both daily-trained (deployed-style) and hourly-refit coefficients —
-plus a storm-rise subset and a deployability verdict. Writes
-`<name>.md` + a CCF-vs-lag `.svg`. **Diagnostic only**: it changes no
-deployed calc. Defaults reproduce the McKenzie Bridge analysis.
+plus a storm-rise subset and a deployability verdict. Crucially, the RMSE
+difference is wrapped in a **block-bootstrap CI** (ISO-week blocks):
+hourly residuals are ~0.97 autocorrelated, so the bare difference is far
+less precise than its decimals suggest, and the CI tells you whether the
+gain is statistically real. Writes `<name>.md` + a CCF-vs-lag `.svg`.
+**Diagnostic only**: it changes no deployed calc. Defaults reproduce the
+McKenzie Bridge analysis.
 
 Data note: pre-2007 unit values are served only by the
 `nwis.waterservices.usgs.gov` host, and the `parameterCd` filter
@@ -145,11 +158,17 @@ picks the `*_00060` column by name (cached to `/tmp/leadlag_<site>_<year>.tsv`).
   given the fitted residuals). A single-day prediction at a new `x`
   has uncertainty dominated by σ̂ (residual scatter), not by SE(slope)
   · x + SE(intercept). The script's note section spells this out.
-- **OLS assumes IID residuals.** For autocorrelated daily flow data
-  the parameter SEs are slight under-estimates (effective sample size
-  is smaller than `n`). r² is unaffected. If precise parameter
-  uncertainty is critical (it usually isn't for a recreation-display
-  estimator), use Newey-West or block-bootstrap.
+- **OLS SEs assume IID residuals — they don't hold here.** Daily flow
+  residuals are strongly autocorrelated (measured lag-1 ≈ 0.7 for the
+  McKenzie fit), so the OLS SEs understate the truth by **~2–3×** (not
+  "slightly"); effective n is a fraction of nominal n. The report now
+  carries **block-bootstrap** SEs/CIs (monthly blocks) alongside the OLS
+  ones — quote those. Point estimates, r², and σ̂ are unaffected (OLS
+  stays unbiased; σ̂ is a valid *marginal* single-day scatter). The
+  companion `gauge_lead_lag.py` applies the same block bootstrap (ISO-week
+  blocks) to its RMSE-difference, so its "is the gain real?" CI reflects
+  the effective sample size — for McKenzie Bridge the lead/lag gain's CI
+  straddles zero.
 - **No data quality flag check.** USGS daily means in the script's
   cache include the agency's `provisional`/`approved` flag, but it's
   ignored. Approved values dominate in any pre-2024 window so this is

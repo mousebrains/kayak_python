@@ -22,6 +22,10 @@ def _load() -> Any:
     name = "gauge_lead_lag_under_test"
     if name in sys.modules:
         return sys.modules[name]
+    # The script imports its sibling `_resample` module; put the script dir on
+    # sys.path so that resolves when we exec it outside its own directory.
+    if str(_SCRIPT_PATH.parent) not in sys.path:
+        sys.path.insert(0, str(_SCRIPT_PATH.parent))
     spec = importlib.util.spec_from_file_location(name, _SCRIPT_PATH)
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)

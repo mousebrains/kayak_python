@@ -50,11 +50,13 @@ import argparse
 import math
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
+from _resample import block_bootstrap, lag1_autocorr
 
 # America/Los_Angeles is the site-local clock for every McKenzie gauge; USGS
 # stamps each unit value PST or PDT explicitly, so we convert with the row's
@@ -430,6 +432,7 @@ def render_markdown(
     lag_results: list[LagResult],
     rows: list[dict],
     storm: dict,
+    boot: dict,
     daily_full_rmse: float,
     daily_full_r2: float,
     daily_full_n: int,
@@ -546,6 +549,26 @@ def render_markdown(
         "reference for the deployed product's daily accuracy.\n"
     )
 
+    bf = boot["full"]
+    full_sig = bf["lo"] > 0 or bf["hi"] < 0
+    a("### Is the gain statistically real?\n")
+    a(
+        "The bare RMSE difference has far fewer decimals' worth of precision than it "
+        f"looks: hourly residuals are near-perfectly autocorrelated (lag-1 "
+        f"**{boot['resid_rho1']:.2f}**), so the {dt_con['n']:,} hours carry only a few "
+        "hundred *independent* observations. A **block bootstrap** over whole ISO-weeks "
+        f"({boot['n_weeks']} weeks, B=2000) puts the production-style RMSE reduction "
+        f"(contemporaneous minus aligned) at **{bf['mean']:+.2f} cfs**, 95% CI "
+        f"**[{bf['lo']:+.2f}, {bf['hi']:+.2f}]**, with alignment better in only "
+        f"**{bf['p_pos']:.0f}%** of resamples. "
+        + (
+            "The interval excludes zero, so the gain is statistically resolved.\n"
+            if full_sig
+            else "**The interval straddles zero — the improvement is not statistically "
+            "distinguishable from no effect.**\n"
+        )
+    )
+
     storm_gain = _pct(storm["con_rmse"], storm["lag_rmse"])
     storm_pct = storm["pct"]
     a("### During rapid flow changes (storm rises/falls)\n")
@@ -568,38 +591,46 @@ def render_markdown(
         f"{storm['lag_r2']:.4f} | {storm['lag_rmse']:.1f} |"
     )
     a("")
+    bs = boot["storm"]
+    storm_sig = bs["lo"] > 0 or bs["hi"] < 0
     a(
         f"Alignment changes storm-subset RMSE by **{storm_gain:+.1f}%** "
-        f"({storm['con_rmse']:.1f} → {storm['lag_rmse']:.1f} cfs). "
+        f"({storm['con_rmse']:.1f} → {storm['lag_rmse']:.1f} cfs); block-bootstrap "
+        f"reduction **{bs['mean']:+.2f} cfs**, 95% CI **[{bs['lo']:+.2f}, "
+        f"{bs['hi']:+.2f}]**"
         + (
-            "So the lags carry usable signal exactly where the physics predicts — it is "
-            "just diluted to near-zero across the mostly-flat full record.\n"
-            if storm_gain > 1.0
-            else "So even where misalignment should bite hardest the lags buy little: at "
-            "this reach's short travel times and heavily regulated, slowly-varying flow, "
-            "sub-daily alignment carries essentially no usable signal.\n"
+            " (excludes zero). So the lags carry a small but resolved signal exactly "
+            "where the physics predicts, just diluted to near-zero across the mostly-flat "
+            "full record.\n"
+            if storm_sig
+            else " (straddles zero). So even where misalignment should bite hardest the "
+            "lags buy nothing resolvable: at this reach's short travel times and heavily "
+            "regulated, slowly-varying flow, sub-daily alignment carries essentially no "
+            "usable signal.\n"
         )
     )
 
-    # Headline = the production-style aggregate, but flag if storms tell a
-    # different story so the verdict isn't misleadingly flat.
-    verdict_material = prod_gain >= 5.0 or storm_gain >= 10.0
+    # Worth pursuing only if the gain is both materially large AND statistically
+    # resolved (the block-bootstrap CI excludes zero); a big point estimate with
+    # a CI through zero is noise.
+    verdict_material = (prod_gain >= 5.0 or storm_gain >= 10.0) and full_sig
     a("## Verdict & recommendation\n")
     if verdict_material:
         a(
             f"Travel-time alignment is **worth pursuing** here: {prod_gain:+.1f}% RMSE "
-            f"overall and {storm_gain:+.1f}% on the fastest-changing hours (production-"
-            "style coefficients). The deployable, upstream-only share is the part to wire "
-            "in (see below).\n"
+            f"overall (block-bootstrap CI [{bf['lo']:+.2f}, {bf['hi']:+.2f}] cfs excludes "
+            f"zero) and {storm_gain:+.1f}% on the fastest-changing hours. The deployable, "
+            "upstream-only share is the part to wire in (see below).\n"
         )
     else:
         a(
-            f"Travel-time alignment yields a **negligible** gain here: {prod_gain:+.1f}% "
-            f"RMSE overall and {storm_gain:+.1f}% even on the fastest-changing "
-            f"{storm_pct:.0f}% of hours (production-style coefficients), both well inside "
-            "the residual scatter. **Recommendation: do not wire lead/lag into this "
-            "reach's estimate** — the complexity (below) buys nothing measurable. Keep "
-            "using contemporaneous latest readings.\n"
+            f"Travel-time alignment yields a **negligible and statistically unresolved** "
+            f"gain here: {prod_gain:+.1f}% RMSE overall and {storm_gain:+.1f}% even on the "
+            f"fastest-changing {storm_pct:.0f}% of hours, and the block-bootstrap CI on "
+            f"the reduction (**[{bf['lo']:+.2f}, {bf['hi']:+.2f}] cfs**) **straddles "
+            "zero** — once the residual autocorrelation is accounted for, the improvement "
+            "isn't distinguishable from no effect. **Recommendation: do not wire lead/lag "
+            "into this reach's estimate** — keep using contemporaneous latest readings.\n"
         )
     if is_mckenzie:
         a(
@@ -648,6 +679,9 @@ def render_markdown(
         "- **Fair comparison:** contemporaneous and aligned RMSE use one shared "
         "hold-out grid — the hours where every contemporaneous *and* every shifted "
         "predictor value exists — so only alignment varies.\n"
+        "- **Significance:** the RMSE difference is tested with a block bootstrap over "
+        "ISO-weeks (B=2000) rather than treating the autocorrelated hours as "
+        "independent; the reported CI reflects the effective, not nominal, sample size.\n"
         f"- **Caveat:** the hourly hold-out ({start}..{end}, ~{n_hours / 8766:.1f} yr of "
         "overlap) is far shorter than the daily fit's multi-decade record"
         + (" and excludes SF Cougar" if is_mckenzie else "")
@@ -820,6 +854,48 @@ def main() -> int:
         file=sys.stderr,
     )
 
+    # Block-bootstrap CI on the RMSE reduction from alignment. Hourly residuals
+    # are near-perfectly autocorrelated (lag-1 ~0.97), so the 23k-hour RMSE
+    # difference looks far more precise than it is; resampling whole ISO-weeks
+    # reflects the effective sample size and gives an honest CI on the gain.
+    e_con = y - _design(cols_con) @ daily_coefs
+    e_lag = y - _design(cols_lag) @ daily_coefs
+    week = np.asarray(hours) // (7 * 86400)
+
+    def _ci(reps: np.ndarray) -> dict:
+        lo, hi = np.percentile(reps, [2.5, 97.5])
+        return {
+            "mean": float(reps.mean()),
+            "lo": float(lo),
+            "hi": float(hi),
+            "p_pos": 100.0 * float((reps > 0).mean()),
+        }
+
+    def _diff_stat(ec: np.ndarray, el: np.ndarray) -> Callable[[np.ndarray], float]:
+        # +ve => travel-time alignment lowers RMSE on the resampled hours.
+        return lambda idx: float(np.sqrt((ec[idx] ** 2).mean()) - np.sqrt((el[idx] ** 2).mean()))
+
+    full_ci = _ci(block_bootstrap(week, _diff_stat(e_con, e_lag), n_boot=2000, seed=0))
+    storm_ci = _ci(
+        block_bootstrap(
+            week[storm_mask],
+            _diff_stat(e_con[storm_mask], e_lag[storm_mask]),
+            n_boot=2000,
+            seed=0,
+        )
+    )
+    boot = {
+        "full": full_ci,
+        "storm": storm_ci,
+        "resid_rho1": lag1_autocorr(e_con),
+        "n_weeks": int(np.unique(week).size),
+    }
+    print(
+        f"  bootstrap RMSE(con-lag): full mean={full_ci['mean']:.2f} "
+        f"CI=[{full_ci['lo']:.2f},{full_ci['hi']:.2f}] P(better)={full_ci['p_pos']:.0f}%",
+        file=sys.stderr,
+    )
+
     md = render_markdown(
         name=args.name,
         daily_doc=args.daily_doc,
@@ -832,6 +908,7 @@ def main() -> int:
         lag_results=lag_results,
         rows=rows,
         storm=storm,
+        boot=boot,
         daily_full_rmse=daily_rmse,
         daily_full_r2=daily_r2,
         daily_full_n=len(dwin),

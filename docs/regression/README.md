@@ -9,8 +9,11 @@ Each file is the source-of-truth for:
 - **Why** the fit exists (which gauge it estimates, why estimation is
   needed — e.g. retired or intermittent target).
 - **What data** went in (period of record, overlap window, n).
-- **The fitted parameters** with full uncertainty (1σ SEs, 95% CIs,
-  variance-covariance matrix, correlation matrix).
+- **The fitted parameters** with **autocorrelation-aware** uncertainty:
+  OLS SEs alongside **block-bootstrap** SEs/95% CIs (daily flow residuals
+  are strongly autocorrelated, so OLS SEs run ~2–3× too small), per-term
+  **VIFs** for multicollinearity, and the OLS variance-covariance /
+  correlation matrices.
 - **Goodness-of-fit** (r², RMSE, σ̂) and **residual diagnostics**
   (percentile distribution, mean/std by predictor quintile, and a
   by-hydrologic-season bias table — heavy-rain / light-rain /
@@ -60,7 +63,9 @@ quantifies that error from USGS unit values and writes a `<slug>_leadlag.md`
 sibling (cross-linked from the daily report's *Future* section). It is a
 **diagnostic** — it does not change any deployed calc — and reports per-predictor
 travel-time lags, a contemporaneous-vs-aligned accuracy table, a storm-rise
-subset, and a deployability verdict.
+subset, a **block-bootstrap CI** on the RMSE difference (so "is the gain real?"
+accounts for the ~0.97 hourly residual autocorrelation), and a deployability
+verdict.
 
 ## Index
 
@@ -74,5 +79,6 @@ subset, and a deployability verdict.
   Bridge) from five upstream gauges. Backs the calc gauge in migration
   0037. Lead/lag companion:
   [`mckenzie_14159000_leadlag.md`](mckenzie_14159000_leadlag.md)
-  (verdict: sub-daily alignment is negligible for this short-travel-time,
-  regulated reach — keep contemporaneous readings).
+  (verdict: sub-daily alignment is negligible *and* statistically unresolved
+  — the block-bootstrap CI straddles zero — for this short-travel-time,
+  regulated reach; keep contemporaneous readings).
