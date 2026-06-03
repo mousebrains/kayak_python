@@ -80,7 +80,7 @@ Correlation matrix:
           x3  -0.2124      -0.2325      -0.7630      +1.0000    
 ```
 
-**Caveat 1 (autocorrelation)**: this is the **OLS** covariance, which assumes IID residuals; with lag-1 residual autocorrelation **0.64** it understates the true parameter variance by roughly **4.4x** (in SE terms). Use the block-bootstrap SEs/CIs in the coefficients table for inference, not these.
+**Caveat 1 (autocorrelation)**: this is the **OLS** covariance, which assumes IID residuals; with lag-1 residual autocorrelation **0.64** it understates the parameter SE by roughly **4.4x**. Use the block-bootstrap SEs/CIs in the coefficients table for inference, not these (monthly blocks; longer blocks would only widen the intervals, so they are conservative for the most autocorrelated fits).
 
 **Caveat 2 (prediction vs parameter)**: even with correct parameter SEs, a single-day prediction at new `x` is dominated by the residual scatter `sigma_hat` (about 81 cfs at 1-sigma here), not by parameter uncertainty. `sigma_hat` is a valid *marginal* description of single-day error (autocorrelation barely biases it); what autocorrelation breaks is treating the n days as n independent observations.
 

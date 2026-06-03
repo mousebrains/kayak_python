@@ -26,7 +26,7 @@ def block_bootstrap(
 ) -> np.ndarray:
     """Block bootstrap: resample whole blocks of observations with replacement.
 
-    ``block_id[i]`` is the calendar block (e.g. ISO week or ``YYYY-MM``) of
+    ``block_id[i]`` is the calendar block (e.g. a 7-day window or ``YYYY-MM``) of
     observation ``i``; observations in the same block always move together, so
     within-block serial correlation is preserved and the resampling reflects
     the effective (not nominal) sample size. The number of blocks drawn equals

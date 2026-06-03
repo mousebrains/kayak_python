@@ -139,7 +139,7 @@ contemporaneous, then compares regression RMSE with predictors aligned
 contemporaneously vs travel-time-shifted — on one shared hold-out grid,
 under both daily-trained (deployed-style) and hourly-refit coefficients —
 plus a storm-rise subset and a deployability verdict. Crucially, the RMSE
-difference is wrapped in a **block-bootstrap CI** (ISO-week blocks):
+difference is wrapped in a **block-bootstrap CI** (7-day blocks):
 hourly residuals are ~0.97 autocorrelated, so the bare difference is far
 less precise than its decimals suggest, and the CI tells you whether the
 gain is statistically real. Writes `<name>.md` + a CCF-vs-lag `.svg`.
@@ -165,7 +165,7 @@ picks the `*_00060` column by name (cached to `/tmp/leadlag_<site>_<year>.tsv`).
   carries **block-bootstrap** SEs/CIs (monthly blocks) alongside the OLS
   ones — quote those. Point estimates, r², and σ̂ are unaffected (OLS
   stays unbiased; σ̂ is a valid *marginal* single-day scatter). The
-  companion `gauge_lead_lag.py` applies the same block bootstrap (ISO-week
+  companion `gauge_lead_lag.py` applies the same block bootstrap (7-day
   blocks) to its RMSE-difference, so its "is the gain real?" CI reflects
   the effective sample size — for McKenzie Bridge the lead/lag gain's CI
   straddles zero.

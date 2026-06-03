@@ -552,10 +552,11 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
     L(
         "**Caveat 1 (autocorrelation)**: this is the **OLS** covariance, which "
         "assumes IID residuals; with lag-1 residual autocorrelation "
-        f"**{coef_unc.resid_rho1:.2f}** it understates the true parameter "
-        f"variance by roughly **{coef_unc.se_inflation:.1f}x** (in SE terms). Use "
-        "the block-bootstrap SEs/CIs in the coefficients table for inference, "
-        "not these.\n"
+        f"**{coef_unc.resid_rho1:.2f}** it understates the parameter SE by roughly "
+        f"**{coef_unc.se_inflation:.1f}x**. Use the block-bootstrap SEs/CIs in the "
+        "coefficients table for inference, not these (monthly blocks; longer "
+        "blocks would only widen the intervals, so they are conservative for the "
+        "most autocorrelated fits).\n"
     )
     L(
         "**Caveat 2 (prediction vs parameter)**: even with correct parameter "

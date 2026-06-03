@@ -65,7 +65,7 @@ Both alignments are evaluated on the **same** hourly hold-out grid (the only dif
 
 ### Is the gain statistically real?
 
-The bare RMSE difference has far fewer decimals' worth of precision than it looks: hourly residuals are near-perfectly autocorrelated (lag-1 **0.97**), so the 23,155 hours carry only a few hundred *independent* observations. A **block bootstrap** over whole ISO-weeks (143 weeks, B=2000) puts the production-style RMSE reduction (contemporaneous minus aligned) at **+0.89 cfs**, 95% CI **[-1.00, +2.40]**, with alignment better in only **83%** of resamples. **The interval straddles zero — the improvement is not statistically distinguishable from no effect.**
+The bare RMSE difference has far fewer decimals' worth of precision than it looks: hourly residuals are near-perfectly autocorrelated (lag-1 **0.97**), so the 23,155 hours carry only a few hundred *independent* observations. A **block bootstrap** over whole 7-day blocks (143 of them, B=2000) puts the production-style RMSE reduction (contemporaneous minus aligned) at **+0.89 cfs**, 95% CI **[-1.00, +2.40]**, with alignment better in only **83%** of resamples. **The interval straddles zero — the improvement is not statistically distinguishable from no effect.**
 
 ### During rapid flow changes (storm rises/falls)
 
@@ -97,6 +97,6 @@ Recorded for completeness and for reaches where the gain is larger. Applying lag
 - **Unit values** pulled unfiltered from `nwis.waterservices.usgs.gov` (the only host serving pre-2007 UV) and resampled to hourly means; 15-min (Trail Bridge) and 30-min sites land on the same grid.
 - **Lag estimation** maximizes the correlation of hourly first differences (flow *changes* propagate; baseline levels are near-identical across neighbours and would pin the peak at τ≈0).
 - **Fair comparison:** contemporaneous and aligned RMSE use one shared hold-out grid — the hours where every contemporaneous *and* every shifted predictor value exists — so only alignment varies.
-- **Significance:** the RMSE difference is tested with a block bootstrap over ISO-weeks (B=2000) rather than treating the autocorrelated hours as independent; the reported CI reflects the effective, not nominal, sample size.
+- **Significance:** the RMSE difference is tested with a block bootstrap over 7-day blocks (B=2000) rather than treating the autocorrelated hours as independent; the reported CI reflects the effective, not nominal, sample size (longer blocks would only widen it, so it is a conservative bound).
 - **Caveat:** the hourly hold-out (1987-10-01..1994-09-30, ~2.6 yr of overlap) is far shorter than the daily fit's multi-decade record and excludes SF Cougar; the daily-reference row controls for the predictor-set change but not the window.
 

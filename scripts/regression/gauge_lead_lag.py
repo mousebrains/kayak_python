@@ -556,8 +556,8 @@ def render_markdown(
         "The bare RMSE difference has far fewer decimals' worth of precision than it "
         f"looks: hourly residuals are near-perfectly autocorrelated (lag-1 "
         f"**{boot['resid_rho1']:.2f}**), so the {dt_con['n']:,} hours carry only a few "
-        "hundred *independent* observations. A **block bootstrap** over whole ISO-weeks "
-        f"({boot['n_weeks']} weeks, B=2000) puts the production-style RMSE reduction "
+        "hundred *independent* observations. A **block bootstrap** over whole 7-day "
+        f"blocks ({boot['n_weeks']} of them, B=2000) puts the production-style RMSE reduction "
         f"(contemporaneous minus aligned) at **{bf['mean']:+.2f} cfs**, 95% CI "
         f"**[{bf['lo']:+.2f}, {bf['hi']:+.2f}]**, with alignment better in only "
         f"**{bf['p_pos']:.0f}%** of resamples. "
@@ -680,8 +680,9 @@ def render_markdown(
         "hold-out grid — the hours where every contemporaneous *and* every shifted "
         "predictor value exists — so only alignment varies.\n"
         "- **Significance:** the RMSE difference is tested with a block bootstrap over "
-        "ISO-weeks (B=2000) rather than treating the autocorrelated hours as "
-        "independent; the reported CI reflects the effective, not nominal, sample size.\n"
+        "7-day blocks (B=2000) rather than treating the autocorrelated hours as "
+        "independent; the reported CI reflects the effective, not nominal, sample size "
+        "(longer blocks would only widen it, so it is a conservative bound).\n"
         f"- **Caveat:** the hourly hold-out ({start}..{end}, ~{n_hours / 8766:.1f} yr of "
         "overlap) is far shorter than the daily fit's multi-decade record"
         + (" and excludes SF Cougar" if is_mckenzie else "")
@@ -856,8 +857,9 @@ def main() -> int:
 
     # Block-bootstrap CI on the RMSE reduction from alignment. Hourly residuals
     # are near-perfectly autocorrelated (lag-1 ~0.97), so the 23k-hour RMSE
-    # difference looks far more precise than it is; resampling whole ISO-weeks
-    # reflects the effective sample size and gives an honest CI on the gain.
+    # difference looks far more precise than it is; resampling whole 7-day blocks
+    # (epoch-anchored, so Thursday-aligned — any contiguous week-length block is
+    # fine) reflects the effective sample size and gives an honest CI on the gain.
     e_con = y - _design(cols_con) @ daily_coefs
     e_lag = y - _design(cols_lag) @ daily_coefs
     week = np.asarray(hours) // (7 * 86400)
