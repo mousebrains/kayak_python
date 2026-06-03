@@ -32,12 +32,14 @@ The chosen window is selected for *data points*, not calendar span.
 
 Window: **1913-02-01 → 1994-06-13**, n = **21958** daily means (~60.1 years of data).
 
-### Coefficients (1-sigma uncertainty)
+### Coefficients (with honest, autocorrelation-aware uncertainty)
 
-| Term | Estimate | SE | 95% CI |
-|---|---|---|---|
-| intercept | +78.7102 | 0.77 | [+77.2, +80.22] |
-| fl::14147500 (predictor 1: 14147500) | +0.439612 | 0.0006636 | [+0.4383, +0.4409] |
+Daily streamflow residuals are strongly autocorrelated (lag-1 **0.76** here), which violates the IID assumption behind the OLS standard errors — so **SE (OLS)** is optimistic. **SE (block-boot)** resamples whole monthly blocks (722 months, B=1000), preserving the serial correlation; it is the realistic figure and runs about **8.1x** the OLS SE. The **95% CI** below is the block-bootstrap percentile interval. **VIF** is the variance-inflation factor (collinearity with the other predictors); VIF > 10 means the individual coefficient is poorly determined and should not be read as a physical sensitivity.
+
+| Term | Estimate | SE (OLS) | SE (block-boot) | 95% CI (block-boot) | VIF |
+|---|---|---|---|---|---|
+| intercept | +78.7102 | 0.77 | 3.438 | [+72.02, +85.32] | — |
+| fl::14147500 (predictor 1: 14147500) | +0.439612 | 0.0006636 | 0.0054 | [+0.4293, +0.4504] | 1.0 |
 
 r² = **0.9524**, RMSE = **84.51 cfs** (sigma_hat = 84.52 cfs unbiased).
 
@@ -66,7 +68,9 @@ Correlation matrix:
           x1  -0.6717      +1.0000    
 ```
 
-**Caveat**: these uncertainties capture *parameter* precision only. For a single-day prediction at new `x`, the prediction interval is dominated by the residual scatter `sigma_hat` (about 117 cfs at 1-sigma here), not by parameter SEs.
+**Caveat 1 (autocorrelation)**: this is the **OLS** covariance, which assumes IID residuals; with lag-1 residual autocorrelation **0.76** it understates the parameter SE by roughly **8.1x**. Use the block-bootstrap SEs/CIs in the coefficients table for inference, not these (monthly blocks; longer blocks would only widen the intervals, so they are conservative for the most autocorrelated fits).
+
+**Caveat 2 (prediction vs parameter)**: even with correct parameter SEs, a single-day prediction at new `x` is dominated by the residual scatter `sigma_hat` (about 85 cfs at 1-sigma here), not by parameter uncertainty. `sigma_hat` is a valid *marginal* description of single-day error (autocorrelation barely biases it); what autocorrelation breaks is treating the n days as n independent observations.
 
 ## Window stability
 
@@ -99,6 +103,19 @@ Re-fit at multiple start dates (endpoint fixed at `1994-06-13`):
 | Q3 | 554 | -0.4 | 50.7 | 4391 |
 | Q4 | 926 | +4.4 | 70.1 | 4391 |
 | Q5 | 1620 | +2.3 | 165.3 | 4394 |
+
+### By hydrologic season
+
+Residuals bucketed by monsoonal season (most kayak gauges sit in a PNW monsoonal regime). **Mean / median flow** give each season's target-flow magnitude. **Bias** is the mean residual (y - y_hat); a non-zero bias means the pooled fit systematically over- (negative) or under-predicts (positive) in that season. **% of flow** normalizes the bias by the season's mean flow so it's comparable across gauges. The remaining columns (median residual, std, RMSE) are residual statistics in cfs.
+
+| Season | n | mean flow | median flow | bias (cfs) | % of flow | median resid | std | RMSE |
+|---|---|---|---|---|---|---|---|---|
+| Heavy rain (Nov-Dec) | 3721 | 516 | 350 | -13.7 | -2.7% | -18.3 | 105.3 | 106.2 |
+| Light rain (Jan-Feb) | 3584 | 577 | 450 | -35.8 | -6.2% | -34.9 | 111.7 | 117.3 |
+| Rain-on-snow (Mar-Apr) | 3691 | 572 | 508 | -13.3 | -2.3% | -21.1 | 85.2 | 86.3 |
+| Dry season (May-Oct) | 10962 | 288 | 191 | +20.8 | +7.2% | +6.9 | 55.2 | 59.0 |
+
+A season whose bias is large relative to `sigma_hat` (the pooled 1-sigma residual scatter) is a candidate for a season-specific intercept or a separate seasonal fit; a season with elevated `std`/`RMSE` but near-zero bias is just noisier (e.g., flashy storm response), not mis-calibrated.
 
 ## Predictions at example x values
 
@@ -153,3 +170,4 @@ WHERE NOT EXISTS (
 
 - **Piecewise-linear fit by predictor-1 quintile.** If the residual table above shows systematic mean drift across quintiles (e.g., consistently under-estimating at low flow and over-estimating at high flow), splitting the predictor range into 2-3 regimes and fitting one linear model per regime can halve RMSE without adding free parameters beyond what `calc_expression` already supports via `greatest(low_estimate, high_estimate)` or `if(x < threshold, ..., ...)`-style composition. Worth trying when RMSE > ~10% of the mean target value.
 - **Re-running** when the active predictor's rating curve drifts. USGS occasionally updates stage-discharge ratings; the `Reproduce` snippet above re-pulls the full period of record on demand.
+- **Sub-daily lead/lag.** This fit is on daily means, but the `calc_expression` applies its coefficients to the *latest instantaneous* predictor readings — so inter-gauge travel time (1-12 h) becomes a timing error the daily fit never sees. `gauge_lead_lag.py` (same directory) quantifies that error from USGS unit values; worth a look when predictors are many river-miles from the target.

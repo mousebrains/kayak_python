@@ -23,8 +23,8 @@ All series are USGS daily-mean flow (`parameterCd=00060`, `statCd=00003`).
 | Gauge | Period of record | Daily means |
 |---|---|---|
 | `14159100` (target) | 1962-10-01 → **2026-04-01** | 3508 |
-| `14159200` (predictor) | 1957-10-01 → 2026-05-21 | 20320 |
-| `14158850` (predictor) | 1959-10-01 → 2026-05-21 | 24340 |
+| `14159200` (predictor) | 1957-10-01 → 2026-06-01 | 20331 |
+| `14158850` (predictor) | 1959-10-01 → 2026-06-01 | 24351 |
 | **Overlap (full)** | 1962-10-01 → 2026-04-01 | **3508** |
 
 Note: USGS records can be **non-contiguous** (instrumentation outages).
@@ -34,13 +34,15 @@ The chosen window is selected for *data points*, not calendar span.
 
 Window: **1962-10-01 → 2026-04-01**, n = **3508** daily means (~9.6 years of data).
 
-### Coefficients (1-sigma uncertainty)
+### Coefficients (with honest, autocorrelation-aware uncertainty)
 
-| Term | Estimate | SE | 95% CI |
-|---|---|---|---|
-| intercept | +53.4289 | 5.524 | [+42.6, +64.26] |
-| sc::SF_McKenzie_Cougar_merge (predictor 1: 14159200) | +0.403663 | 0.004915 | [+0.394, +0.4133] |
-| tb::14158850 (predictor 2: 14158850) | +0.217772 | 0.007729 | [+0.2026, +0.2329] |
+Daily streamflow residuals are strongly autocorrelated (lag-1 **0.82** here), which violates the IID assumption behind the OLS standard errors — so **SE (OLS)** is optimistic. **SE (block-boot)** resamples whole monthly blocks (117 months, B=1000), preserving the serial correlation; it is the realistic figure and runs about **9.3x** the OLS SE. The **95% CI** below is the block-bootstrap percentile interval. **VIF** is the variance-inflation factor (collinearity with the other predictors); VIF > 10 means the individual coefficient is poorly determined and should not be read as a physical sensitivity.
+
+| Term | Estimate | SE (OLS) | SE (block-boot) | 95% CI (block-boot) | VIF |
+|---|---|---|---|---|---|
+| intercept | +53.4289 | 5.524 | 15.76 | [+21.14, +81.76] | — |
+| sc::SF_McKenzie_Cougar_merge (predictor 1: 14159200) | +0.403663 | 0.004915 | 0.06137 | [+0.3157, +0.5253] | 4.4 |
+| tb::14158850 (predictor 2: 14158850) | +0.217772 | 0.007729 | 0.04676 | [+0.1258, +0.2977] | 4.4 |
 
 r² = **0.9354**, RMSE = **88.40 cfs** (sigma_hat = 88.44 cfs unbiased).
 
@@ -72,7 +74,9 @@ Correlation matrix:
           x2  -0.9271      -0.8782      +1.0000    
 ```
 
-**Caveat**: these uncertainties capture *parameter* precision only. For a single-day prediction at new `x`, the prediction interval is dominated by the residual scatter `sigma_hat` (about 117 cfs at 1-sigma here), not by parameter SEs.
+**Caveat 1 (autocorrelation)**: this is the **OLS** covariance, which assumes IID residuals; with lag-1 residual autocorrelation **0.82** it understates the parameter SE by roughly **9.3x**. Use the block-bootstrap SEs/CIs in the coefficients table for inference, not these (monthly blocks; longer blocks would only widen the intervals, so they are conservative for the most autocorrelated fits).
+
+**Caveat 2 (prediction vs parameter)**: even with correct parameter SEs, a single-day prediction at new `x` is dominated by the residual scatter `sigma_hat` (about 88 cfs at 1-sigma here), not by parameter uncertainty. `sigma_hat` is a valid *marginal* description of single-day error (autocorrelation barely biases it); what autocorrelation breaks is treating the n days as n independent observations.
 
 ## Window stability
 
@@ -106,6 +110,19 @@ Re-fit at multiple start dates (endpoint fixed at `2026-04-01`):
 | Q3 | 452 | -8.5 | 61.7 | 701 |
 | Q4 | 678 | -7.3 | 66.8 | 701 |
 | Q5 | 1170 | +20.4 | 167.6 | 704 |
+
+### By hydrologic season
+
+Residuals bucketed by monsoonal season (most kayak gauges sit in a PNW monsoonal regime). **Mean / median flow** give each season's target-flow magnitude. **Bias** is the mean residual (y - y_hat); a non-zero bias means the pooled fit systematically over- (negative) or under-predicts (positive) in that season. **% of flow** normalizes the bias by the season's mean flow so it's comparable across gauges. The remaining columns (median residual, std, RMSE) are residual statistics in cfs.
+
+| Season | n | mean flow | median flow | bias (cfs) | % of flow | median resid | std | RMSE |
+|---|---|---|---|---|---|---|---|---|
+| Heavy rain (Nov-Dec) | 610 | 597 | 448 | -17.0 | -2.9% | -21.2 | 139.5 | 140.5 |
+| Light rain (Jan-Feb) | 593 | 657 | 531 | -3.2 | -0.5% | -23.1 | 112.0 | 111.9 |
+| Rain-on-snow (Mar-Apr) | 581 | 595 | 553 | -15.1 | -2.5% | -20.3 | 60.1 | 61.9 |
+| Dry season (May-Oct) | 1724 | 417 | 331 | +12.2 | +2.9% | +0.8 | 56.3 | 57.6 |
+
+A season whose bias is large relative to `sigma_hat` (the pooled 1-sigma residual scatter) is a candidate for a season-specific intercept or a separate seasonal fit; a season with elevated `std`/`RMSE` but near-zero bias is just noisier (e.g., flashy storm response), not mis-calibrated.
 
 ## Predictions at example x values
 
@@ -152,3 +169,4 @@ WHERE NOT EXISTS (
 
 - **Piecewise-linear fit by predictor-1 quintile.** If the residual table above shows systematic mean drift across quintiles (e.g., consistently under-estimating at low flow and over-estimating at high flow), splitting the predictor range into 2-3 regimes and fitting one linear model per regime can halve RMSE without adding free parameters beyond what `calc_expression` already supports via `greatest(low_estimate, high_estimate)` or `if(x < threshold, ..., ...)`-style composition. Worth trying when RMSE > ~10% of the mean target value.
 - **Re-running** when the active predictor's rating curve drifts. USGS occasionally updates stage-discharge ratings; the `Reproduce` snippet above re-pulls the full period of record on demand.
+- **Sub-daily lead/lag.** This fit is on daily means, but the `calc_expression` applies its coefficients to the *latest instantaneous* predictor readings — so inter-gauge travel time (1-12 h) becomes a timing error the daily fit never sees. `gauge_lead_lag.py` (same directory) quantifies that error from USGS unit values; worth a look when predictors are many river-miles from the target.

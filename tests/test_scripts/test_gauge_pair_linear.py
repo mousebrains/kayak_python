@@ -27,6 +27,10 @@ def _load_script() -> Any:
     name = "gauge_pair_linear_under_test"
     if name in sys.modules:
         return sys.modules[name]
+    # The script imports its sibling `_resample` module; put the script dir on
+    # sys.path so that resolves when we exec it outside its own directory.
+    if str(_SCRIPT_PATH.parent) not in sys.path:
+        sys.path.insert(0, str(_SCRIPT_PATH.parent))
     spec = importlib.util.spec_from_file_location(name, _SCRIPT_PATH)
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
@@ -173,6 +177,70 @@ def test_nice_axis_round_ticks():
     # Step is a "nice" round value: 1/2/5 * 10^k.
     mantissa = step / 10 ** math.floor(math.log10(step))
     assert any(abs(mantissa - m) < 1e-6 for m in (1.0, 2.0, 5.0))
+
+
+def test_seasonal_residuals_buckets_by_month():
+    gpl = _load_script()
+    from datetime import date, timedelta
+
+    import numpy as np
+
+    # Two years of daily keys so every season is well populated.
+    start = date.fromisoformat("2011-01-01")
+    keys = [(start + timedelta(days=i)).isoformat() for i in range(730)]
+    # Plant a known +100 cfs bias in Mar/Apr (rain-on-snow), 0 elsewhere.
+    resid = np.array([100.0 if int(k[5:7]) in (3, 4) else 0.0 for k in keys])
+    y_values = [1000.0] * len(keys)
+    fit = gpl.Fit(
+        n=len(keys),
+        coef_names=["intercept", "x1"],
+        coefs=np.array([0.0, 1.0]),
+        cov=np.eye(2),
+        r2=0.9,
+        rmse=1.0,
+        sigma_hat=1.0,
+        residuals=resid,
+        x_means=np.array([0.0]),
+    )
+    rows = {r["season"]: r for r in gpl.seasonal_residuals(keys, fit, y_values)}
+    # Every day lands in exactly one season.
+    assert sum(r["n"] for r in rows.values()) == len(keys)
+    # The Mar-Apr bucket carries the planted bias; others are unbiased.
+    ros_label = next(name for name, months in gpl.SEASONS if set(months) == {3, 4})
+    ros = rows[ros_label]
+    assert ros["n"] == sum(1 for k in keys if int(k[5:7]) in (3, 4))
+    assert abs(ros["mean_residual"] - 100.0) < 1e-9
+    assert abs(ros["pct_bias"] - 10.0) < 1e-9  # 100 / 1000
+    assert abs(ros["rmse"] - 100.0) < 1e-9
+    # Per-season flow magnitude (constant 1000 here) is reported as mean + median.
+    assert abs(ros["y_mean"] - 1000.0) < 1e-9
+    assert abs(ros["y_median"] - 1000.0) < 1e-9
+    for name, months in gpl.SEASONS:
+        if set(months) != {3, 4}:
+            assert abs(rows[name]["mean_residual"]) < 1e-9
+
+
+def test_coef_uncertainty_shapes_and_determinism():
+    import numpy as np
+
+    gpl = _load_script()
+    pred, targ = _toy_series()
+    keys = sorted(set(pred) & set(targ))
+    xs = [pred[k] for k in keys]
+    ys = [targ[k] for k in keys]
+    fit = gpl.fit_ols([xs], ys, quadratic=False)
+    cu = gpl.coef_uncertainty([xs], ys, keys, False, fit, n_boot=100, seed=0)
+    p = len(fit.coefs)
+    assert cu.boot_se.shape == (p,)
+    assert cu.boot_lo.shape == (p,) and cu.boot_hi.shape == (p,)
+    assert np.all(cu.boot_se > 0)
+    assert len(cu.vifs) == 1  # single predictor -> VIF ~ 1
+    assert abs(cu.vifs[0] - 1.0) < 0.01
+    assert -1.0 <= cu.resid_rho1 <= 1.0
+    assert cu.n_blocks > 1
+    # Deterministic under a fixed seed.
+    cu2 = gpl.coef_uncertainty([xs], ys, keys, False, fit, n_boot=100, seed=0)
+    assert np.allclose(cu.boot_se, cu2.boot_se)
 
 
 def test_predict_returns_three_uncertainties():

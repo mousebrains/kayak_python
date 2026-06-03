@@ -50,6 +50,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
+from _resample import block_bootstrap, lag1_autocorr, vif
 
 
 @dataclass(frozen=True)
@@ -219,6 +220,127 @@ def residual_percentiles(fit: Fit) -> dict[int, float]:
     return {p: r[max(0, min(n - 1, int(p / 100 * n)))] for p in (1, 5, 25, 50, 75, 95, 99)}
 
 
+# Hydrologic ("monsoonal") season buckets for the residual table. Most kayak
+# gauges sit in a Pacific-Northwest monsoonal regime, so bucketing residuals
+# by season exposes seasonal bias the pooled diagnostics average away — e.g.,
+# a fit trained on the long record can systematically under-predict during
+# spring rain-on-snow if the upstream→target routing/gains in that season
+# differ from the annual mean. Months are contiguous and non-overlapping;
+# the water year (starts Oct 1) is split heavy-rain → light-rain →
+# rain-on-snow → dry season.
+SEASONS: list[tuple[str, tuple[int, ...]]] = [
+    ("Heavy rain (Nov-Dec)", (11, 12)),
+    ("Light rain (Jan-Feb)", (1, 2)),
+    ("Rain-on-snow (Mar-Apr)", (3, 4)),
+    ("Dry season (May-Oct)", (5, 6, 7, 8, 9, 10)),
+]
+
+
+def seasonal_residuals(
+    window_keys: list[str],
+    fit: Fit,
+    y_values: list[float],
+) -> list[dict]:
+    """Bucket residuals by hydrologic season (see ``SEASONS``).
+
+    ``window_keys[i]`` is the ``YYYY-MM-DD`` date of residual
+    ``fit.residuals[i]`` and target value ``y_values[i]`` — the three share
+    the ordering used to build the design matrix. Returns one row per season
+    with n, mean/median bias, std, RMSE, the mean target value, and the
+    percent bias (mean residual / mean target) so seasonal over/under-fit is
+    directly comparable across gauges of different magnitudes.
+    """
+    month_to_season = {m: name for name, months in SEASONS for m in months}
+    buckets: dict[str, list[int]] = {name: [] for name, _ in SEASONS}
+    for i, k in enumerate(window_keys):
+        buckets[month_to_season[int(k[5:7])]].append(i)
+    out: list[dict] = []
+    for name, _months in SEASONS:
+        idx = buckets[name]
+        if not idx:
+            out.append({"season": name, "n": 0})
+            continue
+        r = [float(fit.residuals[i]) for i in idx]
+        yv = [y_values[i] for i in idx]
+        y_mean = statistics.mean(yv)
+        out.append(
+            {
+                "season": name,
+                "n": len(r),
+                "mean_residual": statistics.mean(r),
+                "median_residual": statistics.median(r),
+                "std_residual": statistics.stdev(r) if len(r) > 1 else 0.0,
+                "rmse": math.sqrt(sum(v * v for v in r) / len(r)),
+                "y_mean": y_mean,
+                "y_median": statistics.median(yv),
+                "pct_bias": 100.0 * statistics.mean(r) / y_mean if y_mean else float("nan"),
+            }
+        )
+    return out
+
+
+@dataclass(frozen=True)
+class CoefUncertainty:
+    """Honest coefficient uncertainty + collinearity diagnostics.
+
+    OLS SEs assume IID residuals, but daily streamflow residuals are strongly
+    autocorrelated, so those SEs are optimistic. The block-bootstrap values
+    here resample whole monthly calendar blocks (keeping serial correlation
+    intact) and are the realistic numbers; VIFs flag the multicollinearity
+    that makes individual coefficients unreliable to interpret in isolation.
+    """
+
+    boot_se: np.ndarray  # (p,) bootstrap SD of each coefficient
+    boot_lo: np.ndarray  # (p,) 2.5th percentile
+    boot_hi: np.ndarray  # (p,) 97.5th percentile
+    vifs: list[float]  # one per linear predictor
+    resid_rho1: float  # lag-1 autocorrelation of the residuals
+    se_inflation: float  # median(boot_se / ols_se) over the slopes
+    n_blocks: int
+    n_boot: int
+
+
+def coef_uncertainty(
+    pts_predictors: list[list[float]],
+    pts_y: list[float],
+    window_keys: list[str],
+    quadratic: bool,
+    fit: Fit,
+    n_boot: int = 1000,
+    seed: int = 0,
+) -> CoefUncertainty:
+    """Block-bootstrap the whole fit over monthly blocks + compute VIFs.
+
+    `window_keys[i]` is the `YYYY-MM-DD` date of row i; rows are grouped into
+    `YYYY-MM` blocks so an entire month resamples together and within-month
+    autocorrelation is preserved.
+    """
+    cols = [np.asarray(c, dtype=float) for c in pts_predictors]
+    y = np.asarray(pts_y, dtype=float)
+    block_id = np.array([k[:7] for k in window_keys])
+
+    def refit(idx: np.ndarray) -> np.ndarray:
+        design, _ = build_design_matrix([c[idx] for c in cols], quadratic)
+        beta, *_ = np.linalg.lstsq(design, y[idx], rcond=None)
+        return np.asarray(beta, dtype=float)
+
+    reps = block_bootstrap(block_id, refit, n_boot=n_boot, seed=seed)  # (B, p)
+    boot_se = reps.std(axis=0, ddof=1)
+    n_lin = len(cols)
+    ols_se = fit.se[1 : 1 + n_lin]
+    ratio = boot_se[1 : 1 + n_lin] / np.where(ols_se > 0, ols_se, np.nan)
+    return CoefUncertainty(
+        boot_se=boot_se,
+        boot_lo=np.percentile(reps, 2.5, axis=0),
+        boot_hi=np.percentile(reps, 97.5, axis=0),
+        vifs=vif(cols),
+        resid_rho1=lag1_autocorr(fit.residuals),
+        se_inflation=float(np.nanmedian(ratio)),
+        n_blocks=len(set(block_id.tolist())),
+        n_boot=n_boot,
+    )
+
+
 def design_row(predictor_values: list[float], quadratic: bool) -> np.ndarray:
     """Build the design-row vector for a single x* — same column layout as
     `build_design_matrix`."""
@@ -284,9 +406,11 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
     target_data: dict[str, float],
     predictor_data: list[dict[str, float]],
     overlap_keys: list[str],
+    window_keys: list[str],
     pts_predictors: list[list[float]],
     pts_y: list[float],
     fit: Fit,
+    coef_unc: CoefUncertainty,
     stab: list[tuple[str, Fit | None]],
     calc_handles: list[str],
 ) -> str:
@@ -371,13 +495,28 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
         f"daily means (~{fit.n / 365.25:.1f} years of data).\n"
     )
 
-    L("### Coefficients (1-sigma uncertainty)\n")
-    L("| Term | Estimate | SE | 95% CI |")
-    L("|---|---|---|---|")
-    for name_, est, se in zip(fit.coef_names, fit.coefs, fit.se, strict=False):
+    L("### Coefficients (with honest, autocorrelation-aware uncertainty)\n")
+    L(
+        "Daily streamflow residuals are strongly autocorrelated (lag-1 "
+        f"**{coef_unc.resid_rho1:.2f}** here), which violates the IID assumption "
+        "behind the OLS standard errors — so **SE (OLS)** is optimistic. **SE "
+        f"(block-boot)** resamples whole monthly blocks ({coef_unc.n_blocks} "
+        f"months, B={coef_unc.n_boot}), preserving the serial correlation; it is "
+        f"the realistic figure and runs about **{coef_unc.se_inflation:.1f}x** the "
+        "OLS SE. The **95% CI** below is the block-bootstrap percentile interval. "
+        "**VIF** is the variance-inflation factor (collinearity with the other "
+        "predictors); VIF > 10 means the individual coefficient is poorly "
+        "determined and should not be read as a physical sensitivity.\n"
+    )
+    vif_for = {f"x{j}": coef_unc.vifs[j - 1] for j in range(1, len(coef_unc.vifs) + 1)}
+    L("| Term | Estimate | SE (OLS) | SE (block-boot) | 95% CI (block-boot) | VIF |")
+    L("|---|---|---|---|---|---|")
+    for i, (name_, est, se) in enumerate(zip(fit.coef_names, fit.coefs, fit.se, strict=False)):
         label = label_for.get(name_, name_)
-        lo, hi = est - 1.96 * se, est + 1.96 * se
-        L(f"| {label} | {est:+.6g} | {se:.4g} | [{lo:+.4g}, {hi:+.4g}] |")
+        bse = coef_unc.boot_se[i]
+        blo, bhi = coef_unc.boot_lo[i], coef_unc.boot_hi[i]
+        vstr = f"{vif_for[name_]:.1f}" if name_ in vif_for else "—"
+        L(f"| {label} | {est:+.6g} | {se:.4g} | {bse:.4g} | [{blo:+.4g}, {bhi:+.4g}] | {vstr} |")
     L("")
     L(
         f"r² = **{fit.r2:.4f}**, RMSE = **{fit.rmse:.2f} cfs** "
@@ -411,10 +550,22 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
         L(f"{n:>12}  {row}")
     L("```\n")
     L(
-        "**Caveat**: these uncertainties capture *parameter* precision only. "
-        "For a single-day prediction at new `x`, the prediction interval is "
-        "dominated by the residual scatter `sigma_hat` (about 117 cfs at 1-sigma here), "
-        "not by parameter SEs.\n"
+        "**Caveat 1 (autocorrelation)**: this is the **OLS** covariance, which "
+        "assumes IID residuals; with lag-1 residual autocorrelation "
+        f"**{coef_unc.resid_rho1:.2f}** it understates the parameter SE by roughly "
+        f"**{coef_unc.se_inflation:.1f}x**. Use the block-bootstrap SEs/CIs in the "
+        "coefficients table for inference, not these (monthly blocks; longer "
+        "blocks would only widen the intervals, so they are conservative for the "
+        "most autocorrelated fits).\n"
+    )
+    L(
+        "**Caveat 2 (prediction vs parameter)**: even with correct parameter "
+        "SEs, a single-day prediction at new `x` is dominated by the residual "
+        f"scatter `sigma_hat` (about {fit.sigma_hat:.0f} cfs at 1-sigma here), "
+        "not by parameter uncertainty. `sigma_hat` is a valid *marginal* "
+        "description of single-day error (autocorrelation barely biases it); "
+        "what autocorrelation breaks is treating the n days as n independent "
+        "observations.\n"
     )
 
     L("## Window stability\n")
@@ -462,6 +613,41 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
             f"{q['mean_residual']:+.1f} | {q['std_residual']:.1f} | {q['n']} |"
         )
     L("")
+
+    L("### By hydrologic season\n")
+    L(
+        "Residuals bucketed by monsoonal season (most kayak gauges sit in a "
+        "PNW monsoonal regime). **Mean / median flow** give each season's "
+        "target-flow magnitude. **Bias** is the mean residual (y - y_hat); a "
+        "non-zero bias means the pooled fit systematically over- (negative) "
+        "or under-predicts (positive) in that season. **% of flow** "
+        "normalizes the bias by the season's mean flow so it's comparable "
+        "across gauges. The remaining columns (median residual, std, RMSE) "
+        "are residual statistics in cfs.\n"
+    )
+    seas = seasonal_residuals(window_keys, fit, pts_y)
+    L(
+        "| Season | n | mean flow | median flow | bias (cfs) | % of flow | "
+        "median resid | std | RMSE |"
+    )
+    L("|---|---|---|---|---|---|---|---|---|")
+    for s in seas:
+        if s["n"] == 0:
+            L(f"| {s['season']} | 0 | — | — | — | — | — | — | — |")
+            continue
+        L(
+            f"| {s['season']} | {s['n']} | {s['y_mean']:.0f} | {s['y_median']:.0f} | "
+            f"{s['mean_residual']:+.1f} | {s['pct_bias']:+.1f}% | "
+            f"{s['median_residual']:+.1f} | {s['std_residual']:.1f} | {s['rmse']:.1f} |"
+        )
+    L("")
+    L(
+        "A season whose bias is large relative to `sigma_hat` (the pooled "
+        "1-sigma residual scatter) is a candidate for a season-specific "
+        "intercept or a separate seasonal fit; a season with elevated `std`/"
+        "`RMSE` but near-zero bias is just noisier (e.g., flashy storm "
+        "response), not mis-calibrated.\n"
+    )
 
     L("## Predictions at example x values\n")
     L(
@@ -580,6 +766,14 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
         "- **Re-running** when the active predictor's rating curve drifts. "
         "USGS occasionally updates stage-discharge ratings; the `Reproduce` "
         "snippet above re-pulls the full period of record on demand."
+    )
+    L(
+        "- **Sub-daily lead/lag.** This fit is on daily means, but the "
+        "`calc_expression` applies its coefficients to the *latest instantaneous* "
+        "predictor readings — so inter-gauge travel time (1-12 h) becomes a timing "
+        "error the daily fit never sees. `gauge_lead_lag.py` (same directory) "
+        "quantifies that error from USGS unit values; worth a look when predictors "
+        "are many river-miles from the target."
     )
 
     return "\n".join(lines) + "\n"
@@ -1012,6 +1206,7 @@ def main() -> int:
     pts_y = [target_data[k] for k in keys]
 
     fit = fit_ols(pts_predictors, pts_y, args.quadratic)
+    coef_unc = coef_uncertainty(pts_predictors, pts_y, keys, args.quadratic, fit)
 
     # Stability windows
     if args.stability_starts is None:
@@ -1057,9 +1252,11 @@ def main() -> int:
         target_data=target_data,
         predictor_data=predictor_data,
         overlap_keys=overlap_all,
+        window_keys=keys,
         pts_predictors=pts_predictors,
         pts_y=pts_y,
         fit=fit,
+        coef_unc=coef_unc,
         stab=stab,
         calc_handles=calc_handles,
     )

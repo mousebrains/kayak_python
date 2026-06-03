@@ -9,10 +9,16 @@ Each file is the source-of-truth for:
 - **Why** the fit exists (which gauge it estimates, why estimation is
   needed — e.g. retired or intermittent target).
 - **What data** went in (period of record, overlap window, n).
-- **The fitted parameters** with full uncertainty (1σ SEs, 95% CIs,
-  variance-covariance matrix, correlation matrix).
+- **The fitted parameters** with **autocorrelation-aware** uncertainty:
+  OLS SEs alongside **block-bootstrap** SEs/95% CIs (daily flow residuals
+  are strongly autocorrelated, so OLS SEs run ~2–3× too small), per-term
+  **VIFs** for multicollinearity, and the OLS variance-covariance /
+  correlation matrices.
 - **Goodness-of-fit** (r², RMSE, σ̂) and **residual diagnostics**
-  (percentile distribution, mean/std by predictor quintile).
+  (percentile distribution, mean/std by predictor quintile, and a
+  by-hydrologic-season bias table — heavy-rain / light-rain /
+  rain-on-snow / dry-season — since most gauges are in a PNW
+  monsoonal regime and seasonal bias is otherwise averaged away).
 - **Window-stability table** so a future maintainer can see how
   slope/intercept drift across different start dates.
 - **SQL stub** ready to paste into a `data/db/migrations/00NN_*.sql` so
@@ -48,6 +54,19 @@ Each file is the source-of-truth for:
    committed cache files in `/tmp` are enough for a maintainer to
    reproduce the fit on demand.
 
+## Sub-daily lead/lag companion
+
+A daily-mean fit is applied in production to the *latest instantaneous*
+predictor readings, so inter-gauge travel time (1–12 h) becomes a timing
+error the daily fit never sees. [`gauge_lead_lag.py`](../../scripts/regression/gauge_lead_lag.py)
+quantifies that error from USGS unit values and writes a `<slug>_leadlag.md`
+sibling (cross-linked from the daily report's *Future* section). It is a
+**diagnostic** — it does not change any deployed calc — and reports per-predictor
+travel-time lags, a contemporaneous-vs-aligned accuracy table, a storm-rise
+subset, a **block-bootstrap CI** on the RMSE difference (so "is the gain real?"
+accounts for the ~0.97 hourly residual autocorrelation), and a deployability
+verdict.
+
 ## Index
 
 - [`rogue_14328000_from_14330000.md`](rogue_14328000_from_14330000.md)
@@ -55,3 +74,11 @@ Each file is the source-of-truth for:
   Prospect) with a fit from USGS 14330000 (Rogue below Prospect).
   Backs `calc_expression` for the `Rogue_Above_Prospect_calc` gauge
   introduced in migration 0027.
+- [`mckenzie_14159000_from_vida_trailbridge_sfrainbow_sfcougar_lookout.md`](mckenzie_14159000_from_vida_trailbridge_sfrainbow_sfcougar_lookout.md)
+  — multi-linear; revives retired USGS 14159000 (McKenzie at McKenzie
+  Bridge) from five upstream gauges. Backs the calc gauge in migration
+  0037. Lead/lag companion:
+  [`mckenzie_14159000_leadlag.md`](mckenzie_14159000_leadlag.md)
+  (verdict: sub-daily alignment is negligible *and* statistically unresolved
+  — the block-bootstrap CI straddles zero — for this short-travel-time,
+  regulated reach; keep contemporaneous readings).
