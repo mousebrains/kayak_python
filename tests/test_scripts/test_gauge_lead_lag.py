@@ -38,73 +38,106 @@ def _utc_epoch(s: str) -> int:
     return int((datetime.strptime(s, "%Y-%m-%d %H:%M") - _EPOCH).total_seconds())
 
 
-def test_parse_iv_rdb_tz_and_column_pick():
+_RDB = (
+    "# comment line\n"
+    "agency_cd\tsite_no\tdatetime\ttz_cd\t99_00065\t99_00065_cd\t99_00060\t99_00060_cd\n"
+    "5s\t15s\t20d\t6s\t14n\t10s\t14n\t10s\n"
+    "USGS\t14159000\t1988-01-01 00:00\tPST\t3.10\tA\t1330\tA\n"
+    "USGS\t14159000\t1988-01-01 00:30\tPST\t3.20\tA\tIce\tA\n"
+    "USGS\t14159000\t1988-07-01 12:00\tPDT\t2.50\tA\t900\tA\n"
+)
+
+
+def test_parse_iv_rdb_param_selection_and_tz():
     gll = _load()
-    # Header carries a stage (_00065) column *before* discharge (_00060) to
-    # check the parser selects discharge by name, not by position. Includes a
-    # PST row, a PDT row, an "Ice" quality flag (skipped), and the 5s/15s
-    # format-spec row (skipped).
-    rdb = (
-        "# comment line\n"
-        "agency_cd\tsite_no\tdatetime\ttz_cd\t99_00065\t99_00065_cd\t99_00060\t99_00060_cd\n"
-        "5s\t15s\t20d\t6s\t14n\t10s\t14n\t10s\n"
-        "USGS\t14159000\t1988-01-01 00:00\tPST\t3.10\tA\t1330\tA\n"
-        "USGS\t14159000\t1988-01-01 00:30\tPST\t3.10\tA\tIce\tA\n"
-        "USGS\t14159000\t1988-07-01 12:00\tPDT\t2.50\tA\t900\tA\n"
-    )
-    out = dict(gll._parse_iv_rdb(rdb))
-    # PST = UTC-8: local 00:00 -> 08:00 UTC; PDT = UTC-7: local 12:00 -> 19:00.
-    assert out[_utc_epoch("1988-01-01 08:00")] == 1330.0
-    assert out[_utc_epoch("1988-07-01 19:00")] == 900.0
-    # "Ice" row dropped; only the two numeric rows survive.
-    assert len(out) == 2
+    # Flow column (00060): the "Ice" row drops; PST->+8, PDT->+7.
+    flow = dict(gll._parse_iv_rdb(_RDB, "00060"))
+    assert flow[_utc_epoch("1988-01-01 08:00")] == 1330.0
+    assert flow[_utc_epoch("1988-07-01 19:00")] == 900.0
+    assert len(flow) == 2
+    # Stage column (00065): all three rows are numeric, so all survive.
+    stage = dict(gll._parse_iv_rdb(_RDB, "00065"))
+    assert stage[_utc_epoch("1988-01-01 08:00")] == 3.10
+    assert len(stage) == 3
+
+
+def test_available_params():
+    gll = _load()
+    assert gll._available_params(_RDB) == {"00060", "00065"}
+    stage_only = _RDB.replace("99_00060", "99_zzzzz")  # hide the flow column
+    assert gll._available_params(stage_only) == {"00065"}
 
 
 def _sine_series(n: int) -> list[float]:
-    # Deterministic, non-periodic-looking; gives varied first differences so
-    # the cross-correlation has a sharp, unambiguous peak.
     return [math.sin(0.30 * i) + math.sin(0.07 * i) for i in range(n)]
 
 
-def test_ccf_curve_recovers_known_lead():
+def test_ccf_curve_recovers_upstream_lead():
     gll = _load()
     n, lead = 400, 3
     base = _sine_series(n + lead + 2)
-    hour = gll.SECONDS_PER_HOUR
-    # Target is the base series; predictor is the SAME series shifted so it
-    # leads the target by `lead` hours: predictor[h] == target[h + lead].
-    target = {i * hour: base[i] for i in range(n)}
-    pred = {i * hour: base[i + lead] for i in range(n)}
-    curve = gll.ccf_curve(target, pred, range(-6, 7))
-    res = gll.classify_lag("PRED", curve)
+    step = gll.SECONDS_PER_HOUR
+    # Predictor LEADS the target (upstream): predictor[g] == target[g + lead].
+    target = {i * step: base[i] for i in range(n)}
+    pred = {i * step: base[i + lead] for i in range(n)}
+    res = gll.classify_lag("PRED", gll.ccf_curve(target, pred, max_steps=6, step=step), step)
     assert res.identifiable
-    assert res.best_lag_h == lead
-    assert res.applied_lag_h == lead
+    assert res.best_lag_steps == lead
+    assert res.best_lag_h == float(lead)
+    assert res.applied_lag_steps == lead
+    assert res.deployable is True  # upstream -> past read -> deployable
     assert res.best_corr > 0.99
+
+
+def test_ccf_curve_recovers_downstream_lag_not_deployable():
+    gll = _load()
+    n, lag = 400, 4
+    base = _sine_series(n + lag + 2)
+    step = gll.SECONDS_PER_HOUR
+    # Predictor LAGS the target (downstream): predictor[g] == target[g - lag].
+    target = {i * step: base[i + lag] for i in range(n)}
+    pred = {i * step: base[i] for i in range(n)}
+    res = gll.classify_lag("PRED", gll.ccf_curve(target, pred, max_steps=8, step=step), step)
+    assert res.identifiable
+    assert res.best_lag_steps == -lag  # negative = downstream
+    assert res.deployable is False  # future read -> not deployable
+    assert "not deployable" in res.travel_note
 
 
 def test_classify_lag_holds_unidentifiable_contemporaneous():
     gll = _load()
-    # Two independent sine frequencies -> first differences nearly orthogonal,
-    # so no lag clears the identifiability floor.
-    hour = gll.SECONDS_PER_HOUR
+    step = gll.SECONDS_PER_HOUR
     a = [math.sin(0.30 * i) for i in range(400)]
     b = [math.sin(0.011 * i + 1.7) for i in range(400)]
-    target = {i * hour: a[i] for i in range(400)}
-    pred = {i * hour: b[i] for i in range(400)}
-    res = gll.classify_lag("NOISE", gll.ccf_curve(target, pred, range(-6, 7)))
+    target = {i * step: a[i] for i in range(400)}
+    pred = {i * step: b[i] for i in range(400)}
+    res = gll.classify_lag("NOISE", gll.ccf_curve(target, pred, max_steps=6, step=step), step)
     assert res.best_corr < gll.MIN_IDENTIFIABLE_CORR
     assert res.identifiable is False
-    assert res.applied_lag_h == 0
+    assert res.applied_lag_steps == 0
+    assert res.deployable is False
     assert "held contemporaneous" in res.travel_note
 
 
 def test_classify_lag_empty_curve():
     gll = _load()
-    res = gll.classify_lag("X", [])
+    res = gll.classify_lag("X", [], gll.SECONDS_PER_HOUR)
     assert res.identifiable is False
-    assert res.applied_lag_h == 0
+    assert res.applied_lag_steps == 0
     assert math.isnan(res.best_corr)
+
+
+def test_half_hour_grid_resolves_fractional_lag():
+    gll = _load()
+    # On a 30-min grid, a 3-step lead is +1.5 h — exercises fractional reporting.
+    n, lead = 400, 3
+    base = _sine_series(n + lead + 2)
+    step = 1800
+    target = {i * step: base[i] for i in range(n)}
+    pred = {i * step: base[i + lead] for i in range(n)}
+    res = gll.classify_lag("P", gll.ccf_curve(target, pred, max_steps=8, step=step), step)
+    assert res.best_lag_steps == lead
+    assert abs(res.best_lag_h - 1.5) < 1e-9
 
 
 def test_ols_and_eval_recover_known_fit():
@@ -112,9 +145,8 @@ def test_ols_and_eval_recover_known_fit():
 
     gll = _load()
     x1 = np.linspace(100, 500, 300)
-    # x2 independent of x1 (not collinear) so the coefficients are identifiable.
     x2 = np.array([(i * i) % 37 for i in range(300)], dtype=float)
-    y = 2.0 + 0.5 * x1 - 1.5 * x2  # exact linear relationship
+    y = 2.0 + 0.5 * x1 - 1.5 * x2
     coefs = gll.ols([x1, x2], y)
     assert abs(coefs[0] - 2.0) < 1e-6
     assert abs(coefs[1] - 0.5) < 1e-6
@@ -124,34 +156,31 @@ def test_ols_and_eval_recover_known_fit():
     assert r2 > 0.999999
 
 
+def _lag(gll, site, steps, corr, identifiable, applied):
+    return gll.LagResult(
+        site, steps, corr, [(-2.0, 0.1), (0.0, 0.4), (1.5, corr)], identifiable, applied, 1800, "n"
+    )
+
+
 def test_render_ccf_svg_well_formed():
     gll = _load()
-    results = [
-        gll.LagResult(
-            "14158850", 2, 0.71, [(-2, 0.1), (0, 0.4), (2, 0.71), (4, 0.5)], True, 2, "up"
-        ),
-        gll.LagResult("14159500", -17, 0.04, [(-2, 0.02), (0, 0.03), (2, 0.04)], False, 0, "n/a"),
-    ]
+    results = [_lag(gll, "14158850", 3, 0.71, True, 3), _lag(gll, "14159500", -34, 0.04, False, 0)]
     svg = gll._render_ccf_svg(results)
     root = ET.fromstring(svg)
     assert root.tag.endswith("svg")
-    # Identifiable series gets a peak marker; unidentifiable is dashed, no marker.
-    assert "stroke-dasharray" in svg  # the unidentifiable curve
+    assert "stroke-dasharray" in svg  # the unidentifiable curve is dashed
     assert "14158850" in svg and "14159500" in svg
+    assert "+1.5 h" in svg  # fractional applied lag in the legend (3 * 30min)
 
 
 def test_render_ccf_svg_degenerate_inputs_dont_crash():
     gll = _load()
-    # Empty results -> placeholder svg, still valid XML.
     ET.fromstring(gll._render_ccf_svg([]))
-    # Single lag + all-zero correlations: the axis guards must avoid div-by-zero.
-    flat = [gll.LagResult("X", 0, 0.0, [(0, 0.0)], False, 0, "n/a")]
+    flat = [gll.LagResult("X", 0, 0.0, [(0.0, 0.0)], False, 0, 1800, "n/a")]
     ET.fromstring(gll._render_ccf_svg(flat))
 
 
 def test_eval_fit_empty_returns_nan():
-    import math
-
     import numpy as np
 
     gll = _load()

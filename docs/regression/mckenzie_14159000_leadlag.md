@@ -1,6 +1,6 @@
 # Sub-daily lead/lag: USGS 14159000 regression
 
-Companion to [`gauge_pair_linear.py`](../../scripts/regression/gauge_pair_linear.py) and the daily-mean fit in [`mckenzie_14159000_from_vida_trailbridge_sfrainbow_sfcougar_lookout.md`](./mckenzie_14159000_from_vida_trailbridge_sfrainbow_sfcougar_lookout.md). **Question:** the daily-mean coefficients are applied in production to the *latest instantaneous* predictor readings — does correcting for the 1-12 h travel time between gauges measurably improve accuracy?
+Companion to [`gauge_pair_linear.py`](../../scripts/regression/gauge_pair_linear.py) and the daily-mean fit in [`mckenzie_14159000_from_vida_trailbridge_sfrainbow_sfcougar_lookout.md`](./mckenzie_14159000_from_vida_trailbridge_sfrainbow_sfcougar_lookout.md). **Question (informational):** the daily-mean fit averages away the sub-daily travel time between gauges — how large is that timing structure, and how much of it is real-time-usable?
 
 ![CCF vs lag](./mckenzie_14159000_leadlag.svg)
 
@@ -15,88 +15,77 @@ python3 scripts/regression/gauge_lead_lag.py \
     --target 14159000 \
     --start 1987-10-01 \
     --end 1994-09-30 \
+    --grid-minutes 30 \
     --name mckenzie_14159000_leadlag
 ```
 
 ## Data
 
-USGS **unit values** (sub-hourly discharge), resampled to hourly means on a common UTC grid over **1987-10-01 → 1994-09-30** (the target's UV window). Overlap where the target and all 4 predictors have an hourly value: **23,155 hours** (~2.6 years).
+USGS **unit values** resampled to a common **30-min** UTC grid over **1987-10-01 → 1994-09-30**. Overlap where the target and all 4 predictors have a value: **41,834 points** (~2.4 years). Each gauge uses discharge where available, else gage height (timing is identical — USGS derives flow from stage instantaneously):
 
-| Role | Gauge | Label |
-|---|---|---|
-| target | `14159000` | McKenzie at McKenzie Bridge (target, retired) |
-| predictor | `14162500` | McKenzie nr Springfield / Vida (downstream) |
-| predictor | `14158850` | McKenzie at Trail Bridge Dam (upstream, dominant) |
-| predictor | `14159500` | SF McKenzie nr Rainbow |
-| predictor | `14161500` | Lookout Cr nr Blue River |
+| Role | Gauge | Label | variable |
+|---|---|---|---|
+| target | `14159000` | McKenzie at McKenzie Bridge (target, retired) | flow |
+| predictor | `14162500` | McKenzie nr Springfield / Vida (downstream) | flow |
+| predictor | `14158850` | McKenzie at Trail Bridge Dam (upstream, dominant) | flow |
+| predictor | `14159500` | SF McKenzie nr Rainbow | flow |
+| predictor | `14161500` | Lookout Cr nr Blue River | flow |
 
-> Note: the deployed daily fit uses **5** predictors; SF Cougar `14159200` is excluded here (and from the default predictor list) because its unit-value record starts in 2000, after the target retired (1994). The daily reference below is therefore refit on the same 4 predictors for an apples-to-apples comparison.
+> Note: the deployed daily fit uses **5** predictors; SF Cougar `14159200` is excluded here (its unit-value record starts in 2000, after the target retired in 1994). The daily reference below is refit on the same 4 predictors for an apples-to-apples comparison.
 
 ## Estimated travel-time lags
 
-Per predictor, the lag τ maximizing the correlation of hourly *first differences* (flow changes) with the target — i.e. how long a storm rise/fall takes to propagate between the two gauges. **+τ** = the predictor leads the target (upstream); **-τ** = it lags (downstream). A predictor whose CCF peak stays below **0.15** has no resolvable travel time and is **held contemporaneous** (applied τ = 0) so its noise can't pollute the alignment.
+Per predictor, the lag τ maximizing the correlation of *first differences* (flow changes) with the target, searched in 30-min steps. **+τ** = upstream (predictor leads the target; its aligned reading is a *past* value, so it is **deployable** in real time); **-τ** = downstream (its aligned reading is a *future* value, **not** deployable). A peak below **0.15** has no resolvable travel time and is held contemporaneous.
 
 | Predictor | peak τ (h) | peak Δ-corr | applied τ (h) | interpretation |
 |---|---|---|---|---|
-| McKenzie nr Springfield / Vida (downstream) `14162500` | -3 | 0.520 | **-3** | downstream — target leads it by ~3 h |
-| McKenzie at Trail Bridge Dam (upstream, dominant) `14158850` | +2 | 0.709 | **+2** | upstream — rise reaches target ~2 h later |
-| SF McKenzie nr Rainbow `14159500` | -17 | 0.037 | **+0** | not identifiable (peak Δ-corr 0.04); held contemporaneous |
-| Lookout Cr nr Blue River `14161500` | +1 | 0.622 | **+1** | upstream — rise reaches target ~1 h later |
+| McKenzie nr Springfield / Vida (downstream) `14162500` | -2.5 | 0.345 | **-2.5** | downstream — target leads it by ~2.5 h (future read, not deployable) |
+| McKenzie at Trail Bridge Dam (upstream, dominant) `14158850` | +1.5 | 0.563 | **+1.5** | upstream — rise reaches target ~1.5 h later (deployable) |
+| SF McKenzie nr Rainbow `14159500` | +5.5 | 0.039 | **+0.0** | not identifiable (peak Δ-corr 0.04); held contemporaneous |
+| Lookout Cr nr Blue River `14161500` | +0.5 | 0.457 | **+0.5** | upstream — rise reaches target ~0.5 h later (deployable) |
 
 ## Accuracy: contemporaneous vs travel-time-aligned
 
-Both alignments are evaluated on the **same** hourly hold-out grid (the only difference is whether each predictor is read at the current hour or shifted by its τ above), under two coefficient sources:
+All alignments share one hold-out grid (only the alignment changes). **daily-trained** = the deployed-style daily coefficients applied to the grid values (production-relevant); **hourly-refit** = coefficients refit on the grid itself (an upper bound). **full** shifts every identifiable predictor (incl. downstream → future); **deployable** shifts only upstream predictors (causal).
 
-* **daily-trained** — coefficients refit on daily means, the deployed style; this is the production-relevant row.
-* **hourly-refit** — coefficients refit on the hourly grid itself; the ceiling on what alignment can buy.
-
-| Coefficients | Alignment | n (hours) | r² | RMSE (cfs) |
+| Coefficients | Alignment | n | r² | RMSE (cfs) |
 |---|---|---|---|---|
-| daily-trained | contemporaneous (lag 0) | 23,155 | 0.9835 | 79.4 |
-| daily-trained | travel-time-aligned | 23,155 | 0.9839 | 78.5 |
-| hourly-refit | contemporaneous (lag 0) | 23,155 | 0.9851 | 75.6 |
-| hourly-refit | travel-time-aligned | 23,155 | 0.9853 | 75.1 |
+| daily-trained | contemporaneous | 41,834 | 0.9831 | 82.9 |
+| daily-trained | full (incl. downstream) | 41,834 | 0.9838 | 81.1 |
+| daily-trained | deployable (upstream-only) | 41,834 | 0.9831 | 82.8 |
+| hourly-refit | contemporaneous | 41,834 | 0.9847 | 79.0 |
+| hourly-refit | full (incl. downstream) | 41,834 | 0.9853 | 77.2 |
 
-### What the numbers say
+Daily-mean reference (same 4 predictors, 1968-10-01→1994-09-29, n=9,495): RMSE **90.5 cfs**, r² 0.9846 — daily means are smoother than instantaneous values, so this sits below the grid RMSEs and isn't directly comparable to them.
 
-- **Production-relevant (daily-trained coefficients):** travel-time alignment moves hourly RMSE from **79.4** → **78.5 cfs** (**+1.1%**) and r² 0.9835 → 0.9839.
-- **Ceiling (hourly-refit coefficients):** **75.6** → **75.1 cfs** (+0.6%). Refitting on hourly data and aligning together is the most accuracy available from this predictor set.
-- **Daily-mean reference (same 4 predictors, 1968-10-01→1994-09-29, n=9,495):** RMSE **90.5 cfs**, r² 0.9846. Daily means are intrinsically smoother than instantaneous values, so this sits below the hourly RMSEs — it is *not* directly comparable to them, only a reference for the deployed product's daily accuracy.
+### Is the gain statistically real, and is it usable?
 
-### Is the gain statistically real?
+Grid residuals are strongly autocorrelated (lag-1 **0.97**), so the 41,834 points carry far fewer independent observations than their count. A **block bootstrap** over 7-day blocks (143 of them, B=2000) on the RMSE reduction (contemporaneous minus aligned):
 
-The bare RMSE difference has far fewer decimals' worth of precision than it looks: hourly residuals are near-perfectly autocorrelated (lag-1 **0.97**), so the 23,155 hours carry only a few hundred *independent* observations. A **block bootstrap** over whole 7-day blocks (143 of them, B=2000) puts the production-style RMSE reduction (contemporaneous minus aligned) at **+0.89 cfs**, 95% CI **[-1.00, +2.40]**, with alignment better in only **83%** of resamples. **The interval straddles zero — the improvement is not statistically distinguishable from no effect.**
+| Alignment | gain | mean Δ (cfs) | 95% CI (cfs) | better in | resolved? |
+|---|---|---|---|---|---|
+| **full** (incl. downstream future) | +2.2% | +1.79 | [+0.46, +3.23] | 100% | yes |
+| **deployable** (causal, upstream) | +0.1% | +0.08 | [-3.19, +2.51] | 55% | no (CI ∋ 0) |
 
-### During rapid flow changes (storm rises/falls)
+During the **fastest-changing 17% of points** (|Δtarget| ≥ 10 cfs/30min, n=7,091), where misalignment should bite hardest, full alignment changes RMSE by **+3.0%** (124.9 → 121.2 cfs).
 
-Travel-time misalignment should hurt most when flow is *changing* fast — most hours are slowly-varying regulated baseflow where a 1-3 h shift barely moves the value. Restricting to the **most rapidly changing 20% of hours** (|Δtarget| ≥ 10 cfs/h — the threshold is the 90th percentile of |Δ|, but discrete USGS values tie at it so the subset is wider than a tenth; n = 4,645 hours), with the daily-trained coefficients:
+## Verdict
 
-| Subset | Alignment | n | r² | RMSE (cfs) |
-|---|---|---|---|---|
-| fastest-changing 20% | contemporaneous | 4,645 | 0.9822 | 120.7 |
-| fastest-changing 20% | travel-time-aligned | 4,645 | 0.9826 | 119.5 |
+**The sub-daily signal is real but not real-time-usable.** Full alignment gives a statistically-resolved **+2.2%** (CI [+0.46, +3.23] cfs excludes zero), but that gain comes from **downstream** predictors aligned to *future* readings — a downstream gauge's reading τ ahead is essentially a direct measurement of the target's current water arriving later, i.e. look-ahead. The **deployable** (upstream-only) gain is **+0.1%** with a CI through zero ([-3.19, +2.51] cfs) — nothing usable in real time. **Keep contemporaneous readings.**
 
-Alignment changes storm-subset RMSE by **+1.0%** (120.7 → 119.5 cfs); block-bootstrap reduction **+1.25 cfs**, 95% CI **[-4.63, +5.93]** (straddles zero). So even where misalignment should bite hardest the lags buy nothing resolvable: at this reach's short travel times and heavily regulated, slowly-varying flow, sub-daily alignment carries essentially no usable signal.
+### Deployability (what it *would* take)
 
-## Verdict & recommendation
+Applying lags in production is **not** a coefficient change; it requires the calculator to read a predictor's value *from τ ago* rather than its latest:
 
-Travel-time alignment yields a **negligible and statistically unresolved** gain here: +1.1% RMSE overall and +1.0% even on the fastest-changing 20% of hours, and the block-bootstrap CI on the reduction (**[-1.00, +2.40] cfs**) **straddles zero** — once the residual autocorrelation is accounted for, the improvement isn't distinguishable from no effect. **Recommendation: do not wire lead/lag into this reach's estimate** — keep using contemporaneous latest readings.
-
-**Why the effect is bounded for this reach:** the dominant term is Trail Bridge (coefficient ≈ 1.21), only ~7 river miles upstream, so its lead is just a few hours; the smaller-coefficient tributaries contribute little even when mis-aligned. The downstream term (Vida) would need *future* readings to align perfectly, which a real-time estimate cannot have — so its share of the gain is **not deployable** (see below).
-
-### Deployability (what it *would* take — not recommended for this reach)
-
-Recorded for completeness and for reaches where the gain is larger. Applying lags in production is **not** a coefficient change; it requires the calculator to read each predictor's value *from τ hours ago* rather than its latest:
-
-1. **Upstream predictors (+τ):** deployable — the needed value is in the past, already in the `observation` table. The calculator would select the reading closest to `now - τ` instead of `LatestObservation`.
-2. **Downstream predictors (-τ):** **not** deployable for a *nowcast* — the best-aligned value is in the future. Leave them contemporaneous (forfeiting their share) or treat the estimate as a short forecast.
-3. **Plumbing:** `calc_expression` currently references only `LatestObservation`; a lag-aware estimate needs a new time-offset reference form (e.g. `tb::…::flow@-2h`) and a windowed lookup in `kayak.cli.calculator`. A real feature — justified only when the **upstream-only, deployable** share of the gain is large enough to matter, which it is not for this reach.
+1. **Upstream predictors (+τ):** deployable — the value is in the past, already in the `observation` table; select the reading closest to `now - τ`.
+2. **Downstream predictors (-τ):** **not** deployable for a nowcast — the best-aligned value is in the future. Leave them contemporaneous, or treat the estimate as a short forecast.
+3. **Plumbing:** `calc_expression` references only `LatestObservation`; a lag-aware estimate needs a time-offset reference form and a windowed lookup in `kayak.cli.calculator` — justified only when the deployable share is material.
 
 ## Method
 
-- **Unit values** pulled unfiltered from `nwis.waterservices.usgs.gov` (the only host serving pre-2007 UV) and resampled to hourly means; 15-min (Trail Bridge) and 30-min sites land on the same grid.
-- **Lag estimation** maximizes the correlation of hourly first differences (flow *changes* propagate; baseline levels are near-identical across neighbours and would pin the peak at τ≈0).
-- **Fair comparison:** contemporaneous and aligned RMSE use one shared hold-out grid — the hours where every contemporaneous *and* every shifted predictor value exists — so only alignment varies.
-- **Significance:** the RMSE difference is tested with a block bootstrap over 7-day blocks (B=2000) rather than treating the autocorrelated hours as independent; the reported CI reflects the effective, not nominal, sample size (longer blocks would only widen it, so it is a conservative bound).
-- **Caveat:** the hourly hold-out (1987-10-01..1994-09-30, ~2.6 yr of overlap) is far shorter than the daily fit's multi-decade record and excludes SF Cougar; the daily-reference row controls for the predictor-set change but not the window.
+- **Unit values** pulled unfiltered from `nwis.waterservices.usgs.gov` and resampled to a 30-min grid (discharge preferred, gage height as fallback — time-locked, so either works for timing).
+- **Lag estimation** maximizes the correlation of first differences (flow *changes* propagate; baseline levels are near-identical across neighbours). Resolution is capped by the coarser series — a 30-min target can't resolve finer than 30 min, and finer grids add noise without information.
+- **Causal split:** *deployable* shifts only upstream predictors (past reads); *full* also shifts downstream predictors to future reads (not real-time-usable, but it bounds the total timing signal).
+- **Significance:** the RMSE difference is block-bootstrapped over 7-day blocks (B=2000) so the CI reflects the effective, not nominal, sample size (longer blocks would only widen it — a conservative bound).
+- **Caveat:** the grid hold-out (1987-10-01..1994-09-30, ~2.4 yr) is far shorter than the daily fit's record and excludes SF Cougar; the daily-reference row controls for the predictor-set change, not the window.
 

@@ -1,47 +1,47 @@
 #!/usr/bin/env python3
-"""Quantify the sub-daily lead/lag (travel-time) impact on a daily-mean
+"""Quantify the sub-daily lead/lag (travel-time) structure of a daily-mean
 gauge regression — companion to ``gauge_pair_linear.py``.
 
 Motivation
 ----------
-``gauge_pair_linear.py`` fits ``target ~ predictors`` on USGS **daily means**,
-because the target gauge's *daily* record is decades long. But in production
-the resulting ``calc_expression`` applies those coefficients to the **latest
-instantaneous** readings of each predictor (``LatestObservation`` values).
-Neighbouring gauges are separated by river miles, so at any instant their
-latest readings are *not* hydrologically contemporaneous: an upstream gauge's
-current reading describes water that has not yet reached the target, while a
-downstream gauge's current reading describes water that passed the target
-hours ago. The daily-mean fit averages that timing offset away and never sees
-it; the real-time estimate eats it as error.
+``gauge_pair_linear.py`` fits ``target ~ predictors`` on USGS **daily means**.
+A daily fit averages away the sub-daily travel time between gauges — an
+upstream gauge's reading describes water that has not yet reached the target,
+a downstream gauge's describes water that already passed it. This script
+measures that timing structure directly from USGS **unit values**: it resamples
+to a common sub-hourly UTC grid (default 30 min), estimates each predictor's
+travel-time lag by cross-correlating *first differences* (the propagating flow
+*changes*, not the slowly-varying baseline), and compares the regression's
+accuracy with predictors aligned **contemporaneously** vs **travel-time-aligned**.
 
-This script measures that error directly. It pulls USGS **unit values**
-(sub-hourly), resamples to a common hourly UTC grid, estimates each
-predictor's travel-time lag by cross-correlating *first differences* (storm
-rises/falls, which actually propagate) with the target, then compares the
-regression's accuracy with predictors aligned **contemporaneously** (lag 0,
-what production does today) versus **travel-time-aligned** (each predictor
-shifted by its estimated lag).
+It reports two alignments, because they answer different questions:
 
-Two coefficient sources are evaluated on an identical hold-out grid so the
-only thing that changes between the two columns is the *alignment*:
+* **full** — every identifiable predictor shifted to its best lag, including
+  *downstream* predictors shifted to a *future* reading. This measures the
+  total sub-daily timing signal but is **not** realisable in real time.
+* **deployable (causal)** — only *upstream* predictors (whose aligned reading
+  is in the *past*) are shifted; downstream and unidentifiable predictors are
+  held contemporaneous. This is what a real-time nowcast could actually use.
 
-* **daily-trained** — coefficients refit on daily means (the deployed style);
-  this is the production-relevant number.
-* **hourly-refit** — coefficients refit on the hourly grid itself; the
-  best-case ceiling for what lag-alignment can buy.
+Resolution
+----------
+The cross-correlation can only resolve timing as fine as the *coarser* of the
+two series; for a retired target recorded at 30 min, 30 min is the floor, and
+finer grids add noise without information. ``--grid-minutes`` exposes the knob.
 
-Data caveat
------------
-Pre-2007 USGS unit values are served **only** by the ``nwis.waterservices``
-host, and the ``parameterCd`` filter silently suppresses some old discharge
-series — so this script fetches *unfiltered* and selects the ``*_00060``
-(discharge) column by name. Any predictor lacking unit values across the
-target's UV window is dropped (for McKenzie Bridge that's SF Cougar
-``14159200``, whose UV record starts in 2000, after the target retired).
+Data notes
+----------
+- Pre-2007 USGS unit values are served **only** by the ``nwis.waterservices``
+  host, and the ``parameterCd`` filter suppresses some old discharge series —
+  so we fetch *unfiltered* and pick the value column by name.
+- **Flow vs stage:** agencies retain discharge (``00060``) longer than gage
+  height (``00065``); for *timing* either works (USGS derives flow from stage
+  instantaneously via a single-valued rating, so the two are time-locked). We
+  prefer flow and fall back to stage per gauge. The RMSE comparison applies the
+  daily *flow* coefficients, so it is only emitted when every series is flow.
 
-Standalone — depends on numpy + curl + Python stdlib, no kayak imports, so it
-runs without the project venv (same contract as ``gauge_pair_linear.py``).
+Standalone — numpy + curl + Python stdlib, no kayak imports (same contract as
+``gauge_pair_linear.py``); imports the sibling ``_resample`` helper.
 """
 
 from __future__ import annotations
@@ -58,33 +58,53 @@ from pathlib import Path
 import numpy as np
 from _resample import block_bootstrap, lag1_autocorr
 
-# America/Los_Angeles is the site-local clock for every McKenzie gauge; USGS
-# stamps each unit value PST or PDT explicitly, so we convert with the row's
-# own tz_cd rather than re-deriving DST. Value is hours to ADD to local to
-# reach UTC.
-TZ_OFFSET_HOURS = {"PST": 8, "PDT": 7}
+# America/Los_Angeles is the site-local clock for every gauge here; USGS stamps
+# each unit value PST or PDT explicitly, so we convert with the row's own tz_cd
+# rather than re-deriving DST. Value is hours to ADD to local to reach UTC.
+TZ_OFFSET_HOURS = {"PST": 8, "PDT": 7, "MST": 7, "MDT": 6}
 _EPOCH = datetime(1970, 1, 1)
 SECONDS_PER_HOUR = 3600
+DEFAULT_GRID_MIN = 30
+# Prefer discharge; fall back to gage height (retained for shorter spans).
+PARAM_PREFERENCE = ("00060", "00065")
+PARAM_NAME = {"00060": "flow", "00065": "stage"}
 
 # A predictor's lag is only trusted if its first-difference CCF peak clears
 # this correlation. Regulated tributaries whose sub-daily changes are
-# independent of the target (e.g. SF McKenzie below Cougar Dam) produce a
-# flat, near-zero CCF whose argmax is meaningless noise; below this floor we
-# hold the predictor contemporaneous rather than inject a spurious shift.
+# independent of the target produce a flat, near-zero CCF whose argmax is
+# noise; below this floor we hold the predictor contemporaneous.
 MIN_IDENTIFIABLE_CORR = 0.15
 
 
 @dataclass(frozen=True)
 class LagResult:
-    """First-difference cross-correlation outcome for one predictor."""
+    """First-difference cross-correlation outcome for one predictor.
+
+    Lags are stored in integer grid *steps* (the alignment unit); the hour
+    values are derived via ``step_seconds`` for display.
+    """
 
     site: str
-    best_lag_h: int  # +ve = predictor LEADS target (upstream); -ve = lags (downstream)
+    best_lag_steps: int  # +ve = predictor LEADS target (upstream); -ve = lags (downstream)
     best_corr: float
-    curve: list[tuple[int, float]]  # (lag_h, corr) over the searched range
+    curve: list[tuple[float, float]]  # (lag_hours, corr) over the searched range
     identifiable: bool  # peak Δ-corr cleared MIN_IDENTIFIABLE_CORR
-    applied_lag_h: int  # lag actually used in alignment (0 when not identifiable)
+    applied_lag_steps: int  # lag actually used in the FULL alignment (0 if not identifiable)
+    step_seconds: int
     travel_note: str
+
+    @property
+    def best_lag_h(self) -> float:
+        return self.best_lag_steps * self.step_seconds / SECONDS_PER_HOUR
+
+    @property
+    def applied_lag_h(self) -> float:
+        return self.applied_lag_steps * self.step_seconds / SECONDS_PER_HOUR
+
+    @property
+    def deployable(self) -> bool:
+        """Upstream (+lag) alignment reads a *past* value — causal/deployable."""
+        return self.applied_lag_steps > 0
 
 
 # ---------------------------------------------------------------------------
@@ -93,9 +113,9 @@ class LagResult:
 def _fetch_raw_year(site: str, year: int) -> str:
     """Raw RDB of one site's unit values for one calendar year (cached).
 
-    Deliberately *unfiltered* (no ``parameterCd``): the old discharge series
-    for some sites (e.g. Vida ``14162500``) is suppressed when the filter is
-    supplied. We pick the discharge column by name downstream.
+    Deliberately *unfiltered* (no ``parameterCd``): the old discharge series for
+    some sites is suppressed when the filter is supplied. We pick the value
+    column by name downstream.
     """
     cache = Path(f"/tmp/leadlag_{site}_{year}.tsv")
     if not cache.exists() or cache.stat().st_size < 200:
@@ -108,12 +128,25 @@ def _fetch_raw_year(site: str, year: int) -> str:
     return cache.read_text()
 
 
-def _parse_iv_rdb(text: str) -> list[tuple[int, float]]:
-    """Parse a USGS IV RDB into (utc_epoch_seconds, discharge_cfs) pairs.
+def _available_params(text: str) -> set[str]:
+    """Which value parameters the RDB header carries (e.g. {'00060','00065'})."""
+    out: set[str] = set()
+    for line in text.splitlines():
+        if line.startswith("agency_cd"):
+            for nm in line.split("\t"):
+                for p in PARAM_PREFERENCE:
+                    if nm.endswith(f"_{p}"):
+                        out.add(p)
+            break
+    return out
 
-    Selects the first column whose header ends ``_00060`` (discharge), skips
-    the ``5s 15s ...`` format-spec row, and converts each local timestamp to
-    UTC via its explicit ``tz_cd``.
+
+def _parse_iv_rdb(text: str, param: str) -> list[tuple[int, float]]:
+    """Parse a USGS IV RDB into (utc_epoch_seconds, value) pairs for ``param``.
+
+    Selects the first column whose header ends ``_<param>``, skips the
+    ``5s 15s ...`` format-spec row, and converts each local timestamp to UTC
+    via its explicit ``tz_cd``.
     """
     col_idx: int | None = None
     out: list[tuple[int, float]] = []
@@ -123,7 +156,7 @@ def _parse_iv_rdb(text: str) -> list[tuple[int, float]]:
         parts = line.split("\t")
         if parts[0] == "agency_cd":
             col_idx = next(
-                (i for i, name in enumerate(parts) if name.endswith("_00060")),
+                (i for i, name in enumerate(parts) if name.endswith(f"_{param}")),
                 None,
             )
             continue
@@ -142,29 +175,30 @@ def _parse_iv_rdb(text: str) -> list[tuple[int, float]]:
     return out
 
 
-def fetch_hourly(site: str, years: range) -> dict[int, float]:
-    """Hourly-mean discharge keyed by the UTC epoch of the hour's start.
+def fetch_grid(site: str, years: range, step: int) -> tuple[dict[int, float], str | None]:
+    """Resample a site's unit values onto a ``step``-second UTC grid.
 
-    Resampling to an hourly grid (a) puts 15-min and 30-min sites on a common
-    clock and (b) damps instrument jitter without smearing across the 1-12 h
-    lags we're trying to resolve.
+    Picks a single value parameter for the whole window — preferring flow
+    (``00060``) and falling back to stage (``00065``) — so the series is
+    dimensionally consistent. Returns ``(grid, param)`` (param is None if the
+    site has no usable unit values).
     """
-    pairs: list[tuple[int, float]] = []
-    for year in years:
-        pairs.extend(_parse_iv_rdb(_fetch_raw_year(site, year)))
+    texts = [_fetch_raw_year(site, y) for y in years]
+    avail: set[str] = set()
+    for t in texts:
+        avail |= _available_params(t)
+    param = next((p for p in PARAM_PREFERENCE if p in avail), None)
+    if param is None:
+        return {}, None
     buckets: dict[int, list[float]] = {}
-    for epoch, value in pairs:
-        buckets.setdefault(epoch - (epoch % SECONDS_PER_HOUR), []).append(value)
-    return {hour: sum(vals) / len(vals) for hour, vals in buckets.items()}
+    for t in texts:
+        for epoch, value in _parse_iv_rdb(t, param):
+            buckets.setdefault(epoch - (epoch % step), []).append(value)
+    return {g: sum(v) / len(v) for g, v in buckets.items()}, param
 
 
 def fetch_daily_means(site: str) -> dict[str, float]:
-    """USGS daily-mean discharge, reusing the ``gauge_pair_linear`` /tmp cache.
-
-    Daily means come from the plain ``waterservices`` host with ``statCd``
-    (mean); this matches the cache file ``gauge_pair_linear.py`` already
-    writes, so a prior daily run is reused for free.
-    """
+    """USGS daily-mean discharge, reusing the ``gauge_pair_linear`` /tmp cache."""
     cache = Path(f"/tmp/{site}_dv.tsv")
     if not cache.exists() or cache.stat().st_size < 1000:
         url = (
@@ -212,117 +246,106 @@ def eval_fit(cols: list[np.ndarray], y: np.ndarray, coefs: np.ndarray) -> tuple[
     return math.sqrt(rss / len(y)), r2
 
 
-def _hourly_deltas(series: dict[int, float]) -> dict[int, float]:
-    """First differences on the regular hourly grid: Δ(h) needs h and h-1h."""
-    return {
-        h: series[h] - series[h - SECONDS_PER_HOUR]
-        for h in series
-        if (h - SECONDS_PER_HOUR) in series
-    }
+def _deltas(series: dict[int, float], step: int) -> dict[int, float]:
+    """First differences on the regular grid: Δ(g) needs g and g-step."""
+    return {g: series[g] - series[g - step] for g in series if (g - step) in series}
 
 
 def ccf_curve(
-    target_h: dict[int, float],
-    pred_h: dict[int, float],
-    lags_h: range,
+    target_g: dict[int, float],
+    pred_g: dict[int, float],
+    max_steps: int,
+    step: int,
 ) -> list[tuple[int, float]]:
-    """First-difference cross-correlation of a predictor against the target.
+    """First-difference cross-correlation, returned as ``[(lag_steps, corr)]``.
 
-    For each candidate lag τ (hours) the predictor's *change* at hour ``h-τ``
-    is correlated with the target's change at hour ``h``. Positive τ peaks for
-    an **upstream** gauge (its rise reaches the target τ hours later); negative
-    τ for a **downstream** gauge. First differences are used (not levels)
-    because the slowly-varying baseline flow is near-identical across these
-    neighbouring gauges and would pin a levels-CCF peak at τ≈0 regardless of
-    the true wave travel time. Returns ``[(lag_h, corr), ...]``.
+    For each candidate lag of ``k`` grid steps, the predictor's *change* at
+    ``g - k*step`` is correlated with the target's change at ``g``. Positive k
+    peaks for an **upstream** gauge (its rise reaches the target later); negative
+    k for **downstream**. First differences isolate the propagating signal from
+    the near-identical slowly-varying baseline.
     """
-    dy = _hourly_deltas(target_h)
-    dx = _hourly_deltas(pred_h)
+    dy = _deltas(target_g, step)
+    dx = _deltas(pred_g, step)
     curve: list[tuple[int, float]] = []
-    for lag_h in lags_h:
-        shift = lag_h * SECONDS_PER_HOUR
-        common = [h for h in dy if (h - shift) in dx]
+    for k in range(-max_steps, max_steps + 1):
+        shift = k * step
+        common = [g for g in dy if (g - shift) in dx]
         if len(common) < 100:
             continue
-        a = np.array([dy[h] for h in common])
-        b = np.array([dx[h - shift] for h in common])
+        a = np.array([dy[g] for g in common])
+        b = np.array([dx[g - shift] for g in common])
         if a.std() == 0 or b.std() == 0:
             continue
-        curve.append((lag_h, float(np.corrcoef(a, b)[0, 1])))
+        curve.append((k, float(np.corrcoef(a, b)[0, 1])))
     return curve
 
 
-def classify_lag(site: str, curve: list[tuple[int, float]]) -> LagResult:
-    """Pick the peak lag and decide whether it's trustworthy.
-
-    Below ``MIN_IDENTIFIABLE_CORR`` the predictor is held contemporaneous
-    (``applied_lag_h = 0``) — a flat CCF means no resolvable travel time, so
-    the argmax would be noise.
-    """
-    if not curve:
-        return LagResult(site, 0, float("nan"), [], False, 0, "no sub-daily overlap")
-    best_lag, best_corr = max(curve, key=lambda lc: lc[1])
+def classify_lag(site: str, curve_k: list[tuple[int, float]], step: int) -> LagResult:
+    """Pick the peak lag and decide whether it's trustworthy."""
+    if not curve_k:
+        return LagResult(site, 0, float("nan"), [], False, 0, step, "no sub-daily overlap")
+    best_k, best_corr = max(curve_k, key=lambda kc: kc[1])
     identifiable = best_corr >= MIN_IDENTIFIABLE_CORR
-    applied = best_lag if identifiable else 0
+    applied = best_k if identifiable else 0
+    lag_h = best_k * step / SECONDS_PER_HOUR
     if not identifiable:
         note = f"not identifiable (peak Δ-corr {best_corr:.2f}); held contemporaneous"
-    elif best_lag > 0:
-        note = f"upstream — rise reaches target ~{best_lag} h later"
-    elif best_lag < 0:
-        note = f"downstream — target leads it by ~{-best_lag} h"
+    elif best_k > 0:
+        note = f"upstream — rise reaches target ~{lag_h:.1f} h later (deployable)"
+    elif best_k < 0:
+        note = f"downstream — target leads it by ~{-lag_h:.1f} h (future read, not deployable)"
     else:
-        note = "co-located / sub-hourly travel"
-    return LagResult(site, best_lag, best_corr, curve, identifiable, applied, note)
+        note = "co-located / sub-grid travel"
+    curve_h = [(k * step / SECONDS_PER_HOUR, c) for k, c in curve_k]
+    return LagResult(site, best_k, best_corr, curve_h, identifiable, applied, step, note)
 
 
 def aligned_columns(
-    sites: list[str],
-    hourly: dict[str, dict[int, float]],
-    lags_h: dict[str, int],
-    hours: list[int],
+    predictors: list[str],
+    grid: dict[str, dict[int, float]],
+    lags_steps: dict[str, int],
+    points: list[int],
+    step: int,
 ) -> list[np.ndarray]:
-    """Predictor columns for ``hours``, each shifted by its per-site lag.
-
-    ``target[h] ~ Σ βᵢ predᵢ[h - τᵢ]`` — so for hour ``h`` predictor ``i`` is
-    read at ``h - τᵢ`` (τ in hours). Callers must pass only hours where every
-    shifted lookup exists (see ``common_hours``).
-    """
+    """Predictor columns for ``points``, each shifted by its per-site lag (steps)."""
     out: list[np.ndarray] = []
-    for site in sites:
-        shift = lags_h[site] * SECONDS_PER_HOUR
-        out.append(np.array([hourly[site][h - shift] for h in hours]))
+    for site in predictors:
+        shift = lags_steps[site] * step
+        out.append(np.array([grid[site][g - shift] for g in points]))
     return out
 
 
-def common_hours(
-    target_h: dict[int, float],
+def common_points(
+    target_g: dict[int, float],
     predictors: list[str],
-    hourly: dict[str, dict[int, float]],
-    lags_h: dict[str, int],
+    grid: dict[str, dict[int, float]],
+    full_lags: dict[str, int],
+    step: int,
 ) -> list[int]:
-    """Hours where the target, every contemporaneous predictor, AND every
-    lag-shifted predictor all exist — the shared hold-out so contemporaneous
-    and lag-aligned RMSE are computed over an identical set of points."""
-    hours = []
-    for h in target_h:
+    """Grid points where the target, every contemporaneous predictor, AND every
+    full-lag-shifted predictor all exist — one shared hold-out so every
+    alignment (contemporaneous / full / deployable) uses identical points.
+    (Deployable shifts are a subset of {0, full}, so they are covered too.)"""
+    out = []
+    for g in target_g:
         ok = True
         for site in predictors:
-            shift = lags_h[site] * SECONDS_PER_HOUR
-            if h not in hourly[site] or (h - shift) not in hourly[site]:
+            shift = full_lags[site] * step
+            if g not in grid[site] or (g - shift) not in grid[site]:
                 ok = False
                 break
         if ok:
-            hours.append(h)
-    return sorted(hours)
+            out.append(g)
+    return sorted(out)
 
 
 # ---------------------------------------------------------------------------
 # Rendering
 # ---------------------------------------------------------------------------
 def _render_ccf_svg(lag_results: list[LagResult]) -> str:
-    """Lag (h) on x, first-difference correlation on y; one line per
-    predictor with a marker at its peak. The legend uses each predictor's
-    USGS id (the report's table maps ids to names). Standalone (img src)."""
+    """Lag (h) on x, first-difference correlation on y; one line per predictor
+    with a marker at its peak. Legend uses each predictor's USGS id."""
     palette = ["#1b5591", "#c0392b", "#27ae60", "#8e44ad", "#d35400", "#16a085"]
     all_lags = sorted({lag for r in lag_results for lag, _ in r.curve})
     all_corr = [c for r in lag_results for _, c in r.curve]
@@ -332,15 +355,13 @@ def _render_ccf_svg(lag_results: list[LagResult]) -> str:
     y_lo, y_hi = min(0.0, min(all_corr)), max(all_corr)
     y_hi = math.ceil(y_hi * 10) / 10
     y_lo = math.floor(y_lo * 10) / 10
-    # Guard degenerate ranges (single lag, or every correlation exactly 0) so
-    # the px transforms never divide by zero.
     if x_hi <= x_lo:
         x_hi = x_lo + 1
     if y_hi <= y_lo:
         y_hi = y_lo + 0.1
 
     w, h = 640, 400
-    ml, mr, mt, mb = 60, 130, 40, 50
+    ml, mr, mt, mb = 60, 140, 40, 50
     pw, ph = w - ml - mr, h - mt - mb
 
     def xpx(x: float) -> float:
@@ -359,7 +380,6 @@ def _render_ccf_svg(lag_results: list[LagResult]) -> str:
         f'<rect x="{ml}" y="{mt}" width="{pw}" height="{ph}" fill="none" '
         'stroke="#999" stroke-width="1"/>',
     ]
-    # Axis ticks.
     x_step = 6 if (x_hi - x_lo) > 24 else 3
     x = math.ceil(x_lo / x_step) * x_step
     while x <= x_hi:
@@ -367,7 +387,7 @@ def _render_ccf_svg(lag_results: list[LagResult]) -> str:
         p.append(
             f'<line x1="{px:.1f}" y1="{mt + ph}" x2="{px:.1f}" y2="{mt + ph + 5}" stroke="#999"/>'
         )
-        p.append(f'<text x="{px:.1f}" y="{mt + ph + 18}" text-anchor="middle">{x:+d}</text>')
+        p.append(f'<text x="{px:.1f}" y="{mt + ph + 18}" text-anchor="middle">{x:+.0f}</text>')
         x += x_step
     yt = y_lo
     while yt <= y_hi + 1e-9:
@@ -375,14 +395,11 @@ def _render_ccf_svg(lag_results: list[LagResult]) -> str:
         p.append(f'<line x1="{ml - 5}" y1="{py:.1f}" x2="{ml}" y2="{py:.1f}" stroke="#999"/>')
         p.append(f'<text x="{ml - 8}" y="{py + 4:.1f}" text-anchor="end">{yt:.1f}</text>')
         yt += 0.2
-    # Zero-lag reference.
     zx = xpx(0)
     p.append(
         f'<line x1="{zx:.1f}" y1="{mt}" x2="{zx:.1f}" y2="{mt + ph}" '
         'stroke="#333" stroke-width="1" stroke-dasharray="2,2"/>'
     )
-    # One polyline + peak marker + legend entry per predictor. Unidentifiable
-    # predictors (flat CCF, held contemporaneous) are dashed with no marker.
     for i, r in enumerate(lag_results):
         colour = palette[i % len(palette)]
         dash = "" if r.identifiable else ' stroke-dasharray="4,3"'
@@ -396,7 +413,7 @@ def _render_ccf_svg(lag_results: list[LagResult]) -> str:
                 f'fill="{colour}"/>'
             )
         ly = mt + 14 + i * 18
-        tag = f"{r.applied_lag_h:+d} h" if r.identifiable else "n/a"
+        tag = f"{r.applied_lag_h:+.1f} h" if r.identifiable else "n/a"
         p.append(
             f'<line x1="{ml + pw + 8}" y1="{ly - 4}" x2="{ml + pw + 26}" y2="{ly - 4}" '
             f'stroke="{colour}" stroke-width="2.5"{dash}/>'
@@ -419,6 +436,10 @@ def _pct(a: float, b: float) -> float:
     return 100.0 * (a - b) / a if a else float("nan")
 
 
+def _excludes_zero(ci: dict) -> bool:
+    return bool(ci["lo"] > 0 or ci["hi"] < 0)
+
+
 def render_markdown(
     *,
     name: str,
@@ -426,12 +447,15 @@ def render_markdown(
     target: str,
     predictors: list[str],
     labels: dict[str, str],
+    params: dict[str, str],
     start: str,
     end: str,
-    n_hours: int,
+    step_min: int,
+    n_points: int,
+    rmse_valid: bool,
     lag_results: list[LagResult],
     rows: list[dict],
-    storm: dict,
+    storm: dict | None,
     boot: dict,
     daily_full_rmse: float,
     daily_full_r2: float,
@@ -440,10 +464,8 @@ def render_markdown(
 ) -> str:
     """Assemble the lead/lag analysis report."""
     by_site = {r.site: r for r in lag_results}
-    # Some commentary (the 5th-predictor note, the "why bounded" reasoning) is
-    # specific to the McKenzie Bridge reach; gate it so a generic --target run
-    # doesn't emit reach-specific claims that don't apply.
     is_mckenzie = target == DEFAULT_TARGET
+    per_year = 525600 / step_min  # grid points per year
     L: list[str] = []
     a = L.append
 
@@ -452,72 +474,97 @@ def render_markdown(
         "Companion to "
         "[`gauge_pair_linear.py`](../../scripts/regression/gauge_pair_linear.py) and the "
         f"daily-mean fit in [`{daily_doc}.md`](./{daily_doc}.md). "
-        "**Question:** the daily-mean coefficients are applied in production to the "
-        "*latest instantaneous* predictor readings — does correcting for the 1-12 h "
-        "travel time between gauges measurably improve accuracy?\n"
+        "**Question (informational):** the daily-mean fit averages away the sub-daily "
+        "travel time between gauges — how large is that timing structure, and how much of "
+        "it is real-time-usable?\n"
     )
     a(f"![CCF vs lag](./{name}.svg)\n")
 
     cmd = " \\\n    ".join(
         ["python3 scripts/regression/gauge_lead_lag.py"]
         + [f"--predictor {s}" for s in predictors]
-        + [f"--target {target}", f"--start {start}", f"--end {end}", f"--name {name}"]
+        + [
+            f"--target {target}",
+            f"--start {start}",
+            f"--end {end}",
+            f"--grid-minutes {step_min}",
+            f"--name {name}",
+        ]
     )
     a(f"Generated by:\n\n```bash\n{cmd}\n```\n")
 
     a("## Data\n")
     a(
-        f"USGS **unit values** (sub-hourly discharge), resampled to hourly means on a "
-        f"common UTC grid over **{start} → {end}** (the target's UV window). "
-        f"Overlap where the target and all {len(predictors)} predictors have an hourly "
-        f"value: **{n_hours:,} hours** (~{n_hours / 8766:.1f} years).\n"
+        f"USGS **unit values** resampled to a common **{step_min}-min** UTC grid over "
+        f"**{start} → {end}**. Overlap where the target and all {len(predictors)} "
+        f"predictors have a value: **{n_points:,} points** (~{n_points / per_year:.1f} "
+        "years). Each gauge uses discharge where available, else gage height (timing is "
+        "identical — USGS derives flow from stage instantaneously):\n"
     )
-    a("| Role | Gauge | Label |")
-    a("|---|---|---|")
-    a(f"| target | `{target}` | {labels.get(target, '')} |")
+    a("| Role | Gauge | Label | variable |")
+    a("|---|---|---|---|")
+    a(
+        f"| target | `{target}` | {labels.get(target, '')} | {PARAM_NAME.get(params.get(target, ''), '?')} |"
+    )
     for s in predictors:
-        a(f"| predictor | `{s}` | {labels.get(s, '')} |")
+        a(f"| predictor | `{s}` | {labels.get(s, '')} | {PARAM_NAME.get(params.get(s, ''), '?')} |")
     a("")
     if is_mckenzie:
         a(
             "> Note: the deployed daily fit uses **5** predictors; SF Cougar `14159200` "
-            "is excluded here (and from the default predictor list) because its "
-            "unit-value record starts in 2000, after the target retired (1994). The "
-            "daily reference below is therefore refit on the same 4 predictors for an "
-            "apples-to-apples comparison.\n"
+            "is excluded here (its unit-value record starts in 2000, after the target "
+            "retired in 1994). The daily reference below is refit on the same 4 "
+            "predictors for an apples-to-apples comparison.\n"
         )
 
     a("## Estimated travel-time lags\n")
     a(
-        "Per predictor, the lag τ maximizing the correlation of hourly *first "
-        "differences* (flow changes) with the target — i.e. how long a storm rise/fall "
-        "takes to propagate between the two gauges. **+τ** = the predictor leads the "
-        "target (upstream); **-τ** = it lags (downstream). A predictor whose CCF peak "
-        f"stays below **{MIN_IDENTIFIABLE_CORR:.2f}** has no resolvable travel time and "
-        "is **held contemporaneous** (applied τ = 0) so its noise can't pollute the "
-        "alignment.\n"
+        "Per predictor, the lag τ maximizing the correlation of *first differences* (flow "
+        f"changes) with the target, searched in {step_min}-min steps. **+τ** = upstream "
+        "(predictor leads the target; its aligned reading is a *past* value, so it is "
+        "**deployable** in real time); **-τ** = downstream (its aligned reading is a "
+        f"*future* value, **not** deployable). A peak below **{MIN_IDENTIFIABLE_CORR:.2f}** "
+        "has no resolvable travel time and is held contemporaneous.\n"
     )
     a("| Predictor | peak τ (h) | peak Δ-corr | applied τ (h) | interpretation |")
     a("|---|---|---|---|---|")
     for s in predictors:
         r = by_site[s]
         a(
-            f"| {labels.get(s, s)} `{s}` | {r.best_lag_h:+d} | {r.best_corr:.3f} | "
-            f"**{r.applied_lag_h:+d}** | {r.travel_note} |"
+            f"| {labels.get(s, s)} `{s}` | {r.best_lag_h:+.1f} | {r.best_corr:.3f} | "
+            f"**{r.applied_lag_h:+.1f}** | {r.travel_note} |"
         )
     a("")
 
+    if not rmse_valid:
+        a(
+            "> The accuracy comparison below is **omitted**: it applies the daily *flow* "
+            "regression coefficients, but at least one series here is gage height, so the "
+            "units don't match. The travel-time lags above (timing only) are still valid.\n"
+        )
+        return "\n".join(L) + "\n"
+
+    bf, bd = boot["full"], boot["deploy"]
+    full_gain = _pct(
+        next(r["rmse"] for r in rows if r["align_key"] == "con"),
+        next(r["rmse"] for r in rows if r["align_key"] == "full" and r["coefs"] == "daily-trained"),
+    )
+    deploy_gain = _pct(
+        next(r["rmse"] for r in rows if r["align_key"] == "con"),
+        next(
+            r["rmse"] for r in rows if r["align_key"] == "deploy" and r["coefs"] == "daily-trained"
+        ),
+    )
+
     a("## Accuracy: contemporaneous vs travel-time-aligned\n")
     a(
-        "Both alignments are evaluated on the **same** hourly hold-out grid (the only "
-        "difference is whether each predictor is read at the current hour or shifted by "
-        "its τ above), under two coefficient sources:\n\n"
-        "* **daily-trained** — coefficients refit on daily means, the deployed style; "
-        "this is the production-relevant row.\n"
-        "* **hourly-refit** — coefficients refit on the hourly grid itself; the ceiling "
-        "on what alignment can buy.\n"
+        "All alignments share one hold-out grid (only the alignment changes). "
+        "**daily-trained** = the deployed-style daily coefficients applied to the grid "
+        "values (production-relevant); **hourly-refit** = coefficients refit on the grid "
+        "itself (an upper bound). **full** shifts every identifiable predictor (incl. "
+        "downstream → future); **deployable** shifts only upstream predictors (causal).\n"
     )
-    a("| Coefficients | Alignment | n (hours) | r² | RMSE (cfs) |")
+    a("| Coefficients | Alignment | n | r² | RMSE (cfs) |")
     a("|---|---|---|---|---|")
     for row in rows:
         a(
@@ -525,169 +572,126 @@ def render_markdown(
             f"{row['r2']:.4f} | {row['rmse']:.1f} |"
         )
     a("")
-
-    # Headline deltas.
-    dt_con = next(r for r in rows if r["coefs"] == "daily-trained" and r["align_key"] == "con")
-    dt_lag = next(r for r in rows if r["coefs"] == "daily-trained" and r["align_key"] == "lag")
-    hr_con = next(r for r in rows if r["coefs"] == "hourly-refit" and r["align_key"] == "con")
-    hr_lag = next(r for r in rows if r["coefs"] == "hourly-refit" and r["align_key"] == "lag")
-    prod_gain = _pct(dt_con["rmse"], dt_lag["rmse"])
-    ceil_gain = _pct(hr_con["rmse"], hr_lag["rmse"])
-
-    a("### What the numbers say\n")
     a(
-        f"- **Production-relevant (daily-trained coefficients):** travel-time alignment "
-        f"moves hourly RMSE from **{dt_con['rmse']:.1f}** → **{dt_lag['rmse']:.1f} cfs** "
-        f"(**{prod_gain:+.1f}%**) and r² {dt_con['r2']:.4f} → {dt_lag['r2']:.4f}.\n"
-        f"- **Ceiling (hourly-refit coefficients):** **{hr_con['rmse']:.1f}** → "
-        f"**{hr_lag['rmse']:.1f} cfs** ({ceil_gain:+.1f}%). Refitting on hourly data and "
-        f"aligning together is the most accuracy available from this predictor set.\n"
-        f"- **Daily-mean reference (same 4 predictors, {daily_window[0]}→{daily_window[1]}, "
-        f"n={daily_full_n:,}):** RMSE **{daily_full_rmse:.1f} cfs**, r² {daily_full_r2:.4f}. "
-        "Daily means are intrinsically smoother than instantaneous values, so this sits "
-        "below the hourly RMSEs — it is *not* directly comparable to them, only a "
-        "reference for the deployed product's daily accuracy.\n"
+        f"Daily-mean reference (same {len(predictors)} predictors, {daily_window[0]}→"
+        f"{daily_window[1]}, n={daily_full_n:,}): RMSE **{daily_full_rmse:.1f} cfs**, r² "
+        f"{daily_full_r2:.4f} — daily means are smoother than instantaneous values, so "
+        "this sits below the grid RMSEs and isn't directly comparable to them.\n"
     )
 
-    bf = boot["full"]
-    full_sig = bf["lo"] > 0 or bf["hi"] < 0
-    a("### Is the gain statistically real?\n")
+    a("### Is the gain statistically real, and is it usable?\n")
     a(
-        "The bare RMSE difference has far fewer decimals' worth of precision than it "
-        f"looks: hourly residuals are near-perfectly autocorrelated (lag-1 "
-        f"**{boot['resid_rho1']:.2f}**), so the {dt_con['n']:,} hours carry only a few "
-        "hundred *independent* observations. A **block bootstrap** over whole 7-day "
-        f"blocks ({boot['n_weeks']} of them, B=2000) puts the production-style RMSE reduction "
-        f"(contemporaneous minus aligned) at **{bf['mean']:+.2f} cfs**, 95% CI "
-        f"**[{bf['lo']:+.2f}, {bf['hi']:+.2f}]**, with alignment better in only "
-        f"**{bf['p_pos']:.0f}%** of resamples. "
-        + (
-            "The interval excludes zero, so the gain is statistically resolved.\n"
-            if full_sig
-            else "**The interval straddles zero — the improvement is not statistically "
-            "distinguishable from no effect.**\n"
-        )
+        f"Grid residuals are strongly autocorrelated (lag-1 **{boot['resid_rho1']:.2f}**), "
+        f"so the {n_points:,} points carry far fewer independent observations than their "
+        "count. A **block bootstrap** over 7-day blocks "
+        f"({boot['n_blocks']} of them, B=2000) on the RMSE reduction (contemporaneous "
+        "minus aligned):\n"
     )
-
-    storm_gain = _pct(storm["con_rmse"], storm["lag_rmse"])
-    storm_pct = storm["pct"]
-    a("### During rapid flow changes (storm rises/falls)\n")
+    a("| Alignment | gain | mean Δ (cfs) | 95% CI (cfs) | better in | resolved? |")
+    a("|---|---|---|---|---|---|")
     a(
-        "Travel-time misalignment should hurt most when flow is *changing* fast — most "
-        "hours are slowly-varying regulated baseflow where a 1-3 h shift barely moves the "
-        f"value. Restricting to the **most rapidly changing {storm_pct:.0f}% of hours** "
-        f"(|Δtarget| ≥ {storm['thresh']:.0f} cfs/h — the threshold is the 90th percentile "
-        "of |Δ|, but discrete USGS values tie at it so the subset is wider than a tenth; "
-        f"n = {storm['n']:,} hours), with the daily-trained coefficients:\n"
-    )
-    a("| Subset | Alignment | n | r² | RMSE (cfs) |")
-    a("|---|---|---|---|---|")
-    a(
-        f"| fastest-changing {storm_pct:.0f}% | contemporaneous | {storm['n']:,} | "
-        f"{storm['con_r2']:.4f} | {storm['con_rmse']:.1f} |"
+        f"| **full** (incl. downstream future) | {full_gain:+.1f}% | {bf['mean']:+.2f} | "
+        f"[{bf['lo']:+.2f}, {bf['hi']:+.2f}] | {bf['p_pos']:.0f}% | "
+        f"{'yes' if _excludes_zero(bf) else 'no (CI ∋ 0)'} |"
     )
     a(
-        f"| fastest-changing {storm_pct:.0f}% | travel-time-aligned | {storm['n']:,} | "
-        f"{storm['lag_r2']:.4f} | {storm['lag_rmse']:.1f} |"
+        f"| **deployable** (causal, upstream) | {deploy_gain:+.1f}% | {bd['mean']:+.2f} | "
+        f"[{bd['lo']:+.2f}, {bd['hi']:+.2f}] | {bd['p_pos']:.0f}% | "
+        f"{'yes' if _excludes_zero(bd) else 'no (CI ∋ 0)'} |"
     )
     a("")
-    bs = boot["storm"]
-    storm_sig = bs["lo"] > 0 or bs["hi"] < 0
-    a(
-        f"Alignment changes storm-subset RMSE by **{storm_gain:+.1f}%** "
-        f"({storm['con_rmse']:.1f} → {storm['lag_rmse']:.1f} cfs); block-bootstrap "
-        f"reduction **{bs['mean']:+.2f} cfs**, 95% CI **[{bs['lo']:+.2f}, "
-        f"{bs['hi']:+.2f}]**"
-        + (
-            " (excludes zero). So the lags carry a small but resolved signal exactly "
-            "where the physics predicts, just diluted to near-zero across the mostly-flat "
-            "full record.\n"
-            if storm_sig
-            else " (straddles zero). So even where misalignment should bite hardest the "
-            "lags buy nothing resolvable: at this reach's short travel times and heavily "
-            "regulated, slowly-varying flow, sub-daily alignment carries essentially no "
-            "usable signal.\n"
-        )
-    )
 
-    # Worth pursuing only if the gain is both materially large AND statistically
-    # resolved (the block-bootstrap CI excludes zero); a big point estimate with
-    # a CI through zero is noise.
-    verdict_material = (prod_gain >= 5.0 or storm_gain >= 10.0) and full_sig
-    a("## Verdict & recommendation\n")
-    if verdict_material:
+    if storm is not None:
         a(
-            f"Travel-time alignment is **worth pursuing** here: {prod_gain:+.1f}% RMSE "
-            f"overall (block-bootstrap CI [{bf['lo']:+.2f}, {bf['hi']:+.2f}] cfs excludes "
-            f"zero) and {storm_gain:+.1f}% on the fastest-changing hours. The deployable, "
-            "upstream-only share is the part to wire in (see below).\n"
+            f"During the **fastest-changing {storm['pct']:.0f}% of points** "
+            f"(|Δtarget| ≥ {storm['thresh']:.0f} cfs/{step_min}min, n={storm['n']:,}), where "
+            "misalignment should bite hardest, full alignment changes RMSE by "
+            f"**{_pct(storm['con_rmse'], storm['lag_rmse']):+.1f}%** "
+            f"({storm['con_rmse']:.1f} → {storm['lag_rmse']:.1f} cfs).\n"
+        )
+
+    # Verdict: the deployable result governs real-time usability; the full
+    # result characterises the total signal (which may be non-causal).
+    deploy_sig = _excludes_zero(bd)
+    full_sig = _excludes_zero(bf)
+    any_lag = any(r.applied_lag_steps != 0 for r in lag_results)
+    any_upstream = any(r.deployable for r in lag_results)
+    a("## Verdict\n")
+    if not any_lag:
+        a(
+            f"**No resolvable sub-daily lag.** Every predictor is co-located within the "
+            f"{step_min}-min grid or below the identifiability floor "
+            f"({MIN_IDENTIFIABLE_CORR:.2f}), so there is nothing to align — full and "
+            "deployable alignment are both identical to contemporaneous. **Keep "
+            "contemporaneous readings.**\n"
+        )
+    elif deploy_sig and deploy_gain >= 2.0:
+        a(
+            f"**A usable sub-daily gain exists here.** The deployable (causal, upstream) "
+            f"alignment lowers RMSE by **{deploy_gain:+.1f}%** with a 95% CI that excludes "
+            f"zero ([{bd['lo']:+.2f}, {bd['hi']:+.2f}] cfs) — worth considering for a "
+            "real-time estimate (see deployability below).\n"
+        )
+    elif full_sig and not deploy_sig:
+        deploy_clause = (
+            "Here there are **no upstream predictors** at all, so the deployable "
+            "alignment is simply contemporaneous — nothing is usable in real time."
+            if not any_upstream
+            else f"The **deployable** (upstream-only) gain is **{deploy_gain:+.1f}%** with "
+            f"a CI through zero ([{bd['lo']:+.2f}, {bd['hi']:+.2f}] cfs) — nothing usable "
+            "in real time."
+        )
+        a(
+            f"**The sub-daily signal is real but not real-time-usable.** Full alignment "
+            f"gives a statistically-resolved **{full_gain:+.1f}%** (CI "
+            f"[{bf['lo']:+.2f}, {bf['hi']:+.2f}] cfs excludes zero), but that gain comes "
+            "from **downstream** predictors aligned to *future* readings — a downstream "
+            "gauge's reading τ ahead is essentially a direct measurement of the target's "
+            f"current water arriving later, i.e. look-ahead. {deploy_clause} "
+            "**Keep contemporaneous readings.**\n"
         )
     else:
         a(
-            f"Travel-time alignment yields a **negligible and statistically unresolved** "
-            f"gain here: {prod_gain:+.1f}% RMSE overall and {storm_gain:+.1f}% even on the "
-            f"fastest-changing {storm_pct:.0f}% of hours, and the block-bootstrap CI on "
-            f"the reduction (**[{bf['lo']:+.2f}, {bf['hi']:+.2f}] cfs**) **straddles "
-            "zero** — once the residual autocorrelation is accounted for, the improvement "
-            "isn't distinguishable from no effect. **Recommendation: do not wire lead/lag "
-            "into this reach's estimate** — keep using contemporaneous latest readings.\n"
-        )
-    if is_mckenzie:
-        a(
-            "**Why the effect is bounded for this reach:** the dominant term is Trail "
-            "Bridge (coefficient ≈ 1.21), only ~7 river miles upstream, so its lead is "
-            "just a few hours; the smaller-coefficient tributaries contribute little even "
-            "when mis-aligned. The downstream term (Vida) would need *future* readings to "
-            "align perfectly, which a real-time estimate cannot have — so its share of "
-            "the gain is **not deployable** (see below).\n"
-        )
-    else:
-        a(
-            "**Why the effect is bounded:** it scales with the predictors' travel times "
-            "(short hops barely move at the hourly scale, especially on regulated, "
-            "slowly-varying flow) and their coefficients. Any downstream predictor "
-            "(negative τ) would need *future* readings to align perfectly — its share is "
-            "**not deployable** for a real-time nowcast (see below).\n"
+            f"**Negligible and statistically unresolved.** The block-bootstrap CI includes "
+            f"zero (full {full_gain:+.1f}% [{bf['lo']:+.2f}, {bf['hi']:+.2f}] cfs; "
+            f"deployable {deploy_gain:+.1f}% [{bd['lo']:+.2f}, {bd['hi']:+.2f}] cfs) — once "
+            "the residual autocorrelation is accounted for, the improvement isn't "
+            "distinguishable from no effect. **Keep contemporaneous readings.**\n"
         )
 
-    a("### Deployability (what it *would* take — not recommended for this reach)\n")
+    a("### Deployability (what it *would* take)\n")
     a(
-        "Recorded for completeness and for reaches where the gain is larger. Applying "
-        "lags in production is **not** a coefficient change; it requires the calculator "
-        "to read each predictor's value *from τ hours ago* rather than its latest:\n\n"
-        "1. **Upstream predictors (+τ):** deployable — the needed value is in the past, "
-        "already in the `observation` table. The calculator would select the reading "
-        "closest to `now - τ` instead of `LatestObservation`.\n"
-        "2. **Downstream predictors (-τ):** **not** deployable for a *nowcast* — the "
-        "best-aligned value is in the future. Leave them contemporaneous (forfeiting "
-        "their share) or treat the estimate as a short forecast.\n"
-        "3. **Plumbing:** `calc_expression` currently references only "
-        "`LatestObservation`; a lag-aware estimate needs a new time-offset reference "
-        "form (e.g. `tb::…::flow@-2h`) and a windowed lookup in `kayak.cli.calculator`. "
-        "A real feature — justified only when the **upstream-only, deployable** share of "
-        "the gain is large enough to matter, which it is not for this reach.\n"
+        "Applying lags in production is **not** a coefficient change; it requires the "
+        "calculator to read a predictor's value *from τ ago* rather than its latest:\n\n"
+        "1. **Upstream predictors (+τ):** deployable — the value is in the past, already "
+        "in the `observation` table; select the reading closest to `now - τ`.\n"
+        "2. **Downstream predictors (-τ):** **not** deployable for a nowcast — the "
+        "best-aligned value is in the future. Leave them contemporaneous, or treat the "
+        "estimate as a short forecast.\n"
+        "3. **Plumbing:** `calc_expression` references only `LatestObservation`; a "
+        "lag-aware estimate needs a time-offset reference form and a windowed lookup in "
+        "`kayak.cli.calculator` — justified only when the deployable share is material.\n"
     )
 
     a("## Method\n")
     a(
-        "- **Unit values** pulled unfiltered from `nwis.waterservices.usgs.gov` (the only "
-        "host serving pre-2007 UV) and resampled to hourly means; 15-min (Trail Bridge) "
-        "and 30-min sites land on the same grid.\n"
-        "- **Lag estimation** maximizes the correlation of hourly first differences "
-        "(flow *changes* propagate; baseline levels are near-identical across "
-        "neighbours and would pin the peak at τ≈0).\n"
-        "- **Fair comparison:** contemporaneous and aligned RMSE use one shared "
-        "hold-out grid — the hours where every contemporaneous *and* every shifted "
-        "predictor value exists — so only alignment varies.\n"
-        "- **Significance:** the RMSE difference is tested with a block bootstrap over "
-        "7-day blocks (B=2000) rather than treating the autocorrelated hours as "
-        "independent; the reported CI reflects the effective, not nominal, sample size "
-        "(longer blocks would only widen it, so it is a conservative bound).\n"
-        f"- **Caveat:** the hourly hold-out ({start}..{end}, ~{n_hours / 8766:.1f} yr of "
-        "overlap) is far shorter than the daily fit's multi-decade record"
+        f"- **Unit values** pulled unfiltered from `nwis.waterservices.usgs.gov` and "
+        f"resampled to a {step_min}-min grid (discharge preferred, gage height as "
+        "fallback — time-locked, so either works for timing).\n"
+        "- **Lag estimation** maximizes the correlation of first differences (flow "
+        "*changes* propagate; baseline levels are near-identical across neighbours). "
+        "Resolution is capped by the coarser series — a 30-min target can't resolve "
+        "finer than 30 min, and finer grids add noise without information.\n"
+        "- **Causal split:** *deployable* shifts only upstream predictors (past reads); "
+        "*full* also shifts downstream predictors to future reads (not real-time-usable, "
+        "but it bounds the total timing signal).\n"
+        "- **Significance:** the RMSE difference is block-bootstrapped over 7-day blocks "
+        "(B=2000) so the CI reflects the effective, not nominal, sample size (longer "
+        "blocks would only widen it — a conservative bound).\n"
+        f"- **Caveat:** the grid hold-out ({start}..{end}, ~{n_points / per_year:.1f} yr) "
+        "is far shorter than the daily fit's record"
         + (" and excludes SF Cougar" if is_mckenzie else "")
-        + "; the daily-reference row controls for the predictor-set change but not the "
-        "window.\n"
+        + "; the daily-reference row controls for the predictor-set change, not the window.\n"
     )
     return "\n".join(L) + "\n"
 
@@ -695,8 +699,6 @@ def render_markdown(
 # ---------------------------------------------------------------------------
 # Driver
 # ---------------------------------------------------------------------------
-# Defaults reproduce the McKenzie Bridge analysis. SF Cougar (14159200) is
-# absent from the predictors because its unit-value record starts in 2000.
 DEFAULT_TARGET = "14159000"
 DEFAULT_PREDICTORS = ["14162500", "14158850", "14159500", "14161500"]
 DEFAULT_START = "1987-10-01"
@@ -718,69 +720,80 @@ def _window_epochs(start: str, end: str) -> tuple[int, int]:
     return lo, hi
 
 
+def _ci(reps: np.ndarray) -> dict:
+    lo, hi = np.percentile(reps, [2.5, 97.5])
+    return {
+        "mean": float(reps.mean()),
+        "lo": float(lo),
+        "hi": float(hi),
+        "p_pos": 100.0 * float((reps > 0).mean()),
+    }
+
+
+def _diff_stat(ec: np.ndarray, el: np.ndarray) -> Callable[[np.ndarray], float]:
+    """+ve => the alignment lowers RMSE on the resampled points."""
+    return lambda idx: float(np.sqrt((ec[idx] ** 2).mean()) - np.sqrt((el[idx] ** 2).mean()))
+
+
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Sub-daily lead/lag impact on a gauge regression.")
+    ap = argparse.ArgumentParser(description="Sub-daily lead/lag of a gauge regression.")
     ap.add_argument("--target", default=DEFAULT_TARGET)
     ap.add_argument("--predictor", action="append", dest="predictors")
     ap.add_argument("--start", default=DEFAULT_START)
     ap.add_argument("--end", default=DEFAULT_END)
     ap.add_argument("--name", default=DEFAULT_NAME)
-    ap.add_argument(
-        "--daily-doc",
-        default=DEFAULT_DAILY_DOC,
-        help="Slug of the sibling daily-mean report to cross-link (no extension).",
-    )
-    ap.add_argument("--max-lag", type=int, default=18, help="Search ±this many hours.")
+    ap.add_argument("--daily-doc", default=DEFAULT_DAILY_DOC, help="Sibling daily report slug.")
+    ap.add_argument("--grid-minutes", type=int, default=DEFAULT_GRID_MIN, help="Resample grid.")
+    ap.add_argument("--max-lag", type=float, default=18.0, help="Search ±this many hours.")
     ap.add_argument("--daily-start", default="1968-10-01", help="Daily-reference window start.")
     ap.add_argument("--out", type=Path, help="Markdown output path (also writes .svg).")
     args = ap.parse_args()
     predictors: list[str] = args.predictors or DEFAULT_PREDICTORS
-    labels = LABELS
     sites = [args.target, *predictors]
+    step = args.grid_minutes * 60
+    max_steps = round(args.max_lag * SECONDS_PER_HOUR / step)
     years = range(int(args.start[:4]), int(args.end[:4]) + 1)
-
-    print(
-        f"Fetching unit values for {len(sites)} sites, {years.start}-{years.stop - 1} ...",
-        file=sys.stderr,
-    )
     lo, hi = _window_epochs(args.start, args.end)
-    hourly: dict[str, dict[int, float]] = {}
+
+    print(f"Fetching unit values, {len(sites)} sites, {step // 60}-min grid ...", file=sys.stderr)
+    grid: dict[str, dict[int, float]] = {}
+    params: dict[str, str] = {}
     for s in sites:
-        full = fetch_hourly(s, years)
-        hourly[s] = {h: v for h, v in full.items() if lo <= h < hi}
-        print(f"  {s}: {len(hourly[s]):,} hourly values", file=sys.stderr)
-
-    target_h = hourly[args.target]
-    lags_search = range(-args.max_lag, args.max_lag + 1)
-
-    # Per-predictor travel-time lag from first-difference CCF; below the
-    # identifiability floor the predictor is held contemporaneous.
-    lag_results: list[LagResult] = []
-    lags_h: dict[str, int] = {}
-    for s in predictors:
-        r = classify_lag(s, ccf_curve(target_h, hourly[s], lags_search))
-        lag_results.append(r)
-        lags_h[s] = r.applied_lag_h
+        full, param = fetch_grid(s, years, step)
+        grid[s] = {g: v for g, v in full.items() if lo <= g < hi}
+        if param:
+            params[s] = param
         print(
-            f"  lag {s}: peak {r.best_lag_h:+d} h (corr {r.best_corr:.3f}) "
-            f"-> applied {r.applied_lag_h:+d} h",
+            f"  {s}: {len(grid[s]):,} points ({PARAM_NAME.get(param or '', 'none')})",
             file=sys.stderr,
         )
 
-    contemporaneous = dict.fromkeys(predictors, 0)
-
-    # Shared hold-out: hours where contemporaneous AND lag-shifted values exist.
-    hours = common_hours(target_h, predictors, hourly, lags_h)
-    if len(hours) < 100:
-        print(f"Only {len(hours)} usable hours — aborting.", file=sys.stderr)
+    target_g = grid[args.target]
+    if len(target_g) < 100:
+        print(f"Target has only {len(target_g)} grid points — aborting.", file=sys.stderr)
         return 1
-    y = np.array([target_h[h] for h in hours])
-    cols_con = aligned_columns(predictors, hourly, contemporaneous, hours)
-    cols_lag = aligned_columns(predictors, hourly, lags_h, hours)
 
-    # Daily reference (same predictors), and daily-trained coefficients. The
-    # window ends at the target's last daily observation (its record end —
-    # 1994-09-29 for retired McKenzie Bridge, recent for an active target).
+    # Per-predictor lag (full) + the causal/deployable subset (upstream only).
+    lag_results: list[LagResult] = []
+    full_lags: dict[str, int] = {}
+    deploy_lags: dict[str, int] = {}
+    for s in predictors:
+        r = classify_lag(s, ccf_curve(target_g, grid[s], max_steps, step), step)
+        lag_results.append(r)
+        full_lags[s] = r.applied_lag_steps
+        deploy_lags[s] = r.applied_lag_steps if r.deployable else 0
+        print(f"  lag {s}: peak {r.best_lag_h:+.1f} h (corr {r.best_corr:.3f})", file=sys.stderr)
+
+    points = common_points(target_g, predictors, grid, full_lags, step)
+    if len(points) < 100:
+        print(f"Only {len(points)} usable points — aborting.", file=sys.stderr)
+        return 1
+    y = np.array([target_g[g] for g in points])
+    cols_con = aligned_columns(predictors, grid, dict.fromkeys(predictors, 0), points, step)
+    cols_full = aligned_columns(predictors, grid, full_lags, points, step)
+    cols_deploy = aligned_columns(predictors, grid, deploy_lags, points, step)
+
+    # Daily reference + daily-trained (flow) coefficients.
     daily = {s: fetch_daily_means(s) for s in sites}
     daily_end = max(daily[args.target])
     dkeys = sorted(
@@ -788,125 +801,92 @@ def main() -> int:
     )
     dwin = [k for k in dkeys if args.daily_start <= k <= daily_end]
     dcols = [np.array([daily[s][k] for k in dwin]) for s in predictors]
-    dy = np.array([daily[args.target][k] for k in dwin])
-    daily_coefs = ols(dcols, dy)
-    daily_rmse, daily_r2 = eval_fit(dcols, dy, daily_coefs)
+    daily_coefs = ols(dcols, np.array([daily[args.target][k] for k in dwin]))
+    daily_rmse, daily_r2 = eval_fit(
+        dcols, np.array([daily[args.target][k] for k in dwin]), daily_coefs
+    )
 
-    # Hourly-refit coefficients (fit on the same hold-out, per alignment).
-    coefs_con = ols(cols_con, y)
-    coefs_lag = ols(cols_lag, y)
+    # The RMSE comparison applies flow coefficients, so it is only valid when
+    # every grid series is flow (00060). Lag estimation (timing) is always valid.
+    rmse_valid = all(params.get(s) == "00060" for s in sites)
 
-    def row(
-        coef_label: str,
-        align_label: str,
-        align_key: str,
-        cols: list[np.ndarray],
-        coefs: np.ndarray,
-    ) -> dict:
-        rmse, r2 = eval_fit(cols, y, coefs)
-        return {
-            "coefs": coef_label,
-            "alignment": align_label,
-            "align_key": align_key,
-            "n": len(hours),
-            "rmse": rmse,
-            "r2": r2,
-        }
+    rows: list[dict] = []
+    storm: dict | None = None
+    boot: dict = {"resid_rho1": float("nan"), "n_blocks": 0}
+    if rmse_valid:
+        coefs_con = ols(cols_con, y)
+        coefs_full = ols(cols_full, y)
 
-    rows = [
-        row("daily-trained", "contemporaneous (lag 0)", "con", cols_con, daily_coefs),
-        row("daily-trained", "travel-time-aligned", "lag", cols_lag, daily_coefs),
-        row("hourly-refit", "contemporaneous (lag 0)", "con", cols_con, coefs_con),
-        row("hourly-refit", "travel-time-aligned", "lag", cols_lag, coefs_lag),
-    ]
+        def row(
+            coefs_label: str,
+            align_label: str,
+            key: str,
+            cols: list[np.ndarray],
+            coefs: np.ndarray,
+        ) -> dict:
+            rmse, r2 = eval_fit(cols, y, coefs)
+            return {
+                "coefs": coefs_label,
+                "alignment": align_label,
+                "align_key": key,
+                "n": len(points),
+                "rmse": rmse,
+                "r2": r2,
+            }
 
-    # Storm-rise subset: hours where the target is changing fastest, where a
-    # travel-time misalignment should bite hardest. If alignment helps anywhere
-    # it should be here; if it doesn't even here, the lags carry no usable
-    # signal at this resolution.
-    prev = np.array(
-        [
-            target_h[h] - target_h[h - SECONDS_PER_HOUR]
-            if (h - SECONDS_PER_HOUR) in target_h
-            else np.nan
-            for h in hours
+        rows = [
+            row("daily-trained", "contemporaneous", "con", cols_con, daily_coefs),
+            row("daily-trained", "full (incl. downstream)", "full", cols_full, daily_coefs),
+            row("daily-trained", "deployable (upstream-only)", "deploy", cols_deploy, daily_coefs),
+            row("hourly-refit", "contemporaneous", "con", cols_con, coefs_con),
+            row("hourly-refit", "full (incl. downstream)", "full", cols_full, coefs_full),
         ]
-    )
-    valid = ~np.isnan(prev)
-    thresh = float(np.percentile(np.abs(prev[valid]), 90))
-    storm_mask = valid & (np.abs(prev) >= thresh)
-    s_con_rmse, s_con_r2 = eval_fit([c[storm_mask] for c in cols_con], y[storm_mask], daily_coefs)
-    s_lag_rmse, s_lag_r2 = eval_fit([c[storm_mask] for c in cols_lag], y[storm_mask], daily_coefs)
-    storm = {
-        "n": int(storm_mask.sum()),
-        # Actual fraction of hours selected. With a 90th-percentile threshold
-        # this is ~10% in continuous data, but discrete USGS values tie at the
-        # threshold, so report what `>=` actually captured rather than "10%".
-        "pct": 100.0 * int(storm_mask.sum()) / int(valid.sum()),
-        "thresh": thresh,
-        "con_rmse": s_con_rmse,
-        "con_r2": s_con_r2,
-        "lag_rmse": s_lag_rmse,
-        "lag_r2": s_lag_r2,
-    }
-    print(
-        f"  storm subset n={storm['n']} (|Δtarget|>={thresh:.0f} cfs/h): "
-        f"con {s_con_rmse:.1f} -> lag {s_lag_rmse:.1f} cfs",
-        file=sys.stderr,
-    )
 
-    # Block-bootstrap CI on the RMSE reduction from alignment. Hourly residuals
-    # are near-perfectly autocorrelated (lag-1 ~0.97), so the 23k-hour RMSE
-    # difference looks far more precise than it is; resampling whole 7-day blocks
-    # (epoch-anchored, so Thursday-aligned — any contiguous week-length block is
-    # fine) reflects the effective sample size and gives an honest CI on the gain.
-    e_con = y - _design(cols_con) @ daily_coefs
-    e_lag = y - _design(cols_lag) @ daily_coefs
-    week = np.asarray(hours) // (7 * 86400)
-
-    def _ci(reps: np.ndarray) -> dict:
-        lo, hi = np.percentile(reps, [2.5, 97.5])
-        return {
-            "mean": float(reps.mean()),
-            "lo": float(lo),
-            "hi": float(hi),
-            "p_pos": 100.0 * float((reps > 0).mean()),
+        e_con = y - _design(cols_con) @ daily_coefs
+        e_full = y - _design(cols_full) @ daily_coefs
+        e_deploy = y - _design(cols_deploy) @ daily_coefs
+        block = np.asarray(points) // (7 * 86400)
+        boot = {
+            "full": _ci(block_bootstrap(block, _diff_stat(e_con, e_full), n_boot=2000, seed=0)),
+            "deploy": _ci(block_bootstrap(block, _diff_stat(e_con, e_deploy), n_boot=2000, seed=0)),
+            "resid_rho1": lag1_autocorr(e_con),
+            "n_blocks": int(np.unique(block).size),
         }
-
-    def _diff_stat(ec: np.ndarray, el: np.ndarray) -> Callable[[np.ndarray], float]:
-        # +ve => travel-time alignment lowers RMSE on the resampled hours.
-        return lambda idx: float(np.sqrt((ec[idx] ** 2).mean()) - np.sqrt((el[idx] ** 2).mean()))
-
-    full_ci = _ci(block_bootstrap(week, _diff_stat(e_con, e_lag), n_boot=2000, seed=0))
-    storm_ci = _ci(
-        block_bootstrap(
-            week[storm_mask],
-            _diff_stat(e_con[storm_mask], e_lag[storm_mask]),
-            n_boot=2000,
-            seed=0,
+        print(
+            f"  full gain CI=[{boot['full']['lo']:.2f},{boot['full']['hi']:.2f}]  "
+            f"deployable CI=[{boot['deploy']['lo']:.2f},{boot['deploy']['hi']:.2f}]",
+            file=sys.stderr,
         )
-    )
-    boot = {
-        "full": full_ci,
-        "storm": storm_ci,
-        "resid_rho1": lag1_autocorr(e_con),
-        "n_weeks": int(np.unique(week).size),
-    }
-    print(
-        f"  bootstrap RMSE(con-lag): full mean={full_ci['mean']:.2f} "
-        f"CI=[{full_ci['lo']:.2f},{full_ci['hi']:.2f}] P(better)={full_ci['p_pos']:.0f}%",
-        file=sys.stderr,
-    )
+
+        # Storm subset (full alignment), where misalignment bites hardest.
+        prev = np.array(
+            [target_g[g] - target_g[g - step] if (g - step) in target_g else np.nan for g in points]
+        )
+        valid = ~np.isnan(prev)
+        thresh = float(np.percentile(np.abs(prev[valid]), 90))
+        mask = valid & (np.abs(prev) >= thresh)
+        s_con, _ = eval_fit([c[mask] for c in cols_con], y[mask], daily_coefs)
+        s_lag, _ = eval_fit([c[mask] for c in cols_full], y[mask], daily_coefs)
+        storm = {
+            "n": int(mask.sum()),
+            "pct": 100.0 * int(mask.sum()) / int(valid.sum()),
+            "thresh": thresh,
+            "con_rmse": s_con,
+            "lag_rmse": s_lag,
+        }
 
     md = render_markdown(
         name=args.name,
         daily_doc=args.daily_doc,
         target=args.target,
         predictors=predictors,
-        labels=labels,
+        labels=LABELS,
+        params=params,
         start=args.start,
         end=args.end,
-        n_hours=len(hours),
+        step_min=args.grid_minutes,
+        n_points=len(points),
+        rmse_valid=rmse_valid,
         lag_results=lag_results,
         rows=rows,
         storm=storm,

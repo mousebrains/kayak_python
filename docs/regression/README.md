@@ -56,16 +56,36 @@ Each file is the source-of-truth for:
 
 ## Sub-daily lead/lag companion
 
-A daily-mean fit is applied in production to the *latest instantaneous*
-predictor readings, so inter-gauge travel time (1–12 h) becomes a timing
-error the daily fit never sees. [`gauge_lead_lag.py`](../../scripts/regression/gauge_lead_lag.py)
-quantifies that error from USGS unit values and writes a `<slug>_leadlag.md`
-sibling (cross-linked from the daily report's *Future* section). It is a
-**diagnostic** — it does not change any deployed calc — and reports per-predictor
-travel-time lags, a contemporaneous-vs-aligned accuracy table, a storm-rise
-subset, a **block-bootstrap CI** on the RMSE difference (so "is the gain real?"
-accounts for the ~0.97 hourly residual autocorrelation), and a deployability
-verdict.
+A daily-mean fit averages away the sub-daily travel time between gauges.
+[`gauge_lead_lag.py`](../../scripts/regression/gauge_lead_lag.py) measures that
+timing structure from USGS unit values — resampled to a **30-min** grid,
+lags from a first-difference cross-correlation, gain tested with a
+**block-bootstrap CI** (residuals are ~0.97 autocorrelated, so the nominal n
+hugely overstates the evidence). It is **diagnostic only** (changes no deployed
+calc) and writes a `<slug>_leadlag.md` sibling.
+
+The key distinction it reports is **full vs deployable** alignment: *full* shifts
+every predictor to its best lag (including *downstream* gauges to a *future*
+reading — real but non-causal look-ahead); *deployable* shifts only *upstream*
+predictors (a *past* reading, usable in a real-time nowcast). Flow is preferred,
+stage (`00065`) used as fallback for timing.
+
+**Result across every reach analysed: the deployable sub-daily gain is nil.**
+These calc gauges are estimated from *downstream* or co-located gauges, so what
+timing signal exists is downstream look-ahead, not real-time-usable — keep
+contemporaneous readings everywhere.
+
+| reach (target) | lag | full gain (95% CI, cfs) | deployable | verdict |
+|---|---|---|---|---|
+| McKenzie Bridge 14159000 | TB +1.5h, Vida −2.5h | +2.2% [+0.5, +3.2] ✓ | +0.1% [−3.2, +2.5] | real, look-ahead only |
+| Rogue a. Prospect 14328000 | −0.5h (downstream) | +0.3% [+0.2, +0.6] ✓ | 0 (no upstream) | real, look-ahead only |
+| Sunshine 14304350 | −3.0h (downstream) | +10.7% [+2.1, +7.2] ✓ | 0 (no upstream) | real, look-ahead only |
+| Salmon 14146500 | −0.5h (downstream) | +0.5% [−0.0, +0.8] | 0 (no upstream) | unresolved |
+| NF Alsea 14306100 | −3.5h (downstream) | [−1.1, +30.7] | 0 (no upstream) | unresolved |
+| Horse Cr 14159100 | none resolvable | — | — | no sub-daily lag |
+
+Not feasible (target has no sub-hourly record, or predictors don't overlap it):
+Calapooia 14172000, SF Alsea 14306200, Drift Cr Alsea 14306600.
 
 ## Index
 
@@ -73,12 +93,12 @@ verdict.
   — single-linear; replaces retired USGS 14328000 (Rogue above
   Prospect) with a fit from USGS 14330000 (Rogue below Prospect).
   Backs `calc_expression` for the `Rogue_Above_Prospect_calc` gauge
-  introduced in migration 0027.
+  introduced in migration 0027. Lead/lag companion:
+  [`rogue_14328000_leadlag.md`](rogue_14328000_leadlag.md).
 - [`mckenzie_14159000_from_vida_trailbridge_sfrainbow_sfcougar_lookout.md`](mckenzie_14159000_from_vida_trailbridge_sfrainbow_sfcougar_lookout.md)
   — multi-linear; revives retired USGS 14159000 (McKenzie at McKenzie
   Bridge) from five upstream gauges. Backs the calc gauge in migration
   0037. Lead/lag companion:
   [`mckenzie_14159000_leadlag.md`](mckenzie_14159000_leadlag.md)
-  (verdict: sub-daily alignment is negligible *and* statistically unresolved
-  — the block-bootstrap CI straddles zero — for this short-travel-time,
-  regulated reach; keep contemporaneous readings).
+  (verdict: the sub-daily signal is real but lives in *downstream* look-ahead;
+  the deployable upstream-only gain is nil — keep contemporaneous readings).
