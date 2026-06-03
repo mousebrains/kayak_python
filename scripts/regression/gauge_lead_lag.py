@@ -201,6 +201,8 @@ def ols(cols: list[np.ndarray], y: np.ndarray) -> np.ndarray:
 
 def eval_fit(cols: list[np.ndarray], y: np.ndarray, coefs: np.ndarray) -> tuple[float, float]:
     """Return (RMSE, r²) of ``coefs`` applied to ``cols`` against ``y``."""
+    if len(y) == 0:
+        return float("nan"), float("nan")
     resid = y - _design(cols) @ coefs
     rss = float(resid @ resid)
     tss = float(((y - y.mean()) ** 2).sum())
@@ -327,6 +329,12 @@ def _render_ccf_svg(slug: str, lag_results: list[LagResult], labels: dict[str, s
     y_lo, y_hi = min(0.0, min(all_corr)), max(all_corr)
     y_hi = math.ceil(y_hi * 10) / 10
     y_lo = math.floor(y_lo * 10) / 10
+    # Guard degenerate ranges (single lag, or every correlation exactly 0) so
+    # the px transforms never divide by zero.
+    if x_hi <= x_lo:
+        x_hi = x_lo + 1
+    if y_hi <= y_lo:
+        y_hi = y_lo + 0.1
 
     w, h = 640, 400
     ml, mr, mt, mb = 60, 130, 40, 50
@@ -428,6 +436,10 @@ def render_markdown(
 ) -> str:
     """Assemble the lead/lag analysis report."""
     by_site = {r.site: r for r in lag_results}
+    # Some commentary (the 5th-predictor note, the "why bounded" reasoning) is
+    # specific to the McKenzie Bridge reach; gate it so a generic --target run
+    # doesn't emit reach-specific claims that don't apply.
+    is_mckenzie = target == DEFAULT_TARGET
     L: list[str] = []
     a = L.append
 
@@ -462,12 +474,14 @@ def render_markdown(
     for s in predictors:
         a(f"| predictor | `{s}` | {labels.get(s, '')} |")
     a("")
-    a(
-        "> Note: the deployed daily fit uses **5** predictors; SF Cougar `14159200` is "
-        "dropped here because its unit-value record starts in 2000, after the target "
-        "retired (1994). The daily reference below is therefore refit on the same 4 "
-        "predictors for an apples-to-apples comparison.\n"
-    )
+    if is_mckenzie:
+        a(
+            "> Note: the deployed daily fit uses **5** predictors; SF Cougar `14159200` "
+            "is excluded here (and from the default predictor list) because its "
+            "unit-value record starts in 2000, after the target retired (1994). The "
+            "daily reference below is therefore refit on the same 4 predictors for an "
+            "apples-to-apples comparison.\n"
+        )
 
     a("## Estimated travel-time lags\n")
     a(
@@ -532,22 +546,24 @@ def render_markdown(
     )
 
     storm_gain = _pct(storm["con_rmse"], storm["lag_rmse"])
+    storm_pct = storm["pct"]
     a("### During rapid flow changes (storm rises/falls)\n")
     a(
         "Travel-time misalignment should hurt most when flow is *changing* fast — most "
         "hours are slowly-varying regulated baseflow where a 1-3 h shift barely moves the "
-        "value. Restricting to the **top decile of hourly |Δtarget|** "
-        f"(|Δ| ≥ {storm['thresh']:.0f} cfs/h, n = {storm['n']:,} hours), with the "
-        "daily-trained coefficients:\n"
+        f"value. Restricting to the **most rapidly changing {storm_pct:.0f}% of hours** "
+        f"(|Δtarget| ≥ {storm['thresh']:.0f} cfs/h — the threshold is the 90th percentile "
+        "of |Δ|, but discrete USGS values tie at it so the subset is wider than a tenth; "
+        f"n = {storm['n']:,} hours), with the daily-trained coefficients:\n"
     )
     a("| Subset | Alignment | n | r² | RMSE (cfs) |")
     a("|---|---|---|---|---|")
     a(
-        f"| fastest-changing 10% | contemporaneous | {storm['n']:,} | "
+        f"| fastest-changing {storm_pct:.0f}% | contemporaneous | {storm['n']:,} | "
         f"{storm['con_r2']:.4f} | {storm['con_rmse']:.1f} |"
     )
     a(
-        f"| fastest-changing 10% | travel-time-aligned | {storm['n']:,} | "
+        f"| fastest-changing {storm_pct:.0f}% | travel-time-aligned | {storm['n']:,} | "
         f"{storm['lag_r2']:.4f} | {storm['lag_rmse']:.1f} |"
     )
     a("")
@@ -578,20 +594,29 @@ def render_markdown(
     else:
         a(
             f"Travel-time alignment yields a **negligible** gain here: {prod_gain:+.1f}% "
-            f"RMSE overall and {storm_gain:+.1f}% even on the fastest-changing 10% of "
-            "hours (production-style coefficients), both well inside the residual "
-            "scatter. **Recommendation: do not wire lead/lag into this reach's estimate** "
-            "— the complexity (below) buys nothing measurable. Keep using contemporaneous "
-            "latest readings.\n"
+            f"RMSE overall and {storm_gain:+.1f}% even on the fastest-changing "
+            f"{storm_pct:.0f}% of hours (production-style coefficients), both well inside "
+            "the residual scatter. **Recommendation: do not wire lead/lag into this "
+            "reach's estimate** — the complexity (below) buys nothing measurable. Keep "
+            "using contemporaneous latest readings.\n"
         )
-    a(
-        "**Why the effect is bounded for this reach:** the dominant term is Trail Bridge "
-        "(coefficient ≈ 1.21), only ~7 river miles upstream, so its lead is just a few "
-        "hours; the smaller-coefficient tributaries contribute little even when "
-        "mis-aligned. The downstream term (Vida) would need *future* readings to align "
-        "perfectly, which a real-time estimate cannot have — so its share of the gain is "
-        "**not deployable** (see below).\n"
-    )
+    if is_mckenzie:
+        a(
+            "**Why the effect is bounded for this reach:** the dominant term is Trail "
+            "Bridge (coefficient ≈ 1.21), only ~7 river miles upstream, so its lead is "
+            "just a few hours; the smaller-coefficient tributaries contribute little even "
+            "when mis-aligned. The downstream term (Vida) would need *future* readings to "
+            "align perfectly, which a real-time estimate cannot have — so its share of "
+            "the gain is **not deployable** (see below).\n"
+        )
+    else:
+        a(
+            "**Why the effect is bounded:** it scales with the predictors' travel times "
+            "(short hops barely move at the hourly scale, especially on regulated, "
+            "slowly-varying flow) and their coefficients. Any downstream predictor "
+            "(negative τ) would need *future* readings to align perfectly — its share is "
+            "**not deployable** for a real-time nowcast (see below).\n"
+        )
 
     a("### Deployability (what it *would* take — not recommended for this reach)\n")
     a(
@@ -622,9 +647,11 @@ def render_markdown(
         "- **Fair comparison:** contemporaneous and aligned RMSE use one shared "
         "hold-out grid — the hours where every contemporaneous *and* every shifted "
         "predictor value exists — so only alignment varies.\n"
-        "- **Caveat:** the hourly window (~7 yr, 1987-1994) is shorter than the daily "
-        "fit's record and excludes SF Cougar; the daily-reference row controls for the "
-        "predictor-set change but not the window.\n"
+        f"- **Caveat:** the hourly hold-out ({start}..{end}, ~{n_hours / 8766:.1f} yr of "
+        "overlap) is far shorter than the daily fit's multi-decade record"
+        + (" and excludes SF Cougar" if is_mckenzie else "")
+        + "; the daily-reference row controls for the predictor-set change but not the "
+        "window.\n"
     )
     return "\n".join(L) + "\n"
 
@@ -715,12 +742,15 @@ def main() -> int:
     cols_con = aligned_columns(predictors, hourly, contemporaneous, hours)
     cols_lag = aligned_columns(predictors, hourly, lags_h, hours)
 
-    # Daily reference (same 4 predictors), and daily-trained coefficients.
+    # Daily reference (same predictors), and daily-trained coefficients. The
+    # window ends at the target's last daily observation (its record end —
+    # 1994-09-29 for retired McKenzie Bridge, recent for an active target).
     daily = {s: fetch_daily_means(s) for s in sites}
+    daily_end = max(daily[args.target])
     dkeys = sorted(
         set(daily[args.target]) & set[str].intersection(*(set(daily[s]) for s in predictors))
     )
-    dwin = [k for k in dkeys if args.daily_start <= k <= "1994-09-29"]
+    dwin = [k for k in dkeys if args.daily_start <= k <= daily_end]
     dcols = [np.array([daily[s][k] for k in dwin]) for s in predictors]
     dy = np.array([daily[args.target][k] for k in dwin])
     daily_coefs = ols(dcols, dy)
@@ -773,6 +803,10 @@ def main() -> int:
     s_lag_rmse, s_lag_r2 = eval_fit([c[storm_mask] for c in cols_lag], y[storm_mask], daily_coefs)
     storm = {
         "n": int(storm_mask.sum()),
+        # Actual fraction of hours selected. With a 90th-percentile threshold
+        # this is ~10% in continuous data, but discrete USGS values tie at the
+        # threshold, so report what `>=` actually captured rather than "10%".
+        "pct": 100.0 * int(storm_mask.sum()) / int(valid.sum()),
         "thresh": thresh,
         "con_rmse": s_con_rmse,
         "con_r2": s_con_r2,
@@ -800,7 +834,7 @@ def main() -> int:
         daily_full_rmse=daily_rmse,
         daily_full_r2=daily_r2,
         daily_full_n=len(dwin),
-        daily_window=(args.daily_start, "1994-09-29"),
+        daily_window=(args.daily_start, daily_end),
     )
 
     if args.out:

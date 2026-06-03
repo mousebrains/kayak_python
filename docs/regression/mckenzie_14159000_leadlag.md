@@ -30,7 +30,7 @@ USGS **unit values** (sub-hourly discharge), resampled to hourly means on a comm
 | predictor | `14159500` | SF McKenzie nr Rainbow |
 | predictor | `14161500` | Lookout Cr nr Blue River |
 
-> Note: the deployed daily fit uses **5** predictors; SF Cougar `14159200` is dropped here because its unit-value record starts in 2000, after the target retired (1994). The daily reference below is therefore refit on the same 4 predictors for an apples-to-apples comparison.
+> Note: the deployed daily fit uses **5** predictors; SF Cougar `14159200` is excluded here (and from the default predictor list) because its unit-value record starts in 2000, after the target retired (1994). The daily reference below is therefore refit on the same 4 predictors for an apples-to-apples comparison.
 
 ## Estimated travel-time lags
 
@@ -65,18 +65,18 @@ Both alignments are evaluated on the **same** hourly hold-out grid (the only dif
 
 ### During rapid flow changes (storm rises/falls)
 
-Travel-time misalignment should hurt most when flow is *changing* fast — most hours are slowly-varying regulated baseflow where a 1-3 h shift barely moves the value. Restricting to the **top decile of hourly |Δtarget|** (|Δ| ≥ 10 cfs/h, n = 4,645 hours), with the daily-trained coefficients:
+Travel-time misalignment should hurt most when flow is *changing* fast — most hours are slowly-varying regulated baseflow where a 1-3 h shift barely moves the value. Restricting to the **most rapidly changing 20% of hours** (|Δtarget| ≥ 10 cfs/h — the threshold is the 90th percentile of |Δ|, but discrete USGS values tie at it so the subset is wider than a tenth; n = 4,645 hours), with the daily-trained coefficients:
 
 | Subset | Alignment | n | r² | RMSE (cfs) |
 |---|---|---|---|---|
-| fastest-changing 10% | contemporaneous | 4,645 | 0.9822 | 120.7 |
-| fastest-changing 10% | travel-time-aligned | 4,645 | 0.9826 | 119.5 |
+| fastest-changing 20% | contemporaneous | 4,645 | 0.9822 | 120.7 |
+| fastest-changing 20% | travel-time-aligned | 4,645 | 0.9826 | 119.5 |
 
 Alignment changes storm-subset RMSE by **+1.0%** (120.7 → 119.5 cfs). So even where misalignment should bite hardest the lags buy little: at this reach's short travel times and heavily regulated, slowly-varying flow, sub-daily alignment carries essentially no usable signal.
 
 ## Verdict & recommendation
 
-Travel-time alignment yields a **negligible** gain here: +1.1% RMSE overall and +1.0% even on the fastest-changing 10% of hours (production-style coefficients), both well inside the residual scatter. **Recommendation: do not wire lead/lag into this reach's estimate** — the complexity (below) buys nothing measurable. Keep using contemporaneous latest readings.
+Travel-time alignment yields a **negligible** gain here: +1.1% RMSE overall and +1.0% even on the fastest-changing 20% of hours (production-style coefficients), both well inside the residual scatter. **Recommendation: do not wire lead/lag into this reach's estimate** — the complexity (below) buys nothing measurable. Keep using contemporaneous latest readings.
 
 **Why the effect is bounded for this reach:** the dominant term is Trail Bridge (coefficient ≈ 1.21), only ~7 river miles upstream, so its lead is just a few hours; the smaller-coefficient tributaries contribute little even when mis-aligned. The downstream term (Vida) would need *future* readings to align perfectly, which a real-time estimate cannot have — so its share of the gain is **not deployable** (see below).
 
@@ -93,5 +93,5 @@ Recorded for completeness and for reaches where the gain is larger. Applying lag
 - **Unit values** pulled unfiltered from `nwis.waterservices.usgs.gov` (the only host serving pre-2007 UV) and resampled to hourly means; 15-min (Trail Bridge) and 30-min sites land on the same grid.
 - **Lag estimation** maximizes the correlation of hourly first differences (flow *changes* propagate; baseline levels are near-identical across neighbours and would pin the peak at τ≈0).
 - **Fair comparison:** contemporaneous and aligned RMSE use one shared hold-out grid — the hours where every contemporaneous *and* every shifted predictor value exists — so only alignment varies.
-- **Caveat:** the hourly window (~7 yr, 1987-1994) is shorter than the daily fit's record and excludes SF Cougar; the daily-reference row controls for the predictor-set change but not the window.
+- **Caveat:** the hourly hold-out (1987-10-01..1994-09-30, ~2.6 yr of overlap) is far shorter than the daily fit's multi-decade record and excludes SF Cougar; the daily-reference row controls for the predictor-set change but not the window.
 

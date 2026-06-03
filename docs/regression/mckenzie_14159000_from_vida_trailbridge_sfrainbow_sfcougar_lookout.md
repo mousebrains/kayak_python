@@ -90,7 +90,7 @@ Correlation matrix:
           x5  +0.0974      -0.5450      +0.4508      +0.4913      -0.6007      +1.0000    
 ```
 
-**Caveat**: these uncertainties capture *parameter* precision only. For a single-day prediction at new `x`, the prediction interval is dominated by the residual scatter `sigma_hat` (about 117 cfs at 1-sigma here), not by parameter SEs.
+**Caveat**: these uncertainties capture *parameter* precision only. For a single-day prediction at new `x`, the prediction interval is dominated by the residual scatter `sigma_hat` (about 95 cfs at 1-sigma here), not by parameter SEs.
 
 ## Window stability
 

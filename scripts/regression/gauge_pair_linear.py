@@ -473,8 +473,8 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
     L(
         "**Caveat**: these uncertainties capture *parameter* precision only. "
         "For a single-day prediction at new `x`, the prediction interval is "
-        "dominated by the residual scatter `sigma_hat` (about 117 cfs at 1-sigma here), "
-        "not by parameter SEs.\n"
+        f"dominated by the residual scatter `sigma_hat` (about {fit.sigma_hat:.0f} cfs "
+        "at 1-sigma here), not by parameter SEs.\n"
     )
 
     L("## Window stability\n")
