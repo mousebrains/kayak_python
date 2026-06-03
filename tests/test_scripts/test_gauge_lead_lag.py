@@ -186,3 +186,33 @@ def test_eval_fit_empty_returns_nan():
     gll = _load()
     rmse, r2 = gll.eval_fit([np.array([])], np.array([]), np.array([0.0, 1.0]))
     assert math.isnan(rmse) and math.isnan(r2)
+
+
+def test_classify_verdict_branches():
+    gll = _load()
+    cv = gll.classify_verdict
+    assert cv(any_lag=False, deploy_sig=True, deploy_gain=5.0, full_sig=True) == "no_lag"
+    assert cv(any_lag=True, deploy_sig=True, deploy_gain=5.0, full_sig=True) == "usable"
+    # The review-caught case: deployable CI resolved but the gain is < 2% (or
+    # resolved-negative) -> its own branch, not the contradictory "unresolved".
+    assert (
+        cv(any_lag=True, deploy_sig=True, deploy_gain=1.0, full_sig=True) == "deployable_immaterial"
+    )
+    assert (
+        cv(any_lag=True, deploy_sig=True, deploy_gain=-3.0, full_sig=False)
+        == "deployable_immaterial"
+    )
+    # full resolved, deployable not -> downstream look-ahead.
+    assert cv(any_lag=True, deploy_sig=False, deploy_gain=0.1, full_sig=True) == "look_ahead"
+    # neither resolved.
+    assert cv(any_lag=True, deploy_sig=False, deploy_gain=0.1, full_sig=False) == "unresolved"
+    # Every verdict key has a label.
+    for k in (
+        "no_lag",
+        "usable",
+        "deployable_immaterial",
+        "look_ahead",
+        "unresolved",
+        "stage_only",
+    ):
+        assert k in gll.VERDICT_LABEL

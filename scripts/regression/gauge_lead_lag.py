@@ -220,6 +220,8 @@ def fetch_daily_means(site: str) -> dict[str, float]:
             out[parts[2]] = float(parts[3])
         except ValueError:
             continue
+    if not out:
+        raise RuntimeError(f"No daily means for {site} ({cache}); cannot build daily reference")
     return out
 
 
@@ -446,6 +448,7 @@ def _excludes_zero(ci: dict) -> bool:
 VERDICT_LABEL = {
     "no_lag": "no resolvable sub-daily lag",
     "usable": "deployable sub-daily gain exists",
+    "deployable_immaterial": "deployable gain resolved but immaterial",
     "look_ahead": "real signal, but downstream look-ahead only (deployable gain nil)",
     "unresolved": "negligible / statistically unresolved",
     "stage_only": "lags only (RMSE comparison needs flow)",
@@ -457,12 +460,16 @@ def classify_verdict(any_lag: bool, deploy_sig: bool, deploy_gain: float, full_s
         return "no_lag"
     if deploy_sig and deploy_gain >= 2.0:
         return "usable"
-    if full_sig and not deploy_sig:
+    if deploy_sig:
+        # Deployable CI excludes zero but the gain is < 2% (or resolved-negative):
+        # real, but too small to be worth lag-aware plumbing.
+        return "deployable_immaterial"
+    if full_sig:
         return "look_ahead"
     return "unresolved"
 
 
-def render_markdown(
+def render_markdown(  # noqa: C901 — linear assembly of report sections
     *,
     name: str,
     daily_doc: str,
@@ -654,6 +661,19 @@ def render_markdown(
             f"alignment lowers RMSE by **{deploy_gain:+.1f}%** with a 95% CI that excludes "
             f"zero ([{bd['lo']:+.2f}, {bd['hi']:+.2f}] cfs) — worth considering for a "
             "real-time estimate (see deployability below).\n"
+        )
+    elif key == "deployable_immaterial":
+        detail = (
+            f"only {deploy_gain:+.1f}% — too small to be worth lag-aware plumbing"
+            if deploy_gain >= 0
+            else f"**resolved-negative** ({deploy_gain:+.1f}%): applying the lags would "
+            "*raise* RMSE"
+        )
+        a(
+            f"**Deployable gain resolved but immaterial.** The deployable (causal, "
+            f"upstream-only) alignment's CI excludes zero "
+            f"([{bd['lo']:+.2f}, {bd['hi']:+.2f}] cfs), but the gain is {detail}. **Keep "
+            "contemporaneous readings.**\n"
         )
     elif key == "look_ahead":
         deploy_clause = (
