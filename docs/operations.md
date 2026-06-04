@@ -95,7 +95,7 @@ mechanics, more readable in the audit log.
 |---|---|---|
 | Public status page | <https://status.mousebrains.com> | Better Stack hosted; surfaces the uptime + content-keyword monitors |
 | Health snapshot JSON | `https://levels.wkcc.org/status.json` (rewrites to `php/status.php`; also served from the two other vhosts) | On-demand; `Cache-Control: no-cache, max-age=10`. Per-agency freshness rollup + per-status gauge counts |
-| Internal dashboard | `https://levels.wkcc.org/_internal/` (also `levels-test.wkcc.org/_internal/`; `php/_internal/index.php`) | On-demand; maintainer-only via `editor_session`. Per-source freshness, recent CSP violations, aggregate counts, build mtime, DB size. `levels.mousebrains.com` returns 404 (login flow targets `levels.wkcc.org` per `SITE_URL`, so the dashboard host has to match) |
+| Internal dashboard | `https://levels.wkcc.org/_internal/` (`php/_internal/index.php`) | On-demand; maintainer-only via `editor_session`. Per-source freshness, recent CSP violations, aggregate counts, build mtime, DB size. `levels.mousebrains.com` returns 404 (login flow targets `levels.wkcc.org` per `SITE_URL`, so the dashboard host has to match); `levels-test.wkcc.org` 301s wholesale to `levels.wkcc.org` (`conf/sites/levels-test-wkcc-org`, since 2026-05-19) |
 | Public homepage | Better Stack monitor on `https://levels.wkcc.org/` | HEAD/GET 3-min interval |
 | Pipeline heartbeat | `kayak-pipeline.service` → `${HC_PIPELINE}` | Every hour at :12 |
 | Hourly backup heartbeat | `kayak-backup-hourly.service` → `${HC_BACKUP_HOURLY}` | Every hour at :38 |
@@ -445,26 +445,56 @@ sudo php /home/pat/kayak/php/show-config.php
 
 ### Refreshing
 
-`scripts/deploy.sh` re-emits on every deploy via the sudoers grant at
-`/etc/sudoers.d/kayak-emit-config` (allows `pat ALL=(root) NOPASSWD: …
-levels emit-config*`). Manual refresh:
+`scripts/deploy.sh` re-emits on every deploy: it renders the JSON
+**unprivileged** (`levels emit-config --dry-run`, as pat) and pipes it
+into the root-owned installer wrapper. The sudoers grant at
+`/etc/sudoers.d/kayak-emit-config` allows exactly one command —
+`pat ALL=(root) NOPASSWD: /usr/local/sbin/kayak-install-runtime-config`
+— never the pat-writable venv `levels` binary (the old
+`sudo levels emit-config` grant was a pat→root RCE; review-3 R1.5).
+Manual refresh uses the same pipeline:
 
 ```bash
-sudo -n /home/pat/.venv/bin/levels emit-config --out /etc/kayak/runtime-config.json
+/home/pat/.venv/bin/levels emit-config --dry-run \
+    | sudo -n /usr/local/sbin/kayak-install-runtime-config
 ```
+
+The wrapper also **merges `/etc/kayak/secrets.env`** (root-only —
+`TURNSTILE_*`) into the JSON: the pat-side render can't read that file,
+so without the merge the keys silently vanish from the snapshot and
+captcha turns off (fired in prod; gpt-5.5 take-2 2026-06-03). Rendered
+(operator-env) values win over secrets.env, mirroring `config.py`'s
+`override=False` precedence.
 
 PHP picks up the new JSON on the next request (per-request `Config`
 singleton; no FPM reload needed).
 
+One-time install of the wrapper + grant (as root; see
+`deploy/kayak-install-runtime-config.sh` and
+`deploy/sudoers.d/kayak-emit-config` for the full rationale):
+
+```bash
+install -m 0755 -o root -g root \
+    /home/pat/kayak/deploy/kayak-install-runtime-config.sh \
+    /usr/local/sbin/kayak-install-runtime-config
+install -m 440 -o root -g root \
+    /home/pat/kayak/deploy/sudoers.d/kayak-emit-config \
+    /etc/sudoers.d/kayak-emit-config
+visudo -cf /etc/sudoers.d/kayak-emit-config   # validate before relying on it
+```
+
 ### Validation
 
-`levels validate-config` runs as part of `scripts/deploy.sh` before
-`emit-config`. It surfaces:
+`levels validate-config --known-env --strict` runs as part of
+`scripts/deploy.sh` before `emit-config`. It surfaces:
 
 - Out-of-range or malformed values (pydantic field validators).
 - Unknown `KAYAK_*` / `FETCH_*` / `MAIL_*` / `HC_*` / `EDITOR_*` /
-  `TURNSTILE_*` / etc. env vars (likely typos) when invoked with
-  `--known-env --strict`.
+  `TURNSTILE_*` / `METADATA_*` / etc. env vars (likely typos) — fatal
+  under `--strict`. Intentional non-field names (`KAYAK_DATA`,
+  `KAYAK_HOME`, …) are allowlisted in
+  `src/kayak/cli/validate_config.py::_EXTRA_KNOWN`; a false positive
+  means adding the name there, not dropping `--strict`.
 
 Exit codes: `0` clean, `1` invalid field, `2` runner failure.
 

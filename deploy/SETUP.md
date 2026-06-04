@@ -51,7 +51,9 @@ sudo usermod -aG adm pat
 sudo -u pat git clone git@github.com:mousebrains/kayak_python.git /home/pat/kayak
 
 # The venv lives at ~/.venv, NOT inside the repo — every kayak-*.service unit's
-# ExecStart= and the §7 sudoers grant invoke /home/pat/.venv/bin/levels.
+# ExecStart= invokes /home/pat/.venv/bin/levels. (The §7 sudoers grant does
+# NOT — it runs only the root-owned kayak-install-runtime-config wrapper;
+# granting sudo on the pat-writable venv binary was the review-3 R1.5 RCE.)
 cd /home/pat/kayak
 python3 -m venv /home/pat/.venv
 /home/pat/.venv/bin/pip install -e .
@@ -311,9 +313,12 @@ Paths in `WorkingDirectory=` / `EnvironmentFile=` / `ReadWritePaths=`
 remain literal — systemd doesn't expand env vars in those directives.
 
 PHP reads `TURNSTILE_SECRET` from the JSON snapshot
-`/etc/kayak/runtime-config.json` (Phase 2 of T3.3); the FPM-pool's
-`env[TURNSTILE_SECRET] = $TURNSTILE_SECRET` re-export keeps a second
-copy in `getenv()` as defense-in-depth.
+`/etc/kayak/runtime-config.json` **only** (T3.3 Phase 4 removed the
+getenv fallback); the JSON gets the value via the install wrapper's
+secrets.env merge (§ Typed config below). The FPM-pool's
+`env[TURNSTILE_SECRET] = $TURNSTILE_SECRET` re-export still puts a copy
+in `getenv()`, but no current code reads it — a harmless legacy channel,
+kept until the next FPM-config touch.
 
 `/edit.php` used to read `EDIT_PASSWORD` via HTTP Basic Auth; it now gates
 maintainer access on the `ed_sess` editor-session cookie (same pattern as
@@ -344,7 +349,10 @@ levels emit-config --dry-run | sudo -n /usr/local/sbin/kayak-install-runtime-con
 The sudoers grant (`deploy/sudoers.d/kayak-emit-config`) runs **only** that
 fixed wrapper — never the pat-writable `/home/pat/.venv/bin/levels`, so a
 compromised pat can't substitute code to run as root. The wrapper validates the
-piped JSON and atomically installs it (0640 root:www-data).
+piped JSON, **merges `/etc/kayak/secrets.env` into it** (the pat-side render
+can't read that root-only file, so `TURNSTILE_*` would otherwise be missing
+and captcha silently off — fired in prod, gpt-5.5 take-2 2026-06-03), and
+atomically installs it (0640 root:www-data).
 
 Install once on a fresh host (the wrapper first, then the grant):
 

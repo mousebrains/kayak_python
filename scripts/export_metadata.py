@@ -3,7 +3,7 @@
 
 Writes one CSV per metadata table, sorted by primary key so diffs are stable
 across exports. Excludes the append-only time-series tables and caches
-(observation, latest_observation, latest_gauge_observation, pages). The
+(observation, latest_observation, latest_gauge_observation). The
 large reach.geom and reach.gradient_profile columns go to separate JSONs
 (reaches.json and reaches-gradient.json, keyed by reach id) rather than
 reach.csv — they'd bloat every metadata-row diff and aren't regenerable on prod

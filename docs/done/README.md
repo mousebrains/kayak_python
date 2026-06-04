@@ -40,6 +40,8 @@ material rather than a deletable graveyard. For work *in flight*, see the
 | `REVIEW_round6_2026-05-30.md` | Round-6 deep project review (graded B+, ▲ from B−) — first clean recursive pass; merged #99; surfaced the metadata migration↔CSV duality root cause |
 | `PLAN_round6_remediation.md` | Round-6 remediation plan (the v1→v5 red-team record) — **superseded** by the metadata-single-source redesign (`PLAN_metadata_single_source.md`); kept for provenance |
 | `PLAN_metadata_single_source.md` | The metadata-single-source-of-truth redesign (design v2) — COMPLETE: stable ids + base-62 `?h=` handles, `sync-metadata`, retire data migrations, data-repo split (`kayak_data`) + branch protection (#100–#107) |
+| `REVIEW_gpt-5.5_2026-06-03.md` | External gpt-5.5 project review, round 1 — healthcheck per-source freshness false negative (HIGH), stale emit-config runbook, broken PHP quick start, reply race, validate-config gaps; remediated in #119, kept for trend |
+| `REVIEW_gpt-5.5_take2_2026-06-03.md` | gpt-5.5 follow-up review of the round-1 fixes — the Turnstile secrets-merge hole in the R1.5 wrapper pipeline (confirmed fired in prod: captcha silently off); remediated in #119 |
 | `preflight-2026-05-10.md` | Pre-production preflight / closing record for the 2026-05-20 cutover to `levels.wkcc.org` (all P0/P1 items resolved) |
 | `PLAN_montana_gauges.md` | Montana USGS gauges (curated 13-site list) — shipped in release 1.1.0 (#10, #13); the third-revision plan's leftovers were overtaken by events (state pages kept; `0036` regeneration mooted by the migration retirement) |
 

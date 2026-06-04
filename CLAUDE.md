@@ -18,11 +18,11 @@ The development environment uses these paths (configured in `~/.config/kayak/.en
 | Document root | `/home/pat/public_html` (regular directory; populated by `levels build`) |
 | Metadata repo (`METADATA_DIR`) | `/home/pat/kayak_data` (separate clone — the CSVs + `reaches*.json`) |
 
-`config.py` checks `~/.config/kayak/.env` before falling back to the default `load_dotenv()` search. PHP gets `SQLITE_PATH` from nginx `fastcgi_param`.
+`config.py` checks `~/.config/kayak/.env` before falling back to the default `load_dotenv()` search. PHP reads `/etc/kayak/runtime-config.json` (or `$KAYAK_CONFIG_PATH`), the JSON snapshot written by `levels emit-config` — a missing/unreadable file is a hard HTTP 500 (`[CONFIG-FATAL]`). The `SQLITE_PATH` env var is only a fallback when the JSON lacks `database_path`.
 
 **Metadata repo (data-repo split):** the metadata CSVs + `reaches*.json` live in a **separate** repo, `kayak_data`, cloned alongside the code repo and located via the `METADATA_DIR` env var. The default *value* stays `data/db` (path resolution unchanged), but the CSVs no longer live in the code repo — clone `kayak_data` and point `METADATA_DIR` at it. Only `data/db/migrations/` (schema) stays in the code repo. `levels sync-metadata` / `import_metadata` / `export_metadata` all read/write `METADATA_DIR`. Humans edit metadata via a PR to `kayak_data`; the prod host auto-snapshots editor-approved prod edits there nightly. So the code repo's `main` can be branch-protected without the snapshot needing to push to it. See [`deploy/SETUP.md`](deploy/SETUP.md).
 
-**`OUTPUT_DIR` convention:** the live host sets `OUTPUT_DIR=/home/pat/public_html` (outside the repo), so `levels build` writes to the nginx docroot and never touches the repo tree. On a separate dev machine, set `OUTPUT_DIR=/home/<user>/public_html_dev` (or similar non-repo path) in `~/.config/kayak/.env` and serve with `php -S localhost:8000 -t "$OUTPUT_DIR"`. The default (unset) writes back into the repo's `public_html/`, which clobbers tracked dev symlinks and drops stray artifacts under `static/`. See `.env.example` for the full rationale.
+**`OUTPUT_DIR` convention:** the live host sets `OUTPUT_DIR=/home/pat/public_html` (outside the repo), so `levels build` writes to the nginx docroot and never touches the repo tree. On a separate dev machine, set `OUTPUT_DIR=/home/<user>/public_html_dev` (or similar non-repo path) in `~/.config/kayak/.env` and serve with `KAYAK_CONFIG_PATH=… php -S localhost:8000 -t "$OUTPUT_DIR"` (see § Running the PHP Web Layer for the config step). The default (unset) writes back into the repo's `public_html/`, which clobbers tracked dev symlinks and drops stray artifacts under `static/`. See `.env.example` for the full rationale.
 
 POSIX ACLs grant `www-data`: traverse on `/home/pat` (not `/home/pat/kayak`), read on the docroot `/home/pat/public_html` (a real dir outside the repo — `levels build` copies PHP/static in) and on the operator status cache `/home/pat/var/status.html` (relocated out of the repo by R2.6/#47, so `www-data` reads zero repo paths), read-write on `/home/pat/DB`.
 
@@ -117,7 +117,11 @@ Ruff config: Python 3.13 target, 100-char line length, rules `E W F I UP B SIM R
 ### Running the PHP Web Layer
 
 ```bash
-php -S localhost:8000 -t public_html  # Serve PHP pages + static build output
+# PHP pages 500 without a runtime config (php/includes/config.php is
+# fatal-on-missing): emit one first and point KAYAK_CONFIG_PATH at it.
+levels emit-config --out ~/.config/kayak/runtime-config.json
+KAYAK_CONFIG_PATH=~/.config/kayak/runtime-config.json \
+    php -S localhost:8000 -t public_html  # Serve PHP pages + static build output
 ```
 
 ### PHP Tooling
@@ -187,7 +191,7 @@ Multi-source gauges aggregate across all linked sources directly: `update-gauge-
 
 **Python (static generation):** `levels build` writes self-contained HTML pages to `public_html/` with inlined CSS (from `src/kayak/web/static/style.css`) and SVG sparklines. These are the main river levels tables.
 
-**PHP (dynamic pages):** PHP files in `php/` handle interactive features — description pages with plots, data APIs, editing, the reach picker, and source/gauge browsers. Both layers share the same database (`SQLITE_PATH` env var for PHP, `DATABASE_URL` for Python).
+**PHP (dynamic pages):** PHP files in `php/` handle interactive features — description pages with plots, data APIs, editing, the reach picker, and source/gauge browsers. Both layers share the same database (`database_path` from the runtime-config JSON for PHP, with `SQLITE_PATH` as env fallback; `DATABASE_URL` for Python).
 
 ### Database
 
@@ -231,5 +235,5 @@ Each subcommand module in `src/kayak/cli/` exposes `addArgs(subparsers)` and set
 - **Upsert pattern:** `store_observation()` uses SQLite `ON CONFLICT DO UPDATE`
 - **Test isolation:** Every test gets a fresh in-memory SQLite engine and a transactional session that rolls back
 - **Test fixtures:** `tests/conftest.py` provides `engine`, `session`, `sample_source`, `sample_gauge`, `sample_reach`, `linked_source_gauge`
-- **PHP DB connection:** `php/includes/db.php` reads `SQLITE_PATH` env var; SQLite PDO only
+- **PHP DB connection:** `php/includes/db.php` resolves the DB path via `Config::str('database_path')` (runtime-config JSON), then the `SQLITE_PATH` env var; SQLite PDO only
 

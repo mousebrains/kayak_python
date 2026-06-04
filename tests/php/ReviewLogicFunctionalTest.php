@@ -402,7 +402,7 @@ final class ReviewLogicFunctionalTest extends FunctionalTestCase
         $cr = $this->seedCr($editor, $reach, ['reach' => ['description' => 'x']]);
 
         $before = count(glob(self::$mailDir . '/*') ?: []);
-        review_send_reply($db, $cr, 'a question for you', $maint);
+        $this->assertTrue(review_send_reply($db, $cr, 'a question for you', $maint));
 
         $after = $this->fetchCr($cr['id']);
         $this->assertSame('pending', $after['status'], 'reply keeps the CR pending');
@@ -412,6 +412,52 @@ final class ReviewLogicFunctionalTest extends FunctionalTestCase
             count(glob(self::$mailDir . '/*') ?: []),
             'reply emails the editor',
         );
+    }
+
+    public function testConcurrentRepliesBothSurvive(): void
+    {
+        // PR #119 review: replies don't flip status, so two reply tabs can
+        // both pass the `pending` predicate. The append is SQL-side — the
+        // second write must NOT drop the first reply's note even when made
+        // from a stale request-start row (last-writer-wins regression).
+        $db = $this->pdo();
+        $maint = Fixtures::editor($db, ['status' => 'maintainer']);
+        $editor = Fixtures::editor($db, ['email' => 'thread@example.com']);
+        $reach = Fixtures::reach($db, ['river' => 'R']);
+        $cr = $this->seedCr($editor, $reach, ['reach' => ['description' => 'x']]);
+
+        $this->assertTrue(review_send_reply($db, $cr, 'first reply', $maint));
+        // Tab B still holds the pre-first-reply row ($cr, reviewer_note null).
+        $this->assertTrue(review_send_reply($db, $cr, 'second reply', $maint));
+
+        $after = $this->fetchCr($cr['id']);
+        $note = (string)$after['reviewer_note'];
+        $this->assertStringContainsString('first reply', $note, 'first reply survives the race');
+        $this->assertStringContainsString('second reply', $note);
+        $this->assertSame('pending', $after['status']);
+    }
+
+    public function testSendReplyRaceDoesNotMutateTerminalRowOrEmail(): void
+    {
+        // Two maintainer tabs: tab A rejected the CR, tab B's stale "reply,
+        // keep pending" submit must not append a note to the terminal row
+        // nor email the editor a misleading "still pending" message.
+        $db = $this->pdo();
+        $maint = Fixtures::editor($db, ['status' => 'maintainer']);
+        $editor = Fixtures::editor($db, ['email' => 'raced@example.com']);
+        $reach = Fixtures::reach($db, ['river' => 'R']);
+        $cr = $this->seedCr($editor, $reach, ['reach' => ['description' => 'x']], [
+            'status' => 'rejected',
+            'reviewer_note' => 'original decision note',
+        ]);
+
+        $before = count(glob(self::$mailDir . '/*') ?: []);
+        $this->assertFalse(review_send_reply($db, $cr, 'too late', $maint));
+
+        $after = $this->fetchCr($cr['id']);
+        $this->assertSame('rejected', $after['status']);
+        $this->assertSame('original decision note', $after['reviewer_note'], 'terminal note untouched');
+        $this->assertSame($before, count(glob(self::$mailDir . '/*') ?: []), 'no email sent');
     }
 
     // -----------------------------------------------------------------------

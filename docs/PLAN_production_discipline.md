@@ -62,7 +62,7 @@ Goal: detect failures within minutes (not "next time you check"); make recovery 
 - **Push:** [ntfy.sh](https://ntfy.sh) public service. Self-hostable later if needed. Pushover ($5 one-time per platform) is the paid alternative.
 - **Internal dashboard:** Hand-rolled HTML page reading `kayak.db` directly. No Grafana stack at this scale — a 100-line PHP/Python page beats a metrics-pipeline for the metrics we actually need.
 - **Public status page DNS:** `status.mousebrains.com` (new CNAME under Cloudflare; `mousebrains.com` is at `liv.ns.cloudflare.com` / `dale.ns.cloudflare.com`).
-- **Internal dashboard DNS:** `levels.wkcc.org/_internal/` (also `levels-test.wkcc.org/_internal/`; vhost subpath, maintainer-auth via the existing `editor_session` cookie, `noindex`). No new DNS, no new credential. Lives on the wkcc hosts because `SITE_URL=levels.wkcc.org` drives the magic-link round-trip — anchoring the dashboard to a different host would break login.
+- **Internal dashboard DNS:** `levels.wkcc.org/_internal/` (vhost subpath, maintainer-auth via the existing `editor_session` cookie, `noindex`; `levels-test.wkcc.org` has since been 301-redirected wholesale to the canonical host, 2026-05-19). No new DNS, no new credential. Lives on the wkcc hosts because `SITE_URL=levels.wkcc.org` drives the magic-link round-trip — anchoring the dashboard to a different host would break login.
 - **Per [feedback_no_sudo]:** all `/etc/` edits (systemd units, nginx vhosts, certbot) get prepared as diffs that you apply. Per [feedback_systemd_in_tree_copy]: every `/etc/systemd/system/kayak-*` patch also goes into the repo's installed location at the same time.
 
 ## Target shape
@@ -251,7 +251,10 @@ Each tier is several phases; **review gate between tiers**, not between phases.
    - **Disk full:** `levels decimate`; check `~/logs/`; check `/tmp/`
    - **nginx misconfig after deploy:** `sudo nginx -t` to diagnose; revert via Phase 3.4 rollback
    - **healthchecks.io firing but everything looks fine:** check timer cadence vs healthchecks.io expected schedule
-3. **Phase 4.3 — SLO definition.** `docs/slo.md`:
+3. **Phase 4.3 — SLO definition.** `docs/slo.md` (draft targets as
+   proposed here; `docs/slo.md` is canonical and has since diverged —
+   e.g. data freshness is now a 3 h global window plus a 14 d
+   per-source dead-feed detector, 2026-06-03):
    - **Uptime:** 99% / month (allows ~7h downtime). Measured by Better Stack monitor.
    - **Build cadence:** ≥1 successful build/h, 95% of hours/month. Measured by `kayak-pipeline.service`'s healthchecks.io heartbeat (build runs as the last stage of the pipeline since the build.py split).
    - **Data freshness:** ≥1 fresh observation per active source within 2h, 90% of the time. Measured by `/status.json` historical scrape.

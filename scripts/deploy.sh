@@ -104,9 +104,16 @@ fi
 # apply schema changes. Runs after `pip install -e .` so the latest
 # model is loaded. Exit 1 = field invalid; exit 2 = runner failure;
 # either fails the deploy.
+#
+# --known-env --strict additionally fails on any config-shaped env var
+# (KAYAK_* / FETCH_* / MAIL_* / HC_* / METADATA_* / …) that isn't a
+# declared KayakConfig field — typos like METADATA_DRI otherwise
+# silently fall back to the default. Legit non-field names (KAYAK_DATA,
+# KAYAK_HOME, …) live in validate_config._EXTRA_KNOWN; a false positive
+# here means adding the name there, not dropping --strict.
 
-echo ">>> levels validate-config"
-"$LEVELS" validate-config
+echo ">>> levels validate-config --known-env --strict"
+"$LEVELS" validate-config --known-env --strict
 
 # --- 3. migrate --------------------------------------------------------
 
@@ -195,8 +202,10 @@ fi
 #
 # Writes the typed-config JSON snapshot consumed by PHP. emit-config renders
 # the JSON UNPRIVILEGED (as pat, to stdout via --dry-run); the root-owned
-# /usr/local/sbin/kayak-install-runtime-config wrapper validates + atomically
-# installs it (0640 root:www-data). The sudoers grant runs only that fixed
+# /usr/local/sbin/kayak-install-runtime-config wrapper validates it, merges
+# /etc/kayak/secrets.env (root-only TURNSTILE_* — the pat render can't read
+# it; gpt-5.5 take-2 2026-06-03), and atomically installs it (0640
+# root:www-data). The sudoers grant runs only that fixed
 # wrapper, never the pat-writable venv binary (review-3 R1.5). Requires the
 # deploy/sudoers.d/kayak-emit-config grant + the wrapper installed (one-time
 # operator setup; see deploy/SETUP.md). No php-fpm reload needed — PHP re-reads

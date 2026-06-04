@@ -116,8 +116,10 @@ function _review_handle_post(PDO $db, ?int $cr_id, ?string $action, int $maint_i
             if ($note === '') {
                 return [null, 'Reply cannot be empty.'];
             }
-            review_send_reply($db, $cr, $note, $maint_id);
-            return ['Reply sent — proposal kept pending.', null];
+            if (review_send_reply($db, $cr, $note, $maint_id)) {
+                return ['Reply sent — proposal kept pending.', null];
+            }
+            return [null, 'Already reviewed by another maintainer.'];
 
         case 'reply_and_close':
             $note = trim((string)($_POST['reviewer_note'] ?? ''));

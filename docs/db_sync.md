@@ -65,7 +65,6 @@ What it does:
    - Merge via `sqlite3`:
      - `INSERT OR IGNORE` every observation from the live-final DB into the new DB, filtered by a `JOIN` on `source` (skips rows whose source was deleted locally).
      - Replace `latest_observation` / `latest_gauge_observation` from live-final.
-     - Clear `pages` (the next `build` regenerates it).
    - `PRAGMA integrity_check` on the merged DB; abort and restart timers if it's not `ok`.
    - Archive the outgoing live DB to `~/backups/kayak-replaced-<ts>.db.gz`.
    - Atomically `mv /tmp/kayak-new-<ts>.db ~/DB/kayak.db`.
@@ -79,7 +78,6 @@ Result: your metadata edits are live, and no observations were lost.
 |---|---|
 | `observation` | **Union** — your local rows + every live row via `INSERT OR IGNORE`. |
 | `latest_observation`, `latest_gauge_observation` | **Replaced from live's final state.** The next pipeline tick will recompute them anyway. |
-| `pages` | **Cleared.** `levels build` regenerates it on the next run. |
 | `source`, `gauge`, `gauge_source`, `fetch_url`, `calc_expression` | **Local wins.** |
 | `reach`, `reach_state`, `reach_class`, `class_description`, `guidebook`, `reach_guidebook` | **Local wins.** |
 | `rating`, `rating_data` | **Local wins.** |

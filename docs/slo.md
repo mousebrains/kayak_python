@@ -23,7 +23,7 @@ stays up); read the status page and this doc together.
 | # | SLO | Target | Measurement | Where the signal lives |
 |---|---|---|---|---|
 | **A** | Site availability | ≥ **99.5% / 30d** (~3.6 h/month error budget) | Better Stack uptime monitor on `https://levels.wkcc.org/`, 3-min interval, HTTP 2xx | Better Stack dashboard `Uptime / kayak` |
-| **F** | Pipeline freshness per source | ≤ **2 h** since `latest_observation.observed_at` for active sources during their feed's expected cadence | `scripts/health-check.sh` exits non-zero on stale; surfaced via `kayak-healthcheck.service` heartbeat | `journalctl -u kayak-healthcheck` + healthchecks.io `kayak-healthcheck` check |
+| **F** | Pipeline freshness | Global: newest observation across all sources ≤ **3 h** old. Per-source: every active gauge-linked fetch-backed source has ≥ 1 observation and none silent > **14 d** (`STALE_SOURCE_DAYS`); OGC-fetched USGS sources are checked for going silent too, but never-fed ones are exempt | `scripts/health-check.sh` exits non-zero on either; surfaced via `kayak-healthcheck.service` heartbeat | `journalctl -u kayak-healthcheck` + healthchecks.io `kayak-healthcheck` check |
 | **B** | Backup RPO | ≤ **1 h** confirmed by a successful hourly snapshot | `kayak-backup-hourly.service` (hourly `*:38`) pings healthchecks.io on success; backup files land at `/home/pat/backups/backup-<UTC>.db.gz` | healthchecks.io `kayak-backup-hourly` check + `ls -la /home/pat/backups/` |
 | **D** | Build-time freshness | New static HTML written within **75 min** of the hourly pipeline tick (`kayak-pipeline.timer` runs at `*:12`, ~30 min budget for fetch + calc + build, +headroom) | `kayak-pipeline.service` heartbeat ping fires only after the build step exits 0 | healthchecks.io `kayak-pipeline` check + `stat /home/pat/public_html/Oregon.html` |
 | **E** | Editor magic-link delivery | ≥ **95% / 30d** of magic-link emails reach the inbox within 60 s | `php/includes/mail.php` logs every send attempt; success measured by absence of msmtp error in `journalctl` and operator-noticed bounces | `journalctl -t magiclink` + `php/includes/mail.php` retry counters |
@@ -35,9 +35,21 @@ stays up); read the status page and this doc together.
   of the monthly error budget. Two unrelated 6-min hiccups in a month
   still leave headroom; three or four says "stop tolerating one-off
   flakes."
-* **Freshness (F).** `scripts/health-check.sh` returns non-zero when any
-  active source's last observation is older than the feed's expected
-  cadence + 2 h. Healthchecks.io fires when the heartbeat doesn't ping
+* **Freshness (F).** `scripts/health-check.sh` returns non-zero when
+  (a) the newest observation across **all** sources is older than 3 h —
+  the pipeline stopped writing entirely — or (b) any active,
+  gauge-linked, fetch-backed source has no observations at all or none
+  newer than `STALE_SOURCE_DAYS` (default 14 days) — a single feed died
+  while other sources kept the global timestamp fresh. OGC-fetched USGS
+  sources (gauge-linked, no `fetch_url` row) get the same silent->fail
+  window once they have produced data, but never-fed ones are exempt:
+  they're speculative metadata additions awaiting upstream OGC
+  coverage, and paging on them forever would train alert-blindness.
+  There is no
+  per-source cadence model (feeds update anywhere from every 15 min to
+  a few times a day), so the per-source window is deliberately coarse:
+  a dead-feed detector, not a lag detector. Healthchecks.io fires when
+  the heartbeat doesn't ping
   on time *or* the service exits non-zero (`ExecStartPost=-/usr/bin/curl`
   only runs when `ExecStart` succeeds). So "stale" and "unit crashed"
   both surface as the same alert.
@@ -81,9 +93,9 @@ regression surface without paging on every transient. Revisit when:
 * A single month burns >50 % of the availability error budget (3.6 h ×
   0.5 ≈ **108 min downtime**) and the cause was not load-bearing.
 * The freshness SLO trips twice in 30 days on the same source — either
-  the source is unreliable enough to deserve a longer per-source
-  window, or the upstream API has changed and the parser needs
-  attention.
+  the source is unreliable enough to deserve a longer window (raise
+  `STALE_SOURCE_DAYS` in the unit env) or its `fetch_url` deactivated,
+  or the upstream API has changed and the parser needs attention.
 * The hourly backup snapshot misses for any reason during normal
   operation. RPO ≤ 1 h is the headline number for "what can we lose if
   the disk dies right now"; it's not negotiable without a deliberate

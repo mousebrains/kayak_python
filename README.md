@@ -70,16 +70,23 @@ python scripts/import_metadata.py
 # 5. Run the full pipeline (fetch live data, generate HTML)
 levels pipeline
 
-# 6. Serve locally
-php -S localhost:8000 -t public_html
+# 6. Emit the runtime config the PHP layer requires. Every PHP page reads
+#    /etc/kayak/runtime-config.json (or $KAYAK_CONFIG_PATH) and returns
+#    HTTP 500 if it's missing — a bare `php -S` without this step serves
+#    only the static pages. Re-run after changing ~/.config/kayak/.env.
+levels emit-config --out ~/.config/kayak/runtime-config.json
+
+# 7. Serve locally
+KAYAK_CONFIG_PATH=~/.config/kayak/runtime-config.json php -S localhost:8000 -t public_html
 ```
 
 > **Set `OUTPUT_DIR` on a dev machine.** Unset, `levels build` (which `levels
 > pipeline` runs) writes into the repo's own `public_html/`, clobbering the
 > tracked dev symlinks there and dropping stray artifacts under `static/`. Set
 > `OUTPUT_DIR` to a non-repo path (e.g. `~/public_html_dev`) in
-> `~/.config/kayak/.env` and serve that instead — `php -S localhost:8000 -t
-> "$OUTPUT_DIR"`. See `.env.example` and CLAUDE.md for the full rationale.
+> `~/.config/kayak/.env` and serve that instead — `KAYAK_CONFIG_PATH=…
+> php -S localhost:8000 -t "$OUTPUT_DIR"` (config step 6 above). See
+> `.env.example` and CLAUDE.md for the full rationale.
 
 Prefer fully-qualified paths over `source .venv/bin/activate` if your
 shell config makes activation noisy: replace every `levels …` with
