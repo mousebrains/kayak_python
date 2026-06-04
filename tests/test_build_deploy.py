@@ -38,6 +38,22 @@ def test_filter_regression_md_drops_sql_stub_and_future() -> None:
     assert "piecewise" not in out
 
 
+def test_filter_regression_md_drops_calc_expression_row_section() -> None:
+    # Post-redesign reports carry "## `calc_expression` row" (the kayak_data
+    # CSV column values) instead of the SQL stub — equally maintainer-only.
+    md = (
+        "# Title\n\n"
+        "## Chosen fit\n\nstuff\n\n"
+        "## `calc_expression` row\n\n"
+        "```\nexpression: round(greatest(0, ...))\n```\n\n"
+        "## Future\n\n- idea\n"
+    )
+    out = _filter_regression_md_for_html(md)
+    assert "## Chosen fit" in out
+    assert "calc_expression` row" not in out
+    assert "expression: round" not in out
+
+
 def test_filter_regression_md_chops_run_until_next_h2() -> None:
     # A non-dropped H2 following a dropped one survives.
     md = "## Drop me\n## SQL stub for X\n\nSQL goes here\n\n## Keep me\n\nthis section is fine\n"
