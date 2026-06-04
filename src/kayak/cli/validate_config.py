@@ -51,6 +51,7 @@ _CONFIG_PREFIXES = (
     "KAYAK_",
     "METADATA_",
     "USGS_",
+    "SQLITE_",
 )
 
 # Env-var names the CLI reads but that don't correspond to a model field
@@ -68,6 +69,10 @@ _EXTRA_KNOWN = frozenset(
         # into the www-data-readable runtime-config.json, and PHP has no
         # use for it.
         "USGS_API_KEY",
+        # PHP's db.php fallback + health-check.sh's DB override; the
+        # python side uses DATABASE_URL, so this is intentionally not a
+        # model field (PR #119 review — same typo class as METADATA_DIR).
+        "SQLITE_PATH",
     }
 )
 

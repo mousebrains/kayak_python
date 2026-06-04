@@ -93,6 +93,11 @@ fi
 #   - A source added by deploy is flagged until the next pipeline tick
 #     fetches it (deploy runs build, not fetch) — one transient alert,
 #     self-heals within the hour; persistent = the feed really is dead.
+#   - fu.is_active appears non-aggregated under GROUP BY s.id (SQLite's
+#     bare-column extension) — safe because each source has exactly one
+#     fetch_url row, so is_active is functionally dependent on s.id.
+#     Don't "fix" it to MAX(fu.is_active) or port to a stricter engine
+#     unexamined.
 STALE_SOURCES=$(sqlite3 "$DB" "
     SELECT s.id || ' ' || s.name || ' latest=' || COALESCE(MAX(lo.observed_at), 'NEVER')
     FROM source s

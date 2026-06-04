@@ -27,6 +27,54 @@
 
 set -euo pipefail
 
+SECRETS_FILE="/etc/kayak/secrets.env"
+
+# Sanity check on the secrets file: BOTH Turnstile keys must be present and
+# non-empty — turnstile.php's turnstile_enabled() requires the pair, so a
+# secret-only file deploys with captcha silently off (PR #119 review,
+# 2026-06-03; previously only TURNSTILE_SECRET was enforced, via a bare grep
+# that also diverged from the merge's parsing). Parsing semantics deliberately
+# MIRROR the merge in deploy/kayak-install-runtime-config.sh (strip, skip
+# comments, accept an `export ` prefix, strip quotes, empty value = key
+# disabled) — keep the two in sync, or a value this guard accepts could still
+# fail to merge.
+# shellcheck disable=SC2016
+check_secrets() {
+    python3 -c '
+import sys
+from pathlib import Path
+
+p = Path(sys.argv[1])
+if not p.is_file():
+    sys.exit(f"error: {p}: no such file")
+data = {}
+for line in p.read_text().splitlines():
+    line = line.strip()
+    if not line or line.startswith("#") or "=" not in line:
+        continue
+    line = line.removeprefix("export ").lstrip()
+    k, v = line.split("=", 1)
+    k, v = k.strip(), v.strip().strip("\"").strip("\x27")
+    if k and v:
+        data[k.lower()] = v
+missing = [k.upper() for k in ("turnstile_site_key", "turnstile_secret") if not data.get(k)]
+if missing:
+    print(f"error: missing/empty in {p}: " + ", ".join(missing), file=sys.stderr)
+    sys.exit(1)
+' "$1"
+}
+
+# Standalone mode (no root needed): `install-config.sh --check-secrets [FILE]`
+# runs only the sanity check — used by tests/test_scripts/ and handy as a
+# deploy pre-flight. Exit 0 = both keys present, 3 = missing/empty/no file.
+if [[ "${1:-}" == "--check-secrets" ]]; then
+    if check_secrets "${2:-$SECRETS_FILE}"; then
+        exit 0
+    else
+        exit 3
+    fi
+fi
+
 if [[ $EUID -ne 0 ]]; then
     echo "error: must run as root (use sudo)" >&2
     exit 1
@@ -41,7 +89,6 @@ FPM_UNIT="php${PHP_VER}-fpm.service"
 FPM_POOL_DIR="/etc/php/${PHP_VER}/fpm/pool.d"
 FPM_DROPIN_DIR="/etc/systemd/system/${FPM_UNIT}.d"
 
-SECRETS_FILE="/etc/kayak/secrets.env"
 ENV_FILE="/etc/kayak/env"
 
 say() { printf '• %s\n' "$*"; }
@@ -79,9 +126,9 @@ else
     exit 2
 fi
 
-# Sanity: required value present (non-empty) in the secrets file.
-if [[ -z "$(grep -E '^TURNSTILE_SECRET=' "$SECRETS_FILE" | head -1 | cut -d= -f2-)" ]]; then
-    echo "error: $SECRETS_FILE is missing a value for TURNSTILE_SECRET" >&2
+# Sanity: BOTH Turnstile keys present (non-empty) in the secrets file,
+# parsed exactly as the install wrapper will merge them.
+if ! check_secrets "$SECRETS_FILE"; then
     echo "edit it with: sudo -e $SECRETS_FILE" >&2
     exit 3
 fi

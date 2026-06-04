@@ -69,16 +69,27 @@ function review_load_target_state(PDO $db, string $type, int $id): ?array {
 }
 
 /**
+ * One stamped reviewer-note entry ("[<UTC stamp> maintainer] <note>").
+ */
+function reviewer_note_entry(string $new): string {
+    $stamp = gmdate('Y-m-d H:i') . 'Z';
+    return "[$stamp maintainer] " . trim($new);
+}
+
+/**
  * Append a new maintainer note to the prior reviewer_note thread, stamped
- * with the current UTC timestamp. Used by approve / reject / reply so the
- * conversation is preserved across actions.
+ * with the current UTC timestamp. Used by the terminal actions (approve /
+ * reject / resolve / reply-and-close), where the atomic status flip means
+ * only one writer can win — a PHP-side merge from the request-start row is
+ * safe there. review_send_reply() does NOT use this: replies don't flip
+ * status, so two concurrent reply tabs could both pass the predicate and
+ * the second PHP-side merge would drop the first note (PR #119 review);
+ * it appends SQL-side inside the UPDATE instead.
  */
 function merge_reviewer_note(string $prev, string $new): string {
     $new = trim($new);
     if ($new === '') return $prev;
-    $stamp = gmdate('Y-m-d H:i') . 'Z';
-    $entry = "[$stamp maintainer] " . $new;
-    return $prev === '' ? $entry : rtrim($prev) . "\n\n" . $entry;
+    return $prev === '' ? reviewer_note_entry($new) : rtrim($prev) . "\n\n" . reviewer_note_entry($new);
 }
 
 /**
@@ -245,14 +256,25 @@ function review_notify_editor(PDO $db, array $cr, string $decision, string $note
  * @param array{id: int, target_type: string, target_id: int|null, editor_id: int, submitted_at: string, subject: string|null, payload_json: string, notes_to_maint: string|null, status: string, reviewed_at: string|null, reviewed_by: int|null, reviewer_note: string|null, applied_json: string|null, source_url: string|null} $cr change_request row.
  */
 function review_send_reply(PDO $db, array $cr, string $reply, int $maint_id): bool {
-    $merged = merge_reviewer_note($cr['reviewer_note'] ?? '', $reply);
+    $entry = reviewer_note_entry($reply);
     // Same atomic predicate as the terminal actions (approve/reject/
     // resolve/reply-and-close): re-check `pending` inside the UPDATE so a
-    // stale tab can't append a note to an already-reviewed row.
+    // stale tab can't append a note to an already-reviewed row. The append
+    // itself is SQL-side (not merged from the request-start $cr row):
+    // replies don't flip status, so two concurrent reply tabs can BOTH
+    // pass the predicate — a PHP-side merge would last-writer-win and drop
+    // the first reply's note (PR #119 review finding). rtrim's char set
+    // matches PHP rtrim() defaults (space/tab/LF/CR).
     $stmt = $db->prepare(
-        "UPDATE change_request SET reviewer_note = ? WHERE id = ? AND status = 'pending'"
+        "UPDATE change_request
+         SET reviewer_note = CASE
+             WHEN reviewer_note IS NULL OR reviewer_note = '' THEN ?
+             ELSE rtrim(reviewer_note, char(32) || char(9) || char(10) || char(13))
+                  || char(10) || char(10) || ?
+           END
+         WHERE id = ? AND status = 'pending'"
     );
-    $stmt->execute([$merged, $cr['id']]);
+    $stmt->execute([$entry, $entry, $cr['id']]);
     if ($stmt->rowCount() === 0) return false;
 
     $st = $db->prepare('SELECT email FROM editor WHERE id = ?');

@@ -57,6 +57,21 @@ class TestKnownEnvNames:
         # but set in prod's .env, so strict mode must know it.
         assert "USGS_API_KEY" in _known_env_names()
 
+    def test_includes_sqlite_path(self) -> None:
+        # PHP db.php fallback + health-check.sh DB override; set in
+        # prod's .env. Not a model field (python uses DATABASE_URL),
+        # so strict mode must know the exact name (PR #119 review).
+        assert "SQLITE_PATH" in _known_env_names()
+
+    def test_known_env_warns_on_sqlite_typo(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("SQLITE_PTAH", "/tmp/kayak.db")
+        with pytest.raises(SystemExit) as exc:
+            validate_config(_args(known_env=True))
+        assert exc.value.code == 0
+        assert "SQLITE_PTAH" in capsys.readouterr().err
+
 
 class TestValidateConfig:
     """`validate-config` returns the right exit code per scenario."""

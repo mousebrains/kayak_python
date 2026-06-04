@@ -414,6 +414,29 @@ final class ReviewLogicFunctionalTest extends FunctionalTestCase
         );
     }
 
+    public function testConcurrentRepliesBothSurvive(): void
+    {
+        // PR #119 review: replies don't flip status, so two reply tabs can
+        // both pass the `pending` predicate. The append is SQL-side — the
+        // second write must NOT drop the first reply's note even when made
+        // from a stale request-start row (last-writer-wins regression).
+        $db = $this->pdo();
+        $maint = Fixtures::editor($db, ['status' => 'maintainer']);
+        $editor = Fixtures::editor($db, ['email' => 'thread@example.com']);
+        $reach = Fixtures::reach($db, ['river' => 'R']);
+        $cr = $this->seedCr($editor, $reach, ['reach' => ['description' => 'x']]);
+
+        $this->assertTrue(review_send_reply($db, $cr, 'first reply', $maint));
+        // Tab B still holds the pre-first-reply row ($cr, reviewer_note null).
+        $this->assertTrue(review_send_reply($db, $cr, 'second reply', $maint));
+
+        $after = $this->fetchCr($cr['id']);
+        $note = (string)$after['reviewer_note'];
+        $this->assertStringContainsString('first reply', $note, 'first reply survives the race');
+        $this->assertStringContainsString('second reply', $note);
+        $this->assertSame('pending', $after['status']);
+    }
+
     public function testSendReplyRaceDoesNotMutateTerminalRowOrEmail(): void
     {
         // Two maintainer tabs: tab A rejected the CR, tab B's stale "reply,
