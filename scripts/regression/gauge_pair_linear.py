@@ -4,7 +4,8 @@
 Used to derive `calc_expression` formulas that replace a retired or
 intermittent gauge with an estimate from still-active gauges. Produces
 a markdown analysis report (window stability, parameter covariance,
-residual diagnostics) plus a SQL stub ready to paste into a migration.
+residual diagnostics) plus the `calc_expression` column values ready to
+paste into a new `calc_expression.csv` row in the `kayak_data` repo.
 
 Common case is single-predictor linear:
 
@@ -830,32 +831,34 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
         )
         L("```\n")
 
-    L("## SQL stub for `calc_expression`\n")
+    L("## `calc_expression` row\n")
     L(
-        "Paste this into a `data/db/migrations/00NN_*.sql` file. The handles "
+        "`calc_expression` rows are **metadata**: add a row to "
+        "`calc_expression.csv` in the `kayak_data` repo (stable `id` from "
+        "`id_counters.csv`, `provenance_slug` = this report's slug) and let "
+        "`levels sync-metadata` apply it on deploy. Do **not** put this in a "
+        "migration — a new migration may not write a metadata table "
+        "(`tests/test_scripts/test_migrations_schema_only.py`). The handles "
         f"({', '.join(f'`{h}`' for h in calc_handles)}) follow the "
         "`prefix::gauge_name` convention enforced by "
-        "`kayak.cli.calculator._resolve_refs`:\n"
+        "`kayak.cli.calculator._resolve_refs`. Column values:\n"
     )
-    L("```sql")
-    L("INSERT INTO calc_expression (data_type, expression, time_expression, note) SELECT")
-    L("    'flow',")
-    L(f"    '{expr_sql}',")
-    L(f"    '{time_expr}',")
     note = (
         f"{family} regression fit. n={fit.n} daily means, "
         f"window {window_start}..{window_end}, r2={fit.r2:.4f}, "
-        f"RMSE={fit.rmse:.1f} cfs."
+        f"RMSE={fit.rmse:.1f} cfs. See docs/regression/{name}.md."
     )
-    L(f"    '{note}'")
-    L("WHERE NOT EXISTS (")
-    L(f"    SELECT 1 FROM calc_expression WHERE time_expression = '{time_expr}'")
-    L(");")
+    L("```")
+    L("data_type:       flow")
+    L(f"expression:      {expr_sql}")
+    L(f"time_expression: {time_expr}")
+    L(f"note:            {note}")
+    L(f"provenance_slug: {name}")
     L("```\n")
     L(
-        "**Note**: the migration runner (`cli/migrate.py::_split_statements`) "
-        "splits SQL on `;` without understanding string literals, so make sure "
-        "no `;` appears inside the `note` text.\n"
+        "Flesh out `note` before committing — the strongest existing rows "
+        "also record window stability, rejected predictors, and any "
+        "drainage-area scaling (see `calc_expression.csv` for examples).\n"
     )
 
     L("## Future\n")

@@ -7,8 +7,9 @@ still-active gauge.
 
 The tool fetches USGS daily means directly via `waterservices.usgs.gov`
 (cached to `/tmp/<site>_dv.tsv`), fits OLS with full parameter
-covariance, and emits a markdown analysis report plus a SQL stub
-ready to paste into a migration.
+covariance, and emits a markdown analysis report plus the
+`calc_expression` column values ready to paste into a new
+`calc_expression.csv` row in the `kayak_data` repo.
 
 **Dependencies:** Python stdlib + numpy + `curl` on `PATH`. No kayak
 imports, so the tool runs without the project venv.
@@ -119,10 +120,12 @@ The markdown report contains:
   dry-season May–Oct). Seasonal bias that the pooled diagnostics
   average away — common in this PNW monsoonal basin — shows up here as a
   large mean residual relative to σ̂ in one season.
-- **SQL stub** for `calc_expression`, with the right `prefix::gauge`
-  reference handles and a `WHERE NOT EXISTS` idempotency guard. The
-  note text is escaped of `;` since the migration runner splits on
-  semicolons without parsing string literals.
+- **`calc_expression` column values** (expression / time_expression /
+  note / provenance_slug) with the right `prefix::gauge` reference
+  handles, ready for a new `calc_expression.csv` row in `kayak_data`.
+  calc rows are metadata, so they ship via the CSV + `levels
+  sync-metadata` — **not** via a migration (a new migration writing a
+  metadata table fails `test_migrations_schema_only.py`).
 - A **Reproduce** snippet identical to the command that generated the
   file.
 
