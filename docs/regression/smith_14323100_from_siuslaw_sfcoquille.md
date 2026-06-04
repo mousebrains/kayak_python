@@ -14,6 +14,8 @@ python3 scripts/regression/gauge_pair_linear.py \
     --start 1967-10-01 \
     --end 1973-06-30 \
     --name smith_14323100_from_siuslaw_sfcoquille \
+    --calc-handle sm::Suislaw_Mapleton_merge \
+    --calc-handle cp::Coquille_Powers_merge \
     --quadratic-for 14307620
 ```
 

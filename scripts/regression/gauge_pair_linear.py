@@ -571,6 +571,12 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
             f"--name {name}",
         ]
     )
+    # Custom calc handles are part of the output (the calc_expression row), so
+    # the reproduce command must carry them or a regen would silently emit
+    # default p1::<site> handles. Defaults are omitted — they self-reproduce.
+    default_handles = [f"p{i}::{s}" for i, s in enumerate(predictor_sites, start=1)]
+    if calc_handles != default_handles:
+        cmd_parts += [f"--calc-handle {h}" for h in calc_handles]
     if all(quad_mask):
         cmd_parts.append("--quadratic")
     else:
@@ -1242,9 +1248,10 @@ def _render_fit_json(
 
 
 def _default_stability_starts(start: str, end: str, earliest_overlap: str) -> list[str]:
-    """Default start dates for the stability sweep: {start-15y, start-10y,
-    start-5y, start, start+5y, earliest-overlap, 1990-01-01}, deduped,
-    sorted, and capped at the window end."""
+    """Default start dates for the stability sweep: {start-5y, start,
+    start+5y, start+10y, start+15y, earliest-overlap, 1990-01-01}, deduped,
+    sorted, and capped at the window end (so the later offsets drop out of
+    short windows)."""
     anchor = datetime.fromisoformat(start)
     defaults: list[str] = []
     for years_back in (-5, 0, 5, 10, 15):
@@ -1343,8 +1350,8 @@ def main() -> int:
         default=None,
         help=(
             "Window-start dates for the stability sweep. "
-            "Default: {start-15y, start-10y, start-5y, start, start+5y, "
-            "earliest-overlap, 1990-01-01}."
+            "Default: {start-5y, start, start+5y, start+10y, start+15y, "
+            "earliest-overlap, 1990-01-01}, capped at the window end."
         ),
     )
     ap.add_argument(

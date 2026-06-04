@@ -111,9 +111,9 @@ The markdown report contains:
   `mean(x) ≠ 0`, which recentering would decouple.
 - **Goodness-of-fit:** r², plain RMSE (sqrt(RSS/n)), and the unbiased
   σ̂ (sqrt(RSS/(n−p))).
-- **Window stability table** at five default start dates around
-  `--start` plus 1990-01-01 and earliest-overlap. Lets you eyeball how
-  the fit drifts.
+- **Window stability table** at five default start dates (`--start`
+  −5y through +15y, capped at the window end) plus 1990-01-01 and
+  earliest-overlap. Lets you eyeball how the fit drifts.
 - **Residual diagnostics:** percentile distribution, mean/std/n by
   predictor-1 quintile, and a **by-hydrologic-season** bias table
   (heavy-rain Nov–Dec / light-rain Jan–Feb / rain-on-snow Mar–Apr /

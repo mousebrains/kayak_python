@@ -113,5 +113,12 @@ Calapooia 14172000, SF Alsea 14306200, Drift Cr Alsea 14306600.
   Bridge) from five upstream gauges. Backs the calc gauge in migration
   0037. Lead/lag companion:
   [`mckenzie_14159000_leadlag.md`](mckenzie_14159000_leadlag.md)
+- [`smith_14323100_from_siuslaw_sfcoquille.md`](smith_14323100_from_siuslaw_sfcoquille.md)
+  — multi-linear, quadratic on the Siuslaw only (`--quadratic-for`);
+  revives retired USGS 14323100 (Smith River near Gardiner, record
+  1965–73) from Siuslaw nr Mapleton 14307620 + SF Coquille at Powers
+  14325000. Backs `calc_expression` 17 for the `Smith_Gardiner_calc`
+  gauge (kayak_data CSV row). No lead/lag companion — the target
+  predates USGS unit values.
   (verdict: the sub-daily signal is real but lives in *downstream* look-ahead;
   the deployable upstream-only gain is nil — keep contemporaneous readings).
