@@ -55,6 +55,22 @@ python3 scripts/regression/gauge_pair_linear.py \
     --name   rogue_14328000_quadratic --out docs/regression/...
 ```
 
+`--quadratic-for SITE` (repeatable; mutually exclusive with
+`--quadratic`) squares only the named predictor(s). Use it when an
+all-predictor quadratic fit shows a squared term whose block-bootstrap
+CI straddles zero: a non-significant x² coefficient is an extrapolation
+hazard (at the high end of the predictor range it can contribute
+hundreds of cfs of phantom signal), so drop it and keep only the
+significant squared term(s):
+
+```bash
+python3 scripts/regression/gauge_pair_linear.py \
+    --predictor 14307620 --predictor 14325000 \
+    --quadratic-for 14307620 \
+    --target 14323100 --start 1967-10-01 --end 1973-06-30 \
+    --name   smith_14323100_from_siuslaw_sfcoquille --out docs/regression/...
+```
+
 Reach for quadratic when the residual table in a prior linear fit shows
 clear curvature across predictor quintiles (e.g. systematic
 under-estimate at low flow and over-estimate at high flow). For most
@@ -73,7 +89,8 @@ For every run, the script writes three sibling files to `--out`'s directory:
 - `<slug>.json` — structured fit summary (coefs, full covariance matrix,
   r²/RMSE/σ̂, window). Consumed by PHP `_render_gauge_regression()` to
   render the per-gauge fact-box. Schema is uniform across single /
-  multi / quadratic — `coefs[]` is the iteration target.
+  multi / quadratic — `coefs[]` is the iteration target (`quadratic` stays
+  a bool; `quadratic_sites` lists which predictors carry an x² term).
 
 The markdown report contains:
 

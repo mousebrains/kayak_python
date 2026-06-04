@@ -27,6 +27,14 @@ Add a quadratic term per predictor with --quadratic:
     ... --predictor 14330000 --quadratic --target ...
     # fits target = b0 + b1 * x + b2 * x^2
 
+Or square only selected predictors with --quadratic-for (repeatable;
+mutually exclusive with --quadratic). Useful when the residual curvature
+tracks one predictor and the other's x² term is not significant:
+
+    ... --predictor 14307620 --predictor 14325000 \\
+        --quadratic-for 14307620 --target ...
+    # fits target = b0 + b1 * x1 + b2 * x2 + b3 * x1^2
+
 Future: piecewise-linear by predictor flow regime (low/normal/high) is
 worth exploring if a single linear/quadratic fit leaves systematic
 residuals in the top or bottom quintiles; see "Future" in the writeup.
@@ -45,6 +53,7 @@ import random
 import statistics
 import subprocess
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -114,24 +123,42 @@ def fetch_daily_means(site_no: str) -> dict[str, float]:
     return out
 
 
+def _quad_mask(quadratic: bool | Sequence[bool], n_predictors: int) -> list[bool]:
+    """Normalize the quadratic spec to a per-predictor mask.
+
+    `quadratic` is either a bool (x² for all predictors / none — the
+    original CLI flag) or a per-predictor mask (the --quadratic-for form).
+    """
+    if isinstance(quadratic, bool):
+        return [quadratic] * n_predictors
+    mask = list(quadratic)
+    if len(mask) != n_predictors:
+        raise ValueError(f"quadratic mask has {len(mask)} entries for {n_predictors} predictors")
+    return mask
+
+
 def build_design_matrix(
     predictors: list[list[float]],
-    quadratic: bool,
+    quadratic: bool | Sequence[bool],
 ) -> tuple[np.ndarray, list[str]]:
     """Stack intercept, linear, and optional quadratic columns.
 
     `predictors` is a list of length-n columns, one per predictor gauge.
     Column order in the returned matrix: [1, x1, x2, ..., x1², x2², ...]
     (quadratics last so they're easy to read off the coefficient vector).
+    Squared columns are emitted only for predictors selected by
+    `quadratic` (bool = all/none; sequence = per-predictor mask), in
+    predictor order.
     """
     n = len(predictors[0])
+    quad = _quad_mask(quadratic, len(predictors))
     cols: list[np.ndarray] = [np.ones(n)]
     names = ["intercept"]
     for i, p in enumerate(predictors, start=1):
         cols.append(np.asarray(p, dtype=float))
         names.append(f"x{i}")
-    if quadratic:
-        for i, p in enumerate(predictors, start=1):
+    for i, p in enumerate(predictors, start=1):
+        if quad[i - 1]:
             cols.append(np.asarray(p, dtype=float) ** 2)
             names.append(f"x{i}^2")
     X = np.column_stack(cols)
@@ -141,7 +168,7 @@ def build_design_matrix(
 def fit_ols(
     predictors: list[list[float]],
     y_vec: list[float],
-    quadratic: bool,
+    quadratic: bool | Sequence[bool],
 ) -> Fit:
     """OLS beta = (X'X)^-1 X'y with full covariance Cov = sigma^2 (X'X)^-1.
 
@@ -304,7 +331,7 @@ def coef_uncertainty(
     pts_predictors: list[list[float]],
     pts_y: list[float],
     window_keys: list[str],
-    quadratic: bool,
+    quadratic: bool | Sequence[bool],
     fit: Fit,
     n_boot: int = 1000,
     seed: int = 0,
@@ -341,19 +368,19 @@ def coef_uncertainty(
     )
 
 
-def design_row(predictor_values: list[float], quadratic: bool) -> np.ndarray:
+def design_row(predictor_values: list[float], quadratic: bool | Sequence[bool]) -> np.ndarray:
     """Build the design-row vector for a single x* — same column layout as
     `build_design_matrix`."""
+    quad = _quad_mask(quadratic, len(predictor_values))
     cols = [1.0, *list(predictor_values)]
-    if quadratic:
-        cols += [v * v for v in predictor_values]
+    cols += [v * v for v, m in zip(predictor_values, quad, strict=False) if m]
     return np.array(cols)
 
 
 def predict(
     fit: Fit,
     predictor_values: list[float],
-    quadratic: bool,
+    quadratic: bool | Sequence[bool],
 ) -> tuple[float, float, float]:
     """Return (y_hat, se_mean_response, se_prediction) at the given x*.
 
@@ -376,7 +403,7 @@ def stability_windows(
     predictor_dicts: list[dict[str, float]],
     end: str,
     starts: list[str],
-    quadratic: bool,
+    quadratic: bool | Sequence[bool],
 ) -> list[tuple[str, Fit | None]]:
     """Re-fit at multiple start dates so coefficient drift is visible."""
     keys = sorted(set(target) & set[str].intersection(*(set(d) for d in predictor_dicts)))
@@ -468,7 +495,7 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
     target_site: str,
     window_start: str,
     window_end: str,
-    quadratic: bool,
+    quadratic: bool | Sequence[bool],
     target_data: dict[str, float],
     predictor_data: list[dict[str, float]],
     overlap_keys: list[str],
@@ -484,12 +511,13 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
     """Build the markdown analysis report."""
     pct = residual_percentiles(fit)
     quins = quintile_residuals(pts_predictors[0], fit)
+    quad_mask = _quad_mask(quadratic, len(predictor_sites))
 
     # Map coef_names → reference label for the table.
     label_for: dict[str, str] = {"intercept": "intercept"}
     for i, h in enumerate(calc_handles, start=1):
         label_for[f"x{i}"] = f"{h} (predictor {i}: {predictor_sites[i - 1]})"
-        if quadratic:
+        if quad_mask[i - 1]:
             label_for[f"x{i}^2"] = f"({predictor_sites[i - 1]})²"
 
     # SQL stub
@@ -498,11 +526,13 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
     for i, h in enumerate(calc_handles, start=1):
         coef = fit.coefs[1 + (i - 1)]
         sql_terms.append(f"{coef:.6g} * {h}::flow")
-    if quadratic:
-        start_idx = 1 + len(calc_handles)
-        for i, h in enumerate(calc_handles, start=1):
-            coef = fit.coefs[start_idx + (i - 1)]
-            sql_terms.append(f"{coef:.6g} * {h}::flow * {h}::flow")
+    sq_idx = 1 + len(calc_handles)
+    for i, h in enumerate(calc_handles, start=1):
+        if not quad_mask[i - 1]:
+            continue
+        coef = fit.coefs[sq_idx]
+        sq_idx += 1
+        sql_terms.append(f"{coef:.6g} * {h}::flow * {h}::flow")
     intercept_str = f"{intercept:+.4g}"
     inner = " + ".join(sql_terms) + f" {intercept_str}"
     expr_sql = f"round(greatest(0, {inner}))"
@@ -514,8 +544,11 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
     family = "linear"
     if len(predictor_sites) > 1:
         family = f"multi-{family}"
-    if quadratic:
+    if all(quad_mask):
         family += "+quadratic"
+    elif any(quad_mask):
+        squared = [s for s, m in zip(predictor_sites, quad_mask, strict=False) if m]
+        family += f"+quadratic({','.join(squared)})"
 
     L(f"# {family.title()} regression: USGS {target_site} from {', '.join(predictor_sites)}\n")
     L(
@@ -537,8 +570,12 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
             f"--name {name}",
         ]
     )
-    if quadratic:
+    if all(quad_mask):
         cmd_parts.append("--quadratic")
+    else:
+        cmd_parts += [
+            f"--quadratic-for {s}" for s, m in zip(predictor_sites, quad_mask, strict=False) if m
+        ]
     cmd = " \\\n    ".join(cmd_parts)
     L(f"Generated by:\n\n```bash\n{cmd}\n```\n")
 
@@ -637,7 +674,7 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
 
     L("## Window stability\n")
     L(f"Re-fit at multiple start dates (endpoint fixed at `{window_end}`):\n")
-    if not quadratic and len(predictor_sites) == 1:
+    if not any(quad_mask) and len(predictor_sites) == 1:
         L("| Window start | n | data yr | slope | intercept | r² | RMSE | SE(slope) | SE(int) |")
         L("|---|---|---|---|---|---|---|---|---|")
         for start, f in stab:
@@ -750,7 +787,7 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
     for label, x1 in example_x1:
         # Hold predictors 2..N at their means (marginal view of predictor 1).
         xs_all = [x1, *fit.x_means[1:].tolist()]
-        y_hat, se_mean, se_pred = predict(fit, xs_all, quadratic)
+        y_hat, se_mean, se_pred = predict(fit, xs_all, quad_mask)
         lo_mean = y_hat - 1.96 * se_mean
         hi_mean = y_hat + 1.96 * se_mean
         lo_pred = y_hat - 1.96 * se_pred
@@ -766,8 +803,9 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
     L(
         "All the information needed to compute prediction CIs at any new "
         "predictor value is in this document. With the design row "
-        "`X* = [1, x1*, x2*, ..., x1*^2, x2*^2, ...]` matching the column "
-        "order in the covariance matrix above:\n"
+        "`X* = [1, x1*, x2*, ...]` — plus a squared column for each "
+        "predictor fitted quadratically, in predictor order — matching the "
+        "column order in the covariance matrix above:\n"
     )
     L("```")
     L("y_hat = X* . coefs")
@@ -776,7 +814,7 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
     L("SE = sqrt(Var)")
     L("95% CI = y_hat +/- 1.96 * SE     (n >> 30, large-sample z; use t_{n-p} for small n)")
     L("```\n")
-    if len(predictor_sites) == 1 and not quadratic:
+    if len(predictor_sites) == 1 and not any(quad_mask):
         # Single-predictor linear: provide the closed-form formula too.
         L("For this single-predictor linear fit, the equivalent closed form is:\n")
         L("```")
@@ -1149,7 +1187,7 @@ def _render_fit_json(
     fit: Fit,
     target_site: str,
     predictor_sites: list[str],
-    quadratic: bool,
+    quadratic: bool | Sequence[bool],
     window_start: str,
     window_end: str,
 ) -> str:
@@ -1158,6 +1196,8 @@ def _render_fit_json(
     Schema is uniform across single/multi/quadratic — coefs[] is the
     iteration target for the fact-box, cov stays as a matrix so future
     code can compute prediction CIs at a new x* without re-fetching data.
+    `quadratic` stays a bool (any squared term present) for backward
+    compatibility; `quadratic_sites` lists which predictors are squared.
     """
     coefs_out: list[dict[str, object]] = []
     for raw_name, est, se in zip(fit.coef_names, fit.coefs, fit.se, strict=False):
@@ -1176,11 +1216,13 @@ def _render_fit_json(
             name = raw_name
         coefs_out.append({"name": name, "value": float(est), "se": float(se)})
 
+    quad_mask = _quad_mask(quadratic, len(predictor_sites))
     payload = {
         "slug": slug,
         "target": target_site,
         "predictors": predictor_sites,
-        "quadratic": bool(quadratic),
+        "quadratic": any(quad_mask),
+        "quadratic_sites": [s for s, m in zip(predictor_sites, quad_mask, strict=False) if m],
         "n": fit.n,
         "window": [window_start, window_end],
         "coefs": coefs_out,
@@ -1196,12 +1238,53 @@ def _render_fit_json(
     return _json.dumps(payload, indent=2) + "\n"
 
 
+def _default_stability_starts(start: str, end: str, earliest_overlap: str) -> list[str]:
+    """Default start dates for the stability sweep: {start-15y, start-10y,
+    start-5y, start, start+5y, earliest-overlap, 1990-01-01}, deduped,
+    sorted, and capped at the window end."""
+    anchor = datetime.fromisoformat(start)
+    defaults: list[str] = []
+    for years_back in (-5, 0, 5, 10, 15):
+        d_dt = anchor + timedelta(days=365 * years_back)
+        defaults.append(d_dt.strftime("%Y-%m-%d"))
+    defaults.append(earliest_overlap)
+    defaults.append("1990-01-01")
+    return [d_str for d_str in sorted(set(defaults)) if d_str <= end]
+
+
+def _quad_spec_from_args(
+    quadratic: bool,
+    quadratic_for: list[str] | None,
+    predictors: list[str],
+) -> bool | list[bool] | None:
+    """Normalize --quadratic / --quadratic-for into a fit spec.
+
+    Returns a bool (all/none), a per-predictor mask, or None on a usage
+    error (message already printed to stderr).
+    """
+    if not quadratic_for:
+        return quadratic
+    if quadratic:
+        print("--quadratic and --quadratic-for are mutually exclusive.", file=sys.stderr)
+        return None
+    unknown = sorted(set(quadratic_for) - set(predictors))
+    if unknown:
+        print(
+            f"--quadratic-for site(s) not among --predictor: {', '.join(unknown)}",
+            file=sys.stderr,
+        )
+        return None
+    quad_for = set(quadratic_for)
+    return [p in quad_for for p in predictors]
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=(
             "Fit OLS regression between USGS daily-mean series. Single "
             "predictor + linear is the default; --predictor is repeatable "
-            "for multi-linear; --quadratic adds x² per predictor."
+            "for multi-linear; --quadratic adds x² per predictor, "
+            "--quadratic-for adds x² for selected predictors only."
         )
     )
     ap.add_argument(
@@ -1222,6 +1305,18 @@ def main() -> int:
         "--quadratic",
         action="store_true",
         help="Include x² for every predictor in addition to x.",
+    )
+    ap.add_argument(
+        "--quadratic-for",
+        action="append",
+        default=None,
+        metavar="SITE",
+        help=(
+            "Include x² for just this predictor (repeatable). The site must "
+            "also be given via --predictor. Mutually exclusive with "
+            "--quadratic. Use when residual curvature tracks one predictor "
+            "and the other squared terms are not significant."
+        ),
     )
     ap.add_argument(
         "--out",
@@ -1261,6 +1356,11 @@ def main() -> int:
     leadlag = _load_leadlag(args.leadlag, args.out)
 
     predictors: list[str] = args.predictor
+
+    quad_spec = _quad_spec_from_args(args.quadratic, args.quadratic_for, predictors)
+    if quad_spec is None:
+        return 1
+
     print(
         f"Fetching target {args.target} and {len(predictors)} predictor(s) ...",
         file=sys.stderr,
@@ -1286,28 +1386,15 @@ def main() -> int:
     pts_predictors = [[d[k] for k in keys] for d in predictor_data]
     pts_y = [target_data[k] for k in keys]
 
-    fit = fit_ols(pts_predictors, pts_y, args.quadratic)
-    coef_unc = coef_uncertainty(pts_predictors, pts_y, keys, args.quadratic, fit)
+    fit = fit_ols(pts_predictors, pts_y, quad_spec)
+    coef_unc = coef_uncertainty(pts_predictors, pts_y, keys, quad_spec, fit)
 
     # Stability windows
     if args.stability_starts is None:
-        anchor = datetime.fromisoformat(args.start)
-        defaults: list[str] = []
-        for years_back in (-5, 0, 5, 10, 15):
-            d_dt = anchor + timedelta(days=365 * years_back)
-            defaults.append(d_dt.strftime("%Y-%m-%d"))
-        defaults.append(overlap_all[0])
-        defaults.append("1990-01-01")
-        seen: set[str] = set()
-        sb: list[str] = []
-        for d_str in sorted(set(defaults)):
-            if d_str <= args.end and d_str not in seen:
-                seen.add(d_str)
-                sb.append(d_str)
-        args.stability_starts = sb
+        args.stability_starts = _default_stability_starts(args.start, args.end, overlap_all[0])
 
     stab = stability_windows(
-        target_data, predictor_data, args.end, args.stability_starts, args.quadratic
+        target_data, predictor_data, args.end, args.stability_starts, quad_spec
     )
 
     # Calc handles
@@ -1329,7 +1416,7 @@ def main() -> int:
         target_site=args.target,
         window_start=args.start,
         window_end=args.end,
-        quadratic=args.quadratic,
+        quadratic=quad_spec,
         target_data=target_data,
         predictor_data=predictor_data,
         overlap_keys=overlap_all,
@@ -1367,7 +1454,7 @@ def main() -> int:
                 fit=fit,
                 target_site=args.target,
                 predictor_sites=predictors,
-                quadratic=args.quadratic,
+                quadratic=quad_spec,
                 window_start=args.start,
                 window_end=args.end,
             )

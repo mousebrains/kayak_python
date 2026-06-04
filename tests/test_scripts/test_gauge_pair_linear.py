@@ -344,3 +344,146 @@ def test_render_leadlag_section_stage_only():
     md = "\n".join(gpl._render_leadlag_section(ll))
     assert "RMSE comparison was omitted" in md
     assert "## Sub-daily lead/lag" in md
+
+
+def _toy_two_predictor_series() -> tuple[list[str], list[float], list[float], list[float]]:
+    """Two non-collinear predictors + target with a planted x1² term.
+
+    y = 50 + 0.8*x1 + 0.3*x2 + 2e-4*x1² (+ small periodic noise), so a
+    partial-quadratic fit squaring only x1 recovers all four coefficients.
+    """
+    from datetime import date, timedelta
+
+    start = date.fromisoformat("2010-01-01")
+    keys: list[str] = []
+    x1: list[float] = []
+    x2: list[float] = []
+    ys: list[float] = []
+    for i in range(1000):
+        keys.append((start + timedelta(days=i)).isoformat())
+        a = 200.0 + i
+        b = 300.0 + ((i * 37) % 500)
+        x1.append(a)
+        x2.append(b)
+        noise = 10.0 if i % 7 == 0 else -10.0 if i % 7 == 3 else 0.0
+        ys.append(50.0 + 0.8 * a + 0.3 * b + 2e-4 * a * a + noise)
+    return keys, x1, x2, ys
+
+
+def test_quad_mask_normalization():
+    gpl = _load_script()
+    assert gpl._quad_mask(False, 3) == [False, False, False]
+    assert gpl._quad_mask(True, 2) == [True, True]
+    assert gpl._quad_mask([True, False], 2) == [True, False]
+    import pytest
+
+    with pytest.raises(ValueError, match="2 entries for 3 predictors"):
+        gpl._quad_mask([True, False], 3)
+
+
+def test_build_design_matrix_partial_quadratic():
+    gpl = _load_script()
+    x1 = [1.0, 2.0, 3.0]
+    x2 = [4.0, 5.0, 6.0]
+    X, names = gpl.build_design_matrix([x1, x2], [True, False])
+    assert names == ["intercept", "x1", "x2", "x1^2"]
+    assert X.shape == (3, 4)
+    assert list(X[:, 3]) == [1.0, 4.0, 9.0]
+    # Bool spec still squares every predictor (column order unchanged).
+    _, names_all = gpl.build_design_matrix([x1, x2], True)
+    assert names_all == ["intercept", "x1", "x2", "x1^2", "x2^2"]
+
+
+def test_design_row_partial_quadratic():
+    gpl = _load_script()
+    row = gpl.design_row([10.0, 20.0], [False, True])
+    assert list(row) == [1.0, 10.0, 20.0, 400.0]
+
+
+def test_fit_recovers_partial_quadratic():
+    gpl = _load_script()
+    _keys, x1, x2, ys = _toy_two_predictor_series()
+    fit = gpl.fit_ols([x1, x2], ys, [True, False])
+    assert fit.coef_names == ["intercept", "x1", "x2", "x1^2"]
+    assert abs(fit.coefs[0] - 50.0) < 5.0
+    assert abs(fit.coefs[1] - 0.8) < 0.01
+    assert abs(fit.coefs[2] - 0.3) < 0.01
+    assert abs(fit.coefs[3] - 2e-4) < 1e-5
+    assert fit.r2 > 0.99
+
+
+def test_render_markdown_partial_quadratic():
+    gpl = _load_script()
+    keys, x1, x2, ys = _toy_two_predictor_series()
+    pred1 = dict(zip(keys, x1, strict=True))
+    pred2 = dict(zip(keys, x2, strict=True))
+    targ = dict(zip(keys, ys, strict=True))
+    quad = [True, False]
+    fit = gpl.fit_ols([x1, x2], ys, quad)
+    cu = gpl.coef_uncertainty([x1, x2], ys, keys, quad, fit, n_boot=50, seed=0)
+    md = gpl.render_markdown(
+        name="toy_partial",
+        predictor_sites=["111", "222"],
+        target_site="999",
+        window_start=keys[0],
+        window_end=keys[-1],
+        quadratic=quad,
+        target_data=targ,
+        predictor_data=[pred1, pred2],
+        overlap_keys=keys,
+        window_keys=keys,
+        pts_predictors=[x1, x2],
+        pts_y=ys,
+        fit=fit,
+        coef_unc=cu,
+        stab=[(keys[0], fit)],
+        calc_handles=["p1::111", "p2::222"],
+    )
+    # Family label names the squared predictor.
+    assert "# Multi-Linear+Quadratic(111) regression" in md
+    # Reproduce snippet uses --quadratic-for, not --quadratic.
+    assert "--quadratic-for 111" in md
+    assert "--quadratic\n" not in md
+    # Coefficient table labels only x1 as squared.
+    assert "(111)²" in md
+    assert "(222)²" not in md
+    # SQL stub squares only p1.
+    assert "p1::111::flow * p1::111::flow" in md
+    assert "p2::222::flow * p2::222::flow" not in md
+
+
+def test_render_fit_json_quadratic_sites():
+    gpl = _load_script()
+    _keys, x1, x2, ys = _toy_two_predictor_series()
+    fit = gpl.fit_ols([x1, x2], ys, [True, False])
+    payload = json.loads(
+        gpl._render_fit_json(
+            slug="toy_partial",
+            fit=fit,
+            target_site="999",
+            predictor_sites=["111", "222"],
+            quadratic=[True, False],
+            window_start="2010-01-01",
+            window_end="2012-09-26",
+        )
+    )
+    assert payload["quadratic"] is True
+    assert payload["quadratic_sites"] == ["111"]
+    names = [c["name"] for c in payload["coefs"]]
+    assert "x1^2 (111)" in names
+    assert not any("x2^2" in n for n in names)
+    # Bool spec keeps the original schema shape.
+    fit_lin = gpl.fit_ols([x1, x2], ys, False)
+    payload_lin = json.loads(
+        gpl._render_fit_json(
+            slug="toy_lin",
+            fit=fit_lin,
+            target_site="999",
+            predictor_sites=["111", "222"],
+            quadratic=False,
+            window_start="2010-01-01",
+            window_end="2012-09-26",
+        )
+    )
+    assert payload_lin["quadratic"] is False
+    assert payload_lin["quadratic_sites"] == []
