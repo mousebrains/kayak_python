@@ -8,8 +8,9 @@ Schema and metadata changes now travel by **different paths**:
   migration may not INSERT/UPDATE/DELETE a metadata table (guard:
   `tests/test_scripts/test_migrations_schema_only.py`).
 - **Metadata** (source / gauge / reach / junction rows) → a reviewed
-  `data/db/*.csv` diff applied by `levels sync-metadata` (deploy.sh
-  step 3.1), matched by stable id. See
+  CSV diff in the **`kayak_data`** repo (cloned at `METADATA_DIR`),
+  applied by `levels sync-metadata` (deploy.sh step 3.1), matched by
+  stable id. See
   [`PLAN_add_gauges_reaches.md`](PLAN_add_gauges_reaches.md) for the
   add / update / remove / split runbooks.
 
@@ -36,9 +37,9 @@ The next `levels fetch` auto-created replacement source rows
 (parsers/base.py::`_auto_create_source`) without `gauge_source`
 links, and calc gauges that read from the deleted sources stayed
 frozen for three days. The fix is a checklist, not a tool — run
-through this before deleting a source's row from `data/db/source.csv`
-(plus its `gauge_source.csv` link, and `fetch_url.csv` /
-`data/sources.yaml` if it's a fetch source).
+through this before deleting a source's row from `kayak_data`'s
+`source.csv` (plus its `gauge_source.csv` link, and `fetch_url.csv` /
+the code repo's `data/sources.yaml` if it's a fetch source).
 
 ### 1. List every fetch_url referenced by the deleted sources
 
@@ -154,7 +155,7 @@ For each orphan source, pick one of:
   emitting useful data. Live data is cheap to keep wired and
   expensive to lose; deactivating a URL only to have auto-create
   re-orphan it next deploy is the mistake we're trying to avoid. Add
-  the join row to `data/db/gauge_source.csv`:
+  the join row to `kayak_data`'s `gauge_source.csv`:
 
   ```
   gauge_id,source_id
@@ -167,8 +168,9 @@ For each orphan source, pick one of:
 - **Deactivate the URL** — when the agency has retired the endpoint
   or the data is genuinely duplicative. Preferred: remove the URL from
   `data/sources.yaml` (the next `levels fetch` flips `is_active=0`
-  automatically). Only set `is_active=0` in `data/db/fetch_url.csv`
-  directly when the URL must stay in the YAML for unrelated reasons.
+  automatically). Only set `is_active=0` in `kayak_data`'s
+  `fetch_url.csv` directly when the URL must stay in the YAML for
+  unrelated reasons.
 
 - **Delete the source row** — only when the row's history isn't worth
   preserving on another gauge. Remove it from `source.csv` (plus its
@@ -229,13 +231,13 @@ fix). So `init-db` + `migrate` *alone* yields a DB where every
 fetch-backed source is an orphan — `levels orphan-check` would flag
 ~300 rows.
 
-What closes the gap: the `data/db/*.csv` snapshots (written nightly by
-`scripts/export_metadata.py`) are **read back** by
+What closes the gap: the `kayak_data` CSV snapshots (written nightly by
+`scripts/export_metadata.py` to `METADATA_DIR`) are **read back** by
 `scripts/import_metadata.py`, which loads `gauge.csv`, `source.csv`,
 `gauge_source.csv`, `reach.csv`, and the rest — recreating the live
 `gauge_source` links. `reach.geom` and `reach.gradient_profile` are kept
 out of `reach.csv` (large, not regenerable on prod without a DEM/NHD) and
-live in `data/db/reaches.json` + `data/db/reaches-gradient.json`; a full
+live in `kayak_data`'s `reaches.json` + `reaches-gradient.json`; a full
 `import_metadata.py` run applies both after the CSVs in the same invocation
 (the `--geom-only` / `--gradient-only` flags re-apply *only* one to a live
 DB — the dev re-trace path, see `deploy/SETUP.md` §4 and `scripts/deploy.sh`;

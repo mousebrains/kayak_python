@@ -115,7 +115,11 @@ def _deploy_static_assets(output_dir: Path) -> None:
     _deploy_regression_artifacts(static_dir)
 
 
-_HTML_DROP_SECTIONS: tuple[str, ...] = ("## SQL stub", "## Future")
+_HTML_DROP_SECTIONS: tuple[str, ...] = (
+    "## SQL stub",  # pre-redesign reports (immutable history)
+    "## `calc_expression` row",  # current reports (kayak_data CSV flow)
+    "## Future",
+)
 
 
 def _filter_regression_md_for_html(md_text: str) -> str:
