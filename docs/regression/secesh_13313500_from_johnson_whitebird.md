@@ -13,7 +13,9 @@ python3 scripts/regression/gauge_pair_linear.py \
     --target 13313500 \
     --start 1943-04-12 \
     --end 1952-05-31 \
-    --name secesh_13313500_from_johnson_whitebird
+    --name secesh_13313500_from_johnson_whitebird \
+    --calc-handle jo::Johnson_Yellopine_merge \
+    --calc-handle wb::Salmon_Whitebird_merge
 ```
 
 ## Data

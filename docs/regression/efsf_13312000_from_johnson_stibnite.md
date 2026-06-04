@@ -13,7 +13,9 @@ python3 scripts/regression/gauge_pair_linear.py \
     --target 13312000 \
     --start 1928-08-13 \
     --end 1943-07-14 \
-    --name efsf_13312000_from_johnson_stibnite
+    --name efsf_13312000_from_johnson_stibnite \
+    --calc-handle jo::Johnson_Yellopine_merge \
+    --calc-handle st::EFSF_Stibnite
 ```
 
 ## Data

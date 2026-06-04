@@ -14,7 +14,10 @@ python3 scripts/regression/gauge_pair_linear.py \
     --target 13314300 \
     --start 1993-10-01 \
     --end 2003-09-30 \
-    --name sfsalmon_13314300_from_krassel_johnson_whitebird
+    --name sfsalmon_13314300_from_krassel_johnson_whitebird \
+    --calc-handle kr::SF_Salmon_Krassel_merge \
+    --calc-handle jo::Johnson_Yellopine_merge \
+    --calc-handle wb::Salmon_Whitebird_merge
 ```
 
 ## Data
