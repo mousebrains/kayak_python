@@ -122,3 +122,24 @@ Calapooia 14172000, SF Alsea 14306200, Drift Cr Alsea 14306600.
   14325000. Backs `calc_expression` 17 for the `Smith_Gardiner_calc`
   gauge (kayak_data CSV row). No lead/lag companion — the target
   predates USGS unit values.
+- [`sfsalmon_13314300_from_krassel_johnson_whitebird.md`](sfsalmon_13314300_from_krassel_johnson_whitebird.md)
+  — multi-linear; revives retired USGS 13314300 (SF Salmon at mouth nr
+  Mackay Bar, record 1993–2003) from Krassel 13310700 + Johnson Cr
+  13313000 + White Bird 13317000. Backs `calc_expression` 18 for the
+  `SF_Salmon_MackayBar_calc` gauge. Lead/lag companion:
+  [`sfsalmon_13314300_leadlag.md`](sfsalmon_13314300_leadlag.md) —
+  **the first reach with a real deployable gain** (+21% RMSE at 3–5 h
+  upstream lags; diagnostic only, `calc_expression` cannot lag).
+- [`secesh_13313500_from_johnson_whitebird.md`](secesh_13313500_from_johnson_whitebird.md)
+  — multi-linear; revives retired USGS 13313500 (Secesh nr Burgdorf,
+  record 1943–52) from Johnson Cr 13313000 + White Bird 13317000.
+  Backs `calc_expression` 19 for the `Secesh_Burgdorf_calc` gauge,
+  feeding the Secesh reach. No lead/lag companion — the target
+  predates USGS unit values.
+- [`efsf_13312000_from_johnson_stibnite.md`](efsf_13312000_from_johnson_stibnite.md)
+  — multi-linear; estimates the EFSF above the Johnson Cr confluence
+  (retired USGS 13312000, record 1928–43) from Johnson Cr 13313000 +
+  EFSF Stibnite 13311000; deployed as est + live Johnson in the
+  recalibrated `calc_expression` 12 (`EFSF_Salmon_calc` gauge),
+  replacing the uncalibrated Johnson + Stibnite sum (bias −113 cfs).
+  No lead/lag companion — the target predates USGS unit values.
