@@ -16,8 +16,10 @@ Decisions already made (2026-06-05):
 - **`site.yaml`** carries site identity, with **full prose-page
   templating** (about/disclaimer/etc. content lives in the dataset).
 
-Status: planning only — first pass, to be iterated before any phase
-starts. Sequencing intent: S4 → S1 → S2 → S6 → S3 → S5 (contract and
+Status: second pass (2026-06-05, post-#122/#4 merge) — the #122 review
+cycle already landed a slice of S4 (see that section). To be iterated
+once more with the remaining open questions answered, then S4 starts.
+Sequencing intent: S4 → S1 → S2 → S6 → S3 → S5 (contract and
 testability first, cosmetics later).
 
 ## What is already clean
@@ -112,6 +114,17 @@ overrides in the CSV or the YAML grows an `enabled:` per URL
 
 Without this, no outside deployer can run the suite at all.
 
+**Head start — already landed via the #122 review cycle (merged
+2026-06-05):** the `EXPECTED_REACH_COUNT` constant is retired
+(`test_committed_reach_geom` derives the expected count from the
+dataset's own `reach.csv` and enforces cross-set integrity — JSON
+snapshot keys and child-CSV `reach_id`s must be subsets of
+`reach.csv`'s ids, every reach must carry geometry), and CI tests a
+**same-named kayak_data branch** when one exists (paired-PR support).
+Metadata-only reach changes already need no code commit.
+
+Remaining S4 scope:
+
 - **Fixture dataset in the code repo** (`tests/fixtures/dataset/`):
   two states, three gauges (one USGS, one NWS, one calc), one
   calc_expression, two reaches with stub geometry, a minimal
@@ -119,16 +132,14 @@ Without this, no outside deployer can run the suite at all.
   `METADATA_DIR` becomes a test override rather than a requirement.
 - **Dataset guards move to the dataset's CI** via a published
   `levels validate-dataset <dir>` command: id-counter rules, CSV
-  shape, geom format + endpoint checks (today's
+  shape, geom format + endpoint checks and the derived-count +
+  cross-set-integrity invariants (today in
   `test_committed_reach_geom`), reach-name rules, YAML↔CSV generator
-  drift (S1), expected-row-count guard (the count lives in the
-  dataset, e.g. `dataset.yaml`, not in a code-repo test constant —
-  no more `EXPECTED_REACH_COUNT` bumps in code PRs).
-  `kayak_data`'s CI calls it; so does Tennessee's.
+  drift (S1). `kayak_data`'s CI calls it; so does Tennessee's.
 - Code-repo CI drops the private checkout from the required test jobs;
   an **optional integration job** (continues to use the paired-branch
-  checkout logic added in #122) runs when the secret is present, for
-  our own deploys.
+  checkout logic) runs when the secret is present, for our own
+  deploys.
 
 ## S5 — bootstrap path for a new region
 
