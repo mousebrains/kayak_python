@@ -269,6 +269,21 @@ jobs:
           repository: mousebrains/kayak_data
           ssh-key: ${{ secrets.KAYAK_DATA_DEPLOY_KEY }}
           path: kayak_data
+      # Paired-PR support: when a kayak_data branch shares this branch's name
+      # (the convention for coupled metadata changes, e.g. a reach-count bump
+      # guarded by test_committed_reach_geom), test against it instead of
+      # main. Falls back to main when no such branch exists — including
+      # re-runs after the paired PR merges and its branch is deleted.
+      - name: Use matching kayak_data branch when present
+        working-directory: kayak_data
+        run: |
+          BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+          if [ -n "$BRANCH" ] && git fetch origin "$BRANCH" 2>/dev/null; then
+            git checkout --quiet FETCH_HEAD
+            echo "kayak_data: using branch $BRANCH ($(git rev-parse --short HEAD))"
+          else
+            echo "kayak_data: no branch named '$BRANCH'; staying on default"
+          fi
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           enable-cache: true
