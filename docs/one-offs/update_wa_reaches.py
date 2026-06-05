@@ -3,8 +3,10 @@
 
 Take-3 addendum: the Tilton-family Bennett refs (430: p91/r65, 431: p93/r67,
 432: p92/r66) were supplied after this script first ran and are included in
-the table below for provenance; the take-2/3 sort and gradient steps live in
-the session record and kayak_data history.
+the table below for provenance; this script is the complete metadata record
+(endpoints, descriptions, guidebook refs, sort keys); the trace/gradient
+steps (re-trace, 3DEP refresh, sample+compute gradient profiles) ran via
+the tools named in import_wa_lower_columbia.py's Reproduce block.
 
 Per reach: corrected put-in/take-out coordinates, cleaned description text,
 Bennett guidebook (id 6) page/run references, and a re-trace from the new
@@ -149,12 +151,25 @@ def main() -> int:
             page, run = gb
             db.execute(
                 "INSERT INTO reach_guidebook (reach_id, guidebook_id, page, run)"
-                " VALUES (?, ?, ?, ?)",
-                (rid, BENNETT_WA, page, run),
+                " SELECT ?, ?, ?, ? WHERE NOT EXISTS ("
+                "   SELECT 1 FROM reach_guidebook"
+                "   WHERE reach_id = ? AND guidebook_id = ? AND page = ? AND run = ?)",
+                (rid, BENNETT_WA, page, run, rid, BENNETT_WA, page, run),
             )
 
     db.execute("UPDATE reach SET display_name='Green' WHERE id=429")
-    db.execute("UPDATE reach SET sort_name='Tilton NF 0' WHERE id=432")
+    # Sort corrections (takes 1-2): NF Tilton ahead of the Tilton runs; the
+    # Toutle group as NF -> SF -> mainstem; Collawash out of the Clackamas
+    # group into its own, between Clark Fork and Coquille.
+    for rid, sort_name in [
+        (432, "Tilton NF 0"),
+        (427, "Toutle ag 01"),
+        (428, "Toutle ag 02"),
+        (426, "Toutle ag 03"),
+        (321, "Collawash 01"),
+        (319, "Collawash 02"),
+    ]:
+        db.execute("UPDATE reach SET sort_name=? WHERE id=?", (sort_name, rid))
     db.commit()
     print("\nall reach updates applied")
     return 0
