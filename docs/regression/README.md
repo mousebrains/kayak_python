@@ -135,7 +135,7 @@ Smith 14323100, Secesh 13313500, EFSF 13312000 (targets predate unit values).
   13313000 + White Bird 13317000. Backs `calc_expression` 18 for the
   `SF_Salmon_MackayBar_calc` gauge. Lead/lag companion:
   [`sfsalmon_13314300_leadlag.md`](sfsalmon_13314300_leadlag.md) —
-  **the first reach with a real deployable gain** (see the summary
+  **the first fit with a real deployable gain** (see the summary
   table above; diagnostic only, `calc_expression` cannot lag).
 - [`secesh_13313500_from_johnson_whitebird.md`](secesh_13313500_from_johnson_whitebird.md)
   — multi-linear; revives retired USGS 13313500 (Secesh nr Burgdorf,

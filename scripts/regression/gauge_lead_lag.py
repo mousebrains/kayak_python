@@ -996,7 +996,8 @@ def main() -> int:
         # Report the *effective* window (clamped to the actual overlap), not the
         # raw --daily-start arg — a default start earlier than the target's
         # record would otherwise label the reference with a fictional span.
-        daily_window=(min(dwin), daily_end),
+        # Empty overlap keeps the raw bound (the n=0/nan row stays renderable).
+        daily_window=(min(dwin) if dwin else args.daily_start, daily_end),
     )
 
     if args.out:
