@@ -149,12 +149,18 @@ def main() -> int:
             db.execute("UPDATE reach SET description=? WHERE id=?", (desc, rid))
         if gb:
             page, run = gb
+            # reach_guidebook's composite PK is (reach_id, guidebook_id) —
+            # page/run are payload — so the idempotent form is an upsert:
+            # first run inserts, a re-run with corrected page/run updates.
+            # (An earlier revision used a NOT EXISTS guard on the full tuple,
+            # under the mistaken belief the table had no unique constraint —
+            # that shape crashes on a page/run correction.)
             db.execute(
                 "INSERT INTO reach_guidebook (reach_id, guidebook_id, page, run)"
-                " SELECT ?, ?, ?, ? WHERE NOT EXISTS ("
-                "   SELECT 1 FROM reach_guidebook"
-                "   WHERE reach_id = ? AND guidebook_id = ? AND page = ? AND run = ?)",
-                (rid, BENNETT_WA, page, run, rid, BENNETT_WA, page, run),
+                " VALUES (?, ?, ?, ?)"
+                " ON CONFLICT(reach_id, guidebook_id)"
+                " DO UPDATE SET page = excluded.page, run = excluded.run",
+                (rid, BENNETT_WA, page, run),
             )
 
     db.execute("UPDATE reach SET display_name='Green' WHERE id=429")
