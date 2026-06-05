@@ -549,3 +549,44 @@ def test_quad_spec_from_args_paths(capsys):
     # Unknown site rejected by name.
     assert gpl._quad_spec_from_args(False, ["333"], preds) is None
     assert "333" in capsys.readouterr().err
+
+
+def test_deploy_note_renders_and_reproduces():
+    # A fit whose deployed expression differs from the fitted one (e.g. the
+    # estimate is summed with a live gauge) carries a warning in the
+    # calc_expression section AND the note in the Reproduce snippet,
+    # shell-quoted, so a regen keeps the warning.
+    gpl = _load_script()
+    keys, x1, x2, ys = _toy_two_predictor_series()
+    pred1 = dict(zip(keys, x1, strict=True))
+    pred2 = dict(zip(keys, x2, strict=True))
+    targ = dict(zip(keys, ys, strict=True))
+    fit = gpl.fit_ols([x1, x2], ys, False)
+    cu = gpl.coef_uncertainty([x1, x2], ys, keys, False, fit, n_boot=50, seed=0)
+    note = "deployed row adds live Johnson: use 1.177*jo, not 0.177*jo."
+    md = gpl.render_markdown(
+        name="toy_deploy",
+        predictor_sites=["111", "222"],
+        target_site="999",
+        window_start=keys[0],
+        window_end=keys[-1],
+        quadratic=False,
+        target_data=targ,
+        predictor_data=[pred1, pred2],
+        overlap_keys=keys,
+        window_keys=keys,
+        pts_predictors=[x1, x2],
+        pts_y=ys,
+        fit=fit,
+        coef_unc=cu,
+        stab=[(keys[0], fit)],
+        calc_handles=["p1::111", "p2::222"],
+        deploy_note=note,
+    )
+    assert "Deployment note" in md
+    assert note in md
+    # Shell-quoted in the Reproduce snippet (note contains spaces + '*').
+    assert "--deploy-note 'deployed row adds live Johnson" in md
+    # Absent by default.
+    md_plain = _render_toy_markdown(gpl, ["p1::111", "p2::222"])
+    assert "Deployment note" not in md_plain

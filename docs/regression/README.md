@@ -83,10 +83,15 @@ reading — real but non-causal look-ahead); *deployable* shifts only *upstream*
 predictors (a *past* reading, usable in a real-time nowcast). Flow is preferred,
 stage (`00065`) used as fallback for timing.
 
-**Result across every reach analysed: the deployable sub-daily gain is nil.**
-These calc gauges are estimated from *downstream* or co-located gauges, so what
-timing signal exists is downstream look-ahead, not real-time-usable — keep
-contemporaneous readings everywhere.
+**Result: for every reach analysed before 2026-06 the deployable sub-daily
+gain was nil** — those calc gauges are estimated from *downstream* or
+co-located gauges, so what timing signal existed was downstream look-ahead,
+not real-time-usable. **SF Salmon at Mackay Bar broke the pattern**: all three
+donors sit upstream (snowmelt diurnal cycle + 3–5 h travel time), and the
+deployable gain is +21.1% with a CI excluding zero. The calculator still reads
+contemporaneous `LatestObservation` values (no lag support), so that gain is
+*unrealised* — it would justify a time-offset reference form in
+`kayak.cli.calculator` if more upstream-donor fits accumulate.
 
 | reach (target) | lag | full gain (95% CI, cfs) | deployable | verdict |
 |---|---|---|---|---|
@@ -96,9 +101,11 @@ contemporaneous readings everywhere.
 | Salmon 14146500 | −0.5h (downstream) | +0.5% [−0.0, +0.8] | 0 (no upstream) | unresolved |
 | NF Alsea 14306100 | −3.5h (downstream) | [−1.1, +30.7] | 0 (no upstream) | unresolved |
 | Horse Cr 14159100 | none resolvable | — | — | no sub-daily lag |
+| SF Salmon Mackay Bar 13314300 | Krassel +3.0h, Johnson +5.0h, White Bird +1.0h (all upstream) | +21.1% [+41.7, +66.8] ✓ | **+21.1% [+41.7, +66.8] ✓** | **deployable gain — the first real one** |
 
 Not feasible (target has no sub-hourly record, or predictors don't overlap it):
-Calapooia 14172000, SF Alsea 14306200, Drift Cr Alsea 14306600.
+Calapooia 14172000, SF Alsea 14306200, Drift Cr Alsea 14306600,
+Smith 14323100, Secesh 13313500, EFSF 13312000 (targets predate unit values).
 
 ## Index
 
@@ -128,8 +135,8 @@ Calapooia 14172000, SF Alsea 14306200, Drift Cr Alsea 14306600.
   13313000 + White Bird 13317000. Backs `calc_expression` 18 for the
   `SF_Salmon_MackayBar_calc` gauge. Lead/lag companion:
   [`sfsalmon_13314300_leadlag.md`](sfsalmon_13314300_leadlag.md) —
-  **the first reach with a real deployable gain** (+21% RMSE at 3–5 h
-  upstream lags; diagnostic only, `calc_expression` cannot lag).
+  **the first reach with a real deployable gain** (see the summary
+  table above; diagnostic only, `calc_expression` cannot lag).
 - [`secesh_13313500_from_johnson_whitebird.md`](secesh_13313500_from_johnson_whitebird.md)
   — multi-linear; revives retired USGS 13313500 (Secesh nr Burgdorf,
   record 1943–52) from Johnson Cr 13313000 + White Bird 13317000.
@@ -141,5 +148,7 @@ Calapooia 14172000, SF Alsea 14306200, Drift Cr Alsea 14306600.
   (retired USGS 13312000, record 1928–43) from Johnson Cr 13313000 +
   EFSF Stibnite 13311000; deployed as est + live Johnson in the
   recalibrated `calc_expression` 12 (`EFSF_Salmon_calc` gauge),
-  replacing the uncalibrated Johnson + Stibnite sum (bias −113 cfs).
+  replacing the uncalibrated Johnson + Stibnite sum (bias −113 cfs /
+  RMSE 191 vs 0 / 26.5 — reproduce via
+  [`docs/one-offs/efsf_calc_comparison.py`](../one-offs/efsf_calc_comparison.py)).
   No lead/lag companion — the target predates USGS unit values.

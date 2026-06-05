@@ -788,7 +788,14 @@ def main() -> int:
     ap.add_argument("--daily-doc", default=DEFAULT_DAILY_DOC, help="Sibling daily report slug.")
     ap.add_argument("--grid-minutes", type=int, default=DEFAULT_GRID_MIN, help="Resample grid.")
     ap.add_argument("--max-lag", type=float, default=18.0, help="Search ±this many hours.")
-    ap.add_argument("--daily-start", default="1968-10-01", help="Daily-reference window start.")
+    ap.add_argument(
+        "--daily-start",
+        default="1968-10-01",
+        help=(
+            "Daily-reference window start (lower bound; the report shows the "
+            "effective window, clamped to the gauges' actual overlap)."
+        ),
+    )
     ap.add_argument("--out", type=Path, help="Markdown output path (also writes .svg).")
     args = ap.parse_args()
     predictors: list[str] = args.predictors or DEFAULT_PREDICTORS
@@ -986,7 +993,10 @@ def main() -> int:
         daily_full_rmse=daily_rmse,
         daily_full_r2=daily_r2,
         daily_full_n=len(dwin),
-        daily_window=(args.daily_start, daily_end),
+        # Report the *effective* window (clamped to the actual overlap), not the
+        # raw --daily-start arg — a default start earlier than the target's
+        # record would otherwise label the reference with a fictional span.
+        daily_window=(min(dwin), daily_end),
     )
 
     if args.out:

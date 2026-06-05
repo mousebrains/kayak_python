@@ -15,7 +15,8 @@ python3 scripts/regression/gauge_pair_linear.py \
     --end 1943-07-14 \
     --name efsf_13312000_from_johnson_stibnite \
     --calc-handle jo::Johnson_Yellopine_merge \
-    --calc-handle st::EFSF_Stibnite
+    --calc-handle st::EFSF_Stibnite \
+    --deploy-note 'The deployed row (kayak_data calc_expression 12, gauge EFSF_Salmon_calc) represents the EFSF *below* the Johnson Cr confluence: it adds live Johnson Cr to this fit, so the deployed Johnson coefficient is 1.177027 (= 0.177027 fitted + 1.0 live) with the same Stibnite term and intercept. Scored against measured 13312000 + Johnson over 1928-43: bias 0 / RMSE 26.5 cfs vs the old uncalibrated Johnson+Stibnite sum at bias -113 / RMSE 191 (reproduce: docs/one-offs/efsf_calc_comparison.py).'
 ```
 
 ## Data
@@ -160,6 +161,8 @@ time_expression: jo::Johnson_Yellopine_merge::flow st::EFSF_Stibnite::flow
 note:            multi-linear regression fit. n=5044 daily means, window 1928-08-13..1943-07-14, r2=0.9801, RMSE=26.5 cfs. See docs/regression/efsf_13312000_from_johnson_stibnite.md.
 provenance_slug: efsf_13312000_from_johnson_stibnite
 ```
+
+⚠️ **Deployment note — the deployed expression differs from this fit**: The deployed row (kayak_data calc_expression 12, gauge EFSF_Salmon_calc) represents the EFSF *below* the Johnson Cr confluence: it adds live Johnson Cr to this fit, so the deployed Johnson coefficient is 1.177027 (= 0.177027 fitted + 1.0 live) with the same Stibnite term and intercept. Scored against measured 13312000 + Johnson over 1928-43: bias 0 / RMSE 26.5 cfs vs the old uncalibrated Johnson+Stibnite sum at bias -113 / RMSE 191 (reproduce: docs/one-offs/efsf_calc_comparison.py). Do not copy the expression above verbatim; apply the stated composition first.
 
 Flesh out `note` before committing — the strongest existing rows also record window stability, rejected predictors, and any drainage-area scaling (see `calc_expression.csv` for examples).
 

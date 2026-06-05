@@ -51,6 +51,7 @@ import contextlib
 import json as _json
 import math
 import random
+import shlex
 import statistics
 import subprocess
 import sys
@@ -508,6 +509,7 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
     stab: list[tuple[str, Fit | None]],
     calc_handles: list[str],
     leadlag: dict | None = None,
+    deploy_note: str | None = None,
 ) -> str:
     """Build the markdown analysis report."""
     pct = residual_percentiles(fit)
@@ -577,6 +579,8 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
     default_handles = [f"p{i}::{s}" for i, s in enumerate(predictor_sites, start=1)]
     if calc_handles != default_handles:
         cmd_parts += [f"--calc-handle {h}" for h in calc_handles]
+    if deploy_note:
+        cmd_parts.append(f"--deploy-note {shlex.quote(deploy_note)}")
     if all(quad_mask):
         cmd_parts.append("--quadratic")
     else:
@@ -861,6 +865,12 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
     L(f"note:            {note}")
     L(f"provenance_slug: {name}")
     L("```\n")
+    if deploy_note:
+        L(
+            f"⚠️ **Deployment note — the deployed expression differs from this "
+            f"fit**: {deploy_note} Do not copy the expression above verbatim; "
+            "apply the stated composition first.\n"
+        )
     L(
         "Flesh out `note` before committing — the strongest existing rows "
         "also record window stability, rejected predictors, and any "
@@ -1362,6 +1372,16 @@ def main() -> int:
             "as a 'Sub-daily lead/lag' section, e.g. mckenzie_14159000_leadlag."
         ),
     )
+    ap.add_argument(
+        "--deploy-note",
+        default=None,
+        help=(
+            "Deployment-composition warning for the calc_expression section, "
+            "for fits whose deployed expression differs from the fitted one "
+            "(e.g. the estimate is summed with a live gauge, or drainage-area "
+            "scaled). Rides in the Reproduce snippet so a regen keeps it."
+        ),
+    )
     args = ap.parse_args()
     leadlag = _load_leadlag(args.leadlag, args.out)
 
@@ -1438,6 +1458,7 @@ def main() -> int:
         stab=stab,
         calc_handles=calc_handles,
         leadlag=leadlag,
+        deploy_note=args.deploy_note,
     )
 
     if args.out:

@@ -51,7 +51,7 @@ All alignments share one hold-out grid (only the alignment changes). **daily-tra
 | hourly-refit | contemporaneous | 114,559 | 0.9937 | 253.5 |
 | hourly-refit | full (incl. downstream) | 114,559 | 0.9960 | 201.8 |
 
-Daily-mean reference (same 3 predictors, 1968-10-01→2003-09-30, n=3,652): RMSE **183.2 cfs**, r² 0.9960 — daily means are smoother than instantaneous values, so this sits below the grid RMSEs and isn't directly comparable to them.
+Daily-mean reference (same 3 predictors, 1993-10-01→2003-09-30, n=3,652): RMSE **183.2 cfs**, r² 0.9960 — daily means are smoother than instantaneous values, so this sits below the grid RMSEs and isn't directly comparable to them.
 
 ### Is the gain statistically real, and is it usable?
 
