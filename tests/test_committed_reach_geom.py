@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import csv
 import importlib.util
+import json
 import sqlite3
 from pathlib import Path
 from types import ModuleType
@@ -51,6 +52,12 @@ def _snapshot_reach_count() -> int:
     """
     with (DATA_DB_DIR / "reach.csv").open(encoding="utf-8") as fh:
         return sum(1 for _ in csv.DictReader(fh))
+
+
+def _csv_id_set(fname: str, column: str) -> set[int]:
+    """The set of integer ids in one snapshot CSV column."""
+    with (DATA_DB_DIR / fname).open(encoding="utf-8") as fh:
+        return {int(row[column]) for row in csv.DictReader(fh)}
 
 
 def _load_import_metadata() -> ModuleType:
@@ -100,6 +107,30 @@ def test_committed_reach_snapshot_passes_check_reaches(tmp_path) -> None:
         f"expected {expected} reaches (reach.csv row count) from the committed "
         f"snapshot, loaded {total} — did the loaders or fixtures move?"
     )
+
+    # Cross-set integrity: deriving the count from reach.csv removed the
+    # hard-coded shrink tripwire, so a reach deleted from reach.csv alone
+    # (leaving the JSON snapshots / child CSVs behind) must fail HERE instead
+    # (PR #122 follow-up review finding). export_metadata writes consistent
+    # sets; this catches hand edits that don't.
+    reach_ids = _csv_id_set("reach.csv", "id")
+    for fname, key in (
+        ("reach_state.csv", "reach_id"),
+        ("reach_class.csv", "reach_id"),
+        ("reach_guidebook.csv", "reach_id"),
+    ):
+        orphans = _csv_id_set(fname, key) - reach_ids
+        assert not orphans, (
+            f"{fname} references reach ids missing from reach.csv: {sorted(orphans)}"
+        )
+    for jname in ("reaches.json", "reaches-gradient.json"):
+        jkeys = {int(k) for k in json.loads((DATA_DB_DIR / jname).read_text())}
+        orphans = jkeys - reach_ids
+        assert not orphans, f"{jname} carries reach ids missing from reach.csv: {sorted(orphans)}"
+    # Every reach must carry geometry (the whole point of the snapshot).
+    geom_ids = {int(k) for k in json.loads((DATA_DB_DIR / "reaches.json").read_text())}
+    missing_geom = reach_ids - geom_ids
+    assert not missing_geom, f"reaches with no geom in reaches.json: {sorted(missing_geom)}"
     assert flagged == [], (
         "the committed reach snapshot fails check-reaches — fix the geom/"
         "gradient snapshot (or the start/end columns) before merge:\n"

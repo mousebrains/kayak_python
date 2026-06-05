@@ -29,9 +29,12 @@ elevation/gradient/HUC derivation):
     # 3. endpoint elevations / elevation_lost / avg gradient from USGS 3DEP
     python3 scripts/refresh_reach_elevations.py --db $DB \
         --reach-ids 422,423,424,425,426,427,428,429,430,431,432 --apply
-    # 4. reach.huc: WBD HUC12 point-in-polygon at each reach midpoint via
-    #    Trace-cache/wbd.gpkg (geopandas under brew python; same lookup the
-    #    plan doc's Reproduce section shows for the gauge points)
+    # 4. reach.huc via the canonical tool (put-in point-in-polygon over the
+    #    WBD HUC12 layer; needs the [geo] extra -- run under a geopandas-capable
+    #    python, e.g. brew python):
+    for R in 422 423 424 425 426 427 428 429 430 431 432; do
+        levels assign-huc --reach-id $R --gpkg Trace-cache/wbd.gpkg
+    done
     # 5. max_gradient (steepest mile) + gradient_profile from the DEM
     #    (DEM-cache must cover the reaches; tile n47w123 here):
     python3 docs/one-offs/sample_reach_elevations.py --db $DB \
