@@ -49,7 +49,7 @@ GAUGES_USGS = [
         "170800050106",
         "Tilton",
         "Tilton nr Cinebar",
-        "tilton|9|009389|000141",
+        "tilton|9|009390|000141",
     ),
     (
         228,
@@ -91,8 +91,10 @@ CALCS = [
         "tw::14242580::flow ef::EF_Lewis_Washington_merge::flow",
         "SF Toutle at Toutle estimated from Toutle at Tower Rd (14242580, downstream "
         "mass-balance - it contains the SF flow) and EF Lewis nr Heisson (14222500) via "
-        "OLS fit against USGS 14241500 (retired 2013-09-29). Post-SRS window "
-        "1989-10-01..2013-09-29, n=6451 daily means. r2=0.9441, RMSE=188.8 cfs "
+        "OLS fit against USGS 14241500 (retired 2013-09-29). Window "
+        "1996-02-01..2013-09-29, n=6451 daily means (~17.7 yr - a requested 1989 "
+        "start is clipped by the target's 1989-96 gauge outage, so the fit is "
+        "entirely post-SRS and post-outage). r2=0.9441, RMSE=188.8 cfs "
         "(Tower-only baseline 0.9358 / 202.4). Tower CI [+0.236, +0.283], EF Lewis CI "
         "[+0.162, +0.263] (monthly-block bootstrap). Rejected: NF-SRS 14240525 (marginal "
         "given Tower and cuts the sample by a third), Tilton (weaker than EF Lewis), all "
@@ -190,7 +192,7 @@ GAUGES_CALC = [
         198.0,
         "170800030305",
         "Kalama",
-        "Kalama bl Italian Cr (calc)",
+        "Kalama below Italian Cr (calc)",
         "kalama|9|009980|000198",
         354,
         21,
@@ -220,7 +222,7 @@ GAUGES_CALC = [
         129.0,
         "170800050404",
         "Green (Toutle)",
-        "Green (Toutle) ab Beaver Cr (calc)",
+        "Green (Toutle) above Beaver Cr (calc)",
         "green (toutle)|9|999999|000129",
         356,
         23,
@@ -385,6 +387,11 @@ def main() -> int:
             " VALUES ((SELECT MAX(id) + 1 FROM reach_class), ?, ?, ?, 'flow', ?, 'flow')",
             (rid, info["class"], info["low_runnable"], info["high_runnable"]),
         )
+
+    # AW data for the SF Toutle run is internally inconsistent (published
+    # max_gradient 68 ft/mi < the 3DEP-derived average 116 ft/mi, which is
+    # geometrically impossible) - flag rather than guess which is wrong.
+    cur.execute("UPDATE reach SET gradient_unreliable=1 WHERE aw_id=2254")
 
     conn.commit()
     print(

@@ -11,7 +11,7 @@ python3 scripts/regression/gauge_pair_linear.py \
     --predictor 14242580 \
     --predictor 14222500 \
     --target 14241500 \
-    --start 1989-10-01 \
+    --start 1996-02-01 \
     --end 2013-09-29 \
     --name sftoutle_14241500_from_tower_eflewis \
     --calc-handle tw::14242580 \
@@ -34,7 +34,7 @@ The chosen window is selected for *data points*, not calendar span.
 
 ## Chosen fit
 
-Window: **1989-10-01 → 2013-09-29**, n = **6451** daily means (~17.7 years of data).
+Window: **1996-02-01 → 2013-09-29**, n = **6451** daily means (~17.7 years of data).
 
 ### Coefficients (with honest, autocorrelation-aware uncertainty)
 
@@ -86,13 +86,12 @@ Re-fit at multiple start dates (endpoint fixed at `2013-09-29`):
 
 | Window start | n | data yr | r² | RMSE |
 |---|---|---|---|---|
-| 1984-10-02 | 6451 | 17.7 | 0.9441 | 188.8 |
-| 1989-10-01 | 6451 | 17.7 | 0.9441 | 188.8 |
 | 1990-01-01 | 6451 | 17.7 | 0.9441 | 188.8 |
-| 1994-09-30 | 6451 | 17.7 | 0.9441 | 188.8 |
+| 1991-02-02 | 6451 | 17.7 | 0.9441 | 188.8 |
 | 1996-02-01 | 6451 | 17.7 | 0.9441 | 188.8 |
-| 1999-09-29 | 5115 | 14.0 | 0.9435 | 167.1 |
-| 2004-09-27 | 3290 | 9.0 | 0.9506 | 156.4 |
+| 2001-01-30 | 4626 | 12.7 | 0.9430 | 166.9 |
+| 2006-01-29 | 2801 | 7.7 | 0.9462 | 161.9 |
+| 2011-01-28 | 976 | 2.7 | 0.9588 | 141.1 |
 
 (Multi-predictor coefficients in the stability table would be wide; per-window coefficient drift can be inspected by re-running the script with a different `--start`.)
 
@@ -170,7 +169,7 @@ SE = sqrt(Var)
 data_type:       flow
 expression:      round(greatest(0, 0.259162 * tw::14242580::flow + 0.210774 * ef::EF_Lewis_Washington_merge::flow -75.92))
 time_expression: tw::14242580::flow ef::EF_Lewis_Washington_merge::flow
-note:            multi-linear regression fit. n=6451 daily means, window 1989-10-01..2013-09-29, r2=0.9441, RMSE=188.8 cfs. See docs/regression/sftoutle_14241500_from_tower_eflewis.md.
+note:            multi-linear regression fit. n=6451 daily means, window 1996-02-01..2013-09-29, r2=0.9441, RMSE=188.8 cfs. See docs/regression/sftoutle_14241500_from_tower_eflewis.md.
 provenance_slug: sftoutle_14241500_from_tower_eflewis
 ```
 

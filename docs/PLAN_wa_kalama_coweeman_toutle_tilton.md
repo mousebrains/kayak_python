@@ -16,7 +16,7 @@ layer (2026-06-04).
 | Tilton | **yes** — USGS 14236200 (1956→, uv) + TILW1 | direct gauge |
 | Toutle mainstem | **yes** — USGS 14242580 Tower Rd (1981→, uv) + TOTW1 | direct gauge |
 | NF Toutle | **yes** — USGS 14240525 below SRS (1989→, uv) + SRBW1 | direct gauge |
-| SF Toutle | no — USGS 14241500 retired **2013** | calc (donors: Tower Rd + NF-SRS; ~21–24 yr overlap) |
+| SF Toutle | no — USGS 14241500 retired **2013** | calc (donors: Tower Rd + EF Lewis; 1996–2013 usable overlap — the target has a 1989–96 outage) |
 | Green (Toutle) | no — USGS 14240800 retired **1994** | calc (donors: Tower Rd 13 yr, NF-SRS 5 yr overlap) |
 | Kalama | no — USGS all retired ≤**1982**; DOE 27B070 is manual-only | calc (donor: EF Lewis 14222500, full 1946–82 overlap) |
 | Coweeman | no — USGS retired **1984**; DOE 26C075 dead **2019** | calc (donor: EF Lewis; 1950–84 overlap **+ 2006–19 DOE record for out-of-era validation**) |

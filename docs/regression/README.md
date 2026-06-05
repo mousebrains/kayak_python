@@ -161,7 +161,7 @@ Kalama 14223500, Coweeman 14245000, Green 14240800 (ditto).
   No lead/lag companion — the target predates USGS unit values.
 - [`sftoutle_14241500_from_tower_eflewis.md`](sftoutle_14241500_from_tower_eflewis.md)
   — multi-linear; revives retired USGS 14241500 (SF Toutle at Toutle,
-  record 1939–2013, fit on the post-SRS 1989–2013 window) from Toutle
+  record 1939–2013, fit on 1996–2013 — the target's 1989–96 gauge outage clips a requested post-SRS 1989 start) from Toutle
   at Tower Rd 14242580 + EF Lewis 14222500. Backs `calc_expression` 20
   for the `SF_Toutle_calc` gauge. Lead/lag companion:
   [`sftoutle_14241500_leadlag.md`](sftoutle_14241500_leadlag.md)
