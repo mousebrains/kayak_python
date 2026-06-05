@@ -78,17 +78,22 @@ a link to the full companion), so the regression analysis is self-contained on
 timing.
 
 The key distinction it reports is **full vs deployable** alignment: *full* shifts
-every predictor to its best lag (including *downstream* gauges to a *future*
-reading — real but non-causal look-ahead); *deployable* shifts only *upstream*
-predictors (a *past* reading, usable in a real-time nowcast). Flow is preferred,
-stage (`00065`) used as fallback for timing.
+every predictor to its best lag (including −τ gauges to a *future* reading —
+real but non-causal look-ahead); *deployable* shifts only +τ predictors (a
+*past* reading, usable in a real-time nowcast). The lag sign is timing, not
+geography — +τ is usually upstream travel time, but shared-forcing phase (the
+diurnal melt cycle) can give a geographically downstream gauge a +τ peak; the
+causal split is unaffected. Flow is preferred, stage (`00065`) used as fallback
+for timing.
 
 **Result: for every reach analysed before 2026-06 the deployable sub-daily
 gain was nil** — those calc gauges are estimated from *downstream* or
 co-located gauges, so what timing signal existed was downstream look-ahead,
-not real-time-usable. **SF Salmon at Mackay Bar broke the pattern**: all three
-donors sit upstream (snowmelt diurnal cycle + 3–5 h travel time), and the
-deployable gain is +21.1% with a CI excluding zero. The calculator still reads
+not real-time-usable. **SF Salmon at Mackay Bar broke the pattern**: every
+donor carries a +τ (past-reading, causal) lag — Krassel and Johnson are
+upstream travel time (3–5 h); White Bird is geographically *downstream*
+mainstem, its +1 h being shared diurnal-melt phase rather than travel time —
+and the deployable gain is +21.1% with a CI excluding zero. The calculator still reads
 contemporaneous `LatestObservation` values (no lag support), so that gain is
 *unrealised* — it would justify a time-offset reference form in
 `kayak.cli.calculator` if more upstream-donor fits accumulate.
@@ -101,7 +106,7 @@ contemporaneous `LatestObservation` values (no lag support), so that gain is
 | Salmon 14146500 | −0.5h (downstream) | +0.5% [−0.0, +0.8] | 0 (no upstream) | unresolved |
 | NF Alsea 14306100 | −3.5h (downstream) | [−1.1, +30.7] | 0 (no upstream) | unresolved |
 | Horse Cr 14159100 | none resolvable | — | — | no sub-daily lag |
-| SF Salmon Mackay Bar 13314300 | Krassel +3.0h, Johnson +5.0h, White Bird +1.0h (all upstream) | +21.1% [+41.7, +66.8] ✓ | **+21.1% [+41.7, +66.8] ✓** | **deployable gain — the first real one** |
+| SF Salmon Mackay Bar 13314300 | Krassel +3.0h, Johnson +5.0h, White Bird +1.0h (all +τ/causal; White Bird is geographically downstream — its +1 h is diurnal phase, not travel time) | +21.1% [+41.7, +66.8] ✓ | **+21.1% [+41.7, +66.8] ✓** | **deployable gain — the first real one** |
 
 Not feasible (target has no sub-hourly record, or predictors don't overlap it):
 Calapooia 14172000, SF Alsea 14306200, Drift Cr Alsea 14306600,

@@ -77,10 +77,10 @@ Correlation matrix:
 
 ```
               intercept          x1          x2          x3
-   intercept  +1.0000      -0.0637      +0.5990      -0.6164    
-          x1  -0.0637      +1.0000      -0.3157      -0.3691    
-          x2  +0.5990      -0.3157      +1.0000      -0.7509    
-          x3  -0.6164      -0.3691      -0.7509      +1.0000    
+   intercept  +1.0000      -0.0637      +0.5990      -0.6164
+          x1  -0.0637      +1.0000      -0.3157      -0.3691
+          x2  +0.5990      -0.3157      +1.0000      -0.7509
+          x3  -0.6164      -0.3691      -0.7509      +1.0000
 ```
 
 **Caveat 1 (autocorrelation)**: this is the **OLS** covariance, which assumes IID residuals; with lag-1 residual autocorrelation **0.84** it understates the parameter SE by roughly **5.2x**. Use the block-bootstrap SEs/CIs in the coefficients table for inference, not these (monthly blocks; longer blocks would only widen the intervals, so they are conservative for the most autocorrelated fits).
@@ -134,15 +134,15 @@ A season whose bias is large relative to `sigma_hat` (the pooled 1-sigma residua
 
 ## Sub-daily lead/lag
 
-Inter-gauge travel-time structure from USGS unit values (30-min grid, 114,559 points); full analysis in [`sfsalmon_13314300_leadlag.md`](./sfsalmon_13314300_leadlag.md). The daily coefficients above are applied in production to *instantaneous* readings, so these lags are the timing error a correction would address. **+τ** = upstream (a past read, deployable in real time); **-τ** = downstream (a future read — non-causal look-ahead).
+Inter-gauge travel-time structure from USGS unit values (30-min grid, 114,559 points); full analysis in [`sfsalmon_13314300_leadlag.md`](./sfsalmon_13314300_leadlag.md). The daily coefficients above are applied in production to *instantaneous* readings, so these lags are the timing error a correction would address. **+τ** = the predictor leads (a past read, deployable in real time — upstream travel time or shared-forcing phase); **-τ** = it lags (a future read — non-causal look-ahead).
 
 | Predictor | applied τ (h) | Δ-corr | direction |
 |---|---|---|---|
-| 13310700 `13310700` | +3.0 | 0.384 | upstream — deployable |
-| 13313000 `13313000` | +5.0 | 0.444 | upstream — deployable |
-| 13317000 `13317000` | +1.0 | 0.197 | upstream — deployable |
+| 13310700 `13310700` | +3.0 | 0.384 | +τ lead — deployable |
+| 13313000 `13313000` | +5.0 | 0.444 | +τ lead — deployable |
+| 13317000 `13317000` | +1.0 | 0.197 | +τ lead — deployable |
 
-**Full** alignment (incl. downstream → future): +21.1% RMSE, 95% CI [+41.73, +66.82] cfs (resolved). **Deployable** (causal, upstream-only): +21.1%, [+41.73, +66.82] cfs (resolved). **Verdict: deployable sub-daily gain exists** — a deployable gain worth considering.
+**Full** alignment (incl. -τ → future): +21.1% RMSE, 95% CI [+41.73, +66.82] cfs (resolved). **Deployable** (causal, +τ-only): +21.1%, [+41.73, +66.82] cfs (resolved). **Verdict: deployable sub-daily gain exists** — a deployable gain worth considering.
 
 ## Predictions at example x values
 

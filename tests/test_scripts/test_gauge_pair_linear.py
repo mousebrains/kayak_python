@@ -277,7 +277,7 @@ def test_render_leadlag_section():
         "n_points": 1000,
         "rmse_valid": True,
         "verdict": "look_ahead",
-        "verdict_label": "real signal, but downstream look-ahead only (deployable gain nil)",
+        "verdict_label": "real signal, but look-ahead (-τ) only (deployable gain nil)",
         "lags": [
             {
                 "site": "111",
@@ -314,10 +314,10 @@ def test_render_leadlag_section():
     assert "## Sub-daily lead/lag" in md
     assert "[`x_leadlag.md`](./x_leadlag.md)" in md  # link to companion
     assert "+1.5" in md and "-2.5" in md  # lag values present
-    assert "upstream — deployable" in md and "downstream — look-ahead" in md
+    assert "+τ lead — deployable" in md and "-τ lag — look-ahead" in md
     assert "held (not identifiable)" in md
     assert "CI through 0" in md  # deployable not resolved
-    assert "look-ahead only" in md  # verdict label embedded
+    assert "look-ahead (-τ) only" in md  # verdict label embedded
 
 
 def test_render_leadlag_section_stage_only():

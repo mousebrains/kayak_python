@@ -451,8 +451,9 @@ def _render_leadlag_section(leadlag: dict) -> list[str]:
         f"({leadlag['grid_minutes']}-min grid, {leadlag['n_points']:,} points); full "
         f"analysis in [`{slug}.md`](./{slug}.md). The daily coefficients above are "
         "applied in production to *instantaneous* readings, so these lags are the timing "
-        "error a correction would address. **+τ** = upstream (a past read, deployable in "
-        "real time); **-τ** = downstream (a future read — non-causal look-ahead).\n"
+        "error a correction would address. **+τ** = the predictor leads (a past read, "
+        "deployable in real time — upstream travel time or shared-forcing phase); "
+        "**-τ** = it lags (a future read — non-causal look-ahead).\n"
     )
     a("| Predictor | applied τ (h) | Δ-corr | direction |")
     a("|---|---|---|---|")
@@ -460,9 +461,9 @@ def _render_leadlag_section(leadlag: dict) -> list[str]:
         if not lg["identifiable"]:
             direction = "held (not identifiable)"
         elif lg["applied_lag_h"] > 0:
-            direction = "upstream — deployable"
+            direction = "+τ lead — deployable"
         elif lg["applied_lag_h"] < 0:
-            direction = "downstream — look-ahead"
+            direction = "-τ lag — look-ahead"
         else:
             direction = "co-located"
         corr = f"{lg['corr']:.3f}" if lg["corr"] is not None else "—"
@@ -476,10 +477,10 @@ def _render_leadlag_section(leadlag: dict) -> list[str]:
             else "keep using contemporaneous readings"
         )
         a(
-            f"**Full** alignment (incl. downstream → future): {f['gain_pct']:+.1f}% RMSE, "
+            f"**Full** alignment (incl. -τ → future): {f['gain_pct']:+.1f}% RMSE, "
             f"95% CI [{f['ci'][0]:+.2f}, {f['ci'][1]:+.2f}] cfs "
             f"({'resolved' if f['resolved'] else 'CI through 0'}). **Deployable** (causal, "
-            f"upstream-only): {d['gain_pct']:+.1f}%, [{d['ci'][0]:+.2f}, {d['ci'][1]:+.2f}] "
+            f"+τ-only): {d['gain_pct']:+.1f}%, [{d['ci'][0]:+.2f}, {d['ci'][1]:+.2f}] "
             f"cfs ({'resolved' if d['resolved'] else 'CI through 0'}). "
             f"**Verdict: {leadlag['verdict_label']}** — {rec}.\n"
         )
@@ -662,7 +663,7 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
     corr = fit.corr
     for i, n in enumerate(fit.coef_names):
         row = "  ".join(f"{corr[i, j]:+.4f}    " for j in range(len(fit.coef_names)))
-        L(f"{n:>12}  {row}")
+        L(f"{n:>12}  {row}".rstrip())  # the cell padding would leave EOL whitespace
     L("```\n")
     L(
         "**Caveat 1 (autocorrelation)**: this is the **OLS** covariance, which "

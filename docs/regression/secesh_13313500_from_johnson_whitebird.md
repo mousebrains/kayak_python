@@ -71,9 +71,9 @@ Correlation matrix:
 
 ```
               intercept          x1          x2
-   intercept  +1.0000      +0.5549      -0.6534    
-          x1  +0.5549      +1.0000      -0.9782    
-          x2  -0.6534      -0.9782      +1.0000    
+   intercept  +1.0000      +0.5549      -0.6534
+          x1  +0.5549      +1.0000      -0.9782
+          x2  -0.6534      -0.9782      +1.0000
 ```
 
 **Caveat 1 (autocorrelation)**: this is the **OLS** covariance, which assumes IID residuals; with lag-1 residual autocorrelation **0.86** it understates the parameter SE by roughly **6.2x**. Use the block-bootstrap SEs/CIs in the coefficients table for inference, not these (monthly blocks; longer blocks would only widen the intervals, so they are conservative for the most autocorrelated fits).
