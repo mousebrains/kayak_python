@@ -107,10 +107,12 @@ contemporaneous `LatestObservation` values (no lag support), so that gain is
 | NF Alsea 14306100 | −3.5h (downstream) | [−1.1, +30.7] | 0 (no upstream) | unresolved |
 | Horse Cr 14159100 | none resolvable | — | — | no sub-daily lag |
 | SF Salmon Mackay Bar 13314300 | Krassel +3.0h, Johnson +5.0h, White Bird +1.0h (all +τ/causal; White Bird is geographically downstream — its +1 h is diurnal phase, not travel time) | +21.1% [+41.7, +66.8] ✓ | **+21.1% [+41.7, +66.8] ✓** | **deployable gain — the first real one** |
+| SF Toutle 14241500 | Tower Rd −2.5h (downstream), EF Lewis 0.0h | +8.8% [+8.9, +23.5] ✓ | 0 (no +τ predictor) | real, look-ahead only |
 
 Not feasible (target has no sub-hourly record, or predictors don't overlap it):
 Calapooia 14172000, SF Alsea 14306200, Drift Cr Alsea 14306600,
-Smith 14323100, Secesh 13313500, EFSF 13312000 (targets predate unit values).
+Smith 14323100, Secesh 13313500, EFSF 13312000 (targets predate unit values),
+Kalama 14223500, Coweeman 14245000, Green 14240800 (ditto).
 
 ## Index
 
@@ -157,3 +159,34 @@ Smith 14323100, Secesh 13313500, EFSF 13312000 (targets predate unit values).
   RMSE 191 vs 0 / 26.5 — reproduce via
   [`docs/one-offs/efsf_calc_comparison.py`](../one-offs/efsf_calc_comparison.py)).
   No lead/lag companion — the target predates USGS unit values.
+- [`sftoutle_14241500_from_tower_eflewis.md`](sftoutle_14241500_from_tower_eflewis.md)
+  — multi-linear; revives retired USGS 14241500 (SF Toutle at Toutle,
+  record 1939–2013, fit on the post-SRS 1989–2013 window) from Toutle
+  at Tower Rd 14242580 + EF Lewis 14222500. Backs `calc_expression` 20
+  for the `SF_Toutle_calc` gauge. Lead/lag companion:
+  [`sftoutle_14241500_leadlag.md`](sftoutle_14241500_leadlag.md)
+  (verdict: real signal, look-ahead (−τ) only — Tower Rd is
+  downstream; deployable gain nil, keep contemporaneous readings).
+- [`kalama_14223500_from_eflewis_tilton.md`](kalama_14223500_from_eflewis_tilton.md)
+  — multi-linear, quadratic on EF Lewis only (`--quadratic-for`);
+  revives retired USGS 14223500 (Kalama bl Italian Cr, record
+  1946–82) from EF Lewis 14222500 + Tilton 14236200. Backs
+  `calc_expression` 21 for the `Kalama_ItalianCreek_calc` gauge —
+  **deployed with a `least(ef, 15600)` input cap** (the fitted
+  parabola's vertex sits just inside the observed range; see the
+  report's deployment note). No lead/lag companion — the target
+  predates USGS unit values.
+- [`coweeman_14245000_from_eflewis.md`](coweeman_14245000_from_eflewis.md)
+  — single-predictor quadratic; revives retired USGS 14245000
+  (Coweeman nr Kelso, record 1950–84) from EF Lewis 14222500. Backs
+  `calc_expression` 22 for the `Coweeman_Kelso_calc` gauge.
+  **Out-of-era validated** against the independent WA Ecology 26C075
+  telemetry record (2006–19, n=3643: bias −1.1%, r²=0.891 — reproduce
+  via [`docs/one-offs/coweeman_doe_validation.py`](../one-offs/coweeman_doe_validation.py)).
+  No lead/lag companion — the target predates USGS unit values.
+- [`green_14240800_from_tower_tilton.md`](green_14240800_from_tower_tilton.md)
+  — multi-linear; revives retired USGS 14240800 (Green River of the
+  Toutle drainage, ab Beaver Cr, record 1980–94, fit on the post-SRS
+  1989–94 window) from Toutle at Tower Rd 14242580 + Tilton 14236200.
+  Backs `calc_expression` 23 for the `Green_Toutle_calc` gauge. No
+  lead/lag companion — the target predates USGS unit values.

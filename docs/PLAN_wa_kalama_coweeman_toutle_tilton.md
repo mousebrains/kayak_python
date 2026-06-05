@@ -26,7 +26,7 @@ present, uv 1995→), is already a kayak gauge
 (`EF_Lewis_Washington_merge`, gauge 53). None of the Toutle/Tilton
 gauges are in the kayak DB yet.
 
-## AW reaches (10 in scope)
+## AW reaches (11 in scope)
 
 ### Kalama — no gauge wired on any AW run
 
