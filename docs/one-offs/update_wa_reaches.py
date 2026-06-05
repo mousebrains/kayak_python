@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Apply Pat's review corrections to the 11 SW-Washington reaches (wa.notes).
 
+Take-3 addendum: the Tilton-family Bennett refs (430: p91/r65, 431: p93/r67,
+432: p92/r66) were supplied after this script first ran and are included in
+the table below for provenance; the take-2/3 sort and gradient steps live in
+the session record and kayak_data history.
+
 Per reach: corrected put-in/take-out coordinates, cleaned description text,
 Bennett guidebook (id 6) page/run references, and a re-trace from the new
 endpoints — NHD HR by default, the OSM main-channel tracer (NHD-gated) for
@@ -66,9 +71,17 @@ REACHES = {
     ),
     428: (46.209299, -122.270665, 46.252338, -122.576641, None, None, (66, 40)),
     429: (46.389320, -122.352161, 46.376629, -122.528039, None, None, (62, 37)),
-    430: (46.559457, -122.288547, 46.594602, -122.443990, "Morton to Bremer", "Tilton", None),
-    431: (46.580121, -122.416867, 46.562103, -122.537878, "Bremer to Ike Kinswa", "Tilton", None),
-    432: (46.619812, -122.388875, 46.597573, -122.365175, "abv Tilton confluence", None, None),
+    430: (46.559457, -122.288547, 46.594602, -122.443990, "Morton to Bremer", "Tilton", (91, 65)),
+    431: (
+        46.580121,
+        -122.416867,
+        46.562103,
+        -122.537878,
+        "Bremer to Ike Kinswa",
+        "Tilton",
+        (93, 67),
+    ),
+    432: (46.619812, -122.388875, 46.597573, -122.365175, "abv Tilton confluence", None, (92, 66)),
 }
 
 
