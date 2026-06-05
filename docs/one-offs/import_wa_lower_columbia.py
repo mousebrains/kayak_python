@@ -14,22 +14,30 @@ scripts/export_metadata.py (id_counters bumped by hand). Inserts:
   docs/regression/ fits named in each provenance_slug.
 - 11 AW reaches (geometry from the AW GraphQL API) + reach_state WA.
 
-Reproduce (the full sequence that produced the committed kayak_data rows):
+Reproduce (the full pipeline producing the committed kayak_data state —
+the initial import below, then the review-corrections pass, then the
+elevation/gradient/HUC derivation):
     DB=/Users/pat/tpw/DB/kayak.db
+    # 1. initial wiring (this script): gauges, sources, calcs, reaches with
+    #    AW geometry, reach_state, reach_class
     python3 docs/one-offs/import_wa_lower_columbia.py --db $DB
-    # Midpoints from geom arc-length. CAVEAT: with no id filter this also
-    # recomputes any pre-existing reach whose midpoint drifted >0.05 deg from
-    # the put-in/take-out mean (33 such reaches at import time) - restore
-    # those rows' latitude/longitude/updated_at from kayak_data's reach.csv
-    # afterwards so the export diff stays additions-only.
-    python3 docs/one-offs/recompute_midpoints.py --db $DB --apply
-    # Elevations / elevation_lost / gradient from USGS 3DEP (this is where
-    # the committed reach 428 gradient=116 comes from):
+    # 2. review corrections (wa.notes takes 1-3): corrected endpoints,
+    #    re-traces (OSM for the serpentine Tilton x2 + NF Toutle; NHD
+    #    elsewhere), descriptions, sort keys (incl. Collawash), Green
+    #    display name, Bennett guidebook upserts, arc-length midpoints
+    PYTHONPATH=src /opt/homebrew/bin/python3 docs/one-offs/update_wa_reaches.py
+    # 3. endpoint elevations / elevation_lost / avg gradient from USGS 3DEP
     python3 scripts/refresh_reach_elevations.py --db $DB \
         --reach-ids 422,423,424,425,426,427,428,429,430,431,432 --apply
-    # reach.huc: WBD HUC12 point-in-polygon at each reach midpoint via
-    # Trace-cache/wbd.gpkg (geopandas under brew python) - the same lookup
-    # the plan doc's Reproduce section shows for the gauge points.
+    # 4. reach.huc: WBD HUC12 point-in-polygon at each reach midpoint via
+    #    Trace-cache/wbd.gpkg (geopandas under brew python; same lookup the
+    #    plan doc's Reproduce section shows for the gauge points)
+    # 5. max_gradient (steepest mile) + gradient_profile from the DEM
+    #    (DEM-cache must cover the reaches; tile n47w123 here):
+    python3 docs/one-offs/sample_reach_elevations.py --db $DB \
+        --reach-ids 422,423,424,425,426,427,428,429,430,431,432
+    python3 docs/one-offs/compute_reach_gradient.py --db $DB \
+        --reach-ids 422,423,424,425,426,427,428,429,430,431,432 --apply
     python3 scripts/export_metadata.py --db $DB --out <kayak_data clone>
 """
 
@@ -230,12 +238,12 @@ GAUGES_CALC = [
         "Above Beaver Cr nr Kid Valley (estimated)",
         46.381775,
         -122.523720,
-        None,
+        845.8,  # 3DEP-sampled; USGS publishes no altitude for 14240800
         129.0,
         "170800050404",
         "Green (Toutle)",
         "Green (Toutle) above Beaver Cr (calc)",
-        "green (toutle)|9|999999|000129",
+        "green (toutle)|9|009154|000129",
         356,
         23,
     ),
@@ -399,11 +407,6 @@ def main() -> int:
             " VALUES ((SELECT MAX(id) + 1 FROM reach_class), ?, ?, ?, 'flow', ?, 'flow')",
             (rid, info["class"], info["low_runnable"], info["high_runnable"]),
         )
-
-    # AW data for the SF Toutle run is internally inconsistent (published
-    # max_gradient 68 ft/mi < the 3DEP-derived average 116 ft/mi, which is
-    # geometrically impossible) - flag rather than guess which is wrong.
-    cur.execute("UPDATE reach SET gradient_unreliable=1 WHERE aw_id=2254")
 
     conn.commit()
     print(

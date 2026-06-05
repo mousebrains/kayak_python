@@ -12,6 +12,12 @@ Per reach: corrected put-in/take-out coordinates, cleaned description text,
 Bennett guidebook (id 6) page/run references, and a re-trace from the new
 endpoints — NHD HR by default, the OSM main-channel tracer (NHD-gated) for
 the three serpentine sections the NHD trace mangled (Tilton x2, NF Toutle).
+Reach 428 (SF Toutle) provenance: an interim revision flagged it
+gradient_unreliable because AW's published max_gradient (68 ft/mi) was
+impossible against the 3DEP profile; the flag was cleared once lidar-grade
+3DEP verified the elevations and compute_reach_gradient.py replaced AW's
+figure (steepest mile 358, avg 120) — the reviewer accepted the NHD trace
+(braided at low flow; the whole channel fills at paddleable flows).
 Green's reach display name becomes plain "Green"; NF Tilton's sort key moves
 it ahead of the Tilton runs ("Tilton NF 0" < "Tilton ag 01" byte-wise, the
 "Smith NF 0" precedent).

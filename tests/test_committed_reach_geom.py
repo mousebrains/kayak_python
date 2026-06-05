@@ -22,6 +22,7 @@ exercises real data, matching what prod's ``check-reaches`` step sees.
 
 from __future__ import annotations
 
+import csv
 import importlib.util
 import sqlite3
 from pathlib import Path
@@ -37,10 +38,18 @@ REPO_DIR = Path(__file__).resolve().parents[1]
 DATA_DB_DIR = METADATA_DIR
 SCRIPTS_DIR = REPO_DIR / "scripts"
 
-# The committed snapshot the loaders read. Asserted explicitly so the test
-# fails loudly (rather than vacuously passing on an empty DB) if the snapshot
-# ever shrinks or the fixtures move.
-EXPECTED_REACH_COUNT = 432
+def _snapshot_reach_count() -> int:
+    """Row count of the snapshot's own ``reach.csv``.
+
+    The expected count travels WITH the dataset instead of being pinned as a
+    code-repo constant: a hardcoded count couples a metadata-only change (new
+    reaches in kayak_data) to a code commit, which guarantees one red CI run
+    on whichever repo's main merges first (PR #122 review finding 1). The
+    anti-vacuous purpose survives — the loaders must materialize exactly as
+    many reaches as the CSV declares, and more than zero.
+    """
+    with (DATA_DB_DIR / "reach.csv").open(encoding="utf-8") as fh:
+        return sum(1 for _ in csv.DictReader(fh))
 
 
 def _load_import_metadata() -> ModuleType:
@@ -84,9 +93,11 @@ def test_committed_reach_snapshot_passes_check_reaches(tmp_path) -> None:
 
     # The snapshot must have actually loaded — guards against a vacuous green
     # if the loaders silently no-op'd (wrong dir, empty CSV, etc.).
-    assert total == EXPECTED_REACH_COUNT, (
-        f"expected {EXPECTED_REACH_COUNT} reaches from the committed snapshot, "
-        f"loaded {total} — did the snapshot or fixtures move?"
+    expected = _snapshot_reach_count()
+    assert expected > 0, f"no reach rows in {DATA_DB_DIR / 'reach.csv'} — wrong METADATA_DIR?"
+    assert total == expected, (
+        f"expected {expected} reaches (reach.csv row count) from the committed "
+        f"snapshot, loaded {total} — did the loaders or fixtures move?"
     )
     assert flagged == [], (
         "the committed reach snapshot fails check-reaches — fix the geom/"
