@@ -17,11 +17,16 @@ accuracy with predictors aligned **contemporaneously** vs **travel-time-aligned*
 It reports two alignments, because they answer different questions:
 
 * **full** — every identifiable predictor shifted to its best lag, including
-  *downstream* predictors shifted to a *future* reading. This measures the
-  total sub-daily timing signal but is **not** realisable in real time.
-* **deployable (causal)** — only *upstream* predictors (whose aligned reading
-  is in the *past*) are shifted; downstream and unidentifiable predictors are
-  held contemporaneous. This is what a real-time nowcast could actually use.
+  -τ predictors shifted to a *future* reading. This measures the total
+  sub-daily timing signal but is **not** realisable in real time.
+* **deployable (causal)** — only +τ predictors (whose aligned reading is in
+  the *past*) are shifted; -τ and unidentifiable predictors are held
+  contemporaneous. This is what a real-time nowcast could actually use.
+
+Note the lag *sign* is timing, not geography: +τ usually means upstream travel
+time, but shared-forcing phase (e.g. the diurnal melt cycle) can give a
+geographically downstream gauge a +τ peak. Deployability depends only on the
+sign (past vs future reading), so the causal split is unaffected.
 
 Resolution
 ----------
@@ -86,7 +91,7 @@ class LagResult:
     """
 
     site: str
-    best_lag_steps: int  # +ve = predictor LEADS target (upstream); -ve = lags (downstream)
+    best_lag_steps: int  # +ve = predictor LEADS target (past read); -ve = lags (future read)
     best_corr: float
     curve: list[tuple[float, float]]  # (lag_hours, corr) over the searched range
     identifiable: bool  # peak Δ-corr cleared MIN_IDENTIFIABLE_CORR
@@ -264,8 +269,11 @@ def ccf_curve(
 
     For each candidate lag of ``k`` grid steps, the predictor's *change* at
     ``g - k*step`` is correlated with the target's change at ``g``. Positive k
-    peaks for an **upstream** gauge (its rise reaches the target later); negative
-    k for **downstream**. First differences isolate the propagating signal from
+    peaks when the predictor **leads** the target — typically an upstream gauge
+    whose rise reaches the target later, but shared-forcing phase (e.g. the
+    diurnal melt cycle) can also produce a +k peak for a geographically
+    downstream gauge, so the sign is timing, not geography. Negative k = the
+    predictor **lags**. First differences isolate the propagating signal from
     the near-identical slowly-varying baseline.
     """
     dy = _deltas(target_g, step)
@@ -295,9 +303,9 @@ def classify_lag(site: str, curve_k: list[tuple[int, float]], step: int) -> LagR
     if not identifiable:
         note = f"not identifiable (peak Δ-corr {best_corr:.2f}); held contemporaneous"
     elif best_k > 0:
-        note = f"upstream — rise reaches target ~{lag_h:.1f} h later (deployable)"
+        note = f"leads target by ~{lag_h:.1f} h (+τ: past reading, deployable)"
     elif best_k < 0:
-        note = f"downstream — target leads it by ~{-lag_h:.1f} h (future read, not deployable)"
+        note = f"lags target by ~{-lag_h:.1f} h (-τ: future reading, not deployable)"
     else:
         note = "co-located / sub-grid travel"
     curve_h = [(k * step / SECONDS_PER_HOUR, c) for k, c in curve_k]
@@ -449,7 +457,7 @@ VERDICT_LABEL = {
     "no_lag": "no resolvable sub-daily lag",
     "usable": "deployable sub-daily gain exists",
     "deployable_immaterial": "deployable gain resolved but immaterial",
-    "look_ahead": "real signal, but downstream look-ahead only (deployable gain nil)",
+    "look_ahead": "real signal, but look-ahead (-τ) only (deployable gain nil)",
     "unresolved": "negligible / statistically unresolved",
     "stage_only": "lags only (RMSE comparison needs flow)",
 }
@@ -549,11 +557,13 @@ def render_markdown(  # noqa: C901 — linear assembly of report sections
     a("## Estimated travel-time lags\n")
     a(
         "Per predictor, the lag τ maximizing the correlation of *first differences* (flow "
-        f"changes) with the target, searched in {step_min}-min steps. **+τ** = upstream "
-        "(predictor leads the target; its aligned reading is a *past* value, so it is "
-        "**deployable** in real time); **-τ** = downstream (its aligned reading is a "
-        f"*future* value, **not** deployable). A peak below **{MIN_IDENTIFIABLE_CORR:.2f}** "
-        "has no resolvable travel time and is held contemporaneous.\n"
+        f"changes) with the target, searched in {step_min}-min steps. **+τ** = the predictor "
+        "*leads* the target (its aligned reading is a *past* value, so it is **deployable** "
+        "in real time — typically upstream travel time, though shared-forcing phase such as "
+        "the diurnal melt cycle can also produce a +τ peak for a geographically downstream "
+        "gauge); **-τ** = it *lags* (a *future* value, **not** deployable). A peak below "
+        f"**{MIN_IDENTIFIABLE_CORR:.2f}** has no resolvable timing and is held "
+        "contemporaneous.\n"
     )
     a("| Predictor | peak τ (h) | peak Δ-corr | applied τ (h) | interpretation |")
     a("|---|---|---|---|---|")
@@ -571,7 +581,7 @@ def render_markdown(  # noqa: C901 — linear assembly of report sections
             "regression coefficients, but at least one series here is gage height, so the "
             "units don't match. The travel-time lags above (timing only) are still valid.\n"
         )
-        return "\n".join(L) + "\n"
+        return "\n".join(L).rstrip("\n") + "\n"
 
     bf, bd = boot["full"], boot["deploy"]
     full_gain = _pct(
@@ -590,8 +600,9 @@ def render_markdown(  # noqa: C901 — linear assembly of report sections
         "All alignments share one hold-out grid (only the alignment changes). "
         "**daily-trained** = the deployed-style daily coefficients applied to the grid "
         "values (production-relevant); **hourly-refit** = coefficients refit on the grid "
-        "itself (an upper bound). **full** shifts every identifiable predictor (incl. "
-        "downstream → future); **deployable** shifts only upstream predictors (causal).\n"
+        "itself (an upper bound). **full** shifts every identifiable predictor (incl. -τ → "
+        "future readings); **deployable** shifts only +τ (past-reading) predictors "
+        "(causal).\n"
     )
     a("| Coefficients | Alignment | n | r² | RMSE (cfs) |")
     a("|---|---|---|---|---|")
@@ -619,12 +630,12 @@ def render_markdown(  # noqa: C901 — linear assembly of report sections
     a("| Alignment | gain | mean Δ (cfs) | 95% CI (cfs) | better in | resolved? |")
     a("|---|---|---|---|---|---|")
     a(
-        f"| **full** (incl. downstream future) | {full_gain:+.1f}% | {bf['mean']:+.2f} | "
+        f"| **full** (incl. -τ future reads) | {full_gain:+.1f}% | {bf['mean']:+.2f} | "
         f"[{bf['lo']:+.2f}, {bf['hi']:+.2f}] | {bf['p_pos']:.0f}% | "
         f"{'yes' if _excludes_zero(bf) else 'no (CI ∋ 0)'} |"
     )
     a(
-        f"| **deployable** (causal, upstream) | {deploy_gain:+.1f}% | {bd['mean']:+.2f} | "
+        f"| **deployable** (causal, +τ only) | {deploy_gain:+.1f}% | {bd['mean']:+.2f} | "
         f"[{bd['lo']:+.2f}, {bd['hi']:+.2f}] | {bd['p_pos']:.0f}% | "
         f"{'yes' if _excludes_zero(bd) else 'no (CI ∋ 0)'} |"
     )
@@ -657,7 +668,7 @@ def render_markdown(  # noqa: C901 — linear assembly of report sections
         )
     elif key == "usable":
         a(
-            f"**A usable sub-daily gain exists here.** The deployable (causal, upstream) "
+            f"**A usable sub-daily gain exists here.** The deployable (causal, +τ-only) "
             f"alignment lowers RMSE by **{deploy_gain:+.1f}%** with a 95% CI that excludes "
             f"zero ([{bd['lo']:+.2f}, {bd['hi']:+.2f}] cfs) — worth considering for a "
             "real-time estimate (see deployability below).\n"
@@ -671,16 +682,16 @@ def render_markdown(  # noqa: C901 — linear assembly of report sections
         )
         a(
             f"**Deployable gain resolved but immaterial.** The deployable (causal, "
-            f"upstream-only) alignment's CI excludes zero "
+            f"+τ-only) alignment's CI excludes zero "
             f"([{bd['lo']:+.2f}, {bd['hi']:+.2f}] cfs), but the gain is {detail}. **Keep "
             "contemporaneous readings.**\n"
         )
     elif key == "look_ahead":
         deploy_clause = (
-            "Here there are **no upstream predictors** at all, so the deployable "
+            "Here there are **no +τ (past-reading) predictors** at all, so the deployable "
             "alignment is simply contemporaneous — nothing is usable in real time."
             if not any_upstream
-            else f"The **deployable** (upstream-only) gain is **{deploy_gain:+.1f}%** with "
+            else f"The **deployable** (+τ-only) gain is **{deploy_gain:+.1f}%** with "
             f"a CI through zero ([{bd['lo']:+.2f}, {bd['hi']:+.2f}] cfs) — nothing usable "
             "in real time."
         )
@@ -688,9 +699,9 @@ def render_markdown(  # noqa: C901 — linear assembly of report sections
             f"**The sub-daily signal is real but not real-time-usable.** Full alignment "
             f"gives a statistically-resolved **{full_gain:+.1f}%** (CI "
             f"[{bf['lo']:+.2f}, {bf['hi']:+.2f}] cfs excludes zero), but that gain comes "
-            "from **downstream** predictors aligned to *future* readings — a downstream "
-            "gauge's reading τ ahead is essentially a direct measurement of the target's "
-            f"current water arriving later, i.e. look-ahead. {deploy_clause} "
+            "from **-τ** predictors aligned to *future* readings — typically a downstream "
+            "gauge whose reading τ ahead is essentially a direct measurement of the "
+            f"target's current water arriving later, i.e. look-ahead. {deploy_clause} "
             "**Keep contemporaneous readings.**\n"
         )
     else:
@@ -706,9 +717,9 @@ def render_markdown(  # noqa: C901 — linear assembly of report sections
     a(
         "Applying lags in production is **not** a coefficient change; it requires the "
         "calculator to read a predictor's value *from τ ago* rather than its latest:\n\n"
-        "1. **Upstream predictors (+τ):** deployable — the value is in the past, already "
+        "1. **+τ predictors:** deployable — the value is in the past, already "
         "in the `observation` table; select the reading closest to `now - τ`.\n"
-        "2. **Downstream predictors (-τ):** **not** deployable for a nowcast — the "
+        "2. **-τ predictors:** **not** deployable for a nowcast — the "
         "best-aligned value is in the future. Leave them contemporaneous, or treat the "
         "estimate as a short forecast.\n"
         "3. **Plumbing:** `calc_expression` references only `LatestObservation`; a "
@@ -725,8 +736,8 @@ def render_markdown(  # noqa: C901 — linear assembly of report sections
         "*changes* propagate; baseline levels are near-identical across neighbours). "
         "Resolution is capped by the coarser series — a 30-min target can't resolve "
         "finer than 30 min, and finer grids add noise without information.\n"
-        "- **Causal split:** *deployable* shifts only upstream predictors (past reads); "
-        "*full* also shifts downstream predictors to future reads (not real-time-usable, "
+        "- **Causal split:** *deployable* shifts only +τ predictors (past reads); "
+        "*full* also shifts -τ predictors to future reads (not real-time-usable, "
         "but it bounds the total timing signal).\n"
         "- **Significance:** the RMSE difference is block-bootstrapped over 7-day blocks "
         "(B=2000) so the CI reflects the effective, not nominal, sample size (longer "
@@ -736,7 +747,7 @@ def render_markdown(  # noqa: C901 — linear assembly of report sections
         + (" and excludes SF Cougar" if is_mckenzie else "")
         + "; the daily-reference row controls for the predictor-set change, not the window.\n"
     )
-    return "\n".join(L) + "\n"
+    return "\n".join(L).rstrip("\n") + "\n"
 
 
 # ---------------------------------------------------------------------------
@@ -788,7 +799,14 @@ def main() -> int:
     ap.add_argument("--daily-doc", default=DEFAULT_DAILY_DOC, help="Sibling daily report slug.")
     ap.add_argument("--grid-minutes", type=int, default=DEFAULT_GRID_MIN, help="Resample grid.")
     ap.add_argument("--max-lag", type=float, default=18.0, help="Search ±this many hours.")
-    ap.add_argument("--daily-start", default="1968-10-01", help="Daily-reference window start.")
+    ap.add_argument(
+        "--daily-start",
+        default="1968-10-01",
+        help=(
+            "Daily-reference window start (lower bound; the report shows the "
+            "effective window, clamped to the gauges' actual overlap)."
+        ),
+    )
     ap.add_argument("--out", type=Path, help="Markdown output path (also writes .svg).")
     args = ap.parse_args()
     predictors: list[str] = args.predictors or DEFAULT_PREDICTORS
@@ -816,7 +834,7 @@ def main() -> int:
         print(f"Target has only {len(target_g)} grid points — aborting.", file=sys.stderr)
         return 1
 
-    # Per-predictor lag (full) + the causal/deployable subset (upstream only).
+    # Per-predictor lag (full) + the causal/deployable subset (+τ only).
     lag_results: list[LagResult] = []
     full_lags: dict[str, int] = {}
     deploy_lags: dict[str, int] = {}
@@ -879,10 +897,10 @@ def main() -> int:
 
         rows = [
             row("daily-trained", "contemporaneous", "con", cols_con, daily_coefs),
-            row("daily-trained", "full (incl. downstream)", "full", cols_full, daily_coefs),
-            row("daily-trained", "deployable (upstream-only)", "deploy", cols_deploy, daily_coefs),
+            row("daily-trained", "full (incl. -τ future reads)", "full", cols_full, daily_coefs),
+            row("daily-trained", "deployable (+τ-only)", "deploy", cols_deploy, daily_coefs),
             row("hourly-refit", "contemporaneous", "con", cols_con, coefs_con),
-            row("hourly-refit", "full (incl. downstream)", "full", cols_full, coefs_full),
+            row("hourly-refit", "full (incl. -τ future reads)", "full", cols_full, coefs_full),
         ]
 
         e_con = y - _design(cols_con) @ daily_coefs
@@ -986,7 +1004,11 @@ def main() -> int:
         daily_full_rmse=daily_rmse,
         daily_full_r2=daily_r2,
         daily_full_n=len(dwin),
-        daily_window=(args.daily_start, daily_end),
+        # Report the *effective* window (clamped to the actual overlap), not the
+        # raw --daily-start arg — a default start earlier than the target's
+        # record would otherwise label the reference with a fictional span.
+        # Empty overlap keeps the raw bound (the n=0/nan row stays renderable).
+        daily_window=(min(dwin) if dwin else args.daily_start, daily_end),
     )
 
     if args.out:

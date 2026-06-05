@@ -125,7 +125,12 @@ The markdown report contains:
   handles, ready for a new `calc_expression.csv` row in `kayak_data`.
   calc rows are metadata, so they ship via the CSV + `levels
   sync-metadata` — **not** via a migration (a new migration writing a
-  metadata table fails `test_migrations_schema_only.py`).
+  metadata table fails `test_migrations_schema_only.py`). When the
+  deployed expression differs from the fitted one (the estimate is
+  summed with a live gauge, or drainage-area scaled), pass
+  `--deploy-note "…"` so the report carries a warning against copying
+  the fitted expression verbatim; the note rides in the Reproduce
+  snippet so a regen keeps it.
 - A **Reproduce** snippet identical to the command that generated the
   file.
 

@@ -1,0 +1,59 @@
+{
+  "slug": "sfsalmon_13314300_leadlag",
+  "target": "13314300",
+  "daily_doc": "sfsalmon_13314300_from_krassel_johnson_whitebird",
+  "grid_minutes": 30,
+  "window": [
+    "1995-10-01",
+    "2003-09-29"
+  ],
+  "n_points": 114559,
+  "rmse_valid": true,
+  "lags": [
+    {
+      "site": "13310700",
+      "label": "13310700",
+      "applied_lag_h": 3.0,
+      "corr": 0.384,
+      "identifiable": true,
+      "deployable": true,
+      "note": "leads target by ~3.0 h (+\u03c4: past reading, deployable)"
+    },
+    {
+      "site": "13313000",
+      "label": "13313000",
+      "applied_lag_h": 5.0,
+      "corr": 0.444,
+      "identifiable": true,
+      "deployable": true,
+      "note": "leads target by ~5.0 h (+\u03c4: past reading, deployable)"
+    },
+    {
+      "site": "13317000",
+      "label": "13317000",
+      "applied_lag_h": 1.0,
+      "corr": 0.197,
+      "identifiable": true,
+      "deployable": true,
+      "note": "leads target by ~1.0 h (+\u03c4: past reading, deployable)"
+    }
+  ],
+  "full": {
+    "gain_pct": 21.09,
+    "ci": [
+      41.73,
+      66.82
+    ],
+    "resolved": true
+  },
+  "deploy": {
+    "gain_pct": 21.09,
+    "ci": [
+      41.73,
+      66.82
+    ],
+    "resolved": true
+  },
+  "verdict": "usable",
+  "verdict_label": "deployable sub-daily gain exists"
+}
