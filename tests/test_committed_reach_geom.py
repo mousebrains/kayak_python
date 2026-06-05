@@ -38,6 +38,7 @@ REPO_DIR = Path(__file__).resolve().parents[1]
 DATA_DB_DIR = METADATA_DIR
 SCRIPTS_DIR = REPO_DIR / "scripts"
 
+
 def _snapshot_reach_count() -> int:
     """Row count of the snapshot's own ``reach.csv``.
 
