@@ -14,11 +14,23 @@ scripts/export_metadata.py (id_counters bumped by hand). Inserts:
   docs/regression/ fits named in each provenance_slug.
 - 11 AW reaches (geometry from the AW GraphQL API) + reach_state WA.
 
-Reproduce:
-    python3 docs/one-offs/import_wa_lower_columbia.py --db /Users/pat/tpw/DB/kayak.db
-    python3 scripts/recompute_midpoints.py --db /Users/pat/tpw/DB/kayak.db --apply
-    # HUC12s: see the wbd.gpkg point-lookup block in the plan doc
-    python3 scripts/export_metadata.py --db /Users/pat/tpw/DB/kayak.db --out <kayak_data>
+Reproduce (the full sequence that produced the committed kayak_data rows):
+    DB=/Users/pat/tpw/DB/kayak.db
+    python3 docs/one-offs/import_wa_lower_columbia.py --db $DB
+    # Midpoints from geom arc-length. CAVEAT: with no id filter this also
+    # recomputes any pre-existing reach whose midpoint drifted >0.05 deg from
+    # the put-in/take-out mean (33 such reaches at import time) - restore
+    # those rows' latitude/longitude/updated_at from kayak_data's reach.csv
+    # afterwards so the export diff stays additions-only.
+    python3 docs/one-offs/recompute_midpoints.py --db $DB --apply
+    # Elevations / elevation_lost / gradient from USGS 3DEP (this is where
+    # the committed reach 428 gradient=116 comes from):
+    python3 scripts/refresh_reach_elevations.py --db $DB \
+        --reach-ids 422,423,424,425,426,427,428,429,430,431,432 --apply
+    # reach.huc: WBD HUC12 point-in-polygon at each reach midpoint via
+    # Trace-cache/wbd.gpkg (geopandas under brew python) - the same lookup
+    # the plan doc's Reproduce section shows for the gauge points.
+    python3 scripts/export_metadata.py --db $DB --out <kayak_data clone>
 """
 
 from __future__ import annotations
