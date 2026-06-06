@@ -35,6 +35,7 @@ from collections.abc import Callable
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
+from typing import TypeGuard
 
 from kayak.dataset import layout
 
@@ -276,10 +277,15 @@ def _int_problem(spec: layout.ColumnSpec, raw: str) -> str | None:
 
 def _int64_overflow(raw: str) -> bool:
     """True if a grammar-matched integer token is outside SQLite's signed 64-bit
-    range. Checks digit count first so ``int()`` never sees a pathologically long
-    token (Python caps str->int at 4300 digits)."""
-    digits = raw[1:] if raw.startswith("-") else raw
-    return len(digits) > _INT64_MAX_DIGITS or not (_INT64_MIN <= int(raw) <= _INT64_MAX)
+    range. Insignificant leading zeros are stripped first (SQLite normalizes
+    "007" -> 7), and the digit count is checked before ``int()`` so a
+    pathologically long token never hits Python's 4300-digit conversion limit."""
+    neg = raw.startswith("-")
+    digits = (raw[1:] if neg else raw).lstrip("0") or "0"
+    if len(digits) > _INT64_MAX_DIGITS:
+        return True
+    value = -int(digits) if neg else int(digits)
+    return not (_INT64_MIN <= value <= _INT64_MAX)
 
 
 def _trunc(raw: str, limit: int = 24) -> str:
@@ -555,9 +561,17 @@ def _check_gradient_profiles(d: Path) -> list[str]:
 
 
 def _gradient_profile_problem(raw: str) -> str | None:
-    """The contract for a single decoded gradient profile (None == ok)."""
+    """The contract for a single decoded gradient profile (None == ok).
+
+    Parses with recursive duplicate-key detection and NaN/Infinity rejection,
+    then enforces the object/``samples``-list shape and each sample's domain
+    (finite required numbers, positive ``w_mi``, ordered ``d_mi``, and typed
+    optional fields) the SVG renderer + JS hydration assume.
+    """
     try:
-        prof = json.loads(raw, parse_constant=_reject_json_constant)
+        prof = json.loads(
+            raw, object_pairs_hook=_no_dup_pairs, parse_constant=_reject_json_constant
+        )
     except (ValueError, json.JSONDecodeError) as exc:
         return f"profile is not valid JSON ({exc})"
     if not isinstance(prof, dict):
@@ -565,14 +579,55 @@ def _gradient_profile_problem(raw: str) -> str | None:
     samples = prof.get("samples")
     if not isinstance(samples, list):
         return "profile 'samples' must be a list"
+    prev_d: float | None = None
     for i, s in enumerate(samples):
-        if not isinstance(s, dict):
-            return f"sample {i} must be an object"
-        for field in ("d_mi", "w_mi", "grad_ft_per_mi"):
-            v = s.get(field)
-            if not isinstance(v, (int, float)) or isinstance(v, bool):
-                return f"sample {i} field {field!r} must be a number"
+        problem = _gradient_sample_problem(s, i, prev_d)
+        if problem:
+            return problem
+        prev_d = s["d_mi"]  # validated finite above
     return None
+
+
+def _gradient_sample_problem(s: object, i: int, prev_d: float | None) -> str | None:
+    if not isinstance(s, dict):
+        return f"sample {i} must be an object"
+    for field in ("d_mi", "w_mi", "grad_ft_per_mi"):
+        if not _finite_number(s.get(field)):
+            return f"sample {i} field {field!r} must be a finite number"
+    if s["w_mi"] <= 0:
+        return f"sample {i} w_mi must be positive, got {s['w_mi']}"
+    if prev_d is not None and not s["d_mi"] > prev_d:
+        return f"sample {i} d_mi {s['d_mi']} <= previous {prev_d} (samples must be ordered)"
+    return _gradient_optional_problem(s, i)
+
+
+def _gradient_optional_problem(s: dict[str, object], i: int) -> str | None:
+    if "significant" in s and not isinstance(s["significant"], bool):
+        return f"sample {i} 'significant' must be a boolean"
+    for coord, (lo, hi) in (("lat", (-90.0, 90.0)), ("lon", (-180.0, 180.0))):
+        v = s.get(coord)
+        if coord not in s or v is None:
+            continue
+        if not _finite_number(v):
+            return f"sample {i} {coord!r} must be a finite number or null"
+        if not lo <= v <= hi:
+            return f"sample {i} {coord!r} out of range [{lo}, {hi}], got {v}"
+    return None
+
+
+def _finite_number(v: object) -> TypeGuard[float]:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
+def _no_dup_pairs(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    """object_pairs_hook that rejects duplicate keys at any depth (else
+    json.loads keeps the last value silently)."""
+    seen: set[str] = set()
+    for k, _ in pairs:
+        if k in seen:
+            raise ValueError(f"duplicate key {k!r}")
+        seen.add(k)
+    return dict(pairs)
 
 
 def _reject_json_constant(name: str) -> object:

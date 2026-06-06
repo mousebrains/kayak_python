@@ -558,6 +558,63 @@ def test_compact_datetime_is_flagged(dataset_copy: Path) -> None:
     assert any("reach.csv" in e and "updated_at" in e and "datetime" in e for e in errs)
 
 
+# --- regression tests for the PR #123 round-6 review findings ----------------
+
+
+def _set_gradient(dataset_copy: Path, inner: str) -> list[str]:
+    grad = json.loads((dataset_copy / "reaches-gradient.json").read_text())
+    grad[next(iter(grad))] = inner  # the sidecar value is a JSON-encoded string
+    (dataset_copy / "reaches-gradient.json").write_text(json.dumps(grad))
+    return validate_dataset(dataset_copy)
+
+
+_OK = '{"d_mi":1.5,"w_mi":1,"grad_ft_per_mi":11}'
+
+
+@pytest.mark.parametrize(
+    "inner,expect",
+    [
+        # Finding 1: standard JSON number 1e999 decodes to inf (not via parse_constant).
+        (f'{{"samples":[{{"d_mi":0.5,"w_mi":1e999,"grad_ft_per_mi":10}},{_OK}]}}', "finite number"),
+        # Finding 1: optional field types.
+        (
+            f'{{"samples":[{{"d_mi":0.5,"w_mi":1,"grad_ft_per_mi":10,"significant":"false"}},{_OK}]}}',
+            "boolean",
+        ),
+        (
+            f'{{"samples":[{{"d_mi":0.5,"w_mi":1,"grad_ft_per_mi":10,"lat":[]}},{_OK}]}}',
+            "finite number or null",
+        ),
+        # Finding 1: domain/order invariants.
+        (f'{{"samples":[{{"d_mi":0.5,"w_mi":0,"grad_ft_per_mi":10}},{_OK}]}}', "positive"),
+        (
+            '{"samples":[{"d_mi":1.5,"w_mi":1,"grad_ft_per_mi":10},'
+            '{"d_mi":0.5,"w_mi":1,"grad_ft_per_mi":11}]}',
+            "ordered",
+        ),
+        # Finding 2: duplicate members at profile and sample depth.
+        ('{"samples":[{"d_mi":0.5,"w_mi":1,"grad_ft_per_mi":10}],"samples":[]}', "duplicate key"),
+        (
+            f'{{"samples":[{{"d_mi":0.5,"w_mi":1,"grad_ft_per_mi":10,"d_mi":0.7}},{_OK}]}}',
+            "duplicate key",
+        ),
+    ],
+)
+def test_gradient_sample_domain_and_dupes(dataset_copy: Path, inner: str, expect: str) -> None:
+    errs = _set_gradient(dataset_copy, inner)
+    assert any("reaches-gradient.json" in e and expect in e for e in errs)
+
+
+def test_leading_zero_counter_is_not_false_overflow(dataset_copy: Path) -> None:
+    # Non-blocking: a numerically valid leading-zero next_id (= 3) must not be
+    # misreported as a 64-bit overflow.
+    _rewrite_csv(
+        dataset_copy / "id_counters.csv",
+        lambda rows: [r.update(next_id="0" * 20 + "3") for r in rows if r["table"] == "state"],
+    )
+    assert validate_dataset(dataset_copy) == []
+
+
 def test_provenance_matches_committed_fixture() -> None:
     # Finding 4: the committed fixture's geometry/facts/gradient must match the
     # recorded provenance digests, so a hand-edit (or a regen from a dirty
