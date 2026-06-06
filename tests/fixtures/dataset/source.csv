@@ -1,0 +1,4 @@
+id,name,agency,timezone,fetch_url_id,calc_expression_id
+1,14150000,USGS,,,
+2,FXTW1,NWS,,1,
+3,Fixture_Confluence_calc,Calculation,,,1

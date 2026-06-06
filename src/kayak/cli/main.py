@@ -28,6 +28,7 @@ from kayak.cli import (
     sync_metadata,
     trace_reach,
     validate_config,
+    validate_dataset,
 )
 from kayak.cli.logger import addArgs as addLoggerArgs
 from kayak.cli.logger import mkLogger
@@ -65,6 +66,7 @@ def main() -> None:
     assign_huc.addArgs(subparsers)
     emit_config.addArgs(subparsers)
     validate_config.addArgs(subparsers)
+    validate_dataset.addArgs(subparsers)
     analyze_logs.addArgs(subparsers)
     status.addArgs(subparsers)
     sync_metadata.addArgs(subparsers)
@@ -84,3 +86,10 @@ def main() -> None:
     rc = args.func(args)
     if isinstance(rc, int) and not isinstance(rc, bool):
         sys.exit(rc)
+
+
+if __name__ == "__main__":
+    # `python -m kayak.cli.main …` runs the same CLI as the `levels` console
+    # script. Without this guard module-style invocation exits 0 having done
+    # nothing — a silent footgun if a CI gate ever spells the command that way.
+    main()

@@ -484,18 +484,16 @@ function generate_gradient_profile_svg(
     $plot_right = $ml + $pw;
     $plot_bottom = $mt + $ph;
 
-    // Identify the first + last bar (by d_mi) so we can stretch their
-    // outer edges to the put-in / take-out. The cumsum algorithm bins
-    // in dl_mi chunks and exits when fewer than 2 bins remain, leaving
-    // a small unbarred tail when reach length isn't a multiple of
-    // dl_mi (e.g. 4.9 mi with dl_mi=0.2 → bars end at 4.6 or 4.8).
-    // Same for the leading edge if the first bar's centre isn't at
-    // dl_mi/2. Stretch the outer edges visually so the chart covers
-    // the full reach domain; the bar's gradient + significant flag
-    // stay as the algorithm computed them.
-    $first_d_mi = (float)$samples[0]['d_mi'];
-    $last_d_mi = (float)$samples[count($samples) - 1]['d_mi'];
-
+    // Neither outer edge is stretched: each bar is drawn at its own analysis
+    // window [d_mi - w_mi/2, d_mi + w_mi/2], clamped to the plot box. The
+    // generator always centres the first bin so its window starts at the put-in
+    // (d_mi - w_mi/2 == 0 for every real reach), so the clamp pins it to x=0
+    // with no leading gap. A genuine gap at either end — a lake at the put-in or
+    // a reservoir at the take-out, neither of which the trace samples — reads as
+    // zero gradient (blank) rather than the nearest bar smeared across it, and a
+    // window that falls entirely past an endpoint clamps to zero width and is
+    // skipped. This keeps the bars, the hover readout, and the elevation line in
+    // agreement on the chart's domain.
     $ordered = $samples;
     usort($ordered, fn($a, $b) => (float)$b['w_mi'] <=> (float)$a['w_mi']);
 
@@ -507,12 +505,8 @@ function generate_gradient_profile_svg(
         $grad = max(0.0, (float)$s['grad_ft_per_mi']);
         $sig = $s['significant'] ?? false;
 
-        $left_x = $d_mi === $first_d_mi
-            ? (float)$ml
-            : $ml + (($d_mi - $w_mi / 2) - $x_min) * $xPx_per_mi;
-        $right_x = $d_mi === $last_d_mi
-            ? (float)$plot_right
-            : $ml + (($d_mi + $w_mi / 2) - $x_min) * $xPx_per_mi;
+        $left_x = $ml + (($d_mi - $w_mi / 2) - $x_min) * $xPx_per_mi;
+        $right_x = $ml + (($d_mi + $w_mi / 2) - $x_min) * $xPx_per_mi;
         $left_x = max((float)$ml, $left_x);
         $right_x = min((float)$plot_right, $right_x);
         $bar_w = $right_x - $left_x;
@@ -542,11 +536,20 @@ function generate_gradient_profile_svg(
     if ($has_elev) {
         $putin_e = $putin_elev_ft;
         $end_e = $putin_e - $elev_lost_ft;
+        // Integrate + plot only the IN-DOMAIN bins (d_mi <= x_max). A bin centred
+        // past the take-out (overshoot — a trace longer than reach.length)
+        // contributes no reach drop and would otherwise plot at x > plot_right,
+        // i.e. outside the chart, inconsistent with the clipped bars + hover
+        // no-data contract. A reservoir tail stops short and is covered by the
+        // pinned take-out point appended last (flat line to the take-out).
         $cum = 0.0;
-        $raw = [];
-        foreach ($samples as $s) {
+        $cum_by_index = [];
+        foreach ($samples as $i => $s) {
+            if ((float)$s['d_mi'] > $x_max) {
+                continue;
+            }
             $cum += max(0.0, (float)$s['grad_ft_per_mi']) * (float)$s['w_mi'];
-            $raw[] = $cum;
+            $cum_by_index[$i] = $cum;
         }
         $total_raw = $cum > 0 ? $cum : 1.0;
         [$e_min, $e_max, $e_step] = nice_axis(min($end_e, $putin_e), max($end_e, $putin_e));
@@ -554,8 +557,24 @@ function generate_gradient_profile_svg(
         $e_to_py = fn (float $e): float => $mt + ($e_max - $e) / $e_range * $ph;
 
         $pts = [sprintf('%.1f,%.1f', (float)$ml, $e_to_py($putin_e))];
+        $leading = true;
         foreach ($samples as $i => $s) {
-            $elev = $putin_e - ($raw[$i] / $total_raw) * $elev_lost_ft;
+            if (!isset($cum_by_index[$i])) {
+                continue; // overshoot bin — excluded from the elevation line
+            }
+            if ($leading) {
+                // Hold the put-in elevation flat across a leading gap (a lake at
+                // the put-in, where the trace samples no gradient) until the
+                // first window starts, so the line — and the JS readout that
+                // reuses these anchors — doesn't imply a drop in the blank span.
+                $left = (float)$s['d_mi'] - (float)$s['w_mi'] / 2;
+                if ($left > $x_min) {
+                    $lx = $ml + ($left - $x_min) / $x_range * $pw;
+                    $pts[] = sprintf('%.1f,%.1f', $lx, $e_to_py($putin_e));
+                }
+                $leading = false;
+            }
+            $elev = $putin_e - ($cum_by_index[$i] / $total_raw) * $elev_lost_ft;
             $samples[$i]['elev_ft'] = round($elev, 1);
             $px = $ml + ((float)$s['d_mi'] - $x_min) / $x_range * $pw;
             $pts[] = sprintf('%.1f,%.1f', $px, $e_to_py($elev));

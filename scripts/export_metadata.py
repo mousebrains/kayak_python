@@ -21,46 +21,22 @@ import csv
 import json
 import sqlite3
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 from kayak.config import METADATA_DIR
+from kayak.dataset import layout
 
 REPO_DIR = Path(__file__).resolve().parent.parent
 
-METADATA_TABLES = [
-    "state",
-    "source",
-    "gauge",
-    "gauge_source",
-    "fetch_url",
-    "calc_expression",
-    "rating",
-    "rating_data",
-    "class_description",
-    "guidebook",
-    "reach",
-    "reach_state",
-    "reach_class",
-    "reach_guidebook",
-    "huc_name",
-]
-
-# Columns excluded from the per-table CSVs (too large for row-based diffs, or
-# pure churn).
-#
-# reach.geom and reach.gradient_profile are both large, machine-generated, and
-# not regenerable on prod (the DEM/NHD/HUC trace stack is dev-only), so each is
-# excluded from reach.csv and snapshotted to its own JSON instead —
-# reaches.json (write_reaches_json) and reaches-gradient.json
-# (write_reaches_gradient_json) — keeping rebuilds self-contained without
-# bloating every metadata-row diff (gradient_profile was ~83% of reach.csv;
-# review-3 R6.1). max_gradient (one float) stays in reach.csv. The full
-# huc_name lookup stays in METADATA_TABLES for the same self-contained reason.
-EXCLUDED_COLUMNS = {
-    "reach": {"geom", "gradient_profile"},
-    # last_fetched_at gets bumped on every pipeline run — pure churn in git.
-    "fetch_url": {"last_fetched_at"},
-}
+# The complete-projection writer and the validator share ONE contract — the
+# tables to export (in order) and the columns held out to JSON sidecars / as
+# runtime churn both come from kayak.dataset.layout so they can't drift.
+# (reach.geom + reach.gradient_profile are large, machine-generated, and not
+# regenerable on prod, so each is snapshotted to its own JSON; fetch_url's
+# last_fetched_at is per-run churn. See review-3 R6.1 / layout.EXCLUDED_COLUMNS.)
+METADATA_TABLES = list(layout.CONTRACT_CSVS)
+EXCLUDED_COLUMNS = layout.EXCLUDED_COLUMNS
 
 
 def table_columns(conn: sqlite3.Connection, table: str) -> list[tuple[str, bool]]:
@@ -68,11 +44,38 @@ def table_columns(conn: sqlite3.Connection, table: str) -> list[tuple[str, bool]
     return [(row[1], bool(row[5])) for row in rows]  # (name, is_pk)
 
 
+def _round_scales(table: str) -> dict[str, int]:
+    """``{column: scale}`` for the table's fixed-precision Numeric columns.
+
+    The DB stores coordinates as full-precision floats (NHD traces emit 13-15
+    decimal places), but the schema declares Numeric(9, 6) -- ~0.1 m resolution,
+    which is ample. Quantizing on export makes the CSV conform to the declared
+    scale (so ``levels validate-dataset`` can enforce it) and drops meaningless
+    float-formatting noise from every diff.
+    """
+    return {s.name: s.decimal_spec[1] for s in layout.column_specs(table) if s.decimal_spec}
+
+
+def _quantize(value: object, scale: int) -> object:
+    """Round a numeric cell to ``scale`` decimal places, dropping trailing zeros.
+
+    Non-numeric / empty values pass through untouched (the validator flags them).
+    """
+    if value is None or value == "":
+        return value
+    try:
+        q = Decimal(str(value)).quantize(Decimal(1).scaleb(-scale))
+    except (ArithmeticError, ValueError):
+        return value
+    return format(q.normalize(), "f")  # plain decimal, no exponent, no trailing zeros
+
+
 def export_table(conn: sqlite3.Connection, table: str, out_dir: Path) -> tuple[int, int]:
     cols_info = table_columns(conn, table)
     excluded = EXCLUDED_COLUMNS.get(table, set())
     cols = [name for name, _ in cols_info if name not in excluded]
     pk_cols = [name for name, is_pk in cols_info if is_pk]
+    scales = _round_scales(table)
 
     col_list = ", ".join(f'"{c}"' for c in cols)
     order = ", ".join(f'"{c}"' for c in pk_cols) if pk_cols else "1"
@@ -84,7 +87,12 @@ def export_table(conn: sqlite3.Connection, table: str, out_dir: Path) -> tuple[i
         writer = csv.writer(f, lineterminator="\n")
         writer.writerow(cols)
         for row in conn.execute(sql):
-            writer.writerow(row)
+            writer.writerow(
+                [
+                    _quantize(v, scales[c]) if c in scales else v
+                    for c, v in zip(cols, row, strict=True)
+                ]
+            )
             rows += 1
     return rows, dest.stat().st_size
 
