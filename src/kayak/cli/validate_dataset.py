@@ -56,10 +56,18 @@ _FLOAT_RE = re.compile(r"^-?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][-+]?[0-9]+)?
 _DECIMAL_RE = re.compile(r"^-?[0-9]+(?:\.[0-9]+)?$")  # fixed-point (coordinates)
 # DateTime as exported (SQLAlchemy/SQLite text): "YYYY-MM-DD[ T]HH:MM:SS[.ffffff]".
 # A grammar is needed because fromisoformat() also accepts compact forms like
-# "20240101" that SQLite would store with INTEGER affinity.
-_DATETIME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?$")
+# "20240101" that SQLite would store with INTEGER affinity. Fractional seconds
+# are capped at 6 digits — Python's datetime keeps only microseconds, so a longer
+# fraction cannot survive a DB/export round trip unchanged.
+_DATETIME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?$")
 _INT64_MIN, _INT64_MAX = -(2**63), 2**63 - 1
 _INT64_MAX_DIGITS = 19  # 9223372036854775807 — guards int() before Python's 4300-digit limit
+
+# A gradient bin centre (d_mi) may modestly exceed reach.length — the trace
+# distance and the editorial length differ (~10% observed on 2 real reaches).
+# Beyond this multiple a profile is attached to the wrong reach / mis-traced and
+# the renderer would clip most of it (x-domain is 0..reach.length).
+_GRADIENT_DMAX_TOLERANCE = 1.5
 
 # id_counters.csv is a typed two-column contract file.
 _ID_COUNTER_SPECS = {
@@ -121,12 +129,14 @@ def validate_dataset(dataset_dir: Path) -> list[str]:
     # (5) id-counter coverage + invariants.
     errors.extend(_check_id_counters(d))
     # (6) reach names (only if reach.csv parsed cleanly).
+    reach_lengths: dict[str, float] = {}
     if "reach" in good_csvs:
         errors.extend(_check_reach_names(d))
         # (7) cross-set integrity.
         errors.extend(_check_cross_set(d))
+        reach_lengths = _reach_lengths(d)
     # (7b) gradient sidecar: validate the JSON encoded inside each profile string.
-    errors.extend(_check_gradient_profiles(d))
+    errors.extend(_check_gradient_profiles(d, reach_lengths))
     # (8) materialize + check-reaches — only when the dataset is otherwise clean.
     #     A wrong-typed value (e.g. a non-ISO datetime) would otherwise be loaded
     #     and crash SQLAlchemy's decoder mid-scan; the errors above already
@@ -412,17 +422,46 @@ def _norm_pk_cell(spec: layout.ColumnSpec | None, raw: str) -> object:
     return raw
 
 
+def _reach_lengths(d: Path) -> dict[str, float]:
+    """``{reach id (str): length_mi}`` for reaches with a parseable length —
+    the x-domain bound for gradient bin centres."""
+    out: dict[str, float] = {}
+    for r in _csv_rows(d / "reach.csv"):
+        rid = (r.get("id") or "").strip()
+        raw = (r.get("length") or "").strip()
+        if rid and raw and _FLOAT_RE.match(raw):
+            out[rid] = float(raw)
+    return out
+
+
+def _bounded_int(raw: str) -> int | None:
+    """``int(raw)`` within SQLite's signed 64-bit range, else None.
+
+    Never raises and never feeds a pathologically long token to ``int()``
+    (Python caps str->int at 4300 digits) — strips insignificant leading zeros
+    and guards by digit count first.
+    """
+    if not _INT_RE.match(raw):
+        return None
+    neg = raw.startswith("-")
+    digits = (raw[1:] if neg else raw).lstrip("0") or "0"
+    if len(digits) > _INT64_MAX_DIGITS:
+        return None
+    value = -int(digits) if neg else int(digits)
+    return value if _INT64_MIN <= value <= _INT64_MAX else None
+
+
 def _int_ids(rows: list[dict[str, str]], column: str) -> tuple[list[int], str | None]:
-    """Parse an int column; return (ids, error-or-None) — never raises."""
+    """Parse an int column; return (ids, error-or-None) — never raises, bounded."""
     out: list[int] = []
     for r in rows:
         raw = (r.get(column) or "").strip()
         if not raw:
             continue
-        try:
-            out.append(int(raw))
-        except ValueError:
-            return out, f"non-integer {column}={raw!r}"
+        value = _bounded_int(raw)
+        if value is None:
+            return out, f"non-integer or out-of-range {column}={_trunc(raw)}"
+        out.append(value)
     return out, None
 
 
@@ -452,10 +491,9 @@ def _check_id_counters(d: Path) -> list[str]:
 def _check_one_counter(d: Path, table: str, next_raw: str) -> list[str]:
     """Unique ids and next_id > max for a single id-bearing table (an empty
     table is fine — its counter just records the never-reused high-water mark)."""
-    try:
-        nxt = int(next_raw)
-    except ValueError:
-        return [f"id_counters.csv: non-integer next_id for {table}={next_raw!r}"]
+    nxt = _bounded_int(next_raw)
+    if nxt is None:
+        return [f"id_counters.csv: invalid / out-of-range next_id for {table}={_trunc(next_raw)}"]
     if nxt < 1:
         return [f"id_counters.csv: next_id for {table} must be >= 1 (got {nxt})"]
     ids, err = _int_ids(_csv_rows(d / f"{table}.csv"), "id")
@@ -532,14 +570,16 @@ def _check_json_reach_keys(d: Path, reach_id_set: set[int]) -> tuple[set[int], l
     return geom_ids, errors
 
 
-def _check_gradient_profiles(d: Path) -> list[str]:
+def _check_gradient_profiles(d: Path, reach_lengths: dict[str, float]) -> list[str]:
     """Validate the JSON *inside* each gradient sidecar string.
 
     The sidecar value is itself a JSON-encoded profile. ``check-reaches`` treats
     any non-object as an empty sample set and the PHP renderer drops the chart
-    for a missing/non-list ``samples``, so a wrong-shaped-but-valid profile would
-    silently lose its gradient chart. Require the object/``samples``-list contract
-    and numeric per-sample fields before materialization.
+    for a missing/non-list ``samples`` and clips/clamps out-of-domain bars, so a
+    wrong-shaped or out-of-domain profile would silently lose or alter its chart.
+    Require the object/``samples``-list contract, numeric per-sample fields, and
+    the renderer's domain (non-negative distance/gradient, ordered + in-reach
+    ``d_mi``) before materialization.
     """
     path = d / layout.GRADIENT_JSON
     if not path.is_file():
@@ -554,19 +594,20 @@ def _check_gradient_profiles(d: Path) -> list[str]:
     for rid, raw in outer.items():
         if not isinstance(raw, str) or raw == "":
             continue  # empty/non-string already reported
-        problem = _gradient_profile_problem(raw)
+        problem = _gradient_profile_problem(raw, reach_lengths.get(rid))
         if problem:
             errors.append(f"{layout.GRADIENT_JSON} reach {rid}: {problem}")
     return errors
 
 
-def _gradient_profile_problem(raw: str) -> str | None:
+def _gradient_profile_problem(raw: str, length: float | None) -> str | None:
     """The contract for a single decoded gradient profile (None == ok).
 
     Parses with recursive duplicate-key detection and NaN/Infinity rejection,
     then enforces the object/``samples``-list shape and each sample's domain
-    (finite required numbers, positive ``w_mi``, ordered ``d_mi``, and typed
-    optional fields) the SVG renderer + JS hydration assume.
+    (finite + non-negative required numbers, positive ``w_mi``, ordered ``d_mi``
+    within reach length, and typed optional fields) the SVG renderer + JS
+    hydration assume.
     """
     try:
         prof = json.loads(
@@ -581,23 +622,41 @@ def _gradient_profile_problem(raw: str) -> str | None:
         return "profile 'samples' must be a list"
     prev_d: float | None = None
     for i, s in enumerate(samples):
-        problem = _gradient_sample_problem(s, i, prev_d)
+        problem = _gradient_sample_problem(s, i, prev_d, length)
         if problem:
             return problem
         prev_d = s["d_mi"]  # validated finite above
     return None
 
 
-def _gradient_sample_problem(s: object, i: int, prev_d: float | None) -> str | None:
+def _gradient_sample_problem(
+    s: object, i: int, prev_d: float | None, length: float | None
+) -> str | None:
     if not isinstance(s, dict):
         return f"sample {i} must be an object"
+    vals: dict[str, float] = {}
     for field in ("d_mi", "w_mi", "grad_ft_per_mi"):
-        if not _finite_number(s.get(field)):
+        v = s.get(field)
+        if not _finite_number(v):
             return f"sample {i} field {field!r} must be a finite number"
-    if s["w_mi"] <= 0:
-        return f"sample {i} w_mi must be positive, got {s['w_mi']}"
-    if prev_d is not None and not s["d_mi"] > prev_d:
-        return f"sample {i} d_mi {s['d_mi']} <= previous {prev_d} (samples must be ordered)"
+        vals[field] = float(v)  # _finite_number narrows v to a real number
+    return _gradient_sample_domain_problem(s, vals, i, prev_d, length)
+
+
+def _gradient_sample_domain_problem(
+    s: dict[str, object], vals: dict[str, float], i: int, prev_d: float | None, length: float | None
+) -> str | None:
+    d_mi, w_mi, grad = vals["d_mi"], vals["w_mi"], vals["grad_ft_per_mi"]
+    if w_mi <= 0:
+        return f"sample {i} w_mi must be positive, got {w_mi}"
+    if d_mi < 0:
+        return f"sample {i} d_mi must be non-negative, got {d_mi}"
+    if grad < 0:
+        return f"sample {i} grad_ft_per_mi must be non-negative, got {grad}"
+    if prev_d is not None and not d_mi > prev_d:
+        return f"sample {i} d_mi {d_mi} <= previous {prev_d} (samples must be ordered)"
+    if length is not None and length > 0 and d_mi > length * _GRADIENT_DMAX_TOLERANCE:
+        return f"sample {i} d_mi {d_mi} exceeds reach length {length} (x{_GRADIENT_DMAX_TOLERANCE})"
     return _gradient_optional_problem(s, i)
 
 
@@ -616,7 +675,12 @@ def _gradient_optional_problem(s: dict[str, object], i: int) -> str | None:
 
 
 def _finite_number(v: object) -> TypeGuard[float]:
-    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return False
+    try:
+        return math.isfinite(float(v))  # float() of a huge int raises OverflowError
+    except OverflowError:
+        return False
 
 
 def _no_dup_pairs(pairs: list[tuple[str, object]]) -> dict[str, object]:

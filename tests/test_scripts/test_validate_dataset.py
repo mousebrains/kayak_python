@@ -615,6 +615,61 @@ def test_leading_zero_counter_is_not_false_overflow(dataset_copy: Path) -> None:
     assert validate_dataset(dataset_copy) == []
 
 
+# --- regression tests for the PR #123 round-7 review findings ----------------
+
+
+def test_huge_integer_gradient_does_not_crash(dataset_copy: Path) -> None:
+    # P1: a 4,000-digit integer parses, but math.isfinite(float(int)) overflows.
+    inner = '{"samples":[{"d_mi":0.5,"w_mi":1,"grad_ft_per_mi":' + "9" * 4000 + "}," + _OK + "]}"
+    errs = _set_gradient(dataset_copy, inner)  # must not raise
+    assert any("reaches-gradient.json" in e and "finite number" in e for e in errs)
+
+
+@pytest.mark.parametrize(
+    "inner,expect",
+    [
+        ('{"samples":[{"d_mi":-0.5,"w_mi":1,"grad_ft_per_mi":10},' + _OK + "]}", "non-negative"),
+        ('{"samples":[{"d_mi":0.5,"w_mi":1,"grad_ft_per_mi":-10},' + _OK + "]}", "non-negative"),
+        # fixture reach 1 length is 7.7; d_mi=100 is far outside the x-domain.
+        (
+            '{"samples":[' + _OK + ',{"d_mi":100,"w_mi":1,"grad_ft_per_mi":10}]}',
+            "exceeds reach length",
+        ),
+    ],
+)
+def test_gradient_out_of_domain_is_flagged(dataset_copy: Path, inner: str, expect: str) -> None:
+    errs = _set_gradient(dataset_copy, inner)
+    assert any("reaches-gradient.json" in e and expect in e for e in errs)
+
+
+def test_long_zero_padded_counter_does_not_crash(dataset_copy: Path) -> None:
+    # P2: "0"*5000 + "3" = 3; must not hit Python's str->int digit limit.
+    _rewrite_csv(
+        dataset_copy / "id_counters.csv",
+        lambda rows: [r.update(next_id="0" * 5000 + "3") for r in rows if r["table"] == "state"],
+    )
+    assert validate_dataset(dataset_copy) == []  # must not raise; value is 3
+
+
+def test_excess_datetime_fraction_is_flagged(dataset_copy: Path) -> None:
+    # P2: 7 fractional digits cannot round-trip through datetime (microseconds).
+    _rewrite_csv(
+        dataset_copy / "reach.csv",
+        lambda rows: rows[0].update(updated_at="2024-01-01 00:00:00.1234567"),
+    )
+    errs = validate_dataset(dataset_copy)
+    assert any("updated_at" in e and "datetime" in e for e in errs)
+
+
+def test_microsecond_datetime_is_accepted(dataset_copy: Path) -> None:
+    # P2: exactly 6 fractional digits is the round-trippable maximum.
+    _rewrite_csv(
+        dataset_copy / "reach.csv",
+        lambda rows: rows[0].update(updated_at="2024-01-01 00:00:00.123456"),
+    )
+    assert not any("updated_at" in e for e in validate_dataset(dataset_copy))
+
+
 def test_provenance_matches_committed_fixture() -> None:
     # Finding 4: the committed fixture's geometry/facts/gradient must match the
     # recorded provenance digests, so a hand-edit (or a regen from a dirty
