@@ -366,6 +366,48 @@ Remaining S4 scope, in two PR-sized stages:
    since adopted breaks data CI retroactively; the contract version
    makes this loud, not silent.
 
+## Authentication & identity layering (not part of the data/code split)
+
+Auth spans three layers; only one is "code", and **none of it is
+dataset content** — verified: the `editor`, `editor_session`,
+`editor_magic_link`, `change_request`, `change_request_attachment`,
+and `edit_history` tables are **not** in `export_metadata.py`'s
+`METADATA_TABLES`, so they are never snapshotted to the data repo.
+
+| Layer | What | Where it lives |
+|---|---|---|
+| Login mechanism | `auth.php`, magic-link mint/verify, sessions, Turnstile glue, `seed-maintainer` CLI | **code repo** (engine, region-agnostic) |
+| Accounts & state | `editor` rows, sessions, magic links, the `change_request` queue, `edit_history` | **live DB only** — runtime state, like observations and the `latest_*` caches; in neither repo |
+| Auth secrets | SMTP creds, `TURNSTILE_SITE_KEY`/`SECRET`, session-signing key | **host config** (`/etc/kayak/secrets.env`, 0600 root:www-data); in neither repo by design |
+
+The load-bearing rule: **editor accounts are per-deployment DB state,
+never dataset content.** Committing editor emails (PII), session
+tokens, or magic links to a `kayak_data` repo — which may be public or
+templated — would be a leak; keeping them DB-only is correct and must
+stay that way. "Users are data" is the trap; here they are *runtime
+state*.
+
+How SA bifurcates auth by role:
+
+- **Approvers** no longer use the web editor/review auth at all — they
+  approve by **merging a data-repo PR** (GitHub auth, entirely outside
+  both repos).
+- **Proposers** keep the magic-link editor accounts as the
+  low-friction front door (`propose.php`), but the whole editor
+  subsystem becomes **optional engine chrome**: a club whose
+  contributors live in git can disable it and propose via PRs
+  directly; WKCC keeps it.
+- The only auth thread that crosses into the split is the **display
+  identity** of auth emails (`From`/reply-to, the "<org> River Levels"
+  body) — deployment branding that rides `site.yaml` with the rest of
+  G3/S3. The transport secret stays host-side; the accounts stay
+  DB-side.
+
+`init-dataset` therefore scaffolds **no** auth state; a new deployment
+bootstraps its first maintainer with `levels seed-maintainer` against
+its own DB (a host step, not a dataset step), and sets its mail/
+Turnstile secrets host-side.
+
 ## S5 — bootstrap path for a new region
 
 Resolved: **`levels init-dataset <dir>`** scaffolds the skeleton
