@@ -122,6 +122,8 @@ def validate_dataset(dataset_dir: Path) -> list[str]:
     errors.extend(_check_duplicate_pks(d, good_csvs))
     # (5) id-counter coverage + invariants.
     errors.extend(_check_id_counters(d))
+    # (5b) source-name wiring invariants (e.g. USGS station ids).
+    errors.extend(_check_source_names(d, good_csvs))
     # (6) reach names (only if reach.csv parsed cleanly).
     if "reach" in good_csvs:
         errors.extend(_check_reach_names(d))
@@ -501,6 +503,29 @@ def _check_reach_names(d: Path) -> list[str]:
     if name_dups:
         errors.append(f"duplicate reach.name values: {name_dups}")
     return errors
+
+
+def _check_source_names(d: Path, good_csvs: set[str]) -> list[str]:
+    """USGS sources must be named a bare numeric station id.
+
+    The source-based USGS-OGC fetch keys on ``source.name`` as the station id
+    (``kayak.cli.fetch_usgs_ogc``), so a non-numeric name would silently fetch
+    the wrong station / nothing. Consolidated from the former
+    ``tests/test_cli/test_fetch_usgs_ogc.py::test_usgs_source_names_are_station_ids``
+    so the data repo's CI gates it via ``validate-dataset`` (S4b).
+    """
+    if "source" not in good_csvs:
+        return []
+    offenders: list[str] = []
+    for r in _csv_rows(d / "source.csv"):
+        if (r.get("agency") or "").strip() != "USGS":
+            continue
+        name = (r.get("name") or "").strip()
+        if not name.isdigit():
+            offenders.append(name)
+    if offenders:
+        return [f"source.csv: USGS source name must be a numeric station id, got {offenders}"]
+    return []
 
 
 def _check_cross_set(d: Path) -> list[str]:

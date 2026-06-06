@@ -688,6 +688,22 @@ def test_microsecond_datetime_is_accepted(dataset_copy: Path) -> None:
     assert not any("updated_at" in e for e in validate_dataset(dataset_copy))
 
 
+# --- consolidated from the former METADATA_DIR-reading code tests ------------
+
+
+def test_usgs_source_non_numeric_name_is_flagged(dataset_copy: Path) -> None:
+    # The USGS-OGC fetch keys on source.name as the station id, so a USGS source
+    # must be a bare numeric id. Consolidated from the deleted
+    # test_fetch_usgs_ogc::test_usgs_source_names_are_station_ids so the data
+    # repo's CI gates it via validate-dataset.
+    _rewrite_csv(
+        dataset_copy / "source.csv",
+        lambda rows: [r.update(name="not-a-number") for r in rows if r.get("agency") == "USGS"],
+    )
+    errs = validate_dataset(dataset_copy)
+    assert any("source.csv" in e and "USGS" in e and "numeric" in e for e in errs)
+
+
 def test_provenance_matches_committed_fixture() -> None:
     # Finding 4: the committed fixture's geometry/facts/gradient must match the
     # recorded provenance digests, so a hand-edit (or a regen from a dirty

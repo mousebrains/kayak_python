@@ -18,11 +18,9 @@ Parser notes:
 
 from __future__ import annotations
 
-import csv
 import re
 from pathlib import Path
 
-from kayak.config import METADATA_DIR
 from kayak.db.models import Base
 
 _DOC = Path(__file__).resolve().parents[1] / "docs" / "database-schema.md"
@@ -100,29 +98,11 @@ def test_schema_doc_has_no_stale_columns() -> None:
     )
 
 
-def test_source_agency_enum_documents_every_value() -> None:
-    """The source.agency Notes enum must list every distinct agency in the
-    committed source.csv — the authoritative set (review-4 R2.4 / R3.4). The
-    forward/reverse column checks only see column *names*, not enum prose."""
-    csv_path = METADATA_DIR / "source.csv"
-    with csv_path.open(encoding="utf-8") as fh:
-        agencies = {
-            (row.get("agency") or "").strip()
-            for row in csv.DictReader(fh)
-            if (row.get("agency") or "").strip()
-        }
-    notes = ""
-    for line in _DOC.read_text(encoding="utf-8").splitlines():
-        if line.startswith("| `agency`"):
-            cells = line.split("|")
-            notes = cells[3] if len(cells) > 3 else ""
-            break
-    assert notes, "could not find the `agency` row in docs/database-schema.md"
-    # Compare '/'-split tokens, not substrings, so the guard can't be fooled by
-    # one agency being a substring of another (e.g. a future "US"). Review nit on #54.
-    documented_agencies = {tok.strip() for tok in notes.split("/") if tok.strip()}
-    missing = sorted(agencies - documented_agencies)
-    assert not missing, (
-        "docs/database-schema.md source.agency enum is missing values present "
-        "in data/db/source.csv: " + ", ".join(missing)
-    )
+# NOTE: the former test_source_agency_enum_documents_every_value (it read the
+# real source.csv from METADATA_DIR to assert docs/database-schema.md's agency
+# enum listed every agency in use) was removed in the dataset-separation
+# test-repointing: code tests must not read a kayak_data clone. It was a
+# doc-prose vs real-data coverage check with no code-standalone home (there is
+# no authoritative agency enum in the engine — canonical_agency() only maps a
+# few parser slugs). The data repo's CI can re-add such a doc/data coverage
+# check if wanted; the two doc<->ORM guards above stay code-only.
