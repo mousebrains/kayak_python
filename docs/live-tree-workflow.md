@@ -109,23 +109,26 @@ Option A is discipline plus one guardrail; nothing *physically* stops a
 a **frozen install artifact** — a non-editable `pip install .` so prod runs a
 copy, immune to working-tree state until an explicit reinstall.
 
-That's a refactor here, not a flag, because the runtime reads assets that live
-**outside** the package and are located via `BASE_DIR` (= repo root, computed
-from `__file__`):
+That was a refactor, not a flag, because the runtime read several assets that
+live **outside** the package, located via `BASE_DIR` (= repo root, computed from
+`__file__`). The dataset-separation work (plan S4a-2) is retiring those one slice
+at a time; the table below tracks what is now packaged vs. still repo-root:
 
-| Asset | Where | Resolved by |
-|---|---|---|
-| `data/` (sources.yaml, `db/migrations/`, CSVs, reaches.json) | repo root | `config_data.py`, `cli/migrate.py` |
-| `php/` | repo root | `levels build` (`web/build/deploy.py`) |
-| repo-root `static/` (map.js, OSMB GeoJSON, regression HTML) | repo root | `web/build/_shared.py`, `cli/fetch_osmb.py` |
-| `Gauge-metadata-cache/`, `docs/regression/` | repo root | gauges build, regression render |
+| Asset | Where | Resolved by | Frozen-install status |
+|---|---|---|---|
+| engine defaults (`sources`/`builder`/`descriptions`/`http_concurrency`/`audit_ignore` YAML) + `db/migrations/` | **packaged** under `src/kayak/data/` | `config_data.py`, `cli/migrate.py` via `kayak.resources` (`importlib.resources`) | ✅ resolved by S4a-2 slice A (#125) |
+| metadata dataset (the `*.csv` + `reaches*.json`) | external `kayak_data` clone | `METADATA_DIR` (env), not `BASE_DIR` | ✅ not a blocker — external **by design** (club-specific data); a frozen install locates it by env, not working tree |
+| `php/` | repo root | `levels build` (`web/build/deploy.py`) | ⏳ S4a-2 slice B |
+| repo-root `static/` (map.js, OSMB GeoJSON, regression HTML) | repo root | `web/build/_shared.py`, `cli/fetch_osmb.py` | ⏳ S4a-2 slice B |
+| `Gauge-metadata-cache/`, `docs/regression/` | repo root | gauges build, regression render | build-time inputs, not import-time — lower priority |
 
-Only `src/kayak/web/static/style.css` is package-relative and would survive a
-non-editable install as-is. Option B therefore means packaging those assets (or
-making `BASE_DIR`/`DATA_DIR` env-configurable via `KayakConfig`) **and**
-rewriting the ~7 `BASE_DIR` call sites — with `php/` needing special handling,
-since it's a separate language layer that `levels build` only copies into
-`public_html`. Deferred as its own project.
+`src/kayak/web/static/style.css` was already package-relative. With slice A done,
+the engine's Python-side defaults and schema migrations now survive a
+non-editable `pip install .` as-is, and the metadata dataset is intentionally
+env-located (`METADATA_DIR`) rather than working-tree-relative. The remaining
+`BASE_DIR` call sites are `php/` + repo-root `static/` (slice B) plus the
+build/cache inputs above — with `php/` needing special handling, since it's a
+separate language layer that `levels build` only copies into `public_html`. Deferred as its own project.
 
 ---
 
