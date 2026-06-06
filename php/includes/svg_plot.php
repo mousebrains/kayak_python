@@ -538,11 +538,20 @@ function generate_gradient_profile_svg(
     if ($has_elev) {
         $putin_e = $putin_elev_ft;
         $end_e = $putin_e - $elev_lost_ft;
+        // Integrate + plot only the IN-DOMAIN bins (d_mi <= x_max). A bin centred
+        // past the take-out (overshoot — a trace longer than reach.length)
+        // contributes no reach drop and would otherwise plot at x > plot_right,
+        // i.e. outside the chart, inconsistent with the clipped bars + hover
+        // no-data contract. A reservoir tail stops short and is covered by the
+        // pinned take-out point appended last (flat line to the take-out).
         $cum = 0.0;
-        $raw = [];
-        foreach ($samples as $s) {
+        $cum_by_index = [];
+        foreach ($samples as $i => $s) {
+            if ((float)$s['d_mi'] > $x_max) {
+                continue;
+            }
             $cum += max(0.0, (float)$s['grad_ft_per_mi']) * (float)$s['w_mi'];
-            $raw[] = $cum;
+            $cum_by_index[$i] = $cum;
         }
         $total_raw = $cum > 0 ? $cum : 1.0;
         [$e_min, $e_max, $e_step] = nice_axis(min($end_e, $putin_e), max($end_e, $putin_e));
@@ -551,7 +560,10 @@ function generate_gradient_profile_svg(
 
         $pts = [sprintf('%.1f,%.1f', (float)$ml, $e_to_py($putin_e))];
         foreach ($samples as $i => $s) {
-            $elev = $putin_e - ($raw[$i] / $total_raw) * $elev_lost_ft;
+            if (!isset($cum_by_index[$i])) {
+                continue; // overshoot bin — excluded from the elevation line
+            }
+            $elev = $putin_e - ($cum_by_index[$i] / $total_raw) * $elev_lost_ft;
             $samples[$i]['elev_ft'] = round($elev, 1);
             $px = $ml + ((float)$s['d_mi'] - $x_min) / $x_range * $pw;
             $pts[] = sprintf('%.1f,%.1f', $px, $e_to_py($elev));

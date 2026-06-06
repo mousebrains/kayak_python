@@ -344,6 +344,40 @@ final class SvgPlotTest extends TestCase
         $this->assertEqualsWithDelta(1800.0, $payload['elev']['takeout'], 0.01);
     }
 
+    public function test_generate_gradient_profile_svg_elevation_clips_overshoot(): void
+    {
+        // A bin centred past the take-out (overshoot: d_mi=10 on a 5 mi reach)
+        // must not plot the elevation line outside the chart — consistent with
+        // the clipped bars + hover no-data contract.
+        $profile = json_encode([
+            'samples' => [
+                ['d_mi' => 0.0, 'grad_ft_per_mi' => 80.0, 'w_mi' => 0.5, 'significant' => true],
+                ['d_mi' => 1.0, 'grad_ft_per_mi' => 50.0, 'w_mi' => 1.0, 'significant' => true],
+                ['d_mi' => 10.0, 'grad_ft_per_mi' => 40.0, 'w_mi' => 0.25, 'significant' => true],
+            ],
+        ]);
+        assert($profile !== false);
+        $svg = generate_gradient_profile_svg(
+            $profile,
+            1,
+            480,
+            120,
+            length_mi: 5.0,
+            putin_elev_ft: 2400.0,
+            elev_lost_ft: 600.0
+        );
+        // With elevation, mr=48 → pw=382, plot_right = ml(50) + 382 = 432.
+        $this->assertSame(1, preg_match('!<polyline class="gp-elev" points="([^"]+)"!', $svg, $m));
+        $xs = array_map(
+            static fn (string $pt): float => (float) explode(',', $pt)[0],
+            explode(' ', trim($m[1]))
+        );
+        $this->assertNotEmpty($xs);
+        foreach ($xs as $x) {
+            $this->assertLessThanOrEqual(432.5, $x, 'elevation point must stay within the chart');
+        }
+    }
+
     public function test_generate_gradient_profile_svg_omits_elevation_without_params(): void
     {
         // 4-arg form: no elevation params → no line, no axis, elev payload null.

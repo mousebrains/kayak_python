@@ -125,7 +125,9 @@
       anchors.push({ d_mi: 0, lat: payload.putin.lat, lon: payload.putin.lon });
     }
     for (const s of samples) {
-      if (s.lat != null && s.lon != null) {
+      // Skip a bin centred past the take-out (overshoot): its anchor would land
+      // after the take-out anchor and break the sorted-order binary search.
+      if (s.lat != null && s.lon != null && s.d_mi <= xMax) {
         anchors.push({ d_mi: s.d_mi, lat: s.lat, lon: s.lon });
       }
     }
