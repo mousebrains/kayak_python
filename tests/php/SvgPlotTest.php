@@ -250,6 +250,47 @@ final class SvgPlotTest extends TestCase
         $this->assertSame(1, substr_count($paleGroupHtml, '<rect'));
     }
 
+    public function test_generate_gradient_profile_svg_reservoir_gap_not_stretched(): void
+    {
+        // Reservoir at the take-out: the gradient trace stops short of
+        // reach.length (no gradient data for the flat reservoir, whose gradient
+        // is zero). The last real bar must NOT stretch to the take-out — the
+        // gap reads as zero gradient (blank). Samples cover ~0..1.6 mi of a
+        // 5 mi reach.
+        $profile = json_encode([
+            'samples' => [
+                ['d_mi' => 0.0, 'grad_ft_per_mi' => 80.0, 'w_mi' => 0.5, 'significant' => true],
+                ['d_mi' => 0.5, 'grad_ft_per_mi' => 120.0, 'w_mi' => 0.25, 'significant' => true],
+                ['d_mi' => 1.0, 'grad_ft_per_mi' => 50.0, 'w_mi' => 1.0, 'significant' => true],
+                ['d_mi' => 1.5, 'grad_ft_per_mi' => 40.0, 'w_mi' => 0.25, 'significant' => true],
+            ],
+        ]);
+        assert($profile !== false);
+        // length_mi = 5.0; width 480 → ml 50, pw 420, plot_right 470. The last
+        // sample's right edge is ~1.625 mi (~186 px); the pre-fix stretch would
+        // have pinned it to plot_right (470).
+        $svg = generate_gradient_profile_svg($profile, 1, 480, 120, 5.0);
+        $bars = '';
+        if (preg_match('!<g class="gp-bars-sig">(.*?)</g>!', $svg, $m)) {
+            $bars .= $m[1];
+        }
+        if (preg_match('!<g class="gp-bars-pale">(.*?)</g>!', $svg, $m)) {
+            $bars .= $m[1];
+        }
+        preg_match_all(
+            '!<rect x="([0-9.]+)" y="[0-9.]+" width="([0-9.]+)"!',
+            $bars,
+            $rects,
+            PREG_SET_ORDER
+        );
+        $this->assertNotEmpty($rects);
+        $maxRight = 0.0;
+        foreach ($rects as $r) {
+            $maxRight = max($maxRight, (float) $r[1] + (float) $r[2]);
+        }
+        $this->assertLessThan(400.0, $maxRight, 'last bar must not stretch to the take-out');
+    }
+
     public function test_generate_gradient_profile_svg_splits_runs_on_insignificance(): void
     {
         // 5 samples: 4 sig + 1 insig → 4 sig rects + 1 pale rect, regardless

@@ -630,16 +630,21 @@ def test_huge_integer_gradient_does_not_crash(dataset_copy: Path) -> None:
     [
         ('{"samples":[{"d_mi":-0.5,"w_mi":1,"grad_ft_per_mi":10},' + _OK + "]}", "non-negative"),
         ('{"samples":[{"d_mi":0.5,"w_mi":1,"grad_ft_per_mi":-10},' + _OK + "]}", "non-negative"),
-        # fixture reach 1 length is 7.7; d_mi=100 is far outside the x-domain.
-        (
-            '{"samples":[' + _OK + ',{"d_mi":100,"w_mi":1,"grad_ft_per_mi":10}]}',
-            "exceeds reach length",
-        ),
     ],
 )
 def test_gradient_out_of_domain_is_flagged(dataset_copy: Path, inner: str, expect: str) -> None:
     errs = _set_gradient(dataset_copy, inner)
     assert any("reaches-gradient.json" in e and expect in e for e in errs)
+
+
+def test_gradient_is_decoupled_from_reach_length(dataset_copy: Path) -> None:
+    # Round 8: gradient extent and reach.length legitimately diverge (reservoirs
+    # stop short; traces overshoot), so the validator no longer rejects a sample
+    # past reach.length (fixture reach 1 is 7.7 mi). The renderer owns the
+    # x-domain (clips overshoot, shows reservoir gaps as zero gradient).
+    inner = '{"samples":[' + _OK + ',{"d_mi":100,"w_mi":1,"grad_ft_per_mi":10}]}'
+    errs = _set_gradient(dataset_copy, inner)
+    assert not any("reaches-gradient.json" in e for e in errs)
 
 
 def test_long_zero_padded_counter_does_not_crash(dataset_copy: Path) -> None:

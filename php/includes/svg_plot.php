@@ -484,17 +484,15 @@ function generate_gradient_profile_svg(
     $plot_right = $ml + $pw;
     $plot_bottom = $mt + $ph;
 
-    // Identify the first + last bar (by d_mi) so we can stretch their
-    // outer edges to the put-in / take-out. The cumsum algorithm bins
-    // in dl_mi chunks and exits when fewer than 2 bins remain, leaving
-    // a small unbarred tail when reach length isn't a multiple of
-    // dl_mi (e.g. 4.9 mi with dl_mi=0.2 → bars end at 4.6 or 4.8).
-    // Same for the leading edge if the first bar's centre isn't at
-    // dl_mi/2. Stretch the outer edges visually so the chart covers
-    // the full reach domain; the bar's gradient + significant flag
-    // stay as the algorithm computed them.
+    // Stretch the FIRST bar's left edge to the put-in (the first bin centre is
+    // dl_mi/2, so without this a half-bin gap shows at x=0). The LAST bar is
+    // deliberately NOT stretched to the take-out: when the gradient trace stops
+    // short of reach.length — a reservoir at the take-out provides no gradient
+    // data, and its gradient is zero — that tail reads as zero gradient (blank
+    // to the take-out) rather than the last real bar smeared across it. Samples
+    // whose window falls past the take-out (a trace slightly longer than the
+    // editorial length) clamp to a zero-width bar and are skipped below.
     $first_d_mi = (float)$samples[0]['d_mi'];
-    $last_d_mi = (float)$samples[count($samples) - 1]['d_mi'];
 
     $ordered = $samples;
     usort($ordered, fn($a, $b) => (float)$b['w_mi'] <=> (float)$a['w_mi']);
@@ -510,9 +508,7 @@ function generate_gradient_profile_svg(
         $left_x = $d_mi === $first_d_mi
             ? (float)$ml
             : $ml + (($d_mi - $w_mi / 2) - $x_min) * $xPx_per_mi;
-        $right_x = $d_mi === $last_d_mi
-            ? (float)$plot_right
-            : $ml + (($d_mi + $w_mi / 2) - $x_min) * $xPx_per_mi;
+        $right_x = $ml + (($d_mi + $w_mi / 2) - $x_min) * $xPx_per_mi;
         $left_x = max((float)$ml, $left_x);
         $right_x = min((float)$plot_right, $right_x);
         $bar_w = $right_x - $left_x;
