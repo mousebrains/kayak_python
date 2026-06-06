@@ -6,7 +6,7 @@ Usage:
     levels migrate --check            # exit non-zero if any migration is pending
     levels migrate --stamp 0002       # mark a version as applied w/o running
 
-Migrations live in ``data/db/migrations/NNNN_description.sql`` and are
+Migrations live in ``src/kayak/data/db/migrations/NNNN_description.sql`` and are
 tracked in a ``schema_migrations`` table. The runner applies each pending
 file in a transaction.
 

@@ -206,7 +206,7 @@ async def _read_capped_text(resp: aiohttp.ClientResponse) -> str:
 
 
 # Hosts that rate-limit aggressively when many requests arrive at once.
-# Tuning lives in data/http_concurrency.yaml; the loader is cached so the
+# Tuning lives in src/kayak/data/http_concurrency.yaml; the loader is cached so the
 # file is read once per process.
 def _host_concurrency_overrides() -> dict[str, int]:
     from kayak.config_data import load_http_concurrency_overrides
@@ -448,7 +448,7 @@ async def async_fetch_many(
         timeout = FETCH_TIMEOUT
 
     # Group URLs by hostname and create per-host semaphores. Hosts listed in
-    # data/http_concurrency.yaml use their override; everything else uses
+    # src/kayak/data/http_concurrency.yaml use their override; everything else uses
     # concurrency_per_host.
     host_semaphores: dict[str, asyncio.Semaphore] = {}
     overrides = _host_concurrency_overrides()

@@ -63,7 +63,7 @@ python3 -m venv /home/pat/.venv
 
 The metadata snapshots (the `*.csv` + `reaches*.json`) live in a **separate**
 private repo, `kayak_data`, cloned alongside the code repo. Only schema migrations
-(`data/db/migrations/`) stay in the code repo. The code finds the clone via
+(`src/kayak/data/db/migrations/`) stay in the code repo. The code finds the clone via
 `METADATA_DIR` (§3).
 
 ```bash

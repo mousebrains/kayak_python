@@ -3,7 +3,7 @@
 Schema and metadata changes now travel by **different paths**:
 
 - **Schema** (table shape: ALTER / DROP / CHECK / index) → a
-  `data/db/migrations/NNNN_*.sql` applied by `levels migrate`.
+  `src/kayak/data/db/migrations/NNNN_*.sql` applied by `levels migrate`.
   **Schema-only** since the metadata-single-source redesign — a new
   migration may not INSERT/UPDATE/DELETE a metadata table (guard:
   `tests/test_scripts/test_migrations_schema_only.py`).
@@ -39,7 +39,7 @@ links, and calc gauges that read from the deleted sources stayed
 frozen for three days. The fix is a checklist, not a tool — run
 through this before deleting a source's row from `kayak_data`'s
 `source.csv` (plus its `gauge_source.csv` link, and `fetch_url.csv` /
-the code repo's `data/sources.yaml` if it's a fetch source).
+the code repo's `src/kayak/data/sources.yaml` if it's a fetch source).
 
 ### 1. List every fetch_url referenced by the deleted sources
 
@@ -64,7 +64,7 @@ For each URL the listing returns:
   surviving source still needs it.
 
 - **No other consumer, and the URL is genuinely retired?**
-  **Preferred:** delete the URL from `data/sources.yaml`. The next
+  **Preferred:** delete the URL from `src/kayak/data/sources.yaml`. The next
   `levels fetch` runs `sync_sources`
   (`src/kayak/cli/init_db.py::sync_sources`, called at
   `src/kayak/cli/fetch.py:150`) which flips `is_active=0` on any
@@ -167,7 +167,7 @@ For each orphan source, pick one of:
 
 - **Deactivate the URL** — when the agency has retired the endpoint
   or the data is genuinely duplicative. Preferred: remove the URL from
-  `data/sources.yaml` (the next `levels fetch` flips `is_active=0`
+  `src/kayak/data/sources.yaml` (the next `levels fetch` flips `is_active=0`
   automatically). Only set `is_active=0` in `kayak_data`'s
   `fetch_url.csv` directly when the URL must stay in the YAML for
   unrelated reasons.
@@ -225,7 +225,7 @@ The one sibling invariant still worth a follow-on plan is:
 > work). This section is now the recovery runbook, not an open problem.
 
 `levels init-db` seeds `state`, `source`, and `fetch_url` from
-`data/sources.yaml` but **does not** create any `gauge_source` links
+`src/kayak/data/sources.yaml` but **does not** create any `gauge_source` links
 (only migration 0020 ever `INSERT`s into `gauge_source`, and only as a
 fix). So `init-db` + `migrate` *alone* yields a DB where every
 fetch-backed source is an orphan — `levels orphan-check` would flag

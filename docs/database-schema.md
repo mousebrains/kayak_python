@@ -1,6 +1,6 @@
 # Database Schema Reference
 
-This document describes the SQLite database schema used by the Kayak river levels system. The schema is defined in `src/kayak/db/models.py` using SQLAlchemy 2.x ORM. Fresh databases are created via `levels init-db` (which runs `Base.metadata.create_all()` and stamps every discovered migration as applied). Existing databases evolve via `data/db/migrations/NNNN_*.sql` files applied by `levels migrate` and tracked in `schema_migrations` (schema-only — metadata *rows* change via a `data/db/*.csv` diff + `levels sync-metadata`; see [`PLAN_add_gauges_reaches.md`](PLAN_add_gauges_reaches.md)).
+This document describes the SQLite database schema used by the Kayak river levels system. The schema is defined in `src/kayak/db/models.py` using SQLAlchemy 2.x ORM. Fresh databases are created via `levels init-db` (which runs `Base.metadata.create_all()` and stamps every discovered migration as applied). Existing databases evolve via `src/kayak/data/db/migrations/NNNN_*.sql` files applied by `levels migrate` and tracked in `schema_migrations` (schema-only — metadata *rows* change via a `data/db/*.csv` diff + `levels sync-metadata`; see [`PLAN_add_gauges_reaches.md`](PLAN_add_gauges_reaches.md)).
 
 ## Entity-relationship overview
 
@@ -82,7 +82,7 @@ M2M junction linking gauges to their data sources.
 
 ### `fetch_url`
 
-Remote URLs to pull observation data from. Seeded from `data/sources.yaml` by `init-db` / `fetch`. The `parser` field names a registered parser class; `hours` restricts which UTC hours of the day this URL should be fetched (e.g. `"6,12,18"`).
+Remote URLs to pull observation data from. Seeded from `src/kayak/data/sources.yaml` by `init-db` / `fetch`. The `parser` field names a registered parser class; `hours` restricts which UTC hours of the day this URL should be fetched (e.g. `"6,12,18"`).
 
 | Column | Type | Notes |
 |---|---|---|
@@ -433,7 +433,7 @@ Human-readable watershed names for **HUC6 and HUC8** codes — the only two leve
 
 ### `schema_migrations`
 
-Tracks applied SQL migrations from `data/db/migrations/*.sql`. Managed by `levels migrate` and `stamp_all_known` (called by `init-db` on fresh DBs).
+Tracks applied SQL migrations from `src/kayak/data/db/migrations/*.sql`. Managed by `levels migrate` and `stamp_all_known` (called by `init-db` on fresh DBs).
 
 | Column | Type | Notes |
 |---|---|---|
@@ -453,7 +453,7 @@ Tracks applied SQL migrations from `data/db/migrations/*.sql`. Managed by `level
 External APIs (USGS / NOAA/NWPS / NOAA/NWRFC / USACE / USBR / WA DOE)
     |
     v
-fetch (data/sources.yaml → parser dispatch)  +  fetch-usgs-ogc (OGC API)
+fetch (src/kayak/data/sources.yaml → parser dispatch)  +  fetch-usgs-ogc (OGC API)
     |
     v
 observation (raw time-series per source)
@@ -480,4 +480,4 @@ build (static HTML/CSV/JSON → public_html/)       +       PHP layer (dynamic p
 
 1. Add or change a model in `src/kayak/db/models.py`.
 2. **New-DB-only changes** (new tables, new NULLable columns): `Base.metadata.create_all()` picks them up. `init-db` will produce a correct schema on any fresh install.
-3. **Existing-DB changes** (ALTER / DROP / rename / CHECK constraints that SQLite can't add in place, index renames, data backfills): write a new `data/db/migrations/NNNN_<description>.sql` — numbered one higher than the last file in that directory. Each migration runs in a transaction; `schema_migrations` gets a row per applied version. `levels init-db` on a fresh DB stamps every known migration without running it; `levels migrate` on an existing DB runs only the unstamped ones.
+3. **Existing-DB changes** (ALTER / DROP / rename / CHECK constraints that SQLite can't add in place, index renames, data backfills): write a new `src/kayak/data/db/migrations/NNNN_<description>.sql` — numbered one higher than the last file in that directory. Each migration runs in a transaction; `schema_migrations` gets a row per applied version. `levels init-db` on a fresh DB stamps every known migration without running it; `levels migrate` on an existing DB runs only the unstamped ones.

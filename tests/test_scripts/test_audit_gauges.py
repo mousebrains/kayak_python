@@ -171,3 +171,26 @@ def test_candidate_name_override_within_half_mile():
     # ~0.2 mi away, name shares no token with the reach.
     on_top = [("ONTOP", "USGS 14999999 SOME LANDMARK", 44.003, -122.0, None, None)]
     assert [c[1] for c in audit.find_candidates_near_reaches(on_top, db, kind="USGS")] == ["ONTOP"]
+
+
+def test_audit_ignore_default_resolves_packaged_resource():
+    """Regression for the dataset-separation move (plan S4a-2 slice A):
+    audit_ignore.yaml now ships *inside* the kayak package, so
+    ``load_audit_ignore()`` with no args must resolve it via
+    importlib.resources — not the old repo-root ``data/audit_ignore.yaml``
+    path, which no longer exists. If the default path silently breaks, the
+    function returns an empty set and every hand-triaged suppression is lost,
+    re-flooding the weekly audit email with previously-ignored false positives.
+    """
+    from kayak.resources import resource_dir
+
+    packaged = resource_dir("data", "audit_ignore.yaml")
+    assert packaged.is_file(), f"packaged audit_ignore.yaml not shipped: {packaged}"
+
+    audit = _load_audit()
+    default = audit.load_audit_ignore()
+    # Non-empty proves the file was actually found and parsed: a broken default
+    # path returns set() because the file reads as "missing".
+    assert default, "load_audit_ignore() default returned empty — packaged file not found"
+    # The default must resolve to the same packaged file as an explicit path.
+    assert default == audit.load_audit_ignore(path=packaged)
