@@ -16,7 +16,7 @@ or any WKCC-specific file.
 
 ## Decisions
 
-Fifth-pass decisions (2026-06-06), superseding conflicting statements
+Sixth-pass decisions (2026-06-06), superseding conflicting statements
 from earlier passes:
 
 - The dataset repository is the only authority for metadata. The live
@@ -45,7 +45,7 @@ from earlier passes:
 - Runtime web assets and install templates ship in the versioned engine
   artifact; build/deploy does not reach back into a source checkout.
 - The dataset contract is versioned independently of the package version.
-  A dataset also records the immutable engine release/commit used by its
+  A dataset also records the full immutable engine commit used by its
   required CI gate.
 - Code CI is completely standalone. Dataset CI validates with its pinned
   engine release; a separate scheduled canary validates against engine
@@ -54,7 +54,7 @@ from earlier passes:
 - `levels init-dataset <dir>` scaffolds datasets; there is no separately
   maintained template repository.
 
-Status: fifth-pass review complete; implementation has not started.
+Status: sixth-pass review complete; implementation has not started.
 
 Implementation sequence: S4a -> S6 -> S4b -> S9 -> S1 -> SA -> S2 ->
 S3 -> S7 -> S8 -> S5. S4 establishes the test boundary, S6 establishes
@@ -137,14 +137,13 @@ engine without access to WKCC data.
   Geometry must be public-domain NHD-derived; copied descriptive text
   must be authored/licensed for redistribution and recorded in the
   fixture's provenance file. Do not infer eligibility from `aw_id` alone.
-- Add `levels validate-dataset <dir>`, taking an explicit directory
-  argument. S4a precedes S6, so the dataset root is still `METADATA_DIR`
-  here; S6 renames it to `DATASET_DIR` and reroutes the validator's
-  path resolution then. Likewise, S4a hardcodes the required-file and
-  CSV-header lists; S6 introduces the shared contract manifest and
-  reroutes validation, generation, sync, and `init-dataset` onto it, so
-  these S4a lists are deliberately throwaway — do not build the manifest
-  early, and do not leave the hardcoded lists behind after S6.
+- Add `levels validate-dataset <dir>` with a required explicit directory.
+  It does not consult `METADATA_DIR` or any deployment setting, so S6's root
+  rename creates no validator-path churn. S4a introduces one internal
+  dataset-layout descriptor for required files, CSV headers/types, and
+  generated paths; the validator and fixture helpers share it. S6 promotes
+  that descriptor into the versioned contract manifest and adds contract
+  compatibility rules rather than replacing throwaway hardcoded lists.
 - Initial checks cover required files/headers, typed CSV values, stable
   IDs/counters, all foreign keys, geometry/gradient JSON shape, endpoint
   agreement, cross-set integrity, reach-name rules, URL/parser names, and
@@ -153,12 +152,11 @@ engine without access to WKCC data.
 - Tests use the fixture by default. Tests that need a custom edge case
   construct a temporary minimal dataset; no test reads a sibling clone or
   a developer's dataset root.
-- The fixture flow must run `init-db` + `sync-metadata` **without state
-  seeding** even though `_seed_states()`/`sources.yaml` seeding is not
-  formally retired until S1: S4a's fixture CI overrides/bypasses the
-  seed so no WKCC state or source row enters the fixture DB (otherwise
-  the fixture violates acceptance criterion 9). S1 then removes the seed
-  path engine-wide and this override becomes the default.
+- The fixture flow runs `levels init-db --no-seed` followed by
+  `sync-metadata`, using the existing supported flag; do not add a test-only
+  bypass. This keeps the fixture DB independent of code-side states/sources.
+  S1 later removes seeding engine-wide and makes schema-only initialization
+  the default.
 - Move/package every runtime engine resource -- YAML defaults, PHP, JS/CSS,
   generic images, public templates, and install templates -- under a
   package/resource API. Load them with `importlib.resources`; no runtime
@@ -169,6 +167,10 @@ engine without access to WKCC data.
   phase that adds a deployer-facing command (S1 `generate-sources`, S6/S4a
   `validate-dataset` contract checks, S5 `init-dataset`) extends the
   smoke job, and S5 brings it to the full criterion-1 set.
+- S4a's wheel smoke proves source-checkout independence, not generic site
+  content. S3 moves/replaces branded assets and adds the criterion-9 output
+  assertion; do not claim final regional neutrality while WKCC presentation
+  content is still intentionally packaged for compatibility.
 - Keep a license/provenance manifest for the fixture. Do not copy WKCC's
   whole `LICENSE-DATA` into the engine.
 
@@ -176,9 +178,14 @@ engine without access to WKCC data.
 
 - Remove the `kayak_data` checkout and same-named-branch pairing from code
   CI. Every code job runs against fixtures.
-- Dataset CI installs/checks out an immutable engine tag or commit recorded
+- Dataset CI installs/checks out the full engine commit recorded
   in `dataset.yaml` and runs `validate-dataset`, a clean-DB sync, a second
   no-op sync, build smoke, and selected PHP integration tests.
+- The engine commit supplies a hash-locked dependency set and reproducible
+  wheel-build command. Required dataset CI pins actions/containers by commit or
+  digest, installs with hash verification, and records the resulting engine
+  wheel digest; a full git SHA with freshly resolved dependency ranges is not
+  a reproducible gate.
 - Add a scheduled, non-required canary against engine `main`. It provides
   early compatibility warning without making ordinary data PRs change
   result when `main` moves.
@@ -192,6 +199,17 @@ engine without access to WKCC data.
   `pull_request_target` to execute PR-controlled dataset or engine refs with
   secrets; fork PRs use a published artifact or an explicit maintainer-run
   no-secret validation path.
+- An ordinary dataset PR's required gate uses the **base branch's**
+  `engine_test_ref`, not the PR-editable value. Changing the pin is a separate
+  owner-approved pin-only PR: its candidate job validates the unchanged
+  dataset with the proposed commit, and repository rules/CODEOWNERS protect
+  both the workflow and pin. After merge, that commit becomes the trusted base
+  pin for later data changes. A contributor cannot weaken validation by
+  downgrading the validator in the same PR as malformed data.
+- The required workflow reads the trusted ref from the event's base commit
+  (for example `git show "$BASE_SHA:dataset.yaml"`), not from the PR working
+  tree. The candidate job is enabled only for a pin-only change and runs the
+  proposed full SHA without repository-write credentials.
 
 Coupled changes use expand/migrate/contract discipline: merge and release
 backward-compatible engine support first, update the fixture, then update
@@ -210,9 +228,10 @@ Land this before production commands consume the newly dataset-owned files.
   `dataset_id`, `name`, `status` (`scaffold` or `publishable`), license/provenance
   references, and `engine_test_ref`. Do not commit a constantly changing
   `generated_at` field.
-- `engine_test_ref` is a tag or full commit in the workflow's approved engine
-  repository, never an arbitrary repository URL. Validation fails if the
-  workflow pin and `dataset.yaml` disagree.
+- `engine_test_ref` is a full 40-hex commit in the workflow's approved engine
+  repository, never a tag or arbitrary repository URL. A separate display
+  label may record the release name. Validation fails if the base-branch value
+  is malformed or unavailable from the approved repository.
 - The engine declares a supported contract range. Missing `dataset.yaml`
   is legacy contract 0 and is rejected by commands requiring contract 1+.
   Error messages print dataset version, supported range, and the required
@@ -221,12 +240,17 @@ Land this before production commands consume the newly dataset-owned files.
   headers/types, generated files, and version migrations. `init-dataset`,
   validation, generation, and sync share this manifest instead of copying
   header lists.
+- Define `retired_ids.yaml` as a contract file keyed by metadata table. Any
+  exceptional row purge records the stable ID there; validation rejects reuse
+  and requires each `id_counters.csv` high-water mark to exceed both active and
+  retired IDs.
 - `validate-dataset`, `sync-metadata`, build, source generation, regression
   deployment, and site rendering all validate the contract before reading
   content or mutating the DB/docroot.
-- Add deterministic `levels upgrade-dataset <dir> --to N` transforms where
-  practical. They operate on a branch/worktree and never silently upgrade a
-  production clone.
+- Every contract bump supplies either a deterministic
+  `levels upgrade-dataset <dir> --to N` transform or an explicit manual
+  migration document when automation cannot preserve intent. Transforms
+  operate on a branch/worktree and never silently upgrade a production clone.
 - `status: scaffold` blocks production build/deploy. Publishable requires at
   least one state, reach, gauge, active source, privacy page, disclaimer,
   contact method, and a selected data license. Empty data remains valid for
@@ -240,17 +264,25 @@ broad: most later SQL files contain WKCC metadata changes.
 - Classify every existing SQL file as schema-only, data-only, or mixed.
   Preserve the historical bytes for auditability.
 - Before changing discovery, require every supported existing deployment to
-  have applied or explicitly stamped the complete legacy set. A deployment
-  behind that barrier gets a schema-only catch-up path; it must not silently
-  lose a pending mixed migration.
-- Move/copy data-only history to `kayak_data/history/sql/` and stop the
-  engine migration runner from discovering it. Mixed files remain in a
-  frozen legacy directory for existing-install audit history; their schema
-  effect is represented in the current SQLAlchemy schema and, where needed,
-  a schema-only compatibility migration.
-- Change migration discovery to an engine-owned schema directory or explicit
-  manifest. Existing `schema_migrations` rows whose files are no longer in
-  the active directory are tolerated as legacy applied versions.
+  have applied the complete legacy set or completed a documented transition
+  that applies equivalent schema compatibility, syncs the authoritative
+  dataset, verifies migration-specific postconditions, and only then stamps
+  the legacy versions. Never stamp pending files merely to cross the barrier.
+- Copy data-only files byte-for-byte to `kayak_data/history/sql/`, with a
+  manifest recording each original engine commit/path and SHA-256 digest,
+  then remove those files from the engine working tree in the same coordinated
+  cutover. Mixed files remain in a frozen legacy engine directory for
+  existing-install audit history; their schema effect is represented in the
+  current SQLAlchemy schema and, where needed, a schema-only compatibility
+  migration. The frozen directory is documentation/history only and is
+  excluded from wheels and runtime migration discovery.
+- Change active migration discovery to the packaged engine directory
+  `src/kayak/resources/schema_migrations/` and an ordered manifest in that
+  directory. The manifest records version, filename, and SHA-256 digest, and
+  new tracking rows retain the applied digest. Only manifest entries are
+  active; frozen legacy files are never glob-discovered. Existing
+  `schema_migrations` rows whose files are no longer active are tolerated as
+  legacy applied versions.
 - Fresh databases continue to use `Base.metadata.create_all()` and stamp the
   active schema set. Existing WKCC databases get a one-time verified stamp/
   transition; no historical regional DML is replayed on a new region.
@@ -272,11 +304,13 @@ editor path; SA then removes the remaining metadata writers and the snapshot.
 
 ### State model
 
-- Rename the web action from "approve" to "send for data review" (or
-  equivalent). `pending -> queued -> pr_open -> merged -> deployed` is the success
-  path. `rejected`, `pr_closed`, `conflict`, and `worker_error` are explicit
+- Rename the web action from "Approve" to "Send for data review".
+  `pending -> queued -> pr_open -> merged -> deployed` is the success path.
+  `rejected`, `pr_closed`, `conflict`, and `worker_error` are explicit
   states. `merged` is approved; `deployed` is published. Notify the proposer
   at both boundaries so a failed or delayed deploy is not reported as live.
+  `worker_error` is retryable with the same attempt; `rejected`, `pr_closed`,
+  and `conflict` require a new human review before work resumes.
 - Store bridge state separately from the proposal payload: request ID,
   base dataset commit, queued/reviewer identity, branch, PR number/URL,
   attempt count, lease/heartbeat, last error, and merged commit. Transitions
@@ -302,16 +336,23 @@ editor path; SA then removes the remaining metadata writers and the snapshot.
   Use argv-based subprocess calls; proposal text never becomes shell, branch,
   path, author-email, or commit-option input.
 - Per-target adapters preserve stable child-row IDs. For the current
-  `reach_class` proposal shape, retain IDs for unchanged class names, allocate
-  never-reused IDs for additions, and delete only explicitly removed rows.
-  Add `reach_class` to `id_counters.csv` before the bridge edits that table;
-  do not fall back to DB autoincrement.
+  `reach_class` proposal shape, the proposal payload carries each existing
+  row's ID and reviewed base value; additions carry no ID and removals are
+  explicit. Renaming a class preserves its ID rather than being inferred as a
+  delete/add by name. Add `reach_class` to `id_counters.csv`, initializing its
+  high-water mark above every current ID, before the bridge edits that table;
+  all later additions allocate never-reused IDs and never use DB autoincrement.
 - Branch/commit identity is deterministic (`proposal/<id>-<attempt>`), and
-  retries discover/reuse an existing branch or PR. A crash after push but
-  before DB update must not create duplicate PRs.
+  retries within one attempt discover/reuse its existing branch or PR. The
+  attempt number advances only after an explicitly terminal conflict/closed
+  PR is re-reviewed; a crash after push but before DB update must not create a
+  new branch or duplicate PR.
 - A reconciliation job observes merged/closed PRs, records the terminal
-  state, and notifies the proposer. Deployment remains a separate controlled
-  action; merge does not grant the web process deploy rights.
+  state, and notifies the proposer. `kayak-deploy` records the deployed
+  dataset commit and advances matching merged requests to `deployed`; the
+  reconciler sends the publication notification. Deployment remains a
+  separate controlled action; merge does not grant the web process deploy
+  rights.
 
 ### Attachments and editor scope
 
@@ -391,7 +432,11 @@ by generic metadata sync.
   an existing ID or reusing a retired ID is a validation failure.
 - `enabled: false` emits a retained `fetch_url.csv` row with
   `is_active=0`; it does not erase the URL/source identity. Destructive
-  removals require a tombstone or an explicit allow-delete workflow.
+  removal is not represented by omission: normal retirement leaves the
+  registry entry as a `retired: true` tombstone and retains source identity.
+  Exceptional purge uses a dedicated dataset command that removes the row,
+  records the purged ID in `retired_ids.yaml`, and requires the
+  destructive deploy flag described under SA.
 
 ### Generator and runtime
 
@@ -411,7 +456,9 @@ by generic metadata sync.
   undeclared station, default behavior is to reject that URL's batch and make
   the fetch step nonzero so monitoring sees it. A broad feed may opt into an
   explicit `unknown_station_policy: ignore`, with counts logged; no policy
-  creates DB metadata at runtime.
+  creates DB metadata at runtime. Source resolution happens before any batch
+  observations are flushed, so a late unknown station cannot leave a partial
+  URL batch committed.
 - During the temporary S1-to-SA interval, the nightly snapshot remains for
   editor-authored reach metadata but must stop exporting `source` and
   `fetch_url`; those two generated files have only the YAML generator as a
@@ -437,8 +484,8 @@ by generic metadata sync.
 - Render Markdown to HTML and sanitize with an explicit `nh3` allowlist; test
   raw HTML, event handlers, unsafe URL schemes,
   and link attributes. Do not rely on author trust or CSP alone.
-- Treat SVG as active same-origin content, not a harmless image. Validate or
-  sanitize it with a `defusedxml`-based strict SVG allowlist that rejects
+- Treat SVG as active same-origin content, not a harmless image. Parse it with
+  `defusedxml` and validate it against a strict SVG allowlist that rejects
   scripts, event attributes, `foreignObject`, external references, and unsafe
   URL schemes while allowing internal fragment references used by generated
   plots. Reject nonconforming SVG; do not serve it unchanged. Validate JSON
@@ -454,7 +501,8 @@ read from the dataset.
 
 - Site identity: display name, organization, canonical/public URL, contact,
   locale/timezone, analytics public identifier, footer/header links, map
-  default/auto extent, theme colors, and social metadata.
+  default/auto extent, theme colors, social metadata, and the public contact
+  identity used in outbound HTTP `User-Agent` strings.
 - Region presentation: per-state resource links, weather links, nav policy,
   guidebook labels/links, and generic map-layer definitions. The list of
   available states comes from `state.csv`; no six-state allowlist or Oregon
@@ -467,6 +515,10 @@ read from the dataset.
   `security.txt` contact/expiry, robots sitemap URL, and other branded static
   files. Build validates type/size and copies them without allowing paths
   outside the dataset.
+- Move the WKCC `LICENSE-DATA` and dataset-asset provenance records into the
+  WKCC dataset. The engine distribution retains its software license and the
+  fixture's narrowly scoped provenance manifest, but no license text that
+  claims WKCC ownership or describes WKCC production data.
 - Map layers: replace Oregon SMB constants with a generic dataset schema for
   label, endpoint/refresh adapter, output name, bbox/filter, fields, popup
   field labels/link, symbol, and default visibility. Popup HTML/templates stay
@@ -475,10 +527,19 @@ read from the dataset.
   GeoJSON is a re-creatable runtime cache under the configured state/cache
   directory, never written to the engine or dataset checkout. Optional layer
   timers are enabled only when configured.
+- Regional acquisition and enrichment jobs take typed dataset inputs or
+  explicit command arguments. Current Oregon/Washington NHD download lists,
+  harvest defaults, and WKCC-only invocations move to dataset `ops/`; reusable
+  provider clients and geometry algorithms remain engine-side.
 - Static JavaScript reads one generated, non-executable `site-config.json`
   artifact rather than having constants rewritten in place or emitting
   dataset-derived JavaScript. Apply CSP, strict JSON serialization, and
   cache-busting to it.
+- Stop tracking a production-built `public_html/` and fetched regional
+  GeoJSON in the engine repository. Build always writes to a caller-supplied,
+  initially empty staging directory outside both source trees, refuses an
+  engine or dataset root as output, and promotes that directory only through
+  S7's paired-release activation.
 - Sweep Python, PHP, JS, static files, manifest/security/robots, tests, and
   generated output for WKCC/domain/region assumptions. Remaining regional
   names are allowed only in provider adapters, fixtures/provenance, archived
@@ -489,16 +550,29 @@ read from the dataset.
 Content separation is incomplete if a new club must edit systemd, nginx,
 status, or scripts in the engine checkout.
 
-- Define the supported install layout: service account `kayak`, immutable
-  release virtualenvs under `/opt/kayak/releases/<release-id>`, active symlink
-  `/opt/kayak/current`, state under `/var/lib/kayak`, re-creatable caches under
-  `/var/cache/kayak`, logs under `/var/log/kayak`, and config/secrets under
-  `/etc/kayak`. Existing WKCC paths migrate through explicit one-release
-  overrides; `/home/pat` is not an engine default.
+- Define the supported install layout: service account `kayak`; immutable
+  paired releases under `/opt/kayak/releases/<release-id>/` containing
+  `venv/`, a read-only dataset snapshot, built `docroot/`, resolved non-secret
+  `runtime-config.json`, and `release.json`;
+  one active symlink `/opt/kayak/current`; mutable DB/attachments under
+  `/var/lib/kayak`; re-creatable caches under `/var/cache/kayak`; logs under
+  `/var/log/kayak`; and config/secrets under `/etc/kayak`. The release ID is
+  derived from the engine artifact digest, dataset commit, and non-secret
+  host-config fingerprint, so a host-config-only change creates a distinct
+  immutable release and one symlink activation changes engine, dataset,
+  config, and docroot together. Existing WKCC paths migrate through explicit
+  one-release overrides; `/home/pat` is not an engine default.
 - Because systemd does not expand environment variables in executable and
   `WorkingDirectory` fields, the installer places stable wrapper executables
   under `/usr/local/libexec/kayak/` and renders units with fixed state/config
   paths. Do not claim `/etc/kayak/env` alone makes checked-in units portable.
+- Split emitted configuration at the ownership boundary. The deploy stages a
+  non-secret resolved config (engine defaults + dataset site config + allowed
+  host overrides) inside the paired release, and PHP/Python read it through
+  `/opt/kayak/current`. Secrets remain in `/etc/kayak`/systemd credentials or
+  process environment and are merged only in memory. Do not copy secrets into
+  immutable release directories or leave a target-release runtime JSON behind
+  after rollback.
 - Generate nginx vhosts from host config (server names, docroot, certificate
   integration, log names) and generic snippets. WKCC/mousebrains vhosts and
   cert-audit scripts move out of the engine's supported defaults.
@@ -507,19 +581,35 @@ status, or scripts in the engine checkout.
   docroot assets, and enabled optional services.
 - A stable root-owned `kayak-deploy` wrapper at
   `/usr/local/sbin/kayak-deploy`, invoked with `--engine-ref` and
-  `--dataset-ref`,
-  stages both immutable revisions, validates their contract before mutation,
-  pauses writers, backs up the DB, applies schema migrations, performs an
-  all-or-nothing metadata sync, builds a staging docroot, then atomically
-  activates code/docroot and restarts services. Record both commits in a
-  release manifest/status endpoint.
+  `--dataset-ref`, requires full commit SHAs from approved repositories and
+  refuses branch or tag names. It resolves and verifies both before entering
+  maintenance mode; the dataset SHA must be reachable from the configured
+  protected deployment branch, and the engine SHA must match a trusted signed
+  release-input manifest. The wrapper
+  stages the target engine wheel, dataset snapshot, and non-secret config,
+  validates their contract before mutation, enters maintenance mode, stops
+  all DB consumers (not only writers), backs up the DB/runtime assets, applies
+  schema migrations, performs an all-or-nothing metadata sync,
+  builds/verifies the final docroot, then atomically switches
+  `/opt/kayak/current`. Start the target request-serving services behind the
+  maintenance response and run post-activation DB/PHP/static health checks;
+  only after they pass, start background consumers/timers and restore public
+  traffic. Record both commits and the host-config fingerprint in the release
+  manifest/status endpoint.
 - The activation orchestrator is outside the release being replaced. It
-  installs the pinned wheel (including packaged resources) into a new release
-  virtualenv and verifies its recorded hash/signature. It cannot depend on
+  verifies a signature over the release-input manifest and the manifest's
+  SHA-256 digest for the pinned wheel, then installs that wheel (including
+  packaged resources) into a new release virtualenv. It cannot depend on
   code from the half-activated target release to roll itself forward or back.
-- On failure, leave the previous code/docroot active and restore the DB backup
-  if it was mutated. Never `git pull` a live production checkout halfway and
-  rely on "code first, data second" as the transaction boundary.
+  The orchestrator has its own version; a target manifest declares its minimum
+  deployer version. Any deployer upgrade is a separately verified atomic step
+  before maintenance mode, and the prior deployer remains available for
+  rollback.
+- On any pre- or post-activation failure, point `current` back to the previous
+  paired release, restore the consistent DB/runtime-asset backup if mutation
+  began, verify the old release, and only then leave maintenance mode. Never
+  `git pull` a live production checkout halfway or rely on "code first, data
+  second" as the transaction boundary.
 - Service installation is feature-aware: editor/bridge, regional layer fetch,
   audit, and offsite backup timers are installed/enabled only when configured.
 - Add a clean-VM/container deployment smoke test using non-WKCC paths, user,
@@ -544,11 +634,22 @@ staging and production may share a dataset while requiring different remotes.
   already installed `OnCalendar` directive.
 - Backup scripts and `status.py` consume the same resolved config and contain
   no `gdrive-crypt`, `/home/pat/backups`, or WKCC certificate assumptions.
+- `/etc/kayak` configuration, trust roots, and secrets have a separate
+  operator-owned encrypted backup/bootstrap procedure. Application backup
+  jobs never upload plaintext secrets; restore verifies the recovered
+  non-secret config fingerprint and required secret references before service
+  activation.
 - Metadata is already protected by the dataset git remote. Backups cover the
   observation/runtime DB, attachment asset store, and optionally the built
   docroot. A backup set has one manifest/checksum and a consistent DB/asset
-  cutoff (pause attachment writes or use immutable content-addressed assets).
-  Test restore, not only upload/prune.
+  cutoff: the backup command acquires the application backup lock, pauses
+  attachment create/delete operations, snapshots SQLite through its online
+  backup API rather than copying the database/WAL files, verifies the snapshot,
+  copies every asset referenced by it, and releases the lock only after those
+  copies finish. The manifest records engine/dataset commits, schema/contract
+  versions, and a non-secret host-config fingerprint so restore selects the
+  matching paired release before opening the DB. Test restore, not only
+  upload/prune.
 - Document the host-owned runtime-configuration surface (all typed host
   settings, secret references, and the backup/restore procedure) — the
   "host-owned runtime configuration" pillar of acceptance criterion 12,
@@ -562,10 +663,11 @@ and deployment surfaces.
 - `levels init-dataset <dir>` refuses a non-empty destination, writes through
   the shared contract manifest, and creates `dataset.yaml` with
   `status: scaffold`, complete empty CSVs, ID counters, a complete source
-  registry stub, required prose TODOs, site/assets/layers directories,
+  registry stub, an empty `retired_ids.yaml`, required prose TODOs,
+  site/assets/layers directories,
   regression directory, dataset-specific license/provenance templates, README,
   and optional GitHub CI workflow.
-- The generated CI workflow pins the installed engine tag/commit; it does not
+- The generated CI workflow pins the installed engine full commit; it does not
   hardcode `mousebrains/kayak` or assume a secret name without explaining how
   to configure it. `--engine-repo`/`--ci` options make this explicit.
 - Add `levels init-dataset --example`, which copies the licensed code-side
@@ -628,8 +730,9 @@ The separation is complete only when all of these pass:
    fetch, build, and PHP/static deployment without source-tree paths.
 2. Code CI has no dataset checkout, dataset secret, sibling-path dependency,
    or test reading the operator's environment.
-3. Dataset required CI uses an immutable engine ref; scheduled canary `main`
-   failures do not make ordinary PR results nondeterministic.
+3. Dataset required CI uses the trusted base branch's full engine commit;
+   ordinary data PRs cannot edit their own validator, and scheduled canary
+   `main` failures do not make required PR results nondeterministic.
 4. A clean non-WKCC install uses a different user, home/layout, hostname,
    timezone, backup path/remote, and state set without tracked engine edits.
 5. Fresh install applies no historical WKCC metadata migration.
@@ -638,8 +741,9 @@ The separation is complete only when all of these pass:
    schema migration; operational timestamps and caches live in runtime tables.
 7. A queued proposal can create exactly one validated PR across worker crashes;
    production changes only after merge and deploy.
-8. Refused metadata deletes leave the DB byte/logically unchanged; accepted
-   sync followed by a second sync is a no-op.
+8. Refused metadata deletes begin no write transaction and leave logical table
+   checksums/counts unchanged; accepted sync followed by a second sync is a
+   no-op.
 9. Site output contains no WKCC/domain/Oregon assumptions except content
    supplied by the WKCC dataset, provider names, licensed fixture provenance,
    or archived history.
@@ -678,7 +782,7 @@ other metadata until SA, which deletes the reverse-sync path in one release.
 
 Earlier passes correctly selected dataset-owned metadata, regression
 content, prose, fixtures, contract versioning, and git-reviewed approval.
-This pass changes four load-bearing assumptions:
+The fifth pass changed four load-bearing assumptions:
 
 1. The source YAML must model all 328 source rows with explicit stable IDs;
    the current URL/timezone YAML cannot generate `source.csv` safely.
@@ -690,3 +794,9 @@ This pass changes four load-bearing assumptions:
 
 Those corrections make the stated acceptance test achievable without
 creating new dual-authority, identity-loss, or half-deploy failure modes.
+
+The sixth pass also closes the implementation gaps found in the consistency
+updates: S4a now has no throwaway root/header implementation, data PRs cannot
+self-select a weaker validator, proposal child rows preserve IDs across
+renames, source retirement has one explicit tombstone/purge model, and paired
+activation uses one release symlink plus maintenance-mode DB rollback.
