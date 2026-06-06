@@ -33,7 +33,7 @@ import tempfile
 from collections import Counter
 from collections.abc import Callable
 from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from pathlib import Path
 
 from kayak.dataset import layout
@@ -45,6 +45,15 @@ _MAX_VALUE_ERRORS = 20
 # integer: no leading zero, no sign — so base-62 handles stay 1-based and a
 # row can't be addressed two ways ("1" vs "01").
 _CANONICAL_ID = re.compile(r"^[1-9][0-9]*$")
+
+# Explicit ASCII lexical grammars. Python's int()/float()/Decimal() accept
+# spellings SQLite does not store as the declared type (underscores like "1_0",
+# and for ints, values outside the signed-64-bit range stored with REAL
+# affinity), so a value must match the grammar AND fit the storage domain.
+_INT_RE = re.compile(r"^-?[0-9]+$")
+_FLOAT_RE = re.compile(r"^-?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][-+]?[0-9]+)?$")
+_DECIMAL_RE = re.compile(r"^-?[0-9]+(?:\.[0-9]+)?$")  # fixed-point (coordinates)
+_INT64_MIN, _INT64_MAX = -(2**63), 2**63 - 1
 
 # id_counters.csv is a typed two-column contract file.
 _ID_COUNTER_SPECS = {
@@ -86,6 +95,12 @@ def validate_dataset(dataset_dir: Path) -> list[str]:
     if errors:
         return errors  # nothing else is meaningful without the core files
 
+    # (1b) every file decodes as UTF-8 — gate up front so no downstream reader
+    #      hits an uncaught UnicodeDecodeError mid-validation.
+    errors = _check_readable(d)
+    if errors:
+        return errors
+
     # (2) every CSV parses, is a known table, has unique headers and exactly the
     #     expected column set. Later checks only run for files that pass here.
     parse_errors, good_csvs = _check_csv_shape(d)
@@ -110,6 +125,24 @@ def validate_dataset(dataset_dir: Path) -> list[str]:
     #     explain the problem, so there is nothing to gain by materializing.
     if not errors:
         errors.extend(_check_reaches_on_materialized(d))
+    return errors
+
+
+def _check_readable(d: Path) -> list[str]:
+    """Every CSV / JSON sidecar decodes as UTF-8 (an invalid byte is corruption).
+
+    Run before any structural check so a downstream reader never raises an
+    uncaught UnicodeDecodeError — the module's crash-safe contract.
+    """
+    errors: list[str] = []
+    targets = [*sorted(d.glob("*.csv")), d / layout.GEOM_JSON, d / layout.GRADIENT_JSON]
+    for p in targets:
+        if not p.is_file():
+            continue
+        try:
+            p.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
+            errors.append(f"{p.name}: unreadable / not valid UTF-8 ({exc})")
     return errors
 
 
@@ -173,7 +206,7 @@ def _safe_header(csv_path: Path, errors: list[str]) -> list[str] | None:
             for _ in reader:  # force a full parse
                 pass
             return header
-    except (OSError, csv.Error) as exc:
+    except (OSError, csv.Error, UnicodeError) as exc:
         errors.append(f"{csv_path.name}: unreadable ({exc})")
         return None
 
@@ -225,8 +258,13 @@ def _value_problem(spec: layout.ColumnSpec | None, raw: str) -> str | None:
 
 def _int_problem(spec: layout.ColumnSpec, raw: str) -> str | None:
     if spec.is_id:
-        return None if _CANONICAL_ID.match(raw) else f"expected a positive integer id, got {raw!r}"
-    return None if _parses(int, raw) else f"expected integer, got {raw!r}"
+        if not _CANONICAL_ID.match(raw):
+            return f"expected a positive integer id, got {raw!r}"
+    elif not _INT_RE.match(raw):  # strict ASCII grammar — no underscores / '+'
+        return f"expected integer, got {raw!r}"
+    if not (_INT64_MIN <= int(raw) <= _INT64_MAX):
+        return f"integer out of SQLite 64-bit range, got {raw!r}"
+    return None
 
 
 def _bool_problem(spec: layout.ColumnSpec, raw: str) -> str | None:
@@ -253,11 +291,16 @@ def _text_problem(spec: layout.ColumnSpec, raw: str) -> str | None:
 
 def _number_problem(spec: layout.ColumnSpec, raw: str) -> str | None:
     if spec.decimal_spec is not None:
+        if not _DECIMAL_RE.match(raw):  # fixed-point ASCII grammar (no '_', no exp)
+            return f"not a valid decimal, got {raw!r}"
         problem = _decimal_problem(raw, *spec.decimal_spec)
         if problem:
             return problem
-    elif not _is_finite_number(raw):
-        return f"expected a finite number, got {raw!r}"
+    else:
+        if not _FLOAT_RE.match(raw):  # strict float grammar — no underscores
+            return f"expected a number, got {raw!r}"
+        if not math.isfinite(float(raw)):
+            return f"expected a finite number, got {raw!r}"
     if spec.value_range is not None:
         lo, hi = spec.value_range
         if not (lo <= float(raw) <= hi):
@@ -266,11 +309,12 @@ def _number_problem(spec: layout.ColumnSpec, raw: str) -> str | None:
 
 
 def _decimal_problem(raw: str, precision: int, scale: int) -> str | None:
-    """Enforce a ``Numeric(precision, scale)`` contract on a decimal string."""
-    try:
-        d = Decimal(raw)
-    except InvalidOperation:
-        return f"not a valid decimal, got {raw!r}"
+    """Enforce a ``Numeric(precision, scale)`` contract on a decimal string.
+
+    The caller has already matched ``raw`` against the fixed-point grammar, so
+    ``Decimal`` cannot raise here.
+    """
+    d = Decimal(raw)
     if not d.is_finite():
         return f"expected a finite number, got {raw!r}"
     exponent = d.as_tuple().exponent
@@ -304,13 +348,6 @@ def _parses(fn: Callable[[str], object], raw: str) -> bool:
         return False
 
 
-def _is_finite_number(raw: str) -> bool:
-    try:
-        return math.isfinite(float(raw))
-    except (ValueError, TypeError):
-        return False
-
-
 def _check_duplicate_pks(d: Path, good_csvs: set[str]) -> list[str]:
     """Reject duplicate primary-key tuples on composite/natural-key tables.
 
@@ -334,10 +371,14 @@ def _check_duplicate_pks(d: Path, good_csvs: set[str]) -> list[str]:
 
 
 def _norm_pk_cell(spec: layout.ColumnSpec | None, raw: str) -> object:
-    """Normalize an integer PK cell so '1' and '01' collide; others stay literal."""
-    if spec is not None and spec.kind == "int":
+    """Normalize a PK cell to its SQLite storage value so equivalent spellings
+    collide: '1'/'01' as int; '1'/'1.0'/'1e0' as the same REAL. Others stay literal."""
+    if spec is not None:
         try:
-            return int(raw)
+            if spec.kind == "int":
+                return int(raw)
+            if spec.kind == "number":
+                return float(raw)
         except ValueError:
             return raw
     return raw
@@ -463,13 +504,22 @@ def _check_json_reach_keys(d: Path, reach_id_set: set[int]) -> tuple[set[int], l
     return geom_ids, errors
 
 
-def _parse_reach_id_json(path: Path) -> tuple[set[int], list[str]]:
-    """Parse a reach-id-keyed JSON object, rejecting duplicate / non-canonical keys.
+def _reject_json_constant(name: str) -> object:
+    # parse_constant fires for NaN / Infinity / -Infinity — non-standard JSON
+    # that json.loads accepts by default and that would store as NULL geometry.
+    raise ValueError(f"non-standard JSON constant {name!r}")
 
-    ``json.loads`` keeps the last of duplicate object members, so a sidecar with
-    two ``"1"`` keys (or ``"1"`` and ``"01"``, which normalize to the same reach)
-    would silently drop one geometry. An ``object_pairs_hook`` captures the raw
-    members so both kinds of ambiguity are caught.
+
+def _parse_reach_id_json(path: Path) -> tuple[set[int], list[str]]:
+    """Parse a reach-id-keyed JSON object, returning (ids-with-usable-geometry,
+    errors).
+
+    Beyond duplicate-key detection, every key must be a positive-canonical id
+    (``"01"``/``"+1"``/``" 1"`` rejected on their own, not only on collision) and
+    every present value must be a non-empty string — a ``null``/``""``/non-string
+    value would materialize as NULL/empty geometry that ``check-reaches`` treats
+    as optional. Only keys with a usable string value are returned as geometry
+    ids, so the "every reach has geometry" check is value-based, not key-based.
     """
     errors: list[str] = []
     captured: list[list[tuple[str, object]]] = []
@@ -479,26 +529,25 @@ def _parse_reach_id_json(path: Path) -> tuple[set[int], list[str]]:
         return dict(pairs)
 
     try:
-        json.loads(path.read_text(), object_pairs_hook=hook)
+        json.loads(path.read_text(), object_pairs_hook=hook, parse_constant=_reject_json_constant)
     except (ValueError, json.JSONDecodeError) as exc:
         return set(), [f"{path.name}: invalid JSON ({exc})"]
     if not captured:
         return set(), [f"{path.name}: expected a JSON object"]
     top = captured[-1]  # the outermost object is completed last
-    raw_keys = [k for k, _ in top]
-    raw_dups = sorted({k for k, c in Counter(raw_keys).items() if c > 1})
+    raw_dups = sorted({k for k, c in Counter(k for k, _ in top).items() if c > 1})
     if raw_dups:
         errors.append(f"{path.name}: duplicate keys {raw_dups}")
-    by_int: dict[int, set[str]] = {}
-    for k in raw_keys:
-        try:
-            by_int.setdefault(int(k), set()).add(k)
-        except ValueError:
-            errors.append(f"{path.name}: non-integer reach-id key {k!r}")
-    collisions = {ik: sorted(forms) for ik, forms in by_int.items() if len(forms) > 1}
-    if collisions:
-        errors.append(f"{path.name}: non-canonical duplicate reach ids {collisions}")
-    return set(by_int), errors
+    usable: set[int] = set()
+    for k, v in top:
+        if not _CANONICAL_ID.match(k):
+            errors.append(f"{path.name}: non-canonical reach-id key {k!r}")
+            continue
+        if not isinstance(v, str) or v == "":
+            errors.append(f"{path.name}: reach {k} has an empty / non-string value")
+            continue
+        usable.add(int(k))
+    return usable, errors
 
 
 def _check_reaches_on_materialized(dataset_dir: Path) -> list[str]:

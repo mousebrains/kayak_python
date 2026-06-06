@@ -29,40 +29,14 @@ from kayak.dataset import layout
 
 REPO_DIR = Path(__file__).resolve().parent.parent
 
-METADATA_TABLES = [
-    "state",
-    "source",
-    "gauge",
-    "gauge_source",
-    "fetch_url",
-    "calc_expression",
-    "rating",
-    "rating_data",
-    "class_description",
-    "guidebook",
-    "reach",
-    "reach_state",
-    "reach_class",
-    "reach_guidebook",
-    "huc_name",
-]
-
-# Columns excluded from the per-table CSVs (too large for row-based diffs, or
-# pure churn).
-#
-# reach.geom and reach.gradient_profile are both large, machine-generated, and
-# not regenerable on prod (the DEM/NHD/HUC trace stack is dev-only), so each is
-# excluded from reach.csv and snapshotted to its own JSON instead —
-# reaches.json (write_reaches_json) and reaches-gradient.json
-# (write_reaches_gradient_json) — keeping rebuilds self-contained without
-# bloating every metadata-row diff (gradient_profile was ~83% of reach.csv;
-# review-3 R6.1). max_gradient (one float) stays in reach.csv. The full
-# huc_name lookup stays in METADATA_TABLES for the same self-contained reason.
-EXCLUDED_COLUMNS = {
-    "reach": {"geom", "gradient_profile"},
-    # last_fetched_at gets bumped on every pipeline run — pure churn in git.
-    "fetch_url": {"last_fetched_at"},
-}
+# The complete-projection writer and the validator share ONE contract — the
+# tables to export (in order) and the columns held out to JSON sidecars / as
+# runtime churn both come from kayak.dataset.layout so they can't drift.
+# (reach.geom + reach.gradient_profile are large, machine-generated, and not
+# regenerable on prod, so each is snapshotted to its own JSON; fetch_url's
+# last_fetched_at is per-run churn. See review-3 R6.1 / layout.EXCLUDED_COLUMNS.)
+METADATA_TABLES = list(layout.CONTRACT_CSVS)
+EXCLUDED_COLUMNS = layout.EXCLUDED_COLUMNS
 
 
 def table_columns(conn: sqlite3.Connection, table: str) -> list[tuple[str, bool]]:

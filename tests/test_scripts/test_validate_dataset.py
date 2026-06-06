@@ -399,6 +399,109 @@ def test_id_counters_blank_cell_is_flagged(dataset_copy: Path) -> None:
     assert any("id_counters.csv" in e and "NOT NULL" in e for e in errs)
 
 
+# --- regression tests for the PR #123 round-4 review findings ----------------
+
+
+def test_null_geometry_value_is_flagged(dataset_copy: Path) -> None:
+    # Finding 1: a present key with a null value is not "has geometry".
+    geom = json.loads((dataset_copy / "reaches.json").read_text())
+    geom["1"] = None
+    (dataset_copy / "reaches.json").write_text(json.dumps(geom))
+    errs = validate_dataset(dataset_copy)
+    assert any("reaches.json" in e and "non-string" in e for e in errs)
+
+
+def test_empty_geometry_value_is_flagged(dataset_copy: Path) -> None:
+    # Finding 1: an empty-string geometry materializes as empty (treated optional).
+    geom = json.loads((dataset_copy / "reaches.json").read_text())
+    geom["1"] = ""
+    (dataset_copy / "reaches.json").write_text(json.dumps(geom))
+    errs = validate_dataset(dataset_copy)
+    assert any("reaches.json" in e and "1" in e for e in errs)
+
+
+def test_nan_geometry_value_is_flagged(dataset_copy: Path) -> None:
+    # Finding 1: json.loads accepts NaN by default; it must be rejected.
+    geom = json.loads((dataset_copy / "reaches.json").read_text())
+    geom["1"] = float("nan")
+    (dataset_copy / "reaches.json").write_text(json.dumps(geom))  # writes bare NaN
+    errs = validate_dataset(dataset_copy)
+    assert any("reaches.json" in e for e in errs)
+
+
+def test_null_gradient_value_is_flagged(dataset_copy: Path) -> None:
+    # Finding 1: gradient entries get the same present-value validation.
+    grad = json.loads((dataset_copy / "reaches-gradient.json").read_text())
+    grad[next(iter(grad))] = None
+    (dataset_copy / "reaches-gradient.json").write_text(json.dumps(grad))
+    errs = validate_dataset(dataset_copy)
+    assert any("reaches-gradient.json" in e and "non-string" in e for e in errs)
+
+
+def test_lone_noncanonical_json_key_is_flagged(dataset_copy: Path) -> None:
+    # Finding 2: a single non-canonical key (no collision) must still be rejected.
+    geom = json.loads((dataset_copy / "reaches.json").read_text())
+    geom["01"] = geom.pop("1")
+    (dataset_copy / "reaches.json").write_text(json.dumps(geom))
+    errs = validate_dataset(dataset_copy)
+    assert any("reaches.json" in e and "non-canonical" in e for e in errs)
+
+
+def test_duplicate_numeric_composite_pk_is_flagged(dataset_copy: Path) -> None:
+    # Finding 3: (1, 1) and (1, 1.0) are the same REAL PK in SQLite.
+    (dataset_copy / "rating.csv").write_text("id,url,parser\n1,,\n")
+    _rewrite_csv(
+        dataset_copy / "id_counters.csv",
+        lambda rows: [r.update(next_id="2") for r in rows if r["table"] == "rating"],
+    )
+    (dataset_copy / "rating_data.csv").write_text(
+        "rating_id,gauge_height_ft,flow_cfs\n1,1,10\n1,1.0,20\n"
+    )
+    errs = validate_dataset(dataset_copy)
+    assert any("rating_data.csv" in e and "duplicate primary key" in e for e in errs)
+
+
+def test_underscore_integer_is_flagged(dataset_copy: Path) -> None:
+    # Finding 4: Python int() accepts "1_0"; SQLite stores it as TEXT.
+    _rewrite_csv(dataset_copy / "reach.csv", lambda rows: rows[0].update(aw_id="1_0"))
+    errs = validate_dataset(dataset_copy)
+    assert any("reach.csv" in e and "aw_id" in e and "integer" in e for e in errs)
+
+
+def test_underscore_float_is_flagged(dataset_copy: Path) -> None:
+    _rewrite_csv(dataset_copy / "gauge.csv", lambda rows: rows[0].update(bank_full="1_0"))
+    errs = validate_dataset(dataset_copy)
+    assert any("gauge.csv" in e and "bank_full" in e for e in errs)
+
+
+def test_underscore_decimal_is_flagged(dataset_copy: Path) -> None:
+    _rewrite_csv(dataset_copy / "gauge.csv", lambda rows: rows[0].update(latitude="4_4.0"))
+    errs = validate_dataset(dataset_copy)
+    assert any("gauge.csv" in e and "latitude" in e for e in errs)
+
+
+def test_integer_out_of_64bit_range_is_flagged(dataset_copy: Path) -> None:
+    # Finding 4: 2**63 overflows SQLite's signed-64-bit INTEGER -> REAL affinity.
+    _rewrite_csv(
+        dataset_copy / "reach.csv", lambda rows: rows[0].update(aw_id="9223372036854775808")
+    )
+    errs = validate_dataset(dataset_copy)
+    assert any("reach.csv" in e and "aw_id" in e and "range" in e for e in errs)
+
+
+def test_invalid_utf8_csv_does_not_crash(dataset_copy: Path) -> None:
+    # Finding 5: an invalid UTF-8 byte must yield a focused error, not a traceback.
+    (dataset_copy / "state.csv").write_bytes(b"id,name,abbreviation\n1,\xff,OR\n")
+    errs = validate_dataset(dataset_copy)  # must not raise
+    assert any("state.csv" in e and "UTF-8" in e for e in errs)
+
+
+def test_invalid_utf8_id_counters_does_not_crash(dataset_copy: Path) -> None:
+    (dataset_copy / "id_counters.csv").write_bytes(b"table,next_id\n\xff,3\n")
+    errs = validate_dataset(dataset_copy)  # must not raise
+    assert any("id_counters.csv" in e and "UTF-8" in e for e in errs)
+
+
 def test_provenance_matches_committed_fixture() -> None:
     # Finding 4: the committed fixture's geometry/facts/gradient must match the
     # recorded provenance digests, so a hand-edit (or a regen from a dirty
