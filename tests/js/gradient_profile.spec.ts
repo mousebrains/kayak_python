@@ -44,6 +44,34 @@ const LEADING_GAP = {
   ],
 };
 
+// Leading lake with elevation: the put-in is at 1000 ft, the gradient samples
+// start at ~1.875 mi. A hover in the blank lead-in must read the lake surface
+// (flat 1000 ft), not a gradient-derived drop interpolated from the first sample.
+const LEADING_GAP_ELEV = {
+  ...PAYLOAD,
+  elev: { putin: 1000, takeout: 500 },
+  samples: [
+    {
+      d_mi: 2.0,
+      w_mi: 0.25,
+      grad_ft_per_mi: 80,
+      significant: true,
+      lat: 44.1,
+      lon: -122.0,
+      elev_ft: 666.7,
+    },
+    {
+      d_mi: 2.5,
+      w_mi: 0.25,
+      grad_ft_per_mi: 40,
+      significant: true,
+      lat: 44.11,
+      lon: -122.01,
+      elev_ft: 500,
+    },
+  ],
+};
+
 async function setup(page, payload = PAYLOAD) {
   // JSON has no single quotes, so a single-quoted attribute needs no escaping.
   const profile = JSON.stringify(payload);
@@ -98,4 +126,12 @@ test('hover over a blank leading lake reports no gradient data', async ({ page }
   const inside = await hover(page, 2.0); // inside the first window
   expect(inside.title).toContain('80 ft/mi');
   expect(inside.dotShown).toBe(true);
+});
+
+test('elevation reads flat (put-in level) across a leading lake', async ({ page }) => {
+  await setup(page, LEADING_GAP_ELEV);
+  const lake = await hover(page, 0.5); // blank lead-in, before the first window
+  expect(lake.title).toContain('no gradient data');
+  expect(lake.title).toMatch(/1,?000 ft/); // put-in elevation held flat...
+  expect(lake.title).not.toContain('917'); // ...not the interpolated drop
 });

@@ -241,8 +241,18 @@
     // readout matches the drawn line. Null when the reach has no elevation data.
     const elevAnchors = payload.elev ? [{ d: 0, e: payload.elev.putin }] : null;
     if (elevAnchors) {
+      let leading = true;
       for (const s of samples) {
-        if (s.elev_ft != null) elevAnchors.push({ d: s.d_mi, e: s.elev_ft });
+        if (s.elev_ft == null) continue;
+        if (leading) {
+          // Hold the put-in elevation flat across a leading gap (lake at the
+          // put-in) until the first window starts, matching the drawn line — so
+          // a hover in the blank span reports the lake surface, not a drop.
+          const left = s.d_mi - s.w_mi / 2;
+          if (left > 0) elevAnchors.push({ d: left, e: payload.elev.putin });
+          leading = false;
+        }
+        elevAnchors.push({ d: s.d_mi, e: s.elev_ft });
       }
       elevAnchors.push({ d: xMax, e: payload.elev.takeout });
     }

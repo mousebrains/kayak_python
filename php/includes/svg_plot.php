@@ -557,9 +557,22 @@ function generate_gradient_profile_svg(
         $e_to_py = fn (float $e): float => $mt + ($e_max - $e) / $e_range * $ph;
 
         $pts = [sprintf('%.1f,%.1f', (float)$ml, $e_to_py($putin_e))];
+        $leading = true;
         foreach ($samples as $i => $s) {
             if (!isset($cum_by_index[$i])) {
                 continue; // overshoot bin — excluded from the elevation line
+            }
+            if ($leading) {
+                // Hold the put-in elevation flat across a leading gap (a lake at
+                // the put-in, where the trace samples no gradient) until the
+                // first window starts, so the line — and the JS readout that
+                // reuses these anchors — doesn't imply a drop in the blank span.
+                $left = (float)$s['d_mi'] - (float)$s['w_mi'] / 2;
+                if ($left > $x_min) {
+                    $lx = $ml + ($left - $x_min) / $x_range * $pw;
+                    $pts[] = sprintf('%.1f,%.1f', $lx, $e_to_py($putin_e));
+                }
+                $leading = false;
             }
             $elev = $putin_e - ($cum_by_index[$i] / $total_raw) * $elev_lost_ft;
             $samples[$i]['elev_ft'] = round($elev, 1);

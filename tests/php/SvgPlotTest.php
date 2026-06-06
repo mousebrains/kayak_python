@@ -344,6 +344,42 @@ final class SvgPlotTest extends TestCase
         $this->assertSame(0, substr_count($bars, '<rect'), 'no bar for out-of-domain samples');
     }
 
+    public function test_generate_gradient_profile_svg_elevation_flat_over_leading_gap(): void
+    {
+        // A lake at the put-in (first window ~1.875 mi) with elevation params:
+        // the elevation line must stay flat at the put-in elevation across the
+        // blank leading span, not slope a gradient-derived drop into it.
+        $profile = json_encode([
+            'samples' => [
+                ['d_mi' => 2.0, 'grad_ft_per_mi' => 80.0, 'w_mi' => 0.25, 'significant' => true],
+                ['d_mi' => 2.5, 'grad_ft_per_mi' => 40.0, 'w_mi' => 0.25, 'significant' => true],
+            ],
+        ]);
+        assert($profile !== false);
+        $svg = generate_gradient_profile_svg(
+            $profile,
+            1,
+            480,
+            120,
+            length_mi: 5.0,
+            putin_elev_ft: 1000.0,
+            elev_lost_ft: 500.0
+        );
+        $this->assertSame(1, preg_match('!<polyline class="gp-elev" points="([^"]+)"!', $svg, $m));
+        $pts = array_map(
+            static fn (string $p): array => array_map('floatval', explode(',', $p)),
+            explode(' ', trim($m[1]))
+        );
+        $putinY = $pts[0][1]; // first point is the put-in
+        // A flat leading segment = a point at the put-in elevation to the right
+        // of the put-in (x>ml); the drop only begins at the first window.
+        $flatBeyond = array_filter(
+            $pts,
+            static fn (array $pt): bool => $pt[0] > 50.5 && abs($pt[1] - $putinY) < 0.5
+        );
+        $this->assertNotEmpty($flatBeyond, 'elevation must stay flat across the leading gap');
+    }
+
     public function test_generate_gradient_profile_svg_splits_runs_on_insignificance(): void
     {
         // 5 samples: 4 sig + 1 insig → 4 sig rects + 1 pale rect, regardless
