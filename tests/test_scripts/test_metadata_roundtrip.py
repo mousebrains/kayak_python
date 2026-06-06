@@ -93,6 +93,24 @@ def test_round_trip_preserves_geom(tmp_path, monkeypatch):
     }
 
 
+def test_export_rounds_coordinates_to_six_dp(tmp_path, monkeypatch):
+    """export quantizes Numeric(9,6) coordinates to 6 dp so the CSV conforms to
+    the declared scale (the DB stores full-precision floats from NHD traces)."""
+    exp = _load("export_metadata")
+    src, out = tmp_path / "src.db", tmp_path / "snap"
+    out.mkdir()
+    _make_db(src)
+    _seed_reaches(
+        src,
+        [{"id": 1, "name": "HiPrec", "latitude": 44.3859538093346, "longitude": -123.831778038249}],
+    )
+    monkeypatch.setattr(sys, "argv", ["export_metadata", "--db", str(src), "--out", str(out)])
+    assert exp.main() == 0
+    text = (out / "reach.csv").read_text()
+    assert "44.385954" in text and "-123.831778" in text
+    assert "44.3859538093346" not in text  # full-precision float dropped
+
+
 def test_geom_only_applies_geom_leaves_metadata(tmp_path, monkeypatch):
     """--geom-only applies reaches.json to existing rows and touches nothing
     else (skips the CSV upsert entirely)."""

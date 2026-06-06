@@ -224,7 +224,9 @@ def test_non_numeric_value_is_flagged(dataset_copy: Path) -> None:
     # materialized load can't catch it — the value check must.
     _rewrite_csv(dataset_copy / "gauge.csv", lambda rows: rows[0].update(latitude="abc"))
     errs = validate_dataset(dataset_copy)
-    assert any("gauge.csv" in e and "latitude" in e and "number" in e for e in errs)
+    assert any(
+        "gauge.csv" in e and "latitude" in e and ("decimal" in e or "number" in e) for e in errs
+    )
 
 
 def test_bad_enum_value_is_flagged(dataset_copy: Path) -> None:
@@ -291,6 +293,110 @@ def test_short_row_is_flagged(dataset_copy: Path) -> None:
     p.write_text(p.read_text() + "1\n")  # one field, header has two
     errs = validate_dataset(dataset_copy)
     assert any("gauge_source.csv" in e and "fields" in e for e in errs)
+
+
+# --- regression tests for the PR #123 round-3 review findings ----------------
+
+
+def test_bad_datetime_does_not_crash_materialize(dataset_copy: Path) -> None:
+    # Finding 1: a non-ISO datetime would load fine (SQLite text) then crash
+    # SQLAlchemy's decoder mid-scan. The value error must gate materialization.
+    _rewrite_csv(dataset_copy / "reach.csv", lambda rows: rows[0].update(updated_at="not-a-date"))
+    errs = validate_dataset(dataset_copy)  # must not raise
+    assert any("updated_at" in e and "ISO datetime" in e for e in errs)
+
+
+def test_duplicate_composite_pk_is_flagged(dataset_copy: Path) -> None:
+    # Finding 2: SQLite upsert collapses a duplicate composite-PK row.
+    _rewrite_csv(
+        dataset_copy / "gauge_source.csv",
+        lambda rows: rows.append({"gauge_id": "1", "source_id": "1"}),
+    )
+    errs = validate_dataset(dataset_copy)
+    assert any("gauge_source.csv" in e and "duplicate primary key" in e for e in errs)
+
+
+def test_duplicate_natural_pk_is_flagged(dataset_copy: Path) -> None:
+    # Finding 2: class_description's PK is its name.
+    _rewrite_csv(
+        dataset_copy / "class_description.csv",
+        lambda rows: rows.append({"name": "II", "description": "duplicate"}),
+    )
+    errs = validate_dataset(dataset_copy)
+    assert any("class_description.csv" in e and "duplicate primary key" in e for e in errs)
+
+
+def test_duplicate_json_key_is_flagged(dataset_copy: Path) -> None:
+    # Finding 2: json.loads keeps the last of duplicate members, dropping geometry.
+    geom = json.loads((dataset_copy / "reaches.json").read_text())
+    raw = '{{"1": {}, "1": {}, "2": {}, "3": {}}}'.format(
+        json.dumps(geom["1"]), json.dumps(geom["1"]), json.dumps(geom["2"]), json.dumps(geom["3"])
+    )
+    (dataset_copy / "reaches.json").write_text(raw)
+    errs = validate_dataset(dataset_copy)
+    assert any("reaches.json" in e and "duplicate keys" in e for e in errs)
+
+
+def test_noncanonical_json_key_is_flagged(dataset_copy: Path) -> None:
+    # Finding 2: "1" and "01" normalize to the same reach id.
+    geom = json.loads((dataset_copy / "reaches.json").read_text())
+    raw = '{{"1": {}, "01": {}, "2": {}, "3": {}}}'.format(
+        json.dumps(geom["1"]), json.dumps(geom["1"]), json.dumps(geom["2"]), json.dumps(geom["3"])
+    )
+    (dataset_copy / "reaches.json").write_text(raw)
+    errs = validate_dataset(dataset_copy)
+    assert any("reaches.json" in e and "non-canonical" in e for e in errs)
+
+
+def test_string_too_long_is_flagged(dataset_copy: Path) -> None:
+    # Finding 3: state.abbreviation is String(2).
+    _rewrite_csv(dataset_copy / "state.csv", lambda rows: rows[0].update(abbreviation="ORE"))
+    errs = validate_dataset(dataset_copy)
+    assert any("state.csv" in e and "abbreviation" in e and "max length" in e for e in errs)
+
+
+def test_coordinate_out_of_range_is_flagged(dataset_copy: Path) -> None:
+    # Finding 3: an absurd coordinate (1e300) is caught.
+    _rewrite_csv(dataset_copy / "gauge.csv", lambda rows: rows[0].update(latitude="1e300"))
+    errs = validate_dataset(dataset_copy)
+    assert any("gauge.csv" in e and "latitude" in e for e in errs)
+
+
+def test_coordinate_scale_is_enforced(dataset_copy: Path) -> None:
+    # Finding 3: latitude is Numeric(9,6) — 7 decimal places violates the scale.
+    _rewrite_csv(dataset_copy / "gauge.csv", lambda rows: rows[0].update(latitude="44.1234567"))
+    errs = validate_dataset(dataset_copy)
+    assert any("latitude" in e and "scale" in e for e in errs)
+
+
+def test_non_positive_id_is_flagged(dataset_copy: Path) -> None:
+    # Finding 3: a stable id must be a positive canonical integer.
+    _rewrite_csv(dataset_copy / "state.csv", lambda rows: rows[0].update(id="0"))
+    errs = validate_dataset(dataset_copy)
+    assert any("state.csv" in e and "positive integer id" in e for e in errs)
+
+
+def test_non_positive_fk_is_flagged(dataset_copy: Path) -> None:
+    # Finding 3: an FK to an id is held to the same positive-canonical rule.
+    _rewrite_csv(dataset_copy / "reach.csv", lambda rows: rows[0].update(gauge_id="0"))
+    errs = validate_dataset(dataset_copy)
+    assert any("reach.csv" in e and "gauge_id" in e and "positive integer id" in e for e in errs)
+
+
+def test_id_counters_wrong_width_is_flagged(dataset_copy: Path) -> None:
+    # Finding 4: id_counters.csv rows get the same width/value pass.
+    p = dataset_copy / "id_counters.csv"
+    p.write_text(p.read_text().replace("state,3\n", "state,3,extra\n"))
+    errs = validate_dataset(dataset_copy)
+    assert any("id_counters.csv" in e and "fields" in e for e in errs)
+
+
+def test_id_counters_blank_cell_is_flagged(dataset_copy: Path) -> None:
+    # Finding 4: a blank table cell is no longer silently ignored.
+    p = dataset_copy / "id_counters.csv"
+    p.write_text(p.read_text() + ",5\n")
+    errs = validate_dataset(dataset_copy)
+    assert any("id_counters.csv" in e and "NOT NULL" in e for e in errs)
 
 
 def test_provenance_matches_committed_fixture() -> None:

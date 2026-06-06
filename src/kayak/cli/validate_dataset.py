@@ -27,17 +27,30 @@ import argparse
 import csv
 import json
 import math
+import re
 import sqlite3
 import tempfile
 from collections import Counter
 from collections.abc import Callable
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from kayak.dataset import layout
 
 # Cap per-file value errors so one badly-typed column can't flood the report.
 _MAX_VALUE_ERRORS = 20
+
+# A stable id (the PK or an FK to one) must be a positive canonical decimal
+# integer: no leading zero, no sign — so base-62 handles stay 1-based and a
+# row can't be addressed two ways ("1" vs "01").
+_CANONICAL_ID = re.compile(r"^[1-9][0-9]*$")
+
+# id_counters.csv is a typed two-column contract file.
+_ID_COUNTER_SPECS = {
+    "table": layout.ColumnSpec("table", "text", nullable=False),
+    "next_id": layout.ColumnSpec("next_id", "int", nullable=False),
+}
 
 
 def addArgs(subparsers: argparse._SubParsersAction) -> None:
@@ -78,17 +91,25 @@ def validate_dataset(dataset_dir: Path) -> list[str]:
     parse_errors, good_csvs = _check_csv_shape(d)
     errors.extend(parse_errors)
 
-    # (3) every value has the right type and nullability (for cleanly-shaped CSVs).
+    # (3) every value has the right type, length, range and nullability.
     errors.extend(_check_csv_values(d, good_csvs))
-    # (4) id-counter coverage + invariants.
+    errors.extend(_check_one_csv_values(d / layout.ID_COUNTERS_CSV, _ID_COUNTER_SPECS))
+    # (4) no duplicate primary keys on composite/natural-key tables (single-id
+    #     dups are caught by the id-counter check).
+    errors.extend(_check_duplicate_pks(d, good_csvs))
+    # (5) id-counter coverage + invariants.
     errors.extend(_check_id_counters(d))
-    # (5) reach names (only if reach.csv parsed cleanly).
+    # (6) reach names (only if reach.csv parsed cleanly).
     if "reach" in good_csvs:
         errors.extend(_check_reach_names(d))
-        # (6) cross-set integrity.
+        # (7) cross-set integrity.
         errors.extend(_check_cross_set(d))
-    # (7) materialize + check-reaches (geometry AND gradient profile).
-    errors.extend(_check_reaches_on_materialized(d))
+    # (8) materialize + check-reaches — only when the dataset is otherwise clean.
+    #     A wrong-typed value (e.g. a non-ISO datetime) would otherwise be loaded
+    #     and crash SQLAlchemy's decoder mid-scan; the errors above already
+    #     explain the problem, so there is nothing to gain by materializing.
+    if not errors:
+        errors.extend(_check_reaches_on_materialized(d))
     return errors
 
 
@@ -199,22 +220,80 @@ def _value_problem(spec: layout.ColumnSpec | None, raw: str) -> str | None:
         return None  # unknown column already flagged by the shape check
     if raw == "":  # the loader maps "" -> NULL
         return None if spec.nullable else "empty value in NOT NULL column"
-    kind = spec.kind
-    if kind == "int":
-        return None if _parses(int, raw) else f"expected integer, got {raw!r}"
-    if kind == "number":
-        return None if _is_finite_number(raw) else f"expected a finite number, got {raw!r}"
-    if kind == "bool":
-        return None if raw in ("0", "1") else f"expected boolean 0/1, got {raw!r}"
-    if kind == "datetime":
-        return (
-            None if _parses(datetime.fromisoformat, raw) else f"expected ISO datetime, got {raw!r}"
-        )
-    if kind == "date":
-        return None if _parses(date.fromisoformat, raw) else f"expected ISO date, got {raw!r}"
-    if kind == "enum":
-        return None if raw in spec.enums else f"expected one of {list(spec.enums)}, got {raw!r}"
-    return None  # text: no value-format constraint
+    return _KIND_CHECKS.get(spec.kind, _text_problem)(spec, raw)
+
+
+def _int_problem(spec: layout.ColumnSpec, raw: str) -> str | None:
+    if spec.is_id:
+        return None if _CANONICAL_ID.match(raw) else f"expected a positive integer id, got {raw!r}"
+    return None if _parses(int, raw) else f"expected integer, got {raw!r}"
+
+
+def _bool_problem(spec: layout.ColumnSpec, raw: str) -> str | None:
+    return None if raw in ("0", "1") else f"expected boolean 0/1, got {raw!r}"
+
+
+def _datetime_problem(spec: layout.ColumnSpec, raw: str) -> str | None:
+    return None if _parses(datetime.fromisoformat, raw) else f"expected ISO datetime, got {raw!r}"
+
+
+def _date_problem(spec: layout.ColumnSpec, raw: str) -> str | None:
+    return None if _parses(date.fromisoformat, raw) else f"expected ISO date, got {raw!r}"
+
+
+def _enum_problem(spec: layout.ColumnSpec, raw: str) -> str | None:
+    return None if raw in spec.enums else f"expected one of {list(spec.enums)}, got {raw!r}"
+
+
+def _text_problem(spec: layout.ColumnSpec, raw: str) -> str | None:
+    if spec.max_length is not None and len(raw) > spec.max_length:
+        return f"exceeds max length {spec.max_length} (got {len(raw)} chars)"
+    return None
+
+
+def _number_problem(spec: layout.ColumnSpec, raw: str) -> str | None:
+    if spec.decimal_spec is not None:
+        problem = _decimal_problem(raw, *spec.decimal_spec)
+        if problem:
+            return problem
+    elif not _is_finite_number(raw):
+        return f"expected a finite number, got {raw!r}"
+    if spec.value_range is not None:
+        lo, hi = spec.value_range
+        if not (lo <= float(raw) <= hi):
+            return f"out of range [{lo}, {hi}], got {raw!r}"
+    return None
+
+
+def _decimal_problem(raw: str, precision: int, scale: int) -> str | None:
+    """Enforce a ``Numeric(precision, scale)`` contract on a decimal string."""
+    try:
+        d = Decimal(raw)
+    except InvalidOperation:
+        return f"not a valid decimal, got {raw!r}"
+    if not d.is_finite():
+        return f"expected a finite number, got {raw!r}"
+    exponent = d.as_tuple().exponent
+    assert isinstance(exponent, int)  # a finite Decimal always has an int exponent
+    frac = max(0, -exponent)
+    if frac > scale:
+        return f"{frac} decimal places exceeds scale {scale}, got {raw!r}"
+    int_digits = max(0, d.adjusted() + 1) if d != 0 else 0
+    if int_digits > precision - scale:
+        return f"{int_digits} integer digits exceeds precision {precision} (scale {scale}), got {raw!r}"
+    return None
+
+
+# Per-kind value checkers; unknown kinds (plain text) fall back to _text_problem.
+_KIND_CHECKS: dict[str, Callable[[layout.ColumnSpec, str], str | None]] = {
+    "int": _int_problem,
+    "number": _number_problem,
+    "bool": _bool_problem,
+    "datetime": _datetime_problem,
+    "date": _date_problem,
+    "enum": _enum_problem,
+    "text": _text_problem,
+}
 
 
 def _parses(fn: Callable[[str], object], raw: str) -> bool:
@@ -230,6 +309,38 @@ def _is_finite_number(raw: str) -> bool:
         return math.isfinite(float(raw))
     except (ValueError, TypeError):
         return False
+
+
+def _check_duplicate_pks(d: Path, good_csvs: set[str]) -> list[str]:
+    """Reject duplicate primary-key tuples on composite/natural-key tables.
+
+    SQLite's upsert silently collapses a duplicate-PK insert, so two identical
+    ``gauge_source`` rows or two ``class_description`` rows with the same name
+    would load as one. Single-``id`` tables are covered by the id-counter check.
+    """
+    errors: list[str] = []
+    for table in sorted(good_csvs):
+        pk = layout.primary_key_columns(table)
+        if pk == ["id"]:
+            continue
+        specs = {s.name: s for s in layout.column_specs(table)}
+        seen: Counter[tuple[object, ...]] = Counter()
+        for r in _csv_rows(d / f"{table}.csv"):
+            seen[tuple(_norm_pk_cell(specs.get(c), r.get(c) or "") for c in pk)] += 1
+        dups = sorted(str(k) for k, c in seen.items() if c > 1)
+        if dups:
+            errors.append(f"{table}.csv has duplicate primary keys {pk}: {dups}")
+    return errors
+
+
+def _norm_pk_cell(spec: layout.ColumnSpec | None, raw: str) -> object:
+    """Normalize an integer PK cell so '1' and '01' collide; others stay literal."""
+    if spec is not None and spec.kind == "int":
+        try:
+            return int(raw)
+        except ValueError:
+            return raw
+    return raw
 
 
 def _int_ids(rows: list[dict[str, str]], column: str) -> tuple[list[int], str | None]:
@@ -343,16 +454,51 @@ def _check_json_reach_keys(d: Path, reach_id_set: set[int]) -> tuple[set[int], l
     for jname in (layout.GEOM_JSON, layout.GRADIENT_JSON):
         if not (d / jname).is_file():
             continue
-        try:
-            keys = {int(k) for k in _read_json(d / jname)}
-        except (ValueError, json.JSONDecodeError) as exc:
-            errors.append(f"{jname}: not a valid reach-id-keyed JSON object ({exc})")
-            continue
+        keys, errs = _parse_reach_id_json(d / jname)
+        errors.extend(errs)
         if jname == layout.GEOM_JSON:
             geom_ids = keys
         if keys - reach_id_set:
             errors.append(f"{jname} has reach ids not in reach.csv: {sorted(keys - reach_id_set)}")
     return geom_ids, errors
+
+
+def _parse_reach_id_json(path: Path) -> tuple[set[int], list[str]]:
+    """Parse a reach-id-keyed JSON object, rejecting duplicate / non-canonical keys.
+
+    ``json.loads`` keeps the last of duplicate object members, so a sidecar with
+    two ``"1"`` keys (or ``"1"`` and ``"01"``, which normalize to the same reach)
+    would silently drop one geometry. An ``object_pairs_hook`` captures the raw
+    members so both kinds of ambiguity are caught.
+    """
+    errors: list[str] = []
+    captured: list[list[tuple[str, object]]] = []
+
+    def hook(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        captured.append(pairs)
+        return dict(pairs)
+
+    try:
+        json.loads(path.read_text(), object_pairs_hook=hook)
+    except (ValueError, json.JSONDecodeError) as exc:
+        return set(), [f"{path.name}: invalid JSON ({exc})"]
+    if not captured:
+        return set(), [f"{path.name}: expected a JSON object"]
+    top = captured[-1]  # the outermost object is completed last
+    raw_keys = [k for k, _ in top]
+    raw_dups = sorted({k for k, c in Counter(raw_keys).items() if c > 1})
+    if raw_dups:
+        errors.append(f"{path.name}: duplicate keys {raw_dups}")
+    by_int: dict[int, set[str]] = {}
+    for k in raw_keys:
+        try:
+            by_int.setdefault(int(k), set()).add(k)
+        except ValueError:
+            errors.append(f"{path.name}: non-integer reach-id key {k!r}")
+    collisions = {ik: sorted(forms) for ik, forms in by_int.items() if len(forms) > 1}
+    if collisions:
+        errors.append(f"{path.name}: non-canonical duplicate reach ids {collisions}")
+    return set(by_int), errors
 
 
 def _check_reaches_on_materialized(dataset_dir: Path) -> list[str]:
@@ -390,7 +536,10 @@ def _check_reaches_on_materialized(dataset_dir: Path) -> list[str]:
             return out
         finally:
             conn.close()
-        _total, flagged = scan_for_issues(database_url=f"sqlite:///{db_path}")
+        try:
+            _total, flagged = scan_for_issues(database_url=f"sqlite:///{db_path}")
+        except Exception as exc:  # defensive backstop — never crash the validator
+            return [f"check-reaches scan failed: {exc}"]
         for label, issues in flagged:
             out.append(f"check-reaches: {label}: " + "; ".join(issues))
     return out

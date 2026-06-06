@@ -21,9 +21,11 @@ import csv
 import json
 import sqlite3
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 from kayak.config import METADATA_DIR
+from kayak.dataset import layout
 
 REPO_DIR = Path(__file__).resolve().parent.parent
 
@@ -68,11 +70,38 @@ def table_columns(conn: sqlite3.Connection, table: str) -> list[tuple[str, bool]
     return [(row[1], bool(row[5])) for row in rows]  # (name, is_pk)
 
 
+def _round_scales(table: str) -> dict[str, int]:
+    """``{column: scale}`` for the table's fixed-precision Numeric columns.
+
+    The DB stores coordinates as full-precision floats (NHD traces emit 13-15
+    decimal places), but the schema declares Numeric(9, 6) -- ~0.1 m resolution,
+    which is ample. Quantizing on export makes the CSV conform to the declared
+    scale (so ``levels validate-dataset`` can enforce it) and drops meaningless
+    float-formatting noise from every diff.
+    """
+    return {s.name: s.decimal_spec[1] for s in layout.column_specs(table) if s.decimal_spec}
+
+
+def _quantize(value: object, scale: int) -> object:
+    """Round a numeric cell to ``scale`` decimal places, dropping trailing zeros.
+
+    Non-numeric / empty values pass through untouched (the validator flags them).
+    """
+    if value is None or value == "":
+        return value
+    try:
+        q = Decimal(str(value)).quantize(Decimal(1).scaleb(-scale))
+    except (ArithmeticError, ValueError):
+        return value
+    return format(q.normalize(), "f")  # plain decimal, no exponent, no trailing zeros
+
+
 def export_table(conn: sqlite3.Connection, table: str, out_dir: Path) -> tuple[int, int]:
     cols_info = table_columns(conn, table)
     excluded = EXCLUDED_COLUMNS.get(table, set())
     cols = [name for name, _ in cols_info if name not in excluded]
     pk_cols = [name for name, is_pk in cols_info if is_pk]
+    scales = _round_scales(table)
 
     col_list = ", ".join(f'"{c}"' for c in cols)
     order = ", ".join(f'"{c}"' for c in pk_cols) if pk_cols else "1"
@@ -84,7 +113,12 @@ def export_table(conn: sqlite3.Connection, table: str, out_dir: Path) -> tuple[i
         writer = csv.writer(f, lineterminator="\n")
         writer.writerow(cols)
         for row in conn.execute(sql):
-            writer.writerow(row)
+            writer.writerow(
+                [
+                    _quantize(v, scales[c]) if c in scales else v
+                    for c, v in zip(cols, row, strict=True)
+                ]
+            )
             rows += 1
     return rows, dest.stat().st_size
 

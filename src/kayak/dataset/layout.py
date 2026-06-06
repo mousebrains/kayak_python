@@ -73,6 +73,15 @@ GRADIENT_JSON = "reaches-gradient.json"  # required file; per-reach entries opti
 REACH_CHILD_CSVS: tuple[str, ...] = ("reach_state", "reach_class", "reach_guidebook")
 
 
+# Magnitude bounds for the geographic-coordinate columns, a domain check on top
+# of the Numeric(9, 6) precision/scale: a value can fit the scale yet still be
+# an impossible coordinate (e.g. latitude 95), and an absurd value (1e300) is
+# caught here too. export_metadata rounds coordinates to 6 dp on write so the
+# declared scale is actually met.
+_LAT_RANGE = (-90.0, 90.0)
+_LON_RANGE = (-180.0, 180.0)
+
+
 @dataclass(frozen=True)
 class ColumnSpec:
     """A CSV column's validation contract, derived from its ORM column."""
@@ -81,6 +90,10 @@ class ColumnSpec:
     kind: str  # "int" | "number" | "bool" | "datetime" | "date" | "enum" | "text"
     nullable: bool
     enums: tuple[str, ...] = ()
+    max_length: int | None = None  # String(n) cap for text columns
+    is_id: bool = False  # the id PK or an FK to some table's id (stable handle)
+    value_range: tuple[float, float] | None = None  # magnitude bound (coordinates)
+    decimal_spec: tuple[int, int] | None = None  # Numeric(precision, scale)
 
 
 def _kind(coltype: sa.types.TypeEngine) -> tuple[str, tuple[str, ...]]:
@@ -104,6 +117,14 @@ def _kind(coltype: sa.types.TypeEngine) -> tuple[str, tuple[str, ...]]:
     return "text", ()  # String / Text / anything else: no value-format constraint
 
 
+def _coordinate_range(name: str) -> tuple[float, float] | None:
+    if "latitude" in name:
+        return _LAT_RANGE
+    if "longitude" in name:
+        return _LON_RANGE
+    return None
+
+
 def expected_columns(table: str) -> set[str]:
     """The exact CSV column-name set for ``table`` (model columns minus excluded)."""
     cols = {c.name for c in Base.metadata.tables[table].columns}
@@ -116,6 +137,11 @@ def ordered_columns(table: str) -> list[str]:
     return [c.name for c in Base.metadata.tables[table].columns if c.name not in excluded]
 
 
+def primary_key_columns(table: str) -> list[str]:
+    """The CSV columns forming ``table``'s primary key (single ``id`` or composite)."""
+    return [c.name for c in Base.metadata.tables[table].primary_key.columns]
+
+
 def column_specs(table: str) -> list[ColumnSpec]:
     """Per-column validation contract for ``table``'s CSV, in model order."""
     excluded = EXCLUDED_COLUMNS.get(table, set())
@@ -124,8 +150,35 @@ def column_specs(table: str) -> list[ColumnSpec]:
         if c.name in excluded:
             continue
         kind, enums = _kind(c.type)
-        specs.append(ColumnSpec(name=c.name, kind=kind, nullable=bool(c.nullable), enums=enums))
+        max_length = c.type.length if (kind == "text" and isinstance(c.type, sa.String)) else None
+        is_id = c.name == "id" or any(fk.target_fullname.endswith(".id") for fk in c.foreign_keys)
+        value_range = _coordinate_range(c.name) if kind == "number" else None
+        decimal_spec = _decimal_spec(c.type)
+        specs.append(
+            ColumnSpec(
+                name=c.name,
+                kind=kind,
+                nullable=bool(c.nullable),
+                enums=enums,
+                max_length=max_length,
+                is_id=is_id,
+                value_range=value_range,
+                decimal_spec=decimal_spec,
+            )
+        )
     return specs
+
+
+def _decimal_spec(coltype: sa.types.TypeEngine) -> tuple[int, int] | None:
+    """``(precision, scale)`` for a fixed-precision ``Numeric`` column (not Float)."""
+    if (
+        isinstance(coltype, sa.Numeric)
+        and not isinstance(coltype, sa.Float)
+        and coltype.precision is not None
+        and coltype.scale is not None
+    ):
+        return coltype.precision, coltype.scale
+    return None
 
 
 def id_bearing_tables() -> set[str]:
