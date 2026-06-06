@@ -124,22 +124,12 @@ def test_build_site_map_includes_all_usgs_sources_of_one_gauge(session):
     assert _build_site_map(session) == expected
 
 
-def test_usgs_source_names_are_station_ids():
-    """Source-based fetch keys on source.name as the USGS station id, so every
-    USGS source must be named a bare numeric station id -- otherwise it would
-    silently fetch the wrong station. Guards that wiring invariant against
-    source.csv."""
-    import csv
-
-    from kayak.config import METADATA_DIR
-
-    with (METADATA_DIR / "source.csv").open(encoding="utf-8") as fh:
-        offenders = [
-            row["name"]
-            for row in csv.DictReader(fh)
-            if row["agency"] == "USGS" and not row["name"].isdigit()
-        ]
-    assert not offenders, f"USGS sources whose name is not a numeric station id: {offenders}"
+# NOTE: test_usgs_source_names_are_station_ids (it read the real source.csv from
+# METADATA_DIR to assert USGS sources are named a bare numeric station id) moved
+# into `levels validate-dataset` (_check_source_names) in the dataset-separation
+# test-repointing — code tests must not read a kayak_data clone, and the data
+# repo's CI now gates that invariant via validate-dataset. The fixture-based
+# regression lives in tests/test_scripts/test_validate_dataset.py.
 
 
 # ---------------------------------------------------------------------------

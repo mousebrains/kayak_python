@@ -249,12 +249,14 @@ jobs:
 
   test:
     runs-on: ubuntu-24.04
-    # The metadata CSVs live in the private kayak_data repo (data-repo split); the
-    # data-reading tests (test_id_counters, test_reach_names, test_schema_doc_sync,
-    # test_committed_reach_geom, test_fetch_usgs_ogc) read them via METADATA_DIR,
-    # pointed at the second checkout below. The default GITHUB_TOKEN can't read
-    # another private repo, so the checkout uses a read-only deploy key stored as
-    # the KAYAK_DATA_DEPLOY_KEY secret.
+    # The metadata CSVs live in the private kayak_data repo (data-repo split).
+    # As of the dataset-separation test-repointing (#124) NO code test reads
+    # METADATA_DIR — those dataset-integrity checks moved into
+    # `levels validate-dataset` (run on the committed fixture in code CI; the
+    # real dataset is gated by kayak_data's own CI). This kayak_data checkout
+    # and the paired-branch logic below are vestigial, retained only until S4b
+    # (CI inversion) removes them. The checkout uses a read-only deploy key
+    # (KAYAK_DATA_DEPLOY_KEY) since GITHUB_TOKEN can't read another private repo.
     env:
       METADATA_DIR: ${{ github.workspace }}/kayak_data
     strategy:
@@ -269,9 +271,9 @@ jobs:
           repository: mousebrains/kayak_data
           ssh-key: ${{ secrets.KAYAK_DATA_DEPLOY_KEY }}
           path: kayak_data
-      # Paired-PR support: when a kayak_data branch shares this branch's name
-      # (the convention for coupled metadata changes, e.g. a reach-count bump
-      # guarded by test_committed_reach_geom), test against it instead of
+      # Paired-PR support (vestigial pending S4b — no code test reads kayak_data
+      # as of #124): when a kayak_data branch shares this branch's name (the
+      # convention for coupled metadata changes), test against it instead of
       # main. Falls back to main when no such branch exists — including
       # re-runs after the paired PR merges and its branch is deleted.
       - name: Use matching kayak_data branch when present
