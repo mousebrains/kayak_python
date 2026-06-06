@@ -1,17 +1,19 @@
 """YAML config file loaders for sources, builder columns, and description fields.
 
 These replace the database-stored configuration tables (URLParse, BuilderColumn,
-DescriptionField) with static YAML files under data/.
+DescriptionField) with static YAML files packaged under ``kayak/data/``.
 """
 
 from functools import lru_cache
-from pathlib import Path
 from typing import Any
 
 import yaml
 
-# data/ directory is at the project root, sibling of src/
-_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
+from kayak.resources import resource_dir
+
+# Packaged YAML defaults — ship inside the kayak package so they resolve in both
+# an editable (src/kayak/data) and a wheel (site-packages/kayak/data) install.
+_DATA_DIR = resource_dir("data")
 
 
 def _load_yaml(filename: str) -> dict[str, Any]:
@@ -32,7 +34,7 @@ def _load_yaml(filename: str) -> dict[str, Any]:
 
 @lru_cache(maxsize=1)
 def load_sources() -> list[dict[str, Any]]:
-    """Load source URL/parser definitions from data/sources.yaml.
+    """Load source URL/parser definitions from src/kayak/data/sources.yaml.
 
     Returns list of dicts with keys: parser, url, hours, stations.
     ``stations`` is a dict mapping station code → IANA TZ name, empty if
@@ -57,7 +59,7 @@ def load_sources() -> list[dict[str, Any]]:
 
 @lru_cache(maxsize=1)
 def load_builder_columns() -> list[dict[str, Any]]:
-    """Load builder column definitions from data/builder.yaml.
+    """Load builder column definitions from src/kayak/data/builder.yaml.
 
     Returns list of dicts with keys: sort_key, use, type, field, length,
     name_text, name_html.
@@ -69,7 +71,7 @@ def load_builder_columns() -> list[dict[str, Any]]:
 
 @lru_cache(maxsize=1)
 def load_description_fields() -> list[dict[str, Any]]:
-    """Load description field definitions from data/descriptions.yaml.
+    """Load description field definitions from src/kayak/data/descriptions.yaml.
 
     Returns list of dicts with keys: sort_key, column, type, prefix, suffix,
     and optionally info.
@@ -81,7 +83,7 @@ def load_description_fields() -> list[dict[str, Any]]:
 
 @lru_cache(maxsize=1)
 def load_http_concurrency_overrides() -> dict[str, int]:
-    """Load per-host concurrency caps from data/http_concurrency.yaml.
+    """Load per-host concurrency caps from src/kayak/data/http_concurrency.yaml.
 
     Returns a dict of {hostname: int}. Empty if the file is missing the
     ``overrides:`` key. Hosts not listed use the http_client default.

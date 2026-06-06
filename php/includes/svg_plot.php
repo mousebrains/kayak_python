@@ -377,7 +377,7 @@ SVG;
  * Render a gradient profile as an SVG bar chart.
  *
  * Reads the JSON produced by docs/one-offs/compute_reach_gradient.py
- * (shape documented in data/db/migrations/0045_*.sql header). Each
+ * (shape documented in src/kayak/data/db/migrations/0045_*.sql header). Each
  * sample draws as a <rect> spanning its 3σ analysis window
  * (d_mi ± w_mi/2) at height = grad_ft_per_mi. Bars are split into two
  * groups (gp-bars-pale for insignificant, gp-bars-sig for significant)
@@ -408,7 +408,7 @@ function generate_gradient_profile_svg(
     }
     /**
      * Per-sample shape from compute_reach_gradient.build_profile (documented
-     * in data/db/migrations/0045_*.sql header). Numeric fields are `float|int`
+     * in src/kayak/data/db/migrations/0045_*.sql header). Numeric fields are `float|int`
      * because JSON whole numbers (e.g. grad_ft_per_mi: 0) decode to int — the
      * (float) casts below are load-bearing coercion of that external JSON.
      * `significant` defaults via `?? false`; `lat`/`lon` exist in live data but

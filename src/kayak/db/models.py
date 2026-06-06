@@ -174,7 +174,7 @@ class Source(Base):
     error on those stations.
 
     ``timezone`` is an IANA TZ name (``America/Boise``, ``America/Los_Angeles``,
-    ``Etc/GMT+8``) seeded from the ``stations:`` block in data/sources.yaml
+    ``Etc/GMT+8``) seeded from the ``stations:`` block in src/kayak/data/sources.yaml
     and consumed by ``BaseParser.dump_to_db`` to localize naive timestamps
     before UTC conversion. NULL (the default) means "treat naive timestamps
     as UTC" — the correct behavior for parsers whose feed is already UTC.
@@ -237,7 +237,7 @@ class GaugeSource(Base):
 class FetchUrl(Base):
     """Remote URL to fetch observation data from.
 
-    Seeded from data/sources.yaml by init-db. The ``parser`` field names
+    Seeded from src/kayak/data/sources.yaml by init-db. The ``parser`` field names
     the registered parser class. The ``hours`` field restricts which hours
     of the day this URL should be fetched (e.g. "6,12,18").
     """

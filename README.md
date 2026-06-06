@@ -52,7 +52,7 @@ source .venv/bin/activate
 
 # 2b. Clone the metadata repo and point the code at it. The metadata CSVs +
 #     reaches*.json live in the separate `kayak_data` repo (data-repo split),
-#     NOT in this code repo (only data/db/migrations/ stays here). The code
+#     NOT in this code repo (only src/kayak/data/db/migrations/ stays here). The code
 #     finds them via METADATA_DIR.
 git clone git@github.com:mousebrains/kayak_data.git ../kayak_data
 export METADATA_DIR="$(cd ../kayak_data && pwd)"   # or persist in ~/.config/kayak/.env
@@ -97,8 +97,8 @@ shell config makes activation noisy: replace every `levels …` with
 
 | Command | Purpose |
 |---------|---------|
-| `levels init-db` | Create tables, seed states/sources from `data/sources.yaml`, stamp all known migrations |
-| `levels migrate` | Apply pending `data/db/migrations/*.sql` files (tracked in `schema_migrations`) |
+| `levels init-db` | Create tables, seed states/sources from `src/kayak/data/sources.yaml`, stamp all known migrations |
+| `levels migrate` | Apply pending `src/kayak/data/db/migrations/*.sql` files (tracked in `schema_migrations`) |
 | `levels pipeline` | Run full pipeline: fetch → fetch-usgs-ogc → calc-rating → update-gauge-cache → calculator → build |
 | `levels fetch` | Fetch observations from all active sources (standalone — also runs as pipeline stage 1) |
 | `levels fetch-usgs-ogc` | Fetch USGS continuous data via the OGC API for gauges linked to a USGS source |

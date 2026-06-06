@@ -69,7 +69,7 @@ def _seed_states(session: Session) -> None:
 
 
 def sync_sources(session: Session) -> int:
-    """Sync URL/parser definitions from data/sources.yaml into FetchUrl table.
+    """Sync URL/parser definitions from src/kayak/data/sources.yaml into FetchUrl table.
 
     Upserts every YAML entry with is_active=True, then flips is_active=False
     on any FetchUrl whose URL is NOT in the YAML — so URLs removed from the

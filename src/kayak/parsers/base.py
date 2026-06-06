@@ -215,7 +215,7 @@ class BaseParser(ABC):
         the timezone WARNING (the new row has no ``timezone`` set — if this
         feed publishes local time, observations will be stored as naive UTC
         shifted by the local offset until the station is added to the URL's
-        ``stations:`` block in data/sources.yaml).
+        ``stations:`` block in src/kayak/data/sources.yaml).
 
         Additionally escalates to ERROR when ``self.source_map`` is empty
         before the new row goes in: that means the fetch_url has zero other
@@ -235,7 +235,7 @@ class BaseParser(ABC):
         logger.warning(
             "Auto-created Source id=%d for station %s (no timezone). "
             "If this feed publishes local time, add it to the stations: block "
-            "for this URL in data/sources.yaml.",
+            "for this URL in src/kayak/data/sources.yaml.",
             src.id,
             station,
         )

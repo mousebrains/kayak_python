@@ -273,7 +273,7 @@ here" without re-reading migration 0022's commit body.
 ### Audit vs. reality
 
 The audit flagged **four** schema features as removal candidates.
-Migration `data/db/migrations/0022_drop_dormant_features.sql` shipped
+Migration `src/kayak/data/db/migrations/0022_drop_dormant_features.sql` shipped
 only one of them; the other three were retained:
 
 | Candidate | Outcome | Reason |
@@ -314,7 +314,7 @@ recipe is:
    § Recovering from a partial `@no_transaction` migration above).
 
 2. **Write a table-rebuild migration**, named per the existing
-   `data/db/migrations/NNNN_*.sql` sequence. Pattern (adapted from
+   `src/kayak/data/db/migrations/NNNN_*.sql` sequence. Pattern (adapted from
    `0012_reach_name_partial_unique.sql`):
 
    ```sql
@@ -567,7 +567,7 @@ restore the prior state.** Pre-check:
 
 ```bash
 # Migrations applied since the rollback target.
-git diff --name-only <ROLLBACK_SHA>..HEAD -- data/db/migrations/
+git diff --name-only <ROLLBACK_SHA>..HEAD -- src/kayak/data/db/migrations/
 ```
 
 Schema changes are **forward-only.** The migrations listed below

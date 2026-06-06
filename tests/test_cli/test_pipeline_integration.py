@@ -354,7 +354,7 @@ def test_pipeline_fetch_through_build(fixture: _ParserFixture, tmp_path: Path) -
     args = _build_args(input_dir, output_dir)
 
     # Single-entry source list matching our seeded FetchUrl so fetch()
-    # doesn't iterate the 100+ sources from real data/sources.yaml.
+    # doesn't iterate the 100+ sources from real src/kayak/data/sources.yaml.
     yaml_sources = [{"url": url, "parser": fixture.parser_id, "hours": ""}]
 
     # OUTPUT_DIR override routes build()'s path lookup onto our tmp dir.

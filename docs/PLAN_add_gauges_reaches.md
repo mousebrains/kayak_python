@@ -103,17 +103,17 @@ A "gauge" is a `gauge` row + ≥1 `source` (+ a `gauge_source` link). Assign ids
 - **`gauge_source.csv`** — the join row `gauge_id,source_id` (the two ids above).
 - **`fetch_url.csv`** — only for a fetch source: new `id`, `url` (UNIQUE),
   `parser`, `hours`, `is_active` — **and** the URL must also be in
-  `data/sources.yaml` (the pipeline only fetches URLs present there).
+  `src/kayak/data/sources.yaml` (the pipeline only fetches URLs present there).
 - **`id_counters.csv`** — bump `next_id` for every table you added an id to.
 
 **USGS is the easy case (zero extra wiring):** set `gauge.usgs_id`, add a source
 `agency='USGS'`, `fetch_url_id` blank, named the digit station id, link it.
 `fetch-usgs-ogc` then auto-fetches params `00060`/`00065`/`00010` (flow / gage /
 **temperature**, °C→°F) for any gauge with `usgs_id`. No `fetch_url.csv` row,
-nothing in `data/sources.yaml`.
+nothing in `src/kayak/data/sources.yaml`.
 
 **Fetch sources** (WA DOE `_WTM_`, USBR, USACE) additionally need the URL in
-`data/sources.yaml`, and USACE temperature would first need `"Temp-Water":
+`src/kayak/data/sources.yaml`, and USACE temperature would first need `"Temp-Water":
 DataType.temperature` added to `usace_cda.py::_PARAM_MAP` (its own small PR).
 
 **State + HUC are required for the browser filter.** `gauges.html` emits a row's
@@ -273,7 +273,7 @@ Remove the gauge's rows from `*.csv` and let `sync-metadata --allow-deletes`
 apply the deletion by id:
 
 - Remove the row(s) from `gauge.csv`, `source.csv`, and `gauge_source.csv` (and
-  `fetch_url.csv` + the URL from `data/sources.yaml` if it's a fetch source — else
+  `fetch_url.csv` + the URL from `src/kayak/data/sources.yaml` if it's a fetch source — else
   `sync_sources` recreates the `fetch_url`). A USGS source has no URL to remove.
 - **Pre-flight (per [`migrations.md`](migrations.md) *Removing a source safely*):**
   confirm nothing else needs the source — no `calc_expression` input, no

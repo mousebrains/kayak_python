@@ -23,6 +23,8 @@ from dotenv import load_dotenv
 from pydantic import AnyHttpUrl, EmailStr, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+from kayak.resources import resource_dir
+
 
 def _config_env_path() -> Path | None:
     """Locate ``~/.config/kayak/.env``, with a SUDO_USER fallback.
@@ -77,7 +79,11 @@ if _SECRETS_ENV.is_file() and os.access(_SECRETS_ENV, os.R_OK):
     load_dotenv(_SECRETS_ENV, override=False)
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-DATA_DIR = BASE_DIR / "data"
+# Packaged engine resources (YAML defaults, schema migrations) ship inside the
+# kayak package, so this resolves under src/kayak/ (editable) or
+# site-packages/kayak/ (wheel) — not the repo root — which is what lets a
+# wheel-installed engine find them. See kayak.resources / plan S4a-2.
+DATA_DIR = resource_dir("data")
 
 
 def _default_database_url() -> str:
@@ -125,11 +131,16 @@ class KayakConfig(BaseSettings):
 
     # Metadata-snapshot directory — the ``*.csv`` + ``reaches*.json`` that the
     # metadata-single-source flow treats as the source of truth. The default
-    # *value* stays ``data/db`` so path resolution is unchanged, but the CSVs no
-    # longer live in the code repo: clone ``kayak_data`` and set ``METADATA_DIR``
-    # to it (e.g. ``/home/pat/kayak_data``; deploy/SETUP.md § 2.5). Migrations
-    # (``data/db/migrations``) stay in the code repo and are NOT under this dir.
-    metadata_dir: Path = Field(default_factory=lambda: DATA_DIR / "db")
+    # *value* stays ``data/db`` (repo-root; path resolution unchanged) and is
+    # deliberately NOT the packaged ``DATA_DIR``: the metadata is club-specific
+    # external data, not an engine resource, so it ships in a separate repo,
+    # not inside the wheel. The CSVs no longer live in the code repo at all —
+    # clone ``kayak_data`` and set ``METADATA_DIR`` to it (e.g.
+    # ``/home/pat/kayak_data``; deploy/SETUP.md § 2.5). The schema migrations,
+    # by contrast, *are* an engine resource and ship inside the package at
+    # ``src/kayak/data/db/migrations`` (resolved via ``DATA_DIR``), so they are
+    # NOT under this dir.
+    metadata_dir: Path = Field(default_factory=lambda: BASE_DIR / "data" / "db")
 
     # Fetch pipeline
     fetch_timeout: int = Field(default=300, gt=0, le=600)

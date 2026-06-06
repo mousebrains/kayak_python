@@ -90,7 +90,7 @@ can't (see `nwps.parse`, `usace_cda.parse`, `nwrfc_xml.parse` for
 examples — each re-validates the body and emits ERROR before
 delegating to `super().parse(text)`).
 
-2. Add the source URLs to `data/sources.yaml`:
+2. Add the source URLs to `src/kayak/data/sources.yaml`:
 
 ```yaml
 your_parser:
@@ -115,7 +115,7 @@ See `scripts/` for helper scripts. The typical workflow:
 1. Find the gauge in USGS/NWPS metadata
 2. Create the gauge and source rows in the database
 3. Link them via `gauge_source`
-4. Add the fetch URL to `data/sources.yaml`
+4. Add the fetch URL to `src/kayak/data/sources.yaml`
 5. Run `levels init-db` and `levels pipeline`
 
 ## PHP code style
