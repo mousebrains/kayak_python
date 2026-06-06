@@ -514,7 +514,10 @@ def _check_source_names(d: Path, good_csvs: set[str]) -> list[str]:
     (``kayak.cli.fetch_usgs_ogc``), so a non-numeric name would silently fetch
     the wrong station / nothing. Consolidated from the former
     ``tests/test_cli/test_fetch_usgs_ogc.py::test_usgs_source_names_are_station_ids``
-    so the data repo's CI gates it via ``validate-dataset`` (S4b).
+    so the data repo's CI gates it via ``validate-dataset`` (S4b). ASCII digits
+    only — ``str.isdigit()`` alone accepts non-ASCII digits (e.g. ``"٣"``) the
+    fetch URL can't use, so it's paired with ``isascii()`` to match the rest of
+    the validator's ASCII-strict numeric grammars.
     """
     if "source" not in good_csvs:
         return []
@@ -523,7 +526,7 @@ def _check_source_names(d: Path, good_csvs: set[str]) -> list[str]:
         if (r.get("agency") or "").strip() != "USGS":
             continue
         name = (r.get("name") or "").strip()
-        if not name.isdigit():
+        if not (name.isascii() and name.isdigit()):
             offenders.append(name)
     if offenders:
         return [f"source.csv: USGS source name must be a numeric station id, got {offenders}"]
@@ -779,6 +782,17 @@ def _check_reaches_on_materialized(dataset_dir: Path) -> list[str]:
             fk = conn.execute("PRAGMA foreign_key_check").fetchall()
             if fk:
                 out.append(f"foreign-key violations after load: {fk[:10]}")
+            # Anti-vacuity: every reach.csv row must materialize. A loader that
+            # silently skipped rows would make the check-reaches scan below pass
+            # over fewer reaches than the dataset declares (restores the count
+            # guard from test_committed_reach_geom, removed in #124).
+            csv_reaches = len(_csv_rows(dataset_dir / "reach.csv"))
+            (db_reaches,) = conn.execute("SELECT COUNT(*) FROM reach").fetchone()
+            if db_reaches != csv_reaches:
+                out.append(
+                    f"loader materialized {db_reaches} reaches but reach.csv declares "
+                    f"{csv_reaches} (rows skipped on load?)"
+                )
         except (sqlite3.Error, ValueError, json.JSONDecodeError) as exc:
             out.append(f"dataset failed to load into a fresh schema: {exc}")
             conn.close()

@@ -704,6 +704,36 @@ def test_usgs_source_non_numeric_name_is_flagged(dataset_copy: Path) -> None:
     assert any("source.csv" in e and "USGS" in e and "numeric" in e for e in errs)
 
 
+def test_usgs_source_non_ascii_digit_name_is_flagged(dataset_copy: Path) -> None:
+    # str.isdigit() alone accepts non-ASCII digits (e.g. "١٤") the OGC fetch URL
+    # can't use; the check requires ASCII digits. (PR #124 review nit.)
+    _rewrite_csv(
+        dataset_copy / "source.csv",
+        lambda rows: [r.update(name="١٤") for r in rows if r.get("agency") == "USGS"],
+    )
+    errs = validate_dataset(dataset_copy)
+    assert any("source.csv" in e and "USGS" in e for e in errs)
+
+
+def test_loader_row_skip_makes_count_mismatch(dataset_copy: Path, monkeypatch) -> None:
+    # Anti-vacuity guard: if the loader silently dropped a reach row, the
+    # check-reaches scan would cover fewer reaches than reach.csv declares. Patch
+    # the loader to drop one row and assert the count mismatch is reported.
+    # (PR #124 review nit — restores test_committed_reach_geom's count guard.)
+    import kayak.db.metadata_csv as mc
+
+    real = mc.upsert_csvs
+
+    def dropping(conn, in_dir):
+        counts = real(conn, in_dir)
+        conn.execute("DELETE FROM reach WHERE id = (SELECT MAX(id) FROM reach)")
+        return counts
+
+    monkeypatch.setattr(mc, "upsert_csvs", dropping)
+    errs = validate_dataset(dataset_copy)
+    assert any("materialized" in e and "reach.csv declares" in e for e in errs)
+
+
 def test_provenance_matches_committed_fixture() -> None:
     # Finding 4: the committed fixture's geometry/facts/gradient must match the
     # recorded provenance digests, so a hand-edit (or a regen from a dirty
