@@ -232,7 +232,13 @@ CLASS_DESCRIPTION = [
     {"name": "II", "description": "Fixture class text: straightforward rapids, wide channels."},
     {"name": "III-IV", "description": "Fixture class text: powerful rapids requiring maneuvering."},
 ]
-# id_counters covers every fixture table with an id column.
+# Contract tables the fixture has no rows for — written header-only so the
+# fixture is a *complete projection* (every contract CSV present; absence would
+# be corruption, not "not applicable"). See kayak.dataset.layout.
+EMPTY_TABLES = ("rating", "rating_data", "guidebook", "reach_guidebook", "huc_name")
+
+# id_counters covers every id-bearing contract table — including the empty ones
+# (their counter records the never-reused high-water mark; next_id=1 = no rows).
 ID_COUNTERS = {
     "state": 3,
     "fetch_url": 2,
@@ -241,11 +247,24 @@ ID_COUNTERS = {
     "gauge": 4,
     "reach": 4,
     "reach_class": 4,
+    "rating": 1,
+    "guidebook": 1,
 }
 
 
 def _sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _grad_str(value: object) -> str:
+    """Canonical string form of a gradient-profile entry, for hashing.
+
+    The reaches-gradient.json values are JSON-encoded strings; fall back to a
+    sorted-key dump for any non-string so the digest is deterministic.
+    """
+    return (
+        value if isinstance(value, str) else json.dumps(value, sort_keys=True, ensure_ascii=False)
+    )
 
 
 def _source_commit(src: Path) -> str:
@@ -259,6 +278,29 @@ def _source_commit(src: Path) -> str:
         ).stdout.strip()
     except (subprocess.CalledProcessError, FileNotFoundError):
         return "unknown"
+
+
+def _require_clean_source(src: Path, rel_paths: list[str]) -> None:
+    """Refuse to build from a source with uncommitted edits to the files we copy.
+
+    The provenance manifest pins the source HEAD, so reading a dirty working
+    tree would record a commit that does not match the bytes we copied. Abort
+    rather than mint a fixture whose recorded commit is a lie.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(src), "status", "--porcelain", "--", *rel_paths],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        raise SystemExit(f"cannot verify source checkout is clean ({exc})") from exc
+    if out:
+        raise SystemExit(
+            f"source {src} has uncommitted changes to {rel_paths}:\n{out}\n"
+            "commit or stash them — the fixture pins the source HEAD."
+        )
 
 
 def _write_csv(name: str, header: list[str], rows: list[dict]) -> None:
@@ -287,6 +329,9 @@ def main(argv: list[str] | None = None) -> int:
     if not args.source:
         ap.error("a --source dataset directory (or KAYAK_DATA_DIR) is required")
     src = Path(args.source)
+    # The files we copy public-domain bytes from must be committed, so the
+    # recorded source HEAD matches what we read.
+    _require_clean_source(src, ["reach.csv", "reaches.json", "reaches-gradient.json"])
 
     OUT.mkdir(parents=True, exist_ok=True)
     src_reach = {r["id"]: r for r in csv.DictReader((src / "reach.csv").open(encoding="utf-8"))}
@@ -336,6 +381,10 @@ def main(argv: list[str] | None = None) -> int:
                 "fixture_reach_id": fid,
                 "geom_sha256": _sha256(src_geom[src_id]),
                 "facts_sha256": _sha256("|".join(f"{c}={src_row[c]}" for c in COPIED_REACH_COLS)),
+                # "" means the source reach carries no gradient profile.
+                "gradient_sha256": _sha256(_grad_str(src_grad[src_id]))
+                if src_id in src_grad
+                else "",
             }
         )
 
@@ -351,6 +400,8 @@ def main(argv: list[str] | None = None) -> int:
     _table_csv("reach_state", [{"reach_id": r, "state_id": s} for r, s in REACH_STATE])
     _table_csv("reach_class", REACH_CLASS)
     _table_csv("class_description", CLASS_DESCRIPTION)
+    for empty in EMPTY_TABLES:  # header-only — complete projection
+        _table_csv(empty, [])
     _write_csv(
         "id_counters.csv",
         ["table", "next_id"],

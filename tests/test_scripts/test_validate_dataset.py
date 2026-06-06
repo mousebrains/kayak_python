@@ -9,6 +9,7 @@ and catches each class of break it is responsible for.
 from __future__ import annotations
 
 import csv
+import importlib.util
 import json
 import shutil
 from pathlib import Path
@@ -18,6 +19,16 @@ import pytest
 from kayak.cli.validate_dataset import validate_dataset
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "dataset"
+BUILDER = Path(__file__).resolve().parents[1] / "fixtures" / "build_dataset_fixture.py"
+
+
+def _load_builder():
+    """Import the fixture generator to reuse its exact hashing helpers."""
+    spec = importlib.util.spec_from_file_location("build_dataset_fixture", BUILDER)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def test_fixture_dataset_is_valid() -> None:
@@ -203,3 +214,102 @@ def test_malformed_geometry_json_does_not_crash(dataset_copy: Path) -> None:
     (dataset_copy / "reaches.json").write_text("{ not valid json")
     errs = validate_dataset(dataset_copy)  # must not raise
     assert errs
+
+
+# --- regression tests for the PR #123 round-2 review findings ----------------
+
+
+def test_non_numeric_value_is_flagged(dataset_copy: Path) -> None:
+    # Finding 1: SQLite would store "abc" in a REAL column silently, so the
+    # materialized load can't catch it — the value check must.
+    _rewrite_csv(dataset_copy / "gauge.csv", lambda rows: rows[0].update(latitude="abc"))
+    errs = validate_dataset(dataset_copy)
+    assert any("gauge.csv" in e and "latitude" in e and "number" in e for e in errs)
+
+
+def test_bad_enum_value_is_flagged(dataset_copy: Path) -> None:
+    # Finding 1: an out-of-set enum value is a contract violation.
+    _rewrite_csv(
+        dataset_copy / "calc_expression.csv",
+        lambda rows: rows[0].update(data_type="bogus"),
+    )
+    errs = validate_dataset(dataset_copy)
+    assert any("calc_expression.csv" in e and "data_type" in e for e in errs)
+
+
+def test_empty_value_in_not_null_column_is_flagged(dataset_copy: Path) -> None:
+    # Finding 1: nullability is part of the per-column contract.
+    _rewrite_csv(dataset_copy / "gauge.csv", lambda rows: rows[0].update(name=""))
+    errs = validate_dataset(dataset_copy)
+    assert any("gauge.csv" in e and "name" in e and "NOT NULL" in e for e in errs)
+
+
+def test_missing_class_description_is_required(dataset_copy: Path) -> None:
+    # Finding 2: a dataset is a complete projection — every contract CSV present.
+    (dataset_copy / "class_description.csv").unlink()
+    errs = validate_dataset(dataset_copy)
+    assert any("class_description.csv" in e for e in errs)
+
+
+def test_missing_gradient_json_is_required(dataset_copy: Path) -> None:
+    # Finding 2: both JSON sidecars are required (empty is "{}", not absent).
+    (dataset_copy / "reaches-gradient.json").unlink()
+    errs = validate_dataset(dataset_copy)
+    assert any("reaches-gradient.json" in e for e in errs)
+
+
+def test_missing_reach_class_is_required(dataset_copy: Path) -> None:
+    # Finding 2 (reviewer's repro): deleting reach_class.csv + its counter must
+    # not validate.
+    (dataset_copy / "reach_class.csv").unlink()
+    _rewrite_csv(
+        dataset_copy / "id_counters.csv",
+        lambda rows: rows.__setitem__(
+            slice(None), [r for r in rows if r["table"] != "reach_class"]
+        ),
+    )
+    errs = validate_dataset(dataset_copy)
+    assert any("reach_class.csv" in e for e in errs)
+
+
+def test_duplicate_header_is_flagged(dataset_copy: Path) -> None:
+    # Finding 3 (reviewer's repro): header `id,name,abbreviation,id` collapses to
+    # the expected set, so the set check passed it; duplicate names must be
+    # rejected before the set comparison.
+    p = dataset_copy / "state.csv"
+    lines = p.read_text().splitlines()
+    out = [lines[0] + ",id"]
+    out += [ln + "," + ln.split(",")[0] for ln in lines[1:]]
+    p.write_text("\n".join(out) + "\n")
+    errs = validate_dataset(dataset_copy)
+    assert any("state.csv" in e and "duplicate column" in e for e in errs)
+
+
+def test_short_row_is_flagged(dataset_copy: Path) -> None:
+    # Finding 3: a row with the wrong number of fields is a structural error.
+    p = dataset_copy / "gauge_source.csv"
+    p.write_text(p.read_text() + "1\n")  # one field, header has two
+    errs = validate_dataset(dataset_copy)
+    assert any("gauge_source.csv" in e and "fields" in e for e in errs)
+
+
+def test_provenance_matches_committed_fixture() -> None:
+    # Finding 4: the committed fixture's geometry/facts/gradient must match the
+    # recorded provenance digests, so a hand-edit (or a regen from a dirty
+    # source) that drifts from the manifest is caught in CI without needing the
+    # source checkout.
+    b = _load_builder()
+    prov = json.loads((FIXTURE / "PROVENANCE.json").read_text())
+    rows = {r["id"]: r for r in csv.DictReader((FIXTURE / "reach.csv").open(encoding="utf-8"))}
+    geom = json.loads((FIXTURE / "reaches.json").read_text())
+    grad = json.loads((FIXTURE / "reaches-gradient.json").read_text())
+    assert prov["reaches"]
+    for pr in prov["reaches"]:
+        fid = str(pr["fixture_reach_id"])
+        assert b._sha256(geom[fid]) == pr["geom_sha256"]
+        facts = "|".join(f"{c}={rows[fid][c]}" for c in b.COPIED_REACH_COLS)
+        assert b._sha256(facts) == pr["facts_sha256"]
+        if fid in grad:
+            assert b._sha256(b._grad_str(grad[fid])) == pr["gradient_sha256"]
+        else:
+            assert pr["gradient_sha256"] == ""
