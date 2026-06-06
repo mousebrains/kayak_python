@@ -1,0 +1,25 @@
+{
+  "note": "Geometry/gradients copied from aw_id-NULL reaches (NHD/3DEP public domain); all editorial text is fixture-authored. See module docstring.",
+  "source_repo": "kayak_data",
+  "source_commit": "cfd440dae10dc0263a962df63875a64638d8f3d7",
+  "reaches": [
+    {
+      "source_reach_id": "43",
+      "fixture_reach_id": 1,
+      "geom_sha256": "289be859c03b3d101489e64e5ba418f1744b6bd614bc3ded96239b18def3c90d",
+      "facts_sha256": "6faa09b885366644ce25f1c95e5abc9f55a9ffe84018ddf9da55b0510715a0d8"
+    },
+    {
+      "source_reach_id": "53",
+      "fixture_reach_id": 2,
+      "geom_sha256": "c7c4827138b6faa86ff5a726a1d5b4862d7387fb6eea365be96ef17128926be9",
+      "facts_sha256": "554c72284e91345f64e895ed28b3fdf82d2f35a133cd6b74826b3d8cc90355c0"
+    },
+    {
+      "source_reach_id": "38",
+      "fixture_reach_id": 3,
+      "geom_sha256": "fa649ffedba94cda37c54041dda33f168cf3f0ccc1d002a571a89599e220a9bb",
+      "facts_sha256": "5d797dec6a08837523cca8629882dad7152553325e73f0671795e7f3b4c77369"
+    }
+  ]
+}

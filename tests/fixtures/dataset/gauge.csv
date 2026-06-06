@@ -1,4 +1,4 @@
-id,name,bank_full,flood_stage,location,latitude,longitude,station_id,cbtt_id,geos_id,nws_id,nwsli_id,snotel_id,usgs_id,rating_id,elevation,drainage_area,huc,allow_negative_flow,river,display_name,sort_name,state
-1,14150000,,,near Bridge,44.0726,-122.9652,,,,,,,14150000,,460.0,900.0,170900040706,0,Cascade River,Cascade River near Bridge,cascade|9|009540|000900,OR
-2,FXTW1,,,at Fixture Falls,46.5,-122.4,,,,,FXTW1,,,,600.0,140.0,170800050106,0,Fixture Creek,Fixture Creek at Falls,fixture creek|9|009400|000140,WA
-3,Fixture_Confluence_calc,,,At confluence (estimated),45.1387,-122.5335,,,,,,,,,366.0,200.0,170900090607,0,Ridge Creek,Ridge Creek at confluence (calc),ridge creek|9|009634|000200,OR
+id,name,bank_full,flood_stage,river,location,display_name,sort_name,latitude,longitude,elevation,drainage_area,station_id,cbtt_id,geos_id,nws_id,nwsli_id,snotel_id,usgs_id,huc,state,allow_negative_flow,rating_id
+1,14150000,,,Cascade River,near Bridge,Cascade River near Bridge,cascade|9|009540|000900,44.0726,-122.9652,460.0,900.0,,,,,,,14150000,170900040706,OR,0,
+2,FXTW1,,,Fixture Creek,at Fixture Falls,Fixture Creek at Falls,fixture creek|9|009400|000140,46.5,-122.4,600.0,140.0,,,,,FXTW1,,,170800050106,WA,0,
+3,Fixture_Confluence_calc,,,Ridge Creek,At confluence (estimated),Ridge Creek at confluence (calc),ridge creek|9|009634|000200,45.1387,-122.5335,366.0,200.0,,,,,,,,170900090607,OR,0,

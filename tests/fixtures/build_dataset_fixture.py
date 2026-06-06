@@ -21,17 +21,23 @@ validator path: two states, three gauges (USGS-OGC / URL-backed / calculated),
 one fetch URL, one calc expression, three reaches with real geometry, plus the
 junction and class tables.
 
-Run:  python3 tests/fixtures/build_dataset_fixture.py
+Run:  python3 tests/fixtures/build_dataset_fixture.py --source <kayak_data dir>
 """
 
 from __future__ import annotations
 
+import argparse
 import csv
+import hashlib
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
-# Source snapshot (sibling clone) — only read for public-domain geometry/facts.
-SRC = Path("/Users/pat/tpw/kayak_data")
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+from kayak.dataset import layout
+
 OUT = Path(__file__).resolve().parent / "dataset"
 
 # Deterministic timestamp — a fixture must not churn.
@@ -93,45 +99,6 @@ COPIED_REACH_COLS = [
     "huc",
 ]
 
-REACH_HEADER = [
-    "id",
-    "updated_at",
-    "gauge_id",
-    "name",
-    "display_name",
-    "sort_name",
-    "nature",
-    "description",
-    "difficulties",
-    "basin",
-    "basin_area",
-    "elevation",
-    "elevation_lost",
-    "length",
-    "gradient",
-    "features",
-    "latitude",
-    "longitude",
-    "latitude_start",
-    "longitude_start",
-    "latitude_end",
-    "longitude_end",
-    "no_show",
-    "notes",
-    "optimal_flow",
-    "region",
-    "remoteness",
-    "scenery",
-    "season",
-    "watershed_type",
-    "aw_id",
-    "river",
-    "max_gradient",
-    "huc",
-    "map_only",
-    "no_flow_range",
-    "gradient_unreliable",
-]
 
 STATES = [
     {"id": 1, "name": "Oregon", "abbreviation": "OR"},
@@ -229,31 +196,6 @@ GAUGES = [
         "state": "OR",
     },
 ]
-GAUGE_HEADER = [
-    "id",
-    "name",
-    "bank_full",
-    "flood_stage",
-    "location",
-    "latitude",
-    "longitude",
-    "station_id",
-    "cbtt_id",
-    "geos_id",
-    "nws_id",
-    "nwsli_id",
-    "snotel_id",
-    "usgs_id",
-    "rating_id",
-    "elevation",
-    "drainage_area",
-    "huc",
-    "allow_negative_flow",
-    "river",
-    "display_name",
-    "sort_name",
-    "state",
-]
 GAUGE_SOURCE = [(1, 1), (2, 2), (3, 3)]
 REACH_STATE = [(1, 1), (2, 1), (3, 1)]  # all three reaches in Oregon
 REACH_CLASS = [
@@ -302,27 +244,69 @@ ID_COUNTERS = {
 }
 
 
+def _sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _source_commit(src: Path) -> str:
+    """The source dataset's git commit, for the provenance manifest."""
+    try:
+        return subprocess.run(
+            ["git", "-C", str(src), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return "unknown"
+
+
 def _write_csv(name: str, header: list[str], rows: list[dict]) -> None:
+    # LF line endings (DictWriter defaults to CRLF) — git diff --check clean.
     with (OUT / name).open("w", newline="", encoding="utf-8") as fh:
-        w = csv.DictWriter(fh, fieldnames=header)
+        w = csv.DictWriter(fh, fieldnames=header, lineterminator="\n")
         w.writeheader()
         for r in rows:
             w.writerow({k: r.get(k, "") for k in header})
 
 
-def main() -> int:
-    OUT.mkdir(parents=True, exist_ok=True)
+def _table_csv(table: str, rows: list[dict]) -> None:
+    """Write a CSV whose header is the shared layout descriptor's column order."""
+    _write_csv(f"{table}.csv", layout.ordered_columns(table), rows)
 
-    src_reach = {r["id"]: r for r in csv.DictReader((SRC / "reach.csv").open(encoding="utf-8"))}
-    src_geom = json.loads((SRC / "reaches.json").read_text())
-    src_grad = json.loads((SRC / "reaches-gradient.json").read_text())
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument(
+        "--source",
+        default=os.environ.get("KAYAK_DATA_DIR"),
+        help="Source dataset directory to copy public-domain geometry/facts from "
+        "(or set KAYAK_DATA_DIR). No hardcoded default — must be provided.",
+    )
+    args = ap.parse_args(argv)
+    if not args.source:
+        ap.error("a --source dataset directory (or KAYAK_DATA_DIR) is required")
+    src = Path(args.source)
+
+    OUT.mkdir(parents=True, exist_ok=True)
+    src_reach = {r["id"]: r for r in csv.DictReader((src / "reach.csv").open(encoding="utf-8"))}
+    src_geom = json.loads((src / "reaches.json").read_text())
+    src_grad = json.loads((src / "reaches-gradient.json").read_text())
 
     reach_rows: list[dict] = []
     geom_out: dict[str, str] = {}
     grad_out: dict[str, object] = {}
+    provenance_reaches: list[dict] = []
     for src_id, fid, gauge_id, name, disp, sort, river, basin, diff in REACH_PICKS:
-        src = src_reach[src_id]
-        row = {c: "" for c in REACH_HEADER}
+        src_row = src_reach[src_id]
+        # Provenance guard: only copy from aw_id-NULL reaches (no AW-derived
+        # reach record). A future source edit that adds an aw_id fails the build.
+        if (src_row.get("aw_id") or "").strip():
+            raise SystemExit(
+                f"source reach {src_id} has aw_id={src_row['aw_id']!r}; "
+                "fixture geometry must come from aw_id-NULL reaches"
+            )
+        row = dict.fromkeys(layout.ordered_columns("reach"), "")
         row.update(
             id=fid,
             updated_at=TS,
@@ -341,56 +325,54 @@ def main() -> int:
             gradient_unreliable=0,
         )
         for col in COPIED_REACH_COLS:
-            row[col] = src[col]
+            row[col] = src_row[col]
         reach_rows.append(row)
         geom_out[str(fid)] = src_geom[src_id]
         if src_id in src_grad:
             grad_out[str(fid)] = src_grad[src_id]
+        provenance_reaches.append(
+            {
+                "source_reach_id": src_id,
+                "fixture_reach_id": fid,
+                "geom_sha256": _sha256(src_geom[src_id]),
+                "facts_sha256": _sha256("|".join(f"{c}={src_row[c]}" for c in COPIED_REACH_COLS)),
+            }
+        )
 
-    _write_csv("state.csv", ["id", "name", "abbreviation"], STATES)
-    _write_csv("fetch_url.csv", ["id", "url", "parser", "hours", "is_active"], FETCH_URLS)
-    _write_csv(
-        "calc_expression.csv",
-        ["id", "data_type", "expression", "time_expression", "note", "provenance_slug"],
-        CALC_EXPRESSIONS,
-    )
-    _write_csv(
-        "source.csv",
-        ["id", "name", "agency", "fetch_url_id", "calc_expression_id", "timezone"],
-        SOURCES,
-    )
     for g in GAUGES:
         g.setdefault("allow_negative_flow", 0)
-    _write_csv("gauge.csv", GAUGE_HEADER, GAUGES)
-    _write_csv(
-        "gauge_source.csv",
-        ["gauge_id", "source_id"],
-        [{"gauge_id": g, "source_id": s} for g, s in GAUGE_SOURCE],
-    )
-    _write_csv("reach.csv", REACH_HEADER, reach_rows)
-    _write_csv(
-        "reach_state.csv",
-        ["reach_id", "state_id"],
-        [{"reach_id": r, "state_id": s} for r, s in REACH_STATE],
-    )
-    _write_csv(
-        "reach_class.csv",
-        ["id", "reach_id", "name", "low", "low_data_type", "high", "high_data_type"],
-        REACH_CLASS,
-    )
-    _write_csv("class_description.csv", ["name", "description"], CLASS_DESCRIPTION)
+    _table_csv("state", STATES)
+    _table_csv("fetch_url", FETCH_URLS)
+    _table_csv("calc_expression", CALC_EXPRESSIONS)
+    _table_csv("source", SOURCES)
+    _table_csv("gauge", GAUGES)
+    _table_csv("gauge_source", [{"gauge_id": g, "source_id": s} for g, s in GAUGE_SOURCE])
+    _table_csv("reach", reach_rows)
+    _table_csv("reach_state", [{"reach_id": r, "state_id": s} for r, s in REACH_STATE])
+    _table_csv("reach_class", REACH_CLASS)
+    _table_csv("class_description", CLASS_DESCRIPTION)
     _write_csv(
         "id_counters.csv",
         ["table", "next_id"],
         [{"table": t, "next_id": n} for t, n in ID_COUNTERS.items()],
     )
-
     (OUT / "reaches.json").write_text(json.dumps(geom_out, indent=0) + "\n")
     (OUT / "reaches-gradient.json").write_text(json.dumps(grad_out, indent=0) + "\n")
 
+    # Provenance manifest: the source revision + per-reach digests, so a later
+    # regeneration that drifts from the recorded source is detectable.
+    provenance = {
+        "note": "Geometry/gradients copied from aw_id-NULL reaches (NHD/3DEP public "
+        "domain); all editorial text is fixture-authored. See module docstring.",
+        "source_repo": "kayak_data",
+        "source_commit": _source_commit(src),
+        "reaches": provenance_reaches,
+    }
+    (OUT / "PROVENANCE.json").write_text(json.dumps(provenance, indent=2) + "\n")
+
     print(
-        f"wrote fixture to {OUT}: {len(reach_rows)} reaches, {len(GAUGES)} gauges, "
-        f"{len(SOURCES)} sources, geom for {len(geom_out)}, gradient for {len(grad_out)}"
+        f"wrote fixture to {OUT} from {src} @ {provenance['source_commit'][:12]}: "
+        f"{len(reach_rows)} reaches, {len(GAUGES)} gauges, {len(SOURCES)} sources"
     )
     return 0
 
