@@ -53,7 +53,12 @@ _CANONICAL_ID = re.compile(r"^[1-9][0-9]*$")
 _INT_RE = re.compile(r"^-?[0-9]+$")
 _FLOAT_RE = re.compile(r"^-?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][-+]?[0-9]+)?$")
 _DECIMAL_RE = re.compile(r"^-?[0-9]+(?:\.[0-9]+)?$")  # fixed-point (coordinates)
+# DateTime as exported (SQLAlchemy/SQLite text): "YYYY-MM-DD[ T]HH:MM:SS[.ffffff]".
+# A grammar is needed because fromisoformat() also accepts compact forms like
+# "20240101" that SQLite would store with INTEGER affinity.
+_DATETIME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?$")
 _INT64_MIN, _INT64_MAX = -(2**63), 2**63 - 1
+_INT64_MAX_DIGITS = 19  # 9223372036854775807 — guards int() before Python's 4300-digit limit
 
 # id_counters.csv is a typed two-column contract file.
 _ID_COUNTER_SPECS = {
@@ -119,6 +124,8 @@ def validate_dataset(dataset_dir: Path) -> list[str]:
         errors.extend(_check_reach_names(d))
         # (7) cross-set integrity.
         errors.extend(_check_cross_set(d))
+    # (7b) gradient sidecar: validate the JSON encoded inside each profile string.
+    errors.extend(_check_gradient_profiles(d))
     # (8) materialize + check-reaches — only when the dataset is otherwise clean.
     #     A wrong-typed value (e.g. a non-ISO datetime) would otherwise be loaded
     #     and crash SQLAlchemy's decoder mid-scan; the errors above already
@@ -262,9 +269,22 @@ def _int_problem(spec: layout.ColumnSpec, raw: str) -> str | None:
             return f"expected a positive integer id, got {raw!r}"
     elif not _INT_RE.match(raw):  # strict ASCII grammar — no underscores / '+'
         return f"expected integer, got {raw!r}"
-    if not (_INT64_MIN <= int(raw) <= _INT64_MAX):
-        return f"integer out of SQLite 64-bit range, got {raw!r}"
+    if _int64_overflow(raw):
+        return f"integer out of SQLite 64-bit range, got {_trunc(raw)}"
     return None
+
+
+def _int64_overflow(raw: str) -> bool:
+    """True if a grammar-matched integer token is outside SQLite's signed 64-bit
+    range. Checks digit count first so ``int()`` never sees a pathologically long
+    token (Python caps str->int at 4300 digits)."""
+    digits = raw[1:] if raw.startswith("-") else raw
+    return len(digits) > _INT64_MAX_DIGITS or not (_INT64_MIN <= int(raw) <= _INT64_MAX)
+
+
+def _trunc(raw: str, limit: int = 24) -> str:
+    """Bounded repr for diagnostics — a 5,000-digit token must not flood output."""
+    return repr(raw) if len(raw) <= limit else f"{raw[:limit]!r}... ({len(raw)} chars)"
 
 
 def _bool_problem(spec: layout.ColumnSpec, raw: str) -> str | None:
@@ -272,7 +292,9 @@ def _bool_problem(spec: layout.ColumnSpec, raw: str) -> str | None:
 
 
 def _datetime_problem(spec: layout.ColumnSpec, raw: str) -> str | None:
-    return None if _parses(datetime.fromisoformat, raw) else f"expected ISO datetime, got {raw!r}"
+    if not _DATETIME_RE.match(raw):  # compact forms like "20240101" store as INTEGER
+        return f"expected ISO datetime (YYYY-MM-DD HH:MM:SS), got {raw!r}"
+    return None if _parses(datetime.fromisoformat, raw) else f"invalid datetime, got {raw!r}"
 
 
 def _date_problem(spec: layout.ColumnSpec, raw: str) -> str | None:
@@ -504,6 +526,55 @@ def _check_json_reach_keys(d: Path, reach_id_set: set[int]) -> tuple[set[int], l
     return geom_ids, errors
 
 
+def _check_gradient_profiles(d: Path) -> list[str]:
+    """Validate the JSON *inside* each gradient sidecar string.
+
+    The sidecar value is itself a JSON-encoded profile. ``check-reaches`` treats
+    any non-object as an empty sample set and the PHP renderer drops the chart
+    for a missing/non-list ``samples``, so a wrong-shaped-but-valid profile would
+    silently lose its gradient chart. Require the object/``samples``-list contract
+    and numeric per-sample fields before materialization.
+    """
+    path = d / layout.GRADIENT_JSON
+    if not path.is_file():
+        return []
+    try:
+        outer = json.loads(path.read_text(), parse_constant=_reject_json_constant)
+    except (ValueError, json.JSONDecodeError):
+        return []  # outer-JSON problems already reported by _parse_reach_id_json
+    if not isinstance(outer, dict):
+        return []
+    errors: list[str] = []
+    for rid, raw in outer.items():
+        if not isinstance(raw, str) or raw == "":
+            continue  # empty/non-string already reported
+        problem = _gradient_profile_problem(raw)
+        if problem:
+            errors.append(f"{layout.GRADIENT_JSON} reach {rid}: {problem}")
+    return errors
+
+
+def _gradient_profile_problem(raw: str) -> str | None:
+    """The contract for a single decoded gradient profile (None == ok)."""
+    try:
+        prof = json.loads(raw, parse_constant=_reject_json_constant)
+    except (ValueError, json.JSONDecodeError) as exc:
+        return f"profile is not valid JSON ({exc})"
+    if not isinstance(prof, dict):
+        return f"profile must be a JSON object, got {type(prof).__name__}"
+    samples = prof.get("samples")
+    if not isinstance(samples, list):
+        return "profile 'samples' must be a list"
+    for i, s in enumerate(samples):
+        if not isinstance(s, dict):
+            return f"sample {i} must be an object"
+        for field in ("d_mi", "w_mi", "grad_ft_per_mi"):
+            v = s.get(field)
+            if not isinstance(v, (int, float)) or isinstance(v, bool):
+                return f"sample {i} field {field!r} must be a number"
+    return None
+
+
 def _reject_json_constant(name: str) -> object:
     # parse_constant fires for NaN / Infinity / -Infinity — non-standard JSON
     # that json.loads accepts by default and that would store as NULL geometry.
@@ -541,7 +612,10 @@ def _parse_reach_id_json(path: Path) -> tuple[set[int], list[str]]:
     usable: set[int] = set()
     for k, v in top:
         if not _CANONICAL_ID.match(k):
-            errors.append(f"{path.name}: non-canonical reach-id key {k!r}")
+            errors.append(f"{path.name}: non-canonical reach-id key {_trunc(k)}")
+            continue
+        if _int64_overflow(k):
+            errors.append(f"{path.name}: reach-id key out of SQLite 64-bit range {_trunc(k)}")
             continue
         if not isinstance(v, str) or v == "":
             errors.append(f"{path.name}: reach {k} has an empty / non-string value")

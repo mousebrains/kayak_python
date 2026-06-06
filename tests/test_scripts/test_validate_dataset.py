@@ -502,6 +502,62 @@ def test_invalid_utf8_id_counters_does_not_crash(dataset_copy: Path) -> None:
     assert any("id_counters.csv" in e and "UTF-8" in e for e in errs)
 
 
+# --- regression tests for the PR #123 round-5 review findings ----------------
+
+
+@pytest.mark.parametrize("bad", ["null", "[]", "1", '{"samples": "bad"}', '{"samples": {}}', "NaN"])
+def test_wrong_shaped_gradient_profile_is_flagged(dataset_copy: Path, bad: str) -> None:
+    # Finding 1: the JSON *inside* the gradient string must meet the
+    # object/samples-list contract — valid JSON of the wrong shape, not only
+    # invalid syntax, must fail.
+    grad = json.loads((dataset_copy / "reaches-gradient.json").read_text())
+    k = next(iter(grad))
+    grad[k] = bad
+    (dataset_copy / "reaches-gradient.json").write_text(json.dumps(grad))
+    errs = validate_dataset(dataset_copy)
+    assert any("reaches-gradient.json" in e and "reach" in e for e in errs)
+
+
+def test_gradient_sample_missing_field_is_flagged(dataset_copy: Path) -> None:
+    # Finding 1: each sample needs the numeric plotting fields.
+    grad = json.loads((dataset_copy / "reaches-gradient.json").read_text())
+    k = next(iter(grad))
+    prof = json.loads(grad[k])
+    del prof["samples"][0]["grad_ft_per_mi"]
+    grad[k] = json.dumps(prof)
+    (dataset_copy / "reaches-gradient.json").write_text(json.dumps(grad))
+    errs = validate_dataset(dataset_copy)
+    assert any("reaches-gradient.json" in e and "grad_ft_per_mi" in e for e in errs)
+
+
+def test_long_integer_csv_id_does_not_crash(dataset_copy: Path) -> None:
+    # Finding 2: a 5,000-digit id must not raise Python's str->int limit.
+    _rewrite_csv(dataset_copy / "state.csv", lambda rows: rows[0].update(id="9" * 5000))
+    errs = validate_dataset(dataset_copy)  # must not raise
+    assert errs and any("state.csv" in e and "range" in e for e in errs)
+
+
+def test_long_integer_non_id_does_not_crash(dataset_copy: Path) -> None:
+    _rewrite_csv(dataset_copy / "reach.csv", lambda rows: rows[0].update(aw_id="9" * 5000))
+    errs = validate_dataset(dataset_copy)  # must not raise
+    assert errs and any("aw_id" in e and "range" in e for e in errs)
+
+
+def test_long_integer_json_key_does_not_crash(dataset_copy: Path) -> None:
+    geom = json.loads((dataset_copy / "reaches.json").read_text())
+    geom["9" * 5000] = geom.pop("1")
+    (dataset_copy / "reaches.json").write_text(json.dumps(geom))
+    errs = validate_dataset(dataset_copy)  # must not raise
+    assert errs and any("reaches.json" in e and "range" in e for e in errs)
+
+
+def test_compact_datetime_is_flagged(dataset_copy: Path) -> None:
+    # Finding 3: fromisoformat accepts "20240101" but SQLite stores it as INTEGER.
+    _rewrite_csv(dataset_copy / "reach.csv", lambda rows: rows[0].update(updated_at="20240101"))
+    errs = validate_dataset(dataset_copy)
+    assert any("reach.csv" in e and "updated_at" in e and "datetime" in e for e in errs)
+
+
 def test_provenance_matches_committed_fixture() -> None:
     # Finding 4: the committed fixture's geometry/facts/gradient must match the
     # recorded provenance digests, so a hand-edit (or a regen from a dirty
