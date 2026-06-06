@@ -647,6 +647,19 @@ def test_gradient_is_decoupled_from_reach_length(dataset_copy: Path) -> None:
     assert not any("reaches-gradient.json" in e for e in errs)
 
 
+def test_gradient_leading_gap_is_allowed(dataset_copy: Path) -> None:
+    # Symmetric to the trailing reservoir: a profile whose first window starts
+    # mid-reach (a lake at the put-in) is valid gradient data — the renderer
+    # shows the leading span as zero gradient, hover reads "no gradient data".
+    # The validator stays integrity-only and does not enforce a put-in start.
+    inner = (
+        '{"samples":[{"d_mi":2,"w_mi":0.25,"grad_ft_per_mi":80},'
+        '{"d_mi":2.5,"w_mi":0.25,"grad_ft_per_mi":40}]}'
+    )
+    errs = _set_gradient(dataset_copy, inner)
+    assert not any("reaches-gradient.json" in e for e in errs)
+
+
 def test_long_zero_padded_counter_does_not_crash(dataset_copy: Path) -> None:
     # P2: "0"*5000 + "3" = 3; must not hit Python's str->int digit limit.
     _rewrite_csv(

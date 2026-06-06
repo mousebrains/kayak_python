@@ -95,17 +95,14 @@
     }
 
     function findActiveWindow(dMi) {
-      // The first bar is drawn stretched from the put-in (x=0) to its right
-      // edge, so anything left of the first window maps to it.
-      if (dMi < samples[0].d_mi + samples[0].w_mi / 2) return 0;
-      // Otherwise return the bar whose [d_mi - w_mi/2, d_mi + w_mi/2] window
-      // CONTAINS dMi. Interior bars are contiguous, so the first window whose
-      // right edge is past dMi contains it — unless dMi sits in a span the
-      // renderer leaves blank: a reservoir tail with no gradient data, or the
-      // gap before a clipped overshoot sample (trace longer than the reach).
-      // Those return -1 ("no data") rather than clamping across the gap and
-      // reporting a gradient the chart doesn't draw there.
-      for (let i = 1; i < samples.length; i++) {
+      // Return the bar whose [d_mi - w_mi/2, d_mi + w_mi/2] window CONTAINS dMi.
+      // Interior bars are contiguous, so the first window whose right edge is
+      // past dMi is the one that contains it — unless dMi sits in a span the
+      // renderer leaves blank: a lake at the put-in (before the first window), a
+      // reservoir tail (after the last), or the gap before/around a clipped
+      // overshoot bin. Those return -1 ("no data") rather than smearing the
+      // nearest bar across a span the chart doesn't draw a bar in.
+      for (let i = 0; i < samples.length; i++) {
         if (dMi < samples[i].d_mi + samples[i].w_mi / 2) {
           return dMi >= samples[i].d_mi - samples[i].w_mi / 2 ? i : -1;
         }

@@ -291,6 +291,59 @@ final class SvgPlotTest extends TestCase
         $this->assertLessThan(400.0, $maxRight, 'last bar must not stretch to the take-out');
     }
 
+    public function test_generate_gradient_profile_svg_leading_gap_not_stretched(): void
+    {
+        // A lake at the put-in: the first window starts at ~1.875 mi, not 0. The
+        // first bar must NOT stretch back to the put-in (x=ml) — the leading span
+        // reads as zero gradient (blank), mirroring the reservoir tail.
+        $profile = json_encode([
+            'samples' => [
+                ['d_mi' => 2.0, 'grad_ft_per_mi' => 80.0, 'w_mi' => 0.25, 'significant' => true],
+                ['d_mi' => 2.5, 'grad_ft_per_mi' => 40.0, 'w_mi' => 0.25, 'significant' => true],
+            ],
+        ]);
+        assert($profile !== false);
+        // length 5 mi, width 480 → ml 50, pw 420, scale 84; first window left
+        // 1.875 mi → x ≈ 207.5. The old first-bar stretch would have pinned it
+        // to ml (50).
+        $svg = generate_gradient_profile_svg($profile, 1, 480, 120, length_mi: 5.0);
+        $bars = '';
+        if (preg_match('!<g class="gp-bars-sig">(.*?)</g>!', $svg, $m)) {
+            $bars .= $m[1];
+        }
+        if (preg_match('!<g class="gp-bars-pale">(.*?)</g>!', $svg, $m)) {
+            $bars .= $m[1];
+        }
+        preg_match_all('!<rect x="([0-9.]+)"!', $bars, $rects, PREG_SET_ORDER);
+        $this->assertNotEmpty($rects);
+        $minLeft = min(array_map(static fn (array $r): float => (float) $r[1], $rects));
+        $this->assertGreaterThan(100.0, $minLeft, 'first bar must not stretch to the put-in');
+    }
+
+    public function test_generate_gradient_profile_svg_all_overshoot_draws_no_bars(): void
+    {
+        // Every bin is past the take-out (d_mi 100/101 on a 5 mi reach). With no
+        // first-bar stretch, all bars clamp to zero width and are skipped — the
+        // chart agrees with the elevation/no-data layer instead of drawing a
+        // full-width bar for an out-of-domain sample.
+        $profile = json_encode([
+            'samples' => [
+                ['d_mi' => 100.0, 'grad_ft_per_mi' => 80.0, 'w_mi' => 1.0, 'significant' => true],
+                ['d_mi' => 101.0, 'grad_ft_per_mi' => 40.0, 'w_mi' => 1.0, 'significant' => true],
+            ],
+        ]);
+        assert($profile !== false);
+        $svg = generate_gradient_profile_svg($profile, 1, 480, 120, length_mi: 5.0);
+        $bars = '';
+        if (preg_match('!<g class="gp-bars-sig">(.*?)</g>!', $svg, $m)) {
+            $bars .= $m[1];
+        }
+        if (preg_match('!<g class="gp-bars-pale">(.*?)</g>!', $svg, $m)) {
+            $bars .= $m[1];
+        }
+        $this->assertSame(0, substr_count($bars, '<rect'), 'no bar for out-of-domain samples');
+    }
+
     public function test_generate_gradient_profile_svg_splits_runs_on_insignificance(): void
     {
         // 5 samples: 4 sig + 1 insig → 4 sig rects + 1 pale rect, regardless

@@ -34,9 +34,19 @@ const PAYLOAD = {
   ],
 };
 
-async function setup(page) {
+// A lake at the put-in: samples cover ~1.875..2.625 mi of a 5 mi reach, so
+// [0, 1.875] is a blank leading span (mirror of the reservoir tail).
+const LEADING_GAP = {
+  ...PAYLOAD,
+  samples: [
+    { d_mi: 2.0, w_mi: 0.25, grad_ft_per_mi: 80, significant: true, lat: 44.1, lon: -122.0 },
+    { d_mi: 2.5, w_mi: 0.25, grad_ft_per_mi: 40, significant: true, lat: 44.11, lon: -122.01 },
+  ],
+};
+
+async function setup(page, payload = PAYLOAD) {
   // JSON has no single quotes, so a single-quoted attribute needs no escaping.
-  const profile = JSON.stringify(PAYLOAD);
+  const profile = JSON.stringify(payload);
   await page.setContent(
     `<svg class="gradient-profile-chart" width="480" height="120" data-profile='${profile}'>` +
       `<text class="gp-title">original title</text></svg>`,
@@ -77,4 +87,15 @@ test('hover over the blank reservoir tail reports no gradient data', async ({ pa
   expect(title).toContain('no gradient data');
   expect(title).not.toContain('ft/mi'); // not the clamped last-sample value
   expect(dotShown).toBe(false); // no gradient point drawn over a blank span
+});
+
+test('hover over a blank leading lake reports no gradient data', async ({ page }) => {
+  await setup(page, LEADING_GAP);
+  const tail = await hover(page, 0.5); // before the first window (1.875 mi)
+  expect(tail.title).toContain('no gradient data');
+  expect(tail.title).not.toContain('ft/mi'); // not the first sample smeared back
+  expect(tail.dotShown).toBe(false);
+  const inside = await hover(page, 2.0); // inside the first window
+  expect(inside.title).toContain('80 ft/mi');
+  expect(inside.dotShown).toBe(true);
 });

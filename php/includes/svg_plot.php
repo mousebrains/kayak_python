@@ -484,16 +484,16 @@ function generate_gradient_profile_svg(
     $plot_right = $ml + $pw;
     $plot_bottom = $mt + $ph;
 
-    // Stretch the FIRST bar's left edge to the put-in (the first bin centre is
-    // dl_mi/2, so without this a half-bin gap shows at x=0). The LAST bar is
-    // deliberately NOT stretched to the take-out: when the gradient trace stops
-    // short of reach.length — a reservoir at the take-out provides no gradient
-    // data, and its gradient is zero — that tail reads as zero gradient (blank
-    // to the take-out) rather than the last real bar smeared across it. Samples
-    // whose window falls past the take-out (a trace slightly longer than the
-    // editorial length) clamp to a zero-width bar and are skipped below.
-    $first_d_mi = (float)$samples[0]['d_mi'];
-
+    // Neither outer edge is stretched: each bar is drawn at its own analysis
+    // window [d_mi - w_mi/2, d_mi + w_mi/2], clamped to the plot box. The
+    // generator always centres the first bin so its window starts at the put-in
+    // (d_mi - w_mi/2 == 0 for every real reach), so the clamp pins it to x=0
+    // with no leading gap. A genuine gap at either end — a lake at the put-in or
+    // a reservoir at the take-out, neither of which the trace samples — reads as
+    // zero gradient (blank) rather than the nearest bar smeared across it, and a
+    // window that falls entirely past an endpoint clamps to zero width and is
+    // skipped. This keeps the bars, the hover readout, and the elevation line in
+    // agreement on the chart's domain.
     $ordered = $samples;
     usort($ordered, fn($a, $b) => (float)$b['w_mi'] <=> (float)$a['w_mi']);
 
@@ -505,9 +505,7 @@ function generate_gradient_profile_svg(
         $grad = max(0.0, (float)$s['grad_ft_per_mi']);
         $sig = $s['significant'] ?? false;
 
-        $left_x = $d_mi === $first_d_mi
-            ? (float)$ml
-            : $ml + (($d_mi - $w_mi / 2) - $x_min) * $xPx_per_mi;
+        $left_x = $ml + (($d_mi - $w_mi / 2) - $x_min) * $xPx_per_mi;
         $right_x = $ml + (($d_mi + $w_mi / 2) - $x_min) * $xPx_per_mi;
         $left_x = max((float)$ml, $left_x);
         $right_x = min((float)$plot_right, $right_x);
