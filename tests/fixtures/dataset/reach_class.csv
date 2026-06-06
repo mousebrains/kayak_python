@@ -1,0 +1,4 @@
+id,reach_id,name,low,low_data_type,high,high_data_type
+1,1,II,500.0,flow,3000.0,flow
+2,2,III-IV,800.0,flow,5000.0,flow
+3,3,I-II,,flow,,flow

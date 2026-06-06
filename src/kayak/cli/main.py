@@ -28,6 +28,7 @@ from kayak.cli import (
     sync_metadata,
     trace_reach,
     validate_config,
+    validate_dataset,
 )
 from kayak.cli.logger import addArgs as addLoggerArgs
 from kayak.cli.logger import mkLogger
@@ -65,6 +66,7 @@ def main() -> None:
     assign_huc.addArgs(subparsers)
     emit_config.addArgs(subparsers)
     validate_config.addArgs(subparsers)
+    validate_dataset.addArgs(subparsers)
     analyze_logs.addArgs(subparsers)
     status.addArgs(subparsers)
     sync_metadata.addArgs(subparsers)
