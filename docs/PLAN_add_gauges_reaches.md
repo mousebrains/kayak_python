@@ -20,7 +20,7 @@ lands on prod via `levels sync-metadata`, matched by stable id. Covers **adding*
 - **A new row takes a stable id** from `id_counters.csv`: read the table's
   `next_id`, use it, bump the counter. Ids **only ever increment** — a deleted id
   is never reused, so a `base62(id)` public handle never silently re-points.
-  Guard: `tests/test_id_counters.py` (ids unique per table, every id `< next_id`).
+  Guard: `levels validate-dataset` (ids unique per table, every id `< next_id`); kayak_data's CI runs it on the real dataset.
 - **FKs are the stable ids**, not names: `gauge_source.csv = gauge_id,source_id`;
   `reach.csv` carries `gauge_id`. You wire a new row by writing the id you just
   assigned — no "resolve by name" dance.
@@ -47,10 +47,10 @@ lands on prod via `levels sync-metadata`, matched by stable id. Covers **adding*
 
 | Guard | Fails when | What we do |
 |---|---|---|
-| **id-counters** (`test_id_counters`) | a duplicate id, or `next_id` ≤ an existing id | each new row takes the current `next_id` and bumps it; never reuse a deleted id |
+| **id-counters** (`levels validate-dataset`) | a duplicate id, or `next_id` ≤ an existing id | each new row takes the current `next_id` and bumps it; never reuse a deleted id |
 | **orphan-check** | a fetch-active `source` has no `gauge_source` link | always add the `gauge_source.csv` join row; sandbox-verify |
 | **check-reaches** | `geom` has a `LINESTRING(` wrapper, <2 vertices, out-of-range coords, or endpoints drift >0.003° from the `lat/lon_start/end` columns | the tracer writes correct lon-first, no-wrapper geom; keep the endpoint columns in sync with the geom |
-| **committed reach snapshot** (`test_committed_reach_geom`, in the **code** repo) | the loaders materialize a different reach count than `reach.csv` declares, or the snapshot's reach-id sets diverge (an id in `reaches.json` / `reaches-gradient.json` / a child CSV with no `reach.csv` row, or a reach with no geom) | nothing to bump — the expected count derives from the dataset itself (PR #122 retired the hard-coded `EXPECTED_REACH_COUNT`), so a metadata-only reach change needs **no code commit** and either repo may merge first. Keep the CSVs + both JSONs internally consistent (`export_metadata` does; hand edits must remove a reach *everywhere*). CI tests a same-named `kayak_data` branch when one exists, else `kayak_data` main |
+| **reach/snapshot integrity** (`levels validate-dataset`) | the snapshot's reach-id sets diverge (an id in `reaches.json` / `reaches-gradient.json` / a child CSV with no `reach.csv` row, or a reach with no geom) | nothing to bump — the check derives from the dataset itself, so a metadata-only reach change needs **no code commit** and either repo may merge first. Keep the CSVs + both JSONs internally consistent (`export_metadata` does; hand edits must remove a reach *everywhere*). Run on the fixture in code CI; kayak_data's CI runs it on the real dataset |
 | **reach HUC** | a new/edited `reach` has NULL or hand-typed `huc` | run `levels assign-huc` on dev → 12-digit `reach.huc` + HUC8-name `reach.basin` into `reach.csv`. A NULL `huc` drops the reach from the watershed filter |
 | **canonical `agency`** | a `source.agency` uses a raw parser slug | use `'USGS'` / `'WA DOE'` / `'NWRFC'` / `'USBR'` / `'Calculation'` etc. |
 | **schema-only migrations** (`test_migrations_schema_only`) | a *metadata* change is written as a migration | metadata goes via CSV — a migration only appears here if you're **also** adding a column (schema), kept in `models.py` lockstep |

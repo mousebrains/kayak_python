@@ -90,8 +90,8 @@ def _build_site_map(session: Session, restrict_to: set[str] | None = None) -> di
     behavior of fetching only linked sources (orphan-check guarantees a link).
 
     ``source.name`` is the USGS station id by wiring convention -- enforced by
-    ``test_usgs_source_names_are_station_ids`` so a misnamed source can't
-    silently fetch the wrong station.
+    ``levels validate-dataset`` (``validate_dataset._check_source_names``) so a
+    misnamed source can't silently fetch the wrong station.
 
     ``restrict_to``: if set, only these station ids (used by ``--site``).
     """

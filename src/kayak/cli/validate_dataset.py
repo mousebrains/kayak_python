@@ -1,12 +1,14 @@
 """``levels validate-dataset <dir>`` — one gate for every dataset invariant.
 
-Consolidates the checks that were scattered across the code repo's
-``tests/test_id_counters.py``, ``test_reach_names.py``,
-``test_committed_reach_geom.py`` and the data repo's stdlib ``validate.py``
-into a single command the engine owns. The code repo runs it against the
-fixture (``tests/fixtures/dataset``); the data repo's CI runs it against the
-real dataset (S4b). Both get the same authoritative gate, so the two repos
-can never drift on what "a valid dataset" means.
+Consolidates the dataset-integrity checks the code repo previously kept as
+standalone tests reading the real dataset — ``test_id_counters.py``,
+``test_reach_names.py``, ``test_committed_reach_geom.py``, and the USGS
+station-id check from ``test_fetch_usgs_ogc.py`` (all removed in #124) — plus
+the data repo's stdlib ``validate.py``, into a single command the engine owns.
+The code repo runs it against the fixture (``tests/fixtures/dataset``); the
+data repo's CI runs it against the real dataset (S4b). Both get the same
+authoritative gate, so the two repos can never drift on what "a valid dataset"
+means.
 
 The file/column/type/id-bearing contract comes from :mod:`kayak.dataset.layout`,
 the shared descriptor (S6 promotes it to the versioned contract manifest). A
