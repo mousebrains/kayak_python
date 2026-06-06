@@ -95,15 +95,22 @@
     }
 
     function findActiveWindow(dMi) {
-      // Pick the bar whose [d_mi - w_mi/2, d_mi + w_mi/2] span contains dMi.
-      // Bars are non-overlapping (the analysis emits one sample per
-      // non-overlapping window), so this is unambiguous in the interior.
-      // Outside the union of spans (rare — before first bar's left edge
-      // or after the last bar's right edge), clamp to the nearest end.
-      for (let i = 0; i < samples.length; i++) {
-        if (dMi < samples[i].d_mi + samples[i].w_mi / 2) return i;
+      // The first bar is drawn stretched from the put-in (x=0) to its right
+      // edge, so anything left of the first window maps to it.
+      if (dMi < samples[0].d_mi + samples[0].w_mi / 2) return 0;
+      // Otherwise return the bar whose [d_mi - w_mi/2, d_mi + w_mi/2] window
+      // CONTAINS dMi. Interior bars are contiguous, so the first window whose
+      // right edge is past dMi contains it — unless dMi sits in a span the
+      // renderer leaves blank: a reservoir tail with no gradient data, or the
+      // gap before a clipped overshoot sample (trace longer than the reach).
+      // Those return -1 ("no data") rather than clamping across the gap and
+      // reporting a gradient the chart doesn't draw there.
+      for (let i = 1; i < samples.length; i++) {
+        if (dMi < samples[i].d_mi + samples[i].w_mi / 2) {
+          return dMi >= samples[i].d_mi - samples[i].w_mi / 2 ? i : -1;
+        }
       }
-      return samples.length - 1;
+      return -1; // past the last drawn bar: blank tail (reservoir) → no data
     }
 
     // Build an "anchor list" of (d_mi, lat, lon) covering the full reach.
@@ -273,45 +280,58 @@
       }
       const dMi = xMin + ((xView - m.ml) / m.pw) * (xMax - xMin);
       const idx = findActiveWindow(dMi);
-      const s = samples[idx];
-      if (!s) return;
 
-      // Cursor follows the mouse smoothly across the whole reach (not
-      // snapped to bar centres). The dot sits on the active bar's top
-      // (gradient is a step function across windows, so y stays constant
-      // within a bar and steps as the cursor crosses into the next one).
-      const yRange = yMax - yMin || 1;
-      const yPx = m.mt + ((yMax - s.grad_ft_per_mi) / yRange) * m.ph;
-
+      // Cursor follows the mouse smoothly across the whole reach (not snapped
+      // to bar centres) — shown even over a blank span.
       cursor.setAttribute('x1', String(xView));
       cursor.setAttribute('x2', String(xView));
       cursor.style.display = '';
-      dot.setAttribute('cx', String(xView));
-      dot.setAttribute('cy', String(yPx));
-      dot.style.display = '';
 
-      if (titleEl) {
-        // Readout reflects the active bar's value at the cursor mile.
-        // For significant samples, w_mi is the smallest window where the
-        // drop cleared the 3σ threshold — "window" reads as a fixed-
-        // resolution claim. For insignificant samples, w_mi is the
-        // clamped walk distance until the algorithm gave up (often the
-        // whole remaining reach), so "integrated over" avoids implying
-        // it's a chosen scale.
-        const windowText = s.significant
-          ? '(window ' + s.w_mi.toFixed(2) + ' mi)'
-          : '(integrated over ' + s.w_mi.toFixed(2) + ' mi, below noise floor)';
-        const elev = interpolateElev(dMi);
-        const elevText =
-          elev != null ? Math.round(elev).toLocaleString() + ' ft, ' : '';
-        titleEl.textContent =
-          'mi ' +
-          dMi.toFixed(2) +
-          ': ' +
-          elevText +
-          Math.round(s.grad_ft_per_mi) +
-          ' ft/mi ' +
-          windowText;
+      const elev = interpolateElev(dMi);
+      const elevText =
+        elev != null ? Math.round(elev).toLocaleString() + ' ft, ' : '';
+
+      if (idx < 0) {
+        // A span the renderer leaves blank at zero gradient (reservoir tail or
+        // clipped overshoot). No bar here: hide the gradient dot and report no
+        // data, but keep the cursor + map dot — the river position at this mile
+        // is still real, the gradient just isn't.
+        dot.style.display = 'none';
+        if (titleEl) {
+          titleEl.textContent =
+            'mi ' + dMi.toFixed(2) + ': ' + elevText + 'no gradient data';
+        }
+      } else {
+        const s = samples[idx];
+        // The dot sits on the active bar's top (gradient is a step function
+        // across windows, so y stays constant within a bar and steps as the
+        // cursor crosses into the next one).
+        const yRange = yMax - yMin || 1;
+        const yPx = m.mt + ((yMax - s.grad_ft_per_mi) / yRange) * m.ph;
+        dot.setAttribute('cx', String(xView));
+        dot.setAttribute('cy', String(yPx));
+        dot.style.display = '';
+
+        if (titleEl) {
+          // For significant samples, w_mi is the smallest window where the drop
+          // cleared the 3σ threshold — "window" reads as a fixed-resolution
+          // claim. For insignificant samples, w_mi is the clamped walk distance
+          // until the algorithm gave up (often the whole remaining reach), so
+          // "integrated over" avoids implying it's a chosen scale.
+          const windowText = s.significant
+            ? '(window ' + s.w_mi.toFixed(2) + ' mi)'
+            : '(integrated over ' +
+              s.w_mi.toFixed(2) +
+              ' mi, below noise floor)';
+          titleEl.textContent =
+            'mi ' +
+            dMi.toFixed(2) +
+            ': ' +
+            elevText +
+            Math.round(s.grad_ft_per_mi) +
+            ' ft/mi ' +
+            windowText;
+        }
       }
 
       // Ride the drawn geom trace when present; fall back to the sample
