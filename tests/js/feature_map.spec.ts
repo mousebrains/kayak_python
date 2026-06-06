@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
  * Right-click map popup behavioral spec (R4.1, for #79).
  *
  * Proves the `feature-map.js` `contextmenu` -> lat/lon popup handler
- * (static/feature-map.js:503, `L.DomEvent.on(map.getContainer(),
+ * (src/kayak/web/static/feature-map.js:503, `L.DomEvent.on(map.getContainer(),
  * 'contextmenu', ...)`) actually fires: a right-click on the Leaflet
  * map container opens an `.latlon-popup` (:538) containing the
  * formatted coordinate string (:509-511) and a Copy button (:520).
