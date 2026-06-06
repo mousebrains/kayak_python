@@ -86,3 +86,10 @@ def main() -> None:
     rc = args.func(args)
     if isinstance(rc, int) and not isinstance(rc, bool):
         sys.exit(rc)
+
+
+if __name__ == "__main__":
+    # `python -m kayak.cli.main …` runs the same CLI as the `levels` console
+    # script. Without this guard module-style invocation exits 0 having done
+    # nothing — a silent footgun if a CI gate ever spells the command that way.
+    main()

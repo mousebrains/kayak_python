@@ -1,6 +1,9 @@
 """Tests for kayak.cli.main entry point."""
 
+import os
+import subprocess
 import sys
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -92,3 +95,24 @@ def test_unknown_subcommand_exits():
         main()
     # argparse exits with code 2 for unrecognised arguments
     assert exc_info.value.code in (1, 2)
+
+
+def test_module_invocation_runs_cli():
+    """`python -m kayak.cli.main …` runs the CLI (not a silent exit-0 no-op).
+
+    The ``if __name__ == "__main__"`` guard matters because S4b will wire
+    ``validate-dataset`` into kayak_data's CI; a vacuous exit-0 spelling would be
+    a footgun. Uses sys.executable + PYTHONPATH=src so it's robust to whether
+    the package is installed.
+    """
+    fixture = Path(__file__).resolve().parents[1] / "fixtures" / "dataset"
+    src = Path(__file__).resolve().parents[2] / "src"
+    env = {**os.environ, "PYTHONPATH": str(src)}
+    result = subprocess.run(
+        [sys.executable, "-m", "kayak.cli.main", "validate-dataset", str(fixture)],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "validation OK" in result.stdout  # proves it actually validated
