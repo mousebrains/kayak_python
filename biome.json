@@ -2,11 +2,9 @@
   "$schema": "https://biomejs.dev/schemas/2.4.11/schema.json",
   "files": {
     "includes": [
-      "static/**/*.js",
-      "static/**/*.css",
       "src/kayak/web/static/**/*.js",
       "src/kayak/web/static/**/*.css",
-      "!static/leaflet.*"
+      "!src/kayak/web/static/leaflet.*"
     ]
   },
   "formatter": {

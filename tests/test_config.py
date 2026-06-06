@@ -52,6 +52,20 @@ class TestKayakConfigEnvReads:
         cfg = KayakConfig()
         assert cfg.fetch_timeout == 120
 
+    def test_env_override_osmb_dir(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("OSMB_DIR", "/srv/osmb")
+        assert str(KayakConfig().osmb_dir) == "/srv/osmb"
+
+    def test_osmb_dir_default_is_outside_the_package(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # The OSMB staging dir holds generated runtime data, so its default is a
+        # BASE_DIR-relative dev default (like output_dir/metadata_dir), NOT under
+        # the packaged engine resources — a wheel's package dir may be read-only.
+        monkeypatch.delenv("OSMB_DIR", raising=False)
+        osmb = KayakConfig().osmb_dir
+        assert osmb.parts[-2:] == ("var", "osmb")
+        assert "site-packages/kayak" not in str(osmb)
+        assert str(config.DATA_DIR) not in str(osmb)
+
     def test_env_override_editor_feature_bool(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("EDITOR_FEATURE", "true")
         assert KayakConfig().editor_feature is True

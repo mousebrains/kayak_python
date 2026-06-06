@@ -64,7 +64,7 @@ The site is now in a documented, defensible posture for hobby/club scale. The re
 
 | Asset | Control | Source |
 |---|---|---|
-| Vulnerability disclosure | `security.txt` Contact + Expires + Preferred-Languages (D-T5.1 Option A; GHSA deferred to first-report trigger) | `static/security.txt` |
+| Vulnerability disclosure | `security.txt` Contact + Expires + Preferred-Languages (D-T5.1 Option A; GHSA deferred to first-report trigger) | `src/kayak/web/static/security.txt` |
 | IR cadence | Best-effort (D-T5.2); concrete commitments in runbook | `docs/security/incident-response.md` |
 | IR runbook | Discovery + triage + containment (C1-C5) + credential rotation + user notification + post-incident review | `docs/security/incident-response.md` |
 | Re-review cadence | Major-change-triggered + annual light-touch (D-T5.3) | this file's update trigger |
@@ -100,7 +100,7 @@ Recurring obligations from the security review:
 |---|---|---|
 | Daily | Check security gmail (`pat.kayak@gmail.com`) | D-T5.2 / incident-response.md |
 | Daily (auto) | `kayak-editor-retention.timer` runs the purge | D-T4.3 |
-| 2027-04-01 | Refresh `static/security.txt` Expires line to 2028-05-20 (+1 year) | D-T4.5 |
+| 2027-04-01 | Refresh `src/kayak/web/static/security.txt` Expires line to 2028-05-20 (+1 year) | D-T4.5 |
 | ~2027-05-12 | Annual light-touch re-review (~half-day): re-read findings.md + decisions.md, check re-eval triggers, run F-10/11/12 confirms, refresh README | D-T5.3 |
 | At first convenience | First backup-restore drill from security angle | tier5-audit.md § Phase 5.5 |
 | At any major change | Focused re-review of the affected slice | D-T5.3 |

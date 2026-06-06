@@ -228,7 +228,7 @@ Edit `php/privacy.php`:
 
 ### Current state
 
-`static/security.txt` (90 bytes):
+`src/kayak/web/static/security.txt` (90 bytes):
 ```
 Contact: mailto:pat.kayak@gmail.com
 Expires: 2027-05-20T00:00:00Z
@@ -261,7 +261,7 @@ Rationale:
 
 ### Implementation (Tier 6 / annual)
 
-No file change today. Add a calendar reminder for 2027-04-01: "Refresh `static/security.txt` Expires line to 2028-05-20 (or +1 year from refresh date)." If Tier 5 picks a Policy URL or a researcher requests Acknowledgments, append at that time.
+No file change today. Add a calendar reminder for 2027-04-01: "Refresh `src/kayak/web/static/security.txt` Expires line to 2028-05-20 (or +1 year from refresh date)." If Tier 5 picks a Policy URL or a researcher requests Acknowledgments, append at that time.
 
 ### Re-evaluation triggers
 

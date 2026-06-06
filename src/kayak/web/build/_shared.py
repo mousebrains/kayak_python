@@ -12,7 +12,7 @@ from contextlib import suppress
 from datetime import timedelta
 from pathlib import Path
 
-from kayak.config import BASE_DIR, SITE_URL
+from kayak.config import SITE_URL
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +66,10 @@ _CSS_PATH = _STATIC_DIR / "style.css"
 _JS_PATH = _STATIC_DIR / "levels.js"
 _FILTERS_JS_PATH = _STATIC_DIR / "filters.js"
 
-_MAP_JS_PATH = BASE_DIR / "static" / "map.js"
+# map.js ships in the packaged web/static dir alongside levels.js/filters.js
+# (relocated there in dataset-separation S4a-2 slice B1), so it resolves in
+# both an editable and a wheel install — no repo-root BASE_DIR lookup.
+_MAP_JS_PATH = _STATIC_DIR / "map.js"
 
 _LEVELS_JS_VERSION = int(_JS_PATH.stat().st_mtime)
 _FILTERS_JS_VERSION = int(_FILTERS_JS_PATH.stat().st_mtime)

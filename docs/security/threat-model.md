@@ -13,7 +13,7 @@ Three realistic actor profiles. "Nation-state" is excluded per the plan; "inside
 | **Curious user** | Anonymous web access; can register an editor account; reads HTML; uses browser DevTools. No PHP/SQL knowledge presumed. | Idle exploration; curiosity about other proposals or other editors. |
 | **Disgruntled editor** | Has an `editor` row in `status='minimal'` or `'full'`. Knows the propose/comment flow. May read JS source. | Vandalism, harassment, fraud (impersonating others), self-promotion to maintainer, retaliation after status downgrade or ban. |
 | **Opportunistic attacker** | Automated scans, mass credential stuffing, common-exploit kits (XSS, SQLi, SSRF probes). No targeted recon of this specific site. | Site compromise for spam relay / SEO injection / botnet conscription. |
-| **Targeted attacker** | Knows this site; reads `static/security.txt`; manually probes the editor pipeline. Plausibly has done OSINT on the operator. | Defacement of reach data, exfiltration of editor emails (PII), real persistent compromise. |
+| **Targeted attacker** | Knows this site; reads the served `/static/security.txt`; manually probes the editor pipeline. Plausibly has done OSINT on the operator. | Defacement of reach data, exfiltration of editor emails (PII), real persistent compromise. |
 
 **The operator (Pat)** has shell access, root via sudo, DB direct access, and Hetzner console. The threat model assumes the operator is not adversarial; insider-threat scenarios are out of scope (it's a one-person hobby project).
 

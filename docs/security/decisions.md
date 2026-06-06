@@ -218,7 +218,7 @@ Implementation: new `levels editor-retention` CLI + daily `kayak-editor-retentio
 
 ### Choice
 
-Current content (`static/security.txt`) stays as-is:
+Current content (`src/kayak/web/static/security.txt`) stays as-is:
 ```
 Contact: mailto:pat.kayak@gmail.com
 Expires: 2027-05-20T00:00:00Z
@@ -318,7 +318,7 @@ Best-effort response. Concrete commitments documented in `incident-response.md`:
 **Annual light touch** (every 12 months from Tier 5 closeout, so next: ~2027-05-12):
 - Re-read findings.md + decisions.md.
 - Check whether re-evaluation triggers fired since last review.
-- Refresh static/security.txt Expires line (per D-T4.5).
+- Refresh src/kayak/web/static/security.txt Expires line (per D-T4.5).
 - Update README Tier status table.
 - Effort: ~half-day.
 

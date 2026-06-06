@@ -25,14 +25,18 @@ ExecStartPost=-/usr/bin/curl -fsS -m 10 --retry 3 -o /dev/null ${HC_FETCH_OSMB}
 TimeoutStartSec=300
 Nice=15
 
-# Sandboxing. The fetcher only writes GeoJSON files to BASE_DIR/static
-# and reads no other state — no DB, no secrets.
+# Sandboxing. The fetcher only writes GeoJSON files to the OSMB staging dir
+# (OSMB_DIR; default BASE_DIR/var/osmb — `levels build` later copies them into
+# OUTPUT_DIR/static) and reads no other state — no DB, no secrets.
 NoNewPrivileges=yes
 PrivateTmp=yes
 PrivateDevices=yes
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/home/pat/kayak/static
+# OSMB_DIR default is /home/pat/kayak/var/osmb; grant write to the parent
+# var/ (which exists via var/.gitkeep, so systemd's setup-time existence
+# check passes) so fetch-osmb can create + write the osmb/ subdir.
+ReadWritePaths=/home/pat/kayak/var
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes
