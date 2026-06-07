@@ -85,12 +85,60 @@ sudo -u pat git -C /home/pat/kayak_data config core.sshCommand \
 
 The code repo's CI does **not** read `kayak_data` — it runs against the committed
 fixture (`tests/fixtures/dataset`), so no code-CI deploy key is needed (S4b-1).
-The former `KAYAK_DATA_DEPLOY_KEY` Actions secret on `kayak_python` is obsolete
-and removable. The real dataset is validated at deploy time by `deploy.sh`
-(`validate-dataset`, step 3.08); engine-pinned pre-merge validation in
-`kayak_data`'s own CI is the next slice (S4b-2). The code repo's `main` is
-branch-protected — nothing pushes to it except merged PRs, since the snapshot
-targets `kayak_data`, not the code repo.
+The former `KAYAK_DATA_DEPLOY_KEY` Actions/Dependabot secrets on `kayak_python`
+and their orphaned read-only deploy key (`kayak_python-ci-read`) on `kayak_data`
+were removed in the S4b-1 cleanup. The real dataset is validated at deploy time
+by `deploy.sh` (`validate-dataset`, step 3.08); engine-pinned pre-merge
+validation in `kayak_data`'s own CI is the next slice (S4b-2; see below). The
+code repo's `main` is branch-protected — nothing pushes to it except merged PRs,
+since the snapshot targets `kayak_data`, not the code repo.
+
+### 2.6. S4b-2 prerequisite — `kayak_data` CI engine credential (planned)
+
+S4b-2 makes `kayak_data`'s CI install the engine **pinned by `dataset.yaml`'s
+`engine_test_ref`** and run `levels validate-dataset` (replacing the stdlib
+`validate.py`). Both repos are private, so that CI needs a **read-only** credential
+to fetch the engine. This is the *mirror* of the now-deleted code-CI key: the
+**public** half goes on `kayak_python` (the repo being read), the **private** half
+becomes a secret in `kayak_data` (the repo whose CI reads).
+
+> **Status:** already configured on the live setup (2026-06-07) — read-only deploy
+> key `kayak_data-ci-read` on `kayak_python`, secret `KAYAK_ENGINE_DEPLOY_KEY` in
+> `kayak_data`. The commands below are the **from-scratch** runbook; re-running
+> them on the live setup would replace the working key/secret, so only run them on
+> a fresh install.
+
+One-time setup:
+
+```bash
+# 1. Dedicated read-only keypair (ed25519, no passphrase).
+ssh-keygen -t ed25519 -N '' -C 'kayak_data-ci-read' -f /tmp/kayak_engine_ci
+
+# 2. PUBLIC half → kayak_python deploy keys, READ-ONLY (omit -w/--allow-write).
+gh repo deploy-key add /tmp/kayak_engine_ci.pub \
+  -R mousebrains/kayak_python -t 'kayak_data-ci-read (read-only)'
+
+# 3. PRIVATE half → kayak_data Actions secret (the S4b-2 workflow reads this).
+gh secret set KAYAK_ENGINE_DEPLOY_KEY -R mousebrains/kayak_data < /tmp/kayak_engine_ci
+
+# 4. Scrub the local copies (macOS has no `shred`; `rm -P` overwrites).
+rm -P /tmp/kayak_engine_ci /tmp/kayak_engine_ci.pub
+```
+
+Security notes:
+- **Read-only** — a deploy key added without `-w` cannot push; dataset CI only
+  needs to *read* the engine. Never grant write.
+- The secret is exposed to same-repo PRs but **not** to fork PRs, so the S4b-2
+  workflow must use `pull_request` (never `pull_request_target`) and skip the
+  credentialed job on forks.
+- Scope is one engine repo via one read-only key; it grants no access to the
+  canonical WKCC dataset.
+
+Companion S4b-2 setup (done in the S4b-2 PRs, listed here so the picture is
+complete): a `kayak_data` `CODEOWNERS` over `dataset.yaml` + `.github/`, branch
+protection on `kayak_data` `main` requiring the new dataset-CI check + code-owner
+review, and a bump of `dataset.yaml`'s `engine_test_ref` to a contract-current
+engine commit so CI enforces the S6.3/S6.4 contract (not the older S6.2 validator).
 
 ## 3. Environment file
 
