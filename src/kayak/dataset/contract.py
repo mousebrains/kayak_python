@@ -192,3 +192,59 @@ def validate_dataset_meta(meta: dict[str, Any]) -> list[str]:
         )
 
     return errors
+
+
+def _contract_problems(dataset_dir: Path) -> tuple[list[str], dict[str, Any] | None]:
+    """Load + field-check ``dataset.yaml`` once, returning (errors, meta).
+
+    ``meta`` is the parsed mapping when the file is present and parseable, else
+    ``None``. A clean result (empty errors) always carries a non-``None`` ``meta``
+    with a ``status`` in :data:`STATUSES`. Backs both :func:`check_contract` and
+    :func:`gate_for_use` so the manifest is read only once.
+    """
+    try:
+        meta = load_dataset_meta(dataset_dir)
+    except ValueError as e:
+        return [str(e)], None
+    if meta is None:
+        return [
+            f"missing {DATASET_YAML}: this is contract 0, but this engine "
+            f"requires contract {supported_range_str()}. Add a "
+            f"{DATASET_YAML} declaring contract_version "
+            f"{CONTRACT_VERSION} (see docs/migrations.md)."
+        ], None
+    return validate_dataset_meta(meta), meta
+
+
+def check_contract(dataset_dir: Path) -> list[str]:
+    """Integrity gate: is *dataset_dir* a contract the engine can read?
+
+    Returns human-readable problems (empty = OK). A missing ``dataset.yaml`` is
+    "contract 0" and rejected; a present manifest is parsed (corruption → error)
+    and field-checked. Used by ``levels validate-dataset`` — it has **no** opinion
+    on ``status``, because a ``scaffold`` dataset is still a *valid* dataset to
+    validate. Production commands that refuse a scaffold use :func:`gate_for_use`.
+    """
+    return _contract_problems(dataset_dir)[0]
+
+
+def gate_for_use(dataset_dir: Path, *, allow_scaffold: bool) -> list[str]:
+    """Fail-closed gate for a production command about to consume *dataset_dir*.
+
+    Returns human-readable problems (empty = proceed). Rejects everything
+    :func:`check_contract` does, **plus** a ``status: scaffold`` dataset unless
+    *allow_scaffold* — a scaffold dataset is intentionally incomplete and must not
+    reach a production DB/docroot. The ``--allow-scaffold`` escape hatch exists for
+    fresh-init smoke tests on a throwaway DB.
+    """
+    errors, meta = _contract_problems(dataset_dir)
+    if errors:
+        return errors
+    assert meta is not None  # a clean contract always yields a parsed manifest
+    if meta.get("status") == "scaffold" and not allow_scaffold:
+        return [
+            f"{DATASET_YAML}: status is 'scaffold' — refusing to operate on a "
+            "production DB; pass --allow-scaffold to override (e.g. a fresh-init "
+            "smoke test on a throwaway DB)."
+        ]
+    return []

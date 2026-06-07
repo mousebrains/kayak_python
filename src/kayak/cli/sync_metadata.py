@@ -51,6 +51,7 @@ import sys
 from pathlib import Path
 
 from kayak.config import DATABASE_URL, DATASET_DIR
+from kayak.dataset import contract
 from kayak.db import metadata_csv as mc
 
 
@@ -116,11 +117,18 @@ def _print_plan(plan: mc.SyncPlan, db_path: Path, csv_dir: Path) -> None:
         print(f"  TOTAL observations a delete would drop: {plan.total_obs_dropped:,}")
 
 
-def sync_metadata(args: argparse.Namespace) -> int:
-    """Entry point for ``levels sync-metadata``."""
-    db_path = _resolve_db_path(args.database_url)
-    csv_dir = Path(args.csv_dir).resolve() if args.csv_dir else DATASET_DIR
+def _preflight(args: argparse.Namespace, db_path: Path, csv_dir: Path) -> int | None:
+    """Pre-mutation gates: the DB + dataset paths exist and the dataset contract
+    is valid/usable. Returns an exit code to abort with, or ``None`` to proceed.
 
+    The contract gate (S6.4) refuses a contract-0 / unsupported-version /
+    malformed manifest, and a ``status: scaffold`` dataset (unless
+    ``--allow-scaffold``), BEFORE any backup or DB mutation — ``sync-metadata`` is
+    the one production choke point where a dataset enters the live DB, so gating it
+    keeps an incomplete/unreadable dataset out of prod (and, transitively, out of
+    the built docroot). It runs even under ``--dry-run``: the gate answers "will
+    the engine operate on this dataset at all", independent of whether rows change.
+    """
     if not db_path.exists():
         print(
             f"error: database does not exist: {db_path} (run `levels init-db` first)",
@@ -130,6 +138,20 @@ def sync_metadata(args: argparse.Namespace) -> int:
     if not csv_dir.exists():
         print(f"error: csv dir does not exist: {csv_dir}", file=sys.stderr)
         return 1
+    gate_errors = contract.gate_for_use(csv_dir, allow_scaffold=args.allow_scaffold)
+    for err in gate_errors:
+        print(f"error: {err}", file=sys.stderr)
+    return 1 if gate_errors else None
+
+
+def sync_metadata(args: argparse.Namespace) -> int:
+    """Entry point for ``levels sync-metadata``."""
+    db_path = _resolve_db_path(args.database_url)
+    csv_dir = Path(args.csv_dir).resolve() if args.csv_dir else DATASET_DIR
+
+    rc = _preflight(args, db_path, csv_dir)
+    if rc is not None:
+        return rc
 
     # Snapshot the live DB before mutating it (opt-in; deploy.sh passes --backup).
     # The online-backup API is correct even when the pipeline writer is
@@ -219,6 +241,12 @@ def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> 
         action="store_true",
         help="Apply DELETEs (rows absent from the CSVs). Without it, deletions are "
         "refused (exit 2) after printing the per-source observation-drop counts.",
+    )
+    parser.add_argument(
+        "--allow-scaffold",
+        action="store_true",
+        help="Sync a status:scaffold dataset (default: refuse, exit 1). For a "
+        "fresh-init smoke test on a throwaway DB; never for production deploy.",
     )
     parser.add_argument(
         "--backup",

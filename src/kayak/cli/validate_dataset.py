@@ -181,20 +181,13 @@ def _check_dataset_yaml(d: Path) -> list[str]:
 
     A missing ``dataset.yaml`` is contract 0 — rejected with a message naming the
     engine's supported range and the remediation. A present manifest is parsed
-    (corruption → error) and field-checked via ``contract.validate_dataset_meta``.
+    (corruption → error) and field-checked. Delegates to ``contract.check_contract``
+    so the integrity gate (and its contract-0 message) lives in one place, shared
+    with the production gate ``contract.gate_for_use`` (S6.4). ``validate-dataset``
+    uses ``check_contract`` (not ``gate_for_use``): a ``scaffold`` dataset is still
+    a *valid* dataset to validate — only production commands refuse it.
     """
-    try:
-        meta = contract.load_dataset_meta(d)
-    except ValueError as e:
-        return [str(e)]
-    if meta is None:
-        return [
-            f"missing {contract.DATASET_YAML}: this is contract 0, but this engine "
-            f"requires contract {contract.supported_range_str()}. Add a "
-            f"{contract.DATASET_YAML} declaring contract_version "
-            f"{contract.CONTRACT_VERSION} (see docs/migrations.md)."
-        ]
-    return contract.validate_dataset_meta(meta)
+    return contract.check_contract(d)
 
 
 def _check_required_files(d: Path) -> list[str]:

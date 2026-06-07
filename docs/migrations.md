@@ -24,7 +24,13 @@ Schema and metadata changes now travel by **different paths**:
   an existing dataset, add a `dataset.yaml` with `contract_version: 1` and the
   required fields, plus a `retired_ids.yaml` (`{}`). A future contract bump
   ships an `upgrade-dataset` transform or a manual-migration note here
-  (dataset-separation S6).
+  (dataset-separation S6). **`levels sync-metadata` also fail-closes on this
+  contract** (S6.4): it refuses a contract-0 / unsupported-version / malformed
+  manifest and a `status: scaffold` dataset before touching the DB — so the
+  deploy-step sync below applies only to a contract-valid, publishable dataset.
+  `--allow-scaffold` overrides the scaffold block for a fresh-init smoke test on
+  a throwaway DB (never production); it does not rescue a missing/invalid
+  manifest.
 
 This doc covers the hazards that outlive that mechanism change:
 

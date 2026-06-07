@@ -59,6 +59,20 @@ def _write_csv(csv_dir: Path, table: str, header: list[str], rows: list[list[obj
             w.writerow(r)
 
 
+def _write_contract(csv_dir: Path, *, status: str = "publishable") -> None:
+    """Drop a minimal valid dataset.yaml so the sync contract gate (S6.4) passes.
+    The sync gate validates only the manifest, so retired_ids.yaml/CSV integrity
+    are not required here."""
+    (csv_dir / "dataset.yaml").write_text(
+        "contract_version: 1\n"
+        "dataset_id: test\n"
+        "name: Test dataset\n"
+        f"status: {status}\n"
+        "license: CC-BY-NC-4.0\n"
+        'engine_test_ref: "0000000000000000000000000000000000000000"\n'
+    )
+
+
 def _args(
     db: Path,
     csv_dir: Path,
@@ -66,6 +80,7 @@ def _args(
     allow_deletes: bool = False,
     dry_run: bool = False,
     backup: bool = False,
+    allow_scaffold: bool = False,
 ) -> argparse.Namespace:
     return argparse.Namespace(
         database_url=f"sqlite:///{db}",
@@ -73,6 +88,7 @@ def _args(
         allow_deletes=allow_deletes,
         dry_run=dry_run,
         backup=backup,
+        allow_scaffold=allow_scaffold,
     )
 
 
@@ -125,6 +141,7 @@ def test_preserves_observations_on_add_rename_delete(tmp_path: Path) -> None:
     db = tmp_path / "k.db"
     csv_dir = tmp_path / "csv"
     csv_dir.mkdir()
+    _write_contract(csv_dir)
     _seed_two_sources(db)
 
     # Desired state: rename S1, add gauge G2, delete S2.
@@ -166,6 +183,7 @@ def test_idempotent(tmp_path: Path) -> None:
     db = tmp_path / "k.db"
     csv_dir = tmp_path / "csv"
     csv_dir.mkdir()
+    _write_contract(csv_dir)
     _seed_two_sources(db)
     _write_surviving_csvs(csv_dir)
 
@@ -187,6 +205,7 @@ def test_deletes_refused_without_flag(tmp_path: Path) -> None:
     db = tmp_path / "k.db"
     csv_dir = tmp_path / "csv"
     csv_dir.mkdir()
+    _write_contract(csv_dir)
     _seed_two_sources(db)
     _write_surviving_csvs(csv_dir, source_name="S1_NEW")  # rename + (implicit) delete of S2
 
@@ -202,6 +221,7 @@ def test_dry_run_changes_nothing(tmp_path: Path) -> None:
     db = tmp_path / "k.db"
     csv_dir = tmp_path / "csv"
     csv_dir.mkdir()
+    _write_contract(csv_dir)
     _seed_two_sources(db)
     _write_surviving_csvs(csv_dir, source_name="S1_NEW")
 
@@ -221,6 +241,7 @@ def test_reach_and_junction_cascade_deletes(tmp_path: Path) -> None:
     db = tmp_path / "k.db"
     csv_dir = tmp_path / "csv"
     csv_dir.mkdir()
+    _write_contract(csv_dir)
     _schema(db)
     _exec(
         db,
@@ -263,6 +284,7 @@ def test_bad_diff_rolls_back(tmp_path: Path) -> None:
     db = tmp_path / "k.db"
     csv_dir = tmp_path / "csv"
     csv_dir.mkdir()
+    _write_contract(csv_dir)
     _schema(db)
     _exec(
         db,
@@ -298,6 +320,7 @@ def test_unique_value_cannot_move_across_delete(tmp_path: Path) -> None:
     db = tmp_path / "k.db"
     csv_dir = tmp_path / "csv"
     csv_dir.mkdir()
+    _write_contract(csv_dir)
     _schema(db)
     _exec(
         db,
@@ -328,6 +351,7 @@ def test_absent_csv_is_not_a_table_wipe(tmp_path: Path) -> None:
     db = tmp_path / "k.db"
     csv_dir = tmp_path / "csv"
     csv_dir.mkdir()
+    _write_contract(csv_dir)
     _seed_two_sources(db)
     # Provide ONLY source.csv (unchanged from the DB); omit fetch_url.csv,
     # gauge.csv, gauge_source.csv, etc. A missing file must be skipped.
@@ -356,6 +380,7 @@ def test_refuse_prints_observation_drop_counts(tmp_path: Path, capsys) -> None: 
     db = tmp_path / "k.db"
     csv_dir = tmp_path / "csv"
     csv_dir.mkdir()
+    _write_contract(csv_dir)
     _seed_two_sources(db)
     _write_surviving_csvs(csv_dir)  # drops S2 (id=2), which has 2 observations
 
@@ -378,6 +403,7 @@ def test_backup_writes_pre_sync_snapshot(tmp_path: Path) -> None:
     db = tmp_path / "k.db"
     csv_dir = tmp_path / "csv"
     csv_dir.mkdir()
+    _write_contract(csv_dir)
     _seed_two_sources(db)
     _write_surviving_csvs(csv_dir)  # would delete S2 — refused here
 
@@ -400,6 +426,7 @@ def test_missing_pk_column_fails_loud(tmp_path: Path) -> None:
     db = tmp_path / "k.db"
     csv_dir = tmp_path / "csv"
     csv_dir.mkdir()
+    _write_contract(csv_dir)
     _seed_two_sources(db)
     # source.csv without its PK 'id' column. Without the guard, every CSV row
     # reads as an insert and every DB row as a delete — garbage. Refuse instead.
@@ -410,3 +437,76 @@ def test_missing_pk_column_fails_loud(tmp_path: Path) -> None:
     # Read-only failure before any DML — both original sources intact.
     assert _scalar(db, "SELECT COUNT(*) FROM source") == 2
     assert {r[0] for r in _rows(db, "SELECT name FROM source")} == {"S1", "S2"}
+
+
+# ---------------------------------------------------------------------------
+# K — fail-closed dataset-contract gate (S6.4): a contract-0 / scaffold /
+#     unsupported-version dataset is refused before any mutation.
+# ---------------------------------------------------------------------------
+
+
+def test_contract_zero_refused(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+    db = tmp_path / "k.db"
+    csv_dir = tmp_path / "csv"
+    csv_dir.mkdir()
+    _seed_two_sources(db)
+    _write_surviving_csvs(csv_dir)  # CSVs only — deliberately NO dataset.yaml
+
+    rc = sync_metadata(_args(db, csv_dir, allow_deletes=True))
+    assert rc == 1
+    assert "contract 0" in capsys.readouterr().err
+    # Gate fires before any mutation — S2 + its observations untouched.
+    assert _scalar(db, "SELECT COUNT(*) FROM source WHERE id = 2") == 1
+    assert _scalar(db, "SELECT COUNT(*) FROM observation WHERE source_id = 2") == 2
+
+
+def test_scaffold_refused_without_flag(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+    db = tmp_path / "k.db"
+    csv_dir = tmp_path / "csv"
+    csv_dir.mkdir()
+    _seed_two_sources(db)
+    _write_surviving_csvs(csv_dir)
+    _write_contract(csv_dir, status="scaffold")
+
+    rc = sync_metadata(_args(db, csv_dir, allow_deletes=True))
+    assert rc == 1
+    assert "scaffold" in capsys.readouterr().err
+    # Nothing mutated (gate precedes the upsert/delete).
+    assert _scalar(db, "SELECT COUNT(*) FROM source WHERE id = 2") == 1
+    assert _scalar(db, "SELECT COUNT(*) FROM observation WHERE source_id = 2") == 2
+
+
+def test_scaffold_allowed_with_flag(tmp_path: Path) -> None:
+    db = tmp_path / "k.db"
+    csv_dir = tmp_path / "csv"
+    csv_dir.mkdir()
+    _seed_two_sources(db)
+    _write_surviving_csvs(csv_dir)  # drops S2
+    _write_contract(csv_dir, status="scaffold")
+
+    rc = sync_metadata(_args(db, csv_dir, allow_deletes=True, allow_scaffold=True))
+    assert rc == 0
+    # --allow-scaffold lets the sync proceed: S2 deleted, S1 kept.
+    assert _scalar(db, "SELECT COUNT(*) FROM source WHERE id = 2") == 0
+    assert _scalar(db, "SELECT COUNT(*) FROM source WHERE id = 1") == 1
+
+
+def test_unsupported_contract_version_refused(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+    db = tmp_path / "k.db"
+    csv_dir = tmp_path / "csv"
+    csv_dir.mkdir()
+    _seed_two_sources(db)
+    _write_surviving_csvs(csv_dir)
+    (csv_dir / "dataset.yaml").write_text(
+        "contract_version: 999\n"
+        "dataset_id: test\n"
+        "name: Test dataset\n"
+        "status: publishable\n"
+        "license: CC-BY-NC-4.0\n"
+        'engine_test_ref: "0000000000000000000000000000000000000000"\n'
+    )
+
+    rc = sync_metadata(_args(db, csv_dir, allow_deletes=True))
+    assert rc == 1
+    assert "outside this engine's supported range" in capsys.readouterr().err
+    assert _scalar(db, "SELECT COUNT(*) FROM source WHERE id = 2") == 1
