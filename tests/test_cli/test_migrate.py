@@ -59,6 +59,11 @@ def test_committed_manifest_matches_files() -> None:
     for name, sha in listed.items():
         actual = hashlib.sha256((migrate_mod.MIGRATIONS_DIR / name).read_bytes()).hexdigest()
         assert actual == sha, f"sha256 drift for {name} — run gen_migration_manifest.py"
+    # Each row's version must be the file's NNNN_ prefix (no remap in the committed
+    # manifest). Re-read with the version column this time.
+    with manifest.open(encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            assert row["filename"].startswith(row["version"] + "_"), row
     # And discover (which verifies all of the above) returns unique versions.
     versions = [m.version for m in migrate_mod.discover_migrations()]
     assert versions and len(versions) == len(set(versions))
@@ -87,6 +92,29 @@ def test_discover_rejects_unmanifested_sql(tmp_path: Path) -> None:
     (tmp_path / "0002_b.sql").write_text("SELECT 2;")  # not in the manifest
     with pytest.raises(ValueError, match="not in the manifest"):
         migrate_mod.discover_migrations(tmp_path)
+
+
+def test_discover_rejects_version_remap(tmp_path: Path) -> None:
+    # The manifest must not list a file under a version != its NNNN_ prefix: a
+    # manifest-only edit could otherwise replay/skip/stamp a migration under the
+    # wrong schema_migrations key while its sha256 still matches. Covers both
+    # remap repros (a file under a foreign version; the same file under a 2nd one).
+    (tmp_path / "0001_a.sql").write_text("SELECT 1;")
+    sha = migrate_mod._file_sha256(tmp_path / "0001_a.sql")
+    (tmp_path / migrate_mod.MANIFEST_NAME).write_text(
+        f"version,filename,sha256\n9999,0001_a.sql,{sha}\n"
+    )
+    with pytest.raises(ValueError, match="does not match the filename prefix"):
+        migrate_mod.discover_migrations(tmp_path)
+
+
+def test_regenerate_rejects_non_versioned_sql(tmp_path: Path) -> None:
+    # A non-versioned *.sql can't be manifested; regeneration must fail loudly so
+    # the operator removes/renames it (rather than looping on the orphan error).
+    (tmp_path / "0001_a.sql").write_text("SELECT 1;")
+    (tmp_path / "notes.sql").write_text("SELECT 1;")
+    with pytest.raises(ValueError, match="non-versioned migration file"):
+        migrate_mod.regenerate_manifest(tmp_path)
 
 
 def test_split_statements_rejects_semicolon_in_string_literal() -> None:

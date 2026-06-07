@@ -79,6 +79,51 @@ def _ensure_tracking_table() -> None:
             conn.execute(text("ALTER TABLE schema_migrations ADD COLUMN digest TEXT"))
 
 
+def _manifest_migration(
+    row: dict[str, str], root: Path, seen: dict[str, str], listed: set[str]
+) -> Migration:
+    """Validate one manifest row → a :class:`Migration` (mutating *seen*/*listed*
+    for the dup guards). Enforces the manifest's integrity invariants for
+    :func:`discover_migrations`."""
+    version = (row.get("version") or "").strip()
+    filename = (row.get("filename") or "").strip()
+    sha = (row.get("sha256") or "").strip()
+    if not (version and filename and sha):
+        raise ValueError(f"{MANIFEST_NAME}: malformed row {row!r}")
+    # The version MUST equal the filename's NNNN_ prefix: that prefix is the
+    # schema_migrations key, so a manifest listing a file under a different version
+    # could replay/skip/stamp it under the wrong key while its sha256 still matches
+    # — a manifest-only remap. Bind them.
+    fm = _VERSION_RE.match(filename)
+    if fm is None or fm.group(1) != version:
+        raise ValueError(
+            f"{MANIFEST_NAME}: version {version!r} does not match the filename prefix of "
+            f"{filename!r}. The manifest may not remap a migration's version; the version "
+            "must be the file's NNNN_ prefix."
+        )
+    if version in seen:
+        raise ValueError(
+            f"{MANIFEST_NAME}: duplicate version {version!r} ({seen[version]!r} and "
+            f"{filename!r}). The NNNN_ prefix is the schema_migrations PRIMARY KEY; "
+            "renumber one of them."
+        )
+    if filename in listed:
+        raise ValueError(f"{MANIFEST_NAME}: duplicate filename {filename!r}.")
+    seen[version] = filename
+    listed.add(filename)
+    path = root / filename
+    if not path.is_file():
+        raise ValueError(f"{MANIFEST_NAME}: lists {filename!r} but the file is missing.")
+    actual = _file_sha256(path)
+    if actual != sha:
+        raise ValueError(
+            f"{MANIFEST_NAME}: sha256 mismatch for {filename!r} (manifest {sha[:12]}…, file "
+            f"{actual[:12]}…) — a migration was edited after being recorded. Regenerate with "
+            "scripts/gen_migration_manifest.py."
+        )
+    return Migration(version=version, name=path.stem, path=path, digest=sha)
+
+
 def discover_migrations(migrations_dir: Path | None = None) -> list[Migration]:
     """Return the active migrations, in version order.
 
@@ -103,30 +148,7 @@ def discover_migrations(migrations_dir: Path | None = None) -> list[Migration]:
     listed: set[str] = set()
     with manifest.open(encoding="utf-8") as fh:
         for row in csv.DictReader(fh):
-            version = (row.get("version") or "").strip()
-            filename = (row.get("filename") or "").strip()
-            sha = (row.get("sha256") or "").strip()
-            if not (version and filename and sha):
-                raise ValueError(f"{MANIFEST_NAME}: malformed row {row!r}")
-            if version in seen:
-                raise ValueError(
-                    f"{MANIFEST_NAME}: duplicate version {version!r} ({seen[version]!r} and "
-                    f"{filename!r}). The NNNN_ prefix is the schema_migrations PRIMARY KEY; "
-                    "renumber one of them."
-                )
-            seen[version] = filename
-            listed.add(filename)
-            path = root / filename
-            if not path.is_file():
-                raise ValueError(f"{MANIFEST_NAME}: lists {filename!r} but the file is missing.")
-            actual = _file_sha256(path)
-            if actual != sha:
-                raise ValueError(
-                    f"{MANIFEST_NAME}: sha256 mismatch for {filename!r} (manifest "
-                    f"{sha[:12]}…, file {actual[:12]}…) — a migration was edited after being "
-                    "recorded. Regenerate with scripts/gen_migration_manifest.py."
-                )
-            out.append(Migration(version=version, name=path.stem, path=path, digest=sha))
+            out.append(_manifest_migration(row, root, seen, listed))
     orphans = sorted(p.name for p in root.glob("*.sql") if p.name not in listed)
     if orphans:
         raise ValueError(
@@ -137,18 +159,28 @@ def discover_migrations(migrations_dir: Path | None = None) -> list[Migration]:
     return out
 
 
-def regenerate_manifest(migrations_dir: Path = MIGRATIONS_DIR) -> int:
+def regenerate_manifest(migrations_dir: Path | None = None) -> int:
     """(Re)write ``manifest.csv`` for *migrations_dir* from its ``*.sql`` files —
     ``version,filename,sha256`` in version order. The single source of truth for
     the manifest, shared by ``scripts/gen_migration_manifest.py`` and the tests so
     generation can't drift from what :func:`discover_migrations` verifies. Returns
-    the migration count."""
+    the migration count. ``migrations_dir`` defaults to ``MIGRATIONS_DIR`` resolved
+    at call time (``None`` sentinel) so a monkeypatched constant is honored, matching
+    :func:`discover_migrations`."""
+    root = migrations_dir if migrations_dir is not None else MIGRATIONS_DIR
     rows: list[tuple[str, str, str]] = []
     seen: dict[str, str] = {}
-    for path in sorted(migrations_dir.glob("*.sql")):
+    for path in sorted(root.glob("*.sql")):
         m = _VERSION_RE.match(path.name)
-        if not m:
-            continue
+        if m is None:
+            # A non-versioned *.sql can't be manifested, but discover_migrations
+            # would later reject it as an orphan — whose remediation is "run this
+            # script", a loop. Fail loudly here instead so the fix (remove/rename)
+            # is clear.
+            raise ValueError(
+                f"non-versioned migration file {path.name!r} in {root} — migration files "
+                "must be named NNNN_description.sql. Remove or rename it."
+            )
         version = m.group(1)
         if version in seen:
             raise ValueError(
@@ -157,7 +189,7 @@ def regenerate_manifest(migrations_dir: Path = MIGRATIONS_DIR) -> int:
         seen[version] = path.name
         rows.append((version, path.name, _file_sha256(path)))
     rows.sort(key=lambda r: r[0])
-    with (migrations_dir / MANIFEST_NAME).open("w", newline="", encoding="utf-8") as fh:
+    with (root / MANIFEST_NAME).open("w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh, lineterminator="\n")
         w.writerow(["version", "filename", "sha256"])
         w.writerows(rows)
