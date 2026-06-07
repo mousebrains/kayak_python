@@ -145,27 +145,44 @@ def _is_int(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+def _fetch_url_structural(i: int, fu: dict) -> list[str]:
+    problems: list[str] = []
+    for f in ("id", "url", "parser"):
+        if fu.get(f) is None:
+            problems.append(f"fetch_url[{i}]: missing required field {f!r}")
+    if fu.get("id") is not None and not _is_int(fu["id"]):
+        problems.append(f"fetch_url[{i}]: id must be an integer, got {fu['id']!r}")
+    # enabled drives is_active via truthiness, so a quoted "false" would silently
+    # enable the URL — require a real bool (fail closed), like ids.
+    if fu.get("enabled") is not None and not isinstance(fu["enabled"], bool):
+        problems.append(f"fetch_url[{i}]: enabled must be true or false, got {fu['enabled']!r}")
+    return problems
+
+
+def _source_structural(i: int, s: dict) -> list[str]:
+    problems: list[str] = []
+    for f in ("id", "name"):
+        if s.get(f) is None:
+            problems.append(f"source[{i}]: missing required field {f!r}")
+    for f in ("id", *_SOURCE_REF_FIELDS):
+        if s.get(f) is not None and not _is_int(s[f]):
+            problems.append(f"source[{i}]: {f} must be an integer, got {s[f]!r}")
+    return problems
+
+
 def _structural_problems(fetch_urls: list[dict], sources: list[dict]) -> list[str]:
-    """Required-field presence + integer-typed ids. Run before every other check:
-    the dup/reference/counter checks and ``_registry_to_rows`` all assume these
-    hold. id/ref fields must be true ints — a YAML-quoted ``id: "1"`` would alias a
-    separate ``id: 1`` (distinct to the set-based dup check) and a string id slips
-    past the stale-counter check, so both write a colliding/over-range CSV id with
-    no problem reported. Reject them here instead of silently coercing."""
+    """Required-field presence + correctly-typed scalars. Run before every other
+    check: the dup/reference/counter checks and ``_registry_to_rows`` all assume
+    these hold. id/ref fields must be true ints — a YAML-quoted ``id: "1"`` would
+    alias a separate ``id: 1`` (distinct to the set-based dup check) and a string
+    id slips past the stale-counter check, so both write a colliding/over-range
+    CSV id with no problem reported. Reject these here instead of silently
+    coercing (or, for ``enabled``, silently mis-reading a quoted bool)."""
     problems: list[str] = []
     for i, fu in enumerate(fetch_urls):
-        for f in ("id", "url", "parser"):
-            if fu.get(f) is None:
-                problems.append(f"fetch_url[{i}]: missing required field {f!r}")
-        if fu.get("id") is not None and not _is_int(fu["id"]):
-            problems.append(f"fetch_url[{i}]: id must be an integer, got {fu['id']!r}")
+        problems.extend(_fetch_url_structural(i, fu))
     for i, s in enumerate(sources):
-        for f in ("id", "name"):
-            if s.get(f) is None:
-                problems.append(f"source[{i}]: missing required field {f!r}")
-        for f in ("id", *_SOURCE_REF_FIELDS):
-            if s.get(f) is not None and not _is_int(s[f]):
-                problems.append(f"source[{i}]: {f} must be an integer, got {s[f]!r}")
+        problems.extend(_source_structural(i, s))
     return problems
 
 

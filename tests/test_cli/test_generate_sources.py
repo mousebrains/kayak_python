@@ -227,6 +227,14 @@ def test_bool_id_rejected(vdir: Path) -> None:
     assert any("id must be an integer" in p for p in gs.validate_registry(meta, vdir))
 
 
+def test_non_bool_enabled_rejected(vdir: Path) -> None:
+    # A quoted `enabled: "false"` is truthy in Python and would silently enable the
+    # URL — require a real bool so the typing mistake fails closed.
+    meta = _valid_meta()
+    meta["fetch_urls"][0]["enabled"] = "false"
+    assert any("enabled must be true or false" in p for p in gs.validate_registry(meta, vdir))
+
+
 def test_id_at_or_above_next_id(tmp_path: Path) -> None:
     d = tmp_path / "ds"
     d.mkdir()
