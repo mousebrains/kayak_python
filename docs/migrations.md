@@ -6,7 +6,13 @@ Schema and metadata changes now travel by **different paths**:
   `src/kayak/data/db/migrations/NNNN_*.sql` applied by `levels migrate`.
   **Schema-only** since the metadata-single-source redesign — a new
   migration may not INSERT/UPDATE/DELETE a metadata table (guard:
-  `tests/test_scripts/test_migrations_schema_only.py`).
+  `tests/test_scripts/test_migrations_schema_only.py`). After adding (or, rarely,
+  editing) a migration, **regenerate the manifest**: `python3
+  scripts/gen_migration_manifest.py`. The committed `migrations/manifest.csv`
+  (`version,filename,sha256`) is the authoritative active set — `levels migrate`
+  discovers migrations from it (not a glob) and verifies each file's sha256, and
+  a `schema_migrations.digest` column records the applied digest. CI fails if the
+  manifest drifts from the files (S9a).
 - **Metadata** (source / gauge / reach / junction rows) → a reviewed
   CSV diff in the **`kayak_data`** repo (cloned at `DATASET_DIR`),
   applied by `levels sync-metadata` (deploy.sh step 3.1), matched by
