@@ -64,7 +64,7 @@ python3 -m venv /home/pat/.venv
 The metadata snapshots (the `*.csv` + `reaches*.json`) live in a **separate**
 private repo, `kayak_data`, cloned alongside the code repo. Only schema migrations
 (`src/kayak/data/db/migrations/`) stay in the code repo. The code finds the clone via
-`METADATA_DIR` (§3).
+`DATASET_DIR` (§3).
 
 ```bash
 # Clone the metadata repo as pat
@@ -106,7 +106,7 @@ cat > /home/pat/.config/kayak/.env <<'EOF'
 DATABASE_URL=sqlite:////home/pat/DB/kayak.db
 SQLITE_PATH=/home/pat/DB/kayak.db
 OUTPUT_DIR=/home/pat/public_html
-METADATA_DIR=/home/pat/kayak_data
+DATASET_DIR=/home/pat/kayak_data
 EDITOR_FEATURE=1
 EOF
 ```
@@ -120,7 +120,7 @@ sign in via `/login.php` with an email promoted to `status='maintainer'` (see
 `init-db --no-seed` creates the schema and stamps migrations without the
 `sources.yaml` seed; `import_metadata.py` then loads the gauges, reaches,
 sources, and `gauge_source` links from the `kayak_data` metadata snapshots
-(`METADATA_DIR`, §2.5).
+(`DATASET_DIR`, §2.5).
 Without those links the pipeline's `orphan-check` fails and the site renders
 empty, so this order matters:
 

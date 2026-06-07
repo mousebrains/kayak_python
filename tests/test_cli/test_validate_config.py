@@ -34,13 +34,16 @@ class TestKnownEnvNames:
         assert "KAYAK_LEVELS_BIN" in names
         assert "KAYAK_HOME" in names
 
-    def test_includes_metadata_dir_and_deploy_extras(self) -> None:
-        # METADATA_DIR is the data-repo-split pointer; KAYAK_DATA is the
-        # deploy.sh export it's derived from; KAYAK_VENV is the
+    def test_includes_dataset_dir_and_deploy_extras(self) -> None:
+        # DATASET_DIR (and its deprecated alias METADATA_DIR) is the data-repo
+        # pointer, read from the dataset_dir field's AliasChoices; KAYAK_DATA is
+        # the deploy.sh export it's derived from; KAYAK_VENV is the
         # regenerate_schema_svg.sh dev override. All must be known or
-        # `deploy.sh`'s --known-env --strict run would fail the deploy.
+        # `deploy.sh`'s --known-env --strict run would fail the deploy. This also
+        # guards the _known_env_names() AliasChoices extraction (S6.1).
         names = _known_env_names()
-        assert "METADATA_DIR" in names
+        assert "DATASET_DIR" in names
+        assert "METADATA_DIR" in names  # deprecated alias, honored one release
         assert "KAYAK_DATA" in names
         assert "KAYAK_VENV" in names
 
@@ -113,8 +116,9 @@ class TestValidateConfig:
     def test_known_env_warns_on_metadata_typo(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        # The METADATA_ prefix is scanned (gpt-5.5 review): a same-prefix
-        # typo of the load-bearing METADATA_DIR must be flagged.
+        # The METADATA_ prefix is still scanned during the DATASET_DIR
+        # deprecation window (gpt-5.5 review): a same-prefix typo of the
+        # (now-deprecated) METADATA_DIR alias must still be flagged.
         monkeypatch.setenv("METADATA_DRI", "/tmp/kayak_data")
         with pytest.raises(SystemExit) as exc:
             validate_config(_args(known_env=True))

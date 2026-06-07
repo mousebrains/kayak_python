@@ -22,6 +22,13 @@ All notable changes to this project will be documented in this file.
   monitors) and each is fetched and aggregated by the gauge cache, and a merged
   gauge with a NULL `usgs_id` still fetches its linked USGS sources.
 
+### Deprecated
+- **`METADATA_DIR` → `DATASET_DIR`**: the env var pointing at the club-specific
+  dataset clone (`kayak_data`) is now `DATASET_DIR` (dataset-separation S6.1, the
+  "dataset root"). `METADATA_DIR` keeps working as an alias for one release
+  (with a deprecation warning) and is removed thereafter; setting both to
+  different paths is a hard error. Rename it in `~/.config/kayak/.env`.
+
 ## [1.2.0] - 2026-05-27
 
 ### Added

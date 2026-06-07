@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import textwrap
+import warnings
 from pathlib import Path
 
 import pytest
@@ -77,6 +78,8 @@ class TestKayakConfigEnvReads:
         for k in (
             "DATABASE_URL",
             "OUTPUT_DIR",
+            "DATASET_DIR",
+            "METADATA_DIR",
             "FETCH_TIMEOUT",
             "FETCH_BUDGET",
             "FETCH_USER_AGENT",
@@ -96,6 +99,52 @@ class TestKayakConfigEnvReads:
         assert cfg.editor_session_ttl_days == 7
         assert str(cfg.site_url).startswith("https://levels.wkcc.org")
         assert cfg.database_url.startswith("sqlite:///")
+
+
+class TestDatasetDirRoot:
+    """S6.1: DATASET_DIR is the dataset root; METADATA_DIR is a deprecated alias
+    honored for one release (warn-only), with a fail-fast when both are set to
+    different paths. Value resolution (AliasChoices) is separate from the
+    deprecation policy (``_check_dataset_dir_env``)."""
+
+    def test_dataset_dir_env_resolves(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("METADATA_DIR", raising=False)
+        monkeypatch.setenv("DATASET_DIR", "/srv/ds")
+        assert str(KayakConfig().dataset_dir) == "/srv/ds"
+
+    def test_metadata_dir_alias_resolves(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("DATASET_DIR", raising=False)
+        monkeypatch.setenv("METADATA_DIR", "/srv/legacy")
+        assert str(KayakConfig().dataset_dir) == "/srv/legacy"
+
+    def test_dataset_dir_wins_over_metadata_dir(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("DATASET_DIR", "/srv/new")
+        monkeypatch.setenv("METADATA_DIR", "/srv/new")  # agree, so no fail-fast
+        assert str(KayakConfig().dataset_dir) == "/srv/new"
+
+    def test_metadata_only_warns(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("DATASET_DIR", raising=False)
+        monkeypatch.setenv("METADATA_DIR", "/srv/legacy")
+        with pytest.warns(DeprecationWarning, match="METADATA_DIR is deprecated"):
+            config._check_dataset_dir_env()
+
+    def test_dataset_dir_emits_no_warning(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("DATASET_DIR", "/srv/ds")
+        monkeypatch.delenv("METADATA_DIR", raising=False)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            config._check_dataset_dir_env()  # must not warn
+
+    def test_both_set_disagree_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("DATASET_DIR", "/srv/a")
+        monkeypatch.setenv("METADATA_DIR", "/srv/b")
+        with pytest.raises(ValueError, match="Both DATASET_DIR and METADATA_DIR"):
+            config._check_dataset_dir_env()
+
+    def test_both_set_agree_ok(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("DATASET_DIR", "/srv/same")
+        monkeypatch.setenv("METADATA_DIR", "/srv/same")
+        config._check_dataset_dir_env()  # neither raises nor warns
 
 
 class TestKayakConfigValidation:

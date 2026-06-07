@@ -15,12 +15,13 @@ constants.
 from __future__ import annotations
 
 import os
+import warnings
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
 
 from dotenv import load_dotenv
-from pydantic import AnyHttpUrl, EmailStr, Field, SecretStr, field_validator
+from pydantic import AliasChoices, AnyHttpUrl, EmailStr, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from kayak.resources import resource_dir
@@ -132,25 +133,29 @@ class KayakConfig(BaseSettings):
     # Staging dir for build-EXTERNAL generated static inputs — today only the
     # OSMB hazard/access GeoJSON written by ``levels fetch-osmb``, which runs on
     # its own cadence and is then copied into ``OUTPUT_DIR/static`` by
-    # ``levels build``. Like ``output_dir``/``metadata_dir`` it is a
+    # ``levels build``. Like ``output_dir``/``dataset_dir`` it is a
     # ``BASE_DIR``-relative dev default overridden by env (``OSMB_DIR``) in real
     # deployments; it is deliberately NOT under the packaged ``DATA_DIR``/web
     # assets (it holds generated runtime data, not engine resources, and a wheel
     # install's package dir may be read-only).
     osmb_dir: Path = Field(default_factory=lambda: BASE_DIR / "var" / "osmb")
 
-    # Metadata-snapshot directory — the ``*.csv`` + ``reaches*.json`` that the
-    # metadata-single-source flow treats as the source of truth. The default
-    # *value* stays ``data/db`` (repo-root; path resolution unchanged) and is
-    # deliberately NOT the packaged ``DATA_DIR``: the metadata is club-specific
-    # external data, not an engine resource, so it ships in a separate repo,
-    # not inside the wheel. The CSVs no longer live in the code repo at all —
-    # clone ``kayak_data`` and set ``METADATA_DIR`` to it (e.g.
-    # ``/home/pat/kayak_data``; deploy/SETUP.md § 2.5). The schema migrations,
-    # by contrast, *are* an engine resource and ship inside the package at
-    # ``src/kayak/data/db/migrations`` (resolved via ``DATA_DIR``), so they are
-    # NOT under this dir.
-    metadata_dir: Path = Field(default_factory=lambda: BASE_DIR / "data" / "db")
+    # Dataset root — the directory holding the club-specific dataset (the
+    # ``*.csv`` + ``reaches*.json`` the metadata-single-source flow treats as the
+    # source of truth; S6 gives it a versioned contract). Read from ``DATASET_DIR``
+    # (preferred) or the legacy ``METADATA_DIR`` (deprecated alias, honored for one
+    # release; see ``_check_dataset_dir_env``). The default *value* stays
+    # ``data/db`` (repo-root) and is deliberately NOT the packaged ``DATA_DIR``:
+    # the dataset is club-specific external data, not an engine resource, so it
+    # ships in a separate repo (clone ``kayak_data`` and set ``DATASET_DIR`` to it,
+    # e.g. ``/home/pat/kayak_data``; deploy/SETUP.md § 2.5), not inside the wheel.
+    # The schema migrations, by contrast, *are* an engine resource and ship inside
+    # the package at ``src/kayak/data/db/migrations`` (resolved via ``DATA_DIR``),
+    # so they are NOT under this root.
+    dataset_dir: Path = Field(
+        default_factory=lambda: BASE_DIR / "data" / "db",
+        validation_alias=AliasChoices("DATASET_DIR", "METADATA_DIR"),
+    )
 
     # Fetch pipeline
     fetch_timeout: int = Field(default=300, gt=0, le=600)
@@ -234,7 +239,37 @@ def get_config() -> KayakConfig:
     return KayakConfig()
 
 
+def _check_dataset_dir_env() -> None:
+    """Deprecation policy for the dataset-root env var (S6.1).
+
+    Value resolution is handled by the ``dataset_dir`` field's ``AliasChoices``
+    (``DATASET_DIR`` preferred, then the legacy ``METADATA_DIR``). This adds the
+    policy on top: **warn** when only the legacy ``METADATA_DIR`` is set, and
+    **fail fast** when both are set to *different* directories (a likely
+    misconfiguration). It reads ``os.environ`` directly — case-insensitively, to
+    match the model's ``case_sensitive=False`` — so it reflects the deployment
+    env, not a test's direct-kwarg ``KayakConfig(...)`` construction. Exposed as
+    a function so tests can drive it explicitly.
+    """
+    env = {k.upper(): v for k, v in os.environ.items()}
+    ds = env.get("DATASET_DIR")
+    md = env.get("METADATA_DIR")
+    if ds is not None and md is not None and Path(ds).resolve() != Path(md).resolve():
+        raise ValueError(
+            "Both DATASET_DIR and METADATA_DIR are set to different paths "
+            f"(DATASET_DIR={ds!r}, METADATA_DIR={md!r}). Set only DATASET_DIR."
+        )
+    if ds is None and md is not None:
+        warnings.warn(
+            "METADATA_DIR is deprecated; rename it to DATASET_DIR "
+            "(METADATA_DIR is honored for one release, then removed).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
+
 _config = get_config()
+_check_dataset_dir_env()
 
 # Module-level constants derived from the model — preserved for source-
 # compat with existing ``from kayak.config import X`` callers. Phase 4
@@ -242,8 +277,11 @@ _config = get_config()
 # ``get_config()``.
 DATABASE_URL: str = _config.database_url
 OUTPUT_DIR: str = str(_config.output_dir)
-# The metadata-snapshot dir (data/db by default; the kayak_data clone post-split).
-METADATA_DIR: Path = _config.metadata_dir
+# The dataset root (data/db by default; the kayak_data clone in real deployments).
+DATASET_DIR: Path = _config.dataset_dir
+# Deprecated alias of DATASET_DIR, kept for one release so existing
+# ``from kayak.config import METADATA_DIR`` callers keep working.
+METADATA_DIR: Path = _config.dataset_dir
 # Staging dir for build-external generated static inputs (OSMB GeoJSON).
 OSMB_DIR: Path = _config.osmb_dir
 FETCH_TIMEOUT: int = _config.fetch_timeout

@@ -6,10 +6,10 @@ lands on prod via `levels sync-metadata`, matched by stable id. Covers **adding*
 **updating**, **splitting**, and **dropping** gauges and reaches.
 
 > **Where the files are (data-repo split).** The CSVs + `reaches*.json` live in the
-> separate `kayak_data` repo (the code reads it via `METADATA_DIR`); only schema
+> separate `kayak_data` repo (the code reads it via `DATASET_DIR`); only schema
 > migrations stay in the code repo. **Edit them via a PR to `kayak_data`.** All
 > filenames below (`source.csv`, `reaches.json`, …) are relative to that repo's
-> root, i.e. your `METADATA_DIR` clone.
+> root, i.e. your `DATASET_DIR` clone.
 
 ## The model (one source of truth)
 

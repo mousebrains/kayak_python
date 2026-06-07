@@ -53,14 +53,14 @@ source .venv/bin/activate
 # 2b. Clone the metadata repo and point the code at it. The metadata CSVs +
 #     reaches*.json live in the separate `kayak_data` repo (data-repo split),
 #     NOT in this code repo (only src/kayak/data/db/migrations/ stays here). The code
-#     finds them via METADATA_DIR.
+#     finds them via DATASET_DIR.
 git clone git@github.com:mousebrains/kayak_data.git ../kayak_data
-export METADATA_DIR="$(cd ../kayak_data && pwd)"   # or persist in ~/.config/kayak/.env
+export DATASET_DIR="$(cd ../kayak_data && pwd)"   # or persist in ~/.config/kayak/.env
 
 # 3. Create the schema (empty tables + stamped migrations)
 levels init-db --no-seed
 
-# 4. Load gauge/reach/source metadata from the kayak_data repo (METADATA_DIR).
+# 4. Load gauge/reach/source metadata from the kayak_data repo (DATASET_DIR).
 #    init-db alone seeds only states + sources/fetch_urls from sources.yaml;
 #    with no gauge_source links the pipeline's orphan-check fails and the site
 #    renders empty. This loads the real gauges, reaches, and source -> gauge

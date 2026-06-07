@@ -6,7 +6,7 @@
 # origin/main. Run by systemd timer kayak-metadata-snapshot.timer.
 #
 # Since the data-repo split the snapshot targets the SEPARATE kayak_data clone
-# ($KAYAK_DATA / METADATA_DIR), never the code repo — so it can't touch the
+# ($KAYAK_DATA / DATASET_DIR), never the code repo — so it can't touch the
 # branch-protected code-repo main (the round-6 lever). It pushes via the WRITE
 # deploy key configured on the kayak_data clone (`git config core.sshCommand`,
 # operator one-time setup — see deploy/SETUP.md).
