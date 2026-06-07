@@ -10,13 +10,16 @@ data repo's CI runs it against the real dataset (S4b). Both get the same
 authoritative gate, so the two repos can never drift on what "a valid dataset"
 means.
 
-The file/column/type/id-bearing contract comes from :mod:`kayak.dataset.layout`,
-the shared descriptor (S6 promotes it to the versioned contract manifest). A
-dataset is a **complete projection**: every contract CSV and both JSON sidecars
-must be present (header-only / ``{}`` when empty), so a missing file is reported
-as corruption rather than silently accepted as "not applicable". The command
-takes a REQUIRED explicit directory and never consults
-``METADATA_DIR``/``DATASET_DIR``, so S6's root rename causes no validator churn.
+Validation gates on the **dataset contract first** (S6.2): ``dataset.yaml`` must
+declare a ``contract_version`` the engine supports (a dataset with none is
+"contract 0" and is rejected) — see :mod:`kayak.dataset.contract`. Only then are
+the content checks run. The file/column/type/id-bearing contract comes from
+:mod:`kayak.dataset.layout`, the shared descriptor. A dataset is a **complete
+projection**: every contract CSV and both JSON sidecars must be present
+(header-only / ``{}`` when empty), so a missing file is reported as corruption
+rather than silently accepted as "not applicable". The command takes a REQUIRED
+explicit directory and never consults ``METADATA_DIR``/``DATASET_DIR``, so S6's
+root rename causes no validator churn.
 
 Checks are crash-safe: a malformed header, a non-integer id, a wrong-typed
 value, or unparseable JSON yields a focused error and skips the dependent
@@ -39,7 +42,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import TypeGuard
 
-from kayak.dataset import layout
+from kayak.dataset import contract, layout
 
 # Cap per-file value errors so one badly-typed column can't flood the report.
 _MAX_VALUE_ERRORS = 20
@@ -100,6 +103,15 @@ def validate_dataset(dataset_dir: Path) -> list[str]:
     """Return a list of human-readable problems; empty means the dataset is valid."""
     d = dataset_dir
 
+    # (0) the dataset contract — validate it before reading any content (S6.2).
+    #     A missing dataset.yaml is "contract 0" and is rejected outright; an
+    #     unreadable/out-of-range/invalid manifest fails here too. Gating first
+    #     means a dataset the engine can't understand never reaches the content
+    #     checks (or, in later slices, a mutating command).
+    errors = _check_dataset_yaml(d)
+    if errors:
+        return errors
+
     # (1) the complete projection is present.
     errors = _check_required_files(d)
     if errors:
@@ -158,6 +170,27 @@ def _check_readable(d: Path) -> list[str]:
         except (OSError, UnicodeError) as exc:
             errors.append(f"{p.name}: unreadable / not valid UTF-8 ({exc})")
     return errors
+
+
+def _check_dataset_yaml(d: Path) -> list[str]:
+    """Validate the dataset contract (``dataset.yaml``) before any content (S6.2).
+
+    A missing ``dataset.yaml`` is contract 0 — rejected with a message naming the
+    engine's supported range and the remediation. A present manifest is parsed
+    (corruption → error) and field-checked via ``contract.validate_dataset_meta``.
+    """
+    try:
+        meta = contract.load_dataset_meta(d)
+    except ValueError as e:
+        return [str(e)]
+    if meta is None:
+        return [
+            f"missing {contract.DATASET_YAML}: this is contract 0, but this engine "
+            f"requires contract {contract.supported_range_str()}. Add a "
+            f"{contract.DATASET_YAML} declaring contract_version "
+            f"{contract.CONTRACT_VERSION} (see docs/migrations.md)."
+        ]
+    return contract.validate_dataset_meta(meta)
 
 
 def _check_required_files(d: Path) -> list[str]:

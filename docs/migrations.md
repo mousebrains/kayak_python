@@ -13,6 +13,14 @@ Schema and metadata changes now travel by **different paths**:
   stable id. See
   [`PLAN_add_gauges_reaches.md`](PLAN_add_gauges_reaches.md) for the
   add / update / remove / split runbooks.
+- **Dataset contract** (`dataset.yaml` at the dataset root) → declares the
+  `contract_version` the dataset was authored against (plus `dataset_id`,
+  `name`, `status`, `license`, `engine_test_ref`). The engine reads a supported
+  contract range (`kayak.dataset.contract`); a dataset with no `dataset.yaml`
+  is **contract 0** and is rejected by `levels validate-dataset`. To clear that
+  on an existing dataset, add a `dataset.yaml` with `contract_version: 1` and
+  the required fields. A future contract bump ships an `upgrade-dataset`
+  transform or a manual-migration note here (dataset-separation S6).
 
 This doc covers the hazards that outlive that mechanism change:
 

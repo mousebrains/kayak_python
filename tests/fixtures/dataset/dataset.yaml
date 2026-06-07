@@ -1,0 +1,10 @@
+# Dataset contract manifest (S6.2). See kayak.dataset.contract.
+contract_version: 1
+dataset_id: fixture
+name: Kayak engine test fixture
+status: publishable
+license: CC-BY-NC-4.0
+# Engine commit this dataset is tested against. A fixture placeholder — S6.2
+# validates the 40-lowercase-hex format only (the commit-exists-in-the-approved-
+# repo check is an S7 paired-release concern).
+engine_test_ref: "0000000000000000000000000000000000000000"
