@@ -12,7 +12,16 @@ Schema and metadata changes now travel by **different paths**:
   (`version,filename,sha256`) is the authoritative active set — `levels migrate`
   discovers migrations from it (not a glob) and verifies each file's sha256, and
   a `schema_migrations.digest` column records the applied digest. CI fails if the
-  manifest drifts from the files (S9a).
+  manifest drifts from the files (S9a). The active set is **schema-only and
+  region-neutral** (S9b): the wire-via-migration era's regional data migrations
+  were relocated out of it — 54 pure-data ones archived to
+  `kayak_data/history/sql/` (audit), 3 mixed schema+data ones frozen in the
+  engine's top-level `legacy/migrations_frozen/` (their schema is in the models;
+  not packaged or discovered). A new region builds its schema from
+  `Base.metadata.create_all()` + a stamp of the active manifest, so it never
+  replays WKCC's regional migrations. The live DB's pre-relocation
+  `schema_migrations` rows for the moved versions are tolerated (not pending, not
+  re-run) — no transition step beyond the next `levels migrate`.
 - **Metadata** (source / gauge / reach / junction rows) → a reviewed
   CSV diff in the **`kayak_data`** repo (cloned at `DATASET_DIR`),
   applied by `levels sync-metadata` (deploy.sh step 3.1), matched by

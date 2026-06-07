@@ -278,38 +278,6 @@ def test_no_transaction_marker_disables_fk_cascade(tmp_path: Path, engine: objec
         assert "note" in cols
 
 
-def test_0003_does_not_recreate_reach_level(engine: object) -> None:
-    """After the 0003 edit, replaying real migration 0003 must not recreate
-    the dropped `reach_level` table.
-
-    The reach_level half of the original 0003 was stripped — reach_level is
-    gone from models.py and a later commit DROP-ped it. This test runs 0003
-    against a schema that matches Base.metadata.create_all() while stamping
-    every OTHER migration as already applied, so only 0003 runs. We stamp
-    the non-subject migrations because several of them (ADD COLUMN, CREATE
-    TABLE without IF NOT EXISTS, etc.) aren't idempotent against a
-    create_all-built schema — that's fine in production because init_db
-    stamps them on fresh DBs, but the test needs to mirror that.
-    """
-    from kayak.db.models import Base
-
-    Base.metadata.create_all(engine)
-    with (
-        patch("kayak.cli.migrate.get_engine", return_value=engine),
-    ):
-        for m in migrate_mod.discover_migrations():
-            if m.version != "0003":
-                migrate_mod.stamp(m.version)
-        ran = migrate_mod.apply_pending()
-        assert ran == ["0003"]
-
-    with engine.begin() as conn:
-        rows = conn.execute(
-            text("SELECT name FROM sqlite_master WHERE type='table' AND name='reach_level'")
-        ).all()
-        assert rows == [], "reach_level must not exist after migration 0003 runs"
-
-
 def test_ensure_tracking_table_adds_digest_to_legacy_db(engine: object) -> None:
     # The live-host transition: a pre-S9a DB has a 2-column schema_migrations.
     # _ensure_tracking_table must add the `digest` column idempotently and leave
