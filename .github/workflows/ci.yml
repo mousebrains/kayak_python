@@ -249,43 +249,21 @@ jobs:
 
   test:
     runs-on: ubuntu-24.04
-    # The metadata CSVs live in the private kayak_data repo (data-repo split).
-    # As of the dataset-separation test-repointing (#124) NO code test reads
-    # the dataset root (DATASET_DIR) — those dataset-integrity checks moved into
-    # `levels validate-dataset` (run on the committed fixture in code CI; the
-    # real dataset is gated by kayak_data's own CI). This kayak_data checkout
-    # and the paired-branch logic below are vestigial, retained only until S4b
-    # (CI inversion) removes them. The checkout uses a read-only deploy key
-    # (KAYAK_DATA_DEPLOY_KEY) since GITHUB_TOKEN can't read another private repo.
-    env:
-      DATASET_DIR: ${{ github.workspace }}/kayak_data
+    # Code CI runs entirely against the committed fixture (tests/fixtures/dataset):
+    # no code test reads the dataset root (DATASET_DIR) since the
+    # dataset-separation test-repointing (#124), and dataset-integrity checks live
+    # in `levels validate-dataset`, run here on the fixture. S4b-1 removed the
+    # former kayak_data checkout + paired-branch logic from this job (so code CI no
+    # longer needs the kayak_data deploy key, and Dependabot PRs — which can't read
+    # that secret — run clean). The real dataset is validated at the deploy
+    # boundary (deploy.sh step 3.08, #132); engine-pinned PRE-MERGE validation in
+    # kayak_data's own CI is the next slice (S4b-2), not yet live.
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.13", "3.14"]
     steps:
       - uses: actions/checkout@v6
-      - name: Checkout kayak_data (private metadata snapshot)
-        uses: actions/checkout@v6
-        with:
-          repository: mousebrains/kayak_data
-          ssh-key: ${{ secrets.KAYAK_DATA_DEPLOY_KEY }}
-          path: kayak_data
-      # Paired-PR support (vestigial pending S4b — no code test reads kayak_data
-      # as of #124): when a kayak_data branch shares this branch's name (the
-      # convention for coupled metadata changes), test against it instead of
-      # main. Falls back to main when no such branch exists — including
-      # re-runs after the paired PR merges and its branch is deleted.
-      - name: Use matching kayak_data branch when present
-        working-directory: kayak_data
-        run: |
-          BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
-          if [ -n "$BRANCH" ] && git fetch origin "$BRANCH" 2>/dev/null; then
-            git checkout --quiet FETCH_HEAD
-            echo "kayak_data: using branch $BRANCH ($(git rev-parse --short HEAD))"
-          else
-            echo "kayak_data: no branch named '$BRANCH'; staying on default"
-          fi
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           enable-cache: true

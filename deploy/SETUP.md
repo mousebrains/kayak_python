@@ -83,11 +83,14 @@ sudo -u pat git -C /home/pat/kayak_data config core.sshCommand \
   'ssh -i /home/pat/.ssh/kayak_data_deploy -o IdentitiesOnly=yes'
 ```
 
-The code repo's CI reads `kayak_data` via a *separate* **read-only** deploy key
-whose private half is the `KAYAK_DATA_DEPLOY_KEY` Actions secret on `kayak_python`
-(one-time, already configured). The code repo's `main` is branch-protected — nothing
-pushes to it except merged PRs, since the snapshot targets `kayak_data`, not the code
-repo.
+The code repo's CI does **not** read `kayak_data` — it runs against the committed
+fixture (`tests/fixtures/dataset`), so no code-CI deploy key is needed (S4b-1).
+The former `KAYAK_DATA_DEPLOY_KEY` Actions secret on `kayak_python` is obsolete
+and removable. The real dataset is validated at deploy time by `deploy.sh`
+(`validate-dataset`, step 3.08); engine-pinned pre-merge validation in
+`kayak_data`'s own CI is the next slice (S4b-2). The code repo's `main` is
+branch-protected — nothing pushes to it except merged PRs, since the snapshot
+targets `kayak_data`, not the code repo.
 
 ## 3. Environment file
 
