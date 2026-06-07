@@ -251,14 +251,14 @@ jobs:
     runs-on: ubuntu-24.04
     # The metadata CSVs live in the private kayak_data repo (data-repo split).
     # As of the dataset-separation test-repointing (#124) NO code test reads
-    # METADATA_DIR — those dataset-integrity checks moved into
+    # the dataset root (DATASET_DIR) — those dataset-integrity checks moved into
     # `levels validate-dataset` (run on the committed fixture in code CI; the
     # real dataset is gated by kayak_data's own CI). This kayak_data checkout
     # and the paired-branch logic below are vestigial, retained only until S4b
     # (CI inversion) removes them. The checkout uses a read-only deploy key
     # (KAYAK_DATA_DEPLOY_KEY) since GITHUB_TOKEN can't read another private repo.
     env:
-      METADATA_DIR: ${{ github.workspace }}/kayak_data
+      DATASET_DIR: ${{ github.workspace }}/kayak_data
     strategy:
       fail-fast: false
       matrix:

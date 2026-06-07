@@ -8,7 +8,7 @@ Schema and metadata changes now travel by **different paths**:
   migration may not INSERT/UPDATE/DELETE a metadata table (guard:
   `tests/test_scripts/test_migrations_schema_only.py`).
 - **Metadata** (source / gauge / reach / junction rows) → a reviewed
-  CSV diff in the **`kayak_data`** repo (cloned at `METADATA_DIR`),
+  CSV diff in the **`kayak_data`** repo (cloned at `DATASET_DIR`),
   applied by `levels sync-metadata` (deploy.sh step 3.1), matched by
   stable id. See
   [`PLAN_add_gauges_reaches.md`](PLAN_add_gauges_reaches.md) for the
@@ -232,7 +232,7 @@ fetch-backed source is an orphan — `levels orphan-check` would flag
 ~300 rows.
 
 What closes the gap: the `kayak_data` CSV snapshots (written nightly by
-`scripts/export_metadata.py` to `METADATA_DIR`) are **read back** by
+`scripts/export_metadata.py` to `DATASET_DIR`) are **read back** by
 `scripts/import_metadata.py`, which loads `gauge.csv`, `source.csv`,
 `gauge_source.csv`, `reach.csv`, and the rest — recreating the live
 `gauge_source` links. `reach.geom` and `reach.gradient_profile` are kept

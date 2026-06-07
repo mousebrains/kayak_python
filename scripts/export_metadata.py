@@ -24,7 +24,7 @@ import sys
 from decimal import Decimal
 from pathlib import Path
 
-from kayak.config import METADATA_DIR
+from kayak.config import DATASET_DIR
 from kayak.dataset import layout
 
 REPO_DIR = Path(__file__).resolve().parent.parent
@@ -148,8 +148,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--out",
-        default=str(METADATA_DIR),
-        help="Output directory (default: the configured METADATA_DIR — data/db, "
+        default=str(DATASET_DIR),
+        help="Output directory (default: the configured DATASET_DIR — data/db, "
         "or the kayak_data clone post-split)",
     )
     args = parser.parse_args()

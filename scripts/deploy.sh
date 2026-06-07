@@ -32,9 +32,9 @@ LEVELS="${KAYAK_HOME}/.venv/bin/levels"
 
 # The metadata snapshot (CSVs + reaches*.json) lives in a separate repo cloned
 # alongside the code repo (data-repo split). levels/import_metadata read it via
-# METADATA_DIR; export it here so they find it regardless of ~/.config/kayak/.env.
+# DATASET_DIR; export it here so they find it regardless of ~/.config/kayak/.env.
 KAYAK_DATA="${KAYAK_DATA:-${KAYAK_HOME}/kayak_data}"
-export METADATA_DIR="$KAYAK_DATA"
+export DATASET_DIR="$KAYAK_DATA"
 
 # --- preconditions -----------------------------------------------------
 
@@ -124,7 +124,7 @@ echo ">>> levels migrate"
 #
 # The metadata snapshot (CSVs + reaches*.json) lives in a separate repo
 # (data-repo split); steps 3.1/3.25/3.26 apply whatever it now holds, read via
-# METADATA_DIR. Pull it here and record its old/new SHA so those steps can gate
+# DATASET_DIR. Pull it here and record its old/new SHA so those steps can gate
 # on the metadata actually changing (the code-repo SHA no longer moves when only
 # metadata changes). --ff-only mirrors the code-repo pull: no merge, no rebase.
 
@@ -171,7 +171,7 @@ fi
 # large, and not regenerable on prod without the dev-only DEM/NHD trace
 # stack). It is NOT migration-managed, so a dev re-trace reaches prod
 # only by re-running this snapshot apply. --geom-only skips the CSV
-# upsert and just runs `UPDATE reach SET geom` from METADATA_DIR's JSON.
+# upsert and just runs `UPDATE reach SET geom` from DATASET_DIR's JSON.
 # Runs after migrate (reach table is current) and is gated on the file
 # actually changing between the kayak_data SHAs so an unchanged deploy
 # does no DB writes.

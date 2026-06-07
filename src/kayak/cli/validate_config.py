@@ -27,7 +27,7 @@ import argparse
 import os
 import sys
 
-from pydantic import ValidationError
+from pydantic import AliasChoices, ValidationError
 
 from kayak.config import KayakConfig
 
@@ -49,7 +49,8 @@ _CONFIG_PREFIXES = (
     "CSP_",
     "AUDIT_",
     "KAYAK_",
-    "METADATA_",
+    "DATASET_",
+    "METADATA_",  # deprecated alias of DATASET_DIR (S6.1) — kept one release
     "USGS_",
     "SQLITE_",
 )
@@ -100,8 +101,12 @@ def _known_env_names() -> set[str]:
     names: set[str] = set()
     for field_name, info in KayakConfig.model_fields.items():
         names.add(field_name.upper())
-        if isinstance(info.validation_alias, str):
-            names.add(info.validation_alias.upper())
+        alias = info.validation_alias
+        if isinstance(alias, str):
+            names.add(alias.upper())
+        elif isinstance(alias, AliasChoices):
+            # e.g. dataset_dir reads DATASET_DIR or the legacy METADATA_DIR.
+            names.update(c.upper() for c in alias.choices if isinstance(c, str))
     return names | _EXTRA_KNOWN
 
 
