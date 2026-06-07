@@ -105,6 +105,13 @@ class TestValidateDatasetMeta:
         m = _valid_meta() | {"provenance": "PROVENANCE.json"}
         assert contract.validate_dataset_meta(m) == []
 
+    def test_mixed_type_unknown_keys_do_not_crash(self) -> None:
+        # YAML allows non-string keys (`5: y`); a str+int mix must not make the
+        # unknown-key sort raise TypeError — it must stay a focused manifest error.
+        m = _valid_meta() | {"bogus": "x", 5: "y"}
+        errs = contract.validate_dataset_meta(m)
+        assert any("unknown key(s)" in e for e in errs)
+
     @pytest.mark.parametrize("ref", ["nothex", "A" * 40, "a" * 39, "a" * 41, 123])
     def test_bad_engine_test_ref(self, ref: object) -> None:
         m = _valid_meta() | {"engine_test_ref": ref}

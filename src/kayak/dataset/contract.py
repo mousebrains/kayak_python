@@ -163,7 +163,11 @@ def validate_dataset_meta(meta: dict[str, Any]) -> list[str]:
 
     unknown = set(meta) - KNOWN_KEYS
     if unknown:
-        errors.append(f"{DATASET_YAML}: unknown key(s): {sorted(unknown)}")
+        # key=str: YAML allows hashable non-string keys (e.g. `5: y`), so a mix
+        # of str + int keys would make a bare sorted() raise TypeError — a
+        # traceback instead of the fail-closed manifest error, now that this path
+        # gates sync-metadata (S6.4). A non-string key is reported as unknown.
+        errors.append(f"{DATASET_YAML}: unknown key(s): {sorted(unknown, key=str)}")
 
     ver = meta.get("contract_version")
     # bool is an int subclass — reject `contract_version: true`.

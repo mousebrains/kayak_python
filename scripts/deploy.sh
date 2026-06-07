@@ -142,6 +142,22 @@ data_old_sha=$(git -C "$KAYAK_DATA" rev-parse HEAD)
 git -C "$KAYAK_DATA" pull --ff-only
 data_new_sha=$(git -C "$KAYAK_DATA" rev-parse HEAD)
 
+# --- 3.08. validate the full dataset against the engine contract -------
+#
+# sync-metadata (3.1) only fail-closes on the dataset.yaml MANIFEST (contract
+# version + status, S6.4). The deeper contract — retired-id reuse / id-counter
+# high-water (S6.3), foreign keys, geometry/gradient shape, complete-projection
+# file presence — is `validate-dataset`'s job. Run it here, at the deploy
+# boundary, BEFORE any DB mutation, so a contract-invalid dataset aborts the
+# deploy instead of being applied (sync's manifest gate would let it through).
+# ~1s on the real dataset. Unconditional, not gated on a diff: it must also catch
+# a dataset that's valid-as-committed but invalid against the CURRENT engine
+# (e.g. an engine release that added a required contract file). Until S4b makes
+# kayak_data's own CI run this validator pre-merge, this is the only place the
+# full S6.3 invariant is enforced on the real dataset's route to prod.
+echo ">>> levels validate-dataset $KAYAK_DATA"
+"$LEVELS" validate-dataset "$KAYAK_DATA"
+
 # --- 3.1. sync metadata CSVs (only if kayak_data's *.csv changed) ------
 #
 # Apply the reviewed CSV diff to the live DB by stable id: INSERT new, UPDATE

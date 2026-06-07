@@ -27,15 +27,17 @@ All notable changes to this project will be documented in this file.
   metadata CSV snapshot was refreshed from the live DB to match.
 
 ### Changed
-- **`sync-metadata` fail-closes on the dataset contract**: before touching the
+- **`sync-metadata` fail-closes on the dataset manifest**: before touching the
   live DB, `levels sync-metadata` now validates the dataset's `dataset.yaml`
-  contract (via the shared `contract.gate_for_use`) and refuses a dataset with no
+  manifest (via the shared `contract.gate_for_use`) and refuses a dataset with no
   manifest ("contract 0"), an unsupported `contract_version`, or `status:
   scaffold`. `--allow-scaffold` overrides only the scaffold block (for a
   fresh-init smoke test on a throwaway DB), never a missing/invalid manifest. The
-  gate runs even under `--dry-run`. This is the one production choke point where a
-  dataset enters the DB, so an incomplete/unreadable dataset can no longer be
-  synced (or, transitively, built into the docroot) (dataset-separation S6.4).
+  gate runs even under `--dry-run`. It checks the manifest only; deeper dataset
+  invariants (retired-id reuse, FK/geometry, complete-projection) remain `levels
+  validate-dataset`'s job — `scripts/deploy.sh` now runs `validate-dataset`
+  against the pulled `kayak_data` before the sync step, so a contract-invalid
+  dataset aborts the deploy (dataset-separation S6.4).
 - **USGS-OGC fetch is now source-keyed**: `levels fetch-usgs-ogc` selects the
   USGS stations to poll by walking `gauge → gauge_source → source` for sources
   with `agency = 'USGS'`, rather than reading `gauge.usgs_id` (#75). A single
