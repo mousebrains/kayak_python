@@ -126,21 +126,21 @@ def test_duplicate_name_rejected(dataset: Path) -> None:
 def test_duplicate_url_rejected(dataset: Path) -> None:
     existing = _rows(dataset, "fetch_url")[0]["url"]
     snap = _snapshot(dataset)
-    with pytest.raises(ValueError, match="url .* already exists"):
+    with pytest.raises(ValueError, match=r"url .* already exists"):
         gs.add_source(dataset, name="DUPW1", url=existing, parser="nwps")
     assert _snapshot(dataset) == snap
 
 
 def test_calc_id_must_exist(dataset: Path) -> None:
     snap = _snapshot(dataset)
-    with pytest.raises(ValueError, match="not in calc_expression.csv"):
+    with pytest.raises(ValueError, match=r"not in calc_expression\.csv"):
         gs.add_source(dataset, name="BadCalc", calc_expression_id=42)
     assert _snapshot(dataset) == snap
 
 
 def test_calc_id_rejected_when_no_calc_csv(dataset: Path) -> None:
     (dataset / "calc_expression.csv").unlink()
-    with pytest.raises(ValueError, match="calc_expression.csv not present"):
+    with pytest.raises(ValueError, match=r"calc_expression\.csv not present"):
         gs.add_source(dataset, name="BadCalc", calc_expression_id=1)
 
 
@@ -159,8 +159,62 @@ def test_missing_sources_yaml_rejected(tmp_path: Path) -> None:
     d = tmp_path / "ds"
     d.mkdir()
     (d / "id_counters.csv").write_text("table,next_id\nsource,4\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="missing sources.yaml"):
+    with pytest.raises(ValueError, match=r"missing sources\.yaml"):
         gs.add_source(d, name="X")
+
+
+def test_url_and_calc_mutually_exclusive_in_library(dataset: Path) -> None:
+    # The library API (not just the CLI wrapper) must reject both refs, else the
+    # if/elif would silently drop the calc binding (fail-open).
+    snap = _snapshot(dataset)
+    with pytest.raises(ValueError, match="not both"):
+        gs.add_source(
+            dataset, name="BOTH", url="https://example/b", parser="nwps", calc_expression_id=1
+        )
+    assert _snapshot(dataset) == snap
+
+
+def test_non_positive_next_id_rejected(tmp_path: Path) -> None:
+    # A corrupt non-positive counter must fail closed, not allocate a negative id.
+    d = tmp_path / "ds"
+    d.mkdir()
+    (d / "sources.yaml").write_text("fetch_urls: []\nsources: []\n", encoding="utf-8")
+    (d / "id_counters.csv").write_text("table,next_id\nsource,-5\nfetch_url,2\n", encoding="utf-8")
+    snap = _snapshot(d)
+    with pytest.raises(ValueError, match="must be >= 1"):
+        gs.add_source(d, name="NEGW1")
+    assert _snapshot(d) == snap
+
+
+def test_malformed_counter_row_clean_error(tmp_path: Path) -> None:
+    # A truncated counter row (one column) must raise ValueError (clean exit 1),
+    # not an IndexError traceback.
+    d = tmp_path / "ds"
+    d.mkdir()
+    (d / "sources.yaml").write_text("fetch_urls: []\nsources: []\n", encoding="utf-8")
+    (d / "id_counters.csv").write_text("table,next_id\nsource\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        gs.add_source(d, name="X")
+    assert gs._add_source_main(_ns_add(d, name="X")) == 1
+
+
+def test_whitespace_name_rejected(dataset: Path) -> None:
+    snap = _snapshot(dataset)
+    with pytest.raises(ValueError, match="leading/trailing whitespace"):
+        gs.add_source(dataset, name="FXTW1 ")  # trailing space near-dup of FXTW1
+    assert _snapshot(dataset) == snap
+
+
+def test_whitespace_url_rejected(dataset: Path) -> None:
+    with pytest.raises(ValueError, match="leading/trailing whitespace"):
+        gs.add_source(dataset, name="PADW1", url="https://example/x ", parser="nwps")
+
+
+def test_over_length_name_rejected(dataset: Path) -> None:
+    snap = _snapshot(dataset)
+    with pytest.raises(ValueError, match="exceeds 256 chars"):
+        gs.add_source(dataset, name="x" * 300)
+    assert _snapshot(dataset) == snap
 
 
 # --- atomicity / failure isolation --------------------------------------------
