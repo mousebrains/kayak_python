@@ -147,18 +147,26 @@ def _is_int(value: object) -> bool:
 
 def _hours_problems(i: int, fu: dict) -> list[str]:
     """hours is written verbatim to the CSV and parsed at fetch time by
-    ``fetch._hour_allowed`` (``int()`` per comma token). A non-scalar (e.g. the
-    YAML list ``[6, 12]``) or a non-numeric token would render a cell that
-    silently disables the URL on every constrained fetch — require the documented
-    comma-separated-integers string form (empty = always)."""
+    ``fetch._hour_allowed`` (``int()`` per comma token, compared against the
+    current UTC hour 0-23). A non-scalar (e.g. the YAML list ``[6, 12]``), a
+    non-numeric token, an out-of-range hour (``"24"`` can never match), or a
+    non-empty-but-tokenless spec (``","``) would render a cell that silently
+    disables the URL on every constrained fetch — require the documented form: a
+    comma-separated list of UTC hours 0-23 (empty string = always)."""
     h = fu.get("hours")
     if h is None:
         return []
     if isinstance(h, bool) or not isinstance(h, (str, int)):
         return [f'fetch_url[{i}]: hours must be a string like "6,12,18", got {h!r}']
-    tokens = [t.strip() for t in str(h).split(",") if t.strip()]
-    if not all(t.isdigit() for t in tokens):
-        return [f"fetch_url[{i}]: hours must be comma-separated integers, got {h!r}"]
+    cell = str(h)
+    tokens = [t.strip() for t in cell.split(",") if t.strip()]
+    tokenless = bool(cell.strip()) and not tokens  # e.g. "," — non-empty, no hours
+    ok = all(t.isascii() and t.isdigit() and 0 <= int(t) <= 23 for t in tokens)
+    if tokenless or not ok:
+        return [
+            f"fetch_url[{i}]: hours must be comma-separated UTC hours 0-23 "
+            f'(e.g. "6,12,18"), got {h!r}'
+        ]
     return []
 
 

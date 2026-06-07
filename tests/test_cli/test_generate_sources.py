@@ -243,17 +243,21 @@ def test_list_hours_rejected(vdir: Path) -> None:
     assert any("hours must be a string" in p for p in gs.validate_registry(meta, vdir))
 
 
-def test_non_numeric_hours_rejected(vdir: Path) -> None:
-    meta = _valid_meta()
-    meta["fetch_urls"][0]["hours"] = "6,noon"
-    assert any(
-        "hours must be comma-separated integers" in p for p in gs.validate_registry(meta, vdir)
-    )
+def test_bad_hours_rejected(vdir: Path) -> None:
+    # Non-numeric token, out-of-range UTC hour, and a non-empty-but-tokenless spec
+    # all fail closed — each would render a constraint that never matches.
+    for h in ("6,noon", "24", "99", ","):
+        meta = _valid_meta()
+        meta["fetch_urls"][0]["hours"] = h
+        problems = gs.validate_registry(meta, vdir)
+        assert any("hours must be comma-separated UTC hours 0-23" in p for p in problems), (
+            f"hours={h!r} should be rejected"
+        )
 
 
 def test_valid_hours_forms_accepted(vdir: Path) -> None:
-    # The documented string form (and a bare single int) are fine; empty = always.
-    for h in ("6,12,18", "6", 6, ""):
+    # The documented string form, a bare single int, the boundaries, and "" (always).
+    for h in ("6,12,18", "0", "23", "6", 6, ""):
         meta = _valid_meta()
         meta["fetch_urls"][0]["hours"] = h
         assert gs.validate_registry(meta, vdir) == [], f"hours={h!r} should be valid"
