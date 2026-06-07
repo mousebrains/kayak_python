@@ -39,6 +39,15 @@ class TestLoadDatasetMeta:
         with pytest.raises(ValueError, match="must be a mapping"):
             contract.load_dataset_meta(tmp_path)
 
+    def test_duplicate_key_raises(self, tmp_path: Path) -> None:
+        # PyYAML's default last-wins would let a bad value hide behind a good one
+        # in the contract gate; the strict loader rejects it.
+        (tmp_path / contract.DATASET_YAML).write_text(
+            "contract_version: 99\ncontract_version: 1\nname: x\n"
+        )
+        with pytest.raises(ValueError, match="duplicate key"):
+            contract.load_dataset_meta(tmp_path)
+
 
 class TestValidateDatasetMeta:
     def test_valid(self) -> None:
@@ -72,6 +81,16 @@ class TestValidateDatasetMeta:
     def test_bad_status(self) -> None:
         m = _valid_meta() | {"status": "draft"}
         assert any("status must be one of" in e for e in contract.validate_dataset_meta(m))
+
+    def test_unknown_key_rejected(self) -> None:
+        # A stray/typo'd key (e.g. `licence` left beside a corrected `license`)
+        # is an error, matching the validator's complete-projection ethos.
+        m = _valid_meta() | {"licence": "L"}
+        assert any("unknown key(s): ['licence']" in e for e in contract.validate_dataset_meta(m))
+
+    def test_provenance_key_allowed(self) -> None:
+        m = _valid_meta() | {"provenance": "PROVENANCE.json"}
+        assert contract.validate_dataset_meta(m) == []
 
     @pytest.mark.parametrize("ref", ["nothex", "A" * 40, "a" * 39, "a" * 41, 123])
     def test_bad_engine_test_ref(self, ref: object) -> None:

@@ -29,10 +29,46 @@ DATASET_YAML = "dataset.yaml"
 
 STATUSES: tuple[str, ...] = ("scaffold", "publishable")
 
+# The complete key set for contract 1. The manifest is the contract gate, so —
+# like the rest of the validator (an unexpected CSV is an error; a dataset is a
+# "complete projection") — an unknown key is rejected rather than silently
+# tolerated, catching a stray ``licence:``/``Status:`` typo. A future contract
+# version relaxes this deliberately by widening the set.
+KNOWN_KEYS: frozenset[str] = frozenset(
+    {"contract_version", "dataset_id", "name", "status", "license", "engine_test_ref", "provenance"}
+)
+
 # A full SHA-1 git commit: 40 lowercase hex. Format-only here; whether the
 # commit actually exists in the approved engine repo is an S7 paired-release
 # concern (it needs a network/git lookup), not a dataset-integrity check.
 _ENGINE_REF_RE = re.compile(r"^[0-9a-f]{40}$")
+
+
+class _StrictSafeLoader(yaml.SafeLoader):
+    """SafeLoader that rejects duplicate mapping keys.
+
+    PyYAML's default last-wins on a duplicated key would let a manifest like
+    ``contract_version: 99`` / ``contract_version: 1`` slip a bad value past the
+    contract gate. Reject it as malformed — mirrors the JSON sidecar's
+    ``_no_dup_pairs`` strictness in ``cli.validate_dataset``.
+    """
+
+
+def _no_duplicate_mapping(loader: _StrictSafeLoader, node: yaml.MappingNode) -> dict[str, Any]:
+    mapping: dict[str, Any] = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=True)
+        if key in mapping:
+            raise yaml.constructor.ConstructorError(
+                None, None, f"duplicate key {key!r}", key_node.start_mark
+            )
+        mapping[key] = loader.construct_object(value_node, deep=True)
+    return mapping
+
+
+_StrictSafeLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _no_duplicate_mapping
+)
 
 
 def supported_range_str() -> str:
@@ -58,7 +94,9 @@ def load_dataset_meta(dataset_dir: Path) -> dict[str, Any] | None:
     except (OSError, UnicodeDecodeError) as e:
         raise ValueError(f"{DATASET_YAML}: unreadable ({e})") from e
     try:
-        meta = yaml.safe_load(raw)
+        # _StrictSafeLoader is a SafeLoader subclass (safe), with duplicate-key
+        # rejection added — yaml.load with it is equivalent to safe_load + strict.
+        meta = yaml.load(raw, Loader=_StrictSafeLoader)
     except yaml.YAMLError as e:
         raise ValueError(f"{DATASET_YAML}: invalid YAML ({e})") from e
     if not isinstance(meta, dict):
@@ -73,6 +111,10 @@ def validate_dataset_meta(meta: dict[str, Any]) -> list[str]:
     valid. ``engine_test_ref`` is format-checked only (see ``_ENGINE_REF_RE``).
     """
     errors: list[str] = []
+
+    unknown = set(meta) - KNOWN_KEYS
+    if unknown:
+        errors.append(f"{DATASET_YAML}: unknown key(s): {sorted(unknown)}")
 
     ver = meta.get("contract_version")
     # bool is an int subclass — reject `contract_version: true`.

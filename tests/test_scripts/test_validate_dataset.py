@@ -799,3 +799,19 @@ def test_dataset_yaml_bad_engine_test_ref(dataset_copy: Path) -> None:
         "license: L\nengine_test_ref: not-a-sha\n"
     )
     assert any("engine_test_ref must be" in e for e in validate_dataset(dataset_copy))
+
+
+def test_dataset_yaml_duplicate_key(dataset_copy: Path) -> None:
+    # A duplicated contract_version must be rejected as malformed (not last-wins).
+    (dataset_copy / "dataset.yaml").write_text(
+        "contract_version: 99\ncontract_version: 1\ndataset_id: x\nname: y\n"
+        'status: publishable\nlicense: L\nengine_test_ref: "%s"\n' % ("0" * 40)
+    )
+    assert any("duplicate key" in e for e in validate_dataset(dataset_copy))
+
+
+def test_fixture_dataset_yaml_matches_builder() -> None:
+    # The committed fixture dataset.yaml must equal the builder's literal, so the
+    # hand-committed copy and the generator can't drift (review nit).
+    b = _load_builder()
+    assert (FIXTURE / "dataset.yaml").read_text() == b.DATASET_YAML_TEXT

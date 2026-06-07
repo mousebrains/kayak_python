@@ -251,6 +251,23 @@ ID_COUNTERS = {
     "guidebook": 1,
 }
 
+# Dataset contract manifest (S6.2) — a fixed literal so the committed fixture is
+# deterministic across rebuilds (engine_test_ref is a format-only placeholder,
+# NOT `git rev-parse HEAD`, which would churn). A test pins the committed
+# tests/fixtures/dataset/dataset.yaml to this exact text so the two can't drift.
+DATASET_YAML_TEXT = (
+    "# Dataset contract manifest (S6.2). See kayak.dataset.contract.\n"
+    "contract_version: 1\n"
+    "dataset_id: fixture\n"
+    "name: Kayak engine test fixture\n"
+    "status: publishable\n"
+    "license: CC-BY-NC-4.0\n"
+    "# Engine commit this dataset is tested against. A fixture placeholder — S6.2\n"
+    "# validates the 40-lowercase-hex format only (the commit-exists-in-the-approved-\n"
+    "# repo check is an S7 paired-release concern).\n"
+    'engine_test_ref: "0000000000000000000000000000000000000000"\n'
+)
+
 
 def _sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -410,21 +427,8 @@ def main(argv: list[str] | None = None) -> int:
     (OUT / "reaches.json").write_text(json.dumps(geom_out, indent=0) + "\n")
     (OUT / "reaches-gradient.json").write_text(json.dumps(grad_out, indent=0) + "\n")
 
-    # Dataset contract manifest (S6.2). Written as a fixed literal so the
-    # committed fixture is deterministic across rebuilds — engine_test_ref is a
-    # format-only placeholder (NOT `git rev-parse HEAD`, which would churn).
-    (OUT / "dataset.yaml").write_text(
-        "# Dataset contract manifest (S6.2). See kayak.dataset.contract.\n"
-        "contract_version: 1\n"
-        "dataset_id: fixture\n"
-        "name: Kayak engine test fixture\n"
-        "status: publishable\n"
-        "license: CC-BY-NC-4.0\n"
-        "# Engine commit this dataset is tested against. A fixture placeholder — S6.2\n"
-        "# validates the 40-lowercase-hex format only (the commit-exists-in-the-approved-\n"
-        "# repo check is an S7 paired-release concern).\n"
-        'engine_test_ref: "0000000000000000000000000000000000000000"\n'
-    )
+    # Dataset contract manifest (S6.2) — fixed literal (see DATASET_YAML_TEXT).
+    (OUT / "dataset.yaml").write_text(DATASET_YAML_TEXT)
 
     # Provenance manifest: the source revision + per-reach digests, so a later
     # regeneration that drifts from the recorded source is detectable.
