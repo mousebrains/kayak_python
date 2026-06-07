@@ -21,7 +21,11 @@ Schema and metadata changes now travel by **different paths**:
   `Base.metadata.create_all()` + a stamp of the active manifest, so it never
   replays WKCC's regional migrations. The live DB's pre-relocation
   `schema_migrations` rows for the moved versions are tolerated (not pending, not
-  re-run) — no transition step beyond the next `levels migrate`.
+  re-run) — no transition step beyond the next `levels migrate`. **New migrations
+  start at `0075`**: every version `0001`–`0074` was assigned in that era and is
+  stamped on the live DB (active, relocated, or frozen), so reusing one would be
+  discovered yet silently treated as already-applied. A guard
+  (`test_active_versions_reserve_the_pre_s9b_range`) enforces it.
 - **Metadata** (source / gauge / reach / junction rows) → a reviewed
   CSV diff in the **`kayak_data`** repo (cloned at `DATASET_DIR`),
   applied by `levels sync-metadata` (deploy.sh step 3.1), matched by

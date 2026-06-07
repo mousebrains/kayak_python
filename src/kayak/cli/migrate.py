@@ -40,6 +40,12 @@ MIGRATIONS_DIR = DATA_DIR / "db" / "migrations"
 # manifest is never picked up, and an edited migration is caught by its sha256.
 # Regenerate with scripts/gen_migration_manifest.py.
 MANIFEST_NAME = "manifest.csv"
+# The wire-via-migration era assigned every version 0001..RESERVED_THROUGH; all are
+# stamped on the live DB (active survivors, or relocated to kayak_data / frozen in
+# legacy/ by S9b). A NEW migration MUST therefore be numbered above this -- reusing a
+# version <= RESERVED_THROUGH would be discovered yet treated as already-applied on
+# the live DB (a silent skip). Enforced by a guard test on the real migration set.
+RESERVED_THROUGH = 74
 _VERSION_RE = re.compile(r"^(\d{4})_")
 
 

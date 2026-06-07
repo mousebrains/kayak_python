@@ -29,6 +29,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from kayak.cli.migrate import discover_migrations
 from kayak.config import DATA_DIR
 from kayak.db.metadata_csv import LOAD_ORDER
 
@@ -65,11 +66,13 @@ def test_active_migrations_are_schema_only() -> None:
     # Every active migration (the whole set since S9b — no grandfather window) must
     # be schema-only: metadata-table rows change via a data/db/*.csv diff + `levels
     # sync-metadata`, never a data migration.
+    # Iterate the manifest-resolved active set (what `levels migrate` actually runs),
+    # so the guard stays consistent with discovery rather than re-globbing the dir.
     offenders: dict[str, set[str]] = {}
-    for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
-        hits = _metadata_dml(path.read_text(encoding="utf-8"))
+    for mig in discover_migrations():
+        hits = _metadata_dml(mig.sql)
         if hits:
-            offenders[path.name] = hits
+            offenders[mig.path.name] = hits
     assert not offenders, (
         "active migration(s) write metadata-table rows (INSERT/UPDATE/DELETE) — keep "
         f"migrations schema-only; relocate data to kayak_data: {offenders}"
