@@ -263,6 +263,40 @@ def test_valid_hours_forms_accepted(vdir: Path) -> None:
         assert gs.validate_registry(meta, vdir) == [], f"hours={h!r} should be valid"
 
 
+def test_non_string_url_rejected(vdir: Path) -> None:
+    # A list/number url renders a junk CSV cell that fetch can't GET.
+    meta = _valid_meta()
+    meta["fetch_urls"][0]["url"] = ["http://a", "http://b"]
+    assert any("url must be a non-empty string" in p for p in gs.validate_registry(meta, vdir))
+
+
+def test_non_string_name_rejected(vdir: Path) -> None:
+    meta = _valid_meta()
+    meta["sources"][0]["name"] = ["X"]
+    assert any("name must be a non-empty string" in p for p in gs.validate_registry(meta, vdir))
+
+
+def test_non_string_agency_rejected(vdir: Path) -> None:
+    meta = _valid_meta()
+    meta["sources"][0]["agency"] = ["USGS"]
+    assert any("agency must be a string" in p for p in gs.validate_registry(meta, vdir))
+
+
+def test_invalid_timezone_rejected(vdir: Path) -> None:
+    # _localize does ZoneInfo(tz) at fetch time — a bogus IANA name would crash it.
+    meta = _valid_meta()
+    meta["sources"][0]["timezone"] = "Mars/Phobos"
+    assert any("not a valid IANA timezone" in p for p in gs.validate_registry(meta, vdir))
+
+
+def test_valid_timezone_accepted(vdir: Path) -> None:
+    # Real registry tz values (and a blank = no timezone) validate.
+    for tz in ("America/Los_Angeles", "America/Boise", "Etc/GMT+8", ""):
+        meta = _valid_meta()
+        meta["sources"][0]["timezone"] = tz
+        assert gs.validate_registry(meta, vdir) == [], f"timezone={tz!r} should be valid"
+
+
 def test_id_at_or_above_next_id(tmp_path: Path) -> None:
     d = tmp_path / "ds"
     d.mkdir()

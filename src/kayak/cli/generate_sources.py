@@ -25,6 +25,7 @@ import sys
 import tempfile
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yaml
 
@@ -145,6 +146,30 @@ def _is_int(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+def _nonempty_str(value: object) -> bool:
+    """A non-blank string — guards required text fields against a list/number
+    hand-edit (e.g. ``url: [a, b]``) that would render a junk CSV cell."""
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _timezone_problems(i: int, s: dict) -> list[str]:
+    """timezone (optional) must be a valid IANA name: ``BaseParser._localize`` does
+    ``ZoneInfo(tz)`` at fetch time, so a bogus value (``"Mars/Phobos"``) crashes
+    the parse for that source. Blank/absent = no timezone (naive treated as UTC)."""
+    tz = s.get("timezone")
+    if tz is None:
+        return []
+    if not isinstance(tz, str):
+        return [f"source[{i}]: timezone must be an IANA name string, got {tz!r}"]
+    if not tz.strip():
+        return []
+    try:
+        ZoneInfo(tz)
+    except (ZoneInfoNotFoundError, ValueError):
+        return [f"source[{i}]: timezone {tz!r} is not a valid IANA timezone"]
+    return []
+
+
 def _hours_problems(i: int, fu: dict) -> list[str]:
     """hours is written verbatim to the CSV and parsed at fetch time by
     ``fetch._hour_allowed`` (``int()`` per comma token, compared against the
@@ -177,6 +202,8 @@ def _fetch_url_structural(i: int, fu: dict) -> list[str]:
             problems.append(f"fetch_url[{i}]: missing required field {f!r}")
     if fu.get("id") is not None and not _is_int(fu["id"]):
         problems.append(f"fetch_url[{i}]: id must be an integer, got {fu['id']!r}")
+    if fu.get("url") is not None and not _nonempty_str(fu["url"]):
+        problems.append(f"fetch_url[{i}]: url must be a non-empty string, got {fu['url']!r}")
     # enabled drives is_active via truthiness, so a quoted "false" would silently
     # enable the URL — require a real bool (fail closed), like ids.
     if fu.get("enabled") is not None and not isinstance(fu["enabled"], bool):
@@ -193,6 +220,11 @@ def _source_structural(i: int, s: dict) -> list[str]:
     for f in ("id", *_SOURCE_REF_FIELDS):
         if s.get(f) is not None and not _is_int(s[f]):
             problems.append(f"source[{i}]: {f} must be an integer, got {s[f]!r}")
+    if s.get("name") is not None and not _nonempty_str(s["name"]):
+        problems.append(f"source[{i}]: name must be a non-empty string, got {s['name']!r}")
+    if s.get("agency") is not None and not isinstance(s["agency"], str):
+        problems.append(f"source[{i}]: agency must be a string, got {s['agency']!r}")
+    problems.extend(_timezone_problems(i, s))
     return problems
 
 
