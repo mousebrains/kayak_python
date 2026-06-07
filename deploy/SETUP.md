@@ -100,7 +100,15 @@ S4b-2 makes `kayak_data`'s CI install the engine **pinned by `dataset.yaml`'s
 `validate.py`). Both repos are private, so that CI needs a **read-only** credential
 to fetch the engine. This is the *mirror* of the now-deleted code-CI key: the
 **public** half goes on `kayak_python` (the repo being read), the **private** half
-becomes a secret in `kayak_data` (the repo whose CI reads). One-time setup:
+becomes a secret in `kayak_data` (the repo whose CI reads).
+
+> **Status:** already configured on the live setup (2026-06-07) — read-only deploy
+> key `kayak_data-ci-read` on `kayak_python`, secret `KAYAK_ENGINE_DEPLOY_KEY` in
+> `kayak_data`. The commands below are the **from-scratch** runbook; re-running
+> them on the live setup would replace the working key/secret, so only run them on
+> a fresh install.
+
+One-time setup:
 
 ```bash
 # 1. Dedicated read-only keypair (ed25519, no passphrase).
