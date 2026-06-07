@@ -207,9 +207,56 @@ def test_missing_required_field(vdir: Path) -> None:
     assert any("missing required field 'url'" in p for p in problems)
 
 
+def test_quoted_id_rejected(vdir: Path) -> None:
+    # A YAML-quoted id ("1") must not alias the int id 1 (would collide in the CSV).
+    meta = _valid_meta()
+    meta["sources"][0]["id"] = "1"
+    assert any("id must be an integer" in p for p in gs.validate_registry(meta, vdir))
+
+
+def test_quoted_ref_rejected(vdir: Path) -> None:
+    meta = _valid_meta()
+    meta["sources"][1]["fetch_url_id"] = "1"
+    assert any("fetch_url_id must be an integer" in p for p in gs.validate_registry(meta, vdir))
+
+
+def test_bool_id_rejected(vdir: Path) -> None:
+    # bool is an int subclass — guard against `id: true` slipping through.
+    meta = _valid_meta()
+    meta["fetch_urls"][0]["id"] = True
+    assert any("id must be an integer" in p for p in gs.validate_registry(meta, vdir))
+
+
 def test_id_at_or_above_next_id(tmp_path: Path) -> None:
     d = tmp_path / "ds"
     d.mkdir()
     _counters(d, source=2, fetch_url=99)  # source next_id=2, so id 3 is stale
     _calc(d, 1)
     assert any("stale counter" in p for p in gs.validate_registry(_valid_meta(), d))
+
+
+def test_comma_hours_round_trips(tmp_path: Path) -> None:
+    # A multi-hour fetch_url ("6,12,18") must survive CSV -> sources.yaml -> CSV;
+    # reverse_engineer must not int()-cast it. (The documented --from-csv path.)
+    d = tmp_path / "ds"
+    d.mkdir()
+    source_csv = "id,name,agency,timezone,fetch_url_id,calc_expression_id\n1,STAW1,USBR,,1,\n"
+    fetch_csv = 'id,url,parser,hours,is_active\n1,https://example/x,nwps,"6,12,18",1\n'
+    (d / "source.csv").write_text(source_csv, encoding="utf-8")
+    (d / "fetch_url.csv").write_text(fetch_csv, encoding="utf-8")
+    _counters(d, source=2, fetch_url=2)
+    gs.reverse_engineer(d)
+    assert "hours: 6,12,18" in (d / "sources.yaml").read_text(encoding="utf-8")
+    gs.generate(d)
+    assert (d / "fetch_url.csv").read_text(encoding="utf-8") == fetch_csv
+
+
+def test_check_missing_csv_reports_cleanly(tmp_path: Path) -> None:
+    # --check with no committed CSV must exit 1 with a message, not traceback.
+    d = tmp_path / "ds"
+    d.mkdir()
+    _counters(d, source=2, fetch_url=2)
+    (d / "sources.yaml").write_text(
+        "sources:\n- {id: 1, name: X, agency: USGS}\n", encoding="utf-8"
+    )
+    assert gs._main(_ns(d, check=True)) == 1

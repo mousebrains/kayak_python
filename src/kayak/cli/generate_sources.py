@@ -140,18 +140,32 @@ def generate(dataset_dir: Path) -> None:
     _write_csv(dataset_dir, "source", source_rows, _column_order(dataset_dir, "source"))
 
 
-def _missing_field_problems(fetch_urls: list[dict], sources: list[dict]) -> list[str]:
-    """Required fields ``_registry_to_rows`` reads with ``[]`` — a clean error here
-    keeps a malformed hand-edit from crashing with a ``KeyError`` downstream."""
+def _is_int(value: object) -> bool:
+    """A real integer — not ``None``, not a YAML-quoted ``"1"``, not ``bool``."""
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _structural_problems(fetch_urls: list[dict], sources: list[dict]) -> list[str]:
+    """Required-field presence + integer-typed ids. Run before every other check:
+    the dup/reference/counter checks and ``_registry_to_rows`` all assume these
+    hold. id/ref fields must be true ints — a YAML-quoted ``id: "1"`` would alias a
+    separate ``id: 1`` (distinct to the set-based dup check) and a string id slips
+    past the stale-counter check, so both write a colliding/over-range CSV id with
+    no problem reported. Reject them here instead of silently coercing."""
     problems: list[str] = []
     for i, fu in enumerate(fetch_urls):
         for f in ("id", "url", "parser"):
             if fu.get(f) is None:
                 problems.append(f"fetch_url[{i}]: missing required field {f!r}")
+        if fu.get("id") is not None and not _is_int(fu["id"]):
+            problems.append(f"fetch_url[{i}]: id must be an integer, got {fu['id']!r}")
     for i, s in enumerate(sources):
         for f in ("id", "name"):
             if s.get(f) is None:
                 problems.append(f"source[{i}]: missing required field {f!r}")
+        for f in ("id", *_SOURCE_REF_FIELDS):
+            if s.get(f) is not None and not _is_int(s[f]):
+                problems.append(f"source[{i}]: {f} must be an integer, got {s[f]!r}")
     return problems
 
 
@@ -160,8 +174,8 @@ def validate_registry(meta: dict[str, Any], dataset_dir: Path) -> list[str]:
     fetch_urls = meta.get("fetch_urls") or []
     sources = meta.get("sources") or []
 
-    # Required-field gaps first: the rest (and _registry_to_rows) assume these exist.
-    problems = _missing_field_problems(fetch_urls, sources)
+    # Structural gaps first: the rest (and _registry_to_rows) assume these hold.
+    problems = _structural_problems(fetch_urls, sources)
     if problems:
         return problems
 
@@ -234,7 +248,9 @@ def reverse_engineer(dataset_dir: Path) -> None:
         for r in sorted(csv.DictReader(fh), key=lambda r: int(r["id"])):
             entry: dict[str, Any] = {"id": int(r["id"]), "url": r["url"], "parser": r["parser"]}
             if (r.get("hours") or "").strip():
-                entry["hours"] = int(r["hours"])
+                # hours is a comma-separated UTC-hour list (VARCHAR; e.g. "6,12,18"),
+                # not a single int — keep it verbatim so multi-hour specs survive.
+                entry["hours"] = r["hours"]
             entry["enabled"] = (r.get("is_active") or "").strip() != "0"
             fetch_urls.append(entry)
     sources: list[dict[str, Any]] = []
@@ -266,6 +282,13 @@ def _check(dataset_dir: Path) -> int:
         print("invalid sources.yaml:", file=sys.stderr)
         for p in problems:
             print(f"  - {p}", file=sys.stderr)
+        return 1
+    absent = [n for n in ("source.csv", "fetch_url.csv") if not (dataset_dir / n).is_file()]
+    if absent:
+        print(
+            f"generate-sources --check: missing {absent}; run `levels generate-sources` first.",
+            file=sys.stderr,
+        )
         return 1
     source_rows, fetch_rows = _registry_to_rows(meta)
     # Order is taken from the committed files (the byte-comparison target), so a
