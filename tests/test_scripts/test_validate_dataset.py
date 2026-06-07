@@ -754,3 +754,48 @@ def test_provenance_matches_committed_fixture() -> None:
             assert b._sha256(b._grad_str(grad[fid])) == pr["gradient_sha256"]
         else:
             assert pr["gradient_sha256"] == ""
+
+
+# --- dataset contract (dataset.yaml) — S6.2 -------------------------------
+
+
+def test_missing_dataset_yaml_is_contract_zero(dataset_copy: Path) -> None:
+    (dataset_copy / "dataset.yaml").unlink()
+    errs = validate_dataset(dataset_copy)
+    # Contract-0 rejection, gated first: it's the ONLY error (no content checks run).
+    assert errs == [e for e in errs if "dataset.yaml" in e]
+    assert any("contract 0" in e and "requires contract" in e for e in errs)
+
+
+def test_dataset_yaml_malformed_yaml(dataset_copy: Path) -> None:
+    (dataset_copy / "dataset.yaml").write_text("contract_version: 1\n  bad: : indent\n")
+    assert any("invalid YAML" in e for e in validate_dataset(dataset_copy))
+
+
+def test_dataset_yaml_non_mapping(dataset_copy: Path) -> None:
+    (dataset_copy / "dataset.yaml").write_text("- just\n- a\n- list\n")
+    assert any("must be a mapping" in e for e in validate_dataset(dataset_copy))
+
+
+def test_dataset_yaml_contract_version_out_of_range(dataset_copy: Path) -> None:
+    (dataset_copy / "dataset.yaml").write_text(
+        "contract_version: 99\ndataset_id: x\nname: y\nstatus: publishable\n"
+        'license: L\nengine_test_ref: "%s"\n' % ("0" * 40)
+    )
+    assert any("contract_version 99 is outside" in e for e in validate_dataset(dataset_copy))
+
+
+def test_dataset_yaml_bad_status(dataset_copy: Path) -> None:
+    (dataset_copy / "dataset.yaml").write_text(
+        "contract_version: 1\ndataset_id: x\nname: y\nstatus: draft\n"
+        'license: L\nengine_test_ref: "%s"\n' % ("0" * 40)
+    )
+    assert any("status must be one of" in e for e in validate_dataset(dataset_copy))
+
+
+def test_dataset_yaml_bad_engine_test_ref(dataset_copy: Path) -> None:
+    (dataset_copy / "dataset.yaml").write_text(
+        "contract_version: 1\ndataset_id: x\nname: y\nstatus: publishable\n"
+        "license: L\nengine_test_ref: not-a-sha\n"
+    )
+    assert any("engine_test_ref must be" in e for e in validate_dataset(dataset_copy))

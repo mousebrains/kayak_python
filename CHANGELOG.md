@@ -9,6 +9,12 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Dataset contract (`dataset.yaml`)**: a dataset now declares a
+  `contract_version` (plus `dataset_id`/`name`/`status`/`license`/`engine_test_ref`)
+  in a `dataset.yaml` at its root; the engine validates it against a supported
+  contract range (`kayak.dataset.contract`) and `levels validate-dataset` rejects
+  a dataset with none ("contract 0") before reading any content
+  (dataset-separation S6.2).
 - **Batch A/B/C gauges & reaches**: new Columbia, Crooked-basin, and related
   NWS/NWRFC/USGS stations plus the NF Crooked reach were wired in (#76, #77,
   #78), with HUC12 codes backfilled for the affected reaches. The committed
