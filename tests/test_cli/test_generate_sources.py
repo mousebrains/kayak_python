@@ -235,6 +235,30 @@ def test_non_bool_enabled_rejected(vdir: Path) -> None:
     assert any("enabled must be true or false" in p for p in gs.validate_registry(meta, vdir))
 
 
+def test_list_hours_rejected(vdir: Path) -> None:
+    # A YAML list `hours: [6, 12]` would render the cell "[6, 12]", which
+    # _hour_allowed can't parse -> URL silently skipped on every constrained fetch.
+    meta = _valid_meta()
+    meta["fetch_urls"][0]["hours"] = [6, 12]
+    assert any("hours must be a string" in p for p in gs.validate_registry(meta, vdir))
+
+
+def test_non_numeric_hours_rejected(vdir: Path) -> None:
+    meta = _valid_meta()
+    meta["fetch_urls"][0]["hours"] = "6,noon"
+    assert any(
+        "hours must be comma-separated integers" in p for p in gs.validate_registry(meta, vdir)
+    )
+
+
+def test_valid_hours_forms_accepted(vdir: Path) -> None:
+    # The documented string form (and a bare single int) are fine; empty = always.
+    for h in ("6,12,18", "6", 6, ""):
+        meta = _valid_meta()
+        meta["fetch_urls"][0]["hours"] = h
+        assert gs.validate_registry(meta, vdir) == [], f"hours={h!r} should be valid"
+
+
 def test_id_at_or_above_next_id(tmp_path: Path) -> None:
     d = tmp_path / "ds"
     d.mkdir()

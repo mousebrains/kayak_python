@@ -145,6 +145,23 @@ def _is_int(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+def _hours_problems(i: int, fu: dict) -> list[str]:
+    """hours is written verbatim to the CSV and parsed at fetch time by
+    ``fetch._hour_allowed`` (``int()`` per comma token). A non-scalar (e.g. the
+    YAML list ``[6, 12]``) or a non-numeric token would render a cell that
+    silently disables the URL on every constrained fetch — require the documented
+    comma-separated-integers string form (empty = always)."""
+    h = fu.get("hours")
+    if h is None:
+        return []
+    if isinstance(h, bool) or not isinstance(h, (str, int)):
+        return [f'fetch_url[{i}]: hours must be a string like "6,12,18", got {h!r}']
+    tokens = [t.strip() for t in str(h).split(",") if t.strip()]
+    if not all(t.isdigit() for t in tokens):
+        return [f"fetch_url[{i}]: hours must be comma-separated integers, got {h!r}"]
+    return []
+
+
 def _fetch_url_structural(i: int, fu: dict) -> list[str]:
     problems: list[str] = []
     for f in ("id", "url", "parser"):
@@ -156,6 +173,7 @@ def _fetch_url_structural(i: int, fu: dict) -> list[str]:
     # enable the URL — require a real bool (fail closed), like ids.
     if fu.get("enabled") is not None and not isinstance(fu["enabled"], bool):
         problems.append(f"fetch_url[{i}]: enabled must be true or false, got {fu['enabled']!r}")
+    problems.extend(_hours_problems(i, fu))
     return problems
 
 
