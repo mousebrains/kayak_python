@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 
 from kayak.dataset import contract
 
@@ -18,6 +19,11 @@ def _valid_meta() -> dict:
         "license": "CC-BY-NC-4.0",
         "engine_test_ref": "a" * 40,
     }
+
+
+def _write_dataset_yaml(d: Path, **overrides: object) -> None:
+    """Write a valid dataset.yaml into *d*, applying field overrides."""
+    (d / contract.DATASET_YAML).write_text(yaml.safe_dump(_valid_meta() | overrides))
 
 
 class TestLoadDatasetMeta:
@@ -99,6 +105,13 @@ class TestValidateDatasetMeta:
         m = _valid_meta() | {"provenance": "PROVENANCE.json"}
         assert contract.validate_dataset_meta(m) == []
 
+    def test_mixed_type_unknown_keys_do_not_crash(self) -> None:
+        # YAML allows non-string keys (`5: y`); a str+int mix must not make the
+        # unknown-key sort raise TypeError — it must stay a focused manifest error.
+        m = _valid_meta() | {"bogus": "x", 5: "y"}
+        errs = contract.validate_dataset_meta(m)
+        assert any("unknown key(s)" in e for e in errs)
+
     @pytest.mark.parametrize("ref", ["nothex", "A" * 40, "a" * 39, "a" * 41, 123])
     def test_bad_engine_test_ref(self, ref: object) -> None:
         m = _valid_meta() | {"engine_test_ref": ref}
@@ -145,6 +158,54 @@ class TestLoadRetiredIds:
         (tmp_path / contract.RETIRED_IDS_YAML).write_text("? [1, 2]\n: foo\n")
         with pytest.raises(ValueError, match="invalid YAML"):
             contract.load_retired_ids(tmp_path)
+
+
+class TestCheckContract:
+    """The integrity gate (used by validate-dataset) — no scaffold opinion."""
+
+    def test_missing_is_contract_zero(self, tmp_path: Path) -> None:
+        errs = contract.check_contract(tmp_path)
+        assert any("contract 0" in e and "requires contract" in e for e in errs)
+
+    def test_valid_publishable(self, tmp_path: Path) -> None:
+        _write_dataset_yaml(tmp_path)
+        assert contract.check_contract(tmp_path) == []
+
+    def test_scaffold_passes_integrity(self, tmp_path: Path) -> None:
+        # A scaffold dataset is still a *valid* dataset to validate.
+        _write_dataset_yaml(tmp_path, status="scaffold")
+        assert contract.check_contract(tmp_path) == []
+
+    def test_malformed(self, tmp_path: Path) -> None:
+        (tmp_path / contract.DATASET_YAML).write_text("a: : b\n")
+        assert any("invalid YAML" in e for e in contract.check_contract(tmp_path))
+
+
+class TestGateForUse:
+    """The fail-closed production gate (used by sync-metadata)."""
+
+    def test_publishable_passes(self, tmp_path: Path) -> None:
+        _write_dataset_yaml(tmp_path)
+        assert contract.gate_for_use(tmp_path, allow_scaffold=False) == []
+
+    def test_scaffold_rejected_without_flag(self, tmp_path: Path) -> None:
+        _write_dataset_yaml(tmp_path, status="scaffold")
+        errs = contract.gate_for_use(tmp_path, allow_scaffold=False)
+        assert any("scaffold" in e for e in errs)
+
+    def test_scaffold_allowed_with_flag(self, tmp_path: Path) -> None:
+        _write_dataset_yaml(tmp_path, status="scaffold")
+        assert contract.gate_for_use(tmp_path, allow_scaffold=True) == []
+
+    def test_contract_zero_rejected_even_with_allow_scaffold(self, tmp_path: Path) -> None:
+        # --allow-scaffold doesn't rescue a missing/invalid manifest.
+        errs = contract.gate_for_use(tmp_path, allow_scaffold=True)
+        assert any("contract 0" in e for e in errs)
+
+    def test_out_of_range_rejected(self, tmp_path: Path) -> None:
+        _write_dataset_yaml(tmp_path, contract_version=contract.MAX_CONTRACT + 1)
+        errs = contract.gate_for_use(tmp_path, allow_scaffold=False)
+        assert any("outside this engine's supported range" in e for e in errs)
 
 
 def test_supported_range_str() -> None:
