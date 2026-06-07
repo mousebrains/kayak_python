@@ -19,6 +19,8 @@ Existing pre-migration-system databases need a one-time
 from __future__ import annotations
 
 import argparse
+import csv
+import hashlib
 import logging
 import re
 from dataclasses import dataclass
@@ -33,6 +35,11 @@ from kayak.db.engine import get_engine
 logger = logging.getLogger(__name__)
 
 MIGRATIONS_DIR = DATA_DIR / "db" / "migrations"
+# The manifest (version,filename,sha256) is the authoritative ACTIVE migration set
+# (S9a): discovery reads it instead of globbing, so a frozen/legacy file outside the
+# manifest is never picked up, and an edited migration is caught by its sha256.
+# Regenerate with scripts/gen_migration_manifest.py.
+MANIFEST_NAME = "manifest.csv"
 _VERSION_RE = re.compile(r"^(\d{4})_")
 
 
@@ -43,10 +50,15 @@ class Migration:
     version: str  # zero-padded string, e.g. "0002"
     name: str  # full filename stem, e.g. "0002_no_flow_range"
     path: Path
+    digest: str  # sha256 recorded in the manifest (verified against the file)
 
     @property
     def sql(self) -> str:
         return self.path.read_text()
+
+
+def _file_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _ensure_tracking_table() -> None:
@@ -55,39 +67,101 @@ def _ensure_tracking_table() -> None:
         conn.execute(
             text(
                 "CREATE TABLE IF NOT EXISTS schema_migrations ("
-                "version TEXT PRIMARY KEY, applied_at DATETIME NOT NULL"
+                "version TEXT PRIMARY KEY, applied_at DATETIME NOT NULL, digest TEXT"
                 ")"
             )
         )
+        # Pre-S9a DBs (the live host) have the 2-column table; add `digest` if it's
+        # missing. Idempotent — runs on every migrate/init-db; legacy rows keep a
+        # NULL digest (tolerated; only new rows record the applied sha256).
+        cols = {row[1] for row in conn.execute(text("PRAGMA table_info(schema_migrations)")).all()}
+        if "digest" not in cols:
+            conn.execute(text("ALTER TABLE schema_migrations ADD COLUMN digest TEXT"))
 
 
 def discover_migrations(migrations_dir: Path | None = None) -> list[Migration]:
-    """Return every migration file in version order.
+    """Return the active migrations, in version order.
 
-    Uses ``MIGRATIONS_DIR`` by default — resolved at call time so tests can
-    monkeypatch the module constant.
+    Reads ``manifest.csv`` (the authoritative active set, S9a) rather than globbing:
+    each listed file must exist and its sha256 must match the manifest (a mismatch
+    means a migration was edited after being recorded — regenerate with
+    ``scripts/gen_migration_manifest.py``), and a ``*.sql`` in the dir that the
+    manifest omits is an error (added without updating the manifest). ``MIGRATIONS_DIR``
+    is resolved at call time so tests can monkeypatch / pass a dir.
     """
     root = migrations_dir if migrations_dir is not None else MIGRATIONS_DIR
     if not root.is_dir():
         return []
+    manifest = root / MANIFEST_NAME
+    if not manifest.is_file():
+        raise ValueError(
+            f"migration manifest not found: {manifest}. Run "
+            "`python3 scripts/gen_migration_manifest.py` to (re)generate it."
+        )
     out: list[Migration] = []
-    seen: dict[str, str] = {}  # version prefix -> first filename that claimed it
-    for path in sorted(root.glob("*.sql")):
+    seen: dict[str, str] = {}  # version -> filename, for the dup-version guard
+    listed: set[str] = set()
+    with manifest.open(encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            version = (row.get("version") or "").strip()
+            filename = (row.get("filename") or "").strip()
+            sha = (row.get("sha256") or "").strip()
+            if not (version and filename and sha):
+                raise ValueError(f"{MANIFEST_NAME}: malformed row {row!r}")
+            if version in seen:
+                raise ValueError(
+                    f"{MANIFEST_NAME}: duplicate version {version!r} ({seen[version]!r} and "
+                    f"{filename!r}). The NNNN_ prefix is the schema_migrations PRIMARY KEY; "
+                    "renumber one of them."
+                )
+            seen[version] = filename
+            listed.add(filename)
+            path = root / filename
+            if not path.is_file():
+                raise ValueError(f"{MANIFEST_NAME}: lists {filename!r} but the file is missing.")
+            actual = _file_sha256(path)
+            if actual != sha:
+                raise ValueError(
+                    f"{MANIFEST_NAME}: sha256 mismatch for {filename!r} (manifest "
+                    f"{sha[:12]}…, file {actual[:12]}…) — a migration was edited after being "
+                    "recorded. Regenerate with scripts/gen_migration_manifest.py."
+                )
+            out.append(Migration(version=version, name=path.stem, path=path, digest=sha))
+    orphans = sorted(p.name for p in root.glob("*.sql") if p.name not in listed)
+    if orphans:
+        raise ValueError(
+            f"{MANIFEST_NAME}: *.sql file(s) not in the manifest: {orphans}. Run "
+            "scripts/gen_migration_manifest.py."
+        )
+    out.sort(key=lambda mig: mig.version)
+    return out
+
+
+def regenerate_manifest(migrations_dir: Path = MIGRATIONS_DIR) -> int:
+    """(Re)write ``manifest.csv`` for *migrations_dir* from its ``*.sql`` files —
+    ``version,filename,sha256`` in version order. The single source of truth for
+    the manifest, shared by ``scripts/gen_migration_manifest.py`` and the tests so
+    generation can't drift from what :func:`discover_migrations` verifies. Returns
+    the migration count."""
+    rows: list[tuple[str, str, str]] = []
+    seen: dict[str, str] = {}
+    for path in sorted(migrations_dir.glob("*.sql")):
         m = _VERSION_RE.match(path.name)
         if not m:
-            logger.warning("Skipping non-versioned migration file: %s", path.name)
             continue
         version = m.group(1)
         if version in seen:
             raise ValueError(
-                f"Duplicate migration version {version!r}: {seen[version]!r} and "
-                f"{path.name!r}. The NNNN_ prefix is the schema_migrations.version "
-                f"PRIMARY KEY, so two files sharing it collide on apply (or one is "
-                f"silently stamped over the other). Renumber one of them."
+                f"duplicate migration version {version!r}: {seen[version]!r} and {path.name!r}"
             )
         seen[version] = path.name
-        out.append(Migration(version=version, name=path.stem, path=path))
-    return out
+        rows.append((version, path.name, _file_sha256(path)))
+    rows.sort(key=lambda r: r[0])
+    with (migrations_dir / MANIFEST_NAME).open("w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh, lineterminator="\n")
+        w.writerow(["version", "filename", "sha256"])
+        w.writerows(rows)
+    return len(rows)
 
 
 def applied_versions() -> set[str]:
@@ -110,15 +184,22 @@ def pending_migrations(applied: set[str] | None = None) -> list[Migration]:
     return [m for m in discover_migrations() if m.version not in applied]
 
 
-def stamp(version: str) -> None:
-    """Record ``version`` as applied without running its SQL."""
+def stamp(version: str, digest: str | None = None) -> None:
+    """Record ``version`` as applied without running its SQL.
+
+    ``digest`` is the migration's manifest sha256 when known (recorded for new
+    rows); ``None`` for a bare legacy-version bootstrap (``--stamp`` of a version
+    with no active file)."""
     _ensure_tracking_table()
     engine = get_engine()
     now = datetime.now(UTC).isoformat(timespec="seconds")
     with engine.begin() as conn:
         conn.execute(
-            text("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (:v, :a)"),
-            {"v": version, "a": now},
+            text(
+                "INSERT OR IGNORE INTO schema_migrations (version, applied_at, digest) "
+                "VALUES (:v, :a, :d)"
+            ),
+            {"v": version, "a": now, "d": digest},
         )
 
 
@@ -128,7 +209,7 @@ def stamp_all_known() -> int:
     already = applied_versions()  # read once; the loop stamps distinct versions
     for m in discover_migrations():
         if m.version not in already:
-            stamp(m.version)
+            stamp(m.version, m.digest)
             count += 1
     return count
 
@@ -166,16 +247,22 @@ def apply_pending() -> list[str]:
                 raw.close()
             with engine.begin() as conn:
                 conn.execute(
-                    text("INSERT INTO schema_migrations (version, applied_at) VALUES (:v, :a)"),
-                    {"v": m.version, "a": now},
+                    text(
+                        "INSERT INTO schema_migrations (version, applied_at, digest) "
+                        "VALUES (:v, :a, :d)"
+                    ),
+                    {"v": m.version, "a": now, "d": m.digest},
                 )
         else:
             with engine.begin() as conn:
                 for stmt in statements:
                     conn.execute(text(stmt))
                 conn.execute(
-                    text("INSERT INTO schema_migrations (version, applied_at) VALUES (:v, :a)"),
-                    {"v": m.version, "a": now},
+                    text(
+                        "INSERT INTO schema_migrations (version, applied_at, digest) "
+                        "VALUES (:v, :a, :d)"
+                    ),
+                    {"v": m.version, "a": now, "d": m.digest},
                 )
         ran.append(m.version)
     return ran
@@ -291,8 +378,9 @@ def migrate(args: argparse.Namespace) -> None:
         return
 
     if args.stamp:
+        known = {m.version: m for m in discover_migrations()}
         for v in args.stamp:
-            stamp(v)
+            stamp(v, known[v].digest if v in known else None)
             print(f"Stamped {v} as applied.")
         return
 
