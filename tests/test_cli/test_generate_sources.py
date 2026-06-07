@@ -180,6 +180,14 @@ def test_unknown_parser(vdir: Path) -> None:
     assert any("unknown parser" in p for p in gs.validate_registry(meta, vdir))
 
 
+def test_non_string_parser_rejected(vdir: Path) -> None:
+    # A YAML container parser must fail closed structurally, not crash
+    # _parser_problems' set-membership test with "unhashable type".
+    meta = _valid_meta()
+    meta["fetch_urls"][0]["parser"] = ["nwps"]
+    assert any("parser must be a non-empty string" in p for p in gs.validate_registry(meta, vdir))
+
+
 def test_both_refs_rejected(vdir: Path) -> None:
     meta = _valid_meta()
     meta["sources"][1]["calc_expression_id"] = 1  # already has fetch_url_id

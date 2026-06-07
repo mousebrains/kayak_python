@@ -204,6 +204,10 @@ def _fetch_url_structural(i: int, fu: dict) -> list[str]:
         problems.append(f"fetch_url[{i}]: id must be an integer, got {fu['id']!r}")
     if fu.get("url") is not None and not _nonempty_str(fu["url"]):
         problems.append(f"fetch_url[{i}]: url must be a non-empty string, got {fu['url']!r}")
+    # Must be a non-empty string before _parser_problems tests membership in a set
+    # of names — a YAML container would raise "unhashable type" there otherwise.
+    if fu.get("parser") is not None and not _nonempty_str(fu["parser"]):
+        problems.append(f"fetch_url[{i}]: parser must be a non-empty string, got {fu['parser']!r}")
     # enabled drives is_active via truthiness, so a quoted "false" would silently
     # enable the URL — require a real bool (fail closed), like ids.
     if fu.get("enabled") is not None and not isinstance(fu["enabled"], bool):
