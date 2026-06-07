@@ -1,0 +1,4 @@
+# Purged stable ids, per id-bearing table — kept reserved so they are never
+# reused and the id counter stays above them. See kayak.dataset.contract.
+# Empty mapping = nothing retired.
+{}

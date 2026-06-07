@@ -48,6 +48,13 @@ class TestLoadDatasetMeta:
         with pytest.raises(ValueError, match="duplicate key"):
             contract.load_dataset_meta(tmp_path)
 
+    def test_unhashable_key_raises(self, tmp_path: Path) -> None:
+        # A YAML complex key (`? [1, 2]`) is unhashable — the strict loader must
+        # reject it as malformed, not let a raw TypeError escape and crash.
+        (tmp_path / contract.DATASET_YAML).write_text("? [1, 2]\n: foo\n")
+        with pytest.raises(ValueError, match="invalid YAML"):
+            contract.load_dataset_meta(tmp_path)
+
 
 class TestValidateDatasetMeta:
     def test_valid(self) -> None:
@@ -96,6 +103,48 @@ class TestValidateDatasetMeta:
     def test_bad_engine_test_ref(self, ref: object) -> None:
         m = _valid_meta() | {"engine_test_ref": ref}
         assert any("engine_test_ref must be" in e for e in contract.validate_dataset_meta(m))
+
+
+class TestLoadRetiredIds:
+    def test_absent_returns_none(self, tmp_path: Path) -> None:
+        assert contract.load_retired_ids(tmp_path) is None
+
+    def test_empty_mapping_returns_empty(self, tmp_path: Path) -> None:
+        (tmp_path / contract.RETIRED_IDS_YAML).write_text("{}\n")
+        assert contract.load_retired_ids(tmp_path) == {}
+
+    def test_valid_returns_mapping(self, tmp_path: Path) -> None:
+        (tmp_path / contract.RETIRED_IDS_YAML).write_text("reach:\n  - 7\n  - 9\n")
+        assert contract.load_retired_ids(tmp_path) == {"reach": [7, 9]}
+
+    def test_zero_byte_file_raises(self, tmp_path: Path) -> None:
+        # A present-but-empty file parses to None, which the non-mapping guard
+        # rejects — the no-retirements convention is `{}`, not a 0-byte file.
+        (tmp_path / contract.RETIRED_IDS_YAML).write_text("")
+        with pytest.raises(ValueError, match="must be a mapping"):
+            contract.load_retired_ids(tmp_path)
+
+    def test_non_mapping_raises(self, tmp_path: Path) -> None:
+        (tmp_path / contract.RETIRED_IDS_YAML).write_text("- a\n- b\n")
+        with pytest.raises(ValueError, match="must be a mapping"):
+            contract.load_retired_ids(tmp_path)
+
+    def test_malformed_raises(self, tmp_path: Path) -> None:
+        (tmp_path / contract.RETIRED_IDS_YAML).write_text("a: : b\n")
+        with pytest.raises(ValueError, match="invalid YAML"):
+            contract.load_retired_ids(tmp_path)
+
+    def test_duplicate_table_key_raises(self, tmp_path: Path) -> None:
+        # The strict loader rejects a repeated table key (PyYAML last-wins would
+        # silently drop the first list of retired ids).
+        (tmp_path / contract.RETIRED_IDS_YAML).write_text("reach:\n  - 7\nreach:\n  - 9\n")
+        with pytest.raises(ValueError, match="duplicate key"):
+            contract.load_retired_ids(tmp_path)
+
+    def test_unhashable_key_raises(self, tmp_path: Path) -> None:
+        (tmp_path / contract.RETIRED_IDS_YAML).write_text("? [1, 2]\n: foo\n")
+        with pytest.raises(ValueError, match="invalid YAML"):
+            contract.load_retired_ids(tmp_path)
 
 
 def test_supported_range_str() -> None:

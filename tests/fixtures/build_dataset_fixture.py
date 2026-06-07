@@ -268,6 +268,15 @@ DATASET_YAML_TEXT = (
     'engine_test_ref: "0000000000000000000000000000000000000000"\n'
 )
 
+# Retired-id sidecar (S6.3) — a fixed literal, pinned by a test. Empty mapping =
+# nothing retired (this fixture). See kayak.dataset.contract / cli.validate_dataset.
+RETIRED_IDS_YAML_TEXT = (
+    "# Purged stable ids, per id-bearing table — kept reserved so they are never\n"
+    "# reused and the id counter stays above them. See kayak.dataset.contract.\n"
+    "# Empty mapping = nothing retired.\n"
+    "{}\n"
+)
+
 
 def _sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -429,6 +438,9 @@ def main(argv: list[str] | None = None) -> int:
 
     # Dataset contract manifest (S6.2) — fixed literal (see DATASET_YAML_TEXT).
     (OUT / "dataset.yaml").write_text(DATASET_YAML_TEXT)
+
+    # Retired-id sidecar (S6.3) — fixed literal (see RETIRED_IDS_YAML_TEXT).
+    (OUT / "retired_ids.yaml").write_text(RETIRED_IDS_YAML_TEXT)
 
     # Provenance manifest: the source revision + per-reach digests, so a later
     # regeneration that drifts from the recorded source is detectable.

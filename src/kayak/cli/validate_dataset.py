@@ -15,11 +15,11 @@ declare a ``contract_version`` the engine supports (a dataset with none is
 "contract 0" and is rejected) — see :mod:`kayak.dataset.contract`. Only then are
 the content checks run. The file/column/type/id-bearing contract comes from
 :mod:`kayak.dataset.layout`, the shared descriptor. A dataset is a **complete
-projection**: every contract CSV and both JSON sidecars must be present
-(header-only / ``{}`` when empty), so a missing file is reported as corruption
-rather than silently accepted as "not applicable". The command takes a REQUIRED
-explicit directory and never consults ``METADATA_DIR``/``DATASET_DIR``, so S6's
-root rename causes no validator churn.
+projection**: every contract CSV, both JSON sidecars, and ``retired_ids.yaml``
+must be present (header-only / ``{}`` when empty), so a missing file is reported
+as corruption rather than silently accepted as "not applicable". The command
+takes a REQUIRED explicit directory and never consults
+``METADATA_DIR``/``DATASET_DIR``, so S6's root rename causes no validator churn.
 
 Checks are crash-safe: a malformed header, a non-integer id, a wrong-typed
 value, or unparseable JSON yields a focused error and skips the dependent
@@ -134,8 +134,12 @@ def validate_dataset(dataset_dir: Path) -> list[str]:
     # (4) no duplicate primary keys on composite/natural-key tables (single-id
     #     dups are caught by the id-counter check).
     errors.extend(_check_duplicate_pks(d, good_csvs))
-    # (5) id-counter coverage + invariants.
-    errors.extend(_check_id_counters(d))
+    # (5) id-counter coverage + invariants, including retired-id reuse/high-water.
+    #     Retired ids degrade to {} on any shape error, so the counter check
+    #     falls back to active-only rather than acting on half-trusted data.
+    retired_errors, retired = _check_retired_ids(d)
+    errors.extend(retired_errors)
+    errors.extend(_check_id_counters(d, retired))
     # (5b) source-name wiring invariants (e.g. USGS station ids).
     errors.extend(_check_source_names(d, good_csvs))
     # (6) reach names (only if reach.csv parsed cleanly).
@@ -194,14 +198,20 @@ def _check_dataset_yaml(d: Path) -> list[str]:
 
 
 def _check_required_files(d: Path) -> list[str]:
-    """Every contract CSV, id_counters, and both JSON sidecars must be present —
-    a dataset is the full export, so a missing file is corruption, not omission."""
+    """Every contract CSV, id_counters, both JSON sidecars, and retired_ids.yaml
+    must be present — a dataset is the full export, so a missing file is
+    corruption, not omission."""
     missing = [
         f"missing required file: {t}.csv"
         for t in layout.CONTRACT_CSVS
         if not (d / f"{t}.csv").is_file()
     ]
-    for fname in (layout.ID_COUNTERS_CSV, layout.GEOM_JSON, layout.GRADIENT_JSON):
+    for fname in (
+        layout.ID_COUNTERS_CSV,
+        layout.GEOM_JSON,
+        layout.GRADIENT_JSON,
+        contract.RETIRED_IDS_YAML,
+    ):
         if not (d / fname).is_file():
             missing.append(f"missing required file: {fname}")
     return missing
@@ -482,9 +492,65 @@ def _int_ids(rows: list[dict[str, str]], column: str) -> tuple[list[int], str | 
     return out, None
 
 
-def _check_id_counters(d: Path) -> list[str]:
+def _check_retired_ids(d: Path) -> tuple[list[str], dict[str, set[int]]]:
+    """Parse ``retired_ids.yaml`` → (errors, per-table retired-id sets).
+
+    The file records purged ids so a deleted row's id is never reused and the id
+    counter stays above it (see :func:`_check_one_counter`). Shape contract: each
+    key is an id-bearing table; each value a list of unique positive ints within
+    SQLite's signed-64-bit range (``bool`` is rejected — it is an ``int``
+    subclass; YAML yields real ``int``s, so this is an isinstance + range test,
+    not the CSV string path). On **any** shape failure the retired map degrades
+    to ``{}`` so the counter check falls back to active-only rather than acting
+    on half-trusted data — matching the module's crash-safe contract.
+    """
+    try:
+        meta = contract.load_retired_ids(d)
+    except ValueError as e:
+        return [str(e)], {}
+    if meta is None:  # absent — already reported by _check_required_files
+        return [], {}
+    id_tables = layout.id_bearing_tables()
+    errors: list[str] = []
+    retired: dict[str, set[int]] = {}
+    for table, ids in meta.items():
+        if not isinstance(table, str) or table not in id_tables:
+            errors.append(
+                f"{contract.RETIRED_IDS_YAML}: {_trunc(str(table))} is not an id-bearing table"
+            )
+            continue
+        table_errs, parsed = _parse_retired_id_list(table, ids)
+        errors.extend(table_errs)
+        retired[table] = parsed
+    if errors:
+        return errors, {}
+    return [], retired
+
+
+def _parse_retired_id_list(table: str, ids: object) -> tuple[list[str], set[int]]:
+    """One table's retired-id list: a list of unique positive 64-bit ints."""
+    where = f"{contract.RETIRED_IDS_YAML} table {table}"
+    if not isinstance(ids, list):
+        return [f"{where}: value must be a list of ids"], set()
+    errors: list[str] = []
+    out: list[int] = []
+    for item in ids:
+        if not isinstance(item, int) or isinstance(item, bool):
+            errors.append(f"{where}: retired id must be an integer, got {_trunc(str(item))}")
+        elif not (1 <= item <= _INT64_MAX):
+            errors.append(f"{where}: retired id out of 1..2^63-1, got {_trunc(str(item))}")
+        else:
+            out.append(item)
+    dups = sorted(i for i, c in Counter(out).items() if c > 1)
+    if dups:
+        errors.append(f"{where}: duplicate retired ids {dups}")
+    return errors, set(out)
+
+
+def _check_id_counters(d: Path, retired: dict[str, set[int]]) -> list[str]:
     """Exactly one counter per id-bearing contract table; unique ids; next_id
-    strictly above the max existing id; no counters for non-id tables."""
+    strictly above the max existing-or-retired id; no counters for non-id
+    tables; no id both active and retired."""
     errors: list[str] = []
     counters: dict[str, str] = {}
     for r in _csv_rows(d / layout.ID_COUNTERS_CSV):
@@ -501,13 +567,16 @@ def _check_id_counters(d: Path) -> list[str]:
     for table in sorted(set(counters) - id_tables):
         errors.append(f"id_counters.csv: counter for {table} but it is not an id-bearing table")
     for table in sorted(id_tables & set(counters)):
-        errors.extend(_check_one_counter(d, table, counters[table]))
+        errors.extend(_check_one_counter(d, table, counters[table], retired.get(table, set())))
     return errors
 
 
-def _check_one_counter(d: Path, table: str, next_raw: str) -> list[str]:
-    """Unique ids and next_id > max for a single id-bearing table (an empty
-    table is fine — its counter just records the never-reused high-water mark)."""
+def _check_one_counter(d: Path, table: str, next_raw: str, retired_ids: set[int]) -> list[str]:
+    """Unique ids and next_id above the max active-or-retired id for a single
+    id-bearing table (an empty table is fine — its counter just records the
+    never-reused high-water mark). ``retired_ids`` are purged ids that stay
+    reserved: they may not reappear as active rows, and the counter must stay
+    above them too."""
     nxt = _bounded_int(next_raw)
     if nxt is None:
         return [f"id_counters.csv: invalid / out-of-range next_id for {table}={_trunc(next_raw)}"]
@@ -520,9 +589,14 @@ def _check_one_counter(d: Path, table: str, next_raw: str) -> list[str]:
     dups = sorted(i for i, c in Counter(ids).items() if c > 1)
     if dups:
         errors.append(f"{table}.csv has duplicate ids: {dups}")
-    if ids and max(ids) >= nxt:
+    reused = sorted(set(ids) & retired_ids)
+    if reused:
+        errors.append(f"{table}: id(s) {reused} are both active and retired")
+    peak = max([*ids, *retired_ids], default=0)
+    if peak >= nxt:
         errors.append(
-            f"{table}: next_id={nxt} <= max id {max(ids)} (stale counter / id-reuse risk)"
+            f"{table}: next_id={nxt} <= max id {peak} (active or retired) "
+            "(stale counter / id-reuse risk)"
         )
     return errors
 
