@@ -1,0 +1,19 @@
+# Authoritative source registry (dataset-separation S1). Edit this; run
+# `levels generate-sources <dir>` to (re)write source.csv + fetch_url.csv.
+fetch_urls:
+- id: 1
+  url: https://api.water.noaa.gov/nwps/v1/gauges/FXTW1/stageflow/observed
+  parser: nwps
+  enabled: true
+sources:
+- id: 1
+  name: '14150000'
+  agency: USGS
+- id: 2
+  name: FXTW1
+  agency: NWS
+  fetch_url_id: 1
+- id: 3
+  name: Fixture_Confluence_calc
+  agency: Calculation
+  calc_expression_id: 1

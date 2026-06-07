@@ -36,6 +36,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+from kayak.cli.generate_sources import reverse_engineer
 from kayak.dataset import layout
 
 OUT = Path(__file__).resolve().parent / "dataset"
@@ -441,6 +442,11 @@ def main(argv: list[str] | None = None) -> int:
 
     # Retired-id sidecar (S6.3) — fixed literal (see RETIRED_IDS_YAML_TEXT).
     (OUT / "retired_ids.yaml").write_text(RETIRED_IDS_YAML_TEXT)
+
+    # Authoritative source registry (S1) — reverse-engineered from the source.csv +
+    # fetch_url.csv just written, so the fixture's sources.yaml stays in lockstep
+    # with its CSVs (the generate-sources round-trip test asserts this equality).
+    reverse_engineer(OUT)
 
     # Provenance manifest: the source revision + per-reach digests, so a later
     # regeneration that drifts from the recorded source is detectable.
