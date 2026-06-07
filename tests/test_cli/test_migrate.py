@@ -69,6 +69,45 @@ def test_committed_manifest_matches_files() -> None:
     assert versions and len(versions) == len(set(versions))
 
 
+# The <=RESERVED_THROUGH versions that survived S9b's relocation as active,
+# schema-only migrations. Frozen history -- the <=74 version space is fully consumed
+# (every 0001..0074 is stamped on the live DB), so a NEW migration must be >=0075;
+# reusing a relocated/frozen number would silently skip on the live DB. A new <=74
+# entry here (i.e. reusing a retired number) must fail CI.
+_GRANDFATHERED_LE_RESERVED = {
+    "0001",
+    "0002",
+    "0004",
+    "0005",
+    "0006",
+    "0007",
+    "0008",
+    "0009",
+    "0010",
+    "0011",
+    "0012",
+    "0013",
+    "0014",
+    "0016",
+    "0022",
+    "0025",
+    "0045",
+}
+
+
+def test_active_versions_reserve_the_pre_s9b_range() -> None:
+    versions = {m.version for m in migrate_mod.discover_migrations()}
+    le = {v for v in versions if int(v) <= migrate_mod.RESERVED_THROUGH}
+    gt = {v for v in versions if int(v) > migrate_mod.RESERVED_THROUGH}
+    # No NEW ≤74 migration may be introduced (it would collide with a relocated/
+    # frozen version's stamp on the live DB → silent skip).
+    assert le == _GRANDFATHERED_LE_RESERVED, (
+        "a migration reused a retired ≤0074 version (or a survivor was added/removed) — "
+        f"new migrations must start at {migrate_mod.RESERVED_THROUGH + 1:04d}: {le ^ _GRANDFATHERED_LE_RESERVED}"
+    )
+    assert all(int(v) > migrate_mod.RESERVED_THROUGH for v in gt)  # tautology, documents intent
+
+
 def test_discover_requires_manifest(tmp_path: Path) -> None:
     (tmp_path / "0001_a.sql").write_text("SELECT 1;")  # no manifest written
     with pytest.raises(ValueError, match="manifest not found"):
@@ -276,38 +315,6 @@ def test_no_transaction_marker_disables_fk_cascade(tmp_path: Path, engine: objec
         # Parent rebuild produced the new column.
         cols = {r[1] for r in conn.execute(text("PRAGMA table_info(parent)")).all()}
         assert "note" in cols
-
-
-def test_0003_does_not_recreate_reach_level(engine: object) -> None:
-    """After the 0003 edit, replaying real migration 0003 must not recreate
-    the dropped `reach_level` table.
-
-    The reach_level half of the original 0003 was stripped — reach_level is
-    gone from models.py and a later commit DROP-ped it. This test runs 0003
-    against a schema that matches Base.metadata.create_all() while stamping
-    every OTHER migration as already applied, so only 0003 runs. We stamp
-    the non-subject migrations because several of them (ADD COLUMN, CREATE
-    TABLE without IF NOT EXISTS, etc.) aren't idempotent against a
-    create_all-built schema — that's fine in production because init_db
-    stamps them on fresh DBs, but the test needs to mirror that.
-    """
-    from kayak.db.models import Base
-
-    Base.metadata.create_all(engine)
-    with (
-        patch("kayak.cli.migrate.get_engine", return_value=engine),
-    ):
-        for m in migrate_mod.discover_migrations():
-            if m.version != "0003":
-                migrate_mod.stamp(m.version)
-        ran = migrate_mod.apply_pending()
-        assert ran == ["0003"]
-
-    with engine.begin() as conn:
-        rows = conn.execute(
-            text("SELECT name FROM sqlite_master WHERE type='table' AND name='reach_level'")
-        ).all()
-        assert rows == [], "reach_level must not exist after migration 0003 runs"
 
 
 def test_ensure_tracking_table_adds_digest_to_legacy_db(engine: object) -> None:

@@ -60,6 +60,7 @@ checks = [
     (("data",), "sources.yaml"),
     (("data",), "builder.yaml"),
     (("data", "db", "migrations"), "0001_baseline.sql"),
+    (("data", "db", "migrations"), "manifest.csv"),
     (("web", "static"), "map.js"),
     (("web", "static"), "leaflet.js"),
     (("web", "static", "images"), "marker-icon.png"),
@@ -77,7 +78,11 @@ for parts, name in checks:
     assert "site-packages" in str(p), f"resolved outside site-packages: {p}"
 
 migs = sorted(resource_dir("data", "db", "migrations").glob("[0-9]*.sql"))
-assert len(migs) >= 74, f"expected >=74 packaged migrations, found {len(migs)}"
+assert len(migs) >= 17, f"expected >=17 packaged migrations, found {len(migs)}"
+# S9b: the frozen mixed migrations live in the top-level legacy/ tree (not the
+# package), so they must NOT ship in the wheel.
+frozen = resource_dir("data", "db", "migrations") / "0003_reach_level_class_checks.sql"
+assert not frozen.exists(), f"frozen migration leaked into the wheel: {frozen}"
 print(f"    OK — data/web resources resolve from site-packages ({len(migs)} migrations)")
 PYEOF
 
