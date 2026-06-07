@@ -815,3 +815,86 @@ def test_fixture_dataset_yaml_matches_builder() -> None:
     # hand-committed copy and the generator can't drift (review nit).
     b = _load_builder()
     assert (FIXTURE / "dataset.yaml").read_text() == b.DATASET_YAML_TEXT
+
+
+# --- retired ids (retired_ids.yaml) — S6.3 --------------------------------
+
+
+def test_missing_retired_ids_yaml(dataset_copy: Path) -> None:
+    (dataset_copy / "retired_ids.yaml").unlink()
+    errs = validate_dataset(dataset_copy)
+    assert any("retired_ids.yaml" in e and "missing required file" in e for e in errs)
+
+
+def test_empty_retired_ids_is_noop(dataset_copy: Path) -> None:
+    # The fixture's `{}` retired_ids.yaml leaves the dataset valid — an empty
+    # retired set is a no-op over the existing active-only counter check.
+    assert validate_dataset(dataset_copy) == []
+
+
+def test_retired_id_also_active(dataset_copy: Path) -> None:
+    # reach id 1 is an active row — it may not also be recorded as retired.
+    (dataset_copy / "retired_ids.yaml").write_text("reach:\n  - 1\n")
+    errs = validate_dataset(dataset_copy)
+    assert any("reach" in e and "both active and retired" in e for e in errs)
+
+
+def test_retired_id_above_counter(dataset_copy: Path) -> None:
+    # A retired id at/above next_id (reach next_id=4) is a stale counter: the id
+    # must stay reserved, so next_id must exceed every active-or-retired id.
+    (dataset_copy / "retired_ids.yaml").write_text("reach:\n  - 9\n")
+    errs = validate_dataset(dataset_copy)
+    assert any("reach" in e and "next_id" in e and "active or retired" in e for e in errs)
+
+
+def test_retired_non_id_bearing_table(dataset_copy: Path) -> None:
+    # gauge_source is a junction (no `id` PK) — it can't carry retired ids.
+    (dataset_copy / "retired_ids.yaml").write_text("gauge_source:\n  - 1\n")
+    errs = validate_dataset(dataset_copy)
+    assert any("not an id-bearing table" in e for e in errs)
+
+
+def test_retired_value_not_a_list(dataset_copy: Path) -> None:
+    (dataset_copy / "retired_ids.yaml").write_text("reach: 5\n")
+    errs = validate_dataset(dataset_copy)
+    assert any("value must be a list of ids" in e for e in errs)
+
+
+def test_retired_id_non_integer(dataset_copy: Path) -> None:
+    (dataset_copy / "retired_ids.yaml").write_text('reach:\n  - "x"\n')
+    errs = validate_dataset(dataset_copy)
+    assert any("retired id must be an integer" in e for e in errs)
+
+
+def test_retired_id_boolean_rejected(dataset_copy: Path) -> None:
+    # bool is an int subclass — `true` is not a valid retired id.
+    (dataset_copy / "retired_ids.yaml").write_text("reach:\n  - true\n")
+    errs = validate_dataset(dataset_copy)
+    assert any("retired id must be an integer" in e for e in errs)
+
+
+def test_retired_id_duplicate(dataset_copy: Path) -> None:
+    (dataset_copy / "retired_ids.yaml").write_text("reach:\n  - 9\n  - 9\n")
+    errs = validate_dataset(dataset_copy)
+    assert any("duplicate retired ids" in e for e in errs)
+
+
+def test_retired_ids_duplicate_table_key(dataset_copy: Path) -> None:
+    # A repeated table key is malformed (the strict loader rejects last-wins).
+    (dataset_copy / "retired_ids.yaml").write_text("reach:\n  - 9\nreach:\n  - 10\n")
+    errs = validate_dataset(dataset_copy)
+    assert any("duplicate key" in e for e in errs)
+
+
+def test_retired_ids_unhashable_key_is_focused_error(dataset_copy: Path) -> None:
+    # A YAML complex key must yield a focused error, not crash the validator
+    # (the strict loader's crash-safe contract).
+    (dataset_copy / "retired_ids.yaml").write_text("? [1, 2]\n: foo\n")
+    errs = validate_dataset(dataset_copy)
+    assert any("retired_ids.yaml" in e and "invalid YAML" in e for e in errs)
+
+
+def test_fixture_retired_ids_matches_builder() -> None:
+    # The committed fixture retired_ids.yaml must equal the builder's literal.
+    b = _load_builder()
+    assert (FIXTURE / "retired_ids.yaml").read_text() == b.RETIRED_IDS_YAML_TEXT

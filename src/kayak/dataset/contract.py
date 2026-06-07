@@ -13,6 +13,7 @@ they don't each re-spell the rules.
 from __future__ import annotations
 
 import re
+from collections.abc import Hashable
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,12 @@ MIN_CONTRACT = 1
 MAX_CONTRACT = 1
 
 DATASET_YAML = "dataset.yaml"
+
+# Sidecar recording purged stable ids per id-bearing table (S6.3). Kept so a
+# deleted row's id is never reused and the id counter stays above it — the
+# value-domain + cross-checks live in ``cli.validate_dataset``; this module owns
+# only the strict parse (shared loader, dup-key rejection).
+RETIRED_IDS_YAML = "retired_ids.yaml"
 
 STATUSES: tuple[str, ...] = ("scaffold", "publishable")
 
@@ -55,9 +62,22 @@ class _StrictSafeLoader(yaml.SafeLoader):
 
 
 def _no_duplicate_mapping(loader: _StrictSafeLoader, node: yaml.MappingNode) -> dict[str, Any]:
-    mapping: dict[str, Any] = {}
+    # dict[Any, Any]: YAML may hand back non-str keys (e.g. ``5: x``) which the
+    # callers reject downstream as unknown/not-id-bearing; the str-keyed contract
+    # is the return annotation, not an in-loop invariant.
+    mapping: dict[Any, Any] = {}
     for key_node, value_node in node.value:
         key = loader.construct_object(key_node, deep=True)
+        # PyYAML's default constructor guards key hashability before the dict
+        # insert; this override must too. Without it an unhashable key (a YAML
+        # complex key like ``? [1, 2]``) raises a raw TypeError from ``key in
+        # mapping`` that escapes the loaders' YAMLError handling and crashes the
+        # caller — violating validate_dataset's crash-safe contract. Re-raise as
+        # a ConstructorError so it surfaces as the loaders' "invalid YAML".
+        if not isinstance(key, Hashable):
+            raise yaml.constructor.ConstructorError(
+                None, None, f"unhashable key {key!r}", key_node.start_mark
+            )
         if key in mapping:
             raise yaml.constructor.ConstructorError(
                 None, None, f"duplicate key {key!r}", key_node.start_mark
@@ -101,6 +121,35 @@ def load_dataset_meta(dataset_dir: Path) -> dict[str, Any] | None:
         raise ValueError(f"{DATASET_YAML}: invalid YAML ({e})") from e
     if not isinstance(meta, dict):
         raise ValueError(f"{DATASET_YAML}: top-level value must be a mapping")
+    return meta
+
+
+def load_retired_ids(dataset_dir: Path) -> dict[str, Any] | None:
+    """Parse ``retired_ids.yaml`` from *dataset_dir* — exact parallel of
+    :func:`load_dataset_meta`.
+
+    Returns the parsed mapping, or ``None`` only when the file is **absent**.
+    The no-retirements file is a literal empty mapping ``{}`` — *not* a 0-byte
+    file: ``safe_load("")`` is ``None``, which the non-mapping guard below
+    rejects as corruption. Raises ``ValueError`` on an unreadable/malformed file
+    or a non-mapping top-level value. Uses the same ``_StrictSafeLoader`` so a
+    duplicated *table* key can't silently drop retired ids (PyYAML last-wins).
+    The id value-domain + cross-checks against the active rows live in
+    ``cli.validate_dataset`` (they need that module's id machinery).
+    """
+    path = dataset_dir / RETIRED_IDS_YAML
+    if not path.is_file():
+        return None
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        raise ValueError(f"{RETIRED_IDS_YAML}: unreadable ({e})") from e
+    try:
+        meta = yaml.load(raw, Loader=_StrictSafeLoader)
+    except yaml.YAMLError as e:
+        raise ValueError(f"{RETIRED_IDS_YAML}: invalid YAML ({e})") from e
+    if not isinstance(meta, dict):
+        raise ValueError(f"{RETIRED_IDS_YAML}: top-level value must be a mapping")
     return meta
 
 

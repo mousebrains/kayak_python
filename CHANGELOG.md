@@ -15,6 +15,12 @@ All notable changes to this project will be documented in this file.
   contract range (`kayak.dataset.contract`) and `levels validate-dataset` rejects
   a dataset with none ("contract 0") before reading any content
   (dataset-separation S6.2).
+- **Retired-id sidecar (`retired_ids.yaml`)**: a contract-1 dataset records
+  purged stable ids per id-bearing table in a root `retired_ids.yaml` (`{}` when
+  none); `levels validate-dataset` now rejects reusing a retired id for an active
+  row and requires each `next_id` to exceed every active *or* retired id, so a
+  deleted row's id can never be reused even after the active max drops
+  (dataset-separation S6.3).
 - **Batch A/B/C gauges & reaches**: new Columbia, Crooked-basin, and related
   NWS/NWRFC/USGS stations plus the NF Crooked reach were wired in (#76, #77,
   #78), with HUC12 codes backfilled for the affected reaches. The committed
