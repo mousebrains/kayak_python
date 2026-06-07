@@ -249,13 +249,15 @@ jobs:
 
   test:
     runs-on: ubuntu-24.04
-    # Code CI runs entirely against the committed fixture (tests/fixtures/dataset)
-    # — no code test reads the dataset root (DATASET_DIR) since the
+    # Code CI runs entirely against the committed fixture (tests/fixtures/dataset):
+    # no code test reads the dataset root (DATASET_DIR) since the
     # dataset-separation test-repointing (#124), and dataset-integrity checks live
-    # in `levels validate-dataset` (run on the fixture here; the real kayak_data is
-    # gated by its own CI). S4b removed the former kayak_data checkout + paired-
-    # branch logic from this job, so code CI no longer needs the kayak_data deploy
-    # key and Dependabot PRs (which can't read that secret) run clean.
+    # in `levels validate-dataset`, run here on the fixture. S4b-1 removed the
+    # former kayak_data checkout + paired-branch logic from this job (so code CI no
+    # longer needs the kayak_data deploy key, and Dependabot PRs — which can't read
+    # that secret — run clean). The real dataset is validated at the deploy
+    # boundary (deploy.sh step 3.08, #132); engine-pinned PRE-MERGE validation in
+    # kayak_data's own CI is the next slice (S4b-2), not yet live.
     strategy:
       fail-fast: false
       matrix:
