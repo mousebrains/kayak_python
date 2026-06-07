@@ -129,6 +129,16 @@ class KayakConfig(BaseSettings):
     database_url: str = Field(default_factory=_default_database_url)
     output_dir: Path = Field(default_factory=_default_output_dir)
 
+    # Staging dir for build-EXTERNAL generated static inputs — today only the
+    # OSMB hazard/access GeoJSON written by ``levels fetch-osmb``, which runs on
+    # its own cadence and is then copied into ``OUTPUT_DIR/static`` by
+    # ``levels build``. Like ``output_dir``/``metadata_dir`` it is a
+    # ``BASE_DIR``-relative dev default overridden by env (``OSMB_DIR``) in real
+    # deployments; it is deliberately NOT under the packaged ``DATA_DIR``/web
+    # assets (it holds generated runtime data, not engine resources, and a wheel
+    # install's package dir may be read-only).
+    osmb_dir: Path = Field(default_factory=lambda: BASE_DIR / "var" / "osmb")
+
     # Metadata-snapshot directory — the ``*.csv`` + ``reaches*.json`` that the
     # metadata-single-source flow treats as the source of truth. The default
     # *value* stays ``data/db`` (repo-root; path resolution unchanged) and is
@@ -234,6 +244,8 @@ DATABASE_URL: str = _config.database_url
 OUTPUT_DIR: str = str(_config.output_dir)
 # The metadata-snapshot dir (data/db by default; the kayak_data clone post-split).
 METADATA_DIR: Path = _config.metadata_dir
+# Staging dir for build-external generated static inputs (OSMB GeoJSON).
+OSMB_DIR: Path = _config.osmb_dir
 FETCH_TIMEOUT: int = _config.fetch_timeout
 FETCH_BUDGET: int = _config.fetch_budget
 FETCH_USER_AGENT: str = _config.fetch_user_agent

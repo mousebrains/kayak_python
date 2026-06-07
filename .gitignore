@@ -36,15 +36,14 @@ __pycache__/
 public_html/*.html
 public_html/*.csv
 public_html/*.text
-static/reaches.geojson
-static/reaches-geom.json
-static/reaches-state.json
-static/osmb-*.geojson
-static/levels.js
-static/filters.js
-static/sparklines.json
-static/style-*.css
-static/style.css.hash
+# Repo-root static/ is now purely a build-output staging dir: every committed
+# source asset moved into the package at src/kayak/web/static/ (S4a-2 slice B1).
+# A default-OUTPUT_DIR=public_html dev build copies the packaged assets and
+# writes generated files here via the public_html/static symlink, so ignore the
+# whole tree (.gitkeep keeps the symlink target present on a fresh clone).
+# Anchored to the repo root so it never matches src/kayak/web/static.
+/static/*
+!/static/.gitkeep
 
 # DB backups moved to /home/pat/backups, outside the repo (review-4 R5.6);
 # kept as a defensive guard against a stray ./backups in the worktree.
@@ -53,6 +52,12 @@ backups
 # Runtime-generated state (status page render, future cache files)
 var/*
 !var/.gitkeep
+# Keep the OSMB staging dir (osmb_dir default) present so kayak-fetch-osmb's
+# ReadWritePaths=.../var/osmb passes systemd's setup-time existence check on a
+# fresh clone; ignore the generated osmb-*.geojson inside it.
+!var/osmb/
+var/osmb/*
+!var/osmb/.gitkeep
 
 # Ad-hoc audit dumps (often contain secrets from nginx -T or similar)
 *.log

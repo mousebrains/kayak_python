@@ -118,17 +118,20 @@ at a time; the table below tracks what is now packaged vs. still repo-root:
 |---|---|---|---|
 | engine defaults (`sources`/`builder`/`descriptions`/`http_concurrency`/`audit_ignore` YAML) + `db/migrations/` | **packaged** under `src/kayak/data/` | `config_data.py`, `cli/migrate.py` via `kayak.resources` (`importlib.resources`) | ✅ resolved by S4a-2 slice A (#125) |
 | metadata dataset (the `*.csv` + `reaches*.json`) | external `kayak_data` clone | `METADATA_DIR` (env), not `BASE_DIR` | ✅ not a blocker — external **by design** (club-specific data); a frozen install locates it by env, not working tree |
-| `php/` | repo root | `levels build` (`web/build/deploy.py`) | ⏳ S4a-2 slice B |
-| repo-root `static/` (map.js, OSMB GeoJSON, regression HTML) | repo root | `web/build/_shared.py`, `cli/fetch_osmb.py` | ⏳ S4a-2 slice B |
-| `Gauge-metadata-cache/`, `docs/regression/` | repo root | gauges build, regression render | build-time inputs, not import-time — lower priority |
+| `php/` | repo root | `levels build` (`web/build/deploy.py`) | ⏳ S4a-2 slice B2 |
+| committed `static/` assets (map.js, leaflet, images, manifest, sw.js, …) | **packaged** under `src/kayak/web/static/` | `web/build/deploy.py`, `_shared.py` via the packaged dir | ✅ resolved by S4a-2 slice B1 |
+| generated OSMB GeoJSON (`osmb-*.geojson`) | OSMB staging dir (`OSMB_DIR`; default `BASE_DIR/var/osmb`) | `cli/fetch_osmb.py` writes; `deploy.py` copies into `OUTPUT_DIR/static` | ✅ not a blocker — env-located generated runtime data, like `output_dir` |
+| `Gauge-metadata-cache/`, `docs/regression/` (incl. published regression HTML) | repo root | gauges build, regression render | build-time inputs, not import-time — deferred to S3 / lower priority |
 
-`src/kayak/web/static/style.css` was already package-relative. With slice A done,
-the engine's Python-side defaults and schema migrations now survive a
-non-editable `pip install .` as-is, and the metadata dataset is intentionally
-env-located (`METADATA_DIR`) rather than working-tree-relative. The remaining
-`BASE_DIR` call sites are `php/` + repo-root `static/` (slice B) plus the
-build/cache inputs above — with `php/` needing special handling, since it's a
-separate language layer that `levels build` only copies into `public_html`. Deferred as its own project.
+`src/kayak/web/static/style.css` was already package-relative. With slices A + B1
+done, the engine's Python-side defaults, schema migrations, and committed web
+static assets now survive a non-editable `pip install .` as-is; the metadata
+dataset and generated OSMB GeoJSON are intentionally env-located
+(`METADATA_DIR` / `OSMB_DIR`) rather than working-tree-relative. The remaining
+`BASE_DIR` call sites are `php/` + the install templates + `LICENSE` (slice B2)
+plus the build/cache inputs above — with `php/` needing special handling, since
+it's a separate language layer that `levels build` only copies into
+`public_html`. Deferred as its own project.
 
 ---
 

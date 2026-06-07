@@ -20,7 +20,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from kayak.config import BASE_DIR, SITE_URL
+from kayak.config import BASE_DIR, OSMB_DIR, SITE_URL
 from kayak.db.cache import get_all_latest_gauges
 from kayak.db.engine import get_session
 from kayak.db.gauges import get_calculated_gauge_ids
@@ -33,6 +33,7 @@ from kayak.web.build._shared import (
     _JS_PATH,
     _LICENSE_META,
     _NAV_STATES,
+    _STATIC_DIR,
     _atomic_write,
     _css_link_tag,
     _load_css,
@@ -79,7 +80,8 @@ def _osmb_url(static_dir: Path, filename: str) -> str:
 
     Source-of-truth for mtime is the staged copy under ``static_dir``;
     ``shutil.copy2`` (called from ``_deploy_static_assets``) preserves
-    the upstream BASE_DIR/static mtime, and the per-file rename in
+    the upstream mtime from the OSMB staging dir (``OSMB_DIR``, where
+    ``levels fetch-osmb`` wrote the file), and the per-file rename in
     ``_deploy_staging_to_live`` skips identical content, so the live
     file's mtime stays put across no-op nightly fetches.
     """
@@ -91,12 +93,32 @@ def _osmb_url(static_dir: Path, filename: str) -> str:
     return f"/static/{filename}?v={mtime}"
 
 
-def _deploy_static_assets(output_dir: Path) -> None:
-    """Copy the in-repo ``static/`` tree into ``output_dir/static/``.
+# Build-PROCESSED assets that ship in the packaged web/static dir but are
+# emitted to the output as hashed/versioned variants by ``_build_to_dir``
+# (style-<hash>.css at output root + /static; levels.js/filters.js with
+# ?v=mtime), so the as-is copy below skips them to avoid an unreferenced
+# unhashed duplicate under /static.
+_BUILD_PROCESSED_STATIC: frozenset[str] = frozenset({"style.css", "levels.js", "filters.js"})
 
-    ``sw.js`` lands at the output root (not under ``static/``) so the
-    service worker controls scope ``/``. Directories under ``static/``
-    propagate via ``copytree`` with ``dirs_exist_ok=True``.
+
+def _deploy_static_assets(output_dir: Path) -> None:
+    """Copy committed + generated static assets into ``output_dir/static/``.
+
+    Two sources, both outside the deploy target:
+
+    * the packaged ``web/static/`` tree (committed source assets — map.js,
+      leaflet, images, manifest, sw.js, …), resolved via the package so a
+      wheel install finds them (S4a-2 slice B1). The build-processed trio
+      (``style.css``/``levels.js``/``filters.js``) is skipped here — it is
+      emitted as hashed/versioned variants by ``_build_to_dir``.
+    * the OSMB staging dir (``config.osmb_dir``) — ``*.geojson`` written by
+      ``levels fetch-osmb`` on its own cadence. Copying them in here puts
+      them in the build's ``kept`` set so ``_sweep_orphans`` preserves them
+      and ``_osmb_url`` resolves their ``?v=mtime`` URLs.
+
+    ``sw.js`` lands at the output root (not under ``static/``) so the service
+    worker controls scope ``/``. Directories (``images/``) propagate via
+    ``copytree`` with ``dirs_exist_ok=True``.
 
     Also publishes the regression-analysis artifacts: ``docs/regression/*.{svg,json}``
     pass through verbatim into ``static/regression/`` for use by PHP
@@ -106,12 +128,18 @@ def _deploy_static_assets(output_dir: Path) -> None:
     """
     static_dir = output_dir / "static"
     static_dir.mkdir(parents=True, exist_ok=True)
-    for path in (BASE_DIR / "static").iterdir():
+    for path in _STATIC_DIR.iterdir():
         if path.is_file():
+            if path.name in _BUILD_PROCESSED_STATIC:
+                continue
             dst = output_dir if path.name == "sw.js" else static_dir
             shutil.copy2(path, dst / path.name)
         elif path.is_dir():
             shutil.copytree(path, static_dir / path.name, dirs_exist_ok=True)
+    # Generated OSMB overlays staged outside the package by `levels fetch-osmb`.
+    if OSMB_DIR.is_dir():
+        for path in OSMB_DIR.glob("*.geojson"):
+            shutil.copy2(path, static_dir / path.name)
     _deploy_regression_artifacts(static_dir)
 
 

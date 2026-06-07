@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
  * The PHP renderer intentionally leaves a blank span when the gradient trace
  * stops short of reach.length — a reservoir at the take-out has zero gradient
  * and emits no samples (svg_plot.php: the last bar is no longer stretched to
- * the take-out). The hover readout (static/gradient-profile.js findActiveWindow)
+ * the take-out). The hover readout (src/kayak/web/static/gradient-profile.js findActiveWindow)
  * must MATCH that geometry: a hover over the blank tail reports "no gradient
  * data", not the last sample's value clamped across the gap.
  *
@@ -15,7 +15,7 @@ import { resolve } from 'node:path';
  * setContent + addScriptTag, then dispatch a mousemove at a chosen river mile.
  */
 
-const JS = resolve(__dirname, '../../static/gradient-profile.js');
+const JS = resolve(__dirname, '../../src/kayak/web/static/gradient-profile.js');
 
 // Samples cover ~0..1.625 mi of a 5 mi reach (x_max = 5), so [1.625, 5] is the
 // blank reservoir tail. All margins are explicit so the mile<->pixel mapping is

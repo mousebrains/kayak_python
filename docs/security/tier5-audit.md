@@ -19,7 +19,7 @@ What Tier 5 does NOT govern: vulnerability prevention (Tiers 1–3) or user-data
 
 ### Current state
 
-- `static/security.txt` (per D-T4.5) advertises `Contact: mailto:pat.kayak@gmail.com` + `Expires: 2027-05-20T00:00:00Z` + `Preferred-Languages: en`.
+- `src/kayak/web/static/security.txt` (per D-T4.5) advertises `Contact: mailto:pat.kayak@gmail.com` + `Expires: 2027-05-20T00:00:00Z` + `Preferred-Languages: en`.
 - Repo is public at `github.com:mousebrains/kayak_python`; GitHub Security Advisories (GHSA) is available but not enabled.
 - Zero historical reports.
 
@@ -102,7 +102,7 @@ Concretely:
   - Re-read `findings.md` and `decisions.md`.
   - For each Active decision with re-evaluation triggers: check whether a trigger has fired since last review.
   - For each Open finding: check whether the underlying code has changed (`git log -- <file>`) in a way that affects the finding.
-  - Refresh `static/security.txt` Expires line (per D-T4.5).
+  - Refresh `src/kayak/web/static/security.txt` Expires line (per D-T4.5).
   - Update README "Tier status" table if anything's stale.
   - Effort: ~half-day.
 

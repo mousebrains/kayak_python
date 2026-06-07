@@ -1,9 +1,12 @@
 """Fetch OSMB (Oregon State Marine Board) hazard + access GeoJSON layers.
 
-Pulls three public AGOL feature services as GeoJSON and writes them to
-``BASE_DIR/static/``, where ``levels build`` picks them up via
-``_deploy_static_assets``. Files are atomic-replaced only when the
-content changed, so an unchanged response preserves the file's mtime —
+Pulls three public AGOL feature services as GeoJSON and writes them to the
+configured OSMB staging dir (``OSMB_DIR``; ``config.osmb_dir``), where
+``levels build`` picks them up via ``_deploy_static_assets`` and copies them
+into ``OUTPUT_DIR/static``. The staging dir is kept outside the package
+(generated runtime data, not an engine resource — S4a-2 slice B1). Files are
+atomic-replaced only when the content changed, so an unchanged response
+preserves the file's mtime —
 that mtime feeds the ``?v=<mtime>`` cache-bust URLs on map.html, so the
 browser cache stays warm across nightly no-op runs.
 
@@ -17,7 +20,7 @@ import logging
 import urllib.parse
 from pathlib import Path
 
-from kayak.config import BASE_DIR
+from kayak.config import OSMB_DIR
 from kayak.utils.http_client import fetch as http_fetch
 from kayak.web.build._shared import _atomic_write_bytes
 
@@ -64,19 +67,19 @@ def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -
     """Register the 'fetch-osmb' subcommand."""
     parser = subparsers.add_parser(
         "fetch-osmb",
-        help="Fetch Oregon SMB boating obstruction/dam/access GeoJSON to static/",
+        help="Fetch Oregon SMB boating obstruction/dam/access GeoJSON to the OSMB staging dir",
     )
     parser.add_argument(
         "--output-dir",
         default=None,
-        help="Directory to write GeoJSON files (default: BASE_DIR/static)",
+        help="Directory to write GeoJSON files (default: the configured OSMB_DIR)",
     )
     parser.set_defaults(func=fetch_osmb)
 
 
 def fetch_osmb(args: argparse.Namespace) -> None:
     """Fetch OSMB layers. Exits non-zero if every layer fails."""
-    output_dir = Path(args.output_dir) if args.output_dir else (BASE_DIR / "static")
+    output_dir = Path(args.output_dir) if args.output_dir else OSMB_DIR
     output_dir.mkdir(parents=True, exist_ok=True)
 
     successes = 0

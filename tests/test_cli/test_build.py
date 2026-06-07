@@ -741,3 +741,54 @@ class TestAtomicWrite:
         _atomic_write(path, "content")
         mode = stat.S_IMODE(path.stat().st_mode)
         assert mode == 0o644
+
+
+class TestDeployStaticAssets:
+    """S4a-2 slice B1: committed assets are copied from the *packaged*
+    web/static dir (so a wheel install finds them), and OSMB GeoJSON staged
+    outside the package via ``config.osmb_dir`` flows through the build output
+    — which is what puts it in the build's ``kept`` set so ``_sweep_orphans``
+    preserves it. A break here silently drops the OSMB hazard layers from the
+    live map (the file would not be re-staged and the next build would sweep it).
+    """
+
+    def test_copies_packaged_assets_and_staged_osmb(self, tmp_path):
+        from kayak.web.build import deploy
+
+        osmb_dir = tmp_path / "osmb"
+        osmb_dir.mkdir()
+        (osmb_dir / "osmb-dams.geojson").write_text('{"type":"FeatureCollection","features":[]}')
+        output = tmp_path / "out"
+
+        with (
+            mock.patch.object(deploy, "OSMB_DIR", osmb_dir),
+            mock.patch.object(deploy, "_deploy_regression_artifacts"),
+        ):
+            deploy._deploy_static_assets(output)
+
+        static = output / "static"
+        # Committed source assets resolved from the package.
+        assert (static / "map.js").is_file()
+        assert (static / "leaflet.js").is_file()
+        assert (static / "images" / "marker-icon.png").is_file()
+        # sw.js lands at the output root so the service worker controls scope "/".
+        assert (output / "sw.js").is_file()
+        assert not (static / "sw.js").exists()
+        # OSMB overlay staged outside the package reaches the build output.
+        assert (static / "osmb-dams.geojson").is_file()
+        # The build-processed trio is NOT copied as-is here (emitted as the
+        # hashed/versioned variants by _build_to_dir).
+        for name in deploy._BUILD_PROCESSED_STATIC:
+            assert not (static / name).exists(), name
+
+    def test_missing_osmb_dir_is_tolerated(self, tmp_path):
+        from kayak.web.build import deploy
+
+        output = tmp_path / "out"
+        with (
+            mock.patch.object(deploy, "OSMB_DIR", tmp_path / "does-not-exist"),
+            mock.patch.object(deploy, "_deploy_regression_artifacts"),
+        ):
+            deploy._deploy_static_assets(output)
+        assert (output / "static" / "map.js").is_file()
+        assert not list((output / "static").glob("osmb-*.geojson"))
