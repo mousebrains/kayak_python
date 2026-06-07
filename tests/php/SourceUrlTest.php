@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
 
-require_once __DIR__ . '/../../php/includes/source_url.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/source_url.php';
 
 /**
  * Unit tests for php/includes/source_url.php.

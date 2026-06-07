@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/FunctionalTestCase.php';
 require_once __DIR__ . '/Fixtures.php';
-require_once __DIR__ . '/../../php/includes/db.php';
-require_once __DIR__ . '/../../php/includes/header.php';
-require_once __DIR__ . '/../../php/includes/footer.php';
-require_once __DIR__ . '/../../php/includes/custom_gauges_handler.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/db.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/header.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/footer.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/custom_gauges_handler.php';
 
 /**
  * In-process functional coverage for custom_gauges_handler.php

@@ -3,8 +3,8 @@ declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
 
-require_once __DIR__ . '/../../php/includes/pubhash.php';
-require_once __DIR__ . '/../../php/includes/pubhash_request.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/pubhash.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/pubhash_request.php';
 
 /**
  * Unit tests for php/includes/pubhash.php — the PHP half of the base-62

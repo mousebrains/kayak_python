@@ -11,7 +11,7 @@ declare(strict_types=1);
  * directly — only this PHP file, behind require_maintainer(), can.
  *
  * Companion to /_internal/index.php (the live data dashboard) and
- * /status.json (the public health snapshot at php/status.php).
+ * /status.json (the public health snapshot at src/kayak/web/php/status.php).
  */
 
 require_once __DIR__ . '/../includes/auth.php';

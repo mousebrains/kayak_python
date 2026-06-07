@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/FunctionalTestCase.php';
 require_once __DIR__ . '/Fixtures.php';
-require_once __DIR__ . '/../../php/includes/db.php';
-require_once __DIR__ . '/../../php/includes/validate.php';
-require_once __DIR__ . '/../../php/includes/gauge_plots.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/db.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/validate.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/gauge_plots.php';
 
 /**
  * In-process functional tests for the gauge-plots orchestration cluster:

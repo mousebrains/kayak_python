@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Enforce the file-prefix convention for PHP file-private helpers.
 #
-# Rule: a `function _<name>(` definition inside `php/includes/<file>.php`
+# Rule: a `function _<name>(` definition inside `src/kayak/web/php/includes/<file>.php`
 # must have `<name>` containing the file's basename stem (with the
 # `_handler` and `_detail` suffixes stripped, so review_handler.php's
 # stem is `review`). Two escape hatches:
@@ -85,7 +85,7 @@ while IFS= read -r -d '' file; do
 
         violations+=("${file}: '${helper}' does not contain stem '${stem}'")
     done < <(grep -E '^function[[:space:]]+_[a-zA-Z_]+' "$file" 2>/dev/null || true)
-done < <(find php/includes -name '*.php' -type f -print0 2>/dev/null)
+done < <(find src/kayak/web/php/includes -name '*.php' -type f -print0 2>/dev/null)
 
 if (( ${#violations[@]} > 0 )); then
     printf 'php helper-prefix violations:\n' >&2

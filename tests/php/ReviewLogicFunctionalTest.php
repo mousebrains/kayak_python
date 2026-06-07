@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/FunctionalTestCase.php';
 require_once __DIR__ . '/Fixtures.php';
-require_once __DIR__ . '/../../php/includes/review_logic.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/review_logic.php';
 
 /**
  * In-process functional coverage for review_logic.php — the apply/notify

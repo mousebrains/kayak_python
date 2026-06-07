@@ -1,1 +1,1 @@
-../php/auth.php
+../src/kayak/web/php/auth.php

@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/FunctionalTestCase.php';
 require_once __DIR__ . '/Fixtures.php';
-require_once __DIR__ . '/../../php/includes/db.php';
-require_once __DIR__ . '/../../php/includes/header.php';
-require_once __DIR__ . '/../../php/includes/footer.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/db.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/header.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/footer.php';
 // gp_resolve_window() (in gauge_plots.php, pulled in by gauge_detail.php)
 // calls date_ts() on the explicit-window path; the handler file itself
 // doesn't require validate.php, so the test loads it here.
-require_once __DIR__ . '/../../php/includes/validate.php';
-require_once __DIR__ . '/../../php/includes/gauge_detail.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/validate.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/gauge_detail.php';
 
 /**
  * In-process functional coverage for gauge_detail.php — drives

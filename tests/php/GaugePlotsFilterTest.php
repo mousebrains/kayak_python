@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
 
-require_once __DIR__ . '/../../php/includes/gauge_plots_filter.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/gauge_plots_filter.php';
 
 /**
  * Pure unit tests for gauge_plots_filter.php — no DB, no output. The three

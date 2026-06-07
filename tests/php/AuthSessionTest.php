@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/FunctionalTestCase.php';
 require_once __DIR__ . '/Fixtures.php';
-require_once __DIR__ . '/../../php/includes/auth.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/auth.php';
 
 /**
  * Tier-1 security coverage for auth.php: token helpers, session create/resolve/

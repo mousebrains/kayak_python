@@ -12,16 +12,16 @@
 
 | # | Test | Verdict | Evidence |
 |---|---|---|---|
-| 1.1.1 | Token is CSPRNG-backed and full-entropy | ✅ | `generate_token()` in `php/includes/auth.php` returns `bin2hex(random_bytes(32))` — 256-bit entropy. |
+| 1.1.1 | Token is CSPRNG-backed and full-entropy | ✅ | `generate_token()` in `src/kayak/web/php/includes/auth.php` returns `bin2hex(random_bytes(32))` — 256-bit entropy. |
 | 1.1.2 | Token stored as hash at rest | ✅ | `editor_magic_link.token_hash` populated via `hash_token($tok)` → `hash('sha256', $tok)`. Raw token never persisted to DB. |
 | 1.1.3 | 30-min absolute expiry enforced | ✅ | `expires_at` set at insertion; consumed only when `expires_at > datetime('now')`. Verified in `peek_magic_link()` and `consume_magic_link()`. |
 | 1.1.4 | Single-use enforced atomically | ✅ | `consume_magic_link()` runs SELECT + UPDATE inside `beginTransaction()/commit()`. SQLite serialization prevents double-consume races. |
-| 1.1.5 | GET/POST split prevents email-scanner prefetch | ✅ | `php/auth.php:7-13` documents the design. GET calls `peek_magic_link()` (no consumption); POST calls `consume_magic_link()`. Outlook Defender / Proofpoint prefetch GET, see the form, leave the token alone. |
-| 1.1.6 | CSRF required on POST consumption | ✅ | `php/auth.php:34` calls `require_csrf()`. CSRF cookie set lazily by `csrf_token()` during the GET interstitial render. |
-| 1.1.7 | Redirect target validated | ✅ | `safe_next_url()` called on both GET and POST paths (`php/auth.php:36`, `:45`, `:53`); rejects external URLs and path-traversal patterns. |
-| 1.1.8 | No browser caching of `/auth.php` | ✅ | `header('Cache-Control: no-store')` set at `php/auth.php:21`. |
+| 1.1.5 | GET/POST split prevents email-scanner prefetch | ✅ | `src/kayak/web/php/auth.php:7-13` documents the design. GET calls `peek_magic_link()` (no consumption); POST calls `consume_magic_link()`. Outlook Defender / Proofpoint prefetch GET, see the form, leave the token alone. |
+| 1.1.6 | CSRF required on POST consumption | ✅ | `src/kayak/web/php/auth.php:34` calls `require_csrf()`. CSRF cookie set lazily by `csrf_token()` during the GET interstitial render. |
+| 1.1.7 | Redirect target validated | ✅ | `safe_next_url()` called on both GET and POST paths (`src/kayak/web/php/auth.php:36`, `:45`, `:53`); rejects external URLs and path-traversal patterns. |
+| 1.1.8 | No browser caching of `/auth.php` | ✅ | `header('Cache-Control: no-store')` set at `src/kayak/web/php/auth.php:21`. |
 | 1.1.9 | Email body is plain-text only (no HTML) | ✅ | `render_magic_link_email()` returns a heredoc plain-text string; `Content-Type: text/plain; charset=UTF-8` set in `send_email()`. Minimizes email-client attack surface. |
-| 1.1.10 | Token in URL → nginx access log | ⚠ | **F-2 confirmed.** nginx log format includes `$request` (`deploy/kayak-log-format.conf`); `access_log` directive in `deploy/levels:329` writes to `/var/log/nginx/kayak-access.log`. Magic-link URL is constructed in `php/login.php:51`: `https://levels.wkcc.org/auth.php?t=<token>&next=...`. Token lands in log via `$request` field. |
+| 1.1.10 | Token in URL → nginx access log | ⚠ | **F-2 confirmed.** nginx log format includes `$request` (`deploy/kayak-log-format.conf`); `access_log` directive in `deploy/levels:329` writes to `/var/log/nginx/kayak-access.log`. Magic-link URL is constructed in `src/kayak/web/php/login.php:51`: `https://levels.wkcc.org/auth.php?t=<token>&next=...`. Token lands in log via `$request` field. |
 | 1.1.11 | Referer leakage post-consumption | ⚠ | **F-14 (new).** After POST-consume, browser follows the 302 to `$next`. Referer header on that follow-up request is the previous URL — i.e. `/auth.php?t=TOKEN`. Subsequent same-origin requests (loading `/static/leaflet.js`, etc.) also carry this Referer. nginx logs `$http_referer` (see log format), so the token is captured twice: once in `$request` on initial GET, once in `$http_referer` on each post-consume request until the user navigates away. No `Referrer-Policy` header set on `/auth.php` response. |
 
 ### Findings refinement
@@ -66,7 +66,7 @@
 | 1.2.7 | `current_editor()` filters revoked sessions | ✅ | SQL clause `s.revoked_at IS NULL` in the session lookup. Revoked cookie cannot resurrect. |
 | 1.2.8 | `current_editor()` filters expired sessions | ✅ | SQL clause `s.expires_at > datetime('now')`. 7-day flat absolute timeout. |
 | 1.2.9 | `current_editor()` excludes banned editors | ✅ | SQL clause `e.status != 'banned'`. |
-| 1.2.10 | No code reads `EDITOR_SESSION_COOKIE` outside `auth.php` helpers | ✅ | grep across `php/` shows 4 reads, all in `php/includes/auth.php` (set, clear, current_editor). No bypass paths. |
+| 1.2.10 | No code reads `EDITOR_SESSION_COOKIE` outside `auth.php` helpers | ✅ | grep across `src/kayak/web/php/` shows 4 reads, all in `src/kayak/web/php/includes/auth.php` (set, clear, current_editor). No bypass paths. |
 | 1.2.11 | Login → capture cookie → logout → replay → 401 | ⚠ **F-15** | Static analysis says this MUST hold (revoked_at filter + cookie clear). No automated test covers it in `tests/php/*.php` (grep for `logout|revoke|revoked` returns empty). Live integration test recommended once. |
 
 ### Findings refinement
@@ -98,17 +98,17 @@
 
 ### Audit (a) — Is magic-link the only access path to maintainer status?
 
-Surveyed all `UPDATE editor SET status` calls in `php/`:
+Surveyed all `UPDATE editor SET status` calls in `src/kayak/web/php/`:
 
 | File:line | Action | Target status | Source status (guard) |
 |---|---|---|---|
-| `php/admin.php:35-39` | bulk_approve | `minimal` | `pending` only |
-| `php/admin.php:44-50` | promote | `full` | `pending` or `minimal` |
-| `php/admin.php:53-59` | approve_minimal | `minimal` | `pending` only |
-| `php/admin.php:62-68` | demote | `minimal` | `full` only |
-| `php/admin.php:71-78` | reset_pending | `pending` | `minimal` or `full` only |
-| `php/admin.php:80-90` | ban | `banned` | NOT `maintainer` |
-| `php/admin.php:93-99` | unban | `pending` | `banned` only |
+| `src/kayak/web/php/admin.php:35-39` | bulk_approve | `minimal` | `pending` only |
+| `src/kayak/web/php/admin.php:44-50` | promote | `full` | `pending` or `minimal` |
+| `src/kayak/web/php/admin.php:53-59` | approve_minimal | `minimal` | `pending` only |
+| `src/kayak/web/php/admin.php:62-68` | demote | `minimal` | `full` only |
+| `src/kayak/web/php/admin.php:71-78` | reset_pending | `pending` | `minimal` or `full` only |
+| `src/kayak/web/php/admin.php:80-90` | ban | `banned` | NOT `maintainer` |
+| `src/kayak/web/php/admin.php:93-99` | unban | `pending` | `banned` only |
 
 **No admin action sets `status = 'maintainer'`.** The ceiling via web is `'full'`. The ONLY path to `'maintainer'` status is the CLI command `levels seed-maintainer --email <email>` (registered in `src/kayak/cli/seed_maintainer.py`), which requires shell access on the prod box.
 
@@ -194,11 +194,11 @@ None new. The 4 brute-force defense layers (`nginx limit_req`, fail2ban, Turnsti
 
 | # | Test | Verdict | Evidence |
 |---|---|---|---|
-| 1.5.1 | Magic-link resend cap is enforced | ✅ | `magic_link_under_throttle()` (`php/includes/auth_magic_link.php`) caps at 5 per `editor.email` per rolling hour AND 20 per `ip_issued` per rolling hour, via `created_at > datetime('now', '-1 hour')`. Same-shape SELECT-COUNT per cap. |
-| 1.5.2 | Email-changed handling | ⊘ (intentional gap) | **No code path supports changing `editor.email`** (grep across `php/` and `src/`). Account email is set at signup and immutable via the web layer. Implicit policy: lose old email → create a new account with the new email → lose history attribution (FK preserves old rows). Filing as design note D-1 below; possible Tier 4 decision point. |
+| 1.5.1 | Magic-link resend cap is enforced | ✅ | `magic_link_under_throttle()` (`src/kayak/web/php/includes/auth_magic_link.php`) caps at 5 per `editor.email` per rolling hour AND 20 per `ip_issued` per rolling hour, via `created_at > datetime('now', '-1 hour')`. Same-shape SELECT-COUNT per cap. |
+| 1.5.2 | Email-changed handling | ⊘ (intentional gap) | **No code path supports changing `editor.email`** (grep across `src/kayak/web/php/` and `src/`). Account email is set at signup and immutable via the web layer. Implicit policy: lose old email → create a new account with the new email → lose history attribution (FK preserves old rows). Filing as design note D-1 below; possible Tier 4 decision point. |
 | 1.5.3 | Account-takeover blast radius (editor) | ✅ | Editor email compromise allows: proposal/comment submission (tier-capped daily); reading own account page; bumping into the per-account rate limits. Damage is reversible by maintainer reject + ban. Impact: Medium and recoverable. |
 | 1.5.4 | Email normalization (Gmail aliases) | ⚠ **F-3** (existing) | `normalize_email()` is `strtolower(trim(...))` only. Doesn't strip Gmail dots or `+tags`. Already filed; Tier 1.5 decision deferred to Tier 4. |
-| 1.5.5 | `safe_next_url()` open-redirect adequacy | ✅ | Implementation rejects `^/[^/\\\\]` — i.e. requires a single `/` followed by a non-`/`-non-`\` first char. `SanityTest.php` covers 7 attack patterns: null, empty, valid path, `//evil.example/pwn`, `/\\evil.example/`, `/\\\\evil.example/`, absolute https, `javascript:`, missing-leading-slash. Browsers' WHATWG URL normalization (`\` → `/` in special schemes) is explicitly handled. **The plan asked about `/path/?redirect=https://...` — that's not a safe_next_url issue; safe_next_url accepts `/path/?redirect=...` because it's same-origin. The risk only materializes if downstream code does `header('Location: ' . $_GET['redirect'])` — a separate code-path concern, no such pattern found in `php/`.** |
+| 1.5.5 | `safe_next_url()` open-redirect adequacy | ✅ | Implementation rejects `^/[^/\\\\]` — i.e. requires a single `/` followed by a non-`/`-non-`\` first char. `SanityTest.php` covers 7 attack patterns: null, empty, valid path, `//evil.example/pwn`, `/\\evil.example/`, `/\\\\evil.example/`, absolute https, `javascript:`, missing-leading-slash. Browsers' WHATWG URL normalization (`\` → `/` in special schemes) is explicitly handled. **The plan asked about `/path/?redirect=https://...` — that's not a safe_next_url issue; safe_next_url accepts `/path/?redirect=...` because it's same-origin. The risk only materializes if downstream code does `header('Location: ' . $_GET['redirect'])` — a separate code-path concern, no such pattern found in `src/kayak/web/php/`.** |
 
 ### Findings refinement
 

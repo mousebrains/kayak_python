@@ -16,11 +16,11 @@ The site is now in a documented, defensible posture for hobby/club scale. The re
 
 | Asset | Control | Source |
 |---|---|---|
-| Magic-link token | 256-bit random_bytes(32), sha256 at rest, 30-min expiry, GET-peek/POST-consume split (email-scanner defense) | `php/includes/auth_magic_link.php` + `php/auth.php` |
+| Magic-link token | 256-bit random_bytes(32), sha256 at rest, 30-min expiry, GET-peek/POST-consume split (email-scanner defense) | `src/kayak/web/php/includes/auth_magic_link.php` + `src/kayak/web/php/auth.php` |
 | Magic-link rate limit | 5/hour per email + 20/hour per IP | `magic_link_under_throttle()` |
 | Magic-link token in logs | Redacted via nginx `map` directives (F-2 fix) | `deploy/kayak-log-format.conf` |
-| Magic-link token in browser Referer | `Referrer-Policy: no-referrer` on auth.php (F-14 fix) | `php/auth.php` |
-| Session cookie | `ed_sess`, HttpOnly + SameSite=Strict + Secure-on-HTTPS, 7-day flat expiry, sha256 hash at rest | `php/includes/auth.php` |
+| Magic-link token in browser Referer | `Referrer-Policy: no-referrer` on auth.php (F-14 fix) | `src/kayak/web/php/auth.php` |
+| Session cookie | `ed_sess`, HttpOnly + SameSite=Strict + Secure-on-HTTPS, 7-day flat expiry, sha256 hash at rest | `src/kayak/web/php/includes/auth.php` |
 | Session revocation | Logout sets `revoked_at`; `current_editor()` filters `revoked_at IS NULL`; regression test guards (F-15 fix) | `tests/php/SessionRevocationTest.php` |
 | CSRF | Double-submit cookie via `hash_equals` constant-time compare | `require_csrf()` in auth.php |
 | Maintainer auth | Same magic-link flow (D-T1.3 Accepted Option A) | `decisions.md` |
@@ -44,7 +44,7 @@ The site is now in a documented, defensible posture for hobby/club scale. The re
 
 | Asset | Control | Source |
 |---|---|---|
-| XSS | All render paths escape via `htmlspecialchars()` (PHP 8.1+ default `ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML401`); convention documented inline | Tier 3.1 audit + `php/includes/html.php:6-13` |
+| XSS | All render paths escape via `htmlspecialchars()` (PHP 8.1+ default `ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML401`); convention documented inline | Tier 3.1 audit + `src/kayak/web/php/includes/html.php:6-13` |
 | SQLi | 131 `prepare()` calls verified parameterized; all `->query()` / `->exec()` calls use static SQL; 9 SQL-concat sites have cross-file invariant whitelists | Tier 3.2 audit |
 | File upload | None today — `change_request_attachment` schema present but no PHP endpoint (D-T3.3 deferred) | n/a |
 
@@ -57,7 +57,7 @@ The site is now in a documented, defensible posture for hobby/club scale. The re
 | Retention purge — magic links | 90-day TTL post-expiry, daily timer (D-T4.3b) | `src/kayak/cli/editor_retention.py` + `systemd/kayak-editor-retention.timer` |
 | Retention purge — sessions | 90-day TTL post-expiry, daily timer (D-T4.3c) | same |
 | Audit-trail PII linkage | Severed at deletion time, not via decay (D-T4.3a) | `delete_editor` `--anonymize-history` flag |
-| Privacy policy | Refreshed Tier 6 (F-16); accurate Data We Collect ↔ Your Rights | `php/privacy.php` |
+| Privacy policy | Refreshed Tier 6 (F-16); accurate Data We Collect ↔ Your Rights | `src/kayak/web/php/privacy.php` |
 | Terms of service | Not provided (D-T4.4 Accepted) | n/a |
 
 ## Disclosure + response

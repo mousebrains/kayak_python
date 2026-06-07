@@ -1,1 +1,1 @@
-../php/logout.php
+../src/kayak/web/php/logout.php

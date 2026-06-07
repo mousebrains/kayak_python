@@ -12,7 +12,7 @@ Five sections (top to bottom):
     4. systemd jobs — per-kayak-* service state + recent errors
     5. Backups + cert — hourly/weekly/offsite freshness + TLS leaf expiry
 
-Public PUBLIC status snapshot is /status.json (php/status.php) — separate.
+Public PUBLIC status snapshot is /status.json (src/kayak/web/php/status.php) — separate.
 """
 
 from __future__ import annotations

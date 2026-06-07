@@ -120,9 +120,9 @@ See `scripts/` for helper scripts. The typical workflow:
 
 ## PHP code style
 
-Conventions for files under `php/` and `php/includes/` (file shape,
+Conventions for files under `src/kayak/web/php/` and `src/kayak/web/php/includes/` (file shape,
 naming, helper prefixes, module constants) live in
-[`php/CONVENTIONS.md`](php/CONVENTIONS.md). Runtime constraints
+[`src/kayak/web/php/CONVENTIONS.md`](src/kayak/web/php/CONVENTIONS.md). Runtime constraints
 (mbstring, CSP), tooling commands (composer, PHPStan, PHPUnit,
 php-cs-fixer), and the integration-test scaffold are documented in
 [`CLAUDE.md`](CLAUDE.md) § "PHP Tooling".
@@ -138,7 +138,7 @@ src/kayak/
   web/         Static assets (CSS)
 tests/         Mirrors src/ structure
 data/          YAML config (sources, builder columns, descriptions)
-php/           PHP web layer (dynamic pages, API endpoints)
+src/kayak/web/php/           PHP web layer (dynamic pages, API endpoints)
 scripts/       Data import, migration, and maintenance scripts
 systemd/       Service and timer unit files
 deploy/        Deployment configs (nginx, setup guide)

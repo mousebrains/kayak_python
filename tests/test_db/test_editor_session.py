@@ -10,7 +10,7 @@ from kayak.db.models import Editor, EditorSession, EditorStatus
 
 
 def _current_editor_query(session, token_hash: str):
-    """Python mirror of php/includes/auth.php::current_editor() SQL.
+    """Python mirror of src/kayak/web/php/includes/auth.php::current_editor() SQL.
 
     Returns the Editor row if the session token is valid (unrevoked,
     unexpired, editor not banned), else None.

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
 
-require_once __DIR__ . '/../../php/includes/csp_classify.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/csp_classify.php';
 
 /**
  * csp_classify() — the _internal dashboard's "likely source" bucketing.

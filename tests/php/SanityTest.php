@@ -14,8 +14,8 @@ final class SanityTest extends TestCase
         // auth.php transitively loads db.php which defines get_db() but
         // does NOT call it at load time — safe to include. Tests here
         // exercise pure helpers that don't touch the DB at all.
-        require_once __DIR__ . '/../../php/includes/auth.php';
-        require_once __DIR__ . '/../../php/includes/sanity.php';
+        require_once __DIR__ . '/../../src/kayak/web/php/includes/auth.php';
+        require_once __DIR__ . '/../../src/kayak/web/php/includes/sanity.php';
     }
 
     public function testNullReturnsRoot(): void

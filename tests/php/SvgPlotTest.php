@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
 
-require_once __DIR__ . '/../../php/includes/svg_plot.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/svg_plot.php';
 
 final class SvgPlotTest extends TestCase
 {

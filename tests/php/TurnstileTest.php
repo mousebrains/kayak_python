@@ -15,7 +15,7 @@ final class TurnstileTest extends TestCase
 {
     public static function setUpBeforeClass(): void
     {
-        require_once __DIR__ . '/../../php/includes/turnstile.php';
+        require_once __DIR__ . '/../../src/kayak/web/php/includes/turnstile.php';
     }
 
     /** @var list<string> Temp JSON files to clean up after each test. */

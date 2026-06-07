@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
 
-require_once __DIR__ . '/../../php/includes/reach_fields.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/reach_fields.php';
 
 /**
  * Unit tests for the consolidated reach-detail formatters shared by

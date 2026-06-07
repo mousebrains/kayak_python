@@ -1,4 +1,4 @@
-# Rotation for the CSP violation log written by php/csp-report.php.
+# Rotation for the CSP violation log written by src/kayak/web/php/csp-report.php.
 # Installed at: /etc/logrotate.d/kayak-csp
 # The log lives in /home/pat/logs, a pat-owned dir with a default ACL
 # granting www-data rwx (so PHP-FPM can write) and pat rwx (so the build

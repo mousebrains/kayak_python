@@ -1,1 +1,1 @@
-../php/comment.php
+../src/kayak/web/php/comment.php

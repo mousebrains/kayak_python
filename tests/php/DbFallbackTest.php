@@ -4,20 +4,22 @@ declare(strict_types=1);
 use PHPUnit\Framework\TestCase;
 
 /**
- * Guards the `_sqlite_path()` helper in php/includes/db.php.
+ * Guards the `_sqlite_path()` helper in src/kayak/web/php/includes/db.php.
  *
- * The helper used to be inlined into `get_db()` as
- * `dirname(__DIR__, 2) . '/../DB/kayak.db'` which resolved correctly on
- * dev (kayak/php/includes/ is 2 dirs deep from the repo root) but to
- * /home/DB/kayak.db on prod (public_html/includes/ is 1 dir deep under
- * /home/pat). This test pins the new `dirname(__DIR__, 3) . '/DB/kayak.db'`
- * form that works in both layouts, and confirms SQLITE_PATH still wins.
+ * The fallback is keyed to where db.php is *deployed* — `levels build` copies the
+ * PHP layer to <docroot>/includes/db.php, so `dirname(__DIR__, 2) . '/DB/kayak.db'`
+ * resolves to the deploy root's parent + /DB (e.g. /home/pat/public_html/includes
+ * -> /home/pat/DB), the sibling-of-deploy-root convention shared with
+ * backup/decimate. (The PHP source moved deeper, to src/kayak/web/php/includes,
+ * in S4a-2 slice B2; the level was corrected from the old `dirname(__DIR__, 3)`,
+ * which the move surfaced as wrong for the deployed layout.) This test pins the
+ * level + suffix and confirms SQLITE_PATH still wins.
  */
 final class DbFallbackTest extends TestCase
 {
     public static function setUpBeforeClass(): void
     {
-        require_once __DIR__ . '/../../php/includes/db.php';
+        require_once __DIR__ . '/../../src/kayak/web/php/includes/db.php';
     }
 
     protected function setUp(): void
@@ -34,24 +36,23 @@ final class DbFallbackTest extends TestCase
 
     public function testFallbackRelativeToDbPhp(): void
     {
-        // With no SQLITE_PATH, the path should be relative to this project's
-        // db.php — which lives at <repo>/php/includes/db.php. dirname(__DIR__, 3)
-        // from that file resolves to <repo>'s parent (/Users/pat/tpw on dev,
-        // /home/pat on prod).
+        // No SQLITE_PATH: the fallback is dirname(<db.php dir>, 2) . '/DB/kayak.db'
+        // (the sibling-of-deploy-root convention). Derive the expected value from
+        // db.php's real location so the test tracks the file wherever it lives and
+        // pins the dirname level (2) + suffix.
         putenv('SQLITE_PATH');
-        $expected_parent = dirname(dirname(__DIR__));  // <repo>/php -> <repo>
-        $expected = dirname($expected_parent) . '/DB/kayak.db';
+        $db_php_dir = (string) realpath(__DIR__ . '/../../src/kayak/web/php/includes');
+        $expected = dirname($db_php_dir, 2) . '/DB/kayak.db';
         $this->assertSame($expected, _sqlite_path());
     }
 
-    public function testFallbackResolvesToRepoParentDB(): void
+    public function testFallbackResolvesToSiblingDB(): void
     {
-        // Sanity check the two-layout claim: on this machine the repo is
-        // /Users/pat/tpw/kayak, so the fallback should land in /Users/pat/tpw/DB.
+        // The fallback must be an absolute path ending in /DB/kayak.db so PDO can
+        // open it directly.
         putenv('SQLITE_PATH');
         $path = _sqlite_path();
         $this->assertStringEndsWith('/DB/kayak.db', $path);
-        // Path is absolute (starts with /) so PDO can open it directly.
         $this->assertStringStartsWith('/', $path);
     }
 }

@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
 
-require_once __DIR__ . '/../../php/includes/html.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/html.php';
 
 /**
  * Unit tests for autolink_urls() in php/includes/html.php.

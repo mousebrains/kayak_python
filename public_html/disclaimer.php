@@ -1,1 +1,1 @@
-../php/disclaimer.php
+../src/kayak/web/php/disclaimer.php

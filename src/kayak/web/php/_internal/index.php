@@ -55,7 +55,7 @@ function age_phrase(?string $ts): string {
     return (int)($secs / 86400) . 'd ago';
 }
 
-// csp_classify() lives in php/includes/csp_classify.php (required above) so it
+// csp_classify() lives in src/kayak/web/php/includes/csp_classify.php (required above) so it
 // can be unit-tested without booting this maintainer-only page.
 
 /** Bucket a source's freshness against the 48h / 7d thresholds. */
@@ -131,7 +131,8 @@ function tail_lines(string $path, int $max_lines): array {
 // ---------------------------------------------------------------------------
 // Section 1: Build + data freshness
 // ---------------------------------------------------------------------------
-$index_path  = __DIR__ . '/../../public_html/index.html';
+$doc_root    = $_SERVER['DOCUMENT_ROOT'] ?? '';
+$index_path  = (is_string($doc_root) ? $doc_root : '') . '/index.html';
 $build_mtime = file_exists($index_path) ? filemtime($index_path) : false;
 $build_at    = $build_mtime !== false ? gmdate('Y-m-d H:i:s', $build_mtime) . ' UTC' : null;
 
@@ -391,7 +392,8 @@ pre { font-size: 12px; background: #f5f5f5; padding: .5rem; overflow-x: auto; ma
 // /static/. Without the ?v= the browser pins last download for a year and
 // silently keeps a stale selector after we ship a fix. mtime is monotonic
 // and changes every deploy so it does the job without a hash pipeline.
-$js_path  = __DIR__ . '/../../public_html/static/internal-sort.js';
+$doc_root = $_SERVER['DOCUMENT_ROOT'] ?? '';
+$js_path  = (is_string($doc_root) ? $doc_root : '') . '/static/internal-sort.js';
 $js_mtime = file_exists($js_path) ? (int)filemtime($js_path) : 0;
 ?>
 <script src="/static/internal-sort.js?v=<?= $js_mtime ?>" defer></script>

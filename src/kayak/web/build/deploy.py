@@ -26,6 +26,7 @@ from kayak.db.engine import get_session
 from kayak.db.gauges import get_calculated_gauge_ids
 from kayak.db.models import DataType, Gauge, HucName, LatestGaugeObservation, Reach
 from kayak.db.reaches import all_state_names, reaches_query
+from kayak.resources import resource_dir
 from kayak.utils.pubhash import encode as pubhash_encode
 from kayak.web.build._shared import (
     _CSS_PATH,
@@ -255,11 +256,14 @@ def _deploy_php_files(output_dir: Path) -> None:
     """Install the PHP layer: top-level pages, ``includes/``, ``_internal/``,
     and ``style.css``.
 
-    ``style.css`` lives at the output root because ``php/header.php`` reads
+    ``style.css`` lives at the output root because ``src/kayak/web/php/header.php`` reads
     it via ``__DIR__/../style.css`` — the hashed copy under ``static/`` is
     the cacheable variant served to static-HTML clients.
+
+    The PHP layer ships inside the package at ``src/kayak/web/php`` (S4a-2
+    slice B2), resolved via ``resource_dir`` so a wheel install finds it.
     """
-    php_dir = BASE_DIR / "php"
+    php_dir = resource_dir("web", "php")
     for path in php_dir.iterdir():
         if path.is_file() and path.suffix == ".php":
             shutil.copy2(path, output_dir / path.name)
@@ -286,29 +290,37 @@ def _deploy_php_files(output_dir: Path) -> None:
 
 
 def _deploy_config_files(output_dir: Path) -> None:
-    """Copy ``.htaccess``, ``404.html``, ``robots.txt`` from ``public_html/``.
+    """Copy the install templates (``.htaccess``, ``404.html``, ``robots.txt``)
+    into the output root.
 
-    Only present files are copied — the rest of ``public_html/`` is the
-    deploy target and gets populated by the generated content path.
+    These ship inside the package at ``src/kayak/web/install-templates`` (S4a-2
+    slice B2), resolved via ``resource_dir`` so a wheel install finds them. Only
+    present files are copied — the rest of the output dir is the deploy target,
+    populated by the generated content path.
     """
-    repo_public = BASE_DIR / "public_html"
+    templates_dir = resource_dir("web", "install-templates")
     for name in (".htaccess", "404.html", "robots.txt"):
-        src = repo_public / name
+        src = templates_dir / name
         if src.is_file():
             shutil.copy2(src, output_dir / name)
 
 
 def _deploy_license_files(output_dir: Path) -> None:
-    """Copy LICENSE (GPL v3) and LICENSE-DATA (CC BY-NC 4.0) from repo root.
+    """Copy LICENSE (GPL v3) and LICENSE-DATA (CC BY-NC 4.0) into the output.
 
-    Served as ``.txt`` so nginx returns ``text/plain`` and browsers render
-    them inline. The footer in ``php/includes/footer.php`` and the static-
-    page footer link to ``/LICENSE.txt`` and ``/LICENSE-DATA.txt``.
+    Packaged copies ship inside the wheel at ``src/kayak/web/legal/*.txt``
+    (S4a-2 slice B2; the repo-root ``LICENSE``/``LICENSE-DATA`` stay for the
+    GitHub/pyproject convention, and a test guards the two against drift),
+    resolved via ``resource_dir`` so a wheel install finds them. Served as
+    ``.txt`` so nginx returns ``text/plain`` and browsers render them inline;
+    the footer in ``src/kayak/web/php/includes/footer.php`` and the static-page
+    footer link to ``/LICENSE.txt`` and ``/LICENSE-DATA.txt``.
     """
-    for src_name, dst_name in (("LICENSE", "LICENSE.txt"), ("LICENSE-DATA", "LICENSE-DATA.txt")):
-        src = BASE_DIR / src_name
+    legal_dir = resource_dir("web", "legal")
+    for name in ("LICENSE.txt", "LICENSE-DATA.txt"):
+        src = legal_dir / name
         if src.is_file():
-            shutil.copy2(src, output_dir / dst_name)
+            shutil.copy2(src, output_dir / name)
 
 
 def _deploy_source_files(output_dir: Path) -> None:

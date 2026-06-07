@@ -37,7 +37,7 @@ const DB_PATH = (() => {
  * Run one or more SQL statements via the sqlite3 CLI against the test DB.
  *
  * `.timeout 30000` gives the CLI a 30 s busy-timeout matching the PHP server
- * (php/includes/db.php:53). The server holds the DB open (WAL + 30 s timeout)
+ * (src/kayak/web/php/includes/db.php:53). The server holds the DB open (WAL + 30 s timeout)
  * while a test reads it through this *separate* sqlite3 process; with the CLI's
  * default busy-timeout of 0, `-bail` aborts the instant the server holds a
  * write lock ("database is locked (5)") — a timing flake that reds main on an
@@ -149,7 +149,7 @@ test.describe.serial('editor journey: login → propose → review → approve',
     await page.click('button[type="submit"]');
 
     // Server-side success banner — propose_handler emits this exact
-    // phrase on a clean save (php/includes/propose_handler.php:452).
+    // phrase on a clean save (src/kayak/web/php/includes/propose_handler.php:452).
     await expect(page.locator('body')).toContainText('your proposal was recorded');
 
     // Verify the change_request row landed pending and the payload

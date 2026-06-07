@@ -1,1 +1,1 @@
-../php/privacy.php
+../src/kayak/web/php/privacy.php

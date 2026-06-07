@@ -21,7 +21,7 @@ declare(strict_types=1);
  * `const` declarations under PHP 9).
  */
 
-require_once __DIR__ . '/../../php/includes/config.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/config.php';
 Config::install_for_tests([]);
 
 // In-process tests must never let a handler's early-out `exit` kill the test
@@ -30,7 +30,7 @@ Config::install_for_tests([]);
 if (!defined('KAYAK_TEST')) {
     define('KAYAK_TEST', true);
 }
-require_once __DIR__ . '/../../php/includes/http_exit.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/http_exit.php';
 
 /** Fresh in-memory SQLite PDO with a minimal editor/magic-link/session schema. */
 function kayak_test_pdo(): PDO {

@@ -1,1 +1,1 @@
-../php/latest.php
+../src/kayak/web/php/latest.php

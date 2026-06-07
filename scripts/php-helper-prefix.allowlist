@@ -14,43 +14,43 @@
 # post-v1.0.0 (per project_pr_mode_after_v1).
 
 # --- gauge_search.php (stem: gauge_search) -----------------------------
-php/includes/gauge_search.php:_search_gauges
+src/kayak/web/php/includes/gauge_search.php:_search_gauges
 
 # --- db.php (stem: db) -------------------------------------------------
-php/includes/db.php:_sqlite_path
+src/kayak/web/php/includes/db.php:_sqlite_path
 
 # --- reach_search.php (stem: reach_search) -----------------------------
-php/includes/reach_search.php:_search_reaches_query
-php/includes/reach_search.php:_aggregate_reach_readings
-php/includes/reach_search.php:_aggregate_reach_classes_and_guides
-php/includes/reach_search.php:_render_search_results_table
-php/includes/reach_search.php:_render_search_map
-php/includes/reach_search.php:_build_search_map_reaches
-php/includes/reach_search.php:_collect_search_map_gauges
+src/kayak/web/php/includes/reach_search.php:_search_reaches_query
+src/kayak/web/php/includes/reach_search.php:_aggregate_reach_readings
+src/kayak/web/php/includes/reach_search.php:_aggregate_reach_classes_and_guides
+src/kayak/web/php/includes/reach_search.php:_render_search_results_table
+src/kayak/web/php/includes/reach_search.php:_render_search_map
+src/kayak/web/php/includes/reach_search.php:_build_search_map_reaches
+src/kayak/web/php/includes/reach_search.php:_collect_search_map_gauges
 
 # --- gauge_detail.php (stem: gauge) ------------------------------------
-php/includes/gauge_detail.php:_classify_reach_status
-php/includes/gauge_detail.php:_compute_reach_statuses
-php/includes/gauge_detail.php:_render_stale_or_empty_banner
-php/includes/gauge_detail.php:_render_associated_sources
-php/includes/gauge_detail.php:_render_associated_reaches
+src/kayak/web/php/includes/gauge_detail.php:_classify_reach_status
+src/kayak/web/php/includes/gauge_detail.php:_compute_reach_statuses
+src/kayak/web/php/includes/gauge_detail.php:_render_stale_or_empty_banner
+src/kayak/web/php/includes/gauge_detail.php:_render_associated_sources
+src/kayak/web/php/includes/gauge_detail.php:_render_associated_reaches
 
 # --- description_detail.php (stem: description) ------------------------
-php/includes/description_detail.php:_load_current_readings
-php/includes/description_detail.php:_render_current_readings
-php/includes/description_detail.php:_render_data_sources
+src/kayak/web/php/includes/description_detail.php:_load_current_readings
+src/kayak/web/php/includes/description_detail.php:_render_current_readings
+src/kayak/web/php/includes/description_detail.php:_render_data_sources
 
 # --- propose_handler.php (stem: propose) -------------------------------
-php/includes/propose_handler.php:_send_proposal_notification
+src/kayak/web/php/includes/propose_handler.php:_send_proposal_notification
 
 # --- auth.php (stem: auth) ---------------------------------------------
-php/includes/auth.php:_cookie_params
+src/kayak/web/php/includes/auth.php:_cookie_params
 
 # --- svg_plot.php (stem: svg_plot) -------------------------------------
-php/includes/svg_plot.php:_split_y_label
-php/includes/svg_plot.php:_series_data_attr
-php/includes/svg_plot.php:_bands_svg
-php/includes/svg_plot.php:_empty_svg
+src/kayak/web/php/includes/svg_plot.php:_split_y_label
+src/kayak/web/php/includes/svg_plot.php:_series_data_attr
+src/kayak/web/php/includes/svg_plot.php:_bands_svg
+src/kayak/web/php/includes/svg_plot.php:_empty_svg
 
 # --- sanity.php (stem: sanity) -----------------------------------------
-php/includes/sanity.php:_haversine_mi
+src/kayak/web/php/includes/sanity.php:_haversine_mi

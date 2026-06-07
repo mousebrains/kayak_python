@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
 
-require_once __DIR__ . '/../../php/includes/class_tiers.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/class_tiers.php';
 
 /**
  * Unit tests for parse_class_tiers() in php/includes/class_tiers.php.

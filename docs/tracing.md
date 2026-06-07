@@ -22,7 +22,7 @@ Outputs three files:
   in the canonical `"lon lat,lon lat,…"` format for pasting directly
   into a migration's `reach.geom` column. **Do not wrap in
   `LINESTRING(…)`** — the PHP map parser at
-  `php/includes/gauge_map.php:61-70` splits on commas and float-casts
+  `src/kayak/web/php/includes/gauge_map.php:61-70` splits on commas and float-casts
   each side; a wrapper produces a `(0°, lat)` first vertex (somewhere
   in the Atlantic) and the polyline draws a long horizontal line.
   See migration `0041` for the original bug; the format helper at

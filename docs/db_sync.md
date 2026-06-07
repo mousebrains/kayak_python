@@ -124,6 +124,6 @@ artifact types never delete one another.
 
 - **Do not edit `observation` locally.** Live-side rows override nothing (`INSERT OR IGNORE` skips on primary-key conflict), so any local changes silently lose to whatever live already has for the same `(source_id, observed_at, data_type)`. Use `calc-rating` or other pipeline commands on the server if you need to fix observations.
 - **Deleting a source locally drops that source's observations from live on push.** The JOIN on `main.source` filters them out to avoid FK violations. If that's not what you want, don't delete sources — deactivate them instead.
-- **Metadata changes on live during your editing window are lost on push.** If someone uses `php/edit.php` to change a reach while you're editing locally, the push will clobber their edit. Coordinate out-of-band.
+- **Metadata changes on live during your editing window are lost on push.** If someone uses `src/kayak/web/php/edit.php` to change a reach while you're editing locally, the push will clobber their edit. Coordinate out-of-band.
 - **The `.pulled_snapshot` file is the handshake.** `db_push.sh` refuses to run without it. If you hand-built the local DB via some other path, fake the handshake with `touch ../DB/.pulled_snapshot` — but understand you're bypassing the "did this come from a pull?" safety check.
 - **Downtime during push:** the pipeline is stopped from "start of merge" to "end of merge" — usually under a minute. If you can't afford even that, run the push when you're OK with a skipped pipeline tick.

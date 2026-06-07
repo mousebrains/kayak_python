@@ -12,7 +12,7 @@ to 6 decimals, ~11 cm at the equator — matches the precision NHD HR
 flowlines publish).
 
 Why no LINESTRING wrapper: the PHP map rendering path at
-``php/includes/gauge_map.php:61-70`` parses the string by splitting on
+``src/kayak/web/php/includes/gauge_map.php:61-70`` parses the string by splitting on
 ``,`` and float-casting each side. ``(float)"LINESTRING(-122.021835"``
 returns 0 (PHP's float cast stops at the first non-numeric character),
 which lands the first vertex at the prime meridian and draws a long
@@ -78,7 +78,7 @@ def format_geom_for_sql(
 def parse_geom_string(s: str) -> list[tuple[float, float]]:
     """Parse a reach.geom string back into a list of ``(lon, lat)`` tuples.
 
-    Mirrors the PHP parser at ``php/includes/gauge_map.php:61-70`` so
+    Mirrors the PHP parser at ``src/kayak/web/php/includes/gauge_map.php:61-70`` so
     server-side validation matches what the client renders. Tolerant of
     whitespace around pairs (PHP's parser ``trim``s each one). Raises
     ``ValueError`` if any pair has the wrong arity or fails the float

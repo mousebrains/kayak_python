@@ -1,1 +1,1 @@
-../php/status.php
+../src/kayak/web/php/status.php

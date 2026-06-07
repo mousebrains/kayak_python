@@ -28,7 +28,7 @@ Every code path that touches the editor account model (`editor`, `editor_session
 Read-only consumers (referenced by the plan but out of inventory depth):
 
 - `gauge.php` — public gauge detail; renders maintainer-only "Edit" link when `is_maintainer()`.
-- `php/includes/header.php` — renders nav with `/login.php` (logged out) or `/account.php` + `/logout.php` (logged in); shows `Admin` link when `is_maintainer()`. Branches on `editor_feature_enabled()` + `current_editor()`.
+- `src/kayak/web/php/includes/header.php` — renders nav with `/login.php` (logged out) or `/account.php` + `/logout.php` (logged in); shows `Admin` link when `is_maintainer()`. Branches on `editor_feature_enabled()` + `current_editor()`.
 
 ### Cross-tier counts
 
@@ -86,7 +86,7 @@ Per-column classification:
 | `editor_id` | int FK editor.id (CASCADE) | internal | recipient |
 | `token_hash` | varchar(64) UNIQUE | **credential** | sha256(64-char hex token); raw token only ever in transit and in the email |
 | `created_at` | datetime | internal | issued at |
-| `expires_at` | datetime | internal | 30-min absolute (no named constant; the literal `30 * 60` in `php/includes/auth_magic_link.php`) |
+| `expires_at` | datetime | internal | 30-min absolute (no named constant; the literal `30 * 60` in `src/kayak/web/php/includes/auth_magic_link.php`) |
 | `used_at` | datetime nullable | internal | single-use marker; non-null = burnt |
 | `ip_issued` | varchar(45) | **PII** | requester IP at issuance |
 | `next_url` | varchar(512) | internal | post-login redirect target; pre-validated via `safe_next_url()` |
@@ -158,7 +158,7 @@ Per-column classification:
 
 ## Cookies
 
-Both cookies are set via `_cookie_params()` in `php/includes/auth.php` with the attributes:
+Both cookies are set via `_cookie_params()` in `src/kayak/web/php/includes/auth.php` with the attributes:
 
 - `HttpOnly` — JS cannot read either cookie.
 - `SameSite=Strict` — neither cookie is sent on cross-origin requests (incl. clicks from external links/emails).
@@ -208,11 +208,11 @@ Default action: 1h ban with `bantime.increment=true`, capping at 1w.
 
 ### Layer 3 — Cloudflare Turnstile
 
-Required on POST handlers in `login.php` and `contact.php`. Verified server-side via `php/includes/turnstile.php` against Cloudflare's `siteverify` endpoint. Bypasses available only in test mode (per `TurnstileTest.php`).
+Required on POST handlers in `login.php` and `contact.php`. Verified server-side via `src/kayak/web/php/includes/turnstile.php` against Cloudflare's `siteverify` endpoint. Bypasses available only in test mode (per `TurnstileTest.php`).
 
 ### Layer 4 — application-side throttles
 
-- **`magic_link_under_throttle()`** in `php/includes/auth_magic_link.php` — 5 magic links per email per hour, 20 magic links per IP per hour. Per-email cap blunts targeted enumeration; per-IP cap covers shared households without locking out the household.
+- **`magic_link_under_throttle()`** in `src/kayak/web/php/includes/auth_magic_link.php` — 5 magic links per email per hour, 20 magic links per IP per hour. Per-email cap blunts targeted enumeration; per-IP cap covers shared households without locking out the household.
 - **`comment.php` daily cap** — 5 site-comments per editor per day.
 - **`propose.php` tiered daily cap** — 3 (pending) / 10 (minimal) / 20 (full) proposals per editor per day; maintainers unlimited (9999).
 
@@ -225,8 +225,8 @@ Required on POST handlers in `login.php` and `contact.php`. Verified server-side
 
 | Service | How called | Where configured | Data sent |
 |---|---|---|---|
-| msmtp → Gmail SMTP relay | `send_email()` in `php/includes/mail.php` | local msmtp config (`~/.msmtprc` or system) | magic-link emails (token in URL), maintainer notifications (proposer email, subject, body) |
-| Cloudflare Turnstile | client-side widget + server-side `siteverify` POST via `verify_turnstile()` in `php/includes/turnstile.php` | site key + secret env vars (per `TurnstileTest.php`) | client IP + opaque token |
+| msmtp → Gmail SMTP relay | `send_email()` in `src/kayak/web/php/includes/mail.php` | local msmtp config (`~/.msmtprc` or system) | magic-link emails (token in URL), maintainer notifications (proposer email, subject, body) |
+| Cloudflare Turnstile | client-side widget + server-side `siteverify` POST via `verify_turnstile()` in `src/kayak/web/php/includes/turnstile.php` | site key + secret env vars (per `TurnstileTest.php`) | client IP + opaque token |
 
 No third-party analytics. No third-party error tracking. No CDN for editor-pipeline assets (Cloudflare in front of the whole vhost, but no Cloudflare features beyond Turnstile are used).
 
@@ -243,11 +243,11 @@ No third-party analytics. No third-party error tracking. No CDN for editor-pipel
 
 ## File uploads
 
-**N/A.** `change_request_attachment` schema is in place but no PHP endpoint accepts uploads. Verified: `grep -rn "move_uploaded_file|\$_FILES" php/` returns nothing. Tier 3.3 stays N/A; activates when the endpoint lands.
+**N/A.** `change_request_attachment` schema is in place but no PHP endpoint accepts uploads. Verified: `grep -rn "move_uploaded_file|\$_FILES" src/kayak/web/php/` returns nothing. Tier 3.3 stays N/A; activates when the endpoint lands.
 
 ## Auth-aware feature flag
 
-`editor_feature_enabled()` in `php/includes/auth.php` gates the editor pipeline. Some endpoints (`logout.php`, `login.php`) wrap their auth requirements in this flag so the system can be disabled at the per-page level without code removal. `contact.php` is intentionally NOT gated (the contact form should work even when the editor pipeline is disabled — its footer link is shown unconditionally).
+`editor_feature_enabled()` in `src/kayak/web/php/includes/auth.php` gates the editor pipeline. Some endpoints (`logout.php`, `login.php`) wrap their auth requirements in this flag so the system can be disabled at the per-page level without code removal. `contact.php` is intentionally NOT gated (the contact form should work even when the editor pipeline is disabled — its footer link is shown unconditionally).
 
 ## Open verification items (Tier 0.4 confirms)
 

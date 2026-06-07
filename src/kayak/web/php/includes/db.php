@@ -5,11 +5,15 @@ declare(strict_types=1);
  *
  * Resolves the database path via the typed config (`Config::str('database_path')`,
  * sourced from /etc/kayak/runtime-config.json), falling back to the SQLITE_PATH
- * env var, then to a path computed relative to __DIR__ for both layouts:
- *   dev:  /Users/.../kayak/php/includes/db.php   -> /Users/.../DB/kayak.db
- *   prod: /home/pat/public_html/includes/db.php  -> /home/pat/DB/kayak.db
- * dirname(__DIR__, 3) walks up includes/ -> (php|public_html)/ -> project-parent,
- * and joins in /DB/kayak.db — the same sibling layout used by backup/decimate.
+ * env var, then — last resort — to a path relative to where db.php is *deployed*.
+ * At runtime db.php lives at <docroot>/includes/db.php (`levels build` copies the
+ * PHP layer into OUTPUT_DIR), so dirname(__DIR__, 2) is the deploy root's parent
+ * and `/DB/kayak.db` is the sibling-of-deploy-root convention shared with
+ * backup/decimate — e.g. prod /home/pat/public_html/includes/db.php ->
+ * /home/pat/DB/kayak.db. (The PHP source ships in the package at
+ * src/kayak/web/php/includes after S4a-2 slice B2, but this last-resort path is
+ * only meaningful for the deployed copy; dev/prod always set database_path or
+ * SQLITE_PATH.)
  */
 
 require_once __DIR__ . '/config.php';
@@ -23,7 +27,7 @@ function _sqlite_path(): string {
     if ($cfg !== '') return $cfg;
     $env = getenv('SQLITE_PATH');
     if ($env !== false && $env !== '') return $env;
-    return dirname(__DIR__, 3) . '/DB/kayak.db';
+    return dirname(__DIR__, 2) . '/DB/kayak.db';
 }
 
 function get_db(): PDO {

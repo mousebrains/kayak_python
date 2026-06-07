@@ -891,7 +891,7 @@ tr.stale td {
   margin-right: 0.35em;
 }
 
-/* Gradient profile chart (php/includes/svg_plot.php :: generate_gradient_profile_svg).
+/* Gradient profile chart (src/kayak/web/php/includes/svg_plot.php :: generate_gradient_profile_svg).
    Responsive width to match the reach map above it; colors via CSS vars
    so dark mode picks them up (hardcoded greys read as illegible in dark). */
 .gradient-profile-container {

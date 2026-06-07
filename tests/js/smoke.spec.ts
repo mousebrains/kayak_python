@@ -37,7 +37,7 @@ test('/reach.php?st=OR loads with no JS errors', async ({ page }) => {
   const resp = await page.goto('/reach.php?st=OR');
   expect(resp?.status()).toBe(200);
   // 'reaches matching' substring is asserted by the empty-state copy
-  // at php/reach.php:193 — robust to data presence (init-db'd DB has
+  // at src/kayak/web/php/reach.php:193 — robust to data presence (init-db'd DB has
   // zero reaches, so the empty-state branch fires).
   await expect(page.locator('body')).toContainText('reaches matching');
   expect(errors).toEqual([]);

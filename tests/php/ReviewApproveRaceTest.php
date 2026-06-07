@@ -22,7 +22,7 @@ final class ReviewApproveRaceTest extends TestCase
         $dump = sys_get_temp_dir() . '/kayak-test-mail-' . getmypid();
         if (!is_dir($dump)) mkdir($dump, 0700, true);
         putenv("MAIL_DUMP_DIR=$dump");
-        require_once __DIR__ . '/../../php/includes/review_logic.php';
+        require_once __DIR__ . '/../../src/kayak/web/php/includes/review_logic.php';
     }
 
     private function pdo(): PDO
