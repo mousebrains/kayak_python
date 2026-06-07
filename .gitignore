@@ -52,6 +52,12 @@ backups
 # Runtime-generated state (status page render, future cache files)
 var/*
 !var/.gitkeep
+# Keep the OSMB staging dir (osmb_dir default) present so kayak-fetch-osmb's
+# ReadWritePaths=.../var/osmb passes systemd's setup-time existence check on a
+# fresh clone; ignore the generated osmb-*.geojson inside it.
+!var/osmb/
+var/osmb/*
+!var/osmb/.gitkeep
 
 # Ad-hoc audit dumps (often contain secrets from nginx -T or similar)
 *.log

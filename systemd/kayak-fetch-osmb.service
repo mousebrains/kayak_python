@@ -33,10 +33,11 @@ PrivateTmp=yes
 PrivateDevices=yes
 ProtectSystem=strict
 ProtectHome=read-only
-# OSMB_DIR default is /home/pat/kayak/var/osmb; grant write to the parent
-# var/ (which exists via var/.gitkeep, so systemd's setup-time existence
-# check passes) so fetch-osmb can create + write the osmb/ subdir.
-ReadWritePaths=/home/pat/kayak/var
+# OSMB_DIR default is /home/pat/kayak/var/osmb. The dir is kept present by the
+# tracked var/osmb/.gitkeep so systemd's setup-time existence check passes on a
+# fresh clone; scope write to just it (not the whole var/, which holds other
+# components' runtime state).
+ReadWritePaths=/home/pat/kayak/var/osmb
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes

@@ -67,7 +67,7 @@ def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -
     """Register the 'fetch-osmb' subcommand."""
     parser = subparsers.add_parser(
         "fetch-osmb",
-        help="Fetch Oregon SMB boating obstruction/dam/access GeoJSON to static/",
+        help="Fetch Oregon SMB boating obstruction/dam/access GeoJSON to the OSMB staging dir",
     )
     parser.add_argument(
         "--output-dir",

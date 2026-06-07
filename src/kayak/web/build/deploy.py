@@ -80,7 +80,8 @@ def _osmb_url(static_dir: Path, filename: str) -> str:
 
     Source-of-truth for mtime is the staged copy under ``static_dir``;
     ``shutil.copy2`` (called from ``_deploy_static_assets``) preserves
-    the upstream BASE_DIR/static mtime, and the per-file rename in
+    the upstream mtime from the OSMB staging dir (``OSMB_DIR``, where
+    ``levels fetch-osmb`` wrote the file), and the per-file rename in
     ``_deploy_staging_to_live`` skips identical content, so the live
     file's mtime stays put across no-op nightly fetches.
     """
