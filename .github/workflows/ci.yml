@@ -351,3 +351,24 @@ jobs:
       #      it, and 3.10.2 is the current PyPI release.
       # Revisit when the OSV record is amended or 3.10.x ships a patch.
       - run: pip-audit --strict --ignore-vuln PYSEC-2026-89 .
+
+  wheel-smoke:
+    name: Wheel smoke (packaged-resource install)
+    runs-on: ubuntu-24.04
+    # Builds the wheel, installs it into a fresh venv OUTSIDE the checkout, and
+    # runs init-db + build against it (dataset-separation S4a-2 slice C). Guards
+    # the packaging invariant the slices established: every runtime resource
+    # (data YAMLs, migrations, web static/php, install templates, LICENSE) ships
+    # in the wheel and resolves via importlib.resources — so a regression to a
+    # repo-root BASE_DIR read, or a data file that stops shipping, fails CI.
+    # No kayak_data / PHP / Node needed — it only exercises packaged resources.
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Build wheel, install outside the checkout, run the engine
+        run: scripts/wheel-smoke.sh
