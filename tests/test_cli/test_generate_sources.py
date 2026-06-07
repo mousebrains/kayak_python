@@ -243,6 +243,38 @@ def test_id_at_or_above_next_id(tmp_path: Path) -> None:
     assert any("stale counter" in p for p in gs.validate_registry(_valid_meta(), d))
 
 
+def test_non_list_section_rejected(vdir: Path) -> None:
+    # `sources: {}` is falsy → previously coerced to [] and truncated the CSV.
+    assert any(
+        "sources: must be a list" in p
+        for p in gs.validate_registry({"sources": {}, "fetch_urls": []}, vdir)
+    )
+    # A truthy malformed dict must not crash _source_structural with AttributeError.
+    assert any(
+        "sources: must be a list" in p
+        for p in gs.validate_registry({"sources": {"id": 1, "name": "X"}}, vdir)
+    )
+
+
+def test_non_mapping_item_rejected(vdir: Path) -> None:
+    problems = gs.validate_registry({"sources": ["bogus", {"id": 1, "name": "X"}]}, vdir)
+    assert any("sources[0]: must be a mapping" in p for p in problems)
+
+
+def test_non_list_section_does_not_truncate_csv(tmp_path: Path) -> None:
+    # The destructive path: `generate` on a malformed registry must refuse, leaving
+    # the committed source.csv intact (not rewritten to a header-only file).
+    d = tmp_path / "ds"
+    d.mkdir()
+    source_csv = "id,name,agency,timezone,fetch_url_id,calc_expression_id\n1,FOO,USGS,,,\n"
+    (d / "source.csv").write_text(source_csv, encoding="utf-8")
+    (d / "fetch_url.csv").write_text("id,url,parser,hours,is_active\n", encoding="utf-8")
+    _counters(d, source=9, fetch_url=9)
+    (d / "sources.yaml").write_text("fetch_urls: []\nsources: {}\n", encoding="utf-8")
+    assert gs._main(_ns(d)) == 1
+    assert (d / "source.csv").read_text(encoding="utf-8") == source_csv  # untouched
+
+
 def test_comma_hours_round_trips(tmp_path: Path) -> None:
     # A multi-hour fetch_url ("6,12,18") must survive CSV -> sources.yaml -> CSV;
     # reverse_engineer must not int()-cast it. (The documented --from-csv path.)

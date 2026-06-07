@@ -186,12 +186,41 @@ def _structural_problems(fetch_urls: list[dict], sources: list[dict]) -> list[st
     return problems
 
 
+def _section_items(meta: dict[str, Any], key: str) -> tuple[list[dict], list[str]]:
+    """Normalize a top-level registry section to a list of mappings.
+
+    A *missing* section (absent / null) is an empty list — a valid empty
+    projection. But the non-``--check`` command **overwrites** the CSVs, so a
+    malformed shape must fail loudly rather than silently: a non-list section
+    (e.g. the ``sources: {}`` typo, which would coerce to empty and truncate the
+    CSV) or a non-mapping item (``sources: [bogus]``, which would crash the
+    structural checks with an ``AttributeError``) is reported, not swallowed.
+    """
+    raw = meta.get(key)
+    if raw is None:
+        return [], []
+    if not isinstance(raw, list):
+        return [], [f"{key}: must be a list, got {type(raw).__name__}"]
+    problems = [
+        f"{key}[{i}]: must be a mapping, got {type(item).__name__}"
+        for i, item in enumerate(raw)
+        if not isinstance(item, dict)
+    ]
+    return raw, problems
+
+
 def validate_registry(meta: dict[str, Any], dataset_dir: Path) -> list[str]:
     """Field/reference checks for the registry (empty == valid)."""
-    fetch_urls = meta.get("fetch_urls") or []
-    sources = meta.get("sources") or []
+    fetch_urls, fu_shape = _section_items(meta, "fetch_urls")
+    sources, src_shape = _section_items(meta, "sources")
 
-    # Structural gaps first: the rest (and _registry_to_rows) assume these hold.
+    # Container shape first: a non-list section or non-mapping item would crash the
+    # structural checks (or silently truncate the CSVs), so fail loudly here.
+    shape_problems = fu_shape + src_shape
+    if shape_problems:
+        return shape_problems
+
+    # Structural gaps next: the rest (and _registry_to_rows) assume these hold.
     problems = _structural_problems(fetch_urls, sources)
     if problems:
         return problems
@@ -203,15 +232,32 @@ def validate_registry(meta: dict[str, Any], dataset_dir: Path) -> list[str]:
     if len(src_ids) != len(set(src_ids)):
         problems.append("duplicate source id(s)")
 
-    # Parser names must be registered engine parsers.
+    problems.extend(_parser_problems(fetch_urls))
+    problems.extend(_reference_problems(sources, fetch_urls, dataset_dir))
+    problems.extend(_check_id_counters(dataset_dir, "source", src_ids))
+    problems.extend(_check_id_counters(dataset_dir, "fetch_url", fu_ids))
+    return problems
+
+
+def _parser_problems(fetch_urls: list[dict]) -> list[str]:
+    """Every fetch_url parser must name a registered engine parser."""
     from kayak.parsers.registry import ensure_all_loaded, get_parser_names
 
     ensure_all_loaded()
-    known_parsers = set(get_parser_names())
-    for fu in fetch_urls:
-        if fu.get("parser") not in known_parsers:
-            problems.append(f"fetch_url {fu.get('id')}: unknown parser {fu.get('parser')!r}")
+    known = set(get_parser_names())
+    return [
+        f"fetch_url {fu.get('id')}: unknown parser {fu.get('parser')!r}"
+        for fu in fetch_urls
+        if fu.get("parser") not in known
+    ]
 
+
+def _reference_problems(
+    sources: list[dict], fetch_urls: list[dict], dataset_dir: Path
+) -> list[str]:
+    """A source carries at most one of {fetch_url_id, calc_expression_id}, and each
+    reference must resolve (the fetch_url is defined; the calc id is in the CSV)."""
+    problems: list[str] = []
     fu_id_set = {fu.get("id") for fu in fetch_urls}
     calc_ids = _calc_expression_ids(dataset_dir)
     for s in sources:
@@ -229,9 +275,6 @@ def validate_registry(meta: dict[str, Any], dataset_dir: Path) -> list[str]:
                 f"source {s.get('id')}: calc_expression_id {s['calc_expression_id']} "
                 "not in calc_expression.csv"
             )
-
-    problems.extend(_check_id_counters(dataset_dir, "source", src_ids))
-    problems.extend(_check_id_counters(dataset_dir, "fetch_url", fu_ids))
     return problems
 
 
