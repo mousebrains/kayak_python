@@ -1,5 +1,5 @@
 .PHONY: lint format typecheck test test-all coverage check pipeline build clean \
-       lint-php lint-js lint-css lint-shell lint-all test-php init-db install help
+       lint-php lint-js lint-css lint-shell lint-all test-php wheel-smoke init-db install help
 
 VENV ?= .venv
 PYTHON = $(VENV)/bin/python
@@ -26,6 +26,9 @@ test-all:  ## Run every test including slow ones (matches CI)
 test-php:  ## Run PHP unit tests (PHPUnit via composer)
 	composer test
 
+wheel-smoke:  ## Build the wheel + run it from a fresh venv outside the checkout (S4a-2 slice C)
+	bash scripts/wheel-smoke.sh
+
 coverage:  ## Run tests with coverage report
 	$(VENV)/bin/pytest -m '' --cov=kayak --cov-report=term-missing -q
 
@@ -33,7 +36,7 @@ lint-php:  ## Syntax-check PHP files
 	@for f in src/kayak/web/php/*.php src/kayak/web/php/includes/*.php src/kayak/web/php/_internal/*.php; do php -l "$$f" || exit 1; done
 
 lint-js:  ## Lint JavaScript files
-	biome check static/ src/kayak/web/static/
+	biome check  # paths from biome.json (src/kayak/web/static, leaflet excluded)
 
 lint-css:  ## Lint CSS files
 	biome check src/kayak/web/static/style.css

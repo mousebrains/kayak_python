@@ -135,8 +135,12 @@ remaining `BASE_DIR` call sites are the build/cache inputs above
 reads, not import-time blockers. The PHP layer needs no special handling beyond
 the relocation, since `levels build` only copies it into the output docroot. A
 true frozen (non-editable) `pip install .` is now viable for everything except
-those build-time inputs; flipping prod from the editable `.pth` install to a
-frozen artifact remains a separate, optional follow-up.
+those build-time inputs, and the `wheel-smoke` CI job (`scripts/wheel-smoke.sh`,
+S4a-2 slice C) continuously verifies it — it builds the wheel, installs it into a
+fresh venv outside the checkout, and runs `init-db` + `build` against the
+packaged resources, so a regression to a repo-root `BASE_DIR` read fails CI.
+Flipping prod from the editable `.pth` install to a frozen artifact remains a
+separate, optional follow-up.
 
 ---
 
