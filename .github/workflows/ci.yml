@@ -79,7 +79,7 @@ jobs:
 
       - name: PHP syntax check
         run: |
-          for f in src/kayak/web/php/*.php src/kayak/web/php/includes/*.php; do
+          for f in src/kayak/web/php/*.php src/kayak/web/php/includes/*.php src/kayak/web/php/_internal/*.php; do
             php -l "$f" || exit 1
           done
 

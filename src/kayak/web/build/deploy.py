@@ -290,16 +290,16 @@ def _deploy_php_files(output_dir: Path) -> None:
 
 
 def _deploy_config_files(output_dir: Path) -> None:
-    """Copy the install templates (``.htaccess``, ``404.html``, ``robots.txt``)
-    into the output root.
+    """Copy the install templates (``404.html``, ``robots.txt``) into the output root.
 
     These ship inside the package at ``src/kayak/web/install-templates`` (S4a-2
     slice B2), resolved via ``resource_dir`` so a wheel install finds them. Only
     present files are copied — the rest of the output dir is the deploy target,
-    populated by the generated content path.
+    populated by the generated content path. (No ``.htaccess`` — the site is
+    nginx-served; a club switching to Apache would add one to the templates dir.)
     """
     templates_dir = resource_dir("web", "install-templates")
-    for name in (".htaccess", "404.html", "robots.txt"):
+    for name in ("404.html", "robots.txt"):
         src = templates_dir / name
         if src.is_file():
             shutil.copy2(src, output_dir / name)

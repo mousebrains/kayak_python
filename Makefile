@@ -30,7 +30,7 @@ coverage:  ## Run tests with coverage report
 	$(VENV)/bin/pytest -m '' --cov=kayak --cov-report=term-missing -q
 
 lint-php:  ## Syntax-check PHP files
-	@for f in src/kayak/web/php/*.php src/kayak/web/php/includes/*.php; do php -l "$$f" || exit 1; done
+	@for f in src/kayak/web/php/*.php src/kayak/web/php/includes/*.php src/kayak/web/php/_internal/*.php; do php -l "$$f" || exit 1; done
 
 lint-js:  ## Lint JavaScript files
 	biome check static/ src/kayak/web/static/

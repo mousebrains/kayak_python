@@ -36,6 +36,17 @@ __pycache__/
 public_html/*.html
 public_html/*.csv
 public_html/*.text
+# Output-root files a default-OUTPUT_DIR=public_html build copies/writes from the
+# package (S4a-2): install templates (robots.txt; 404.html already matches *.html),
+# the served LICENSE copies, the un-hashed style.css for php/header.php, the
+# service worker, and the sitemap. None are tracked — ignore so a dev build
+# doesn't dirty the worktree. (.htaccess is intentionally absent — nginx site.)
+public_html/robots.txt
+public_html/LICENSE.txt
+public_html/LICENSE-DATA.txt
+public_html/style.css
+public_html/sw.js
+public_html/sitemap.xml
 # Repo-root static/ is now purely a build-output staging dir: every committed
 # source asset moved into the package at src/kayak/web/static/ (S4a-2 slice B1).
 # A default-OUTPUT_DIR=public_html dev build copies the packaged assets and
