@@ -48,7 +48,7 @@ All notable changes to this project will be documented in this file.
   Web Light's `google-proxy-*` fleet), not authored code — now bucketed
   "Injected (proxy/extension)". Also fixes the `violated`/`blocked` columns
   rendering `—` (they read pre-normalization log keys). `csp_classify()`
-  extracted to `php/includes/csp_classify.php` with unit tests.
+  extracted to `src/kayak/web/php/includes/csp_classify.php` with unit tests.
 - **rDNS resolver bounded** so `kayak-status.service` no longer times out on
   slow reverse lookups (wall-clock budget + negative-cache backoff).
 - **Deploy path**: the documented quick-start now loads the metadata snapshot
@@ -104,7 +104,7 @@ All notable changes to this project will be documented in this file.
   instead of calling `sys.exit`; `M_TO_FT` given a canonical home;
   `.gitattributes` collapses the opaque `reaches.json` / `huc_name.csv`
   snapshot diffs (reach.csv stays a readable text diff).
-- **PHP type-safety hardened**: `php/` now runs PHPStan at **level 9** with the
+- **PHP type-safety hardened**: `src/kayak/web/php/` now runs PHPStan at **level 9** with the
   **full** `phpstan/phpstan-strict-rules` (no toggles). The old level-8
   grandfather baseline was cleared by fixing every find at the source; all
   strict-rules finds — including the `booleansInConditions` and short-ternary
@@ -318,7 +318,7 @@ All notable changes to this project will be documented in this file.
 
 ### Removed
 - **`mbstring` from CI** (P0.1): prod PHP-FPM lacks it; CI now matches.
-  Verified zero `mb_*` references in `src/`, `php/`, `scripts/`,
+  Verified zero `mb_*` references in `src/`, `src/kayak/web/php/`, `scripts/`,
   `tests/`.
 - **Legacy MySQL sync pipeline:**
   `scripts/{import_from_dump,sync_legacy_observations,load_observations_sqlite,link_sources,dump_and_import}.*`

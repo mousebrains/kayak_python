@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/IntegrationTestCase.php';
-require_once __DIR__ . '/../../php/includes/pubhash.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/pubhash.php';
 
 /**
  * Baseline integration tests for description.php (Phase 3.1 of

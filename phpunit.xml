@@ -15,11 +15,11 @@
     </testsuites>
     <source>
         <include>
-            <directory suffix=".php">php</directory>
+            <directory suffix=".php">src/kayak/web/php</directory>
         </include>
         <exclude>
             <!-- db.php does side-effectful PDO init at load time. -->
-            <file>php/includes/db.php</file>
+            <file>src/kayak/web/php/includes/db.php</file>
         </exclude>
     </source>
     <!-- pcov is a line-only driver (no path coverage). T2.7 sets pcov as

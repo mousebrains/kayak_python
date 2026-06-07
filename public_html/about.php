@@ -1,1 +1,1 @@
-../php/about.php
+../src/kayak/web/php/about.php

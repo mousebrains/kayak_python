@@ -21,7 +21,7 @@ final class EditAuthTest extends TestCase
 {
     public static function setUpBeforeClass(): void
     {
-        require_once __DIR__ . '/../../php/includes/auth.php';
+        require_once __DIR__ . '/../../src/kayak/web/php/includes/auth.php';
     }
 
     public function testHashTokenIsSha256(): void

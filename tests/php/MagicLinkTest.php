@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/FunctionalTestCase.php';
 require_once __DIR__ . '/Fixtures.php';
-require_once __DIR__ . '/../../php/includes/auth.php';
-require_once __DIR__ . '/../../php/includes/auth_magic_link.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/auth.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/auth_magic_link.php';
 
 /**
  * Tier-1 security coverage for the magic-link login flow (auth_magic_link.php):

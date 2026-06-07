@@ -1,6 +1,6 @@
-# PHP conventions (`php/includes/`)
+# PHP conventions (`src/kayak/web/php/includes/`)
 
-Conventions for code under `php/` and `php/includes/`. Extracted from
+Conventions for code under `src/kayak/web/php/` and `src/kayak/web/php/includes/`. Extracted from
 `CLAUDE.md` so first-time human contributors find these without
 needing Claude context.
 
@@ -10,9 +10,9 @@ see `CLAUDE.md` § "PHP Tooling".
 
 ## File shape
 
-- **One concern per file.** Entry-point shims in `php/*.php` stay
+- **One concern per file.** Entry-point shims in `src/kayak/web/php/*.php` stay
   <60 lines (arg-parse + auth-gate + dispatch); the work lives in
-  `php/includes/<entry>_handler.php`.
+  `src/kayak/web/php/includes/<entry>_handler.php`.
 - **No load-time side effects in `includes/*.php`.** `require_once`,
   `const`, and `function` definitions only — load-time PDO calls or
   `echo` break `phpunit.xml`'s coverage isolation.

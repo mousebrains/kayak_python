@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/FunctionalTestCase.php';
 require_once __DIR__ . '/Fixtures.php';
-require_once __DIR__ . '/../../php/includes/db.php';
-require_once __DIR__ . '/../../php/includes/header.php';
-require_once __DIR__ . '/../../php/includes/footer.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/db.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/header.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/footer.php';
 // validate.php (date_ts/validate_date) is pulled in by the description.php
 // shim in production; the handler file itself doesn't require it, and the
 // date-window plot path calls date_ts(), so the test loads it here.
-require_once __DIR__ . '/../../php/includes/validate.php';
-require_once __DIR__ . '/../../php/includes/description_detail.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/validate.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/description_detail.php';
 
 /**
  * In-process functional coverage for description_detail.php — drives

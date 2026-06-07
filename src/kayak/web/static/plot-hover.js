@@ -2,7 +2,7 @@
  *
  * HTML contract:
  *   Target selector: `.plot-container svg[data-series]`
- *   data-series JSON (emitted by php/includes/svg_plot.php):
+ *   data-series JSON (emitted by src/kayak/web/php/includes/svg_plot.php):
  *     {
  *       kind:     "single" | "dual",
  *       points:   [[unix_ts, value], ...],        // already LTTB-downsampled

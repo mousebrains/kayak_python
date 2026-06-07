@@ -50,7 +50,7 @@ Per-decision implementation log:
 | D-T4.1 (manual account deletion) | ✅ `levels delete-editor` CLI shipped Tier 6 | `src/kayak/cli/delete_editor.py` + main.py wiring + tests |
 | D-T4.2 (on-request export) | ✅ `levels export-editor` CLI shipped Tier 6 | `src/kayak/cli/export_editor.py` + main.py wiring + tests |
 | D-T4.3 (90-day retention purge) | ✅ `levels editor-retention` CLI + systemd timer shipped Tier 6 | `src/kayak/cli/editor_retention.py` + systemd units + sudoers + tests |
-| D-T4.4 (refresh privacy.php) | ✅ "Your Rights" section rewritten; F-16 closed | `php/privacy.php` |
+| D-T4.4 (refresh privacy.php) | ✅ "Your Rights" section rewritten; F-16 closed | `src/kayak/web/php/privacy.php` |
 | D-T4.5 (security.txt minimum + annual refresh) | n/a — file unchanged; calendar item for 2027-04-01 | n/a (calendar) |
 | D-T5.1 (security.txt only disclosure path) | n/a — same content as D-T4.5 | n/a |
 | D-T5.2 (best-effort IR cadence) | n/a — documented in runbook | `docs/security/incident-response.md` |

@@ -30,7 +30,7 @@ final class ConfigTest extends TestCase
 {
     public static function setUpBeforeClass(): void
     {
-        require_once __DIR__ . '/../../php/includes/config.php';
+        require_once __DIR__ . '/../../src/kayak/web/php/includes/config.php';
     }
 
     protected function tearDown(): void
@@ -197,7 +197,7 @@ final class ConfigTest extends TestCase
         // [CONFIG-FATAL] and exit(1). We can't assert this in-process
         // because the SUT calls exit() which would kill PHPUnit.
         $script_dir = sys_get_temp_dir();
-        $config_php = realpath(__DIR__ . '/../../php/includes/config.php');
+        $config_php = realpath(__DIR__ . '/../../src/kayak/web/php/includes/config.php');
         $this->assertNotFalse($config_php);
         $script = $script_dir . '/kayak-fatal-' . uniqid() . '.php';
         file_put_contents(

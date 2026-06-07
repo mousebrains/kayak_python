@@ -28,9 +28,9 @@ Aux references:
 
 ### Current state
 
-- **No web-side deletion endpoint exists.** `php/account.php` allows display-name edit and self-ban (`status='banned'`) but no row delete.
+- **No web-side deletion endpoint exists.** `src/kayak/web/php/account.php` allows display-name edit and self-ban (`status='banned'`) but no row delete.
 - **No CLI deletion command exists.** `levels seed-maintainer` creates/promotes; nothing reverses.
-- **Privacy policy commits** to "You can request deletion at any time by contacting the club" (`php/privacy.php:39-40`).
+- **Privacy policy commits** to "You can request deletion at any time by contacting the club" (`src/kayak/web/php/privacy.php:39-40`).
 - **Cascade behavior** (verified above): `DELETE FROM editor WHERE id=?` cleans `editor_session` + `editor_magic_link` + `maintainer_credential` + `change_request` (and through change_request, `change_request_attachment` and SET-NULL on `edit_history.change_request_id`). `edit_history.changed_by` strings survive intentionally.
 - **Effective demand:** zero so far (no requests received per operator). Realistic volume for a hobby/club site: < 1/year.
 
@@ -163,7 +163,7 @@ Wire as `levels editor-retention`; add a systemd timer `kayak-editor-retention.t
 
 ### Current state
 
-`php/privacy.php` exists (4.7 KB, last-updated 2026-05-01). Sections present:
+`src/kayak/web/php/privacy.php` exists (4.7 KB, last-updated 2026-05-01). Sections present:
 - Data We Collect (server logs, cookies, contributor email, proposed edits, no analytics)
 - Login Email and Bot Protection (Google mail relay, Cloudflare Turnstile)
 - How We Use Server Logs
@@ -175,7 +175,7 @@ Wire as `levels editor-retention`; add a systemd timer `kayak-editor-retention.t
 
 ### Accuracy audit
 
-Side-by-side reading of `php/privacy.php` against actual data collection:
+Side-by-side reading of `src/kayak/web/php/privacy.php` against actual data collection:
 
 | Privacy.php claim | Actual state | Verdict |
 |---|---|---|
@@ -212,7 +212,7 @@ Rationale:
 
 ### Implementation (Tier 6)
 
-Edit `php/privacy.php`:
+Edit `src/kayak/web/php/privacy.php`:
 - "Your Rights" section: replace with accurate paragraph (deletion via operator-handled path per D-T4.1, export via CLI per D-T4.2 on request, audit trail retention per D-T4.3, cookie expiry).
 - Bump "Last updated: May 12, 2026" (or commit date).
 - Add an HTML comment near the top: `<!-- Annual review trigger: next review 2027-05-12 -->`.

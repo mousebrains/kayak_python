@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
 
-require_once __DIR__ . '/../../php/includes/gauge_map.php';
+require_once __DIR__ . '/../../src/kayak/web/php/includes/gauge_map.php';
 
 /**
  * Unit tests for php/includes/gauge_map.php.

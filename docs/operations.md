@@ -13,7 +13,7 @@ breaks, the steps shouldn't depend on a network round-trip to GitHub.
 
 | What | Where |
 |---|---|
-| App | Python (`src/kayak/`) + PHP (`php/`); two-layer architecture, see `CLAUDE.md`. |
+| App | Python (`src/kayak/`) + PHP (`src/kayak/web/php/`); two-layer architecture, see `CLAUDE.md`. |
 | Database | SQLite at `/home/pat/DB/kayak.db` (WAL mode). |
 | Web | nginx + PHP-FPM 8.4. Three vhosts: `levels.mousebrains.com`, `levels-test.wkcc.org`, `levels.wkcc.org`. |
 | Cert | Let's Encrypt 3-SAN at `/etc/letsencrypt/live/levels.mousebrains.com/` covering `levels.mousebrains.com`, `levels-test.wkcc.org`, `levels.wkcc.org`. Renewed via certbot's nginx (HTTP-01) authenticator. |
@@ -94,8 +94,8 @@ mechanics, more readable in the audit log.
 | Signal | Path / unit | Configured cadence |
 |---|---|---|
 | Public status page | <https://status.mousebrains.com> | Better Stack hosted; surfaces the uptime + content-keyword monitors |
-| Health snapshot JSON | `https://levels.wkcc.org/status.json` (rewrites to `php/status.php`; also served from the two other vhosts) | On-demand; `Cache-Control: no-cache, max-age=10`. Per-agency freshness rollup + per-status gauge counts |
-| Internal dashboard | `https://levels.wkcc.org/_internal/` (`php/_internal/index.php`) | On-demand; maintainer-only via `editor_session`. Per-source freshness, recent CSP violations, aggregate counts, build mtime, DB size. `levels.mousebrains.com` returns 404 (login flow targets `levels.wkcc.org` per `SITE_URL`, so the dashboard host has to match); `levels-test.wkcc.org` 301s wholesale to `levels.wkcc.org` (`conf/sites/levels-test-wkcc-org`, since 2026-05-19) |
+| Health snapshot JSON | `https://levels.wkcc.org/status.json` (rewrites to `src/kayak/web/php/status.php`; also served from the two other vhosts) | On-demand; `Cache-Control: no-cache, max-age=10`. Per-agency freshness rollup + per-status gauge counts |
+| Internal dashboard | `https://levels.wkcc.org/_internal/` (`src/kayak/web/php/_internal/index.php`) | On-demand; maintainer-only via `editor_session`. Per-source freshness, recent CSP violations, aggregate counts, build mtime, DB size. `levels.mousebrains.com` returns 404 (login flow targets `levels.wkcc.org` per `SITE_URL`, so the dashboard host has to match); `levels-test.wkcc.org` 301s wholesale to `levels.wkcc.org` (`conf/sites/levels-test-wkcc-org`, since 2026-05-19) |
 | Public homepage | Better Stack monitor on `https://levels.wkcc.org/` | HEAD/GET 3-min interval |
 | Pipeline heartbeat | `kayak-pipeline.service` → `${HC_PIPELINE}` | Every hour at :12 |
 | Hourly backup heartbeat | `kayak-backup-hourly.service` → `${HC_BACKUP_HOURLY}` | Every hour at :38 |
@@ -420,7 +420,7 @@ When `kayak-pipeline.service` exits nonzero:
 ## Config
 
 The runtime configuration shared between Python (`kayak.config`) and PHP
-(`Config::*` in `php/includes/config.php`) is a single JSON snapshot:
+(`Config::*` in `src/kayak/web/php/includes/config.php`) is a single JSON snapshot:
 
 - **Location:** `/etc/kayak/runtime-config.json`, mode `0640 root:www-data`.
   Atomically written by `levels emit-config` (same-dir `.tmp` + `rename(2)`).
@@ -440,7 +440,7 @@ The runtime configuration shared between Python (`kayak.config`) and PHP
 levels show-config
 
 # PHP view — reads /etc/kayak/runtime-config.json. Refuses HTTP serving.
-sudo php /home/pat/kayak/php/show-config.php
+sudo php /home/pat/kayak/src/kayak/web/php/show-config.php
 ```
 
 ### Refreshing
@@ -500,7 +500,7 @@ Exit codes: `0` clean, `1` invalid field, `2` runner failure.
 
 ### When config is fatal at request time
 
-Phase 4 of T3.3 made `php/includes/config.php` HTTP-500 on a missing
+Phase 4 of T3.3 made `src/kayak/web/php/includes/config.php` HTTP-500 on a missing
 or unparseable JSON; the error gets logged as `[CONFIG-FATAL]` to
 `php-fpm`'s journal. If `/login.php` (or anything else PHP) returns 500:
 

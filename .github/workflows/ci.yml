@@ -57,8 +57,8 @@ jobs:
           php-version: "8.4"
           # Prod PHP-FPM lacks mbstring (CLAUDE.md §PHP Tooling). CI installs only
           # what prod has, so a future mb_* call fails locally + in CI before it
-          # 500s in prod. Verified zero mb_* call sites in src/, php/, scripts/,
-          # tests/ as of 2026-05-14.
+          # 500s in prod. Verified zero mb_* call sites in src/ (incl. the
+          # packaged web/php layer), scripts/, tests/ as of 2026-05-14.
           extensions: pdo_sqlite, curl, pcov
           # pcov is the lightweight line-coverage driver (vs xdebug).
           # PHPUnit emits the Clover report consumed by
@@ -79,7 +79,7 @@ jobs:
 
       - name: PHP syntax check
         run: |
-          for f in php/*.php php/includes/*.php; do
+          for f in src/kayak/web/php/*.php src/kayak/web/php/includes/*.php src/kayak/web/php/_internal/*.php; do
             php -l "$f" || exit 1
           done
 

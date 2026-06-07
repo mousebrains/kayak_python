@@ -117,7 +117,7 @@ Ruff config: Python 3.13 target, 100-char line length, rules `E W F I UP B SIM R
 ### Running the PHP Web Layer
 
 ```bash
-# PHP pages 500 without a runtime config (php/includes/config.php is
+# PHP pages 500 without a runtime config (src/kayak/web/php/includes/config.php is
 # fatal-on-missing): emit one first and point KAYAK_CONFIG_PATH at it.
 levels emit-config --out ~/.config/kayak/runtime-config.json
 KAYAK_CONFIG_PATH=~/.config/kayak/runtime-config.json \
@@ -154,9 +154,9 @@ For editor-gated endpoints,
 `$cookies` arg as `ed_sess` + `ed_csrf`, plus `csrf_token` in the POST
 body for double-submit CSRF.
 
-### PHP Conventions (`php/includes/`)
+### PHP Conventions (`src/kayak/web/php/includes/`)
 
-Moved to [`php/CONVENTIONS.md`](php/CONVENTIONS.md). The runtime
+Moved to [`src/kayak/web/php/CONVENTIONS.md`](src/kayak/web/php/CONVENTIONS.md). The runtime
 constraints (mbstring, CSP) and integration-test scaffold remain in
 § "PHP Tooling" above.
 
@@ -191,7 +191,7 @@ Multi-source gauges aggregate across all linked sources directly: `update-gauge-
 
 **Python (static generation):** `levels build` writes self-contained HTML pages to `public_html/` with inlined CSS (from `src/kayak/web/static/style.css`) and SVG sparklines. These are the main river levels tables.
 
-**PHP (dynamic pages):** PHP files in `php/` handle interactive features — description pages with plots, data APIs, editing, the reach picker, and source/gauge browsers. Both layers share the same database (`database_path` from the runtime-config JSON for PHP, with `SQLITE_PATH` as env fallback; `DATABASE_URL` for Python).
+**PHP (dynamic pages):** PHP files in `src/kayak/web/php/` handle interactive features — description pages with plots, data APIs, editing, the reach picker, and source/gauge browsers. Both layers share the same database (`database_path` from the runtime-config JSON for PHP, with `SQLITE_PATH` as env fallback; `DATABASE_URL` for Python).
 
 ### Database
 
@@ -235,5 +235,5 @@ Each subcommand module in `src/kayak/cli/` exposes `addArgs(subparsers)` and set
 - **Upsert pattern:** `store_observation()` uses SQLite `ON CONFLICT DO UPDATE`
 - **Test isolation:** Every test gets a fresh in-memory SQLite engine and a transactional session that rolls back
 - **Test fixtures:** `tests/conftest.py` provides `engine`, `session`, `sample_source`, `sample_gauge`, `sample_reach`, `linked_source_gauge`
-- **PHP DB connection:** `php/includes/db.php` resolves the DB path via `Config::str('database_path')` (runtime-config JSON), then the `SQLITE_PATH` env var; SQLite PDO only
+- **PHP DB connection:** `src/kayak/web/php/includes/db.php` resolves the DB path via `Config::str('database_path')` (runtime-config JSON), then the `SQLITE_PATH` env var; SQLite PDO only
 

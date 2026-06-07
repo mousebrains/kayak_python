@@ -17,7 +17,7 @@ includes:
 parameters:
     level: 9
     paths:
-        - php
+        - src/kayak/web/php
     excludePaths:
         # tests/ and vendor/ aren't always present in fresh checkouts
         # (e.g. before composer install runs). Mark them optional so

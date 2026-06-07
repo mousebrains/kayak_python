@@ -12,11 +12,11 @@ declare(strict_types=1);
  * runtime-config.json`).
  *
  * Run from the repo root:
- *     php /home/pat/kayak/php/show-config.php
+ *     php /home/pat/kayak/src/kayak/web/php/show-config.php
  *
  * Override the source path for tests / dry runs:
  *     KAYAK_CONFIG_PATH=/tmp/runtime-config.json \
- *         php /home/pat/kayak/php/show-config.php
+ *         php /home/pat/kayak/src/kayak/web/php/show-config.php
  *
  * Refuses to serve via HTTP — the script has no auth and the JSON
  * carries plaintext secrets (mode 0640 root:www-data).

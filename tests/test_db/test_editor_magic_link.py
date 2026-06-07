@@ -10,7 +10,7 @@ from kayak.db.models import EditorMagicLink
 
 
 def _consume(session, token_hash: str) -> EditorMagicLink | None:
-    """Python mirror of php/includes/auth.php::consume_magic_link() intent.
+    """Python mirror of src/kayak/web/php/includes/auth.php::consume_magic_link() intent.
 
     Find an unused, unexpired link, mark used_at, return the row.
     The atomicity is what matters — a second call against the same token

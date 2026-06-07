@@ -12,8 +12,8 @@ declare(strict_types=1);
  * `rate_flow_to_gauge` consume. Independently testable; covered by 6
  * of SvgPlotTest's 11 cases.
  *
- * External consumers: php/includes/gauge_plots.php (all three functions).
- * Transitive consumer: php/includes/svg_plot.php
+ * External consumers: src/kayak/web/php/includes/gauge_plots.php (all three functions).
+ * Transitive consumer: src/kayak/web/php/includes/svg_plot.php
  * (`generate_rating_dual_plot` calls rate_*_to_* internally), so
  * svg_plot.php `require_once`s this file.
  *

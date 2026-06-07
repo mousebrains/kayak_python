@@ -18,7 +18,7 @@ declare(strict_types=1);
  */
 
 $finder = (new PhpCsFixer\Finder())
-    ->in(__DIR__ . '/php')
+    ->in(__DIR__ . '/src/kayak/web/php')
     ->name('*.php');
 
 return (new PhpCsFixer\Config())

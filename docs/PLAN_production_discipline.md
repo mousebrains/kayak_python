@@ -163,7 +163,7 @@ Each tier is several phases; **review gate between tiers**, not between phases.
 
 **Goal:** At a glance, "is the site healthy?" — both for users and for you.
 
-1. **Phase 2.1 — `/status.json` endpoint.** Add `php/status.php` (lightest path; PHP already serves dynamic pages). Reads `latest_observation` and `latest_gauge_observation` tables. Output:
+1. **Phase 2.1 — `/status.json` endpoint.** Add `src/kayak/web/php/status.php` (lightest path; PHP already serves dynamic pages). Reads `latest_observation` and `latest_gauge_observation` tables. Output:
    ```json
    {
      "build_at": "2026-05-11T17:23:00Z",

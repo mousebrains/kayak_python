@@ -30,8 +30,8 @@ function css_head_block(): string {
     if ($block !== null) return $block;
     // Use the request-time doc root rather than __DIR__/.. — when this file
     // is loaded through the symlink at public_html/includes/header.php (dev
-    // workflow), __DIR__ resolves to php/includes (the symlink target) and
-    // __DIR__/.. lands in php/, which lacks the hashed CSS sidecar. Same
+    // workflow), __DIR__ resolves to src/kayak/web/php/includes (the symlink target) and
+    // __DIR__/.. lands in src/kayak/web/php/, which lacks the hashed CSS sidecar. Same
     // pattern as leaflet.css in gauge_map.php:79-88.
     $doc_root = $_SERVER['DOCUMENT_ROOT'] ?? (__DIR__ . '/..');
     $hash_path = $doc_root . '/static/style.css.hash';

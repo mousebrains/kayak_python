@@ -84,7 +84,7 @@ COMMIT;
 SELECT changes();  -- print rows affected
 SQL
 ```
-Effect: every editor's `ed_sess` cookie becomes immediately invalid (per `php/includes/auth.php` `current_editor()` which filters `s.revoked_at IS NULL`). Editors must re-login via magic-link.
+Effect: every editor's `ed_sess` cookie becomes immediately invalid (per `src/kayak/web/php/includes/auth.php` `current_editor()` which filters `s.revoked_at IS NULL`). Editors must re-login via magic-link.
 
 ### C2 — Lock a specific editor
 

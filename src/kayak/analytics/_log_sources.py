@@ -320,7 +320,7 @@ def iter_csp_events(
     since: dt.datetime,
     log_glob: str = "/home/pat/logs/csp.log*",
 ) -> Iterator[CspEvent]:
-    """CSP violation reports written by ``php/csp-report.php``.
+    """CSP violation reports written by ``src/kayak/web/php/csp-report.php``.
 
     Default path matches the live host's www-data-writable ACL'd
     location. Missing log files yield zero events (csp-report.php

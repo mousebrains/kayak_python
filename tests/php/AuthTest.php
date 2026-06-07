@@ -15,7 +15,7 @@ final class AuthTest extends TestCase
         // db.php defines get_db() but doesn't call it at load; these tests
         // pass their own PDO directly to magic_link_under_throttle, so
         // get_db is never invoked.
-        require_once __DIR__ . '/../../php/includes/auth.php';
+        require_once __DIR__ . '/../../src/kayak/web/php/includes/auth.php';
     }
 
     private function seedEditor(PDO $db, string $email): int

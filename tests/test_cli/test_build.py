@@ -1,6 +1,7 @@
 """Tests for the kayak.web.build output generators."""
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from unittest import mock
 
 from kayak.db.models import (
@@ -792,3 +793,51 @@ class TestDeployStaticAssets:
             deploy._deploy_static_assets(output)
         assert (output / "static" / "map.js").is_file()
         assert not list((output / "static").glob("osmb-*.geojson"))
+
+
+class TestDeployPhpConfigLicense:
+    """S4a-2 slice B2: the PHP layer, install templates, and LICENSE files ship
+    inside the package (``src/kayak/web/{php,install-templates,legal}``) and the
+    deploy helpers resolve them via the package, not a repo-root ``BASE_DIR``
+    path — so a wheel install can render the site."""
+
+    def test_deploy_php_files(self, tmp_path):
+        from kayak.web.build import deploy
+
+        out = tmp_path / "out"
+        out.mkdir()
+        deploy._deploy_php_files(out)
+        assert (out / "latest.php").is_file()  # a top-level page
+        assert (out / "includes" / "db.php").is_file()  # includes/
+        assert (out / "_internal" / "index.php").is_file()  # maintainer dashboard
+        assert (out / "style.css").is_file()  # css at output root for php header
+
+    def test_deploy_config_files(self, tmp_path):
+        from kayak.web.build import deploy
+
+        out = tmp_path / "out"
+        out.mkdir()
+        deploy._deploy_config_files(out)
+        assert (out / "404.html").is_file()
+        assert (out / "robots.txt").is_file()
+
+    def test_deploy_license_files(self, tmp_path):
+        from kayak.web.build import deploy
+
+        out = tmp_path / "out"
+        out.mkdir()
+        deploy._deploy_license_files(out)
+        assert (out / "LICENSE.txt").is_file()
+        assert (out / "LICENSE-DATA.txt").is_file()
+
+    def test_packaged_license_matches_repo_root(self):
+        """The repo-root LICENSE/LICENSE-DATA (GitHub + pyproject convention)
+        and the packaged copies the deploy serves must not drift."""
+        from kayak.resources import resource_dir
+
+        repo_root = Path(__file__).resolve().parents[2]
+        legal = resource_dir("web", "legal")
+        assert (repo_root / "LICENSE").read_bytes() == (legal / "LICENSE.txt").read_bytes()
+        assert (repo_root / "LICENSE-DATA").read_bytes() == (
+            legal / "LICENSE-DATA.txt"
+        ).read_bytes()

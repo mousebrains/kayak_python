@@ -6,7 +6,7 @@ declare(strict_types=1);
  * Magic-link issuance + consumption — the email-based login flow.
  *
  * Split out of auth.php as part of Tier 5.A. Three consumers
- * (login.php, /php/auth.php, includes/auth.php transitive) so the
+ * (login.php, /src/kayak/web/php/auth.php, includes/auth.php transitive) so the
  * cluster boundary is clean: nothing outside the login flow needs
  * to see these helpers.
  *
@@ -26,7 +26,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/db.php';
 // Back-require for the rare caller that includes auth_magic_link.php
-// directly (none today — login.php and /php/auth.php go through
+// directly (none today — login.php and /src/kayak/web/php/auth.php go through
 // includes/auth.php). PHP's require_once is idempotent, so the
 // apparent cycle with auth.php → auth_magic_link.php is safe.
 require_once __DIR__ . '/auth.php';

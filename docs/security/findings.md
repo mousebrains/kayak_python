@@ -60,7 +60,7 @@
 - **Threats:** T-T1 (stored XSS)
 - **Severity:** ~~Medium-High impact~~ — no exploitable gap given the convention + actual codebase usage.
 - **Description:** Original concern: "no calls specify `ENT_QUOTES | ENT_HTML5`." After Phase 3.1 audit:
-  - `php/includes/html.php:6-13` documents the explicit convention: bare `htmlspecialchars($s)` everywhere; PHP 8.1+ defaults (`ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML401`) are correct for content + quoted-attribute contexts.
+  - `src/kayak/web/php/includes/html.php:6-13` documents the explicit convention: bare `htmlspecialchars($s)` everywhere; PHP 8.1+ defaults (`ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML401`) are correct for content + quoted-attribute contexts.
   - HTML5 unquoted-attribute interpolation is not present in the codebase (grep verified — all `\$var` interpolations into HTML attributes are inside double quotes).
   - The original F-6 framing missed the html.php docstring.
 - **Re-evaluation trigger:** if the codebase introduces unquoted-attribute interpolation, OR if a PHP version downgrade puts the default flags back to pre-8.1, revisit.
@@ -86,8 +86,8 @@
 - **Threats:** T-T4, T-E2
 - **Severity:** Critical impact if a column or table name from user input ever lands in the concat; low likelihood with current callers.
 - **Description:** Two sites concat into `prepare()`:
-  - `php/edit.php:117` — `prepare('UPDATE ' . $table . ' SET ' . implode(', ', $sets) . ' WHERE id = ?')`
-  - `php/includes/review_logic.php:101` — same pattern
+  - `src/kayak/web/php/edit.php:117` — `prepare('UPDATE ' . $table . ' SET ' . implode(', ', $sets) . ' WHERE id = ?')`
+  - `src/kayak/web/php/includes/review_logic.php:101` — same pattern
 
   Both currently use whitelisted `$table` and `$sets` (the `$field = ?` strings have field names from the editable-field list). Safe in current usage; the pattern is a code smell — a future contributor could pass user-supplied keys.
 - **Acceptance rationale:**
@@ -115,7 +115,7 @@
 
 - **Status:** ⚪ Accepted (Tier 6 disposition: low-impact at hobby-club scale; documented re-eval triggers).
 - **Threats:** T-S6, T-D2
-- **Description:** `normalize_email()` in `php/includes/auth_magic_link.php` is `strtolower(trim(...))`. Gmail's `Foo.Bar+test@gmail.com` and `foobar@gmail.com` resolve to *different* `editor` rows. An attacker could spawn N alias accounts to: (1) bypass per-account caps; (2) dilute audit trail; (3) sock-puppet proposal volume.
+- **Description:** `normalize_email()` in `src/kayak/web/php/includes/auth_magic_link.php` is `strtolower(trim(...))`. Gmail's `Foo.Bar+test@gmail.com` and `foobar@gmail.com` resolve to *different* `editor` rows. An attacker could spawn N alias accounts to: (1) bypass per-account caps; (2) dilute audit trail; (3) sock-puppet proposal volume.
 - **Acceptance rationale:**
   1. **Realized attack surface is low at this scale.** No per-account daily cap exists today — only magic-link rate limits (per-email + per-IP). Audit-trail dilution requires the alias accounts to actually contribute, which means the maintainer approves them; 5 accounts with `foo+1@`/`foo+2@`/etc. patterns would be visible during review and trivially banned. Sock-puppet proposal volume requires those proposals to be approved, again through the same maintainer gate.
   2. **Privacy policy does not promise one-account-per-person.** No external trust contract is violated by alias accounts.
@@ -135,7 +135,7 @@
 - **Status:** 🔵 Deferred (Tier 6 disposition: trigger-bound, second-maintainer scenario).
 - **Threats:** T-E6
 - **Severity:** Low impact at single-maintainer scale (moot — maintainer could direct-edit anyway); Medium impact at multi-maintainer scale.
-- **Description:** `review_approve()` in `php/includes/review_logic.php:61` takes `$cr, $applied, $maint_id` and does not check `$cr['editor_id'] !== $maint_id`. Realistic scenario: an editor with pending proposals gets promoted to maintainer; they can now approve their own pre-promotion proposals. (After promotion, `propose.php` routes them to `/edit.php`, so they cannot submit NEW proposals as maintainer.)
+- **Description:** `review_approve()` in `src/kayak/web/php/includes/review_logic.php:61` takes `$cr, $applied, $maint_id` and does not check `$cr['editor_id'] !== $maint_id`. Realistic scenario: an editor with pending proposals gets promoted to maintainer; they can now approve their own pre-promotion proposals. (After promotion, `propose.php` routes them to `/edit.php`, so they cannot submit NEW proposals as maintainer.)
 - **Phase 2.3 audit note:** at the current single-maintainer scale this is largely moot — the maintainer could direct-edit via `/edit.php` and achieve the same outcome. Becomes meaningful only when a second maintainer joins and you want to enforce "second pair of eyes."
 - **Remediation:** One line in `review_approve()`: `if ($cr['editor_id'] === $maint_id) return ['ok' => false, 'err' => 'Cannot approve own proposal'];` (or downgrade to a require-other-maintainer flow if there are multiple maintainers).
 - **Plan tier:** Tier 2.3 (this audit). Disposition: defer to multi-maintainer trigger (same trigger as F-5, D-T1.3).
@@ -180,11 +180,11 @@ This section holds two kinds of items: (a) findings downgraded to Low after audi
 
 #### F-14 — Magic-link token leaks via Referer to subsequent requests
 
-- **Status:** 🟢 Closed (Tier 6 fix; php/auth.php).
+- **Status:** 🟢 Closed (Tier 6 fix; src/kayak/web/php/auth.php).
 - **Threats:** T-S1, T-I4
 - **Severity:** Medium impact (same vector as F-2), low-Medium likelihood (Referer-leak is universal for URLs-with-secrets).
 - **Description:** After POST-consume of the magic-link, browser follows the 302 redirect. The Referer header on the follow-up request is the previous URL — `/auth.php?t=TOKEN&next=…`. Subsequent same-origin asset requests also carry this Referer until the user navigates away. nginx log format captures `$http_referer` (`deploy/kayak-log-format.conf`), so the token would be captured a SECOND time across all post-consume requests, even if F-2's `$request`-side redaction is in place.
-- **Resolution:** Added `header('Referrer-Policy: no-referrer');` to `php/auth.php` immediately after the existing `header('Cache-Control: no-store');`. Applies to both GET (interstitial render) and POST (consume + 302). Browser respects the header on the redirect chain, so subsequent same-origin asset requests carry no Referer for the auth.php-originated navigation.
+- **Resolution:** Added `header('Referrer-Policy: no-referrer');` to `src/kayak/web/php/auth.php` immediately after the existing `header('Cache-Control: no-store');`. Applies to both GET (interstitial render) and POST (consume + 302). Browser respects the header on the redirect chain, so subsequent same-origin asset requests carry no Referer for the auth.php-originated navigation.
 - **Verification:** After deploy, complete a login, then `tail /var/log/nginx/kayak-access.log`; the requests immediately following the auth.php POST should show `-` in the Referer column.
 - **Plan tier:** Tier 1.1 (this finding). Effort: ~15min.
 
@@ -195,7 +195,7 @@ This section holds two kinds of items: (a) findings downgraded to Low after audi
 - **Severity:** Low; informational.
 - **Description:** `tests/php/` had no test covering the login → logout → replay → 401 flow. The bootstrap.php harness didn't even create the `editor_session` table. A future refactor that dropped `revoked_at`, `expires_at`, or `status != 'banned'` filters from `current_editor()` would not have broken any test.
 - **Resolution:**
-  1. Refactored `current_editor()` and `clear_editor_session()` in `php/includes/auth.php` to accept an optional `?PDO $db_override` parameter (idiomatic with the existing AuthTest pattern). Production callers pass nothing → same behavior; tests inject an in-memory PDO. The per-request static cache is bypassed when an override is passed.
+  1. Refactored `current_editor()` and `clear_editor_session()` in `src/kayak/web/php/includes/auth.php` to accept an optional `?PDO $db_override` parameter (idiomatic with the existing AuthTest pattern). Production callers pass nothing → same behavior; tests inject an in-memory PDO. The per-request static cache is bypassed when an override is passed.
   2. Extended `tests/php/bootstrap.php`'s `kayak_test_pdo()` to include the full `editor_session` schema.
   3. Added `tests/php/SessionRevocationTest.php` with 6 cases:
      - live session resolves to the editor;
@@ -209,10 +209,10 @@ This section holds two kinds of items: (a) findings downgraded to Low after audi
 
 #### F-16 — Privacy policy "Your Rights" section contradicts the rest of the page
 
-- **Status:** 🟢 Closed (Tier 6 fix; php/privacy.php).
+- **Status:** 🟢 Closed (Tier 6 fix; src/kayak/web/php/privacy.php).
 - **Threats:** Not a code-side threat; trust/policy correctness.
 - **Severity:** Low (user-trust-facing). The page read as self-contradicting and signaled carelessness on a page whose primary purpose is to project care.
-- **Description:** `php/privacy.php` "Your Rights" section read: *"Because we collect only server access logs and no personal data, there is generally no personal data to access, correct, or delete."* This contradicted the upper "Data We Collect" section which lists contributor email addresses, proposed edits, comments, and cookies. The page was likely written before the editor pipeline existed and the "Your Rights" section was not refreshed when editor + change_request + edit_history landed.
+- **Description:** `src/kayak/web/php/privacy.php` "Your Rights" section read: *"Because we collect only server access logs and no personal data, there is generally no personal data to access, correct, or delete."* This contradicted the upper "Data We Collect" section which lists contributor email addresses, proposed edits, comments, and cookies. The page was likely written before the editor pipeline existed and the "Your Rights" section was not refreshed when editor + change_request + edit_history landed.
 - **Resolution:** Rewrote the "Your Rights" section to accurately describe deletion (D-T4.1), export (D-T4.2), audit-trail retention (D-T4.3a), and cookie lifecycle (D-T4.3c). Bumped "Last updated" to 2026-05-12. Added HTML comment `<!-- Annual review trigger: next review 2027-05-12 -->` above the prose block.
 - **Verification:** Visit `/privacy.php` after deploy; confirm the new section text and updated date are visible.
 - **Plan tier:** Tier 4.4 (this finding). Implementation in Tier 6. Effort: ~20 min.

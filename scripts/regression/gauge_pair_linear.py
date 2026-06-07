@@ -911,7 +911,7 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
 
 def _nice_axis(data_min: float, data_max: float) -> tuple[float, float, float]:
     """Compute (lo, hi, step) for round tick labels — Python port of
-    `php/includes/svg_plot.php::nice_axis`.
+    `src/kayak/web/php/includes/svg_plot.php::nice_axis`.
 
     Targets 4-8 ticks; falls back to the candidate closest to 5 ticks.
     """

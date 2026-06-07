@@ -81,7 +81,7 @@ Revisit when ANY of the following happens:
 
 The decision menu (Indefinite / Time-bounded / Off-disk) cannot be made now because there's nothing to retain. The `change_request_attachment` schema is provisioned but no PHP endpoint accepts uploads. Re-open this decision when:
 
-1. The Phase 1b file-upload wiring lands in `php/`.
+1. The Phase 1b file-upload wiring lands in `src/kayak/web/php/`.
 2. AND the per-attachment use case is known (e.g., trip-report photos vs documentation PDFs — different lifetimes).
 
 ### Recommended posture when activated
@@ -104,7 +104,7 @@ But this is just a default; the per-use-case context at trigger time should driv
 
 ### Choice
 
-When a user requests account deletion (via the documented "contact the club" path in `php/privacy.php`), the operator runs a new CLI tool — `levels delete-editor --email <addr>` — which cascades the deletes through `editor → editor_session / editor_magic_link / maintainer_credential / change_request → change_request_attachment` inside one transaction. `edit_history.changed_by` strings persist (audit-trail preservation); optional `--anonymize-history` flag rewrites `'editor:<id>' → 'deleted:<id>'`.
+When a user requests account deletion (via the documented "contact the club" path in `src/kayak/web/php/privacy.php`), the operator runs a new CLI tool — `levels delete-editor --email <addr>` — which cascades the deletes through `editor → editor_session / editor_magic_link / maintainer_credential / change_request → change_request_attachment` inside one transaction. `edit_history.changed_by` strings persist (audit-trail preservation); optional `--anonymize-history` flag rewrites `'editor:<id>' → 'deleted:<id>'`.
 
 ### Rationale
 
@@ -188,7 +188,7 @@ Implementation: new `levels editor-retention` CLI + daily `kayak-editor-retentio
 
 ### Choice
 
-1. Refresh `php/privacy.php` to fix F-16 (the "Your Rights" section contradicts the upper "Data We Collect" section — likely written before the editor pipeline existed).
+1. Refresh `src/kayak/web/php/privacy.php` to fix F-16 (the "Your Rights" section contradicts the upper "Data We Collect" section — likely written before the editor pipeline existed).
 2. Update "Last updated" date; add annual-review HTML comment trigger.
 3. Do NOT add a Terms of Service page at this time.
 4. Do NOT pursue lawyer review.
