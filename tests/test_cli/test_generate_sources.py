@@ -95,6 +95,7 @@ def test_preserves_committed_pragma_column_order(tmp_path: Path) -> None:
     (d / "fetch_url.csv").write_text(
         "id,url,parser,hours,is_active\n1,https://example/x,nwps,,1\n", encoding="utf-8"
     )
+    (d / "gauge_source.csv").write_text("gauge_id,source_id\n1,1\n", encoding="utf-8")
     _counters(d, source=2, fetch_url=2)
     gs.reverse_engineer(d)
     gs.generate(d)
@@ -110,7 +111,7 @@ def test_absent_csv_falls_back_to_model_order(tmp_path: Path) -> None:
         "fetch_urls:\n"
         "- {id: 1, url: 'https://example/x', parser: nwps, enabled: true}\n"
         "sources:\n"
-        "- {id: 1, name: STAW1, agency: USBR, fetch_url_id: 1}\n",
+        "- {id: 1, name: STAW1, agency: USBR, gauge_id: 1, fetch_url_id: 1}\n",
         encoding="utf-8",
     )
     gs.generate(d)
@@ -127,7 +128,7 @@ def test_drifted_header_is_rejected(tmp_path: Path) -> None:
     (d / "fetch_url.csv").write_text("id,url,parser,hours,is_active\n", encoding="utf-8")
     _counters(d, source=2, fetch_url=2)
     (d / "sources.yaml").write_text(
-        "sources:\n- {id: 1, name: X, agency: USGS}\n", encoding="utf-8"
+        "sources:\n- {id: 1, name: X, agency: USGS, gauge_id: 1}\n", encoding="utf-8"
     )
     with pytest.raises(ValueError, match="does not match the schema"):
         gs.generate(d)
@@ -139,12 +140,14 @@ def test_drifted_header_is_rejected(tmp_path: Path) -> None:
 
 
 def _valid_meta() -> dict:
+    # gauge_id is required on every source; vdir has no gauge.csv, so the gauge
+    # *reference* check is skipped while the structural requirement still applies.
     return {
         "fetch_urls": [{"id": 1, "url": "https://example/x", "parser": "nwps", "enabled": True}],
         "sources": [
-            {"id": 1, "name": "A", "agency": "USGS"},
-            {"id": 2, "name": "B", "agency": "NWS", "fetch_url_id": 1},
-            {"id": 3, "name": "C", "agency": "Calculation", "calc_expression_id": 1},
+            {"id": 1, "name": "A", "agency": "USGS", "gauge_id": 1},
+            {"id": 2, "name": "B", "agency": "NWS", "gauge_id": 2, "fetch_url_id": 1},
+            {"id": 3, "name": "C", "agency": "Calculation", "gauge_id": 3, "calc_expression_id": 1},
         ],
     }
 
@@ -354,6 +357,7 @@ def test_comma_hours_round_trips(tmp_path: Path) -> None:
     fetch_csv = 'id,url,parser,hours,is_active\n1,https://example/x,nwps,"6,12,18",1\n'
     (d / "source.csv").write_text(source_csv, encoding="utf-8")
     (d / "fetch_url.csv").write_text(fetch_csv, encoding="utf-8")
+    (d / "gauge_source.csv").write_text("gauge_id,source_id\n1,1\n", encoding="utf-8")
     _counters(d, source=2, fetch_url=2)
     gs.reverse_engineer(d)
     assert "hours: 6,12,18" in (d / "sources.yaml").read_text(encoding="utf-8")
@@ -367,6 +371,6 @@ def test_check_missing_csv_reports_cleanly(tmp_path: Path) -> None:
     d.mkdir()
     _counters(d, source=2, fetch_url=2)
     (d / "sources.yaml").write_text(
-        "sources:\n- {id: 1, name: X, agency: USGS}\n", encoding="utf-8"
+        "sources:\n- {id: 1, name: X, agency: USGS, gauge_id: 1}\n", encoding="utf-8"
     )
     assert gs._main(_ns(d, check=True)) == 1

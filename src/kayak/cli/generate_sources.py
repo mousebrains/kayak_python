@@ -2,12 +2,14 @@
 authoritative ``sources.yaml`` registry (dataset-separation S1, expand phase).
 
 ``sources.yaml`` (in the dataset root) is the human-edited authority for every
-source and fetch URL; this command writes the two CSVs the metadata sync consumes,
-**deterministically** (LF line endings, rows sorted by id, written atomically; the
-column order preserves the committed file's header — see :func:`_column_order`) so
-re-running it on an unchanged registry is a no-op. ``--check`` regenerates into a
-temp dir and byte-compares the committed CSVs — the CI gate against hand-edits and
-drift.
+source, its fetch URL, and its (single, required) ``gauge_id``; this command writes
+the three CSVs the metadata sync consumes — ``source.csv``, ``fetch_url.csv``, and
+``gauge_source.csv`` (one ``(gauge_id, source.id)`` row per source) —
+**deterministically** (LF line endings, rows sorted by primary key, written
+atomically; the column order preserves the committed file's header — see
+:func:`_column_order`) so re-running it on an unchanged registry is a no-op.
+``--check`` regenerates into a temp dir and byte-compares the committed CSVs — the
+CI gate against hand-edits and drift.
 
 ``--from-csv`` reverse-engineers a ``sources.yaml`` from existing CSVs (the one-time
 bootstrap, kept as the documented re-bootstrap path).
@@ -88,8 +90,11 @@ def _column_order(source_dir: Path, table: str) -> list[str]:
 
 
 def _write_csv(out_dir: Path, table: str, rows: list[dict[str, Any]], cols: list[str]) -> None:
-    """Write ``<table>.csv`` atomically into ``out_dir``: given column order, LF, by id."""
-    ordered = sorted(rows, key=lambda r: int(r["id"]))
+    """Write ``<table>.csv`` atomically into ``out_dir``: given column order, LF,
+    rows sorted by the table's primary-key tuple (a single ``id``, or the composite
+    ``(gauge_id, source_id)`` for gauge_source) — matching export_metadata's ORDER BY."""
+    pk = layout.primary_key_columns(table)
+    ordered = sorted(rows, key=lambda r: tuple(int(r[c]) for c in pk))
     fd, tmp = tempfile.mkstemp(dir=out_dir, prefix=f".{table}.", suffix=".csv")
     try:
         with open(fd, "w", newline="", encoding="utf-8") as fh:
@@ -103,8 +108,12 @@ def _write_csv(out_dir: Path, table: str, rows: list[dict[str, Any]], cols: list
         raise
 
 
-def _registry_to_rows(meta: dict[str, Any]) -> tuple[list[dict], list[dict]]:
-    """Map the registry to source.csv / fetch_url.csv row dicts."""
+def _registry_to_rows(meta: dict[str, Any]) -> tuple[list[dict], list[dict], list[dict]]:
+    """Map the registry to source.csv / fetch_url.csv / gauge_source.csv row dicts.
+
+    Each source carries a required ``gauge_id``; it is NOT a source.csv column —
+    it projects to one ``gauge_source`` row ``(gauge_id, source.id)``, the single
+    mandatory gauge every source is bound to (source->gauge is 1-to-1)."""
     fetch_rows: list[dict[str, Any]] = []
     for fu in meta.get("fetch_urls") or []:
         fetch_rows.append(
@@ -117,6 +126,7 @@ def _registry_to_rows(meta: dict[str, Any]) -> tuple[list[dict], list[dict]]:
             }
         )
     source_rows: list[dict[str, Any]] = []
+    gauge_source_rows: list[dict[str, Any]] = []
     for s in meta.get("sources") or []:
         source_rows.append(
             {
@@ -128,18 +138,20 @@ def _registry_to_rows(meta: dict[str, Any]) -> tuple[list[dict], list[dict]]:
                 "calc_expression_id": s.get("calc_expression_id"),
             }
         )
-    return source_rows, fetch_rows
+        gauge_source_rows.append({"gauge_id": s["gauge_id"], "source_id": s["id"]})
+    return source_rows, fetch_rows, gauge_source_rows
 
 
 def generate(dataset_dir: Path) -> None:
-    """Write source.csv + fetch_url.csv from ``dataset_dir/sources.yaml``."""
+    """Write source.csv + fetch_url.csv + gauge_source.csv from ``dataset_dir/sources.yaml``."""
     meta = _load_registry(dataset_dir)
     problems = validate_registry(meta, dataset_dir)
     if problems:
         raise ValueError("invalid sources.yaml:\n  - " + "\n  - ".join(problems))
-    source_rows, fetch_rows = _registry_to_rows(meta)
+    source_rows, fetch_rows, gs_rows = _registry_to_rows(meta)
     _write_csv(dataset_dir, "fetch_url", fetch_rows, _column_order(dataset_dir, "fetch_url"))
     _write_csv(dataset_dir, "source", source_rows, _column_order(dataset_dir, "source"))
+    _write_csv(dataset_dir, "gauge_source", gs_rows, _column_order(dataset_dir, "gauge_source"))
 
 
 def _is_int(value: object) -> bool:
@@ -219,10 +231,10 @@ def _fetch_url_structural(i: int, fu: dict) -> list[str]:
 
 def _source_structural(i: int, s: dict) -> list[str]:
     problems: list[str] = []
-    for f in ("id", "name"):
+    for f in ("id", "name", "gauge_id"):
         if s.get(f) is None:
             problems.append(f"source[{i}]: missing required field {f!r}")
-    for f in ("id", *_SOURCE_REF_FIELDS):
+    for f in ("id", "gauge_id", *_SOURCE_REF_FIELDS):
         if s.get(f) is not None and not _is_int(s[f]):
             problems.append(f"source[{i}]: {f} must be an integer, got {s[f]!r}")
     if s.get("name") is not None and not _nonempty_str(s["name"]):
@@ -339,6 +351,7 @@ def _reference_problems(
     problems: list[str] = []
     fu_id_set = {fu.get("id") for fu in fetch_urls}
     calc_ids = _calc_expression_ids(dataset_dir)
+    gauge_ids = _gauge_ids(dataset_dir)
     for s in sources:
         refs = [f for f in _SOURCE_REF_FIELDS if s.get(f) is not None]
         if len(refs) > 1:
@@ -354,7 +367,31 @@ def _reference_problems(
                 f"source {s.get('id')}: calc_expression_id {s['calc_expression_id']} "
                 "not in calc_expression.csv"
             )
+        if (
+            gauge_ids is not None
+            and s.get("gauge_id") is not None
+            and s["gauge_id"] not in gauge_ids
+        ):
+            problems.append(f"source {s.get('id')}: gauge_id {s['gauge_id']} not in gauge.csv")
     return problems
+
+
+def _gauge_ids(dataset_dir: Path) -> set[int] | None:
+    """Ids in gauge.csv, or None if the file is absent (skip the reference check)."""
+    path = dataset_dir / "gauge.csv"
+    if not path.is_file():
+        return None
+    ids: set[int] = set()
+    with path.open(encoding="utf-8") as fh:
+        for r in csv.DictReader(fh):
+            raw = (r.get("id") or "").strip()
+            if not raw:
+                continue
+            try:
+                ids.add(int(raw))
+            except ValueError:
+                raise ValueError(f"gauge.csv: non-integer id {raw!r}") from None
+    return ids
 
 
 def _calc_expression_ids(dataset_dir: Path) -> set[int] | None:
@@ -422,7 +459,12 @@ def _normalize_source_entry(s: dict[str, Any]) -> dict[str, Any]:
     """Canonical source registry entry. ``agency`` is ALWAYS emitted (even empty) to
     match reverse_engineer's historical output; the refs/timezone are omitted when
     absent."""
-    entry: dict[str, Any] = {"id": s["id"], "name": s["name"], "agency": s.get("agency") or ""}
+    entry: dict[str, Any] = {
+        "id": s["id"],
+        "name": s["name"],
+        "agency": s.get("agency") or "",
+        "gauge_id": s["gauge_id"],  # required: every source is bound to one gauge
+    }
     tz = s.get("timezone")
     if tz is not None and str(tz).strip():
         entry["timezone"] = tz
@@ -448,8 +490,25 @@ def _dump_sources_yaml(fetch_urls: list[dict[str, Any]], sources: list[dict[str,
     return header + body
 
 
+def _source_to_gauge(dataset_dir: Path) -> dict[int, int]:
+    """Map source_id -> its single gauge_id from gauge_source.csv. Errors if a
+    source links to 0 or >1 distinct gauges (the scalar registry ``gauge_id`` field
+    assumes the 1-to-1 invariant validate-dataset enforces)."""
+    gauges: dict[int, set[int]] = {}
+    with (dataset_dir / "gauge_source.csv").open(encoding="utf-8") as fh:
+        for r in csv.DictReader(fh):
+            sid_raw = (r.get("source_id") or "").strip()
+            gid_raw = (r.get("gauge_id") or "").strip()
+            if sid_raw and gid_raw:
+                gauges.setdefault(int(sid_raw), set()).add(int(gid_raw))
+    multi = {sid: sorted(gs) for sid, gs in gauges.items() if len(gs) > 1}
+    if multi:
+        raise ValueError(f"sources linked to multiple gauges (expected one each): {multi}")
+    return {sid: next(iter(gs)) for sid, gs in gauges.items()}
+
+
 def reverse_engineer(dataset_dir: Path) -> None:
-    """Bootstrap ``sources.yaml`` from existing source.csv + fetch_url.csv."""
+    """Bootstrap ``sources.yaml`` from existing source.csv + fetch_url.csv + gauge_source.csv."""
     fetch_urls: list[dict[str, Any]] = []
     with (dataset_dir / "fetch_url.csv").open(encoding="utf-8") as fh:
         for r in csv.DictReader(fh):
@@ -458,10 +517,21 @@ def reverse_engineer(dataset_dir: Path) -> None:
                 entry["hours"] = r["hours"]
             entry["enabled"] = (r.get("is_active") or "").strip() != "0"
             fetch_urls.append(entry)
+    src_gauge = _source_to_gauge(dataset_dir)
     sources: list[dict[str, Any]] = []
     with (dataset_dir / "source.csv").open(encoding="utf-8") as fh:
         for r in csv.DictReader(fh):
-            entry = {"id": int(r["id"]), "name": r["name"], "agency": r["agency"]}
+            sid = int(r["id"])
+            if sid not in src_gauge:
+                raise ValueError(
+                    f"source {sid} has no gauge_source row; every source needs a gauge"
+                )
+            entry = {
+                "id": sid,
+                "name": r["name"],
+                "agency": r["agency"],
+                "gauge_id": src_gauge[sid],
+            }
             if (r.get("timezone") or "").strip():
                 entry["timezone"] = r["timezone"]
             if (r.get("fetch_url_id") or "").strip():
@@ -481,25 +551,25 @@ def _check(dataset_dir: Path) -> int:
         for p in problems:
             print(f"  - {p}", file=sys.stderr)
         return 1
-    absent = [n for n in ("source.csv", "fetch_url.csv") if not (dataset_dir / n).is_file()]
+    targets = ("source.csv", "fetch_url.csv", "gauge_source.csv")
+    absent = [n for n in targets if not (dataset_dir / n).is_file()]
     if absent:
         print(
             f"generate-sources --check: missing {absent}; run `levels generate-sources` first.",
             file=sys.stderr,
         )
         return 1
-    source_rows, fetch_rows = _registry_to_rows(meta)
+    source_rows, fetch_rows, gs_rows = _registry_to_rows(meta)
     # Order is taken from the committed files (the byte-comparison target), so a
     # benign PRAGMA-vs-model column-order difference never trips --check.
-    fetch_cols = _column_order(dataset_dir, "fetch_url")
-    source_cols = _column_order(dataset_dir, "source")
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
-        _write_csv(tmp, "fetch_url", fetch_rows, fetch_cols)
-        _write_csv(tmp, "source", source_rows, source_cols)
+        _write_csv(tmp, "fetch_url", fetch_rows, _column_order(dataset_dir, "fetch_url"))
+        _write_csv(tmp, "source", source_rows, _column_order(dataset_dir, "source"))
+        _write_csv(tmp, "gauge_source", gs_rows, _column_order(dataset_dir, "gauge_source"))
         diffs = [
             name
-            for name in ("source.csv", "fetch_url.csv")
+            for name in targets
             if (tmp / name).read_bytes() != (dataset_dir / name).read_bytes()
         ]
     if diffs:
@@ -509,7 +579,9 @@ def _check(dataset_dir: Path) -> int:
             file=sys.stderr,
         )
         return 1
-    print("generate-sources --check: source.csv + fetch_url.csv match sources.yaml.")
+    print(
+        "generate-sources --check: source.csv + fetch_url.csv + gauge_source.csv match sources.yaml."
+    )
     return 0
 
 
@@ -539,7 +611,7 @@ def _main(args: argparse.Namespace) -> int:
         return 2
     if args.from_csv:
         reverse_engineer(dataset_dir)
-        print(f"wrote {dataset_dir / SOURCES_YAML} from source.csv + fetch_url.csv")
+        print(f"wrote {dataset_dir / SOURCES_YAML} from source/fetch_url/gauge_source CSVs")
         return 0
     try:
         if args.check:
@@ -548,7 +620,7 @@ def _main(args: argparse.Namespace) -> int:
     except ValueError as e:
         print(f"generate-sources: {e}", file=sys.stderr)
         return 1
-    print(f"generate-sources: wrote source.csv + fetch_url.csv in {dataset_dir}")
+    print(f"generate-sources: wrote source.csv + fetch_url.csv + gauge_source.csv in {dataset_dir}")
     return 0
 
 
@@ -617,7 +689,13 @@ def _validate_proposed(
 
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
-        for fn in ("calc_expression.csv", "source.csv", "fetch_url.csv"):
+        for fn in (
+            "calc_expression.csv",
+            "gauge.csv",
+            "source.csv",
+            "fetch_url.csv",
+            "gauge_source.csv",
+        ):
             src = dataset_dir / fn
             if src.is_file():
                 shutil.copy2(src, tmp / fn)
@@ -639,6 +717,7 @@ def _add_source_guards(
     fetch_urls: list[dict],
     *,
     name: str,
+    gauge_id: int,
     url: str | None,
     parser: str | None,
     calc_expression_id: int | None,
@@ -656,6 +735,7 @@ def _add_source_guards(
         raise ValueError("name must not have leading/trailing whitespace")
     if any(str(s.get("name")) == name for s in sources):
         raise ValueError(f"a source named {name!r} already exists")
+    _check_gauge_ref_exists(dataset_dir, gauge_id)
     if url is not None:
         if url != url.strip():
             raise ValueError("url must not have leading/trailing whitespace")
@@ -663,6 +743,14 @@ def _add_source_guards(
             raise ValueError(f"a fetch_url with url {url!r} already exists")
     if calc_expression_id is not None:
         _check_calc_ref_exists(dataset_dir, calc_expression_id)
+
+
+def _check_gauge_ref_exists(dataset_dir: Path, gauge_id: int) -> None:
+    gauge_ids = _gauge_ids(dataset_dir)
+    if gauge_ids is None:
+        raise ValueError("gauge.csv not present; cannot resolve --gauge-id")
+    if gauge_id not in gauge_ids:
+        raise ValueError(f"gauge_id {gauge_id} not in gauge.csv")
 
 
 def _check_calc_ref_exists(dataset_dir: Path, calc_expression_id: int) -> None:
@@ -687,6 +775,7 @@ def add_source(
     dataset_dir: Path,
     *,
     name: str,
+    gauge_id: int,
     agency: str | None = None,
     timezone: str | None = None,
     url: str | None = None,
@@ -720,6 +809,7 @@ def add_source(
         sources,
         fetch_urls,
         name=name,
+        gauge_id=gauge_id,
         url=url,
         parser=parser,
         calc_expression_id=calc_expression_id,
@@ -728,7 +818,7 @@ def add_source(
     counters = _read_counters(dataset_dir)
     source_id = _allocate_id(counters, "source")
     allocated: dict[str, int] = {"source": source_id}
-    new_source: dict[str, Any] = {"id": source_id, "name": name}
+    new_source: dict[str, Any] = {"id": source_id, "name": name, "gauge_id": gauge_id}
     if agency is not None:
         new_source["agency"] = agency
     if timezone is not None:
@@ -771,16 +861,23 @@ def add_source_args(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         "add-source",
         help="Add a source to a dataset's sources.yaml (allocates the id, regenerates CSVs)",
         description=(
-            "Add a source to a dataset's sources.yaml: allocate its stable id(s), append "
-            "the entry, bump id_counters, and regenerate source.csv + fetch_url.csv. The "
-            "result is validated against the registry contract and the source-row rules "
-            "(incl. the USGS numeric-station-id name rule). The full dataset contract "
-            "(cross-table FK, reaches, materialization) is not re-checked here — run "
-            "`levels validate-dataset` after wiring the gauge/gauge_source rows."
+            "Add a source to a dataset's sources.yaml: allocate its stable id, append the "
+            "entry (bound to an existing gauge via --gauge-id), bump id_counters, and "
+            "regenerate source.csv + fetch_url.csv + gauge_source.csv. The result is "
+            "validated against the registry contract and the source-row rules (incl. the "
+            "USGS numeric-station-id name rule). The full dataset contract (reaches, "
+            "materialization) is not re-checked here — run `levels validate-dataset` for it."
         ),
     )
     p.add_argument("dir", help="Dataset directory (containing sources.yaml)")
     p.add_argument("--name", required=True, help="Source name (the fetch resolution key)")
+    p.add_argument(
+        "--gauge-id",
+        type=int,
+        dest="gauge_id",
+        required=True,
+        help="Id of the existing gauge this source feeds (every source needs a gauge)",
+    )
     p.add_argument("--agency", help="Agency label, e.g. USGS / NWS")
     p.add_argument(
         "--timezone", help="IANA timezone for naive local-time feeds (e.g. America/Boise)"
@@ -826,6 +923,7 @@ def _add_source_main(args: argparse.Namespace) -> int:
         allocated = add_source(
             dataset_dir,
             name=args.name,
+            gauge_id=args.gauge_id,
             agency=args.agency,
             timezone=args.timezone,
             url=args.url,

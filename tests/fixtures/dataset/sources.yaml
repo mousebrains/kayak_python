@@ -9,11 +9,14 @@ sources:
 - id: 1
   name: '14150000'
   agency: USGS
+  gauge_id: 1
 - id: 2
   name: FXTW1
   agency: NWS
+  gauge_id: 2
   fetch_url_id: 1
 - id: 3
   name: Fixture_Confluence_calc
   agency: Calculation
+  gauge_id: 3
   calc_expression_id: 1
