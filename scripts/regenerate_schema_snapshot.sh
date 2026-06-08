@@ -58,6 +58,9 @@ WHERE type = 'index'
   AND sql IS NOT NULL
 ORDER BY name;
 SQL
-} > "$OUT"
+    # SQLAlchemy's CREATE TABLE DDL emits a trailing space after each column
+    # comma; strip it so the checked-in fixture stays clean under
+    # `git diff --check` and doesn't churn whitespace on every regen.
+} | sed 's/[[:space:]]*$//' > "$OUT"
 
 echo "wrote $OUT ($(wc -l <"$OUT") lines)"
