@@ -18,6 +18,7 @@ from pathlib import Path
 from sqlalchemy import create_engine
 
 from kayak.cli.sync_metadata import sync_metadata
+from kayak.db import metadata_csv as mc
 from kayak.db.models import Base
 
 
@@ -510,3 +511,91 @@ def test_unsupported_contract_version_refused(tmp_path: Path, capsys) -> None:  
     assert rc == 1
     assert "outside this engine's supported range" in capsys.readouterr().err
     assert _scalar(db, "SELECT COUNT(*) FROM source WHERE id = 2") == 1
+
+
+# ---------------------------------------------------------------------------
+# Generator-owned OPTIONAL column reset on sync ([P3], S1-fetch-2 follow-up).
+# ---------------------------------------------------------------------------
+
+
+def test_sync_resets_absent_optional_column_keeps_excluded_churn(tmp_path: Path) -> None:
+    """An omitted generator-owned OPTIONAL column (unknown_station_policy) is reset
+    to its default (NULL) on apply, so a stale opt-in can't outlive an opt-out that
+    dropped the column. The EXCLUDED runtime-churn column (last_fetched_at), which an
+    omitted CSV must PRESERVE, is left untouched — the distinction the fix turns on."""
+    db = tmp_path / "k.db"
+    _schema(db)
+    conn = sqlite3.connect(db)
+    try:
+        conn.execute(
+            "INSERT INTO fetch_url (id, url, is_active, unknown_station_policy, last_fetched_at) "
+            "VALUES (1, 'http://fu1', 1, 'ignore', '2026-01-01 00:00:00')"
+        )
+        conn.commit()
+        csv_dir = tmp_path / "csv"
+        csv_dir.mkdir()
+        # A no-opt-in fetch_url.csv: the policy column is absent entirely.
+        _write_csv(csv_dir, "fetch_url", ["id", "url", "is_active"], [[1, "http://fu1", 1]])
+        mc.import_table(conn, csv_dir / "fetch_url.csv")
+        conn.commit()
+        policy, last = conn.execute(
+            "SELECT unknown_station_policy, last_fetched_at FROM fetch_url WHERE id = 1"
+        ).fetchone()
+    finally:
+        conn.close()
+    assert policy is None  # OPTIONAL column reset to the default (= reject)
+    assert last == "2026-01-01 00:00:00"  # EXCLUDED churn preserved
+
+
+def test_sync_no_write_when_optional_column_already_default(tmp_path: Path) -> None:
+    """The reset is a true no-op when there's nothing to clear (IS NOT NULL guard),
+    so a no-opt-in dataset's repeated sync stays a no-op."""
+    db = tmp_path / "k.db"
+    _schema(db)
+    conn = sqlite3.connect(db)
+    try:
+        conn.execute("INSERT INTO fetch_url (id, url, is_active) VALUES (1, 'http://fu1', 1)")
+        conn.commit()
+        csv_dir = tmp_path / "csv"
+        csv_dir.mkdir()
+        _write_csv(csv_dir, "fetch_url", ["id", "url", "is_active"], [[1, "http://fu1", 1]])
+        before = conn.total_changes
+        mc.import_table(conn, csv_dir / "fetch_url.csv")
+        delta = conn.total_changes - before
+        conn.commit()
+        policy = conn.execute(
+            "SELECT unknown_station_policy FROM fetch_url WHERE id = 1"
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    # Only the single upsert wrote; the reset's IS NOT NULL guard added nothing.
+    assert delta == 1
+    assert policy is None
+
+
+def test_sync_applies_present_optional_column(tmp_path: Path) -> None:
+    """When the column IS present, the value is applied normally — including a blank
+    cell (the opt-out-by-blanking path), which clears a prior opt-in to NULL."""
+    db = tmp_path / "k.db"
+    _schema(db)
+    conn = sqlite3.connect(db)
+    try:
+        conn.execute(
+            "INSERT INTO fetch_url (id, url, is_active, unknown_station_policy) "
+            "VALUES (1, 'http://fu1', 1, 'ignore'), (2, 'http://fu2', 1, NULL)"
+        )
+        conn.commit()
+        csv_dir = tmp_path / "csv"
+        csv_dir.mkdir()
+        _write_csv(
+            csv_dir,
+            "fetch_url",
+            ["id", "url", "is_active", "unknown_station_policy"],
+            [[1, "http://fu1", 1, ""], [2, "http://fu2", 1, "ignore"]],
+        )
+        mc.import_table(conn, csv_dir / "fetch_url.csv")
+        conn.commit()
+        got = dict(conn.execute("SELECT id, unknown_station_policy FROM fetch_url").fetchall())
+    finally:
+        conn.close()
+    assert got == {1: None, 2: "ignore"}  # blank clears, value applies

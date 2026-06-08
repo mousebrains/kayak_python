@@ -78,18 +78,22 @@ def _column_order(
 
     The column *set* is still validated against the schema, so a drifted header
     (a stray, or a missing *required*, column) is rejected, not silently
-    propagated. :func:`layout.optional_columns` (e.g. ``fetch_url`` 's
-    ``unknown_station_policy``) MAY be absent: it is included only when the
-    committed header already has it OR a ``rows`` value uses it, and omitted
-    otherwise — so a dataset that opts into nothing stays byte-identical, while
-    adding the first opt-in appends the column (and ``--check`` then flags the
-    committed file as stale until it's regenerated).
+    propagated. An :func:`layout.optional_columns` column (e.g. ``fetch_url`` 's
+    ``unknown_station_policy``) is present **iff a ``rows`` value uses it** —
+    independent of whether the committed header carried it. So opt-in/opt-out is
+    symmetric: a dataset that opts into nothing stays byte-identical (no column),
+    a first opt-in appends the column, and a later opt-out *drops* it again
+    (``--check`` flags the stale committed file until regenerated — an opt-out is a
+    real content change). The drop is safe because the sync layer resets an absent
+    optional column to its default (see ``kayak.db.metadata_csv``), so a removed
+    opt-in can't leave a stale value live.
     """
     expected = layout.expected_columns(table)
     optional = layout.optional_columns(table)
     required = expected - optional
+    used = {c for c in optional for r in (rows or []) if str(r.get(c) or "").strip()}
     path = source_dir / f"{table}.csv"
-    base: list[str] | None = None
+    order_source: list[str] | None = None
     if path.is_file():
         with path.open(newline="", encoding="utf-8") as fh:
             header = next(csv.reader(fh), None)
@@ -103,15 +107,15 @@ def _column_order(
                     f"columns {sorted(expected)} (missing {sorted(missing)}, "
                     f"unexpected {sorted(unexpected)})"
                 )
-            base = header
-    if base is None:
-        # Fresh dataset (no committed file): required columns in model order, plus
-        # any optional column actually used below.
-        base = [c for c in layout.ordered_columns(table) if c not in optional]
-    # Append any optional column a row populates that isn't already present.
-    used = {c for c in optional for r in (rows or []) if str(r.get(c) or "").strip()}
-    base = list(base) + [c for c in layout.ordered_columns(table) if c in used and c not in base]
-    return base
+            order_source = header
+    if order_source is None:
+        order_source = layout.ordered_columns(table)
+    # Keep every required column in the committed (or model) order, plus only the
+    # optional columns currently in use; then append a first-time opt-in column
+    # that the order source didn't have yet.
+    cols = [c for c in order_source if c not in optional or c in used]
+    cols += [c for c in layout.ordered_columns(table) if c in used and c not in cols]
+    return cols
 
 
 def _write_csv(out_dir: Path, table: str, rows: list[dict[str, Any]], cols: list[str]) -> None:

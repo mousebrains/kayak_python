@@ -574,3 +574,25 @@ def test_check_flags_optin_not_yet_regenerated(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     assert gs._main(_ns(d, check=True)) == 1
+
+
+def test_opt_out_drops_the_column(tmp_path: Path) -> None:
+    # Symmetric with opt-in: removing the only opt-in drops the column again (not a
+    # vestigial empty column). --check flags the stale committed file until the
+    # opt-out is regenerated (an opt-out IS a content change), then passes.
+    d = tmp_path / "ds"
+    _policy_dataset(d, policy_line="unknown_station_policy: ignore, ")
+    gs.generate(d)
+    assert "unknown_station_policy" in (d / "fetch_url.csv").read_text(encoding="utf-8")
+
+    sy = d / "sources.yaml"
+    sy.write_text(
+        sy.read_text(encoding="utf-8").replace("unknown_station_policy: ignore, ", ""),
+        encoding="utf-8",
+    )
+    # Stale committed file still has the column → --check trips...
+    assert gs._main(_ns(d, check=True)) == 1
+    gs.generate(d)
+    header = (d / "fetch_url.csv").read_text(encoding="utf-8").splitlines()[0]
+    assert "unknown_station_policy" not in header  # ...column dropped on regenerate
+    assert gs._main(_ns(d, check=True)) == 0
