@@ -50,10 +50,13 @@ def _calc(dir: Path, *ids: int) -> None:
 # --- the round-trip invariant -------------------------------------------------
 
 
+_CSVS = ("source.csv", "fetch_url.csv", "gauge_source.csv")
+
+
 def test_generate_reproduces_fixture_byte_for_byte(dataset: Path) -> None:
-    before = {n: (dataset / n).read_bytes() for n in ("source.csv", "fetch_url.csv")}
+    before = {n: (dataset / n).read_bytes() for n in _CSVS}
     gs.generate(dataset)
-    after = {n: (dataset / n).read_bytes() for n in ("source.csv", "fetch_url.csv")}
+    after = {n: (dataset / n).read_bytes() for n in _CSVS}
     assert after == before
 
 
@@ -71,11 +74,11 @@ def test_check_fails_on_hand_edited_csv(dataset: Path) -> None:
 
 
 def test_reverse_engineer_then_generate_round_trips(dataset: Path) -> None:
-    original = {n: (dataset / n).read_bytes() for n in ("source.csv", "fetch_url.csv")}
+    original = {n: (dataset / n).read_bytes() for n in _CSVS}
     (dataset / "sources.yaml").unlink()
     gs.reverse_engineer(dataset)
     gs.generate(dataset)
-    assert {n: (dataset / n).read_bytes() for n in ("source.csv", "fetch_url.csv")} == original
+    assert {n: (dataset / n).read_bytes() for n in _CSVS} == original
 
 
 # --- column-order handling ----------------------------------------------------
@@ -95,6 +98,11 @@ def test_preserves_committed_pragma_column_order(tmp_path: Path) -> None:
     (d / "fetch_url.csv").write_text(
         "id,url,parser,hours,is_active\n1,https://example/x,nwps,,1\n", encoding="utf-8"
     )
+    (d / "gauge_source.csv").write_text("gauge_id,source_id\n1,1\n", encoding="utf-8")
+    (d / "gauge.csv").write_text("id\n1\n", encoding="utf-8")
+    (d / "calc_expression.csv").write_text(
+        "id,data_type,expression,time_expression,note,provenance_slug\n", encoding="utf-8"
+    )
     _counters(d, source=2, fetch_url=2)
     gs.reverse_engineer(d)
     gs.generate(d)
@@ -110,7 +118,7 @@ def test_absent_csv_falls_back_to_model_order(tmp_path: Path) -> None:
         "fetch_urls:\n"
         "- {id: 1, url: 'https://example/x', parser: nwps, enabled: true}\n"
         "sources:\n"
-        "- {id: 1, name: STAW1, agency: USBR, fetch_url_id: 1}\n",
+        "- {id: 1, name: STAW1, agency: USBR, gauge_id: 1, fetch_url_id: 1}\n",
         encoding="utf-8",
     )
     gs.generate(d)
@@ -127,7 +135,7 @@ def test_drifted_header_is_rejected(tmp_path: Path) -> None:
     (d / "fetch_url.csv").write_text("id,url,parser,hours,is_active\n", encoding="utf-8")
     _counters(d, source=2, fetch_url=2)
     (d / "sources.yaml").write_text(
-        "sources:\n- {id: 1, name: X, agency: USGS}\n", encoding="utf-8"
+        "sources:\n- {id: 1, name: X, agency: USGS, gauge_id: 1}\n", encoding="utf-8"
     )
     with pytest.raises(ValueError, match="does not match the schema"):
         gs.generate(d)
@@ -139,12 +147,14 @@ def test_drifted_header_is_rejected(tmp_path: Path) -> None:
 
 
 def _valid_meta() -> dict:
+    # gauge_id is required on every source; vdir has no gauge.csv, so the gauge
+    # *reference* check is skipped while the structural requirement still applies.
     return {
         "fetch_urls": [{"id": 1, "url": "https://example/x", "parser": "nwps", "enabled": True}],
         "sources": [
-            {"id": 1, "name": "A", "agency": "USGS"},
-            {"id": 2, "name": "B", "agency": "NWS", "fetch_url_id": 1},
-            {"id": 3, "name": "C", "agency": "Calculation", "calc_expression_id": 1},
+            {"id": 1, "name": "A", "agency": "USGS", "gauge_id": 1},
+            {"id": 2, "name": "B", "agency": "NWS", "gauge_id": 2, "fetch_url_id": 1},
+            {"id": 3, "name": "C", "agency": "Calculation", "gauge_id": 3, "calc_expression_id": 1},
         ],
     }
 
@@ -354,11 +364,103 @@ def test_comma_hours_round_trips(tmp_path: Path) -> None:
     fetch_csv = 'id,url,parser,hours,is_active\n1,https://example/x,nwps,"6,12,18",1\n'
     (d / "source.csv").write_text(source_csv, encoding="utf-8")
     (d / "fetch_url.csv").write_text(fetch_csv, encoding="utf-8")
+    (d / "gauge_source.csv").write_text("gauge_id,source_id\n1,1\n", encoding="utf-8")
+    (d / "gauge.csv").write_text("id\n1\n", encoding="utf-8")
+    (d / "calc_expression.csv").write_text(
+        "id,data_type,expression,time_expression,note,provenance_slug\n", encoding="utf-8"
+    )
     _counters(d, source=2, fetch_url=2)
     gs.reverse_engineer(d)
     assert "hours: 6,12,18" in (d / "sources.yaml").read_text(encoding="utf-8")
     gs.generate(d)
     assert (d / "fetch_url.csv").read_text(encoding="utf-8") == fetch_csv
+
+
+def _mini_for_reverse(d: Path, gauge_source_body: str) -> None:
+    """A minimal dataset for reverse_engineer: one source (id 1) bound to gauge 1 +
+    the given gauge_source.csv body. reverse_engineer requires the contract CSVs it
+    resolves against (gauge.csv, calc_expression.csv) to be present, so include them."""
+    d.mkdir()
+    (d / "source.csv").write_text(
+        "id,name,agency,timezone,fetch_url_id,calc_expression_id\n1,X,USGS,,,\n", encoding="utf-8"
+    )
+    (d / "fetch_url.csv").write_text("id,url,parser,hours,is_active\n", encoding="utf-8")
+    (d / "gauge.csv").write_text("id\n1\n", encoding="utf-8")
+    (d / "calc_expression.csv").write_text(
+        "id,data_type,expression,time_expression,note,provenance_slug\n", encoding="utf-8"
+    )
+    (d / "gauge_source.csv").write_text(gauge_source_body, encoding="utf-8")
+
+
+def test_reverse_engineer_rejects_orphan_source(tmp_path: Path) -> None:
+    _mini_for_reverse(tmp_path / "ds", "gauge_id,source_id\n")  # source 1 has no row
+    with pytest.raises(ValueError, match="no gauge_source row"):
+        gs.reverse_engineer(tmp_path / "ds")
+
+
+def test_reverse_engineer_rejects_dangling_source(tmp_path: Path) -> None:
+    # A gauge_source row for a source not in source.csv is corruption (validate-
+    # dataset flags it); the bootstrap must refuse, not silently drop it.
+    _mini_for_reverse(tmp_path / "ds", "gauge_id,source_id\n1,1\n1,999\n")
+    with pytest.raises(ValueError, match=r"references source ids not in source\.csv"):
+        gs.reverse_engineer(tmp_path / "ds")
+
+
+def test_reverse_engineer_rejects_duplicate_row(tmp_path: Path) -> None:
+    # An exact-duplicate gauge_source row must not be silently de-duped on bootstrap.
+    _mini_for_reverse(tmp_path / "ds", "gauge_id,source_id\n1,1\n1,1\n")
+    with pytest.raises(ValueError, match="duplicate gauge_source rows"):
+        gs.reverse_engineer(tmp_path / "ds")
+
+
+def test_reverse_engineer_rejects_multi_gauge(tmp_path: Path) -> None:
+    _mini_for_reverse(tmp_path / "ds", "gauge_id,source_id\n1,1\n2,1\n")
+    with pytest.raises(ValueError, match="linked to multiple gauges"):
+        gs.reverse_engineer(tmp_path / "ds")
+
+
+def test_reverse_engineer_rejects_non_integer_gauge_source(tmp_path: Path) -> None:
+    _mini_for_reverse(tmp_path / "ds", "gauge_id,source_id\nxyz,1\n")
+    with pytest.raises(ValueError, match="non-integer id"):
+        gs.reverse_engineer(tmp_path / "ds")
+
+
+@pytest.mark.parametrize("body", ["gauge_id,source_id\n1,\n", "gauge_id,source_id\n,1\n"])
+def test_reverse_engineer_rejects_blank_pk_cell(tmp_path: Path, body: str) -> None:
+    # A partially-blank NOT-NULL PK row must be rejected, not silently skipped
+    # (validate-dataset flags it as "empty value in NOT NULL column").
+    _mini_for_reverse(tmp_path / "ds", body)
+    with pytest.raises(ValueError, match="empty PK cell"):
+        gs.reverse_engineer(tmp_path / "ds")
+
+
+def test_reverse_engineer_rejects_dangling_gauge_ref(tmp_path: Path) -> None:
+    # A gauge_source row pointing at a non-existent gauge is corruption; the validate
+    # pass on the assembled registry must reject it (not write a dangling gauge_id).
+    # _mini_for_reverse's gauge.csv has only gauge 1, so 99999999 is dangling.
+    _mini_for_reverse(tmp_path / "ds", "gauge_id,source_id\n99999999,1\n")
+    with pytest.raises(ValueError, match=r"gauge_id 99999999 not in gauge\.csv"):
+        gs.reverse_engineer(tmp_path / "ds")
+
+
+def test_reverse_engineer_rejects_missing_required_csv(tmp_path: Path) -> None:
+    # gauge.csv (and the other contract CSVs) must be present so refs resolve — a
+    # missing one is a clean error, not a FileNotFoundError traceback or a skipped check.
+    _mini_for_reverse(tmp_path / "ds", "gauge_id,source_id\n1,1\n")
+    (tmp_path / "ds" / "gauge.csv").unlink()
+    with pytest.raises(ValueError, match=r"missing required file.*gauge\.csv"):
+        gs.reverse_engineer(tmp_path / "ds")
+
+
+def test_reverse_engineer_rejects_duplicate_source_id(tmp_path: Path) -> None:
+    d = tmp_path / "ds"
+    _mini_for_reverse(d, "gauge_id,source_id\n1,1\n")
+    (d / "source.csv").write_text(
+        "id,name,agency,timezone,fetch_url_id,calc_expression_id\n1,A,USGS,,,\n1,B,NWS,,,\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="duplicate source id"):
+        gs.reverse_engineer(d)
 
 
 def test_check_missing_csv_reports_cleanly(tmp_path: Path) -> None:
@@ -367,6 +469,6 @@ def test_check_missing_csv_reports_cleanly(tmp_path: Path) -> None:
     d.mkdir()
     _counters(d, source=2, fetch_url=2)
     (d / "sources.yaml").write_text(
-        "sources:\n- {id: 1, name: X, agency: USGS}\n", encoding="utf-8"
+        "sources:\n- {id: 1, name: X, agency: USGS, gauge_id: 1}\n", encoding="utf-8"
     )
     assert gs._main(_ns(d, check=True)) == 1

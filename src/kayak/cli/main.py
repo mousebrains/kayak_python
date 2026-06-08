@@ -72,6 +72,7 @@ def main() -> None:
     status.addArgs(subparsers)
     sync_metadata.addArgs(subparsers)
     generate_sources.addArgs(subparsers)
+    generate_sources.add_source_args(subparsers)
 
     args = parser.parse_args()
     mkLogger(args)
