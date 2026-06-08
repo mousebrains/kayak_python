@@ -14,11 +14,11 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from kayak.cli.init_db import canonical_agency, sync_sources
 from kayak.config import FETCH_BUDGET
+from kayak.config_data import load_sources
 from kayak.db.engine import get_session
 from kayak.db.models import FetchUrl, Source
-from kayak.db.sources import get_active_fetch_urls
-from kayak.parsers.base import BaseParser
 from kayak.parsers.registry import ensure_all_loaded, get_parser_class
 
 logger = logging.getLogger(__name__)
@@ -109,12 +109,9 @@ class _FetchWork:
     source_map: dict[str, int] = field(default_factory=dict)
     source_tz_map: dict[str, str] = field(default_factory=dict)
     fetch_url_id: int | None = None
-    # Per-URL policy for a parser-emitted station with no `source` row. NULL/''/
-    # 'reject' -> reject (alert; fetch exits non-zero); 'ignore' -> drop quietly.
-    unknown_station_policy: str | None = None
 
 
-def fetch(args: argparse.Namespace) -> int:
+def fetch(args: argparse.Namespace) -> None:
     """Fetch data from remote agencies, parse, and store in database.
 
     Phase-banner structure preserved: (1) prepare work items inside a
@@ -122,13 +119,6 @@ def fetch(args: argparse.Namespace) -> int:
     (3) parse + store inside a short write session. Sessions are opened
     in this function and passed to helpers — helpers never acquire
     their own session.
-
-    The work-list comes from the DB's active ``fetch_url`` rows (synced from
-    the dataset CSVs by ``levels sync-metadata``), not the engine-packaged
-    ``sources.yaml`` (dataset-separation S1). Returns the process exit code:
-    ``1`` if any URL emitted an undeclared station under the default ``reject``
-    policy (its known sibling stations are still saved, but the non-zero exit
-    drives the systemd ``OnFailure`` alert), else ``0``.
     """
 
     ensure_all_loaded()
@@ -148,12 +138,18 @@ def fetch(args: argparse.Namespace) -> int:
             args.dry_run,
             args.fetch_only,
         )
-        return 0
+        return
 
-    # --- Phase 1: Prepare work items from the DB (short read-only session) ---
+    yaml_sources = _filter_yaml_sources(load_sources(), args.parser_filter, args.url_filter)
+    print(f"Found {len(yaml_sources)} URL sources to process")
+
+    # --- Phase 1: Prepare work items (short read-only session) ---
     session = get_session()
     try:
-        work_items = _prepare_work_items(session, args)
+        # Sync YAML → fetch_url table so new/changed URLs are available
+        sync_sources(session)
+        session.commit()
+        work_items = _prepare_work_items(session, yaml_sources, args)
     finally:
         session.close()
 
@@ -161,10 +157,9 @@ def fetch(args: argparse.Namespace) -> int:
     content_map = _fetch_content(work_items, args)
 
     # --- Phase 3: Parse and store (short write session) ---
-    rejected: list[str] = []
     session = get_session()
     try:
-        rejected = _parse_and_store(session, work_items, content_map, args)
+        _parse_and_store(session, work_items, content_map, args)
         if args.dry_run:
             session.rollback()
         else:
@@ -172,80 +167,80 @@ def fetch(args: argparse.Namespace) -> int:
     finally:
         session.close()
 
-    if rejected:
-        logger.error(
-            "fetch: %d URL(s) emitted undeclared stations under reject policy "
-            "(known stations were still saved): %s",
-            len(rejected),
-            ", ".join(rejected),
-        )
-        return 1
-    return 0
 
-
-def _filter_fetch_urls(
-    fetch_urls: list[FetchUrl],
+def _filter_yaml_sources(
+    yaml_sources: list[dict],
     parser_filter: str | None,
     url_filter: str | None,
-) -> list[FetchUrl]:
-    """Apply optional --parser-filter / --url-filter to the active fetch_url rows."""
+) -> list[dict]:
+    """Apply optional --parser-filter / --url-filter to the YAML source list."""
     if parser_filter:
-        fetch_urls = [fu for fu in fetch_urls if fu.parser == parser_filter]
+        yaml_sources = [s for s in yaml_sources if s["parser"] == parser_filter]
     if url_filter:
-        fetch_urls = [fu for fu in fetch_urls if url_filter in fu.url]
-    return fetch_urls
+        yaml_sources = [s for s in yaml_sources if url_filter in s["url"]]
+    return yaml_sources
 
 
-def _build_fetch_work(fetch_url: FetchUrl, url: str, parser_name: str) -> _FetchWork:
-    """Flatten a ``fetch_url`` row (with its eager-loaded sources) into a
-    fully-populated _FetchWork.
+def _build_fetch_work(
+    session: Session,
+    src_def: dict,
+    url: str,
+    parser_name: str,
+) -> _FetchWork:
+    """Resolve a YAML source row into a fully-populated _FetchWork.
 
     Caller has already filtered by hour-allow + parser-known + fetch_only
-    short-circuit. ``source_id`` is set only when the URL has exactly one source
-    (single-station feeds); multi-station feeds dispatch via ``source_map``.
+    short-circuit. This helper does the fetch_url lookup + source-map
+    flattening only.
     """
-    sources = fetch_url.sources
-    source_map = {s.name: s.id for s in sources}
-    source_tz_map = {s.name: s.timezone for s in sources if s.timezone}
-    source_id = sources[0].id if len(sources) == 1 else None
+    fetch_url = session.execute(
+        select(FetchUrl).where(FetchUrl.url == src_def["url"])
+    ).scalar_one_or_none()
+
+    source_id = None
+    source_map: dict[str, int] = {}
+    source_tz_map: dict[str, str] = {}
+    fetch_url_id = None
+    if fetch_url is not None:
+        fetch_url_id = fetch_url.id
+        sources = fetch_url.sources
+        source_map = {s.name: s.id for s in sources}
+        source_tz_map = {s.name: s.timezone for s in sources if s.timezone}
+        if len(sources) == 1:
+            source_id = sources[0].id
 
     return _FetchWork(
         url=url,
-        raw_url=fetch_url.url,
+        raw_url=src_def["url"],
         parser_name=parser_name,
         source_id=source_id,
         source_map=source_map,
         source_tz_map=source_tz_map,
-        fetch_url_id=fetch_url.id,
-        unknown_station_policy=fetch_url.unknown_station_policy,
+        fetch_url_id=fetch_url_id,
     )
 
 
 def _prepare_work_items(
     session: Session,
+    yaml_sources: list[dict],
     args: argparse.Namespace,
 ) -> list[_FetchWork]:
-    """Build the list of fetch work items from the DB. Session is borrowed.
+    """Build the list of fetch work items. Session is borrowed, not owned.
 
-    Reads the active ``fetch_url`` rows (synced from the dataset CSVs), applies
-    the optional name/url filters, then per row: the hour-allow check, the
-    ``fetch_only`` short-circuit, and the ``parser_cls`` pre-flight (so we don't
-    carry a non-fetchable URL into Phase 2's async layer, and a typo'd / unknown
-    parser surfaces before any network I/O).
+    Both `fetch_only` short-circuit and `parser_cls` pre-flight are
+    intentional and stay here (so we don't carry a non-fetchable URL into
+    Phase 2's async layer, and so a typo'd parser_name surfaces before any
+    network I/O).
     """
-    fetch_urls = _filter_fetch_urls(
-        get_active_fetch_urls(session), args.parser_filter, args.url_filter
-    )
-    print(f"Found {len(fetch_urls)} URL sources to process")
-
     work_items: list[_FetchWork] = []
-    for fu in fetch_urls:
-        if not args.ignore_constraints and not _hour_allowed(fu.hours or ""):
-            logger.debug("Skipping %s (hour constraint)", fu.url)
+    for src_def in yaml_sources:
+        hours = src_def.get("hours", "")
+        if not args.ignore_constraints and not _hour_allowed(hours):
+            logger.debug("Skipping %s (hour constraint)", src_def["url"])
             continue
 
-        url = args.url_prefix + fu.url
-        parser_name = args.parser_type or fu.parser
+        url = args.url_prefix + src_def["url"]
+        parser_name = args.parser_type or src_def["parser"]
 
         if args.show_name:
             print(f"Processing {url} parser={parser_name}")
@@ -256,18 +251,18 @@ def _prepare_work_items(
             work_items.append(
                 _FetchWork(
                     url=url,
-                    raw_url=fu.url,
-                    parser_name=parser_name or "",
+                    raw_url=src_def["url"],
+                    parser_name=parser_name,
                     source_id=None,
                 )
             )
             continue
 
-        if parser_name is None or get_parser_class(parser_name) is None:
-            logger.error("Unknown parser %r for %s", parser_name, fu.url)
+        if get_parser_class(parser_name) is None:
+            logger.error("Unknown parser '%s'", parser_name)
             continue
 
-        work_items.append(_build_fetch_work(fu, url, parser_name))
+        work_items.append(_build_fetch_work(session, src_def, url, parser_name))
     return work_items
 
 
@@ -313,7 +308,7 @@ def _parse_and_store(
     work_items: list[_FetchWork],
     content_map: dict[str, str | None],
     args: argparse.Namespace,
-) -> list[str]:
+) -> None:
     """Phase 3: parse + store each fetched payload. Session is borrowed.
 
     The per-URL commit inside the loop is the SQLite-writer-lock-release
@@ -321,113 +316,56 @@ def _parse_and_store(
     branches stay distinct: `logger.error` for expected parser/data
     errors (already actionable); `logger.exception` (with traceback) for
     anything else so an unexpected crash is debuggable.
-
-    Returns the URLs that emitted an undeclared station under the default
-    ``reject`` policy (their known sibling stations are still committed); the
-    caller turns a non-empty list into a non-zero exit so monitoring alerts.
     """
-    rejected: list[str] = []
     for w in work_items:
-        if _process_work_item(session, w, content_map, args):
-            rejected.append(w.url)
-    return rejected
+        text_content = content_map.get(w.url)
+        if text_content is None:
+            continue
 
+        if args.fetch_only:
+            continue
 
-def _process_work_item(
-    session: Session,
-    w: _FetchWork,
-    content_map: dict[str, str | None],
-    args: argparse.Namespace,
-) -> bool:
-    """Parse + store one URL's payload (commit-per-URL releases the SQLite writer
-    lock between URLs). Returns True if the URL must be rejected (undeclared
-    station under the default reject policy) so the caller can flag a non-zero
-    fetch exit. A bad single URL never kills the batch — both except branches
-    roll back its partial work and return False.
-    """
-    text_content = content_map.get(w.url)
-    if text_content is None or args.fetch_only:
-        return False
+        try:
+            parser_cls = get_parser_class(w.parser_name)
+            if parser_cls is None:
+                continue
 
-    try:
-        parser_cls = get_parser_class(w.parser_name)
-        if parser_cls is None:
-            return False
+            parser = parser_cls(
+                url=w.url,
+                session=session,
+                source_id=w.source_id,
+                source_map=w.source_map,
+                source_tz_map=w.source_tz_map,
+                dry_run=args.dry_run,
+                fetch_url_id=w.fetch_url_id,
+                agency=canonical_agency(w.parser_name),
+            )
+            count = parser.parse(text_content)
 
-        parser = parser_cls(
-            url=w.url,
-            session=session,
-            source_id=w.source_id,
-            source_map=w.source_map,
-            source_tz_map=w.source_tz_map,
-            dry_run=args.dry_run,
-            fetch_url_id=w.fetch_url_id,
-        )
-        count = parser.parse(text_content)
+            if w.fetch_url_id and not args.dry_run and not args.input_dir:
+                fetch_url = session.get(FetchUrl, w.fetch_url_id)
+                if fetch_url:
+                    fetch_url.last_fetched_at = datetime.now(UTC)
 
-        # Stations the feed emitted with no `source` row: their observations were
-        # dropped (never auto-created — S1) while known sibling stations were
-        # saved. The per-URL policy decides reject (alert) vs ignore.
-        reject = bool(parser.unknown_stations) and not args.dry_run
-        if reject:
-            reject = _apply_unknown_station_policy(w, parser)
+            logger.debug("  %d updates", count)
 
-        if w.fetch_url_id and not args.dry_run and not args.input_dir:
-            fetch_url = session.get(FetchUrl, w.fetch_url_id)
-            if fetch_url:
-                fetch_url.last_fetched_at = datetime.now(UTC)
+            # Commit after each URL to release the SQLite writer lock
+            # between URLs; otherwise concurrent PHP readers can hit
+            # SQLITE_BUSY while the pipeline is running.
+            if not args.dry_run:
+                session.commit()
 
-        logger.debug("  %d updates", count)
-        if not args.dry_run:
-            session.commit()
-        return reject
-
-    except (ValueError, KeyError, LookupError) as e:
-        session.rollback()
-        logger.error("Parse/data error for %s: %s", w.url, e)
-        return False
-    except Exception:
-        # Don't let a single bad URL kill the rest of the batch — log with
-        # traceback and move on. KeyboardInterrupt / SystemExit (BaseException)
-        # still propagate.
-        session.rollback()
-        logger.exception("Unexpected error for %s", w.url)
-        return False
-
-
-def _apply_unknown_station_policy(work: _FetchWork, parser: BaseParser) -> bool:
-    """Log + classify a URL's undeclared stations per its ``unknown_station_policy``.
-
-    Known sibling stations are already saved either way; this only decides whether
-    the dropped unknowns are an alert (``reject`` → returns True → non-zero fetch
-    exit) or expected churn (``ignore`` → returns False, warn with counts). Any
-    value other than ``ignore`` (matched case-insensitively, whitespace-trimmed)
-    is treated as reject (fail-safe). Note only multi-source URLs reach here — a
-    single-source URL attributes any emitted station to its lone source, so an
-    unrecognized station name there is not flagged (see BaseParser.dump_to_db).
-    """
-    stations = ", ".join(sorted(parser.unknown_stations))
-    dropped = parser.dropped_obs_count
-    if (work.unknown_station_policy or "").strip().lower() == "ignore":
-        logger.warning(
-            "Ignored %d observation(s) from %d undeclared station(s) on %s "
-            "(unknown_station_policy=ignore): %s",
-            dropped,
-            len(parser.unknown_stations),
-            work.url,
-            stations,
-        )
-        return False
-    logger.error(
-        "Dropped %d observation(s) from %d undeclared station(s) on %s — no "
-        "`source` row; declare them in the dataset or set "
-        "unknown_station_policy=ignore: %s",
-        dropped,
-        len(parser.unknown_stations),
-        work.url,
-        stations,
-    )
-    return True
+        except (ValueError, KeyError, LookupError) as e:
+            session.rollback()
+            logger.error("Parse/data error for %s: %s", w.url, e)
+            continue
+        except Exception:
+            # Don't let a single bad URL kill the rest of the batch —
+            # log with traceback and move on. KeyboardInterrupt /
+            # SystemExit (BaseException) still propagate.
+            session.rollback()
+            logger.exception("Unexpected error for %s", w.url)
+            continue
 
 
 def _get_content_from_file(raw_url: str, input_dir: str) -> str | None:
@@ -520,18 +458,6 @@ def _fetch_single(
             )
             count = parser.parse(text_content)
             print(f"{count} database updates")
-            if parser.unknown_stations:
-                # Single-URL backfill drops undeclared stations like the batch
-                # path, but has no per-URL policy — surface them so a manual
-                # backfill doesn't silently discard data (S1).
-                logger.warning(
-                    "Dropped %d observation(s) from %d undeclared station(s) on %s "
-                    "(no `source` row): %s",
-                    parser.dropped_obs_count,
-                    len(parser.unknown_stations),
-                    full_url,
-                    ", ".join(sorted(parser.unknown_stations)),
-                )
             if not dry_run:
                 session.commit()
         finally:

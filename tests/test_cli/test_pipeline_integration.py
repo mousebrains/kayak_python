@@ -353,16 +353,22 @@ def test_pipeline_fetch_through_build(fixture: _ParserFixture, tmp_path: Path) -
     output_dir = tmp_path / "out"
     args = _build_args(input_dir, output_dir)
 
-    # fetch() reads its work-list straight from the DB (S1): _seed already wrote
-    # the single active FetchUrl + linked Source, so no sources.yaml stubbing is
-    # needed. OUTPUT_DIR override routes build()'s path lookup onto our tmp dir.
+    # Single-entry source list matching our seeded FetchUrl so fetch()
+    # doesn't iterate the 100+ sources from real src/kayak/data/sources.yaml.
+    yaml_sources = [{"url": url, "parser": fixture.parser_id, "hours": ""}]
+
+    # OUTPUT_DIR override routes build()'s path lookup onto our tmp dir.
     # Stub fetch-usgs-ogc to avoid hitting the real USGS OGC endpoint.
+    # Stub sync_sources so it doesn't re-seed sources.yaml's full row
+    # set (the orphan-check step would then flag every unlinked source).
     engine_mod.reset()
     engine_mod.get_engine(db_url)
     engine_mod.get_session_factory(db_url)
 
     with (
         patch.dict("os.environ", {"DATABASE_URL": db_url, "OUTPUT_DIR": str(output_dir)}),
+        patch("kayak.cli.fetch.load_sources", return_value=yaml_sources),
+        patch("kayak.cli.fetch.sync_sources", return_value=0),
         patch("kayak.cli.pipeline.fetch_usgs_ogc.fetch_usgs_ogc", return_value=None),
     ):
         try:

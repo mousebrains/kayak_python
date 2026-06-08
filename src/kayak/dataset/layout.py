@@ -7,17 +7,13 @@ carry stable ids, and which columns live in the geometry/gradient JSON
 sidecars rather than in ``reach.csv``. S6 promotes this descriptor into the
 versioned contract manifest; until then it is the contract.
 
-A dataset is a **complete projection** of the metadata schema: every
-``CONTRACT_CSVS`` file is required (header-only when the table is empty) plus
-both JSON sidecars (``{}`` when empty), so the validator treats a missing file
-as corruption, not as "this table is not applicable" — absence and emptiness are
-distinct, and emptiness is expressed by a header-only CSV / empty-object JSON.
-The files come from two writers: ``scripts/export_metadata.py`` (the nightly DB
-snapshot) writes ``SNAPSHOT_EXPORT_CSVS``, while the generator-owned
-``GENERATOR_OWNED_CSVS`` trio (source/fetch_url/gauge_source) is written only by
-``levels generate-sources`` from the dataset's ``sources.yaml`` — so the snapshot
-never races them (dataset-separation S1's "no dual-writer window"). Both writers
-together still produce every contract file.
+A dataset is a **complete projection** of the metadata schema: ``levels build``
+/ ``scripts/export_metadata.py`` write one CSV per metadata table (header-only
+when the table is empty) plus both JSON sidecars (``{}`` when empty), so a
+faithfully-exported dataset always carries *every* contract file. The validator
+therefore treats a missing file as corruption, not as "this table is not
+applicable" — absence and emptiness are distinct, and emptiness is expressed by
+a header-only CSV / empty-object JSON.
 
 CSV column sets and types are derived from the SQLAlchemy models minus the
 columns that export to JSON sidecars or are runtime churn — exactly the rule
@@ -40,19 +36,6 @@ from kayak.db.models import Base
 EXCLUDED_COLUMNS: dict[str, set[str]] = {
     "reach": {"geom", "gradient_profile"},
     "fetch_url": {"last_fetched_at"},
-}
-
-# Nullable columns a CSV MAY omit (vs. the complete-projection default that every
-# model column is present). `unknown_station_policy` is the per-URL opt-in added
-# in S1: a dataset that wants the all-reject default simply leaves the column out,
-# so `generate-sources` omits it when no URL opts in. This keeps the column's
-# introduction backward-compatible — an older committed `fetch_url.csv` (no
-# column) stays valid and byte-stable under `generate-sources --check`, which the
-# base-pin CI trust boundary requires (a dataset can't validate against the new
-# engine in the same PR that bumps the pin). When the column IS present it is
-# validated like any other.
-OPTIONAL_COLUMNS: dict[str, set[str]] = {
-    "fetch_url": {"unknown_station_policy"},
 }
 
 # Every metadata table a dataset projects to a CSV, in export order
@@ -78,21 +61,6 @@ CONTRACT_CSVS: tuple[str, ...] = (
 )
 # Any CSV in the dataset directory whose stem is not one of these is unexpected.
 KNOWN_CSVS: tuple[str, ...] = CONTRACT_CSVS
-
-# CSVs whose sole writer is ``levels generate-sources`` (projected from the
-# dataset's ``sources.yaml``), NOT the nightly DB snapshot. The snapshot
-# (``scripts/export_metadata.py``) must not export these — otherwise two writers
-# race the same files and a fetch-time DB change could drift them out of the
-# byte-for-byte ``generate-sources --check`` (dataset-separation S1, "no
-# dual-writer window"). They stay in ``CONTRACT_CSVS`` — still required, still
-# applied by ``levels sync-metadata`` — only the *export* side excludes them.
-GENERATOR_OWNED_CSVS: frozenset[str] = frozenset({"source", "fetch_url", "gauge_source"})
-
-# Tables the nightly snapshot exports: every contract CSV except the
-# generator-owned trio, in contract order.
-SNAPSHOT_EXPORT_CSVS: tuple[str, ...] = tuple(
-    t for t in CONTRACT_CSVS if t not in GENERATOR_OWNED_CSVS
-)
 
 # id_counters.csv is required and is itself not a contract table (no id column).
 ID_COUNTERS_CSV = "id_counters.csv"
@@ -158,18 +126,9 @@ def _coordinate_range(name: str) -> tuple[float, float] | None:
 
 
 def expected_columns(table: str) -> set[str]:
-    """The full CSV column-name set for ``table`` (model columns minus excluded).
-
-    Includes :data:`OPTIONAL_COLUMNS` — a CSV may carry them but is not required
-    to; use :func:`optional_columns` to split required from optional.
-    """
+    """The exact CSV column-name set for ``table`` (model columns minus excluded)."""
     cols = {c.name for c in Base.metadata.tables[table].columns}
     return cols - EXCLUDED_COLUMNS.get(table, set())
-
-
-def optional_columns(table: str) -> set[str]:
-    """Columns ``table``'s CSV MAY omit (see :data:`OPTIONAL_COLUMNS`)."""
-    return OPTIONAL_COLUMNS.get(table, set())
 
 
 def ordered_columns(table: str) -> list[str]:
