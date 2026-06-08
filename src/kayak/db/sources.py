@@ -4,9 +4,30 @@ from datetime import datetime
 from typing import NamedTuple
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from kayak.db.models import FetchUrl, Gauge, GaugeSource, LatestObservation, Source
+
+
+def get_active_fetch_urls(session: Session) -> list[FetchUrl]:
+    """Return the active fetch URLs to harvest, each with its sources loaded.
+
+    The fetch work-list — replaces ``levels fetch`` reading the engine-packaged
+    ``sources.yaml`` (dataset-separation S1): ``fetch_url`` / ``source`` rows now
+    arrive in the DB only via ``levels sync-metadata`` from the dataset CSVs. Only
+    ``is_active=1`` rows are fetched (an ``enabled: false`` registry URL projects
+    to ``is_active=0`` and is skipped here). ``sources`` is eager-loaded so the
+    caller can build the per-station source/timezone maps without re-querying.
+    Ordered by id for deterministic processing.
+    """
+    return list(
+        session.scalars(
+            select(FetchUrl)
+            .where(FetchUrl.is_active.is_(True))
+            .options(selectinload(FetchUrl.sources))
+            .order_by(FetchUrl.id)
+        )
+    )
 
 
 class OrphanRow(NamedTuple):

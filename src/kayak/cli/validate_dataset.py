@@ -216,7 +216,9 @@ def _check_required_files(d: Path) -> list[str]:
 
 def _check_csv_shape(d: Path) -> tuple[list[str], set[str]]:
     """Each *.csv parses, names a known table, has no duplicate header names, and
-    carries exactly the expected columns. Returns (errors, tables-that-passed)."""
+    carries the expected columns (required ones present, no unexpected ones;
+    :func:`layout.optional_columns` may be absent). Returns (errors,
+    tables-that-passed)."""
     errors: list[str] = []
     good: set[str] = set()
     for csv_path in sorted(d.glob("*.csv")):
@@ -236,13 +238,16 @@ def _check_csv_shape(d: Path) -> tuple[list[str], set[str]]:
             errors.append(f"unexpected CSV (not a known dataset table): {csv_path.name}")
             continue
         expected = layout.expected_columns(table)
+        required = expected - layout.optional_columns(table)
         got = set(header)
-        if got != expected:
+        missing = required - got  # optional columns may be absent
+        unexpected = got - expected
+        if missing or unexpected:
             parts = []
-            if expected - got:
-                parts.append(f"missing {sorted(expected - got)}")
-            if got - expected:
-                parts.append(f"unexpected {sorted(got - expected)}")
+            if missing:
+                parts.append(f"missing {sorted(missing)}")
+            if unexpected:
+                parts.append(f"unexpected {sorted(unexpected)}")
             errors.append(f"{csv_path.name}: column mismatch ({'; '.join(parts)})")
             continue
         good.add(table)

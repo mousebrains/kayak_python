@@ -2,10 +2,10 @@
 
 A source with a ``fetch_url_id`` but no ``gauge_source`` row is an
 orphan: the fetch pipeline keeps it fed with fresh observations, but
-nothing consumes that data. Orphans typically appear when a deletion
-migration removes a source row without deactivating its fetch_url —
-the next ``levels fetch`` then auto-creates a replacement Source
-without a gauge_source link (parsers/base.py::_auto_create_source).
+nothing consumes that data. Since S1, ``levels fetch`` no longer
+auto-creates source rows, so an orphan now comes from a metadata CSV
+edit — a ``source`` row that exists (with a fetch_url) but whose
+``gauge_source`` link was removed or never added in the dataset.
 
 See ``docs/done/PLAN_orphan_sources.md`` for the systemic context and the
 follow-up pipeline integration that escalates these to alerts.

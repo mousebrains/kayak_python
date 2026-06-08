@@ -38,13 +38,18 @@ class _Result(Enum):
 
     ok = "ok"
     failed = "failed"
+    # A soft step that signalled failure (truthy int return). It counts toward
+    # the run's non-zero exit (monitoring alerts) but, unlike ``failed``, does
+    # NOT cascade-skip downstream steps — so a soft-failed first step (``fetch``
+    # dropping an undeclared station) never freezes the public site.
+    soft_failed = "soft_failed"
     skipped = "skipped"
 
 
 @dataclass(frozen=True)
 class _Step:
     name: str
-    fn: Callable[[argparse.Namespace], None]
+    fn: Callable[[argparse.Namespace], int | None]
     # Names of steps that must have completed (ok) for this step to run.
     # A step is skipped when any of its prerequisites failed OR was
     # skipped, modulo --continue-on-error (which disables the cascade).
@@ -53,6 +58,9 @@ class _Step:
     # block this step. That preserves the long-standing "--skip-fetch
     # lets the rest of the pipeline run" contract.
     requires: tuple[str, ...] = field(default_factory=tuple)
+    # A "soft" step records a failure (non-zero exit at run end) but does not
+    # cascade-skip downstream on a truthy int return — see _Result.soft_failed.
+    soft: bool = False
 
 
 def _should_skip(
@@ -167,7 +175,9 @@ def _build_steps(skip_fetch: bool) -> list[_Step]:
     """
     steps: list[_Step] = []
     if not skip_fetch:
-        steps.append(_Step("fetch", fetch.fetch))
+        # fetch is "soft": an undeclared-station reject must alert (non-zero exit)
+        # WITHOUT cascade-skipping build, or one new station would freeze the site.
+        steps.append(_Step("fetch", fetch.fetch, soft=True))
     steps.append(_Step("fetch-usgs-ogc", fetch_usgs_ogc.fetch_usgs_ogc))
     steps.extend(
         [
@@ -195,6 +205,33 @@ def _system_exit_result(step_name: str, e: SystemExit, failures: list[tuple[str,
     logger.error("Step %s exited with code %s", step_name, e.code)
     failures.append((step_name, f"SystemExit({e.code})"))
     return _Result.failed
+
+
+def _execute_step(
+    step: _Step, args: argparse.Namespace, failures: list[tuple[str, str]]
+) -> _Result:
+    """Run one step's function and classify the outcome (appending any failure
+    message to ``failures``).
+
+    A *soft* step signals failure via a truthy int return: recorded as
+    ``soft_failed`` (counts toward the run's non-zero exit) but NOT cascading to
+    downstream steps. ``bool`` is excluded so a future ``return <predicate>``
+    can't be misread as a failing exit code. A raised ``SystemExit`` /
+    ``Exception`` is a hard failure (``failed``) that cascade-skips dependents.
+    """
+    try:
+        rc = step.fn(args)
+        if step.soft and isinstance(rc, int) and not isinstance(rc, bool) and rc != 0:
+            logger.error("Step %s soft-failed (rc=%s) — continuing pipeline", step.name, rc)
+            failures.append((step.name, f"soft-fail(rc={rc})"))
+            return _Result.soft_failed
+        return _Result.ok
+    except SystemExit as e:
+        return _system_exit_result(step.name, e, failures)
+    except Exception as e:
+        logger.error("Error in %s: %s", step.name, e)
+        failures.append((step.name, str(e)))
+        return _Result.failed
 
 
 def pipeline(args: argparse.Namespace) -> None:
@@ -238,26 +275,17 @@ def pipeline(args: argparse.Namespace) -> None:
         print(f"{'=' * 60}", flush=True)
         struct_emit("step_start", run_id=run_id, step=step.name)
         start = time.time()
-        try:
-            step.fn(args)
-            results[step.name] = _Result.ok
-        except SystemExit as e:
-            # A truthy/non-zero exit code is a real failure (a bare exit(0)
-            # stays success); the helper logs + records it.
-            results[step.name] = _system_exit_result(step.name, e, failures)
-        except Exception as e:
-            logger.error("Error in %s: %s", step.name, e)
-            failures.append((step.name, str(e)))
-            results[step.name] = _Result.failed
+        results[step.name] = _execute_step(step, args, failures)
         elapsed = time.time() - start
         print(f"Completed {step.name} in {elapsed:.1f}s", flush=True)
+        failed_outcomes = (_Result.failed, _Result.soft_failed)
         struct_emit(
             "step_done" if results[step.name] is _Result.ok else "step_failed",
             run_id=run_id,
             step=step.name,
             elapsed_s=round(elapsed, 3),
             outcome=results[step.name].value,
-            error=failures[-1][1] if results[step.name] is _Result.failed else None,
+            error=failures[-1][1] if results[step.name] in failed_outcomes else None,
         )
 
     # Run PRAGMA optimize to update SQLite query planner statistics
