@@ -368,6 +368,50 @@ def test_comma_hours_round_trips(tmp_path: Path) -> None:
     assert (d / "fetch_url.csv").read_text(encoding="utf-8") == fetch_csv
 
 
+def _mini_for_reverse(d: Path, gauge_source_body: str) -> None:
+    """A minimal dataset for reverse_engineer: one source (id 1) + the given
+    gauge_source.csv body (header included by the caller)."""
+    d.mkdir()
+    (d / "source.csv").write_text(
+        "id,name,agency,timezone,fetch_url_id,calc_expression_id\n1,X,USGS,,,\n", encoding="utf-8"
+    )
+    (d / "fetch_url.csv").write_text("id,url,parser,hours,is_active\n", encoding="utf-8")
+    (d / "gauge_source.csv").write_text(gauge_source_body, encoding="utf-8")
+
+
+def test_reverse_engineer_rejects_orphan_source(tmp_path: Path) -> None:
+    _mini_for_reverse(tmp_path / "ds", "gauge_id,source_id\n")  # source 1 has no row
+    with pytest.raises(ValueError, match="no gauge_source row"):
+        gs.reverse_engineer(tmp_path / "ds")
+
+
+def test_reverse_engineer_rejects_dangling_source(tmp_path: Path) -> None:
+    # A gauge_source row for a source not in source.csv is corruption (validate-
+    # dataset flags it); the bootstrap must refuse, not silently drop it.
+    _mini_for_reverse(tmp_path / "ds", "gauge_id,source_id\n1,1\n1,999\n")
+    with pytest.raises(ValueError, match=r"references source ids not in source\.csv"):
+        gs.reverse_engineer(tmp_path / "ds")
+
+
+def test_reverse_engineer_rejects_duplicate_row(tmp_path: Path) -> None:
+    # An exact-duplicate gauge_source row must not be silently de-duped on bootstrap.
+    _mini_for_reverse(tmp_path / "ds", "gauge_id,source_id\n1,1\n1,1\n")
+    with pytest.raises(ValueError, match="duplicate gauge_source rows"):
+        gs.reverse_engineer(tmp_path / "ds")
+
+
+def test_reverse_engineer_rejects_multi_gauge(tmp_path: Path) -> None:
+    _mini_for_reverse(tmp_path / "ds", "gauge_id,source_id\n1,1\n2,1\n")
+    with pytest.raises(ValueError, match="linked to multiple gauges"):
+        gs.reverse_engineer(tmp_path / "ds")
+
+
+def test_reverse_engineer_rejects_non_integer_gauge_source(tmp_path: Path) -> None:
+    _mini_for_reverse(tmp_path / "ds", "gauge_id,source_id\nxyz,1\n")
+    with pytest.raises(ValueError, match="non-integer id"):
+        gs.reverse_engineer(tmp_path / "ds")
+
+
 def test_check_missing_csv_reports_cleanly(tmp_path: Path) -> None:
     # --check with no committed CSV must exit 1 with a message, not traceback.
     d = tmp_path / "ds"

@@ -491,21 +491,43 @@ def _dump_sources_yaml(fetch_urls: list[dict[str, Any]], sources: list[dict[str,
     return header + body
 
 
-def _source_to_gauge(dataset_dir: Path) -> dict[int, int]:
+def _source_to_gauge(dataset_dir: Path, source_ids: set[int]) -> dict[int, int]:
     """Map source_id -> its single gauge_id from gauge_source.csv. Errors if a
-    source links to 0 or >1 distinct gauges (the scalar registry ``gauge_id`` field
-    assumes the 1-to-1 invariant validate-dataset enforces)."""
-    gauges: dict[int, set[int]] = {}
+    source has anything other than exactly one gauge_source row. The bootstrap must
+    FAIL CLOSED on any corruption ``validate-dataset`` would flag, not silently
+    canonicalize it: a row whose source_id isn't a real source, a source with no
+    row, or a source with >1 row (an exact duplicate or a multi-gauge link the
+    scalar ``gauge_id`` field can't represent)."""
+    rows: dict[int, list[int]] = {}
     with (dataset_dir / "gauge_source.csv").open(encoding="utf-8") as fh:
         for r in csv.DictReader(fh):
             sid_raw = (r.get("source_id") or "").strip()
             gid_raw = (r.get("gauge_id") or "").strip()
-            if sid_raw and gid_raw:
-                gauges.setdefault(int(sid_raw), set()).add(int(gid_raw))
-    multi = {sid: sorted(gs) for sid, gs in gauges.items() if len(gs) > 1}
-    if multi:
-        raise ValueError(f"sources linked to multiple gauges (expected one each): {multi}")
-    return {sid: next(iter(gs)) for sid, gs in gauges.items()}
+            if not sid_raw or not gid_raw:
+                continue
+            try:
+                sid, gid = int(sid_raw), int(gid_raw)
+            except ValueError:
+                raise ValueError(
+                    f"gauge_source.csv: non-integer id ({sid_raw!r}, {gid_raw!r})"
+                ) from None
+            rows.setdefault(sid, []).append(gid)
+    problems: list[str] = []
+    dangling = sorted(set(rows) - source_ids)
+    if dangling:
+        problems.append(f"gauge_source.csv references source ids not in source.csv: {dangling}")
+    for sid in sorted(source_ids):
+        gids = rows.get(sid, [])
+        if not gids:
+            problems.append(f"source {sid}: no gauge_source row (every source needs a gauge)")
+        elif len(gids) > 1:
+            kind = (
+                "linked to multiple gauges" if len(set(gids)) > 1 else "duplicate gauge_source rows"
+            )
+            problems.append(f"source {sid}: {kind} {sorted(gids)} (expected exactly one)")
+    if problems:
+        raise ValueError("invalid gauge_source.csv:\n  - " + "\n  - ".join(problems))
+    return {sid: rows[sid][0] for sid in source_ids}
 
 
 def reverse_engineer(dataset_dir: Path) -> None:
@@ -518,28 +540,20 @@ def reverse_engineer(dataset_dir: Path) -> None:
                 entry["hours"] = r["hours"]
             entry["enabled"] = (r.get("is_active") or "").strip() != "0"
             fetch_urls.append(entry)
-    src_gauge = _source_to_gauge(dataset_dir)
-    sources: list[dict[str, Any]] = []
     with (dataset_dir / "source.csv").open(encoding="utf-8") as fh:
-        for r in csv.DictReader(fh):
-            sid = int(r["id"])
-            if sid not in src_gauge:
-                raise ValueError(
-                    f"source {sid} has no gauge_source row; every source needs a gauge"
-                )
-            entry = {
-                "id": sid,
-                "name": r["name"],
-                "agency": r["agency"],
-                "gauge_id": src_gauge[sid],
-            }
-            if (r.get("timezone") or "").strip():
-                entry["timezone"] = r["timezone"]
-            if (r.get("fetch_url_id") or "").strip():
-                entry["fetch_url_id"] = int(r["fetch_url_id"])
-            if (r.get("calc_expression_id") or "").strip():
-                entry["calc_expression_id"] = int(r["calc_expression_id"])
-            sources.append(entry)
+        source_rows = list(csv.DictReader(fh))
+    src_gauge = _source_to_gauge(dataset_dir, {int(r["id"]) for r in source_rows})
+    sources: list[dict[str, Any]] = []
+    for r in source_rows:
+        sid = int(r["id"])
+        entry = {"id": sid, "name": r["name"], "agency": r["agency"], "gauge_id": src_gauge[sid]}
+        if (r.get("timezone") or "").strip():
+            entry["timezone"] = r["timezone"]
+        if (r.get("fetch_url_id") or "").strip():
+            entry["fetch_url_id"] = int(r["fetch_url_id"])
+        if (r.get("calc_expression_id") or "").strip():
+            entry["calc_expression_id"] = int(r["calc_expression_id"])
+        sources.append(entry)
     _atomic_write_text(dataset_dir / SOURCES_YAML, _dump_sources_yaml(fetch_urls, sources))
 
 
