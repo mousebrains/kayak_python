@@ -82,6 +82,14 @@ def test_unexpected_extra_column_still_rejected(dataset_copy: Path) -> None:
     assert any("bogus_col" in e and "column mismatch" in e for e in errs)
 
 
+def test_bad_unknown_station_policy_value_rejected(dataset_copy: Path) -> None:
+    """A non-canonical unknown_station_policy (S1) is caught at the dataset level,
+    not silently demoted to reject at fetch time."""
+    _add_column(dataset_copy / "fetch_url.csv", "unknown_station_policy", "ingore")
+    errs = validate_dataset(dataset_copy)
+    assert any("unknown_station_policy must be blank or one of" in e for e in errs)
+
+
 def test_missing_required_file(dataset_copy: Path) -> None:
     (dataset_copy / "id_counters.csv").unlink()
     errs = validate_dataset(dataset_copy)

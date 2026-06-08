@@ -55,6 +55,13 @@ OPTIONAL_COLUMNS: dict[str, set[str]] = {
     "fetch_url": {"unknown_station_policy"},
 }
 
+# Canonical authoring values for fetch_url.unknown_station_policy (S1). Blank/absent
+# = the default reject. The runtime treats anything but 'ignore' as reject, but the
+# dataset keeps this canonical set so a typo ('ingore') is caught by validation
+# rather than silently demoted to reject at fetch time. Single source of truth for
+# both validate-dataset (CSV) and generate-sources (registry).
+UNKNOWN_STATION_POLICIES: tuple[str, ...] = ("ignore", "reject")
+
 # Every metadata table a dataset projects to a CSV, in export order
 # (scripts/export_metadata.py::METADATA_TABLES). A complete projection carries
 # all of them — header-only when a table has no rows — so a missing file is

@@ -146,6 +146,7 @@ def validate_dataset(dataset_dir: Path) -> list[str]:
     #      gauge_source / reach.gauge_id FK references.
     errors.extend(_check_gauge_source(d, good_csvs))
     errors.extend(_check_reach_gauge(d, good_csvs))
+    errors.extend(_check_fetch_url_policy(d, good_csvs))
     # (6) reach names (only if reach.csv parsed cleanly).
     if "reach" in good_csvs:
         errors.extend(_check_reach_names(d))
@@ -652,6 +653,26 @@ def _source_gauge_map(gs_rows: list[dict[str, str]]) -> dict[int, set[int]]:
         if sid is not None and gid is not None:
             out.setdefault(sid, set()).add(gid)
     return out
+
+
+def _check_fetch_url_policy(d: Path, good_csvs: set[str]) -> list[str]:
+    """fetch_url.unknown_station_policy (optional column; S1) must be blank or one of
+    layout.UNKNOWN_STATION_POLICIES. Blank/absent = the default reject. The runtime
+    treats anything but 'ignore' as reject, but the dataset keeps the canonical set
+    so a typo ('ingore') is caught here rather than silently demoted at fetch time.
+    A fetch_url.csv with no such column (the common case) is fine — it's optional."""
+    if "fetch_url" not in good_csvs:
+        return []
+    errors: list[str] = []
+    for i, r in enumerate(_csv_rows(d / "fetch_url.csv")):
+        raw = (r.get("unknown_station_policy") or "").strip()
+        if raw and raw not in layout.UNKNOWN_STATION_POLICIES:
+            allowed = ", ".join(repr(v) for v in layout.UNKNOWN_STATION_POLICIES)
+            errors.append(
+                f"fetch_url.csv[{i}]: unknown_station_policy must be blank or one of "
+                f"{allowed} (got {_trunc(raw)})"
+            )
+    return errors
 
 
 def _check_gauge_source(d: Path, good_csvs: set[str]) -> list[str]:
