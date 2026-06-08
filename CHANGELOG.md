@@ -27,6 +27,15 @@ All notable changes to this project will be documented in this file.
   metadata CSV snapshot was refreshed from the live DB to match.
 
 ### Changed
+- **`import_metadata.py` is now sidecar-only; CSV loads go through `sync-metadata`**:
+  the script's full-CSV upsert path was removed (it duplicated `sync-metadata` and
+  skipped its delete-safety). It now applies *only* the reach geometry sidecars
+  (`reaches.json` / `reaches-gradient.json`); a fresh/recovery load is `init-db
+  --no-seed → levels sync-metadata → python scripts/import_metadata.py → pipeline`.
+  It also **fails loud** (rolls back, exit non-zero) if a sidecar reach id has no
+  reach row — the "ran before `sync-metadata`" / wrong-DB mistake — with
+  `--allow-missing-reaches` to opt into a partial apply (dataset-separation
+  SA-teardown).
 - **`sync-metadata` fail-closes on the dataset manifest**: before touching the
   live DB, `levels sync-metadata` now validates the dataset's `dataset.yaml`
   manifest (via the shared `contract.gate_for_use`) and refuses a dataset with no

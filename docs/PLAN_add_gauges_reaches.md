@@ -76,8 +76,8 @@ DATABASE_URL=sqlite:////tmp/sandbox.db levels check-reaches                   # 
 >    ("TOTAL 0") — now fixed so the combined form does the obvious thing. The
 >    snippet above runs them as two commands to mirror `deploy.sh` steps
 >    3.25/3.26 (which apply each only if its JSON changed); a single combined
->    call now works too. (Plain `import_metadata.py` with no flags does the CSV
->    upsert **and** both JSONs.)
+>    call now works too. (Plain `import_metadata.py` with no flags applies **both**
+>    JSON sidecars — no CSV load; the CSVs are `levels sync-metadata`'s job.)
 > 2. **`check-reaches` must run *after* the geom apply.** `geom` lives in
 >    `reaches.json`, not `reach.csv`, so right after `sync-metadata` a re-traced
 >    or **split** reach has its `lat/lon_*` endpoint columns moved but its geom

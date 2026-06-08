@@ -169,15 +169,17 @@ sign in via `/login.php` with an email promoted to `status='maintainer'` (see
 ## 4. Initialize the database
 
 `init-db --no-seed` creates the schema and stamps migrations without the
-`sources.yaml` seed; `import_metadata.py` then loads the gauges, reaches,
-sources, and `gauge_source` links from the `kayak_data` metadata snapshots
-(`DATASET_DIR`, §2.5).
+`sources.yaml` seed; `levels sync-metadata` then loads the gauges, reaches,
+sources, and `gauge_source` links from the `kayak_data` metadata CSVs (matched by
+stable id; `DATASET_DIR`, §2.5), and `import_metadata.py` applies the reach geometry
+sidecars (`reaches.json` / `reaches-gradient.json`) that the CSV sync excludes.
 Without those links the pipeline's `orphan-check` fails and the site renders
 empty, so this order matters:
 
 ```bash
 cd /home/pat/kayak
 /home/pat/.venv/bin/levels init-db --no-seed
+/home/pat/.venv/bin/levels sync-metadata
 /home/pat/.venv/bin/python scripts/import_metadata.py
 /home/pat/.venv/bin/levels pipeline    # first run — fetches data and generates HTML
 ```
@@ -203,7 +205,7 @@ via a migration" — so a dev re-trace reaches prod like this:
 To apply geometry to the live DB by hand (without re-syncing CSV metadata):
 
 ```bash
-/home/pat/.venv/bin/python scripts/import_metadata.py --geom-only
+/home/pat/.venv/bin/python /home/pat/kayak/scripts/import_metadata.py --geom-only
 ```
 
 **Filesystem access for nginx/PHP (`www-data`).** The pipeline runs as `pat`,
@@ -729,6 +731,10 @@ sudo apt install -y nginx php8.4-fpm php8.4-sqlite3 python3 python3-venv sqlite3
 python3 -m venv /home/pat/.venv
 /home/pat/.venv/bin/pip install -e "/home/pat/kayak[dev]"
 
+# 2b. Metadata repo (the CSVs + reaches*.json — separate from the code repo).
+#     The load in step 6 (sync-metadata + import_metadata) reads it via DATASET_DIR.
+sudo -u pat git clone git@github.com:mousebrains/kayak_data.git /home/pat/kayak_data
+
 # 3. Directories (docroot is a real dir outside the repo — no symlink)
 mkdir -p /home/pat/.config/kayak /home/pat/DB /home/pat/public_html
 
@@ -736,6 +742,7 @@ mkdir -p /home/pat/.config/kayak /home/pat/DB /home/pat/public_html
 cat > /home/pat/.config/kayak/.env <<'EOF'
 SQLITE_PATH=/home/pat/DB/kayak.db
 DATABASE_URL=sqlite:////home/pat/DB/kayak.db
+DATASET_DIR=/home/pat/kayak_data
 OUTPUT_DIR=/home/pat/public_html
 EDITOR_FEATURE=1
 EOF
@@ -752,9 +759,10 @@ setfacl -R -d -m u:www-data:rwX /home/pat/DB              # default for new DB f
 
 # 6. Initialize and run (same sequence as § 4 — plain init-db leaves every
 #    source an orphan and renders an empty site)
-/home/pat/.venv/bin/levels init-db --no-seed           # schema + stamped migrations
-/home/pat/.venv/bin/python scripts/import_metadata.py  # gauges/reaches/sources/links from data/db/*.csv
-/home/pat/.venv/bin/levels pipeline                    # fetch live data, generate HTML
+/home/pat/.venv/bin/levels init-db --no-seed                       # schema + stamped migrations
+/home/pat/.venv/bin/levels sync-metadata                          # gauges/reaches/sources/links (CSVs, by id)
+/home/pat/.venv/bin/python /home/pat/kayak/scripts/import_metadata.py  # reach geom/gradient JSON sidecars
+/home/pat/.venv/bin/levels pipeline                               # fetch live data, generate HTML
 ```
 
 ### config.py .env resolution

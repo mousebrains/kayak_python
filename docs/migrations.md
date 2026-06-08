@@ -264,9 +264,10 @@ The one sibling invariant still worth a follow-on plan is:
 
 > This was previously listed here as a future-work gap — "rebuilding
 > prod from scratch is not possible … no code path reads the CSVs back."
-> That gap is **closed**: `scripts/import_metadata.py` reads the CSV
-> snapshots back into the DB (added in the #18/#22 deploy/onboarding
-> work). This section is now the recovery runbook, not an open problem.
+> That gap is **closed**: `levels sync-metadata` applies the CSV snapshots
+> back into the DB (matched by stable id, with delete-safety), and
+> `scripts/import_metadata.py` applies the reach geom/gradient JSON sidecars.
+> This section is the recovery runbook, not an open problem.
 
 `levels init-db` seeds `state`, `source`, and `fetch_url` from
 `src/kayak/data/sources.yaml` but **does not** create any `gauge_source` links
@@ -275,17 +276,16 @@ fix). So `init-db` + `migrate` *alone* yields a DB where every
 fetch-backed source is an orphan — `levels orphan-check` would flag
 ~300 rows.
 
-What closes the gap: the `kayak_data` CSV snapshots (written nightly by
-`scripts/export_metadata.py` to `DATASET_DIR`) are **read back** by
-`scripts/import_metadata.py`, which loads `gauge.csv`, `source.csv`,
-`gauge_source.csv`, `reach.csv`, and the rest — recreating the live
+What closes the gap: the `kayak_data` CSV snapshots are **applied back** by
+`levels sync-metadata`, which loads `gauge.csv`, `source.csv`,
+`gauge_source.csv`, `reach.csv`, and the rest by stable id — recreating the live
 `gauge_source` links. `reach.geom` and `reach.gradient_profile` are kept
 out of `reach.csv` (large, not regenerable on prod without a DEM/NHD) and
-live in `kayak_data`'s `reaches.json` + `reaches-gradient.json`; a full
-`import_metadata.py` run applies both after the CSVs in the same invocation
-(the `--geom-only` / `--gradient-only` flags re-apply *only* one to a live
-DB — the dev re-trace path, see `deploy/SETUP.md` §4 and `scripts/deploy.sh`;
-a from-scratch rebuild doesn't need them).
+live in `kayak_data`'s `reaches.json` + `reaches-gradient.json`;
+`scripts/import_metadata.py` applies those sidecars (no flags = both;
+`--geom-only` / `--gradient-only` re-apply *only* one — the dev re-trace path,
+see `deploy/SETUP.md` §4 and `scripts/deploy.sh`). A from-scratch rebuild runs
+both: `sync-metadata` for the CSVs, then `import_metadata.py` for the geometry.
 
 `huc_name.csv` carries only the HUC6 + HUC8 names the site resolves; the
 HUC2/4/10/12 levels (≈97% of WBD's 17k rows) were trimmed in migration
@@ -297,20 +297,25 @@ with no usable backup — **is** possible purely from what's checked in:
 
 ```bash
 levels init-db --no-seed           # empty schema + stamped migrations
-python scripts/import_metadata.py  # CSVs (incl. gauge_source) + reaches.json geom
+levels sync-metadata               # CSVs (incl. gauge_source), matched by id
+python scripts/import_metadata.py  # reach geom/gradient JSON sidecars
 levels pipeline                    # fetch live data + render
 ```
 
+(`sync-metadata` refuses a `status: scaffold` dataset — add `--allow-scaffold`
+only if rebuilding from a scaffold checkout; the real `kayak_data` is publishable.)
+
 `--no-seed` is required, not just advisable: a plain `levels init-db`
 seeds `state` / `source` / `fetch_url` from `sources.yaml` with fresh
-ids, which then collide with the canonical-id CSV rows on import — a
-duplicate `source` (its name isn't unique), or, since the import upserts
+ids, which then collide with the canonical-id CSV rows on `sync-metadata`
+— a duplicate `source` (its name isn't unique), or, since the sync upserts
 on the primary key, an *aborting* `UNIQUE` conflict on `state.name` /
 `fetch_url.url`. `--no-seed` gives empty tables so the CSV ids load
-cleanly. The import loads with FK enforcement off (the live DB carries
-intentional orphan rows) and reports `integrity_check` +
-`foreign_key_check` afterward. This is the same sequence the quick-start
-(`README.md`, `deploy/SETUP.md` §4) uses for a fresh install.
+cleanly. `sync-metadata` runs with FK enforcement on (and audits
+`integrity_check` + `foreign_key_check`); the `import_metadata.py` sidecar
+apply runs FK-off (the live DB carries intentional orphan rows) and reports
+the same checks. This is the same sequence the quick-start (`README.md`,
+`deploy/SETUP.md` §4) uses for a fresh install.
 
 ### Smaller follow-ups (one-line each)
 

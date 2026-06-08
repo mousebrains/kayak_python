@@ -63,8 +63,10 @@ levels init-db --no-seed
 # 4. Load gauge/reach/source metadata from the kayak_data repo (DATASET_DIR).
 #    init-db alone seeds only states + sources/fetch_urls from sources.yaml;
 #    with no gauge_source links the pipeline's orphan-check fails and the site
-#    renders empty. This loads the real gauges, reaches, and source -> gauge
-#    links that make the pipeline produce a populated site.
+#    renders empty. sync-metadata applies the CSVs (matched by stable id); the
+#    import_metadata step then applies the reach geom/gradient JSON sidecars
+#    (excluded from reach.csv), so the pipeline produces a populated site.
+levels sync-metadata
 python scripts/import_metadata.py
 
 # 5. Run the full pipeline (fetch live data, generate HTML)
