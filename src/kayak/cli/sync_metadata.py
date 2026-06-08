@@ -8,14 +8,17 @@ because the id never moves). It replaces "write a data migration, then snapshot
 the CSV" with "edit the reviewed CSV, then sync".
 
     levels sync-metadata --dry-run          # print the plan, change nothing
-    levels sync-metadata                     # apply inserts/updates; REFUSE deletes
-    levels sync-metadata --allow-deletes     # also apply deletions (drops data)
+    levels sync-metadata                     # apply inserts/updates IFF no deletes
+    levels sync-metadata --allow-deletes     # apply inserts/updates AND deletions
 
-Deletions are gated: a deleted source's observations are gone forever and are
-invisible in the one-line CSV diff, so without ``--allow-deletes`` the sync
-applies the safe insert/update half, prints the per-source observation-drop
-counts, and exits non-zero (2) so ``deploy.sh`` aborts and a human runs the
-delete by hand.
+Deletions are gated, and the gate is **all-or-nothing**: a deleted source's
+observations are gone forever and are invisible in the one-line CSV diff, so a
+diff that removes any row is **refused before a single write** without
+``--allow-deletes`` — the sync prints the per-source observation-drop counts and
+exits non-zero (2) with the DB **untouched** (no partial insert/update half), so
+``deploy.sh`` aborts and a human re-runs the *whole* batch with
+``--allow-deletes`` (which applies inserts/updates and deletes in one
+transaction).
 
 Runs on a **raw ``sqlite3`` connection with ``foreign_keys=ON``** (set before
 any transaction opens — SQLite ignores the PRAGMA mid-transaction): the schema's
@@ -153,17 +156,6 @@ def sync_metadata(args: argparse.Namespace) -> int:
     if rc is not None:
         return rc
 
-    # Snapshot the live DB before mutating it (opt-in; deploy.sh passes --backup).
-    # The online-backup API is correct even when the pipeline writer is
-    # mid-transaction (a plain cp could copy a torn page or miss the -wal); a
-    # fresh source connection keeps it independent of the sync connection's
-    # PRAGMA/transaction state below. Skipped under --dry-run (nothing changes).
-    if args.backup and not args.dry_run:
-        backup_path = db_path.with_name(db_path.name + ".pre-sync")
-        with sqlite3.connect(db_path) as bsrc, sqlite3.connect(backup_path) as bdst:
-            bsrc.backup(bdst)
-        print(f"backed up live DB → {backup_path}")
-
     conn = sqlite3.connect(db_path)
     try:
         # A concurrent pipeline/decimate write would otherwise make the first DML
@@ -192,26 +184,48 @@ def sync_metadata(args: argparse.Namespace) -> int:
             print("dry-run: nothing applied")
             return 0
 
-        refuse_deletes = plan.has_deletes and not args.allow_deletes
+        # A refused delete must touch NOTHING (AC #8: "refused deletes begin no
+        # write transaction and leave logical table checksums/counts unchanged").
+        # Gate BEFORE opening the write transaction so a deploy that hits an
+        # unexpected deletion leaves the DB byte-for-byte unchanged — not the old
+        # half-applied state where inserts/updates committed but deletes were
+        # skipped. The operator reviews the drop counts (printed by _print_plan
+        # above) and re-runs with --allow-deletes, which then applies the whole
+        # batch (inserts/updates AND deletes) atomically in one transaction.
+        if plan.has_deletes and not args.allow_deletes:
+            print(
+                f"REFUSED {plan.total_deletes} deletion(s) that would drop "
+                f"{plan.total_obs_dropped:,} observation(s); NO changes applied. "
+                "Review the plan above, then re-run with --allow-deletes.",
+                file=sys.stderr,
+            )
+            return 2
+
+        # Snapshot the live DB before mutating it (opt-in; deploy.sh passes
+        # --backup). Taken AFTER the refusal gate and dry-run return, so a refused
+        # or dry run does ZERO disk I/O — the backup's purpose is to protect an
+        # actual apply (a FK-valid but logically-wrong UPDATE that commits and
+        # can't be undone from the one-line diff), and there is nothing to protect
+        # when nothing applies. The online-backup API is correct even when the
+        # pipeline writer is mid-transaction (a plain cp could copy a torn page or
+        # miss the -wal); a fresh source connection keeps it independent of the
+        # sync connection's PRAGMA/transaction state.
+        if args.backup:
+            backup_path = db_path.with_name(db_path.name + ".pre-sync")
+            with sqlite3.connect(db_path) as bsrc, sqlite3.connect(backup_path) as bdst:
+                bsrc.backup(bdst)
+            print(f"backed up live DB → {backup_path}")
+
         try:
             with conn:  # commit on success; ROLLBACK on any raise
                 mc.upsert_csvs(conn, csv_dir)
-                if plan.has_deletes and args.allow_deletes:
+                if plan.has_deletes:  # implies --allow-deletes (refusal returned above)
                     deleted = mc.apply_deletions(conn, plan)
                     print(f"deleted {sum(deleted.values())} row(s) across {len(deleted)} table(s)")
                 _audit_or_raise(conn)
         except (SyncError, sqlite3.Error) as exc:
             print(f"error: sync rolled back — NO changes applied: {exc}", file=sys.stderr)
             return 1
-
-        if refuse_deletes:
-            print(
-                f"REFUSED {plan.total_deletes} deletion(s) that would drop "
-                f"{plan.total_obs_dropped:,} observation(s); applied inserts/updates only. "
-                "Review the plan above, then re-run with --allow-deletes.",
-                file=sys.stderr,
-            )
-            return 2
 
         print(f"sync-metadata complete → {db_path}")
         return 0
@@ -239,8 +253,10 @@ def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> 
     parser.add_argument(
         "--allow-deletes",
         action="store_true",
-        help="Apply DELETEs (rows absent from the CSVs). Without it, deletions are "
-        "refused (exit 2) after printing the per-source observation-drop counts.",
+        help="Apply DELETEs (rows absent from the CSVs) together with inserts/updates "
+        "in one transaction. Without it, a diff containing ANY deletion is refused "
+        "(exit 2) with NO changes applied, after printing the per-source "
+        "observation-drop counts.",
     )
     parser.add_argument(
         "--allow-scaffold",

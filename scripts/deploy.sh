@@ -162,16 +162,20 @@ echo ">>> levels validate-dataset $KAYAK_DATA"
 #
 # Apply the reviewed CSV diff to the live DB by stable id: INSERT new, UPDATE
 # changed (a rename is an UPDATE — matched by id, so the source's observations
-# are preserved). --backup snapshots the DB to <db>.pre-sync first: a FK-valid
-# but logically-wrong CSV edit (e.g. a bad threshold UPDATE) commits and is NOT
-# undoable from the one-line diff. Runs WITHOUT --allow-deletes: a diff that
-# REMOVES a row prints the per-source observation-drop plan and exits non-zero,
-# so this `set -e`d deploy ABORTS — but note the safe insert/update half is
-# already COMMITTED at that point. The operator reviews the drop counts, runs
-# `levels sync-metadata --allow-deletes` by hand (the committed upserts are
-# idempotent, so re-running deploy.sh is safe), then re-runs deploy.sh. Runs
-# after migrate (schema current) and before the geom/gradient applies (which
-# UPDATE the same reach rows). Gated on the metadata CSVs actually changing.
+# are preserved). --backup snapshots the DB to <db>.pre-sync just before an
+# actual apply (a FK-valid but logically-wrong CSV edit, e.g. a bad threshold
+# UPDATE, commits and is NOT undoable from the one-line diff); the snapshot
+# follows the refusal gate, so a refused run writes nothing. Runs WITHOUT
+# --allow-deletes: a diff that REMOVES a row prints the per-source
+# observation-drop plan and exits non-zero with NO changes applied (all-or-nothing
+# — not even the insert/update half, and no backup sidecar), so this `set -e`d
+# deploy ABORTS leaving the DB and disk untouched. The operator reviews the drop
+# counts and runs `levels sync-metadata --allow-deletes --backup` by hand (--backup
+# because the destructive run is the one that mutates), which applies the whole
+# batch (inserts/updates AND deletes) in one transaction, then re-runs deploy.sh (a
+# no-op for metadata — the sync is idempotent). Runs after migrate (schema current)
+# and before the geom/gradient applies (which UPDATE the same reach rows). Gated on
+# the metadata CSVs actually changing.
 
 if [[ "$data_old_sha" != "$data_new_sha" ]] && \
         ! git -C "$KAYAK_DATA" diff --quiet "$data_old_sha" "$data_new_sha" -- '*.csv'; then
