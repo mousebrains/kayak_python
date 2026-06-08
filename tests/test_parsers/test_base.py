@@ -279,57 +279,94 @@ class TestUnknownStation:
         assert parser.dropped_obs_count == 0
 
 
-class TestSingleSourceFallbackWarning:
-    """A single-source URL folds any emitted station into its lone source via the
-    source_id fallback (load-bearing for wa.gov's decoupled station id). parse()
-    WARNs only when >1 *distinct* station lands on that one source — the signal a
-    single-source feed has begun emitting multiple physical stations."""
+def _warned_distinct(caplog) -> bool:
+    return any(
+        r.levelno == logging.WARNING and "distinct stations" in r.getMessage()
+        for r in caplog.records
+    )
 
-    def test_warns_when_one_source_absorbs_multiple_stations(self, session, caplog):
+
+class TestSingleSourceMultiStationWarning:
+    """A single-source URL attributes every emitted station to its lone source.
+    parse() WARNs only when >1 *distinct* station lands on that one source — the
+    signal a single-source feed has begun emitting multiple physical stations."""
+
+    def test_warns_on_declared_station_plus_new_one(self, session, caplog):
+        """The natural production regression: the feed emits its declared station
+        AND a new one. The fetch driver passes BOTH source_id and a one-entry
+        source_map for a single-source URL, so the declared name resolves via the
+        map and the new one via the fallback — both must be tracked and warned."""
+        src = _make_source(session, name="A")
+        parser = _NamesParser(
+            url="https://example.com/x",
+            session=session,
+            source_id=src.id,
+            source_map={"A": src.id},  # the real single-source-URL shape
+        )
+        with caplog.at_level(logging.WARNING, logger="kayak.parsers.base"):
+            parser.parse("A\nB")  # declared A (matched) + new B (fallback)
+
+        # Both landed on the lone source...
+        assert session.query(Observation).filter_by(source_id=src.id).count() == 2
+        assert parser._lone_source_stations == {"A", "B"}
+        # ...and the silent-merge is surfaced.
+        warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+        assert any("distinct stations" in m and "A" in m and "B" in m for m in warnings)
+
+    def test_warns_when_lone_source_absorbs_multiple_foreign_stations(self, session, caplog):
+        """Empty source_map + lone source_id (the decoupled shape) — >1 distinct
+        folded name still warns."""
         src = _make_source(session, name="LONE")
-        # source_map empty (wa.gov-style decoupling) + a lone source_id set.
         parser = _NamesParser(url="https://example.com/x", session=session, source_id=src.id)
         with caplog.at_level(logging.WARNING, logger="kayak.parsers.base"):
-            parser.parse("STN_A\nSTN_B")  # two distinct foreign names → both fold
+            parser.parse("STN_A\nSTN_B")
 
-        # Both stored under the lone source (partial behavior unchanged)...
-        assert session.query(Observation).filter_by(source_id=src.id).count() == 2
-        assert parser._fallback_stations == {"STN_A", "STN_B"}
-        # ...and the anomaly is surfaced.
-        warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
-        assert any("distinct stations" in m and "STN_A" in m and "STN_B" in m for m in warnings)
+        assert parser._lone_source_stations == {"STN_A", "STN_B"}
+        assert _warned_distinct(caplog)
 
-    def test_no_warn_for_single_foreign_station(self, session, caplog):
-        """The wa.gov case: one decoupled station name folds in — no warning."""
+    def test_no_warn_for_single_decoupled_station(self, session, caplog):
+        """The wa.gov case: one decoupled station name folds into the lone source
+        (source name 29C100_STG_FM, body emits 29C100) — no warning."""
         src = _make_source(session, name="29C100_STG_FM")
-        parser = _NamesParser(url="https://example.com/wa", session=session, source_id=src.id)
+        parser = _NamesParser(
+            url="https://example.com/wa",
+            session=session,
+            source_id=src.id,
+            source_map={"29C100_STG_FM": src.id},
+        )
         with caplog.at_level(logging.WARNING, logger="kayak.parsers.base"):
             parser.parse("29C100\n29C100")  # same name twice → one distinct
 
-        assert parser._fallback_stations == {"29C100"}
-        assert not [
-            r
-            for r in caplog.records
-            if r.levelno == logging.WARNING and "distinct" in r.getMessage()
-        ]
+        assert parser._lone_source_stations == {"29C100"}
+        assert not _warned_distinct(caplog)
 
-    def test_no_warn_when_stations_matched_in_map(self, session, caplog):
-        """Stations resolved via source_map (not the fallback) are never tracked,
-        so a genuine multi-source URL with all stations declared doesn't warn."""
+    def test_no_warn_for_declared_single_station(self, session, caplog):
+        """A normal single-source feed emitting only its declared station: no warn."""
+        src = _make_source(session, name="FXTW1")
+        parser = _NamesParser(
+            url="https://example.com/nwps",
+            session=session,
+            source_id=src.id,
+            source_map={"FXTW1": src.id},
+        )
+        with caplog.at_level(logging.WARNING, logger="kayak.parsers.base"):
+            parser.parse("FXTW1")
+
+        assert parser._lone_source_stations == {"FXTW1"}
+        assert not _warned_distinct(caplog)
+
+    def test_no_warn_for_genuine_multi_source_url(self, session, caplog):
+        """A real multi-source URL (no lone source_id; stations resolve to
+        DIFFERENT sources via source_map) is never tracked → no false warning."""
         a = _make_source(session, name="A")
         b = _make_source(session, name="B")
-        # Multi-source URL: no lone source_id, both names in the map.
         parser = _NamesParser(
             url="https://example.com/multi",
             session=session,
-            source_map={"A": a.id, "B": b.id},
+            source_map={"A": a.id, "B": b.id},  # source_id stays None
         )
         with caplog.at_level(logging.WARNING, logger="kayak.parsers.base"):
             parser.parse("A\nB")
 
-        assert parser._fallback_stations == set()
-        assert not [
-            r
-            for r in caplog.records
-            if r.levelno == logging.WARNING and "distinct" in r.getMessage()
-        ]
+        assert parser._lone_source_stations == set()
+        assert not _warned_distinct(caplog)

@@ -89,12 +89,13 @@ class BaseParser(ABC):
         # fetch driver reads these to apply the URL's unknown_station_policy.
         self.unknown_stations: set[str] = set()
         self.dropped_obs_count = 0
-        # Distinct station names that folded into a single source via the
-        # source_id fallback (station not in source_map, but a lone source_id is
-        # set — the single-source-URL case). parse() WARNs when >1 distinct name
-        # lands on one source, which signals a single-source feed that has begun
-        # emitting multiple physical stations (silent mis-attribution risk).
-        self._fallback_stations: set[str] = set()
+        # Distinct station names that land on a single lone source_id (the
+        # single-source-URL case — source_id set, every obs attributed to it,
+        # whether matched in source_map or via the fallback). parse() WARNs when
+        # >1 distinct name lands on one source, signalling a single-source feed
+        # that has begun emitting multiple physical stations (silent
+        # mis-attribution risk).
+        self._lone_source_stations: set[str] = set()
 
     # ------------------------------------------------------------------
     # Pure parsing contract + thin DB wrapper
@@ -126,19 +127,19 @@ class BaseParser(ABC):
         self._obs_buffer = []
         self.unknown_stations = set()
         self.dropped_obs_count = 0
-        self._fallback_stations = set()
+        self._lone_source_stations = set()
         for r in self.parse_records(text):
             self.dump_to_db(r.station, r.data_type, r.observed_at, r.value)
         self._flush_buffer()
-        if len(self._fallback_stations) > 1:
+        if len(self._lone_source_stations) > 1:
             logger.warning(
                 "Single-source feed %s attributed %d distinct stations (%s) to its "
                 "lone source — a single-source URL should carry one physical "
                 "station; if this feed now emits multiple, split it into "
                 "per-station sources so they aren't silently merged.",
                 self.url,
-                len(self._fallback_stations),
-                ", ".join(sorted(self._fallback_stations)),
+                len(self._lone_source_stations),
+                ", ".join(sorted(self._lone_source_stations)),
             )
         if self._db_updates == 0:
             logger.warning("No database updates from %s parser(%s)", self.url, self.name)
@@ -232,13 +233,18 @@ class BaseParser(ABC):
             self.dropped_obs_count += 1
             return False
 
-        if matched is None:
-            # Station wasn't in source_map but a lone source_id absorbed it (the
-            # single-source-URL fallback above). Track the distinct foreign name
-            # so parse() can WARN if >1 lands on one source — the only signal that
-            # a single-source feed has started emitting multiple physical stations
-            # (which would otherwise be silently merged, no drop / no alert).
-            self._fallback_stations.add(station)
+        if self.source_id is not None and sid == self.source_id:
+            # Single-source URL: EVERY observation lands on the one source_id,
+            # whether the station matched source_map (the fetch driver sets both
+            # source_map={"A": A.id} AND source_id=A.id for a lone source) or fell
+            # back to it. Track the distinct station names so parse() can WARN on
+            # >1 — the only signal that the feed now emits multiple physical
+            # stations being silently merged into the lone source (the natural
+            # regression is the declared station PLUS a new one, so tracking only
+            # the fallback name would miss it). source_id is set ⇔ single-source
+            # URL (the driver sets it only when len(sources)==1), so a genuine
+            # multi-source URL (source_id is None) is never tracked here.
+            self._lone_source_stations.add(station)
 
         self._obs_buffer.append(
             {
