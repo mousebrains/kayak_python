@@ -542,14 +542,32 @@ def _source_to_gauge(dataset_dir: Path, source_ids: set[int]) -> dict[int, int]:
     return {sid: rows[sid][0] for sid in source_ids}
 
 
+_REVERSE_REQUIRED = (
+    "source.csv",
+    "fetch_url.csv",
+    "gauge_source.csv",
+    "gauge.csv",
+    "calc_expression.csv",
+)
+
+
 def reverse_engineer(dataset_dir: Path) -> None:
     """Bootstrap ``sources.yaml`` from existing source.csv + fetch_url.csv + gauge_source.csv.
 
     Fails closed on a corrupt input rather than silently canonicalizing it away: the
-    gauge_source row checks live in ``_source_to_gauge``, and the assembled registry
-    is run through ``validate_registry`` (dup ids, dangling gauge/fetch/calc refs,
-    typing, stale counters) BEFORE any file is written. (Corruption outside these
-    CSVs — reaches, etc. — remains ``validate-dataset``'s job.)"""
+    contract CSVs it needs must be present (so the gauge_id / calc references are
+    actually resolvable, not skipped), the gauge_source row checks live in
+    ``_source_to_gauge``, and the assembled registry is run through
+    ``validate_registry`` (dup ids, dangling gauge/fetch/calc refs, typing, stale
+    counters) BEFORE any file is written.
+
+    The guarantee is bounded to the *registry contract* (validate_registry): the
+    output is guaranteed to satisfy ``generate-sources --check``. The FULL dataset
+    contract — the USGS source-name rule, reaches, cross-table FK, materialization —
+    stays ``validate-dataset``'s job; run it after a bootstrap."""
+    missing = [f for f in _REVERSE_REQUIRED if not (dataset_dir / f).is_file()]
+    if missing:
+        raise ValueError(f"cannot reverse-engineer: missing required file(s) {missing}")
     fetch_urls: list[dict[str, Any]] = []
     with (dataset_dir / "fetch_url.csv").open(encoding="utf-8") as fh:
         for r in csv.DictReader(fh):

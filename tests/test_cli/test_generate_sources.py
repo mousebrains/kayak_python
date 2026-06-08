@@ -99,6 +99,10 @@ def test_preserves_committed_pragma_column_order(tmp_path: Path) -> None:
         "id,url,parser,hours,is_active\n1,https://example/x,nwps,,1\n", encoding="utf-8"
     )
     (d / "gauge_source.csv").write_text("gauge_id,source_id\n1,1\n", encoding="utf-8")
+    (d / "gauge.csv").write_text("id\n1\n", encoding="utf-8")
+    (d / "calc_expression.csv").write_text(
+        "id,data_type,expression,time_expression,note,provenance_slug\n", encoding="utf-8"
+    )
     _counters(d, source=2, fetch_url=2)
     gs.reverse_engineer(d)
     gs.generate(d)
@@ -361,6 +365,10 @@ def test_comma_hours_round_trips(tmp_path: Path) -> None:
     (d / "source.csv").write_text(source_csv, encoding="utf-8")
     (d / "fetch_url.csv").write_text(fetch_csv, encoding="utf-8")
     (d / "gauge_source.csv").write_text("gauge_id,source_id\n1,1\n", encoding="utf-8")
+    (d / "gauge.csv").write_text("id\n1\n", encoding="utf-8")
+    (d / "calc_expression.csv").write_text(
+        "id,data_type,expression,time_expression,note,provenance_slug\n", encoding="utf-8"
+    )
     _counters(d, source=2, fetch_url=2)
     gs.reverse_engineer(d)
     assert "hours: 6,12,18" in (d / "sources.yaml").read_text(encoding="utf-8")
@@ -369,13 +377,18 @@ def test_comma_hours_round_trips(tmp_path: Path) -> None:
 
 
 def _mini_for_reverse(d: Path, gauge_source_body: str) -> None:
-    """A minimal dataset for reverse_engineer: one source (id 1) + the given
-    gauge_source.csv body (header included by the caller)."""
+    """A minimal dataset for reverse_engineer: one source (id 1) bound to gauge 1 +
+    the given gauge_source.csv body. reverse_engineer requires the contract CSVs it
+    resolves against (gauge.csv, calc_expression.csv) to be present, so include them."""
     d.mkdir()
     (d / "source.csv").write_text(
         "id,name,agency,timezone,fetch_url_id,calc_expression_id\n1,X,USGS,,,\n", encoding="utf-8"
     )
     (d / "fetch_url.csv").write_text("id,url,parser,hours,is_active\n", encoding="utf-8")
+    (d / "gauge.csv").write_text("id\n1\n", encoding="utf-8")
+    (d / "calc_expression.csv").write_text(
+        "id,data_type,expression,time_expression,note,provenance_slug\n", encoding="utf-8"
+    )
     (d / "gauge_source.csv").write_text(gauge_source_body, encoding="utf-8")
 
 
@@ -424,22 +437,28 @@ def test_reverse_engineer_rejects_blank_pk_cell(tmp_path: Path, body: str) -> No
 def test_reverse_engineer_rejects_dangling_gauge_ref(tmp_path: Path) -> None:
     # A gauge_source row pointing at a non-existent gauge is corruption; the validate
     # pass on the assembled registry must reject it (not write a dangling gauge_id).
-    d = tmp_path / "ds"
-    _mini_for_reverse(d, "gauge_id,source_id\n99999999,1\n")
-    (d / "gauge.csv").write_text("id\n1\n", encoding="utf-8")  # gauge 99999999 does not exist
+    # _mini_for_reverse's gauge.csv has only gauge 1, so 99999999 is dangling.
+    _mini_for_reverse(tmp_path / "ds", "gauge_id,source_id\n99999999,1\n")
     with pytest.raises(ValueError, match=r"gauge_id 99999999 not in gauge\.csv"):
-        gs.reverse_engineer(d)
+        gs.reverse_engineer(tmp_path / "ds")
+
+
+def test_reverse_engineer_rejects_missing_required_csv(tmp_path: Path) -> None:
+    # gauge.csv (and the other contract CSVs) must be present so refs resolve — a
+    # missing one is a clean error, not a FileNotFoundError traceback or a skipped check.
+    _mini_for_reverse(tmp_path / "ds", "gauge_id,source_id\n1,1\n")
+    (tmp_path / "ds" / "gauge.csv").unlink()
+    with pytest.raises(ValueError, match=r"missing required file.*gauge\.csv"):
+        gs.reverse_engineer(tmp_path / "ds")
 
 
 def test_reverse_engineer_rejects_duplicate_source_id(tmp_path: Path) -> None:
     d = tmp_path / "ds"
-    d.mkdir()
+    _mini_for_reverse(d, "gauge_id,source_id\n1,1\n")
     (d / "source.csv").write_text(
         "id,name,agency,timezone,fetch_url_id,calc_expression_id\n1,A,USGS,,,\n1,B,NWS,,,\n",
         encoding="utf-8",
     )
-    (d / "fetch_url.csv").write_text("id,url,parser,hours,is_active\n", encoding="utf-8")
-    (d / "gauge_source.csv").write_text("gauge_id,source_id\n1,1\n", encoding="utf-8")
     with pytest.raises(ValueError, match="duplicate source id"):
         gs.reverse_engineer(d)
 
