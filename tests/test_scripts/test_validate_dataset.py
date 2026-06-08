@@ -376,6 +376,18 @@ def test_reach_dangling_gauge_id_rejected(dataset_copy: Path) -> None:
     assert any("reach.csv references gauge ids not in gauge.csv" in e and "999" in e for e in errs)
 
 
+def test_same_gauge_twice_is_only_a_duplicate_pk(dataset_copy: Path) -> None:
+    # An exact-duplicate gauge_source row is a duplicate-PK error, NOT "more than
+    # one gauge" — _check_gauge_source counts distinct gauges, so it stays silent.
+    _rewrite_csv(
+        dataset_copy / "gauge_source.csv",
+        lambda rows: rows.append({"gauge_id": "1", "source_id": "1"}),
+    )
+    errs = validate_dataset(dataset_copy)
+    assert any("duplicate primary key" in e for e in errs)
+    assert not any("more than one gauge" in e for e in errs)
+
+
 def test_duplicate_json_key_is_flagged(dataset_copy: Path) -> None:
     # Finding 2: json.loads keeps the last of duplicate members, dropping geometry.
     geom = json.loads((dataset_copy / "reaches.json").read_text())

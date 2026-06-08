@@ -637,6 +637,18 @@ def _check_source_names(d: Path, good_csvs: set[str]) -> list[str]:
     return []
 
 
+def _source_gauge_map(gs_rows: list[dict[str, str]]) -> dict[int, set[int]]:
+    """source_id -> set of distinct gauge_ids it links to (rows with an empty/invalid
+    cell are skipped — those are reported by the value checks)."""
+    out: dict[int, set[int]] = {}
+    for r in gs_rows:
+        sid = _bounded_int((r.get("source_id") or "").strip())
+        gid = _bounded_int((r.get("gauge_id") or "").strip())
+        if sid is not None and gid is not None:
+            out.setdefault(sid, set()).add(gid)
+    return out
+
+
 def _check_gauge_source(d: Path, good_csvs: set[str]) -> list[str]:
     """Every source is linked to EXACTLY one gauge, and gauge_source's ids resolve.
 
@@ -669,13 +681,16 @@ def _check_gauge_source(d: Path, good_csvs: set[str]) -> list[str]:
     dangling_gauge = sorted(set(gs_gauges) - gauge_set)
     if dangling_gauge:
         errors.append(f"gauge_source.csv references gauge ids not in gauge.csv: {dangling_gauge}")
-    counts = Counter(gs_sources)
-    orphans = sorted(sid for sid in source_set if counts.get(sid, 0) == 0)
+    # Count DISTINCT gauges per source — a same-gauge-twice row is a duplicate-PK
+    # error (caught by _check_duplicate_pks), not a "more than one gauge" error, so
+    # the set dedups it and the message below stays literally true.
+    source_gauges = _source_gauge_map(gs_rows)
+    orphans = sorted(sid for sid in source_set if not source_gauges.get(sid))
     if orphans:
         errors.append(
             f"source ids with no gauge_source row (every source needs a gauge): {orphans}"
         )
-    doubled = sorted(sid for sid, c in counts.items() if c > 1 and sid in source_set)
+    doubled = sorted(sid for sid in source_set if len(source_gauges.get(sid, ())) > 1)
     if doubled:
         errors.append(f"source ids linked to more than one gauge: {doubled}")
     return errors
