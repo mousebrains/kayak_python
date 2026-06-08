@@ -326,6 +326,56 @@ def test_duplicate_natural_pk_is_flagged(dataset_copy: Path) -> None:
     assert any("class_description.csv" in e and "duplicate primary key" in e for e in errs)
 
 
+def test_orphan_source_rejected(dataset_copy: Path) -> None:
+    # Every source must have a gauge: drop source 1's gauge_source row -> orphan.
+    def _drop_source_1(rows: list[dict]) -> None:
+        rows[:] = [r for r in rows if r["source_id"] != "1"]
+
+    _rewrite_csv(dataset_copy / "gauge_source.csv", _drop_source_1)
+    errs = validate_dataset(dataset_copy)
+    assert any("no gauge_source row" in e and "[1]" in e for e in errs)
+
+
+def test_double_linked_source_rejected(dataset_copy: Path) -> None:
+    # A source linked to two gauges (source->gauge must be 1-to-1).
+    _rewrite_csv(
+        dataset_copy / "gauge_source.csv",
+        lambda rows: rows.append({"gauge_id": "2", "source_id": "1"}),
+    )
+    errs = validate_dataset(dataset_copy)
+    assert any("more than one gauge" in e and "[1]" in e for e in errs)
+
+
+def test_gauge_source_dangling_source_id_rejected(dataset_copy: Path) -> None:
+    _rewrite_csv(
+        dataset_copy / "gauge_source.csv",
+        lambda rows: rows.append({"gauge_id": "1", "source_id": "999"}),
+    )
+    errs = validate_dataset(dataset_copy)
+    assert any("references source ids not in source.csv" in e and "999" in e for e in errs)
+
+
+def test_gauge_source_dangling_gauge_id_rejected(dataset_copy: Path) -> None:
+    # Repoint source 1's link at a non-existent gauge (stays exactly-one, bad FK).
+    def _mutate(rows: list[dict]) -> None:
+        for r in rows:
+            if r["source_id"] == "1":
+                r["gauge_id"] = "999"
+
+    _rewrite_csv(dataset_copy / "gauge_source.csv", _mutate)
+    errs = validate_dataset(dataset_copy)
+    assert any("references gauge ids not in gauge.csv" in e and "999" in e for e in errs)
+
+
+def test_reach_dangling_gauge_id_rejected(dataset_copy: Path) -> None:
+    def _mutate(rows: list[dict]) -> None:
+        rows[0]["gauge_id"] = "999"
+
+    _rewrite_csv(dataset_copy / "reach.csv", _mutate)
+    errs = validate_dataset(dataset_copy)
+    assert any("reach.csv references gauge ids not in gauge.csv" in e and "999" in e for e in errs)
+
+
 def test_duplicate_json_key_is_flagged(dataset_copy: Path) -> None:
     # Finding 2: json.loads keeps the last of duplicate members, dropping geometry.
     geom = json.loads((dataset_copy / "reaches.json").read_text())
