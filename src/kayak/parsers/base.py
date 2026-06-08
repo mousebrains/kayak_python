@@ -89,6 +89,12 @@ class BaseParser(ABC):
         # fetch driver reads these to apply the URL's unknown_station_policy.
         self.unknown_stations: set[str] = set()
         self.dropped_obs_count = 0
+        # Distinct station names that folded into a single source via the
+        # source_id fallback (station not in source_map, but a lone source_id is
+        # set — the single-source-URL case). parse() WARNs when >1 distinct name
+        # lands on one source, which signals a single-source feed that has begun
+        # emitting multiple physical stations (silent mis-attribution risk).
+        self._fallback_stations: set[str] = set()
 
     # ------------------------------------------------------------------
     # Pure parsing contract + thin DB wrapper
@@ -120,9 +126,20 @@ class BaseParser(ABC):
         self._obs_buffer = []
         self.unknown_stations = set()
         self.dropped_obs_count = 0
+        self._fallback_stations = set()
         for r in self.parse_records(text):
             self.dump_to_db(r.station, r.data_type, r.observed_at, r.value)
         self._flush_buffer()
+        if len(self._fallback_stations) > 1:
+            logger.warning(
+                "Single-source feed %s attributed %d distinct stations (%s) to its "
+                "lone source — a single-source URL should carry one physical "
+                "station; if this feed now emits multiple, split it into "
+                "per-station sources so they aren't silently merged.",
+                self.url,
+                len(self._fallback_stations),
+                ", ".join(sorted(self._fallback_stations)),
+            )
         if self._db_updates == 0:
             logger.warning("No database updates from %s parser(%s)", self.url, self.name)
         return self._db_updates
@@ -203,7 +220,10 @@ class BaseParser(ABC):
         # 29C100_STG_FM). The unknown-station drop below therefore only fires on
         # MULTI-source URLs (source_id is None), matching the owner's spec that
         # partial-save / reject applies "when a url populates multiple sources".
-        sid = self.source_map.get(station) or self.source_id
+        # (`is not None`, not `or`, so a hypothetical source id 0 wouldn't fall
+        # through — ids are ≥1 by the dataset contract, but be explicit.)
+        matched = self.source_map.get(station)
+        sid = matched if matched is not None else self.source_id
         if sid is None:
             # Undeclared station: drop it (no row is ever created at fetch time)
             # and record it so the fetch driver can apply the URL's
@@ -211,6 +231,14 @@ class BaseParser(ABC):
             self.unknown_stations.add(station)
             self.dropped_obs_count += 1
             return False
+
+        if matched is None:
+            # Station wasn't in source_map but a lone source_id absorbed it (the
+            # single-source-URL fallback above). Track the distinct foreign name
+            # so parse() can WARN if >1 lands on one source — the only signal that
+            # a single-source feed has started emitting multiple physical stations
+            # (which would otherwise be silently merged, no drop / no alert).
+            self._fallback_stations.add(station)
 
         self._obs_buffer.append(
             {

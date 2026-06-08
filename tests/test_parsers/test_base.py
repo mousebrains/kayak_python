@@ -1,9 +1,28 @@
 """Tests for the BaseParser abstract class."""
 
+import logging
 from datetime import UTC, datetime
 
 from kayak.db.models import DataType, FetchUrl, Observation, Source
 from kayak.parsers.base import BaseParser, ObservationRecord
+
+
+class _NamesParser(BaseParser):
+    """Emits one flow observation per non-blank line, keyed by that line as the
+    station name — lets a test choose exactly which station names a feed emits."""
+
+    name = "test"
+
+    def parse_records(self, text):
+        # Distinct minute per line so two stations don't collide on the
+        # (source_id, data_type, observed_at) observation PK when they fold
+        # into one source — keeps row-count assertions unambiguous.
+        return [
+            ObservationRecord(
+                line.strip(), DataType.flow, datetime(2026, 1, 1, 12, i, tzinfo=UTC), 1.0
+            )
+            for i, line in enumerate(line for line in text.splitlines() if line.strip())
+        ]
 
 
 class ConcreteParser(BaseParser):
@@ -258,3 +277,59 @@ class TestUnknownStation:
         parser.parse("DATA:1")  # now resolvable → state reset, nothing unknown
         assert parser.unknown_stations == set()
         assert parser.dropped_obs_count == 0
+
+
+class TestSingleSourceFallbackWarning:
+    """A single-source URL folds any emitted station into its lone source via the
+    source_id fallback (load-bearing for wa.gov's decoupled station id). parse()
+    WARNs only when >1 *distinct* station lands on that one source — the signal a
+    single-source feed has begun emitting multiple physical stations."""
+
+    def test_warns_when_one_source_absorbs_multiple_stations(self, session, caplog):
+        src = _make_source(session, name="LONE")
+        # source_map empty (wa.gov-style decoupling) + a lone source_id set.
+        parser = _NamesParser(url="https://example.com/x", session=session, source_id=src.id)
+        with caplog.at_level(logging.WARNING, logger="kayak.parsers.base"):
+            parser.parse("STN_A\nSTN_B")  # two distinct foreign names → both fold
+
+        # Both stored under the lone source (partial behavior unchanged)...
+        assert session.query(Observation).filter_by(source_id=src.id).count() == 2
+        assert parser._fallback_stations == {"STN_A", "STN_B"}
+        # ...and the anomaly is surfaced.
+        warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+        assert any("distinct stations" in m and "STN_A" in m and "STN_B" in m for m in warnings)
+
+    def test_no_warn_for_single_foreign_station(self, session, caplog):
+        """The wa.gov case: one decoupled station name folds in — no warning."""
+        src = _make_source(session, name="29C100_STG_FM")
+        parser = _NamesParser(url="https://example.com/wa", session=session, source_id=src.id)
+        with caplog.at_level(logging.WARNING, logger="kayak.parsers.base"):
+            parser.parse("29C100\n29C100")  # same name twice → one distinct
+
+        assert parser._fallback_stations == {"29C100"}
+        assert not [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and "distinct" in r.getMessage()
+        ]
+
+    def test_no_warn_when_stations_matched_in_map(self, session, caplog):
+        """Stations resolved via source_map (not the fallback) are never tracked,
+        so a genuine multi-source URL with all stations declared doesn't warn."""
+        a = _make_source(session, name="A")
+        b = _make_source(session, name="B")
+        # Multi-source URL: no lone source_id, both names in the map.
+        parser = _NamesParser(
+            url="https://example.com/multi",
+            session=session,
+            source_map={"A": a.id, "B": b.id},
+        )
+        with caplog.at_level(logging.WARNING, logger="kayak.parsers.base"):
+            parser.parse("A\nB")
+
+        assert parser._fallback_stations == set()
+        assert not [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and "distinct" in r.getMessage()
+        ]
