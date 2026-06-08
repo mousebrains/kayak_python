@@ -412,6 +412,38 @@ def test_reverse_engineer_rejects_non_integer_gauge_source(tmp_path: Path) -> No
         gs.reverse_engineer(tmp_path / "ds")
 
 
+@pytest.mark.parametrize("body", ["gauge_id,source_id\n1,\n", "gauge_id,source_id\n,1\n"])
+def test_reverse_engineer_rejects_blank_pk_cell(tmp_path: Path, body: str) -> None:
+    # A partially-blank NOT-NULL PK row must be rejected, not silently skipped
+    # (validate-dataset flags it as "empty value in NOT NULL column").
+    _mini_for_reverse(tmp_path / "ds", body)
+    with pytest.raises(ValueError, match="empty PK cell"):
+        gs.reverse_engineer(tmp_path / "ds")
+
+
+def test_reverse_engineer_rejects_dangling_gauge_ref(tmp_path: Path) -> None:
+    # A gauge_source row pointing at a non-existent gauge is corruption; the validate
+    # pass on the assembled registry must reject it (not write a dangling gauge_id).
+    d = tmp_path / "ds"
+    _mini_for_reverse(d, "gauge_id,source_id\n99999999,1\n")
+    (d / "gauge.csv").write_text("id\n1\n", encoding="utf-8")  # gauge 99999999 does not exist
+    with pytest.raises(ValueError, match=r"gauge_id 99999999 not in gauge\.csv"):
+        gs.reverse_engineer(d)
+
+
+def test_reverse_engineer_rejects_duplicate_source_id(tmp_path: Path) -> None:
+    d = tmp_path / "ds"
+    d.mkdir()
+    (d / "source.csv").write_text(
+        "id,name,agency,timezone,fetch_url_id,calc_expression_id\n1,A,USGS,,,\n1,B,NWS,,,\n",
+        encoding="utf-8",
+    )
+    (d / "fetch_url.csv").write_text("id,url,parser,hours,is_active\n", encoding="utf-8")
+    (d / "gauge_source.csv").write_text("gauge_id,source_id\n1,1\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="duplicate source id"):
+        gs.reverse_engineer(d)
+
+
 def test_check_missing_csv_reports_cleanly(tmp_path: Path) -> None:
     # --check with no committed CSV must exit 1 with a message, not traceback.
     d = tmp_path / "ds"

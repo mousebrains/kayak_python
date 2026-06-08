@@ -92,7 +92,13 @@ def _column_order(source_dir: Path, table: str) -> list[str]:
 def _write_csv(out_dir: Path, table: str, rows: list[dict[str, Any]], cols: list[str]) -> None:
     """Write ``<table>.csv`` atomically into ``out_dir``: given column order, LF,
     rows sorted by the table's primary-key tuple (a single ``id``, or the composite
-    ``(gauge_id, source_id)`` for gauge_source) — matching export_metadata's ORDER BY."""
+    ``(gauge_id, source_id)`` for gauge_source).
+
+    DUAL-WRITER CONTRACT: this sort must stay byte-identical to the nightly snapshot
+    (``scripts/export_metadata.py``), whose ``order = ", ".join(pk_cols)`` SQL
+    ``ORDER BY`` is the same primary-key tuple. The byte round-trip ``--check`` is the
+    only guard on this alignment — if export_metadata's ordering or the layout PK
+    spec changes, both writers must move together."""
     pk = layout.primary_key_columns(table)
     ordered = sorted(rows, key=lambda r: tuple(int(r[c]) for c in pk))
     fd, tmp = tempfile.mkstemp(dir=out_dir, prefix=f".{table}.", suffix=".csv")
@@ -492,19 +498,25 @@ def _dump_sources_yaml(fetch_urls: list[dict[str, Any]], sources: list[dict[str,
 
 
 def _source_to_gauge(dataset_dir: Path, source_ids: set[int]) -> dict[int, int]:
-    """Map source_id -> its single gauge_id from gauge_source.csv. Errors if a
-    source has anything other than exactly one gauge_source row. The bootstrap must
-    FAIL CLOSED on any corruption ``validate-dataset`` would flag, not silently
-    canonicalize it: a row whose source_id isn't a real source, a source with no
-    row, or a source with >1 row (an exact duplicate or a multi-gauge link the
-    scalar ``gauge_id`` field can't represent)."""
+    """Map source_id -> its single gauge_id from gauge_source.csv, failing closed on
+    any gauge_source row the scalar registry ``gauge_id`` field can't represent: a
+    partially-blank PK cell, a non-integer id, a row whose source_id isn't a real
+    source, a source with no row, or a source with >1 row (an exact duplicate or a
+    multi-gauge link). Dangling *gauge* refs and duplicate ids are caught by the
+    ``validate_registry`` pass reverse_engineer runs on the result."""
     rows: dict[int, list[int]] = {}
     with (dataset_dir / "gauge_source.csv").open(encoding="utf-8") as fh:
         for r in csv.DictReader(fh):
             sid_raw = (r.get("source_id") or "").strip()
             gid_raw = (r.get("gauge_id") or "").strip()
+            if not sid_raw and not gid_raw:
+                continue  # a truly blank physical line
             if not sid_raw or not gid_raw:
-                continue
+                # one cell blank — a malformed NOT-NULL PK row; don't silently drop it
+                raise ValueError(
+                    f"gauge_source.csv: row with an empty PK cell "
+                    f"(gauge_id={gid_raw!r}, source_id={sid_raw!r})"
+                )
             try:
                 sid, gid = int(sid_raw), int(gid_raw)
             except ValueError:
@@ -531,7 +543,13 @@ def _source_to_gauge(dataset_dir: Path, source_ids: set[int]) -> dict[int, int]:
 
 
 def reverse_engineer(dataset_dir: Path) -> None:
-    """Bootstrap ``sources.yaml`` from existing source.csv + fetch_url.csv + gauge_source.csv."""
+    """Bootstrap ``sources.yaml`` from existing source.csv + fetch_url.csv + gauge_source.csv.
+
+    Fails closed on a corrupt input rather than silently canonicalizing it away: the
+    gauge_source row checks live in ``_source_to_gauge``, and the assembled registry
+    is run through ``validate_registry`` (dup ids, dangling gauge/fetch/calc refs,
+    typing, stale counters) BEFORE any file is written. (Corruption outside these
+    CSVs — reaches, etc. — remains ``validate-dataset``'s job.)"""
     fetch_urls: list[dict[str, Any]] = []
     with (dataset_dir / "fetch_url.csv").open(encoding="utf-8") as fh:
         for r in csv.DictReader(fh):
@@ -554,6 +572,11 @@ def reverse_engineer(dataset_dir: Path) -> None:
         if (r.get("calc_expression_id") or "").strip():
             entry["calc_expression_id"] = int(r["calc_expression_id"])
         sources.append(entry)
+    problems = validate_registry({"fetch_urls": fetch_urls, "sources": sources}, dataset_dir)
+    if problems:
+        raise ValueError(
+            "cannot reverse-engineer an invalid dataset:\n  - " + "\n  - ".join(problems)
+        )
     _atomic_write_text(dataset_dir / SOURCES_YAML, _dump_sources_yaml(fetch_urls, sources))
 
 
