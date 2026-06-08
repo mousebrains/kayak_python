@@ -163,6 +163,37 @@ def test_missing_sources_yaml_rejected(tmp_path: Path) -> None:
         gs.add_source(d, name="X")
 
 
+def test_malformed_current_registry_falsy_section_rejected(tmp_path: Path) -> None:
+    # `sources: {}` is falsy: _split would treat it as empty and the rewrite would
+    # silently DROP the existing OLD source. Must refuse before any write.
+    d = tmp_path / "ds"
+    d.mkdir()
+    (d / "source.csv").write_text(
+        "id,name,agency,timezone,fetch_url_id,calc_expression_id\n1,OLD,USGS,,,\n", encoding="utf-8"
+    )
+    (d / "fetch_url.csv").write_text("id,url,parser,hours,is_active\n", encoding="utf-8")
+    (d / "id_counters.csv").write_text("table,next_id\nsource,4\nfetch_url,2\n", encoding="utf-8")
+    (d / "sources.yaml").write_text("fetch_urls: []\nsources: {}\n", encoding="utf-8")
+    snap = _snapshot(d)
+    with pytest.raises(ValueError, match=r"current sources\.yaml is invalid"):
+        gs.add_source(d, name="NEW", agency="USGS")
+    assert _snapshot(d) == snap  # OLD preserved, nothing rewritten
+
+
+def test_malformed_current_registry_truthy_section_rejected(tmp_path: Path) -> None:
+    # `sources: {id: 1}` (truthy dict) previously crashed with AttributeError.
+    d = tmp_path / "ds"
+    d.mkdir()
+    (d / "source.csv").write_text(
+        "id,name,agency,timezone,fetch_url_id,calc_expression_id\n", "utf-8"
+    )
+    (d / "fetch_url.csv").write_text("id,url,parser,hours,is_active\n", encoding="utf-8")
+    (d / "id_counters.csv").write_text("table,next_id\nsource,4\nfetch_url,2\n", encoding="utf-8")
+    (d / "sources.yaml").write_text("sources: {id: 1, name: OLD}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=r"current sources\.yaml is invalid"):
+        gs.add_source(d, name="NEW")
+
+
 def test_url_and_calc_mutually_exclusive_in_library(dataset: Path) -> None:
     # The library API (not just the CLI wrapper) must reject both refs, else the
     # if/elif would silently drop the calc binding (fail-open).

@@ -375,7 +375,13 @@ def _check_id_counters(dataset_dir: Path, table: str, ids: list[Any]) -> list[st
         counters = {r["table"]: r["next_id"] for r in csv.DictReader(fh)}
     if table not in counters:
         return []
-    nxt = int(counters[table])
+    raw = counters[table]
+    if raw is None or not str(raw).strip():
+        return [f"{table}: id_counters.csv has no next_id value"]
+    try:
+        nxt = int(raw)
+    except ValueError:
+        return [f"{table}: id_counters.csv next_id is not an integer ({raw!r})"]
     bad = [i for i in ids if isinstance(i, int) and i >= nxt]
     return [f"{table}: id(s) {sorted(bad)} >= next_id {nxt} (stale counter)"] if bad else []
 
@@ -667,6 +673,17 @@ def add_source(
     Raises ``ValueError`` on any guard/validation failure BEFORE the real dataset is
     touched (the proposed result is validated in a temp dir first)."""
     meta = _load_registry(dataset_dir)
+    # The CURRENT registry must be valid before we derive lists from it: _split uses
+    # `meta.get(...) or []`, which would treat a malformed-but-falsy section (the
+    # `sources: {}` typo) as empty and silently drop the existing rows on rewrite,
+    # or crash on a truthy-malformed shape. validate_registry runs the _section_items
+    # shape checks, so refuse a broken input before any write.
+    current = validate_registry(meta, dataset_dir)
+    if current:
+        raise ValueError(
+            "current sources.yaml is invalid; fix it (e.g. `generate-sources`) before "
+            "add-source:\n  - " + "\n  - ".join(current)
+        )
     base_fu, base_src = _split(meta)
     fetch_urls, sources = list(base_fu), list(base_src)
     _add_source_guards(
