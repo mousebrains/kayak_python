@@ -137,7 +137,11 @@ def _produces_model(node: ast.expr, models: set[str]) -> bool:
             continue
         if _is_model_ref(sub.func, models):  # Model(...) / models.Model(...)
             return True
-        if _func_name(sub.func) in _MODEL_FETCHERS and sub.args and _is_model_ref(sub.args[0], models):
+        if (
+            _func_name(sub.func) in _MODEL_FETCHERS
+            and sub.args
+            and _is_model_ref(sub.args[0], models)
+        ):
             return True
     return False
 
@@ -174,7 +178,11 @@ def _model_dml_reasons(node: ast.Call, models: set[str]) -> list[str]:
     ``bulk_*_mappings(M, …)``, ``M(...)``, and ``query(M).update/delete(...)``."""
     reasons: list[str] = []
     fn = _func_name(node.func)
-    if fn in (_MUTATING_FUNCS | _BULK_DML_FUNCS) and node.args and _is_model_ref(node.args[0], models):
+    if (
+        fn in (_MUTATING_FUNCS | _BULK_DML_FUNCS)
+        and node.args
+        and _is_model_ref(node.args[0], models)
+    ):
         reasons.append(f"{fn}({_func_name(node.args[0])})")
     if _is_model_ref(node.func, models):
         reasons.append(f"{_func_name(node.func)}(...)")
