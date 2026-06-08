@@ -173,9 +173,21 @@ def _attr_write_reasons(node: ast.Assign, tainted: set[str]) -> list[str]:
     ]
 
 
+def _query_chain_model(recv: ast.expr, models: set[str]) -> str | None:
+    """Walk back a ``.query(Model).filter(...).…`` method chain from ``recv`` to the
+    underlying ``query(Model)``; return the dataset-owned model name, or None. Catches
+    the common targeted form ``query(M).filter(...).update/delete(...)``, not just the
+    bare ``query(M).update(...)``."""
+    while isinstance(recv, ast.Call) and isinstance(recv.func, ast.Attribute):
+        if recv.func.attr == "query" and recv.args and _is_model_ref(recv.args[0], models):
+            return _func_name(recv.args[0])
+        recv = recv.func.value
+    return None
+
+
 def _model_dml_reasons(node: ast.Call, models: set[str]) -> list[str]:
     """DML/instantiation naming a dataset-owned model class: ``update/delete/insert(M)``,
-    ``bulk_*_mappings(M, …)``, ``M(...)``, and ``query(M).update/delete(...)``."""
+    ``bulk_*_mappings(M, …)``, ``M(...)``, ``query(M)[.filter…].update/delete(...)``."""
     reasons: list[str] = []
     fn = _func_name(node.func)
     if (
@@ -187,14 +199,9 @@ def _model_dml_reasons(node: ast.Call, models: set[str]) -> list[str]:
     if _is_model_ref(node.func, models):
         reasons.append(f"{_func_name(node.func)}(...)")
     if isinstance(node.func, ast.Attribute) and node.func.attr in _QUERY_WRITE_METHODS:
-        recv = node.func.value
-        if (
-            isinstance(recv, ast.Call)
-            and _func_name(recv.func) == "query"
-            and recv.args
-            and _is_model_ref(recv.args[0], models)
-        ):
-            reasons.append(f"query({_func_name(recv.args[0])}).{node.func.attr}()")
+        model = _query_chain_model(node.func.value, models)
+        if model is not None:
+            reasons.append(f"query({model}).….{node.func.attr}()")
     return reasons
 
 
@@ -278,6 +285,8 @@ def test_detector_actually_fires() -> None:
         "def f(s, i):\n    r = s.get(Reach, i)\n    r.huc = 'x'\n",  # ORM attr write (get)
         "def f(s):\n    s.query(Reach).update({'huc': 'x'})\n",  # query().update()
         "def f(s):\n    s.query(Gauge).delete()\n",  # query().delete()
+        "def f(s):\n    s.query(Reach).filter(Reach.id == 1).update({'huc': 'x'})\n",  # chained
+        "def f(s):\n    s.query(Gauge).filter_by(id=1).delete()\n",  # chained delete
         "def f(s):\n    s.bulk_update_mappings(Reach, [{'id': 1, 'huc': 'x'}])\n",  # bulk mappings
         "from sqlalchemy import select\ndef f(s):\n    r = s.scalars(select(Reach)).first()\n    r.huc = 'x'\n",  # select-result attr write
         "def f(s):\n    for r in s.query(Reach).all():\n        r.huc = 'x'\n",  # loop-var attr write

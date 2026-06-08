@@ -25,6 +25,7 @@ the geom/gradient JSON sidecars.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from kayak.config import DATABASE_URL
@@ -61,14 +62,27 @@ def as_sqlite_url(target: str) -> str:
     return f"sqlite:///{Path(target).resolve()}"
 
 
+def maintenance_target_db(explicit: str | None, *, for_write: bool) -> Path:
+    """Resolve a maintenance tool's DB target (accepts a bare path or ``sqlite://``
+    URL — so it can be handed straight to ``sqlite3.connect``).
+
+    For a **write** the target is the explicit ``--db``, else the configured DB —
+    **never** the legacy ``KAYAK_DB`` env, so ``KAYAK_DB`` can't become a silent
+    ``--apply`` target (even under ``--allow-production``, which only bypasses the
+    refusal of the *configured* DB). For a **read** it may also fall back to
+    ``KAYAK_DB``. Pair with :func:`refuse_configured_db` on the raw ``--db`` for the
+    write gate; both resolve identically, so the guarded path == the written path.
+    """
+    fallback = None if for_write else os.environ.get("KAYAK_DB")
+    return resolve_db_path(explicit or fallback or None)
+
+
 def _same_file(a: Path, b: Path) -> bool:
     """Whether two paths point at the same on-disk file.
 
     Prefer ``os.path.samefile`` (compares device+inode, so a *hardlink* to the prod
     DB is caught too), but it raises if either path doesn't exist — so fall back to a
     symlink-resolved path compare (the common case: a not-yet-created scratch DB)."""
-    import os
-
     try:
         return os.path.samefile(a, b)
     except OSError:

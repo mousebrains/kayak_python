@@ -68,3 +68,36 @@ def test_allow_production_flag_parses(script: str) -> None:
     r = _run(script, "--help")
     assert r.returncode == 0, r.stderr
     assert "--allow-production" in r.stdout
+
+
+def test_apply_allow_production_targets_configured_not_kayak_db(tmp_path: Path) -> None:
+    """--apply --allow-production with no --db connects the CONFIGURED DB, never the
+    legacy KAYAK_DB target (review P3). Driven via refresh_reach_elevations (no cache
+    dependency); seed shares the same maintenance_target_db resolution."""
+    configured = tmp_path / "configured.db"
+    kayak_db = tmp_path / "kayakdb.db"
+    _run(
+        "refresh_reach_elevations.py",
+        "--apply",
+        "--allow-production",
+        db_url=f"sqlite:///{configured}",
+        kayak_db=str(kayak_db),
+    )
+    # Connected to (and created) the configured DB; the KAYAK_DB target is untouched.
+    assert configured.exists()
+    assert not kayak_db.exists()
+
+
+def test_apply_accepts_sqlite_url_db(tmp_path: Path) -> None:
+    """An explicit sqlite:// --db is normalized before sqlite3.connect (review P3: a
+    URL --db used to raise 'unable to open database file')."""
+    scratch = tmp_path / "scratch.db"
+    r = _run(
+        "refresh_reach_elevations.py",
+        "--apply",
+        "--db",
+        f"sqlite:///{scratch}",
+        db_url=f"sqlite:///{tmp_path / 'configured.db'}",
+    )
+    assert "unable to open database file" not in r.stderr, r.stderr
+    assert scratch.exists()  # connected → file created

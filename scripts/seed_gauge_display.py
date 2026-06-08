@@ -28,7 +28,6 @@ changed.
 from __future__ import annotations
 
 import argparse
-import os
 import re
 import sqlite3
 import sys
@@ -37,7 +36,7 @@ from pathlib import Path
 # Reuse the build pipeline's station-name parsers so we stay in lockstep with
 # current behavior.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-from kayak.db.safety import ProductionWriteRefused, refuse_configured_db, resolve_db_path
+from kayak.db.safety import ProductionWriteRefused, maintenance_target_db, refuse_configured_db
 from kayak.web.build.gauges import (
     _parse_station_mixed,
     _parse_station_uppercase,
@@ -352,10 +351,10 @@ def main() -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 2
 
-    # For reads (and an approved --apply target) resolve the path: the explicit
-    # --db, else the legacy KAYAK_DB, else the configured DB.
-    db_path = args.db or os.environ.get("KAYAK_DB") or str(resolve_db_path(None))
-    conn = sqlite3.connect(db_path)
+    # Resolve the DB path (handles a bare path or a sqlite:// URL). On --apply the
+    # write target is the explicit --db, else the configured DB — never KAYAK_DB; a
+    # read may fall back to KAYAK_DB.
+    conn = sqlite3.connect(maintenance_target_db(args.db, for_write=args.apply))
     conn.row_factory = sqlite3.Row
     metadata = load_metadata_cache(args.cache)
 
