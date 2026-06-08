@@ -731,6 +731,10 @@ sudo apt install -y nginx php8.4-fpm php8.4-sqlite3 python3 python3-venv sqlite3
 python3 -m venv /home/pat/.venv
 /home/pat/.venv/bin/pip install -e "/home/pat/kayak[dev]"
 
+# 2b. Metadata repo (the CSVs + reaches*.json — separate from the code repo).
+#     The load in step 6 (sync-metadata + import_metadata) reads it via DATASET_DIR.
+sudo -u pat git clone git@github.com:mousebrains/kayak_data.git /home/pat/kayak_data
+
 # 3. Directories (docroot is a real dir outside the repo — no symlink)
 mkdir -p /home/pat/.config/kayak /home/pat/DB /home/pat/public_html
 
@@ -738,6 +742,7 @@ mkdir -p /home/pat/.config/kayak /home/pat/DB /home/pat/public_html
 cat > /home/pat/.config/kayak/.env <<'EOF'
 SQLITE_PATH=/home/pat/DB/kayak.db
 DATABASE_URL=sqlite:////home/pat/DB/kayak.db
+DATASET_DIR=/home/pat/kayak_data
 OUTPUT_DIR=/home/pat/public_html
 EDITOR_FEATURE=1
 EOF

@@ -207,6 +207,30 @@ def test_geom_only_applies_geom_leaves_metadata(tmp_path, monkeypatch):
     assert _reach_rows(dst) == {1: ("orig1", "G1 g1"), 2: ("orig2", "G2 g2")}
 
 
+def test_import_fails_loud_on_unmatched_sidecar_reach(tmp_path, monkeypatch):
+    """A sidecar reach id with no DB row (the classic "ran before sync-metadata" /
+    wrong-DB mistake) fails loud and rolls back the whole apply; --allow-missing-reaches
+    opts into a partial apply of the ids that DO match."""
+    imp = _load("import_metadata")
+    dst, snap = tmp_path / "dst.db", tmp_path / "snap"
+    snap.mkdir()
+    _make_db(dst)
+    _seed_reaches(dst, [{"id": 1, "name": "here"}])  # reach 1 exists; 99 does not
+    (snap / "reaches.json").write_text(json.dumps({"1": "G1 geom", "99": "G99 geom"}))
+
+    monkeypatch.setattr(sys, "argv", ["import_metadata", "--db", str(dst), "--in", str(snap)])
+    assert imp.main() == 1  # reach 99 has no row → fail loud
+    assert _reach_rows(dst) == {1: ("here", None)}  # rolled back: reach 1's geom NOT applied
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["import_metadata", "--db", str(dst), "--in", str(snap), "--allow-missing-reaches"],
+    )
+    assert imp.main() == 0  # partial apply explicitly allowed
+    assert _reach_rows(dst) == {1: ("here", "G1 geom")}  # reach 1 applied; 99 skipped
+
+
 def test_csv_apply_preserves_geom_absent_from_snapshot(tmp_path, monkeypatch):
     """A reach carrying geom in the live DB but absent from reaches.json keeps its
     geom across a CSV apply: geom is excluded from reach.csv, so sync-metadata's upsert

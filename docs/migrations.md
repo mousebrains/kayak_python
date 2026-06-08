@@ -302,6 +302,9 @@ python scripts/import_metadata.py  # reach geom/gradient JSON sidecars
 levels pipeline                    # fetch live data + render
 ```
 
+(`sync-metadata` refuses a `status: scaffold` dataset — add `--allow-scaffold`
+only if rebuilding from a scaffold checkout; the real `kayak_data` is publishable.)
+
 `--no-seed` is required, not just advisable: a plain `levels init-db`
 seeds `state` / `source` / `fetch_url` from `sources.yaml` with fresh
 ids, which then collide with the canonical-id CSV rows on `sync-metadata`

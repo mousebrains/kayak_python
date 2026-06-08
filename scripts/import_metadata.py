@@ -38,6 +38,14 @@ from kayak.config import DATASET_DIR
 REPO_DIR = Path(__file__).resolve().parent.parent
 
 
+class _MissingReaches(RuntimeError):
+    """A sidecar carried reach ids with no matching reach row — roll back, fail loud."""
+
+    def __init__(self, count: int) -> None:
+        self.count = count
+        super().__init__(count)
+
+
 def _default_db_path() -> Path:
     """Resolve the DB path the way ``levels`` does (via ``DATABASE_URL``).
 
@@ -61,16 +69,19 @@ def _default_db_path() -> Path:
     return REPO_DIR.parent / "DB" / "kayak.db"
 
 
-def _apply_geom(conn: sqlite3.Connection, in_dir: Path) -> None:
+def _apply_geom(conn: sqlite3.Connection, in_dir: Path) -> int:
     """Apply reach.geom from reaches.json (excluded from reach.csv).
 
     Reports the rows actually updated (``cur.rowcount``), not the snapshot
     size, so a mis-resolved or empty DB shows 0 rather than a falsely-full
-    count. Flags any snapshot reaches that matched no row in this DB.
+    count. Returns the number of snapshot reaches that matched NO row in this
+    DB (0 = clean) so the caller can fail loud on the most likely operator
+    mistake — applying the sidecars before ``levels sync-metadata`` (or to the
+    wrong/empty DB).
     """
     reaches_json = in_dir / "reaches.json"
     if not reaches_json.exists():
-        return
+        return 0
     with reaches_json.open(encoding="utf-8") as f:
         # Fail cleanly (and roll back the enclosing transaction) on a corrupt
         # snapshot rather than dumping a raw traceback — reaches.json is
@@ -84,22 +95,24 @@ def _apply_geom(conn: sqlite3.Connection, in_dir: Path) -> None:
     cur = conn.executemany("UPDATE reach SET geom = ? WHERE id = ?", pairs)
     applied = cur.rowcount
     print(f"{'reaches.json (geom)':<22} {applied:>10}")
-    if applied != len(geoms):
+    unmatched = len(geoms) - applied
+    if unmatched:
         print(
-            f"Note: {len(geoms)} reaches in reaches.json but {applied} matched a "
+            f"Warning: {len(geoms)} reaches in reaches.json but only {applied} matched a "
             "reach row (the rest have no row in this DB).",
             file=sys.stderr,
         )
+    return unmatched
 
 
-def _apply_gradient(conn: sqlite3.Connection, in_dir: Path) -> None:
+def _apply_gradient(conn: sqlite3.Connection, in_dir: Path) -> int:
     """Apply reach.gradient_profile from reaches-gradient.json (excluded from
-    reach.csv). Mirrors _apply_geom: reports rows actually updated and flags any
-    snapshot reaches that matched no row in this DB. review-3 R6.1.
+    reach.csv). Mirrors _apply_geom: reports rows actually updated and returns the
+    number of snapshot reaches that matched no row in this DB. review-3 R6.1.
     """
     grad_json = in_dir / "reaches-gradient.json"
     if not grad_json.exists():
-        return
+        return 0
     with grad_json.open(encoding="utf-8") as f:
         try:
             grads = json.load(f)
@@ -110,12 +123,14 @@ def _apply_gradient(conn: sqlite3.Connection, in_dir: Path) -> None:
     cur = conn.executemany("UPDATE reach SET gradient_profile = ? WHERE id = ?", pairs)
     applied = cur.rowcount
     print(f"{'reaches-gradient.json':<22} {applied:>10}")
-    if applied != len(grads):
+    unmatched = len(grads) - applied
+    if unmatched:
         print(
-            f"Note: {len(grads)} reaches in reaches-gradient.json but {applied} matched a "
+            f"Warning: {len(grads)} reaches in reaches-gradient.json but only {applied} matched a "
             "reach row (the rest have no row in this DB).",
             file=sys.stderr,
         )
+    return unmatched
 
 
 def _report_integrity(conn: sqlite3.Connection) -> int:
@@ -164,6 +179,13 @@ def main() -> int:
         action="store_true",
         help="Apply only reaches-gradient.json (reach.gradient_profile). Default applies both.",
     )
+    parser.add_argument(
+        "--allow-missing-reaches",
+        action="store_true",
+        help="Allow a partial apply: don't fail if a sidecar reach id has no reach row "
+        "in this DB. Default is to roll back and exit non-zero — the usual cause is "
+        "running this before `levels sync-metadata` (or against the wrong/empty DB).",
+    )
     args = parser.parse_args()
 
     db_path = (Path(args.db) if args.db else _default_db_path()).resolve()
@@ -188,11 +210,27 @@ def main() -> int:
     try:
         print(f"{'Sidecar':<22} {'Rows':>10}")
         print(f"{'-' * 22} {'-' * 10:>10}")
-        with conn:
-            if apply_geom:
-                _apply_geom(conn, in_dir)
-            if apply_gradient:
-                _apply_gradient(conn, in_dir)
+        try:
+            with conn:
+                unmatched = 0
+                if apply_geom:
+                    unmatched += _apply_geom(conn, in_dir)
+                if apply_gradient:
+                    unmatched += _apply_gradient(conn, in_dir)
+                # Fail loud (rolling back the partial apply) when a sidecar id has no
+                # reach row — almost always "ran before `levels sync-metadata`" or the
+                # wrong/empty DB. --allow-missing-reaches opts into a partial apply.
+                if unmatched and not args.allow_missing_reaches:
+                    raise _MissingReaches(unmatched)
+        except _MissingReaches as exc:
+            print(
+                f"error: {exc.count} sidecar entr(ies) matched no reach row in this DB "
+                "(summed across the JSON sidecars applied) — nothing applied. Run "
+                "`levels sync-metadata` first, or pass --allow-missing-reaches for a "
+                "deliberate partial apply.",
+                file=sys.stderr,
+            )
+            return 1
 
         rc = _report_integrity(conn)
         if rc:

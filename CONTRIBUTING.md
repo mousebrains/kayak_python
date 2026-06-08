@@ -9,6 +9,11 @@ cd kayak
 python3 -m venv /path/to/venv
 /path/to/venv/bin/pip install -e ".[dev]"
 
+# Clone the metadata repo (the CSVs + reaches*.json live in a separate repo) and
+# point DATASET_DIR at it — the load below reads the dataset from there.
+git clone git@github.com:mousebrains/kayak_data.git ../kayak_data
+export DATASET_DIR="$(cd ../kayak_data && pwd)"   # or persist in ~/.config/kayak/.env
+
 # Initialize database: empty schema, then canonical metadata. `sync-metadata`
 # applies the CSVs (gauges/reaches/sources/links, by stable id); import_metadata
 # applies the reach geom/gradient JSON sidecars (excluded from reach.csv). A bare
