@@ -34,13 +34,16 @@ python3 -m venv /home/pat/.venv
 git clone git@github.com:mousebrains/kayak_data.git /home/pat/kayak_data  # the metadata snapshot
 echo 'DATASET_DIR=/home/pat/kayak_data' >> ~/.config/kayak/.env          # point the code at it
 /home/pat/.venv/bin/levels init-db --no-seed            # Empty schema + stamp migrations
-/home/pat/.venv/bin/python scripts/import_metadata.py   # Load gauges/reaches/sources from DATASET_DIR
+/home/pat/.venv/bin/levels sync-metadata                # Load gauges/reaches/sources CSVs (by id) from DATASET_DIR
+/home/pat/.venv/bin/python scripts/import_metadata.py   # Apply the reach geom/gradient JSON sidecars
 /home/pat/.venv/bin/levels pipeline                     # Fetch live data and generate HTML
 ```
 
 `init-db` creates the schema and stamps migrations; `--no-seed` skips the
 `sources.yaml` state/source seed so the canonical rows from the metadata CSVs
-(`DATASET_DIR`, loaded by `import_metadata.py`) import without duplicate-by-name sources.
+(`DATASET_DIR`, applied by `levels sync-metadata` — matched by stable id) load without
+duplicate-by-name sources. `import_metadata.py` then applies the reach geometry
+sidecars (`reaches.json` / `reaches-gradient.json`), which `sync-metadata` excludes.
 Without the metadata load every source is an orphan with no `gauge_source`
 link, so `levels pipeline` fails at `orphan-check` and the site renders empty.
 A plain `levels init-db` (seeded from `src/kayak/data/sources.yaml`) is enough for a

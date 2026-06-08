@@ -1,7 +1,8 @@
-"""Shared CSV ↔ SQLite metadata machinery for import + sync.
+"""CSV ↔ SQLite metadata machinery for ``levels sync-metadata``.
 
-The **upsert** side (used by ``scripts/import_metadata.py`` and ``levels
-sync-metadata``) loads ``data/db/*.csv`` rows by primary key —
+The **upsert** side (the sole caller is now ``levels sync-metadata``; the geometry
+sidecars go through ``scripts/import_metadata.py``, which no longer touches this
+module) loads ``data/db/*.csv`` rows by primary key —
 ``INSERT … ON CONFLICT(<pk>) DO UPDATE`` — so a CSV may omit columns
 (``reach.geom`` / ``reach.gradient_profile``, applied via the JSON sidecars) and
 have them survive on existing rows. **Exception:** a *generator-owned optional*
@@ -22,16 +23,12 @@ sources — their integer FKs stay valid because the id never moves.
 The numeric ``id`` is the stable, author-assigned key and FKs stay numeric, so
 this keys on the PK directly — no symbolic-key resolution.
 
-**Foreign-key PRAGMA — the caller owns it, and it matters:**
-
-* ``import_metadata`` runs with ``foreign_keys=OFF`` (tolerant bulk load of a
-  snapshot; its trailing ``foreign_key_check`` is informational).
-* the **sync runs with ``foreign_keys=ON``** so the schema's own
-  ``ON DELETE CASCADE`` / ``SET NULL`` clean a deleted row's dependents and the
-  ``observation`` ``RESTRICT`` is enforced. ``apply_deletions`` REQUIRES
-  ``foreign_keys=ON`` — cascades do NOT fire under OFF. SQLite ignores a
-  ``foreign_keys`` change *inside a transaction*, so the caller must set the
-  PRAGMA before any DML opens one (see ``cli/sync_metadata.py``).
+**Foreign-key PRAGMA — the caller owns it, and it matters:** the **sync runs with
+``foreign_keys=ON``** so the schema's own ``ON DELETE CASCADE`` / ``SET NULL`` clean a
+deleted row's dependents and the ``observation`` ``RESTRICT`` is enforced.
+``apply_deletions`` REQUIRES ``foreign_keys=ON`` — cascades do NOT fire under OFF.
+SQLite ignores a ``foreign_keys`` change *inside a transaction*, so the caller must set
+the PRAGMA before any DML opens one (see ``cli/sync_metadata.py``).
 
 The upsert helpers are PRAGMA-agnostic; only ``apply_deletions`` cares.
 """
@@ -80,7 +77,7 @@ def _pk_cols(conn: sqlite3.Connection, table: str) -> list[tuple[str, str]]:
 
 
 # ---------------------------------------------------------------------------
-# Upsert side (INSERT new + UPDATE changed) — shared with import_metadata.
+# Upsert side (INSERT new + UPDATE changed) — used by levels sync-metadata.
 # ---------------------------------------------------------------------------
 
 

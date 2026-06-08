@@ -1,16 +1,20 @@
-"""Round-trip tests for scripts/export_metadata.py + scripts/import_metadata.py.
+"""Round-trip tests for the metadata export + reload path.
 
-These scripts snapshot the metadata tables to CSV (+ reaches.json for geom) and
-read them back — the supported prod rebuild/recovery path (docs/migrations.md)
-and the only way committed geometry reaches prod. They mutate a live DB, so the
-round-trip and the geom edge cases need a net.
+``export_metadata.py`` snapshots the metadata tables to CSV (+ reaches.json /
+reaches-gradient.json for the geometry sidecars). The reload splits in two:
+``levels sync-metadata`` applies the CSV columns (by stable id, delete-safe), and
+``scripts/import_metadata.py`` applies the geometry sidecars (the only path that
+writes reach.geom / reach.gradient_profile — they're excluded from reach.csv). These
+mutate a live DB, so the round-trip and the geom edge cases need a net.
 
-The scripts live outside src/, so they're loaded via importlib path (matching
-test_recap.py). Each is driven through ``main()`` with a monkeypatched argv.
+The two scripts live outside src/, so they're loaded via importlib path (matching
+test_recap.py) and driven through ``main()`` with a monkeypatched argv; the CSV apply
+goes through ``kayak.cli.sync_metadata.sync_metadata`` directly.
 """
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import json
 import sys
@@ -20,6 +24,7 @@ from types import ModuleType
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
+from kayak.cli.sync_metadata import sync_metadata
 from kayak.db.models import (
     Base,
     FetchUrl,
@@ -49,6 +54,30 @@ def _make_db(path: Path) -> None:
     eng = create_engine(f"sqlite:///{path}")
     Base.metadata.create_all(eng)
     eng.dispose()
+
+
+def _sync_csvs(dst: Path, csv_dir: Path, *, allow_deletes: bool = True) -> int:
+    """Apply the CSV half of a snapshot via `levels sync-metadata` (the reload path
+    for everything except the geometry sidecars). Writes the minimal dataset.yaml the
+    sync contract gate needs into the export dir first."""
+    (csv_dir / "dataset.yaml").write_text(
+        "contract_version: 1\n"
+        "dataset_id: test\n"
+        "name: Test dataset\n"
+        "status: publishable\n"
+        "license: CC-BY-NC-4.0\n"
+        'engine_test_ref: "0000000000000000000000000000000000000000"\n'
+    )
+    return sync_metadata(
+        argparse.Namespace(
+            database_url=f"sqlite:///{dst}",
+            csv_dir=str(csv_dir),
+            allow_deletes=allow_deletes,
+            allow_scaffold=False,
+            dry_run=False,
+            backup=False,
+        )
+    )
 
 
 def _seed_reaches(path: Path, reaches: list[dict]) -> None:
@@ -106,8 +135,9 @@ def test_export_excludes_generator_owned_trio(tmp_path, monkeypatch):
 
 
 def test_round_trip_preserves_geom(tmp_path, monkeypatch):
-    """export → fresh DB import reproduces the reach rows, with geom carried
-    through reaches.json (and genuinely excluded from reach.csv)."""
+    """export → fresh DB reload (sync-metadata CSV + import_metadata sidecar)
+    reproduces the reach rows, with geom carried through reaches.json (and genuinely
+    excluded from reach.csv)."""
     exp = _load("export_metadata")
     imp = _load("import_metadata")
     src, dst, out = tmp_path / "src.db", tmp_path / "dst.db", tmp_path / "snap"
@@ -129,6 +159,8 @@ def test_round_trip_preserves_geom(tmp_path, monkeypatch):
     header = (out / "reach.csv").read_text().splitlines()[0]
     assert "geom" not in header.split(",")
 
+    # CSV columns via sync-metadata; geom via the import_metadata sidecar applier.
+    assert _sync_csvs(dst, out) == 0
     monkeypatch.setattr(sys, "argv", ["import_metadata", "--db", str(dst), "--in", str(out)])
     assert imp.main() == 0
 
@@ -175,10 +207,10 @@ def test_geom_only_applies_geom_leaves_metadata(tmp_path, monkeypatch):
     assert _reach_rows(dst) == {1: ("orig1", "G1 g1"), 2: ("orig2", "G2 g2")}
 
 
-def test_full_import_preserves_geom_absent_from_snapshot(tmp_path, monkeypatch):
-    """Regression for the UPSERT fix: a reach carrying geom in the live DB but
-    absent from reaches.json keeps its geom on a full import. INSERT OR REPLACE
-    used to delete+reinsert the row and null the un-snapshotted geom column."""
+def test_csv_apply_preserves_geom_absent_from_snapshot(tmp_path, monkeypatch):
+    """A reach carrying geom in the live DB but absent from reaches.json keeps its
+    geom across a CSV apply: geom is excluded from reach.csv, so sync-metadata's upsert
+    never touches it (and the EXCLUDED-vs-OPTIONAL split means it isn't reset either)."""
     exp = _load("export_metadata")
     imp = _load("import_metadata")
     src, dst, out = tmp_path / "src.db", tmp_path / "dst.db", tmp_path / "snap"
@@ -197,21 +229,22 @@ def test_full_import_preserves_geom_absent_from_snapshot(tmp_path, monkeypatch):
     # Live dst: reach 2 already carries geom the snapshot doesn't know about.
     _seed_reaches(dst, [{"id": 2, "name": "live2", "geom": "-99.9 38.0 LIVE"}])
 
+    # CSV apply (sync-metadata): inserts reach 1, renames reach 2 — geom untouched.
+    assert _sync_csvs(dst, out) == 0
     monkeypatch.setattr(sys, "argv", ["import_metadata", "--db", str(dst), "--in", str(out)])
-    assert imp.main() == 0
+    assert imp.main() == 0  # sidecar applies reach 1's geom from reaches.json
 
     rows = _reach_rows(dst)
     assert rows[1] == ("snap1", "-120.0 43.0")  # inserted + geom from reaches.json
     assert rows[2] == ("snap2", "-99.9 38.0 LIVE")  # name updated, live geom preserved
 
 
-def test_reimport_idempotent_across_pk_shapes(tmp_path, monkeypatch):
-    """A second full import into a populated DB succeeds — exercising the
-    composite-PK conflict paths the single-reach tests don't: reach_state (all
-    columns are PK → ON CONFLICT DO NOTHING) and reach_guidebook (has non-PK
-    columns → ON CONFLICT DO UPDATE)."""
+def test_resync_idempotent_across_pk_shapes(tmp_path, monkeypatch):
+    """A second CSV apply into a populated DB succeeds — exercising the composite-PK
+    conflict paths the single-reach tests don't: reach_state (all columns are PK → ON
+    CONFLICT DO NOTHING) and reach_guidebook (has non-PK columns → ON CONFLICT DO
+    UPDATE). sync-metadata's upsert runs every apply, so the second hits the conflicts."""
     exp = _load("export_metadata")
-    imp = _load("import_metadata")
     src, dst, out = tmp_path / "src.db", tmp_path / "dst.db", tmp_path / "snap"
     out.mkdir()
     _make_db(src)
@@ -234,9 +267,8 @@ def test_reimport_idempotent_across_pk_shapes(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "argv", ["export_metadata", "--db", str(src), "--out", str(out)])
     assert exp.main() == 0
 
-    monkeypatch.setattr(sys, "argv", ["import_metadata", "--db", str(dst), "--in", str(out)])
-    assert imp.main() == 0  # first import inserts
-    assert imp.main() == 0  # second import hits the DO NOTHING + DO UPDATE conflict paths
+    assert _sync_csvs(dst, out) == 0  # first apply inserts
+    assert _sync_csvs(dst, out) == 0  # second apply hits the DO NOTHING + DO UPDATE paths
 
     eng = create_engine(f"sqlite:///{dst}")
     with eng.connect() as c:
@@ -277,8 +309,9 @@ def test_round_trip_preserves_gradient(tmp_path, monkeypatch):
     header = (out / "reach.csv").read_text().splitlines()[0]
     assert "gradient_profile" not in header.split(",")
 
+    assert _sync_csvs(dst, out) == 0  # CSV columns via sync-metadata
     monkeypatch.setattr(sys, "argv", ["import_metadata", "--db", str(dst), "--in", str(out)])
-    assert imp.main() == 0
+    assert imp.main() == 0  # gradient via the import_metadata sidecar applier
     assert _reach_gradients(dst) == {1: '{"samples":[1,2,3]}', 2: None}
 
 

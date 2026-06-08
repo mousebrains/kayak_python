@@ -12,15 +12,14 @@ direct-DB write mode, but must run against an explicitly named scratch/dev copy 
 ``kayak_data`` → ``sync-metadata`` to prod".
 
 The complete set of *sanctioned* writers of dataset-owned rows to the live DB is:
-``levels sync-metadata`` (the reviewed-CSV apply), ``scripts/import_metadata.py``
-(its geom/gradient sibling — applies the already-reviewed ``reaches*.json`` sidecars
-that the CSV sync excludes; deploy.sh steps 3.25/3.26 use ``--geom-only`` /
-``--gradient-only``), and a schema migration. Everything else either goes through
-those or is refused by this guard. ``import_metadata.py`` is intentionally NOT
-``refuse_configured_db``-gated — like ``sync-metadata`` it *is* the apply path — but
-its full-CSV mode skips the delete-safety review the all-or-nothing ``sync-metadata``
-gives, so prefer ``sync-metadata`` for CSV changes and reserve ``import_metadata`` for
-the geom/gradient JSON sidecars.
+``levels sync-metadata`` (the reviewed-CSV apply, by stable id, with delete-safety),
+``scripts/import_metadata.py`` (its geom/gradient sibling — applies *only* the
+already-reviewed ``reaches*.json`` sidecars that the CSV sync excludes; deploy.sh steps
+3.25/3.26 use ``--geom-only`` / ``--gradient-only``), and a schema migration.
+Everything else either goes through those or is refused by this guard.
+``import_metadata.py`` is intentionally NOT ``refuse_configured_db``-gated — like
+``sync-metadata`` it *is* an apply path — and it carries no full-CSV mode (CSV loads go
+through ``sync-metadata``).
 """
 
 from __future__ import annotations

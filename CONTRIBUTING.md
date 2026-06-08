@@ -9,10 +9,13 @@ cd kayak
 python3 -m venv /path/to/venv
 /path/to/venv/bin/pip install -e ".[dev]"
 
-# Initialize database: empty schema + canonical metadata (gauges, reaches,
-# sources). A bare `levels init-db` seeds duplicate sources and leaves every
-# source an orphan — see CLAUDE.md § Quick start.
+# Initialize database: empty schema, then canonical metadata. `sync-metadata`
+# applies the CSVs (gauges/reaches/sources/links, by stable id); import_metadata
+# applies the reach geom/gradient JSON sidecars (excluded from reach.csv). A bare
+# `levels init-db` seeds duplicate sources and leaves every source an orphan —
+# see CLAUDE.md § Quick start.
 levels init-db --no-seed
+levels sync-metadata
 python scripts/import_metadata.py
 
 # Verify everything works (the test suite uses in-memory SQLite — the DB
