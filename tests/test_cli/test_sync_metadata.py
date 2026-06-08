@@ -462,26 +462,43 @@ def test_refuse_prints_observation_drop_counts(tmp_path: Path, capsys) -> None: 
 
 
 # ---------------------------------------------------------------------------
-# I — --backup snapshots the live DB before mutating (and even when refused).
+# I — --backup snapshots the live DB before an APPLY, and writes NOTHING on a
+#     refused run (zero-I/O refusal — the backup follows the refusal gate).
 # ---------------------------------------------------------------------------
 
 
-def test_backup_writes_pre_sync_snapshot(tmp_path: Path) -> None:
+def test_backup_skipped_on_refusal(tmp_path: Path) -> None:
     db = tmp_path / "k.db"
     csv_dir = tmp_path / "csv"
     csv_dir.mkdir()
     _write_contract(csv_dir)
     _seed_two_sources(db)
-    _write_surviving_csvs(csv_dir)  # would delete S2 — refused here
+    _write_surviving_csvs(csv_dir)  # would delete S2 — refused without the flag
 
     rc = sync_metadata(_args(db, csv_dir, allow_deletes=False, backup=True))
-    assert rc == 2  # deletes refused, but the backup is taken before any mutate
+    assert rc == 2
+    # A refused run does ZERO disk I/O: no .pre-sync sidecar is written (the
+    # backup protects an apply, and nothing applied).
+    assert not db.with_name(db.name + ".pre-sync").exists()
+
+
+def test_backup_writes_pre_sync_snapshot_on_apply(tmp_path: Path) -> None:
+    db = tmp_path / "k.db"
+    csv_dir = tmp_path / "csv"
+    csv_dir.mkdir()
+    _write_contract(csv_dir)
+    _seed_two_sources(db)
+    _write_surviving_csvs(csv_dir)  # drops S2 — applied with the flag
+
+    rc = sync_metadata(_args(db, csv_dir, allow_deletes=True, backup=True))
+    assert rc == 0
     backup = db.with_name(db.name + ".pre-sync")
     assert backup.exists()
-    # A valid SQLite snapshot of the pre-sync state — S2 + its observations
-    # are still there in the copy.
+    # The snapshot is taken BEFORE this run's mutation: the copy still has S2 +
+    # its observations, while the live DB has had S2 deleted.
     assert _scalar(backup, "SELECT COUNT(*) FROM source") == 2
     assert _scalar(backup, "SELECT COUNT(*) FROM observation WHERE source_id = 2") == 2
+    assert _scalar(db, "SELECT COUNT(*) FROM source") == 1
 
 
 # ---------------------------------------------------------------------------

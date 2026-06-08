@@ -156,17 +156,6 @@ def sync_metadata(args: argparse.Namespace) -> int:
     if rc is not None:
         return rc
 
-    # Snapshot the live DB before mutating it (opt-in; deploy.sh passes --backup).
-    # The online-backup API is correct even when the pipeline writer is
-    # mid-transaction (a plain cp could copy a torn page or miss the -wal); a
-    # fresh source connection keeps it independent of the sync connection's
-    # PRAGMA/transaction state below. Skipped under --dry-run (nothing changes).
-    if args.backup and not args.dry_run:
-        backup_path = db_path.with_name(db_path.name + ".pre-sync")
-        with sqlite3.connect(db_path) as bsrc, sqlite3.connect(backup_path) as bdst:
-            bsrc.backup(bdst)
-        print(f"backed up live DB → {backup_path}")
-
     conn = sqlite3.connect(db_path)
     try:
         # A concurrent pipeline/decimate write would otherwise make the first DML
@@ -211,6 +200,21 @@ def sync_metadata(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 2
+
+        # Snapshot the live DB before mutating it (opt-in; deploy.sh passes
+        # --backup). Taken AFTER the refusal gate and dry-run return, so a refused
+        # or dry run does ZERO disk I/O — the backup's purpose is to protect an
+        # actual apply (a FK-valid but logically-wrong UPDATE that commits and
+        # can't be undone from the one-line diff), and there is nothing to protect
+        # when nothing applies. The online-backup API is correct even when the
+        # pipeline writer is mid-transaction (a plain cp could copy a torn page or
+        # miss the -wal); a fresh source connection keeps it independent of the
+        # sync connection's PRAGMA/transaction state.
+        if args.backup:
+            backup_path = db_path.with_name(db_path.name + ".pre-sync")
+            with sqlite3.connect(db_path) as bsrc, sqlite3.connect(backup_path) as bdst:
+                bsrc.backup(bdst)
+            print(f"backed up live DB → {backup_path}")
 
         try:
             with conn:  # commit on success; ROLLBACK on any raise
