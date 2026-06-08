@@ -785,5 +785,5 @@ Ensure the ACME challenge location is still in the nginx config and `/var/www/ce
 sudo certbot renew --dry-run
 ```
 
-**Undeclared-station drops / non-zero `fetch` in pipeline logs:**
-Since S1, `levels fetch` no longer auto-creates `source` rows. A station a feed emits that has no `source` row is **dropped** (its known sibling stations are still saved), and under the default `reject` policy the `fetch` step exits non-zero so the failure alerts — while the rest of the pipeline (build, etc.) still runs. Fix it by declaring the station in the dataset (`source.csv` + a `gauge_source` link, authored via `sources.yaml`), or, for a broad feed you knowingly don't fully track, set that URL's `unknown_station_policy: ignore`. The ERROR log line names the URL and the dropped station(s).
+**"No source_id set" warnings in pipeline logs:**
+Normal on first run if Source records haven't been created yet. The pipeline auto-creates missing Source records for multi-station parsers (USBR). Run the pipeline a second time and these should resolve.

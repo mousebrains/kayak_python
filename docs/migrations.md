@@ -75,13 +75,10 @@ For the schema-migration mechanics (where files live, how
 
 The 0018 anti-pattern: deleted 19 source rows, touched no
 `fetch_url` row, didn't verify calc inputs still had a live source.
-The next `levels fetch` (back then) auto-created replacement source rows
-without `gauge_source` links, and calc gauges that read from the deleted
-sources stayed frozen for three days. (Since S1 fetch no longer
-auto-creates rows — an undeclared station is dropped and the fetch step
-flags it — so this exact re-orphaning can't recur, but a stale `fetch_url`
-left active still wastes fetches and noise, so the checklist stands.)
-The fix is a checklist, not a tool — run
+The next `levels fetch` auto-created replacement source rows
+(parsers/base.py::`_auto_create_source`) without `gauge_source`
+links, and calc gauges that read from the deleted sources stayed
+frozen for three days. The fix is a checklist, not a tool — run
 through this before deleting a source's row from `kayak_data`'s
 `source.csv` (plus its `gauge_source.csv` link, and `fetch_url.csv` /
 the code repo's `src/kayak/data/sources.yaml` if it's a fetch source).
@@ -109,13 +106,14 @@ For each URL the listing returns:
   surviving source still needs it.
 
 - **No other consumer, and the URL is genuinely retired?**
-  **Preferred:** in `kayak_data`, set the fetch_url row's `is_active=0`
-  in `fetch_url.csv` (author it via `sources.yaml` `enabled: false` →
-  `levels generate-sources`), or drop the row entirely; `levels
-  sync-metadata` applies it. Since S1, `levels fetch` reads only
-  `is_active=1` rows from the DB (`db/sources.py::get_active_fetch_urls`)
-  — it no longer runs `sync_sources` or reads the YAML — so an
-  `is_active=0` URL simply stops being fetched.
+  **Preferred:** delete the URL from `src/kayak/data/sources.yaml`. The next
+  `levels fetch` runs `sync_sources`
+  (`src/kayak/cli/init_db.py::sync_sources`, called at
+  `src/kayak/cli/fetch.py:150`) which flips `is_active=0` on any
+  fetch_url whose URL is no longer in the YAML; the fetch loop
+  already skips URLs not in YAML — `is_active` is an audit marker,
+  not the gate. The migration only needs to touch the source-row
+  table.
 
 - **No other consumer, but the URL must stay in YAML?** (Edge case:
   another station in the URL's `stations:` block is still wired up,
@@ -197,8 +195,9 @@ For each orphan source, pick one of:
 
 - **Link to a gauge** — the preferred move when the source is still
   emitting useful data. Live data is cheap to keep wired and
-  expensive to lose. Add the join row to `kayak_data`'s
-  `gauge_source.csv`:
+  expensive to lose; deactivating a URL only to have auto-create
+  re-orphan it next deploy is the mistake we're trying to avoid. Add
+  the join row to `kayak_data`'s `gauge_source.csv`:
 
   ```
   gauge_id,source_id
@@ -209,12 +208,11 @@ For each orphan source, pick one of:
   gauge_source` equivalents.) `levels sync-metadata` inserts it by id.
 
 - **Deactivate the URL** — when the agency has retired the endpoint
-  or the data is genuinely duplicative. Set `is_active=0` on the row in
-  `kayak_data`'s `fetch_url.csv` (author via `sources.yaml`
-  `enabled: false` → `levels generate-sources`), or drop the row;
-  `levels sync-metadata` applies it and fetch (`get_active_fetch_urls`)
-  then skips it. (Since S1, `levels fetch` no longer flips `is_active`
-  from any YAML — it only reads the active DB rows.)
+  or the data is genuinely duplicative. Preferred: remove the URL from
+  `src/kayak/data/sources.yaml` (the next `levels fetch` flips `is_active=0`
+  automatically). Only set `is_active=0` in `kayak_data`'s
+  `fetch_url.csv` directly when the URL must stay in the YAML for
+  unrelated reasons.
 
 - **Delete the source row** — only when the row's history isn't worth
   preserving on another gauge. Remove it from `source.csv` (plus its
@@ -314,10 +312,11 @@ intentional orphan rows) and reports `integrity_check` +
 
 ### Smaller follow-ups (one-line each)
 
-- ~~**Rename `_auto_create_source`**~~ — **done one better in S1**: the
-  function was *removed*. Fetch no longer creates source rows at run time;
-  an undeclared station is dropped and the fetch step flags it per the
-  URL's `unknown_station_policy`.
+- **Rename `_auto_create_source`** to express the danger surface
+  more clearly (e.g., `_auto_create_orphan_source` when
+  `source_map` is empty). Rejected during the orphan-source plan
+  as not worth the churn; revisit if the function gains more
+  conditional behavior.
 - **Schema-level FK / CHECK constraint** that fetch-backed sources
   must have a `gauge_source` link. SQLite triggers don't span tables
   cleanly and would block legitimate intermediate migration states.

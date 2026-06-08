@@ -81,14 +81,10 @@ fi
 
 "$VENV_PY" "$EXPORT" --out "$KAYAK_DATA" >/dev/null
 
-# The snapshot owns most metadata CSVs; reaches*.json are dev-authored
-# (re-traces, via a kayak_data PR), so discard any byte-churn export produced for
-# them to keep the tree clean for the next run. source/fetch_url/gauge_source are
-# generator-owned (levels generate-sources is their sole writer — S1's "no
-# dual-writer window"); export_metadata already skips them, but discard any
-# stray change belt-and-suspenders so the snapshot can never commit the trio.
+# The snapshot owns the CSVs only; reaches*.json are dev-authored (re-traces, via
+# a kayak_data PR), so discard any byte-churn export produced for them to keep
+# the tree clean for the next run.
 git checkout -- reaches.json reaches-gradient.json 2>/dev/null || true
-git checkout -- source.csv fetch_url.csv gauge_source.csv 2>/dev/null || true
 
 if git diff --quiet -- '*.csv'; then
     echo "No metadata changes."

@@ -102,11 +102,8 @@ A "gauge" is a `gauge` row + ≥1 `source` (+ a `gauge_source` link). Assign ids
   `fetch_url_id` (or blank), `timezone`.
 - **`gauge_source.csv`** — the join row `gauge_id,source_id` (the two ids above).
 - **`fetch_url.csv`** — only for a fetch source: new `id`, `url` (UNIQUE),
-  `parser`, `hours`, `is_active` (and optionally `unknown_station_policy`).
-  This file is **generator-owned**: author the URL in the dataset's
-  `sources.yaml` and run `levels generate-sources` rather than hand-editing it.
-  After `sync-metadata`, fetch reads the active rows straight from the DB (S1) —
-  the engine `src/kayak/data/sources.yaml` is no longer the fetch source.
+  `parser`, `hours`, `is_active` — **and** the URL must also be in
+  `src/kayak/data/sources.yaml` (the pipeline only fetches URLs present there).
 - **`id_counters.csv`** — bump `next_id` for every table you added an id to.
 
 **USGS is the easy case (zero extra wiring):** set `gauge.usgs_id`, add a source
@@ -275,13 +272,9 @@ gap/overlap on the dev map.
 Remove the gauge's rows from `*.csv` and let `sync-metadata --allow-deletes`
 apply the deletion by id:
 
-- Remove the row(s) from `gauge.csv`, `source.csv`, and `gauge_source.csv`. For a
-  fetch source, also remove the URL from the dataset's `sources.yaml` and run
-  `levels generate-sources` to regenerate `source.csv` / `fetch_url.csv` /
-  `gauge_source.csv` (that trio is generator-owned — don't hand-edit
-  `fetch_url.csv`). `sync-metadata --allow-deletes` then applies the deletion by
-  id; nothing recreates the row (since S1, `levels fetch` reads only active DB
-  rows and never re-seeds from any YAML). A USGS source has no URL to remove.
+- Remove the row(s) from `gauge.csv`, `source.csv`, and `gauge_source.csv` (and
+  `fetch_url.csv` + the URL from `src/kayak/data/sources.yaml` if it's a fetch source — else
+  `sync_sources` recreates the `fetch_url`). A USGS source has no URL to remove.
 - **Pre-flight (per [`migrations.md`](migrations.md) *Removing a source safely*):**
   confirm nothing else needs the source — no `calc_expression` input, no
   `reach.gauge_id` — and if the source feeds a *calc* input on another gauge, relink

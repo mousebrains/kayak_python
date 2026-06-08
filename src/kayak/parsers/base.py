@@ -21,7 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from kayak.db.cache import update_latest, update_latest_gauge
-from kayak.db.models import DataType, GaugeSource
+from kayak.db.models import DataType, GaugeSource, Source
 from kayak.db.observations import store_observations
 from kayak.db.sources import get_negative_flow_source_ids
 
@@ -68,6 +68,7 @@ class BaseParser(ABC):
         source_tz_map: dict[str, str] | None = None,
         dry_run: bool = False,
         fetch_url_id: int | None = None,
+        agency: str | None = None,
     ):
         self.url = url
         self.session = session
@@ -79,16 +80,11 @@ class BaseParser(ABC):
         self.source_tz_map = source_tz_map or {}
         self.dry_run = dry_run
         self.fetch_url_id = fetch_url_id
+        self.agency = agency
         self._db_updates = 0
         self._obs_buffer: list[dict] = []
         # Cache of ZoneInfo objects to avoid repeated lookups per observation.
         self._tz_cache: dict[str, ZoneInfo] = {}
-        # Stations this feed emitted that have no `source` row: their
-        # observations are dropped (never auto-created — dataset-separation S1)
-        # while known sibling stations on the same URL are still stored. The
-        # fetch driver reads these to apply the URL's unknown_station_policy.
-        self.unknown_stations: set[str] = set()
-        self.dropped_obs_count = 0
 
     # ------------------------------------------------------------------
     # Pure parsing contract + thin DB wrapper
@@ -118,8 +114,6 @@ class BaseParser(ABC):
         """
         self._db_updates = 0
         self._obs_buffer = []
-        self.unknown_stations = set()
-        self.dropped_obs_count = 0
         for r in self.parse_records(text):
             self.dump_to_db(r.station, r.data_type, r.observed_at, r.value)
         self._flush_buffer()
@@ -178,11 +172,6 @@ class BaseParser(ABC):
         to UTC. This is how per-station local-time feeds (USBR's multi-zone
         CSV, wa.gov year-round PST) get stored correctly without forcing
         parsers to know the TZ themselves.
-
-        A station with no resolvable ``source_id`` is **dropped** (recorded in
-        ``self.unknown_stations`` for the fetch driver's policy decision) — fetch
-        no longer auto-creates ``source`` rows (dataset-separation S1). Known
-        sibling stations on the same feed are unaffected.
         """
         # Localize naive timestamps using per-station TZ metadata. Must run
         # BEFORE the debug log so the log reflects the final stored value.
@@ -195,22 +184,19 @@ class BaseParser(ABC):
         if self.dry_run:
             return True
 
-        # Resolve source_id: use per-station source_map first, then fall back to
-        # the single source_id set at construction time. So on a SINGLE-source URL
-        # (source_id set) an unrecognized station name still attributes to that one
-        # source — this is intentional and load-bearing for feeds that decouple the
-        # body's station id from the source name (e.g. wa.gov 29C100 vs source
-        # 29C100_STG_FM). The unknown-station drop below therefore only fires on
-        # MULTI-source URLs (source_id is None), matching the owner's spec that
-        # partial-save / reject applies "when a url populates multiple sources".
+        # Resolve source_id: use per-station source_map first, then fall
+        # back to the single source_id set at construction time.
         sid = self.source_map.get(station) or self.source_id
         if sid is None:
-            # Undeclared station: drop it (no row is ever created at fetch time)
-            # and record it so the fetch driver can apply the URL's
-            # unknown_station_policy. Known siblings still flush normally.
-            self.unknown_stations.add(station)
-            self.dropped_obs_count += 1
-            return False
+            if self.fetch_url_id is not None:
+                sid = self._auto_create_source(station)
+            else:
+                logger.error(
+                    "No source_id set for %s/%s — cannot store",
+                    station,
+                    data_type,
+                )
+                return False
 
         self._obs_buffer.append(
             {
@@ -221,6 +207,50 @@ class BaseParser(ABC):
             }
         )
         return True
+
+    def _auto_create_source(self, station: str) -> int:
+        """Auto-create a Source record for an unknown station.
+
+        Returns the new source_id and caches it in source_map. Always emits
+        the timezone WARNING (the new row has no ``timezone`` set — if this
+        feed publishes local time, observations will be stored as naive UTC
+        shifted by the local offset until the station is added to the URL's
+        ``stations:`` block in src/kayak/data/sources.yaml).
+
+        Additionally escalates to ERROR when ``self.source_map`` is empty
+        before the new row goes in: that means the fetch_url has zero other
+        live sources, the post-deletion-migration "URL orphaned of sources"
+        case (see ``docs/done/PLAN_orphan_sources.md``). The new Source row will
+        also be missing a ``gauge_source`` link — Phase 2b's end-of-pipeline
+        gate trips on this. Logging here lets the operator find the
+        offending URL by grepping the fetch run output. The legitimate
+        multi-station case (USGS basin feeds, wa.gov station dirs) leaves
+        ``source_map`` non-empty and silences the ERROR.
+        """
+        url_was_orphaned = not self.source_map
+        src = Source(name=station, agency=self.agency, fetch_url_id=self.fetch_url_id)
+        self.session.add(src)
+        self.session.flush()
+        self.source_map[station] = src.id
+        logger.warning(
+            "Auto-created Source id=%d for station %s (no timezone). "
+            "If this feed publishes local time, add it to the stations: block "
+            "for this URL in src/kayak/data/sources.yaml.",
+            src.id,
+            station,
+        )
+        if url_was_orphaned:
+            logger.error(
+                "ORPHAN auto-create: Source id=%d (station %s, url=%s, "
+                "fetch_url_id=%s) — the URL had no other live sources. "
+                "Link via gauge_source or remove the URL from sources.yaml. "
+                "See docs/done/PLAN_orphan_sources.md.",
+                src.id,
+                station,
+                self.url,
+                self.fetch_url_id,
+            )
+        return src.id
 
     def _flush_buffer(self) -> None:
         """Flush buffered observations to the database in a single batch."""

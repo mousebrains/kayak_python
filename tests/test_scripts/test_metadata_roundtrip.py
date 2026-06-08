@@ -20,18 +20,7 @@ from types import ModuleType
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
-from kayak.db.models import (
-    Base,
-    FetchUrl,
-    Gauge,
-    GaugeSource,
-    Guidebook,
-    Reach,
-    ReachGuidebook,
-    ReachState,
-    Source,
-    State,
-)
+from kayak.db.models import Base, Guidebook, Reach, ReachGuidebook, ReachState, State
 
 _SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
 
@@ -68,41 +57,6 @@ def _reach_rows(path: Path) -> dict[int, tuple[str | None, str | None]]:
         rows = c.execute(text("SELECT id, name, geom FROM reach ORDER BY id")).all()
     eng.dispose()
     return {r[0]: (r[1], r[2]) for r in rows}
-
-
-def test_export_excludes_generator_owned_trio(tmp_path, monkeypatch):
-    """The nightly snapshot (export_metadata) must NOT write the generator-owned
-    source/fetch_url/gauge_source trio even when those rows exist —
-    ``levels generate-sources`` is their sole writer (dataset-separation S1's
-    "no dual-writer window"). Snapshot-owned tables are still exported.
-
-    This guards the core S1 invariant behaviorally: flipping export back to the
-    full CONTRACT_CSVS set (re-introducing the dual-writer race) would fail here.
-    """
-    exp = _load("export_metadata")
-    src, out = tmp_path / "src.db", tmp_path / "snap"
-    out.mkdir()
-    _make_db(src)
-    eng = create_engine(f"sqlite:///{src}")
-    with Session(eng) as s:
-        s.add(State(id=1, name="Oregon", abbreviation="OR"))
-        s.add(Gauge(id=1, name="G"))
-        s.add(FetchUrl(id=1, url="https://example.com/f", parser="nwps", is_active=True))
-        s.add(Source(id=1, name="STN", fetch_url_id=1))
-        s.flush()
-        s.add(GaugeSource(gauge_id=1, source_id=1))
-        s.commit()
-    eng.dispose()
-
-    monkeypatch.setattr(sys, "argv", ["export_metadata", "--db", str(src), "--out", str(out)])
-    assert exp.main() == 0
-
-    # Generator-owned trio: present in the DB, but the snapshot must not write it.
-    for stem in ("source", "fetch_url", "gauge_source"):
-        assert not (out / f"{stem}.csv").exists(), f"snapshot must not export {stem}.csv"
-    # Snapshot-owned tables are still exported.
-    assert (out / "state.csv").exists()
-    assert (out / "gauge.csv").exists()
 
 
 def test_round_trip_preserves_geom(tmp_path, monkeypatch):

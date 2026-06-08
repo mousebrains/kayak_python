@@ -33,8 +33,8 @@ class NWPSParser(BaseParser):
     T3.1 status: ``parse_records`` is the pure entry point;
     ``parse`` is a thin wrapper that feeds the records through the
     legacy ``dump_to_db``/``_flush_buffer`` path so the rest of the
-    pipeline (latest-observation cache, gauge cache, unknown-station
-    drop+record path) keeps working unchanged.
+    pipeline (latest-observation cache, gauge cache, auto-create-
+    source ERROR path) keeps working unchanged.
     """
 
     name = "nwps"

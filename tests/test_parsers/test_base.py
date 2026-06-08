@@ -84,17 +84,13 @@ class TestStripHtml:
 
 
 class TestDumpToDbNoSource:
-    def test_no_source_records_unknown_station(self, session):
-        """dump_to_db with no resolvable source drops the obs (returns False) and
-        records the station for the fetch driver's policy — it never auto-creates
-        a Source (dataset-separation S1)."""
+    def test_no_source_id_logs_error(self, session):
+        """dump_to_db with source_id=None should log error and return False."""
         parser = ConcreteParser(url="https://example.com/test", session=session, source_id=None)
         result = parser.dump_to_db("station", DataType.flow, datetime.now(UTC), 100.0)
         assert result is False
-        # _db_updates is still incremented before the resolve check
+        # _db_updates is still incremented before the check
         assert parser._db_updates == 1
-        assert parser.unknown_stations == {"station"}
-        assert parser.dropped_obs_count == 1
 
 
 class TestSourceTzLocalization:
@@ -182,79 +178,105 @@ class TestSourceTzLocalization:
         assert obs.observed_at.replace(tzinfo=UTC) == aware_utc
 
 
-class TestUnknownStation:
-    """An undeclared station (no source row) is dropped and recorded — fetch no
-    longer auto-creates Source rows at run time (dataset-separation S1). Known
-    sibling stations on the same feed are still saved (partial-save)."""
-
-    def test_unknown_station_dropped_not_created(self, session):
+class TestAutoCreateSource:
+    def test_unknown_station_with_fetch_url_id_creates_source(self, session):
+        """Unknown station with fetch_url_id set should auto-create Source and store."""
         fu = FetchUrl(url="https://example.com/auto", parser="test", is_active=True)
         session.add(fu)
         session.flush()
 
-        parser = ConcreteParser(url="https://example.com/auto", session=session, fetch_url_id=fu.id)
+        parser = ConcreteParser(
+            url="https://example.com/auto",
+            session=session,
+            fetch_url_id=fu.id,
+            agency="test_agency",
+        )
         result = parser.dump_to_db("NEW_STATION", DataType.flow, datetime.now(UTC), 42.0)
+        assert result is True
 
-        assert result is False
-        assert session.query(Source).filter_by(name="NEW_STATION").one_or_none() is None
-        assert "NEW_STATION" not in parser.source_map
-        assert parser.unknown_stations == {"NEW_STATION"}
-        assert parser.dropped_obs_count == 1
+        # Source was created and cached in source_map
+        assert "NEW_STATION" in parser.source_map
+        new_src = session.query(Source).filter_by(name="NEW_STATION").one()
+        assert new_src.agency == "test_agency"
+        assert new_src.fetch_url_id == fu.id
+        assert parser.source_map["NEW_STATION"] == new_src.id
 
-    def test_dropped_count_accumulates(self, session):
-        """Every dropped obs from an unknown station bumps the counter; the
-        station appears once in the set."""
-        parser = ConcreteParser(url="https://example.com/x", session=session, source_id=None)
+    def test_auto_created_source_reused_on_second_call(self, session):
+        """Second call for the same station should reuse the cached source_map entry."""
+        fu = FetchUrl(url="https://example.com/auto2", parser="test", is_active=True)
+        session.add(fu)
+        session.flush()
+
+        parser = ConcreteParser(
+            url="https://example.com/auto2",
+            session=session,
+            fetch_url_id=fu.id,
+            agency="test_agency",
+        )
         parser.dump_to_db("STN", DataType.flow, datetime.now(UTC), 1.0)
         parser.dump_to_db("STN", DataType.gauge, datetime.now(UTC), 2.0)
 
-        assert parser.unknown_stations == {"STN"}
-        assert parser.dropped_obs_count == 2
-        assert session.query(Source).filter_by(name="STN").all() == []
+        # Only one Source should exist
+        sources = session.query(Source).filter_by(name="STN").all()
+        assert len(sources) == 1
 
-    def test_partial_save_keeps_known_sibling(self, session):
-        """The owner's case: a multi-station feed with one known + one unknown
-        station saves the known station's obs and drops only the unknown."""
-        fu = FetchUrl(url="https://example.com/multi", parser="test", is_active=True)
+    def test_no_fetch_url_id_still_logs_error(self, session):
+        """Without fetch_url_id, unknown station should still log error."""
+        parser = ConcreteParser(url="https://example.com/test", session=session, source_id=None)
+        result = parser.dump_to_db("MISSING", DataType.flow, datetime.now(UTC), 100.0)
+        assert result is False
+
+    def test_orphaned_url_logs_error(self, session, caplog):
+        """Empty source_map at auto-create time = URL orphaned of sources;
+        escalate to ERROR so Phase 2b's end-of-pipeline gate can act."""
+        import logging
+
+        fu = FetchUrl(url="https://example.com/orphaned-url", parser="test", is_active=True)
         session.add(fu)
         session.flush()
-        known = Source(name="KNOWN", fetch_url_id=fu.id)
-        session.add(known)
-        session.flush()
 
-        class TwoStationParser(BaseParser):
-            name = "test"
-
-            def parse_records(self, text):
-                ts = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
-                return [
-                    ObservationRecord("KNOWN", DataType.flow, ts, 10.0),
-                    ObservationRecord("MYSTERY", DataType.flow, ts, 20.0),
-                ]
-
-        parser = TwoStationParser(
-            url="https://example.com/multi",
+        parser = ConcreteParser(
+            url="https://example.com/orphaned-url",
             session=session,
-            source_map={"KNOWN": known.id},
             fetch_url_id=fu.id,
+            agency="test_agency",
+            # source_map omitted → defaults to empty dict.
         )
-        parser.parse("go")
+        with caplog.at_level(logging.ERROR, logger="kayak.parsers.base"):
+            parser.dump_to_db("LONE_STN", DataType.flow, datetime.now(UTC), 1.0)
+
+        error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+        assert len(error_records) == 1
+        msg = error_records[0].getMessage()
+        assert "ORPHAN auto-create" in msg
+        assert "LONE_STN" in msg
+        assert "https://example.com/orphaned-url" in msg
+
+    def test_multistation_url_does_not_log_error(self, session, caplog):
+        """Non-empty source_map = legitimate multi-station feed (USGS basin
+        query, wa.gov station dir); auto-create stays at WARNING only."""
+        import logging
+
+        fu = FetchUrl(url="https://example.com/multistation", parser="test", is_active=True)
+        session.add(fu)
+        session.flush()
+        # Pre-existing sibling source on the same URL.
+        sibling = Source(name="SIBLING", fetch_url_id=fu.id)
+        session.add(sibling)
         session.flush()
 
-        obs = session.query(Observation).filter_by(source_id=known.id).all()
-        assert len(obs) == 1 and obs[0].value == 10.0  # known sibling saved
-        assert parser.unknown_stations == {"MYSTERY"}  # unknown dropped + recorded
-        assert parser.dropped_obs_count == 1
-        assert session.query(Source).filter_by(name="MYSTERY").one_or_none() is None
+        parser = ConcreteParser(
+            url="https://example.com/multistation",
+            session=session,
+            fetch_url_id=fu.id,
+            agency="test_agency",
+            source_map={"SIBLING": sibling.id},  # non-empty: multi-station case
+        )
+        with caplog.at_level(logging.WARNING, logger="kayak.parsers.base"):
+            parser.dump_to_db("NEW_STN", DataType.flow, datetime.now(UTC), 1.0)
 
-    def test_parse_resets_unknown_state_per_call(self, session):
-        """A reused parser instance clears unknown-station state on each parse()."""
-        parser = ConcreteParser(url="https://example.com/r", session=session, source_id=None)
-        parser.parse("DATA:1")  # test_station has no source → recorded
-        assert parser.unknown_stations == {"test_station"}
-
-        src = _make_source(session, name="test_station")
-        parser.source_map = {"test_station": src.id}
-        parser.parse("DATA:1")  # now resolvable → state reset, nothing unknown
-        assert parser.unknown_stations == set()
-        assert parser.dropped_obs_count == 0
+        error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+        assert error_records == []  # no ORPHAN ERROR
+        warning_records = [r for r in caplog.records if r.levelno == logging.WARNING]
+        # Existing TZ warning still fires.
+        assert any("no timezone" in r.getMessage() for r in warning_records)
