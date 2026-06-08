@@ -142,6 +142,10 @@ def validate_dataset(dataset_dir: Path) -> list[str]:
     errors.extend(_check_id_counters(d, retired))
     # (5b) source-name wiring invariants (e.g. USGS station ids).
     errors.extend(_check_source_names(d, good_csvs))
+    # (5c) source<->gauge cardinality (every source has exactly one gauge) + the
+    #      gauge_source / reach.gauge_id FK references.
+    errors.extend(_check_gauge_source(d, good_csvs))
+    errors.extend(_check_reach_gauge(d, good_csvs))
     # (6) reach names (only if reach.csv parsed cleanly).
     if "reach" in good_csvs:
         errors.extend(_check_reach_names(d))
@@ -630,6 +634,82 @@ def _check_source_names(d: Path, good_csvs: set[str]) -> list[str]:
             offenders.append(name)
     if offenders:
         return [f"source.csv: USGS source name must be a numeric station id, got {offenders}"]
+    return []
+
+
+def _source_gauge_map(gs_rows: list[dict[str, str]]) -> dict[int, set[int]]:
+    """source_id -> set of distinct gauge_ids it links to (rows with an empty/invalid
+    cell are skipped — those are reported by the value checks)."""
+    out: dict[int, set[int]] = {}
+    for r in gs_rows:
+        sid = _bounded_int((r.get("source_id") or "").strip())
+        gid = _bounded_int((r.get("gauge_id") or "").strip())
+        if sid is not None and gid is not None:
+            out.setdefault(sid, set()).add(gid)
+    return out
+
+
+def _check_gauge_source(d: Path, good_csvs: set[str]) -> list[str]:
+    """Every source is linked to EXACTLY one gauge, and gauge_source's ids resolve.
+
+    Domain invariant: every source must be associated with a gauge (source->gauge is
+    1-to-1; gauge->source is 1-to-many). The pipeline orphan-check only flags
+    fetch-active orphans, so enforce it here for ALL sources: no source without a
+    gauge_source row, none linked to >1 gauge, and gauge_source's gauge_id/source_id
+    reference real rows.
+    """
+    if not {"source", "gauge", "gauge_source"} <= good_csvs:
+        return []
+    source_ids, err = _int_ids(_csv_rows(d / "source.csv"), "id")
+    if err:
+        return [f"source.csv: {err}"]
+    gauge_ids, err = _int_ids(_csv_rows(d / "gauge.csv"), "id")
+    if err:
+        return [f"gauge.csv: {err}"]
+    gs_rows = _csv_rows(d / "gauge_source.csv")
+    gs_sources, err = _int_ids(gs_rows, "source_id")
+    if err:
+        return [f"gauge_source.csv: {err}"]
+    gs_gauges, err = _int_ids(gs_rows, "gauge_id")
+    if err:
+        return [f"gauge_source.csv: {err}"]
+    errors: list[str] = []
+    source_set, gauge_set = set(source_ids), set(gauge_ids)
+    dangling_src = sorted(set(gs_sources) - source_set)
+    if dangling_src:
+        errors.append(f"gauge_source.csv references source ids not in source.csv: {dangling_src}")
+    dangling_gauge = sorted(set(gs_gauges) - gauge_set)
+    if dangling_gauge:
+        errors.append(f"gauge_source.csv references gauge ids not in gauge.csv: {dangling_gauge}")
+    # Count DISTINCT gauges per source — a same-gauge-twice row is a duplicate-PK
+    # error (caught by _check_duplicate_pks), not a "more than one gauge" error, so
+    # the set dedups it and the message below stays literally true.
+    source_gauges = _source_gauge_map(gs_rows)
+    orphans = sorted(sid for sid in source_set if not source_gauges.get(sid))
+    if orphans:
+        errors.append(
+            f"source ids with no gauge_source row (every source needs a gauge): {orphans}"
+        )
+    doubled = sorted(sid for sid in source_set if len(source_gauges.get(sid, ())) > 1)
+    if doubled:
+        errors.append(f"source ids linked to more than one gauge: {doubled}")
+    return errors
+
+
+def _check_reach_gauge(d: Path, good_csvs: set[str]) -> list[str]:
+    """A reach's optional ``gauge_id`` must reference an existing gauge (<=1 gauge per
+    reach is already structural — it is a scalar column; NULL/empty = no gauge)."""
+    if not {"reach", "gauge"} <= good_csvs:
+        return []
+    gauge_ids, err = _int_ids(_csv_rows(d / "gauge.csv"), "id")
+    if err:
+        return [f"gauge.csv: {err}"]
+    reach_gauge_ids, err = _int_ids(_csv_rows(d / "reach.csv"), "gauge_id")
+    if err:
+        return [f"reach.csv: {err}"]
+    dangling = sorted(set(reach_gauge_ids) - set(gauge_ids))
+    if dangling:
+        return [f"reach.csv references gauge ids not in gauge.csv: {dangling}"]
     return []
 
 
