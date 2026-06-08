@@ -50,10 +50,13 @@ def _calc(dir: Path, *ids: int) -> None:
 # --- the round-trip invariant -------------------------------------------------
 
 
+_CSVS = ("source.csv", "fetch_url.csv", "gauge_source.csv")
+
+
 def test_generate_reproduces_fixture_byte_for_byte(dataset: Path) -> None:
-    before = {n: (dataset / n).read_bytes() for n in ("source.csv", "fetch_url.csv")}
+    before = {n: (dataset / n).read_bytes() for n in _CSVS}
     gs.generate(dataset)
-    after = {n: (dataset / n).read_bytes() for n in ("source.csv", "fetch_url.csv")}
+    after = {n: (dataset / n).read_bytes() for n in _CSVS}
     assert after == before
 
 
@@ -71,11 +74,11 @@ def test_check_fails_on_hand_edited_csv(dataset: Path) -> None:
 
 
 def test_reverse_engineer_then_generate_round_trips(dataset: Path) -> None:
-    original = {n: (dataset / n).read_bytes() for n in ("source.csv", "fetch_url.csv")}
+    original = {n: (dataset / n).read_bytes() for n in _CSVS}
     (dataset / "sources.yaml").unlink()
     gs.reverse_engineer(dataset)
     gs.generate(dataset)
-    assert {n: (dataset / n).read_bytes() for n in ("source.csv", "fetch_url.csv")} == original
+    assert {n: (dataset / n).read_bytes() for n in _CSVS} == original
 
 
 # --- column-order handling ----------------------------------------------------

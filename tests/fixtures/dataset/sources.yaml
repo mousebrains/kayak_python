@@ -1,5 +1,6 @@
 # Authoritative source registry (dataset-separation S1). Edit this; run
-# `levels generate-sources <dir>` to (re)write source.csv + fetch_url.csv.
+# `levels generate-sources <dir>` to (re)write source.csv, fetch_url.csv,
+# gauge_source.csv.
 fetch_urls:
 - id: 1
   url: https://api.water.noaa.gov/nwps/v1/gauges/FXTW1/stageflow/observed

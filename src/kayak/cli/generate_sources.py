@@ -1,5 +1,5 @@
-"""``levels generate-sources <dir>`` — generate source.csv + fetch_url.csv from the
-authoritative ``sources.yaml`` registry (dataset-separation S1, expand phase).
+"""``levels generate-sources <dir>`` — generate source.csv + fetch_url.csv +
+gauge_source.csv from the authoritative ``sources.yaml`` registry (dataset-separation S1).
 
 ``sources.yaml`` (in the dataset root) is the human-edited authority for every
 source, its fetch URL, and its (single, required) ``gauge_id``; this command writes
@@ -482,7 +482,8 @@ def _dump_sources_yaml(fetch_urls: list[dict[str, Any]], sources: list[dict[str,
     src = [_normalize_source_entry(e) for e in sorted(sources, key=lambda e: int(e["id"]))]
     header = (
         "# Authoritative source registry (dataset-separation S1). Edit this; run\n"
-        "# `levels generate-sources <dir>` to (re)write source.csv + fetch_url.csv.\n"
+        "# `levels generate-sources <dir>` to (re)write source.csv, fetch_url.csv,\n"
+        "# gauge_source.csv.\n"
     )
     body = yaml.safe_dump(
         {"fetch_urls": fu, "sources": src}, sort_keys=False, default_flow_style=False
@@ -588,7 +589,7 @@ def _check(dataset_dir: Path) -> int:
 def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = subparsers.add_parser(
         "generate-sources",
-        help="Generate source.csv + fetch_url.csv from a dataset's sources.yaml",
+        help="Generate source.csv + fetch_url.csv + gauge_source.csv from a dataset's sources.yaml",
     )
     p.add_argument("dir", help="Dataset directory (containing sources.yaml)")
     p.add_argument(
@@ -599,7 +600,7 @@ def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> 
     p.add_argument(
         "--from-csv",
         action="store_true",
-        help="Reverse-engineer sources.yaml from existing source.csv + fetch_url.csv (bootstrap)",
+        help="Reverse-engineer sources.yaml from the committed CSVs (bootstrap)",
     )
     p.set_defaults(func=_main)
 
@@ -609,11 +610,11 @@ def _main(args: argparse.Namespace) -> int:
     if not dataset_dir.is_dir():
         print(f"generate-sources: not a directory: {dataset_dir}", file=sys.stderr)
         return 2
-    if args.from_csv:
-        reverse_engineer(dataset_dir)
-        print(f"wrote {dataset_dir / SOURCES_YAML} from source/fetch_url/gauge_source CSVs")
-        return 0
     try:
+        if args.from_csv:
+            reverse_engineer(dataset_dir)
+            print(f"wrote {dataset_dir / SOURCES_YAML} from source/fetch_url/gauge_source CSVs")
+            return 0
         if args.check:
             return _check(dataset_dir)
         generate(dataset_dir)
