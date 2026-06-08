@@ -2,8 +2,8 @@
 -- Snapshot of the live DB schema; checked in to gate schema/model parity.
 -- Regenerate after structural migrations land. Do not edit by hand.
 --
--- Source: /Users/pat/tpw/DB/kayak.db
--- Generated: 2026-05-23T20:49:27Z
+-- Source: /tmp/sa2.db
+-- Generated: 2026-06-08T18:16:04Z
 
 CREATE TABLE calc_expression (
 	id INTEGER NOT NULL, 
@@ -104,14 +104,20 @@ CREATE TABLE editor_session (
 	FOREIGN KEY(editor_id) REFERENCES editor (id) ON DELETE CASCADE, 
 	UNIQUE (token_hash)
 );
+CREATE TABLE fetch_state (
+	fetch_url_id INTEGER NOT NULL,
+	last_fetched_at DATETIME,
+	PRIMARY KEY (fetch_url_id),
+	FOREIGN KEY(fetch_url_id) REFERENCES fetch_url (id) ON DELETE CASCADE
+);
 CREATE TABLE fetch_url (
 	id INTEGER NOT NULL, 
 	url VARCHAR(512) NOT NULL, 
 	parser VARCHAR(32), 
 	hours VARCHAR(128), 
-	is_active BOOLEAN DEFAULT 0 NOT NULL,
-	last_fetched_at DATETIME, unknown_station_policy TEXT,
-	PRIMARY KEY (id),
+	is_active BOOLEAN DEFAULT 0 NOT NULL, 
+	unknown_station_policy TEXT, 
+	PRIMARY KEY (id), 
 	UNIQUE (url)
 );
 CREATE TABLE gauge (

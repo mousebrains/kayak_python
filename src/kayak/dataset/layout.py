@@ -35,11 +35,14 @@ import sqlalchemy as sa
 from kayak.db.models import Base
 
 # Columns present on the model but NOT written to the table's CSV: large
-# machine-generated geometry/gradient (→ JSON sidecars) and runtime churn.
-# Mirrors scripts/export_metadata.py::EXCLUDED_COLUMNS.
+# machine-generated geometry/gradient that export to the JSON sidecars instead.
+# They are PRESERVED (not reset) when a CSV omits them — applied via the sidecars,
+# not the CSV — which is the EXCLUDED-vs-OPTIONAL distinction the sync's
+# _reset_absent_optional_columns turns on. Mirrors
+# scripts/export_metadata.py::EXCLUDED_COLUMNS. (fetch_url.last_fetched_at lived
+# here until SA-2 relocated that runtime timestamp to the fetch_state table.)
 EXCLUDED_COLUMNS: dict[str, set[str]] = {
     "reach": {"geom", "gradient_profile"},
-    "fetch_url": {"last_fetched_at"},
 }
 
 # Nullable columns a CSV MAY omit (vs. the complete-projection default that every

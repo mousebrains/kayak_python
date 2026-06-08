@@ -174,7 +174,7 @@ Key systemd timers:
 | [CLAUDE.md](CLAUDE.md) | Architecture, dev setup, conventions, key patterns |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development workflow, testing, adding parsers |
 | [deploy/SETUP.md](deploy/SETUP.md) | Production deployment (Hetzner CPX11) |
-| [docs/database-schema.md](docs/database-schema.md) | Full schema reference (24 ORM tables + `schema_migrations`) |
+| [docs/database-schema.md](docs/database-schema.md) | Full schema reference (25 ORM tables + `schema_migrations`) |
 | [docs/schema-overview.svg](docs/schema-overview.svg) | ER diagram |
 | [docs/security/posture.md](docs/security/posture.md) | Current security posture (controls, accepted findings, operator obligations) |
 

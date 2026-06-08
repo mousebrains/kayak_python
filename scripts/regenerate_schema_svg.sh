@@ -35,7 +35,9 @@ if [[ ! -x "$ERALCHEMY" ]]; then
     exit 1
 fi
 
-TMP_DB="$(mktemp --suffix=.db)"
+# Portable temp file: GNU `mktemp --suffix` isn't supported by BSD/macOS mktemp,
+# so append the .db suffix to a bare mktemp template instead (works on both).
+TMP_DB="$(mktemp)".db
 trap 'rm -f "$TMP_DB"' EXIT
 
 "$PYTHON" - <<EOF

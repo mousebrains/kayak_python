@@ -427,3 +427,57 @@ def test_apply_unknown_station_policy_classification():
     assert _verdict("bogus") is True  # fail-safe: anything but 'ignore' rejects
     assert _verdict("ignore") is False
     assert _verdict("  IGNORE  ") is False  # case/space-insensitive
+
+
+# ---------------------------------------------------------------------------
+# _process_work_item — fetch timestamp lands in the runtime fetch_state table,
+# never on the dataset-owned fetch_url row (SA / AC #6).
+# ---------------------------------------------------------------------------
+
+
+def test_process_work_item_writes_fetch_state():
+    """A successful fetch records its timestamp in fetch_state (a runtime table),
+    not on fetch_url; a second fetch upserts the same single row."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from kayak.cli.fetch import _FetchWork, _process_work_item
+    from kayak.db.models import Base, FetchState, FetchUrl
+
+    class _StubParser:
+        def __init__(self, **kw):
+            self.url = kw["url"]
+            self.unknown_stations: set[str] = set()
+            self.dropped_obs_count = 0
+
+        def parse(self, _text):
+            return 1
+
+    # The timestamp moved off the dataset-owned fetch_url row onto fetch_state.
+    assert "last_fetched_at" not in {c.name for c in FetchUrl.__table__.columns}
+    assert "last_fetched_at" in {c.name for c in FetchState.__table__.columns}
+
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        session.add(FetchUrl(id=1, url="https://example.com/d"))
+        session.commit()
+
+        w = _FetchWork(
+            url="https://example.com/d",
+            raw_url="https://example.com/d",
+            parser_name="p",
+            source_id=1,
+            fetch_url_id=1,
+        )
+        content = {"https://example.com/d": "data"}
+
+        with mock.patch("kayak.cli.fetch.get_parser_class", return_value=_StubParser):
+            assert _process_work_item(session, w, content, _args()) is False
+            state = session.get(FetchState, 1)
+            assert state is not None and state.last_fetched_at is not None
+            # Idempotent upsert: a second fetch updates the same single row.
+            _process_work_item(session, w, content, _args())
+
+        assert session.query(FetchState).count() == 1
+        assert session.get(FetchState, 1).last_fetched_at is not None

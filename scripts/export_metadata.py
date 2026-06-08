@@ -33,11 +33,11 @@ from kayak.dataset import layout
 REPO_DIR = Path(__file__).resolve().parent.parent
 
 # The snapshot writer and the validator share ONE contract — the tables to
-# export (in order) and the columns held out to JSON sidecars / as runtime churn
-# both come from kayak.dataset.layout so they can't drift.
+# export (in order) and the columns held out to the JSON sidecars both come from
+# kayak.dataset.layout so they can't drift.
 # (reach.geom + reach.gradient_profile are large, machine-generated, and not
-# regenerable on prod, so each is snapshotted to its own JSON; fetch_url's
-# last_fetched_at is per-run churn. See review-3 R6.1 / layout.EXCLUDED_COLUMNS.)
+# regenerable on prod, so each is snapshotted to its own JSON. See review-3 R6.1 /
+# layout.EXCLUDED_COLUMNS.)
 #
 # The snapshot exports SNAPSHOT_EXPORT_CSVS — every contract CSV EXCEPT the
 # generator-owned source/fetch_url/gauge_source trio (dataset-separation S1):
