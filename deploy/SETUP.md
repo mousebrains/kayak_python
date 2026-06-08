@@ -205,7 +205,7 @@ via a migration" — so a dev re-trace reaches prod like this:
 To apply geometry to the live DB by hand (without re-syncing CSV metadata):
 
 ```bash
-/home/pat/.venv/bin/python scripts/import_metadata.py --geom-only
+/home/pat/.venv/bin/python /home/pat/kayak/scripts/import_metadata.py --geom-only
 ```
 
 **Filesystem access for nginx/PHP (`www-data`).** The pipeline runs as `pat`,
@@ -759,10 +759,10 @@ setfacl -R -d -m u:www-data:rwX /home/pat/DB              # default for new DB f
 
 # 6. Initialize and run (same sequence as § 4 — plain init-db leaves every
 #    source an orphan and renders an empty site)
-/home/pat/.venv/bin/levels init-db --no-seed           # schema + stamped migrations
-/home/pat/.venv/bin/levels sync-metadata               # gauges/reaches/sources/links (CSVs, by id)
-/home/pat/.venv/bin/python scripts/import_metadata.py  # reach geom/gradient JSON sidecars
-/home/pat/.venv/bin/levels pipeline                    # fetch live data, generate HTML
+/home/pat/.venv/bin/levels init-db --no-seed                       # schema + stamped migrations
+/home/pat/.venv/bin/levels sync-metadata                          # gauges/reaches/sources/links (CSVs, by id)
+/home/pat/.venv/bin/python /home/pat/kayak/scripts/import_metadata.py  # reach geom/gradient JSON sidecars
+/home/pat/.venv/bin/levels pipeline                               # fetch live data, generate HTML
 ```
 
 ### config.py .env resolution
