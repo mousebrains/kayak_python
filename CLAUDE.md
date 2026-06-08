@@ -176,7 +176,7 @@ Traces stream paths using NHDPlus HR HydroSeq network data. Requires `Trace-cach
 
 Runs these steps in order:
 
-1. **fetch** — reads `src/kayak/data/sources.yaml`, fetches URLs, dispatches to registered parsers, stores `Observation` rows
+1. **fetch** — reads the active `fetch_url` rows from the DB (synced from the dataset CSVs by `levels sync-metadata`; no longer the engine `sources.yaml` — S1), fetches URLs, dispatches to registered parsers, stores `Observation` rows. A station a feed emits with no `source` row is dropped (known siblings still saved) and flagged per the URL's `unknown_station_policy` (default `reject` → non-zero fetch exit)
 2. **fetch-usgs-ogc** — fetches USGS data via the OGC API for gauges linked to a USGS source
 3. **calc-rating** — interpolates missing flow from gage height (or vice versa) using `Rating`/`RatingData` tables
 4. **update-gauge-cache** — recomputes gauge-level latest observation values
