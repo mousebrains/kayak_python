@@ -61,7 +61,7 @@ fresh copy of prod and confirm the graph is clean:
 ```bash
 cp /path/to/prod-or-fresh.db /tmp/sandbox.db
 DATABASE_URL=sqlite:////tmp/sandbox.db levels sync-metadata --dry-run        # review the plan
-DATABASE_URL=sqlite:////tmp/sandbox.db levels sync-metadata [--allow-deletes] # apply inserts + updates
+DATABASE_URL=sqlite:////tmp/sandbox.db levels sync-metadata [--allow-deletes] # apply the diff (add the flag if it drops rows — a delete else refuses the WHOLE batch)
 DATABASE_URL=sqlite:////tmp/sandbox.db levels orphan-check                    # No orphan sources.
 # geom/gradient apply, if the JSONs changed — run the two flags SEPARATELY (see warning below):
 DATABASE_URL=sqlite:////tmp/sandbox.db python scripts/import_metadata.py --geom-only

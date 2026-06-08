@@ -210,10 +210,23 @@ def test_deletes_refused_without_flag(tmp_path: Path) -> None:
     _seed_two_sources(db)
     _write_surviving_csvs(csv_dir, source_name="S1_NEW")  # rename + (implicit) delete of S2
 
-    rc = sync_metadata(_args(db, csv_dir, allow_deletes=False))
+    # PRAGMA data_version on a SEPARATE connection bumps iff *another* connection
+    # commits a write; sync_metadata uses its own connection, so an unchanged
+    # value across the call proves "no write transaction committed" — exactly AC
+    # #8's "refused deletes begin no write transaction and leave logical table
+    # checksums/counts unchanged", and stronger than spot-checking a few rows.
+    mon = sqlite3.connect(db)
+    try:
+        before = mon.execute("PRAGMA data_version").fetchone()[0]
+        rc = sync_metadata(_args(db, csv_dir, allow_deletes=False))
+        after = mon.execute("PRAGMA data_version").fetchone()[0]
+    finally:
+        mon.close()
+
     assert rc == 2  # refused — deploy.sh aborts on this
-    # The safe half applied (S1 renamed); the delete did NOT happen.
-    assert _scalar(db, "SELECT name FROM source WHERE id = 1") == "S1_NEW"
+    assert after == before  # all-or-nothing: not a single write committed (AC #8)
+    # …and concretely, neither the would-be rename nor the delete landed.
+    assert _scalar(db, "SELECT name FROM source WHERE id = 1") == "S1"
     assert _scalar(db, "SELECT COUNT(*) FROM source WHERE id = 2") == 1
     assert _scalar(db, "SELECT COUNT(*) FROM observation WHERE source_id = 2") == 2
 
@@ -230,6 +243,59 @@ def test_dry_run_changes_nothing(tmp_path: Path) -> None:
     assert rc == 0
     # Not even the rename landed.
     assert _scalar(db, "SELECT name FROM source WHERE id = 1") == "S1"
+    assert _scalar(db, "SELECT COUNT(*) FROM source WHERE id = 2") == 1
+
+
+def test_refused_delete_then_allow_deletes_applies_whole_batch(tmp_path: Path) -> None:
+    """AC #8 + the deploy recovery flow: a refused delete leaves the DB byte-for-
+    byte unchanged (not half-applied); the operator's --allow-deletes re-run then
+    applies the WHOLE batch (rename + delete) atomically, and is idempotent."""
+    db = tmp_path / "k.db"
+    csv_dir = tmp_path / "csv"
+    csv_dir.mkdir()
+    _write_contract(csv_dir)
+    _seed_two_sources(db)
+    _write_surviving_csvs(csv_dir, source_name="S1_NEW")  # rename S1 + drop S2
+
+    # First pass without the flag: refused, DB untouched (the rename did NOT land).
+    assert sync_metadata(_args(db, csv_dir, allow_deletes=False)) == 2
+    assert _scalar(db, "SELECT name FROM source WHERE id = 1") == "S1"
+    assert _scalar(db, "SELECT COUNT(*) FROM source WHERE id = 2") == 1
+
+    # Operator re-runs with the flag: the whole batch (rename + delete) applies.
+    assert sync_metadata(_args(db, csv_dir, allow_deletes=True)) == 0
+    assert _scalar(db, "SELECT name FROM source WHERE id = 1") == "S1_NEW"
+    assert _scalar(db, "SELECT COUNT(*) FROM source WHERE id = 2") == 0
+    assert _scalar(db, "SELECT COUNT(*) FROM observation WHERE source_id = 2") == 0
+
+    # A second --allow-deletes run is a clean no-op (idempotent).
+    assert sync_metadata(_args(db, csv_dir, allow_deletes=True)) == 0
+    assert _scalar(db, "SELECT name FROM source WHERE id = 1") == "S1_NEW"
+
+
+def test_pure_upsert_without_allow_deletes_applies(tmp_path: Path) -> None:
+    """The common deploy path: a diff with NO deletes runs WITHOUT --allow-deletes
+    and applies cleanly. Guards that the all-or-nothing delete gate doesn't block a
+    delete-free insert/update."""
+    db = tmp_path / "k.db"
+    csv_dir = tmp_path / "csv"
+    csv_dir.mkdir()
+    _write_contract(csv_dir)
+    _seed_two_sources(db)
+    # Desired state keeps BOTH sources (no delete) and just renames S1.
+    _write_csv(csv_dir, "fetch_url", ["id", "url"], [[1, "http://fu1"]])
+    _write_csv(
+        csv_dir,
+        "source",
+        ["id", "name", "agency", "fetch_url_id", "calc_expression_id", "timezone"],
+        [[1, "S1_NEW", "USGS", 1, "", ""], [2, "S2", "USGS", "", "", ""]],
+    )
+    _write_csv(csv_dir, "gauge", ["id", "name"], [[1, "G1"]])
+    _write_csv(csv_dir, "gauge_source", ["gauge_id", "source_id"], [[1, 1], [1, 2]])
+
+    rc = sync_metadata(_args(db, csv_dir, allow_deletes=False))
+    assert rc == 0  # no deletes → the gate doesn't fire
+    assert _scalar(db, "SELECT name FROM source WHERE id = 1") == "S1_NEW"
     assert _scalar(db, "SELECT COUNT(*) FROM source WHERE id = 2") == 1
 
 

@@ -165,13 +165,14 @@ echo ">>> levels validate-dataset $KAYAK_DATA"
 # are preserved). --backup snapshots the DB to <db>.pre-sync first: a FK-valid
 # but logically-wrong CSV edit (e.g. a bad threshold UPDATE) commits and is NOT
 # undoable from the one-line diff. Runs WITHOUT --allow-deletes: a diff that
-# REMOVES a row prints the per-source observation-drop plan and exits non-zero,
-# so this `set -e`d deploy ABORTS — but note the safe insert/update half is
-# already COMMITTED at that point. The operator reviews the drop counts, runs
-# `levels sync-metadata --allow-deletes` by hand (the committed upserts are
-# idempotent, so re-running deploy.sh is safe), then re-runs deploy.sh. Runs
-# after migrate (schema current) and before the geom/gradient applies (which
-# UPDATE the same reach rows). Gated on the metadata CSVs actually changing.
+# REMOVES a row prints the per-source observation-drop plan and exits non-zero
+# with NO changes applied (all-or-nothing — not even the insert/update half), so
+# this `set -e`d deploy ABORTS leaving the DB untouched. The operator reviews the
+# drop counts and runs `levels sync-metadata --allow-deletes` by hand, which
+# applies the whole batch (inserts/updates AND deletes) in one transaction, then
+# re-runs deploy.sh (a no-op for metadata — the sync is idempotent). Runs after
+# migrate (schema current) and before the geom/gradient applies (which UPDATE the
+# same reach rows). Gated on the metadata CSVs actually changing.
 
 if [[ "$data_old_sha" != "$data_new_sha" ]] && \
         ! git -C "$KAYAK_DATA" diff --quiet "$data_old_sha" "$data_new_sha" -- '*.csv'; then
