@@ -3,7 +3,10 @@
 
 Writes one CSV per metadata table, sorted by primary key so diffs are stable
 across exports. Excludes the append-only time-series tables and caches
-(observation, latest_observation, latest_gauge_observation). The
+(observation, latest_observation, latest_gauge_observation) and the
+generator-owned source/fetch_url/gauge_source trio (those are written only by
+``levels generate-sources`` from the dataset's sources.yaml — S1's "no
+dual-writer window"). The
 large reach.geom and reach.gradient_profile columns go to separate JSONs
 (reaches.json and reaches-gradient.json, keyed by reach id) rather than
 reach.csv — they'd bloat every metadata-row diff and aren't regenerable on prod
@@ -29,13 +32,19 @@ from kayak.dataset import layout
 
 REPO_DIR = Path(__file__).resolve().parent.parent
 
-# The complete-projection writer and the validator share ONE contract — the
-# tables to export (in order) and the columns held out to JSON sidecars / as
-# runtime churn both come from kayak.dataset.layout so they can't drift.
+# The snapshot writer and the validator share ONE contract — the tables to
+# export (in order) and the columns held out to JSON sidecars / as runtime churn
+# both come from kayak.dataset.layout so they can't drift.
 # (reach.geom + reach.gradient_profile are large, machine-generated, and not
 # regenerable on prod, so each is snapshotted to its own JSON; fetch_url's
 # last_fetched_at is per-run churn. See review-3 R6.1 / layout.EXCLUDED_COLUMNS.)
-METADATA_TABLES = list(layout.CONTRACT_CSVS)
+#
+# The snapshot exports SNAPSHOT_EXPORT_CSVS — every contract CSV EXCEPT the
+# generator-owned source/fetch_url/gauge_source trio (dataset-separation S1):
+# `levels generate-sources` is their sole writer, so the nightly DB snapshot
+# must not race them. They remain part of the dataset (required + synced); only
+# this export side excludes them.
+METADATA_TABLES = list(layout.SNAPSHOT_EXPORT_CSVS)
 EXCLUDED_COLUMNS = layout.EXCLUDED_COLUMNS
 
 

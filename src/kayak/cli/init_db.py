@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 # Canonical source.agency for a parser name, used when sources.yaml sets none
-# (it carries no `agency:` field, so a synced or auto-created source would
+# (it carries no `agency:` field, so a synced source would
 # otherwise inherit the raw parser SLUG — nwps, wa.gov, nwrfc.* — which splits
 # GROUP BY agency; review-3 R6.3, migration 0062 fixed the existing rows). This
 # is the default for a new/unlabeled source; per-gauge exceptions (e.g. an nwps
@@ -79,7 +79,9 @@ def sync_sources(session: Session) -> int:
     Also upserts Source rows for every station listed in a URL's ``stations:``
     block, setting ``source.timezone`` to the IANA TZ name. This pre-creates
     station source rows so the per-station TZ is populated before the first
-    parse; parsers still auto-create rows for unknown stations (without a TZ).
+    parse. (Since S1, ``levels fetch`` no longer auto-creates rows for unknown
+    stations — it drops them and the fetch step flags them per the URL's
+    ``unknown_station_policy``.)
 
     Returns the count of newly-inserted FetchUrl rows. Updates, station
     upserts, and deactivations are logged but not counted in the return value.

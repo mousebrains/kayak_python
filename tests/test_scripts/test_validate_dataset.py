@@ -52,6 +52,36 @@ def _rewrite_csv(path: Path, mutate) -> None:
         w.writerows(rows)
 
 
+def _add_column(path: Path, col: str, value: str) -> None:
+    """Append a new column ``col`` (set to ``value`` on every row) to a CSV."""
+    rows = list(csv.DictReader(path.open(encoding="utf-8")))
+    fieldnames = (list(rows[0].keys()) if rows else []) + [col]
+    for r in rows:
+        r[col] = value
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=fieldnames)
+        w.writeheader()
+        w.writerows(rows)
+
+
+def test_optional_unknown_station_policy_column_accepted(dataset_copy: Path) -> None:
+    """The fetch_url.unknown_station_policy column (S1) may be PRESENT with a value
+    and the dataset still fully validates (text/nullable value check passes). The
+    complementary ABSENCE case — the column omitted, which is what makes the
+    introduction backward-compatible — is covered by test_fixture_dataset_is_valid
+    (the fixture's fetch_url.csv carries no such column)."""
+    _add_column(dataset_copy / "fetch_url.csv", "unknown_station_policy", "ignore")
+    assert validate_dataset(dataset_copy) == []
+
+
+def test_unexpected_extra_column_still_rejected(dataset_copy: Path) -> None:
+    """Allowing OPTIONAL columns to be absent must NOT let an arbitrary unknown
+    column through — a non-contract column is still a shape error."""
+    _add_column(dataset_copy / "fetch_url.csv", "bogus_col", "x")
+    errs = validate_dataset(dataset_copy)
+    assert any("bogus_col" in e and "column mismatch" in e for e in errs)
+
+
 def test_missing_required_file(dataset_copy: Path) -> None:
     (dataset_copy / "id_counters.csv").unlink()
     errs = validate_dataset(dataset_copy)

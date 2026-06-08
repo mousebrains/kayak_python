@@ -151,6 +151,50 @@ def test_pipeline_exits_nonzero_on_failure(
 @patch("kayak.cli.pipeline.calc_rating.calc_rating")
 @patch("kayak.cli.pipeline.fetch_usgs_ogc.fetch_usgs_ogc")
 @patch("kayak.cli.pipeline.fetch.fetch")
+def test_pipeline_soft_fail_fetch_still_builds_but_exits_nonzero(
+    mock_fetch,
+    mock_ogc,
+    mock_calc_rating,
+    mock_gauge_cache,
+    mock_calculator,
+    mock_build,
+    mock_engine,
+    mock_orphan_check,
+    mock_check_reaches,
+):
+    """fetch RETURNING a non-zero rc (an undeclared-station reject — S1) is a
+    SOFT failure: unlike a raised exception it does NOT cascade-skip downstream,
+    so build still runs and the public site never freezes on one new station —
+    but the run still exits non-zero so systemd OnFailure alerts.
+    """
+    conn = MagicMock()
+    mock_engine.return_value.connect.return_value.__enter__ = MagicMock(return_value=conn)
+    mock_engine.return_value.connect.return_value.__exit__ = MagicMock(return_value=False)
+
+    mock_fetch.return_value = 1  # soft fail (return, not raise)
+
+    args = _make_args()
+    with pytest.raises(SystemExit) as exc_info:
+        pipeline(args)
+    assert exc_info.value.code == 1
+
+    # The load-bearing invariant: build (and every transform) still ran.
+    mock_fetch.assert_called_once()
+    mock_calc_rating.assert_called_once()
+    mock_gauge_cache.assert_called_once()
+    mock_calculator.assert_called_once()
+    mock_build.assert_called_once()
+
+
+@patch("kayak.cli.pipeline._check_reaches")
+@patch("kayak.cli.pipeline._orphan_check")
+@patch("kayak.cli.pipeline.get_engine")
+@patch("kayak.cli.pipeline.build.build")
+@patch("kayak.cli.pipeline.calculator.calculator")
+@patch("kayak.cli.pipeline._update_gauge_cache")
+@patch("kayak.cli.pipeline.calc_rating.calc_rating")
+@patch("kayak.cli.pipeline.fetch_usgs_ogc.fetch_usgs_ogc")
+@patch("kayak.cli.pipeline.fetch.fetch")
 def test_pipeline_continue_on_error_suppresses_exit(
     mock_fetch,
     mock_ogc,

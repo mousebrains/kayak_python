@@ -109,9 +109,9 @@ CREATE TABLE fetch_url (
 	url VARCHAR(512) NOT NULL, 
 	parser VARCHAR(32), 
 	hours VARCHAR(128), 
-	is_active BOOLEAN DEFAULT 0 NOT NULL, 
-	last_fetched_at DATETIME, 
-	PRIMARY KEY (id), 
+	is_active BOOLEAN DEFAULT 0 NOT NULL,
+	last_fetched_at DATETIME, unknown_station_policy TEXT,
+	PRIMARY KEY (id),
 	UNIQUE (url)
 );
 CREATE TABLE gauge (

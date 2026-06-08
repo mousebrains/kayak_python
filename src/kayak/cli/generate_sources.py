@@ -72,18 +72,27 @@ def _column_order(source_dir: Path, table: str) -> list[str]:
     avoids reordering the committed CSVs (which the snapshot would only revert).
 
     The column *set* is still validated against the schema, so a drifted header
-    (a stray or missing column) is rejected, not silently propagated.
+    (a stray, or a missing *required*, column) is rejected, not silently
+    propagated. :func:`layout.optional_columns` (e.g. ``fetch_url`` 's
+    ``unknown_station_policy``) MAY be absent from the committed header — a
+    dataset that doesn't use the opt-in simply omits the column, and the
+    generated CSV stays byte-identical.
     """
     expected = layout.expected_columns(table)
+    required = expected - layout.optional_columns(table)
     path = source_dir / f"{table}.csv"
     if path.is_file():
         with path.open(newline="", encoding="utf-8") as fh:
             header = next(csv.reader(fh), None)
         if header is not None:
-            if set(header) != expected:
+            hset = set(header)
+            missing = required - hset
+            unexpected = hset - expected
+            if missing or unexpected:
                 raise ValueError(
                     f"{table}.csv header {sorted(header)} does not match the schema "
-                    f"columns {sorted(expected)}"
+                    f"columns {sorted(expected)} (missing {sorted(missing)}, "
+                    f"unexpected {sorted(unexpected)})"
                 )
             return header
     return layout.ordered_columns(table)
