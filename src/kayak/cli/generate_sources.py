@@ -603,8 +603,18 @@ def _validate_proposed(
 ) -> None:
     """Prove the proposed registry + bumped counters are valid WITHOUT touching the
     real dataset: mirror the validator's inputs into a temp dir (so the stale-counter
-    check sees the bumped next_id, not the pre-bump one the new id equals) and run a
-    full generate() dry-run there. Raises ValueError on any problem."""
+    check sees the bumped next_id, not the pre-bump one the new id equals), run a
+    generate() dry-run, and apply the source-row dataset-contract rule. Raises
+    ValueError on any problem.
+
+    Scope: generate() covers the registry contract (parser/refs/typing); we also run
+    ``validate_dataset._check_source_names`` (the one source.csv-CONTENT contract
+    rule generate's validate_registry doesn't cover — a USGS source name must be a
+    numeric station id). The full dataset contract (cross-table FK, reaches,
+    materialization) stays ``levels validate-dataset``'s job — it's run after the
+    gauge/gauge_source wiring this command doesn't touch."""
+    from kayak.cli.validate_dataset import _check_source_names
+
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         for fn in ("calc_expression.csv", "source.csv", "fetch_url.csv"):
@@ -613,7 +623,10 @@ def _validate_proposed(
                 shutil.copy2(src, tmp / fn)
         _write_counters(tmp, bumped)
         _atomic_write_text(tmp / SOURCES_YAML, _dump_sources_yaml(*_split(proposed)))
-        generate(tmp)  # validates the registry and proves the CSVs regenerate cleanly
+        generate(tmp)  # validates the registry and writes source.csv/fetch_url.csv
+        contract = _check_source_names(tmp, {"source"})
+        if contract:
+            raise ValueError("dataset-contract violation:\n  - " + "\n  - ".join(contract))
 
 
 def _split(meta: dict[str, list[dict[str, Any]]]) -> tuple[list[dict], list[dict]]:
@@ -627,6 +640,7 @@ def _add_source_guards(
     *,
     name: str,
     url: str | None,
+    parser: str | None,
     calc_expression_id: int | None,
 ) -> None:
     """Up-front guards beyond ``validate_registry`` (clear messages; reject before
@@ -636,6 +650,8 @@ def _add_source_guards(
         raise ValueError(
             "a source is fetch-backed (--url) or calc-backed (--calc-expression-id), not both"
         )
+    if url is not None and parser is None:
+        raise ValueError("a fetch_url (url) requires a parser")
     if name != name.strip():
         raise ValueError("name must not have leading/trailing whitespace")
     if any(str(s.get("name")) == name for s in sources):
@@ -646,11 +662,15 @@ def _add_source_guards(
         if any(str(fu.get("url")) == url for fu in fetch_urls):
             raise ValueError(f"a fetch_url with url {url!r} already exists")
     if calc_expression_id is not None:
-        calc_ids = _calc_expression_ids(dataset_dir)
-        if calc_ids is None:
-            raise ValueError("calc_expression.csv not present; cannot link --calc-expression-id")
-        if calc_expression_id not in calc_ids:
-            raise ValueError(f"calc_expression_id {calc_expression_id} not in calc_expression.csv")
+        _check_calc_ref_exists(dataset_dir, calc_expression_id)
+
+
+def _check_calc_ref_exists(dataset_dir: Path, calc_expression_id: int) -> None:
+    calc_ids = _calc_expression_ids(dataset_dir)
+    if calc_ids is None:
+        raise ValueError("calc_expression.csv not present; cannot link --calc-expression-id")
+    if calc_expression_id not in calc_ids:
+        raise ValueError(f"calc_expression_id {calc_expression_id} not in calc_expression.csv")
 
 
 def _allocate_id(counters: list[list[str]], table: str) -> int:
@@ -696,7 +716,13 @@ def add_source(
     base_fu, base_src = _split(meta)
     fetch_urls, sources = list(base_fu), list(base_src)
     _add_source_guards(
-        dataset_dir, sources, fetch_urls, name=name, url=url, calc_expression_id=calc_expression_id
+        dataset_dir,
+        sources,
+        fetch_urls,
+        name=name,
+        url=url,
+        parser=parser,
+        calc_expression_id=calc_expression_id,
     )
 
     counters = _read_counters(dataset_dir)
@@ -744,6 +770,14 @@ def add_source_args(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     p = subparsers.add_parser(
         "add-source",
         help="Add a source to a dataset's sources.yaml (allocates the id, regenerates CSVs)",
+        description=(
+            "Add a source to a dataset's sources.yaml: allocate its stable id(s), append "
+            "the entry, bump id_counters, and regenerate source.csv + fetch_url.csv. The "
+            "result is validated against the registry contract and the source-row rules "
+            "(incl. the USGS numeric-station-id name rule). The full dataset contract "
+            "(cross-table FK, reaches, materialization) is not re-checked here — run "
+            "`levels validate-dataset` after wiring the gauge/gauge_source rows."
+        ),
     )
     p.add_argument("dir", help="Dataset directory (containing sources.yaml)")
     p.add_argument("--name", required=True, help="Source name (the fetch resolution key)")

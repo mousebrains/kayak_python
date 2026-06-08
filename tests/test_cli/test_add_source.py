@@ -194,6 +194,30 @@ def test_malformed_current_registry_truthy_section_rejected(tmp_path: Path) -> N
         gs.add_source(d, name="NEW")
 
 
+def test_usgs_non_numeric_name_rejected(dataset: Path) -> None:
+    # The dataset-contract rule (USGS source name must be a numeric station id) is
+    # off generate-sources' path; add-source must apply it so a natural mistake
+    # ("Human Name" for a USGS source) is caught at authoring, not deploy.
+    snap = _snapshot(dataset)
+    with pytest.raises(ValueError, match="numeric station id"):
+        gs.add_source(
+            dataset, name="Human Name", agency="USGS", url="https://example/u", parser="nwps"
+        )
+    assert _snapshot(dataset) == snap
+
+
+def test_usgs_numeric_name_accepted(dataset: Path) -> None:
+    gs.add_source(dataset, name="14998000", agency="USGS", url="https://example/u", parser="nwps")
+    assert any(r["name"] == "14998000" for r in _rows(dataset, "source"))
+
+
+def test_url_without_parser_library_guard(dataset: Path) -> None:
+    # The library API (not just the CLI) rejects url without parser, with a clear
+    # pairing message rather than a generic "missing required field".
+    with pytest.raises(ValueError, match="requires a parser"):
+        gs.add_source(dataset, name="A1", url="https://example/x")
+
+
 def test_malformed_calc_csv_clean_error(dataset: Path) -> None:
     # A non-integer id in calc_expression.csv must surface a clean message, not the
     # raw `invalid literal for int()` from the set comprehension.
