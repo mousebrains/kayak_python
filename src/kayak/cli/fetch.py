@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from kayak.config import FETCH_BUDGET
 from kayak.db.engine import get_session
-from kayak.db.models import FetchUrl, Source
+from kayak.db.models import FetchState, FetchUrl, Source
 from kayak.db.sources import get_active_fetch_urls
 from kayak.parsers.base import BaseParser
 from kayak.parsers.registry import ensure_all_loaded, get_parser_class
@@ -373,9 +373,14 @@ def _process_work_item(
             reject = _apply_unknown_station_policy(w, parser)
 
         if w.fetch_url_id and not args.dry_run and not args.input_dir:
-            fetch_url = session.get(FetchUrl, w.fetch_url_id)
-            if fetch_url:
-                fetch_url.last_fetched_at = datetime.now(UTC)
+            # Record the fetch timestamp in the runtime fetch_state table — never
+            # mutate the dataset-owned fetch_url row here (SA / AC #6). Upsert by
+            # fetch_url id (1:1); session.add on an already-persistent row is a no-op.
+            state = session.get(FetchState, w.fetch_url_id) or FetchState(
+                fetch_url_id=w.fetch_url_id
+            )
+            state.last_fetched_at = datetime.now(UTC)
+            session.add(state)
 
         logger.debug("  %d updates", count)
         if not args.dry_run:

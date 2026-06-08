@@ -601,33 +601,35 @@ def test_unsupported_contract_version_refused(tmp_path: Path, capsys) -> None:  
 # ---------------------------------------------------------------------------
 
 
-def test_sync_resets_absent_optional_column_keeps_excluded_churn(tmp_path: Path) -> None:
+def test_sync_resets_absent_optional_column_keeps_other_columns(tmp_path: Path) -> None:
     """An omitted generator-owned OPTIONAL column (unknown_station_policy) is reset
     to its default (NULL) on apply, so a stale opt-in can't outlive an opt-out that
-    dropped the column. The EXCLUDED runtime-churn column (last_fetched_at), which an
-    omitted CSV must PRESERVE, is left untouched — the distinction the fix turns on."""
+    dropped the column. A NON-optional column the CSV happens to omit (here `parser`;
+    in production the EXCLUDED reach.geom/gradient_profile sidecar columns) is left
+    untouched — the reset is scoped to layout.optional_columns, the distinction the
+    fix turns on."""
     db = tmp_path / "k.db"
     _schema(db)
     conn = sqlite3.connect(db)
     try:
         conn.execute(
-            "INSERT INTO fetch_url (id, url, is_active, unknown_station_policy, last_fetched_at) "
-            "VALUES (1, 'http://fu1', 1, 'ignore', '2026-01-01 00:00:00')"
+            "INSERT INTO fetch_url (id, url, is_active, parser, unknown_station_policy) "
+            "VALUES (1, 'http://fu1', 1, 'nwps', 'ignore')"
         )
         conn.commit()
         csv_dir = tmp_path / "csv"
         csv_dir.mkdir()
-        # A no-opt-in fetch_url.csv: the policy column is absent entirely.
+        # A no-opt-in fetch_url.csv: both the policy column and parser are absent.
         _write_csv(csv_dir, "fetch_url", ["id", "url", "is_active"], [[1, "http://fu1", 1]])
         mc.import_table(conn, csv_dir / "fetch_url.csv")
         conn.commit()
-        policy, last = conn.execute(
-            "SELECT unknown_station_policy, last_fetched_at FROM fetch_url WHERE id = 1"
+        policy, parser = conn.execute(
+            "SELECT unknown_station_policy, parser FROM fetch_url WHERE id = 1"
         ).fetchone()
     finally:
         conn.close()
     assert policy is None  # OPTIONAL column reset to the default (= reject)
-    assert last == "2026-01-01 00:00:00"  # EXCLUDED churn preserved
+    assert parser == "nwps"  # non-optional column preserved on omit
 
 
 def test_sync_no_write_when_optional_column_already_default(tmp_path: Path) -> None:

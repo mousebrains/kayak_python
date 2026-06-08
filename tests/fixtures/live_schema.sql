@@ -2,172 +2,178 @@
 -- Snapshot of the live DB schema; checked in to gate schema/model parity.
 -- Regenerate after structural migrations land. Do not edit by hand.
 --
--- Source: /Users/pat/tpw/DB/kayak.db
--- Generated: 2026-05-23T20:49:27Z
+-- Source: /tmp/sa2.db
+-- Generated: 2026-06-08T18:52:31Z
 
 CREATE TABLE calc_expression (
-	id INTEGER NOT NULL, 
-	data_type VARCHAR(11) NOT NULL, 
-	expression VARCHAR(512) NOT NULL, 
-	time_expression TEXT, 
-	note TEXT, provenance_slug TEXT, 
+	id INTEGER NOT NULL,
+	data_type VARCHAR(11) NOT NULL,
+	expression VARCHAR(512) NOT NULL,
+	time_expression TEXT,
+	note TEXT, provenance_slug TEXT,
 	PRIMARY KEY (id)
 );
 CREATE TABLE change_request (
-	id INTEGER NOT NULL, 
-	target_type VARCHAR(11) NOT NULL, 
-	target_id INTEGER, 
-	editor_id INTEGER NOT NULL, 
-	submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, 
-	subject VARCHAR(256), 
-	payload_json TEXT NOT NULL, 
-	notes_to_maint TEXT, 
-	status VARCHAR(12) DEFAULT 'pending' NOT NULL, 
-	reviewed_at DATETIME, 
-	reviewed_by INTEGER, 
-	reviewer_note TEXT, 
-	applied_json TEXT, source_url TEXT, 
-	PRIMARY KEY (id), 
-	FOREIGN KEY(editor_id) REFERENCES editor (id) ON DELETE CASCADE, 
+	id INTEGER NOT NULL,
+	target_type VARCHAR(11) NOT NULL,
+	target_id INTEGER,
+	editor_id INTEGER NOT NULL,
+	submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	subject VARCHAR(256),
+	payload_json TEXT NOT NULL,
+	notes_to_maint TEXT,
+	status VARCHAR(12) DEFAULT 'pending' NOT NULL,
+	reviewed_at DATETIME,
+	reviewed_by INTEGER,
+	reviewer_note TEXT,
+	applied_json TEXT, source_url TEXT,
+	PRIMARY KEY (id),
+	FOREIGN KEY(editor_id) REFERENCES editor (id) ON DELETE CASCADE,
 	FOREIGN KEY(reviewed_by) REFERENCES editor (id) ON DELETE SET NULL
 );
 CREATE TABLE change_request_attachment (
-	id INTEGER NOT NULL, 
-	change_request_id INTEGER NOT NULL, 
-	filename VARCHAR(256) NOT NULL, 
-	content_type VARCHAR(128) NOT NULL, 
-	size_bytes INTEGER NOT NULL, 
-	sha256 VARCHAR(64) NOT NULL, 
-	storage_path VARCHAR(512) NOT NULL, 
-	caption TEXT, 
-	uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, 
-	PRIMARY KEY (id), 
-	CONSTRAINT uq_attachment_request_sha UNIQUE (change_request_id, sha256), 
+	id INTEGER NOT NULL,
+	change_request_id INTEGER NOT NULL,
+	filename VARCHAR(256) NOT NULL,
+	content_type VARCHAR(128) NOT NULL,
+	size_bytes INTEGER NOT NULL,
+	sha256 VARCHAR(64) NOT NULL,
+	storage_path VARCHAR(512) NOT NULL,
+	caption TEXT,
+	uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT uq_attachment_request_sha UNIQUE (change_request_id, sha256),
 	FOREIGN KEY(change_request_id) REFERENCES change_request (id) ON DELETE CASCADE
 );
 CREATE TABLE class_description (
-	name VARCHAR(32) NOT NULL, 
-	description TEXT NOT NULL, 
+	name VARCHAR(32) NOT NULL,
+	description TEXT NOT NULL,
 	PRIMARY KEY (name)
 );
 CREATE TABLE edit_history (
-	id INTEGER NOT NULL, 
-	target_type VARCHAR(11) NOT NULL, 
-	target_id INTEGER, 
-	change_request_id INTEGER, 
-	field VARCHAR(64) NOT NULL, 
-	old_value TEXT, 
-	new_value TEXT, 
-	changed_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, 
-	changed_by VARCHAR(64) NOT NULL, 
-	PRIMARY KEY (id), 
+	id INTEGER NOT NULL,
+	target_type VARCHAR(11) NOT NULL,
+	target_id INTEGER,
+	change_request_id INTEGER,
+	field VARCHAR(64) NOT NULL,
+	old_value TEXT,
+	new_value TEXT,
+	changed_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	changed_by VARCHAR(64) NOT NULL,
+	PRIMARY KEY (id),
 	FOREIGN KEY(change_request_id) REFERENCES change_request (id) ON DELETE SET NULL
 );
 CREATE TABLE editor (
-	id INTEGER NOT NULL, 
-	email VARCHAR(255) NOT NULL, 
-	display_name VARCHAR(128), 
-	status VARCHAR(10) DEFAULT 'pending' NOT NULL, 
-	request_note TEXT, 
-	created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, 
-	reviewed_at DATETIME, 
-	reviewed_by INTEGER, 
-	last_login_at DATETIME, 
-	PRIMARY KEY (id), 
-	UNIQUE (email), 
+	id INTEGER NOT NULL,
+	email VARCHAR(255) NOT NULL,
+	display_name VARCHAR(128),
+	status VARCHAR(10) DEFAULT 'pending' NOT NULL,
+	request_note TEXT,
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	reviewed_at DATETIME,
+	reviewed_by INTEGER,
+	last_login_at DATETIME,
+	PRIMARY KEY (id),
+	UNIQUE (email),
 	FOREIGN KEY(reviewed_by) REFERENCES editor (id) ON DELETE SET NULL
 );
 CREATE TABLE editor_magic_link (
-	id INTEGER NOT NULL, 
-	editor_id INTEGER NOT NULL, 
-	token_hash VARCHAR(64) NOT NULL, 
-	created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, 
-	expires_at DATETIME NOT NULL, 
-	used_at DATETIME, 
-	ip_issued VARCHAR(45), 
-	next_url VARCHAR(512), 
-	PRIMARY KEY (id), 
-	FOREIGN KEY(editor_id) REFERENCES editor (id) ON DELETE CASCADE, 
+	id INTEGER NOT NULL,
+	editor_id INTEGER NOT NULL,
+	token_hash VARCHAR(64) NOT NULL,
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	expires_at DATETIME NOT NULL,
+	used_at DATETIME,
+	ip_issued VARCHAR(45),
+	next_url VARCHAR(512),
+	PRIMARY KEY (id),
+	FOREIGN KEY(editor_id) REFERENCES editor (id) ON DELETE CASCADE,
 	UNIQUE (token_hash)
 );
 CREATE TABLE editor_session (
-	id INTEGER NOT NULL, 
-	editor_id INTEGER NOT NULL, 
-	token_hash VARCHAR(64) NOT NULL, 
-	created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, 
-	expires_at DATETIME NOT NULL, 
-	last_seen_at DATETIME, 
-	ip VARCHAR(45), 
-	user_agent VARCHAR(512), 
-	revoked_at DATETIME, 
-	PRIMARY KEY (id), 
-	FOREIGN KEY(editor_id) REFERENCES editor (id) ON DELETE CASCADE, 
+	id INTEGER NOT NULL,
+	editor_id INTEGER NOT NULL,
+	token_hash VARCHAR(64) NOT NULL,
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	expires_at DATETIME NOT NULL,
+	last_seen_at DATETIME,
+	ip VARCHAR(45),
+	user_agent VARCHAR(512),
+	revoked_at DATETIME,
+	PRIMARY KEY (id),
+	FOREIGN KEY(editor_id) REFERENCES editor (id) ON DELETE CASCADE,
 	UNIQUE (token_hash)
 );
+CREATE TABLE fetch_state (
+	fetch_url_id INTEGER NOT NULL,
+	last_fetched_at DATETIME,
+	PRIMARY KEY (fetch_url_id),
+	FOREIGN KEY(fetch_url_id) REFERENCES fetch_url (id) ON DELETE CASCADE
+);
 CREATE TABLE fetch_url (
-	id INTEGER NOT NULL, 
-	url VARCHAR(512) NOT NULL, 
-	parser VARCHAR(32), 
-	hours VARCHAR(128), 
+	id INTEGER NOT NULL,
+	url VARCHAR(512) NOT NULL,
+	parser VARCHAR(32),
+	hours VARCHAR(128),
 	is_active BOOLEAN DEFAULT 0 NOT NULL,
-	last_fetched_at DATETIME, unknown_station_policy TEXT,
+	unknown_station_policy TEXT,
 	PRIMARY KEY (id),
 	UNIQUE (url)
 );
 CREATE TABLE gauge (
-	id INTEGER NOT NULL, 
-	name VARCHAR(256) NOT NULL, 
-	bank_full FLOAT, 
-	flood_stage FLOAT, 
-	location TEXT, 
-	latitude NUMERIC(9, 6), 
-	longitude NUMERIC(9, 6), 
-	station_id TEXT, 
-	cbtt_id TEXT, 
-	geos_id TEXT, 
-	nws_id TEXT, 
-	nwsli_id TEXT, 
-	snotel_id TEXT, 
-	usgs_id VARCHAR(32), 
-	rating_id INTEGER, elevation REAL, drainage_area REAL, huc TEXT, allow_negative_flow BOOLEAN DEFAULT 0 NOT NULL, river         TEXT, display_name  TEXT, sort_name     TEXT, state TEXT, 
-	PRIMARY KEY (id), 
-	UNIQUE (name), 
+	id INTEGER NOT NULL,
+	name VARCHAR(256) NOT NULL,
+	bank_full FLOAT,
+	flood_stage FLOAT,
+	location TEXT,
+	latitude NUMERIC(9, 6),
+	longitude NUMERIC(9, 6),
+	station_id TEXT,
+	cbtt_id TEXT,
+	geos_id TEXT,
+	nws_id TEXT,
+	nwsli_id TEXT,
+	snotel_id TEXT,
+	usgs_id VARCHAR(32),
+	rating_id INTEGER, elevation REAL, drainage_area REAL, huc TEXT, allow_negative_flow BOOLEAN DEFAULT 0 NOT NULL, river         TEXT, display_name  TEXT, sort_name     TEXT, state TEXT,
+	PRIMARY KEY (id),
+	UNIQUE (name),
 	FOREIGN KEY(rating_id) REFERENCES rating (id) ON DELETE SET NULL
 );
 CREATE TABLE gauge_source (
-	gauge_id INTEGER NOT NULL, 
-	source_id INTEGER NOT NULL, 
-	PRIMARY KEY (gauge_id, source_id), 
-	FOREIGN KEY(gauge_id) REFERENCES gauge (id) ON DELETE CASCADE, 
+	gauge_id INTEGER NOT NULL,
+	source_id INTEGER NOT NULL,
+	PRIMARY KEY (gauge_id, source_id),
+	FOREIGN KEY(gauge_id) REFERENCES gauge (id) ON DELETE CASCADE,
 	FOREIGN KEY(source_id) REFERENCES source (id) ON DELETE CASCADE
 );
 CREATE TABLE guidebook (
-	id INTEGER NOT NULL, 
-	title VARCHAR(256) NOT NULL, 
-	subtitle VARCHAR(256), 
-	edition VARCHAR(24), 
-	author TEXT, 
-	url TEXT, sort_order INTEGER, 
+	id INTEGER NOT NULL,
+	title VARCHAR(256) NOT NULL,
+	subtitle VARCHAR(256),
+	edition VARCHAR(24),
+	author TEXT,
+	url TEXT, sort_order INTEGER,
 	PRIMARY KEY (id)
 );
 CREATE TABLE huc_name (
-	code VARCHAR(12) NOT NULL, 
-	level INTEGER NOT NULL, 
-	name TEXT NOT NULL, 
-	states TEXT, 
+	code VARCHAR(12) NOT NULL,
+	level INTEGER NOT NULL,
+	name TEXT NOT NULL,
+	states TEXT,
 	PRIMARY KEY (code)
 );
 CREATE TABLE latest_gauge_observation (
-	gauge_id INTEGER NOT NULL, 
-	data_type VARCHAR(11) NOT NULL, 
-	observed_at DATETIME NOT NULL, 
-	value FLOAT NOT NULL, 
-	prev_observed_at DATETIME, 
-	prev_value FLOAT, 
-	delta_per_hour FLOAT, 
-	source_id INTEGER, 
-	PRIMARY KEY (gauge_id, data_type), 
-	FOREIGN KEY(gauge_id) REFERENCES gauge (id) ON DELETE CASCADE, 
+	gauge_id INTEGER NOT NULL,
+	data_type VARCHAR(11) NOT NULL,
+	observed_at DATETIME NOT NULL,
+	value FLOAT NOT NULL,
+	prev_observed_at DATETIME,
+	prev_value FLOAT,
+	delta_per_hour FLOAT,
+	source_id INTEGER,
+	PRIMARY KEY (gauge_id, data_type),
+	FOREIGN KEY(gauge_id) REFERENCES gauge (id) ON DELETE CASCADE,
 	FOREIGN KEY(source_id) REFERENCES source (id) ON DELETE SET NULL
 );
 CREATE TABLE "latest_observation" (
@@ -182,24 +188,24 @@ CREATE TABLE "latest_observation" (
     FOREIGN KEY(source_id) REFERENCES source (id) ON DELETE CASCADE
 );
 CREATE TABLE observation (
-	source_id INTEGER NOT NULL, 
-	observed_at DATETIME NOT NULL, 
-	data_type VARCHAR(11) NOT NULL, 
-	value FLOAT NOT NULL, 
-	PRIMARY KEY (source_id, observed_at, data_type), 
+	source_id INTEGER NOT NULL,
+	observed_at DATETIME NOT NULL,
+	data_type VARCHAR(11) NOT NULL,
+	value FLOAT NOT NULL,
+	PRIMARY KEY (source_id, observed_at, data_type),
 	FOREIGN KEY(source_id) REFERENCES source (id) ON DELETE RESTRICT
 );
 CREATE TABLE rating (
-	id INTEGER NOT NULL, 
-	url VARCHAR(512), 
-	parser VARCHAR(32), 
+	id INTEGER NOT NULL,
+	url VARCHAR(512),
+	parser VARCHAR(32),
 	PRIMARY KEY (id)
 );
 CREATE TABLE rating_data (
-	rating_id INTEGER NOT NULL, 
-	gauge_height_ft FLOAT NOT NULL, 
-	flow_cfs FLOAT NOT NULL, 
-	PRIMARY KEY (rating_id, gauge_height_ft), 
+	rating_id INTEGER NOT NULL,
+	gauge_height_ft FLOAT NOT NULL,
+	flow_cfs FLOAT NOT NULL,
+	PRIMARY KEY (rating_id, gauge_height_ft),
 	FOREIGN KEY(rating_id) REFERENCES rating (id) ON DELETE CASCADE
 );
 CREATE TABLE "reach" (
@@ -255,37 +261,37 @@ CREATE TABLE "reach_class" (
     CONSTRAINT ck_reach_class_low_le_high CHECK (low IS NULL OR high IS NULL OR low <= high)
 );
 CREATE TABLE "reach_guidebook" (
-	reach_id INTEGER NOT NULL, 
-	guidebook_id INTEGER NOT NULL, 
-	page TEXT, 
-	run TEXT, 
-	url TEXT, 
-	PRIMARY KEY (reach_id, guidebook_id), 
-	FOREIGN KEY(guidebook_id) REFERENCES guidebook (id) ON DELETE CASCADE, 
+	reach_id INTEGER NOT NULL,
+	guidebook_id INTEGER NOT NULL,
+	page TEXT,
+	run TEXT,
+	url TEXT,
+	PRIMARY KEY (reach_id, guidebook_id),
+	FOREIGN KEY(guidebook_id) REFERENCES guidebook (id) ON DELETE CASCADE,
 	FOREIGN KEY(reach_id) REFERENCES reach (id) ON DELETE CASCADE
 );
 CREATE TABLE "reach_state" (
-	reach_id INTEGER NOT NULL, 
-	state_id INTEGER NOT NULL, 
-	PRIMARY KEY (reach_id, state_id), 
-	FOREIGN KEY(state_id) REFERENCES state (id) ON DELETE CASCADE, 
+	reach_id INTEGER NOT NULL,
+	state_id INTEGER NOT NULL,
+	PRIMARY KEY (reach_id, state_id),
+	FOREIGN KEY(state_id) REFERENCES state (id) ON DELETE CASCADE,
 	FOREIGN KEY(reach_id) REFERENCES reach (id) ON DELETE CASCADE
 );
 CREATE TABLE source (
-	id INTEGER NOT NULL, 
-	name VARCHAR(256) NOT NULL, 
-	agency VARCHAR(64), 
-	fetch_url_id INTEGER, 
-	calc_expression_id INTEGER, timezone TEXT, 
-	PRIMARY KEY (id), 
-	FOREIGN KEY(fetch_url_id) REFERENCES fetch_url (id) ON DELETE SET NULL, 
+	id INTEGER NOT NULL,
+	name VARCHAR(256) NOT NULL,
+	agency VARCHAR(64),
+	fetch_url_id INTEGER,
+	calc_expression_id INTEGER, timezone TEXT,
+	PRIMARY KEY (id),
+	FOREIGN KEY(fetch_url_id) REFERENCES fetch_url (id) ON DELETE SET NULL,
 	FOREIGN KEY(calc_expression_id) REFERENCES calc_expression (id) ON DELETE SET NULL
 );
 CREATE TABLE state (
-	id INTEGER NOT NULL, 
-	name VARCHAR(64) NOT NULL, 
-	abbreviation VARCHAR(2), 
-	PRIMARY KEY (id), 
+	id INTEGER NOT NULL,
+	name VARCHAR(64) NOT NULL,
+	abbreviation VARCHAR(2),
+	PRIMARY KEY (id),
 	UNIQUE (name)
 );
 CREATE INDEX ix_attachment_change_request_id ON change_request_attachment (change_request_id);

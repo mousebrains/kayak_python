@@ -252,7 +252,9 @@ class FetchUrl(Base):
     parser: Mapped[str | None] = mapped_column(String(32))
     hours: Mapped[str | None] = mapped_column(String(128))
     is_active: Mapped[bool] = mapped_column(default=False, server_default=text("0"))
-    last_fetched_at: Mapped[datetime | None] = mapped_column()
+    # NOTE: the per-URL fetch timestamp lives in the runtime `fetch_state` table,
+    # NOT on this dataset-owned row — engine runtime must not mutate dataset-owned
+    # tables (dataset-separation SA / AC #6). See `FetchState`.
     # Policy for a station a parser emits that has no `source` row (S1: fetch no
     # longer auto-creates sources). NULL/''/'reject' -> reject (drop the unknown
     # station's obs + non-zero fetch exit); 'ignore' -> drop with counts logged,
@@ -268,6 +270,30 @@ class FetchUrl(Base):
     sources: Mapped[list[Source]] = relationship(back_populates="fetch_url")
 
     __table_args__ = (Index("ix_fetch_url_is_active", "is_active"),)
+
+
+# ---------------------------------------------------------------------------
+# fetch_state (runtime — NOT dataset-owned)
+# ---------------------------------------------------------------------------
+
+
+class FetchState(Base):
+    """Per-URL runtime fetch bookkeeping — **not** dataset metadata.
+
+    Holds ``last_fetched_at`` (moved off the dataset-owned ``fetch_url`` row in
+    dataset-separation SA / AC #6: engine runtime must not mutate dataset-owned
+    tables; operational timestamps live in runtime tables). One row per
+    ``fetch_url``, written by ``levels fetch`` and CASCADE-deleted with its URL.
+    Never exported to or synced from the dataset CSVs (absent from
+    ``CONTRACT_CSVS``), like ``observation`` / ``latest_*``.
+    """
+
+    __tablename__ = "fetch_state"
+
+    fetch_url_id: Mapped[int] = mapped_column(
+        ForeignKey("fetch_url.id", ondelete="CASCADE"), primary_key=True
+    )
+    last_fetched_at: Mapped[datetime | None] = mapped_column()
 
 
 # ---------------------------------------------------------------------------

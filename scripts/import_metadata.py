@@ -6,8 +6,8 @@ are updated, missing rows inserted, and rows present in the DB but absent from
 the CSVs are left alone (so this is safe to run against a live DB without
 cascade-nuking observations that reference sources you're not touching).
 
-Columns a table deliberately keeps out of its CSV — ``reach.geom`` (carried in
-reaches.json) and ``fetch_url.last_fetched_at`` (pure churn) — are **preserved**
+Columns a table deliberately keeps out of its CSV — ``reach.geom`` and
+``reach.gradient_profile`` (carried in the JSON sidecars) — are **preserved**
 on existing rows. That's the key difference from the old ``INSERT OR REPLACE``,
 whose delete-and-reinsert reset those columns to NULL on every import.
 

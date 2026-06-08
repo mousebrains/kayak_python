@@ -35,8 +35,13 @@ if [[ ! -x "$ERALCHEMY" ]]; then
     exit 1
 fi
 
-TMP_DB="$(mktemp --suffix=.db)"
-trap 'rm -f "$TMP_DB"' EXIT
+# Portable temp file: GNU `mktemp --suffix` isn't supported by BSD/macOS mktemp.
+# Use a temp DIRECTORY (mktemp -d works on both) and put the .db inside it, so
+# cleanup removes everything and nothing leaks (a bare `mktemp` + appended .db
+# would leave the original empty temp file behind).
+TMP_DIR="$(mktemp -d)"
+TMP_DB="$TMP_DIR/schema.db"
+trap 'rm -rf "$TMP_DIR"' EXIT
 
 "$PYTHON" - <<EOF
 from sqlalchemy import create_engine

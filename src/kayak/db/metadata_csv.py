@@ -3,15 +3,16 @@
 The **upsert** side (used by ``scripts/import_metadata.py`` and ``levels
 sync-metadata``) loads ``data/db/*.csv`` rows by primary key —
 ``INSERT … ON CONFLICT(<pk>) DO UPDATE`` — so a CSV may omit columns
-(``reach.geom``, ``fetch_url.last_fetched_at``) and have them survive on
-existing rows. **Exception:** a *generator-owned optional* column
-(:func:`kayak.dataset.layout.optional_columns`, e.g.
+(``reach.geom`` / ``reach.gradient_profile``, applied via the JSON sidecars) and
+have them survive on existing rows. **Exception:** a *generator-owned optional*
+column (:func:`kayak.dataset.layout.optional_columns`, e.g.
 ``fetch_url.unknown_station_policy``) that the CSV omits is RESET to its default
 (NULL) — for those columns "absent" means "the default", not "keep the DB value",
 so the dataset's "no column ⇒ default" meaning holds at the sync layer too
 (otherwise a stale opt-in would linger after an opt-out). This deliberately
-differs from the ``EXCLUDED_COLUMNS`` churn above (``last_fetched_at``), which an
-omitted CSV must preserve. The **delete** side (used only by the sync) removes
+differs from the ``EXCLUDED_COLUMNS`` sidecar columns above (``reach.geom`` /
+``reach.gradient_profile``), which an omitted CSV must preserve. The **delete**
+side (used only by the sync) removes
 rows present
 in the DB but absent from the CSV. Together they are the "single source of
 truth" apply: a reviewed CSV diff lands on prod by stable id (INSERT new /
@@ -139,9 +140,10 @@ def _reset_absent_optional_columns(conn: sqlite3.Connection, table: str, header:
     opt-in) would survive a CSV that has since dropped the column — leaving the
     runtime ignoring undeclared stations even though the dataset says "default
     reject". Only :func:`layout.optional_columns` are reset; the schema's
-    ``EXCLUDED_COLUMNS`` churn (``fetch_url.last_fetched_at``) is intentionally NOT
-    touched — an omitted CSV must preserve it. The ``IS NOT NULL`` guard keeps a
-    no-op sync a no-op (no write when there's nothing to clear).
+    ``EXCLUDED_COLUMNS`` sidecar columns (``reach.geom`` / ``reach.gradient_profile``)
+    are intentionally NOT touched — an omitted CSV must preserve them (they're
+    applied via the JSON sidecars). The ``IS NOT NULL`` guard keeps a no-op sync a
+    no-op (no write when there's nothing to clear).
     """
     from kayak.dataset import layout
 
