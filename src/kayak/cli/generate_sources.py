@@ -14,9 +14,12 @@ CI gate against hand-edits and drift.
 ``--from-csv`` reverse-engineers a ``sources.yaml`` from existing CSVs (the one-time
 bootstrap, kept as the documented re-bootstrap path).
 
-This is the *expand* phase: it does not change the runtime. ``levels fetch`` /
-``init-db`` still read the engine's ``src/kayak/data/sources.yaml`` until the later
-S1-fetch slice.
+The CSVs this writes are applied to the live DB by ``levels sync-metadata``;
+``levels fetch`` then reads the DB, not any YAML (S1-fetch). A URL may carry an
+optional ``unknown_station_policy: ignore`` to opt that feed out of the default
+reject (S1-fetch-2); the column is written only when at least one URL sets it.
+``init-db`` still seeds a fresh dev DB from the engine's
+``src/kayak/data/sources.yaml`` (until the S1-cleanup slice removes that seed).
 """
 
 from __future__ import annotations
@@ -57,7 +60,9 @@ def _cell(value: object) -> object:
     return "" if value is None else value
 
 
-def _column_order(source_dir: Path, table: str) -> list[str]:
+def _column_order(
+    source_dir: Path, table: str, rows: list[dict[str, Any]] | None = None
+) -> list[str]:
     """Column order for ``<table>.csv``.
 
     Preserve the committed file's header order when present, else fall back to the
@@ -73,14 +78,22 @@ def _column_order(source_dir: Path, table: str) -> list[str]:
 
     The column *set* is still validated against the schema, so a drifted header
     (a stray, or a missing *required*, column) is rejected, not silently
-    propagated. :func:`layout.optional_columns` (e.g. ``fetch_url`` 's
-    ``unknown_station_policy``) MAY be absent from the committed header — a
-    dataset that doesn't use the opt-in simply omits the column, and the
-    generated CSV stays byte-identical.
+    propagated. An :func:`layout.optional_columns` column (e.g. ``fetch_url`` 's
+    ``unknown_station_policy``) is present **iff a ``rows`` value uses it** —
+    independent of whether the committed header carried it. So opt-in/opt-out is
+    symmetric: a dataset that opts into nothing stays byte-identical (no column),
+    a first opt-in appends the column, and a later opt-out *drops* it again
+    (``--check`` flags the stale committed file until regenerated — an opt-out is a
+    real content change). The drop is safe because the sync layer resets an absent
+    optional column to its default (see ``kayak.db.metadata_csv``), so a removed
+    opt-in can't leave a stale value live.
     """
     expected = layout.expected_columns(table)
-    required = expected - layout.optional_columns(table)
+    optional = layout.optional_columns(table)
+    required = expected - optional
+    used = {c for c in optional for r in (rows or []) if str(r.get(c) or "").strip()}
     path = source_dir / f"{table}.csv"
+    order_source: list[str] | None = None
     if path.is_file():
         with path.open(newline="", encoding="utf-8") as fh:
             header = next(csv.reader(fh), None)
@@ -94,8 +107,15 @@ def _column_order(source_dir: Path, table: str) -> list[str]:
                     f"columns {sorted(expected)} (missing {sorted(missing)}, "
                     f"unexpected {sorted(unexpected)})"
                 )
-            return header
-    return layout.ordered_columns(table)
+            order_source = header
+    if order_source is None:
+        order_source = layout.ordered_columns(table)
+    # Keep every required column in the committed (or model) order, plus only the
+    # optional columns currently in use; then append a first-time opt-in column
+    # that the order source didn't have yet.
+    cols = [c for c in order_source if c not in optional or c in used]
+    cols += [c for c in layout.ordered_columns(table) if c in used and c not in cols]
+    return cols
 
 
 def _write_csv(out_dir: Path, table: str, rows: list[dict[str, Any]], cols: list[str]) -> None:
@@ -131,15 +151,20 @@ def _registry_to_rows(meta: dict[str, Any]) -> tuple[list[dict], list[dict], lis
     mandatory gauge every source is bound to (source->gauge is 1-to-1)."""
     fetch_rows: list[dict[str, Any]] = []
     for fu in meta.get("fetch_urls") or []:
-        fetch_rows.append(
-            {
-                "id": fu["id"],
-                "url": fu["url"],
-                "parser": fu["parser"],
-                "hours": fu.get("hours"),
-                "is_active": 1 if fu.get("enabled", True) else 0,
-            }
-        )
+        row: dict[str, Any] = {
+            "id": fu["id"],
+            "url": fu["url"],
+            "parser": fu["parser"],
+            "hours": fu.get("hours"),
+            "is_active": 1 if fu.get("enabled", True) else 0,
+        }
+        # Emit the optional unknown_station_policy column ONLY when a URL sets it,
+        # so a dataset that opts into nothing keeps fetch_url.csv free of the column
+        # (byte-identical under --check). _column_order appends it when present.
+        policy = fu.get("unknown_station_policy")
+        if policy is not None and str(policy).strip():
+            row["unknown_station_policy"] = policy
+        fetch_rows.append(row)
     source_rows: list[dict[str, Any]] = []
     gauge_source_rows: list[dict[str, Any]] = []
     for s in meta.get("sources") or []:
@@ -164,9 +189,15 @@ def generate(dataset_dir: Path) -> None:
     if problems:
         raise ValueError("invalid sources.yaml:\n  - " + "\n  - ".join(problems))
     source_rows, fetch_rows, gs_rows = _registry_to_rows(meta)
-    _write_csv(dataset_dir, "fetch_url", fetch_rows, _column_order(dataset_dir, "fetch_url"))
-    _write_csv(dataset_dir, "source", source_rows, _column_order(dataset_dir, "source"))
-    _write_csv(dataset_dir, "gauge_source", gs_rows, _column_order(dataset_dir, "gauge_source"))
+    _write_csv(
+        dataset_dir, "fetch_url", fetch_rows, _column_order(dataset_dir, "fetch_url", fetch_rows)
+    )
+    _write_csv(
+        dataset_dir, "source", source_rows, _column_order(dataset_dir, "source", source_rows)
+    )
+    _write_csv(
+        dataset_dir, "gauge_source", gs_rows, _column_order(dataset_dir, "gauge_source", gs_rows)
+    )
 
 
 def _is_int(value: object) -> bool:
@@ -241,7 +272,26 @@ def _fetch_url_structural(i: int, fu: dict) -> list[str]:
     if fu.get("enabled") is not None and not isinstance(fu["enabled"], bool):
         problems.append(f"fetch_url[{i}]: enabled must be true or false, got {fu['enabled']!r}")
     problems.extend(_hours_problems(i, fu))
+    problems.extend(_policy_problems(i, fu))
     return problems
+
+
+def _policy_problems(i: int, fu: dict) -> list[str]:
+    """unknown_station_policy (optional; S1) must be blank/absent or one of
+    layout.UNKNOWN_STATION_POLICIES. Blank/absent = the default reject; the runtime
+    tolerates case, but keep the registry canonical so a typo ('ingore') is caught
+    here rather than silently demoted to reject at fetch time."""
+    p = fu.get("unknown_station_policy")
+    if p is None:
+        return []
+    if not isinstance(p, str):
+        return [f"fetch_url[{i}]: unknown_station_policy must be a string, got {p!r}"]
+    if p.strip() and p.strip() not in layout.UNKNOWN_STATION_POLICIES:
+        allowed = ", ".join(repr(v) for v in layout.UNKNOWN_STATION_POLICIES)
+        return [
+            f"fetch_url[{i}]: unknown_station_policy must be one of {allowed} (or omitted), got {p!r}"
+        ]
+    return []
 
 
 def _source_structural(i: int, s: dict) -> list[str]:
@@ -466,6 +516,9 @@ def _normalize_fetch_url_entry(fu: dict[str, Any]) -> dict[str, Any]:
     if hours is not None and str(hours).strip():
         # hours is a comma-separated UTC-hour list (VARCHAR; e.g. "6,12,18"), kept verbatim.
         entry["hours"] = hours
+    policy = fu.get("unknown_station_policy")
+    if policy is not None and str(policy).strip():
+        entry["unknown_station_policy"] = policy
     entry["enabled"] = bool(fu.get("enabled", True))
     return entry
 
@@ -583,6 +636,8 @@ def reverse_engineer(dataset_dir: Path) -> None:
             entry: dict[str, Any] = {"id": int(r["id"]), "url": r["url"], "parser": r["parser"]}
             if (r.get("hours") or "").strip():
                 entry["hours"] = r["hours"]
+            if (r.get("unknown_station_policy") or "").strip():
+                entry["unknown_station_policy"] = r["unknown_station_policy"]
             entry["enabled"] = (r.get("is_active") or "").strip() != "0"
             fetch_urls.append(entry)
     with (dataset_dir / "source.csv").open(encoding="utf-8") as fh:
@@ -629,9 +684,15 @@ def _check(dataset_dir: Path) -> int:
     # benign PRAGMA-vs-model column-order difference never trips --check.
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
-        _write_csv(tmp, "fetch_url", fetch_rows, _column_order(dataset_dir, "fetch_url"))
-        _write_csv(tmp, "source", source_rows, _column_order(dataset_dir, "source"))
-        _write_csv(tmp, "gauge_source", gs_rows, _column_order(dataset_dir, "gauge_source"))
+        # Pass the regenerated rows so a newly-used optional column (e.g. a fresh
+        # unknown_station_policy opt-in) appends and --check flags the stale CSV.
+        _write_csv(
+            tmp, "fetch_url", fetch_rows, _column_order(dataset_dir, "fetch_url", fetch_rows)
+        )
+        _write_csv(tmp, "source", source_rows, _column_order(dataset_dir, "source", source_rows))
+        _write_csv(
+            tmp, "gauge_source", gs_rows, _column_order(dataset_dir, "gauge_source", gs_rows)
+        )
         diffs = [
             name
             for name in targets

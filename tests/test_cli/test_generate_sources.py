@@ -14,6 +14,7 @@ position).
 from __future__ import annotations
 
 import argparse
+import csv
 import shutil
 from pathlib import Path
 
@@ -472,3 +473,126 @@ def test_check_missing_csv_reports_cleanly(tmp_path: Path) -> None:
         "sources:\n- {id: 1, name: X, agency: USGS, gauge_id: 1}\n", encoding="utf-8"
     )
     assert gs._main(_ns(d, check=True)) == 1
+
+
+# --- unknown_station_policy (S1-fetch-2 opt-in authoring) ----------------------
+
+
+def test_policy_values_accepted(vdir: Path) -> None:
+    # The canonical set plus blank (= default reject); blank is also the absent case.
+    for p in ("ignore", "reject", ""):
+        meta = _valid_meta()
+        meta["fetch_urls"][0]["unknown_station_policy"] = p
+        assert gs.validate_registry(meta, vdir) == [], f"policy={p!r} should be valid"
+
+
+def test_bad_policy_value_rejected(vdir: Path) -> None:
+    # A typo, or a non-canonical case/spelling, is caught at authoring time rather
+    # than silently demoted to reject at fetch time.
+    for p in ("ingore", "drop", "Ignore", "IGNORE"):
+        meta = _valid_meta()
+        meta["fetch_urls"][0]["unknown_station_policy"] = p
+        problems = gs.validate_registry(meta, vdir)
+        assert any("unknown_station_policy must be one of" in x for x in problems), (
+            f"policy={p!r} should be rejected"
+        )
+
+
+def test_non_string_policy_rejected(vdir: Path) -> None:
+    meta = _valid_meta()
+    meta["fetch_urls"][0]["unknown_station_policy"] = ["ignore"]
+    assert any(
+        "unknown_station_policy must be a string" in p for p in gs.validate_registry(meta, vdir)
+    )
+
+
+def _policy_dataset(d: Path, *, policy_line: str) -> None:
+    """Minimal two-URL dataset; the first fetch_url carries ``policy_line`` verbatim
+    (e.g. ``unknown_station_policy: ignore, `` or empty for no opt-in)."""
+    d.mkdir()
+    _counters(d, source=3, fetch_url=3)
+    (d / "gauge.csv").write_text("id\n1\n2\n", encoding="utf-8")
+    (d / "calc_expression.csv").write_text(
+        "id,data_type,expression,time_expression,note,provenance_slug\n", encoding="utf-8"
+    )
+    (d / "sources.yaml").write_text(
+        "fetch_urls:\n"
+        f"- {{id: 1, url: 'https://example/a', parser: usbr, {policy_line}enabled: true}}\n"
+        "- {id: 2, url: 'https://example/b', parser: nwps, enabled: true}\n"
+        "sources:\n"
+        "- {id: 1, name: A, agency: USBR, gauge_id: 1, fetch_url_id: 1}\n"
+        "- {id: 2, name: B, agency: NWS, gauge_id: 2, fetch_url_id: 2}\n",
+        encoding="utf-8",
+    )
+
+
+def test_policy_column_omitted_when_no_optin(tmp_path: Path) -> None:
+    # No URL opts in → fetch_url.csv carries no unknown_station_policy column at all
+    # (the backward-compatible default that keeps older datasets byte-identical).
+    d = tmp_path / "ds"
+    _policy_dataset(d, policy_line="")
+    gs.generate(d)
+    header = (d / "fetch_url.csv").read_text(encoding="utf-8").splitlines()[0]
+    assert "unknown_station_policy" not in header
+
+
+def test_policy_appends_column_and_round_trips(tmp_path: Path) -> None:
+    # An opt-in appends the column (only the opting row populated), --check stays
+    # clean on the freshly generated dataset, and reverse_engineer -> generate is
+    # byte-identical (the policy survives the registry round-trip).
+    d = tmp_path / "ds"
+    _policy_dataset(d, policy_line="unknown_station_policy: ignore, ")
+    gs.generate(d)
+
+    rows = list(csv.DictReader((d / "fetch_url.csv").open(encoding="utf-8")))
+    by_id = {r["id"]: r["unknown_station_policy"] for r in rows}
+    assert by_id == {"1": "ignore", "2": ""}
+
+    assert gs._main(_ns(d, check=True)) == 0
+
+    before = (d / "fetch_url.csv").read_bytes()
+    (d / "sources.yaml").unlink()
+    gs.reverse_engineer(d)
+    gs.generate(d)
+    assert (d / "fetch_url.csv").read_bytes() == before
+    assert "unknown_station_policy: ignore" in (d / "sources.yaml").read_text(encoding="utf-8")
+
+
+def test_check_flags_optin_not_yet_regenerated(tmp_path: Path) -> None:
+    # Adding the opt-in to sources.yaml without regenerating must trip --check: the
+    # committed fetch_url.csv (no column) drifts from the registry (column needed).
+    d = tmp_path / "ds"
+    _policy_dataset(d, policy_line="")
+    gs.generate(d)  # commit the no-column CSV
+    # Now opt in, but DON'T regenerate.
+    sy = d / "sources.yaml"
+    sy.write_text(
+        sy.read_text(encoding="utf-8").replace(
+            "parser: usbr, enabled: true",
+            "parser: usbr, unknown_station_policy: ignore, enabled: true",
+        ),
+        encoding="utf-8",
+    )
+    assert gs._main(_ns(d, check=True)) == 1
+
+
+def test_opt_out_drops_the_column(tmp_path: Path) -> None:
+    # Symmetric with opt-in: removing the only opt-in drops the column again (not a
+    # vestigial empty column). --check flags the stale committed file until the
+    # opt-out is regenerated (an opt-out IS a content change), then passes.
+    d = tmp_path / "ds"
+    _policy_dataset(d, policy_line="unknown_station_policy: ignore, ")
+    gs.generate(d)
+    assert "unknown_station_policy" in (d / "fetch_url.csv").read_text(encoding="utf-8")
+
+    sy = d / "sources.yaml"
+    sy.write_text(
+        sy.read_text(encoding="utf-8").replace("unknown_station_policy: ignore, ", ""),
+        encoding="utf-8",
+    )
+    # Stale committed file still has the column → --check trips...
+    assert gs._main(_ns(d, check=True)) == 1
+    gs.generate(d)
+    header = (d / "fetch_url.csv").read_text(encoding="utf-8").splitlines()[0]
+    assert "unknown_station_policy" not in header  # ...column dropped on regenerate
+    assert gs._main(_ns(d, check=True)) == 0

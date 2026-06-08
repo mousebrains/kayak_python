@@ -4,7 +4,15 @@ The **upsert** side (used by ``scripts/import_metadata.py`` and ``levels
 sync-metadata``) loads ``data/db/*.csv`` rows by primary key —
 ``INSERT … ON CONFLICT(<pk>) DO UPDATE`` — so a CSV may omit columns
 (``reach.geom``, ``fetch_url.last_fetched_at``) and have them survive on
-existing rows. The **delete** side (used only by the sync) removes rows present
+existing rows. **Exception:** a *generator-owned optional* column
+(:func:`kayak.dataset.layout.optional_columns`, e.g.
+``fetch_url.unknown_station_policy``) that the CSV omits is RESET to its default
+(NULL) — for those columns "absent" means "the default", not "keep the DB value",
+so the dataset's "no column ⇒ default" meaning holds at the sync layer too
+(otherwise a stale opt-in would linger after an opt-out). This deliberately
+differs from the ``EXCLUDED_COLUMNS`` churn above (``last_fetched_at``), which an
+omitted CSV must preserve. The **delete** side (used only by the sync) removes
+rows present
 in the DB but absent from the CSV. Together they are the "single source of
 truth" apply: a reviewed CSV diff lands on prod by stable id (INSERT new /
 UPDATE changed / DELETE removed), preserving the observations of surviving
@@ -118,7 +126,31 @@ def import_table(conn: sqlite3.Connection, csv_path: Path) -> int:
         if batch:
             conn.executemany(sql, batch)
             rows += len(batch)
+    _reset_absent_optional_columns(conn, table, header)
     return rows
+
+
+def _reset_absent_optional_columns(conn: sqlite3.Connection, table: str, header: list[str]) -> None:
+    """Reset generator-owned OPTIONAL columns to their default (NULL) when the CSV
+    omits them, so "absent column ⇒ the default" holds in the DB too.
+
+    The upsert only touches columns named in the CSV header, so without this an
+    existing value (e.g. ``fetch_url.unknown_station_policy='ignore'`` from a prior
+    opt-in) would survive a CSV that has since dropped the column — leaving the
+    runtime ignoring undeclared stations even though the dataset says "default
+    reject". Only :func:`layout.optional_columns` are reset; the schema's
+    ``EXCLUDED_COLUMNS`` churn (``fetch_url.last_fetched_at``) is intentionally NOT
+    touched — an omitted CSV must preserve it. The ``IS NOT NULL`` guard keeps a
+    no-op sync a no-op (no write when there's nothing to clear).
+    """
+    from kayak.dataset import layout
+
+    absent = layout.optional_columns(table) - set(header)
+    if not absent:
+        return
+    db_cols = {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    for col in sorted(absent & db_cols):
+        conn.execute(f'UPDATE {table} SET "{col}" = NULL WHERE "{col}" IS NOT NULL')
 
 
 def upsert_csvs(conn: sqlite3.Connection, in_dir: Path) -> dict[str, int]:
