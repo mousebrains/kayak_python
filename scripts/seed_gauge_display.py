@@ -43,19 +43,6 @@ from kayak.web.build.gauges import (
     _parse_station_uppercase,
 )
 
-
-def _default_db() -> str | None:
-    """Honor the legacy KAYAK_DB override, else the engine's configured DB — so the
-    default ``--db`` is the same identity the prod-refuse interlock guards. Returns
-    None if the configured URL carries no path (e.g. in-memory ``sqlite://``); wrapped
-    so importing this script / ``--help`` never crashes on an odd ``DATABASE_URL``."""
-    try:
-        return os.environ.get("KAYAK_DB") or str(resolve_db_path(None))
-    except ValueError:
-        return None
-
-
-DEFAULT_DB = _default_db()
 DEFAULT_CACHE = "/home/pat/kayak/Gauge-metadata-cache/gauges.db"
 
 _DIRECTIONS = ("North", "South", "East", "West", "Middle")
@@ -335,7 +322,12 @@ def resolve_raw(
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--db", default=DEFAULT_DB)
+    ap.add_argument(
+        "--db",
+        default=None,
+        help="Target SQLite DB path/URL. REQUIRED for --apply (a scratch/dev copy, not "
+        "the configured DB); reads/dry-run fall back to $KAYAK_DB or DATABASE_URL.",
+    )
     ap.add_argument("--cache", default=DEFAULT_CACHE)
     ap.add_argument("--apply", action="store_true")
     ap.add_argument(
@@ -349,8 +341,10 @@ def main() -> int:
     args = ap.parse_args()
 
     # gauge.river/location/display_name/sort_name are dataset-owned — refuse to
-    # mutate the configured production DB directly (SA / AC #6). Fail fast: write a
-    # scratch/dev copy and export_metadata the result, or pass --allow-production.
+    # mutate the configured production DB directly (SA / AC #6). A write (--apply)
+    # must name an explicit scratch/dev --db: an omitted --db resolves to the
+    # configured DB (refused below), so the legacy KAYAK_DB env can't silently
+    # become an --apply target. Fail fast, before any work.
     if args.apply:
         try:
             refuse_configured_db(args.db, allow_production=args.allow_production)
@@ -358,7 +352,10 @@ def main() -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 2
 
-    conn = sqlite3.connect(args.db)
+    # For reads (and an approved --apply target) resolve the path: the explicit
+    # --db, else the legacy KAYAK_DB, else the configured DB.
+    db_path = args.db or os.environ.get("KAYAK_DB") or str(resolve_db_path(None))
+    conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     metadata = load_metadata_cache(args.cache)
 

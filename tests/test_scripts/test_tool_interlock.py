@@ -18,11 +18,15 @@ _REPO = Path(__file__).resolve().parents[2]
 _SCRIPTS = ["refresh_reach_elevations.py", "seed_gauge_display.py"]
 
 
-def _run(script: str, *args: str, db_url: str | None = None) -> subprocess.CompletedProcess[str]:
+def _run(
+    script: str, *args: str, db_url: str | None = None, kayak_db: str | None = None
+) -> subprocess.CompletedProcess[str]:
     env = dict(os.environ)
-    env.pop("KAYAK_DB", None)  # so the default --db is the configured DATABASE_URL
+    env.pop("KAYAK_DB", None)  # so an omitted --db resolves to the configured DATABASE_URL
     if db_url is not None:
         env["DATABASE_URL"] = db_url
+    if kayak_db is not None:
+        env["KAYAK_DB"] = kayak_db
     return subprocess.run(
         [sys.executable, str(_REPO / "scripts" / script), *args],
         capture_output=True,
@@ -35,10 +39,25 @@ def _run(script: str, *args: str, db_url: str | None = None) -> subprocess.Compl
 
 @pytest.mark.parametrize("script", _SCRIPTS)
 def test_apply_refuses_configured_db(script: str, tmp_path: Path) -> None:
-    """--apply with the default --db (= the configured DB) is refused before any
+    """--apply with no --db (resolves to the configured DB) is refused before any
     work, exiting 2 with a clear message."""
     db = tmp_path / "live.db"
     r = _run(script, "--apply", db_url=f"sqlite:///{db}")
+    assert r.returncode == 2, f"stdout={r.stdout!r} stderr={r.stderr!r}"
+    assert "refusing to mutate the configured database" in r.stderr
+
+
+@pytest.mark.parametrize("script", _SCRIPTS)
+def test_apply_refuses_even_with_kayak_db_set(script: str, tmp_path: Path) -> None:
+    """The legacy KAYAK_DB env can't silently become an --apply target: an omitted
+    --db resolves to the configured DB (refused), even when KAYAK_DB points at a
+    different real DB. Regression for the SA-3 review fail-open."""
+    r = _run(
+        script,
+        "--apply",
+        db_url=f"sqlite:///{tmp_path / 'configured.db'}",
+        kayak_db=str(tmp_path / "kayakdb.db"),
+    )
     assert r.returncode == 2, f"stdout={r.stdout!r} stderr={r.stderr!r}"
     assert "refusing to mutate the configured database" in r.stderr
 

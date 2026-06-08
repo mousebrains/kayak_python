@@ -10,6 +10,17 @@ direct-DB write mode, but must run against an explicitly named scratch/dev copy 
 **refuse the configured production database** unless overridden. The dev flow stays
 "run on a scratch/dev DB → ``export_metadata`` → reviewed CSV edit → PR to
 ``kayak_data`` → ``sync-metadata`` to prod".
+
+The complete set of *sanctioned* writers of dataset-owned rows to the live DB is:
+``levels sync-metadata`` (the reviewed-CSV apply), ``scripts/import_metadata.py``
+(its geom/gradient sibling — applies the already-reviewed ``reaches*.json`` sidecars
+that the CSV sync excludes; deploy.sh steps 3.25/3.26 use ``--geom-only`` /
+``--gradient-only``), and a schema migration. Everything else either goes through
+those or is refused by this guard. ``import_metadata.py`` is intentionally NOT
+``refuse_configured_db``-gated — like ``sync-metadata`` it *is* the apply path — but
+its full-CSV mode skips the delete-safety review the all-or-nothing ``sync-metadata``
+gives, so prefer ``sync-metadata`` for CSV changes and reserve ``import_metadata`` for
+the geom/gradient JSON sidecars.
 """
 
 from __future__ import annotations
@@ -51,11 +62,20 @@ def as_sqlite_url(target: str) -> str:
 
 
 def _same_file(a: Path, b: Path) -> bool:
-    """Whether two paths point at the same on-disk file (symlinks resolved)."""
+    """Whether two paths point at the same on-disk file.
+
+    Prefer ``os.path.samefile`` (compares device+inode, so a *hardlink* to the prod
+    DB is caught too), but it raises if either path doesn't exist — so fall back to a
+    symlink-resolved path compare (the common case: a not-yet-created scratch DB)."""
+    import os
+
     try:
-        return a.resolve() == b.resolve()
-    except OSError:  # a path component is unreadable — fall back to a lexical compare
-        return a == b
+        return os.path.samefile(a, b)
+    except OSError:
+        try:
+            return a.resolve() == b.resolve()
+        except OSError:  # an unreadable path component — last-resort lexical compare
+            return a == b
 
 
 def refuse_configured_db(target: str | Path | None, *, allow_production: bool = False) -> None:
