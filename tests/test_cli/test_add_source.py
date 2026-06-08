@@ -194,6 +194,17 @@ def test_malformed_current_registry_truthy_section_rejected(tmp_path: Path) -> N
         gs.add_source(d, name="NEW")
 
 
+def test_malformed_calc_csv_clean_error(dataset: Path) -> None:
+    # A non-integer id in calc_expression.csv must surface a clean message, not the
+    # raw `invalid literal for int()` from the set comprehension.
+    (dataset / "calc_expression.csv").write_text(
+        "id,data_type,expression,time_expression,note,provenance_slug\nabc,flow,x,,,\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="non-integer id"):
+        gs.add_source(dataset, name="A1", calc_expression_id=1)
+
+
 def test_url_and_calc_mutually_exclusive_in_library(dataset: Path) -> None:
     # The library API (not just the CLI wrapper) must reject both refs, else the
     # if/elif would silently drop the calc binding (fail-open).

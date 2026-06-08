@@ -362,8 +362,17 @@ def _calc_expression_ids(dataset_dir: Path) -> set[int] | None:
     path = dataset_dir / "calc_expression.csv"
     if not path.is_file():
         return None
+    ids: set[int] = set()
     with path.open(encoding="utf-8") as fh:
-        return {int(r["id"]) for r in csv.DictReader(fh) if (r.get("id") or "").strip()}
+        for r in csv.DictReader(fh):
+            raw = (r.get("id") or "").strip()
+            if not raw:
+                continue
+            try:
+                ids.add(int(raw))
+            except ValueError:
+                raise ValueError(f"calc_expression.csv: non-integer id {raw!r}") from None
+    return ids
 
 
 def _check_id_counters(dataset_dir: Path, table: str, ids: list[Any]) -> list[str]:
