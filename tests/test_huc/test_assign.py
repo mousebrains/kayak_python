@@ -16,6 +16,7 @@ from shapely.geometry import Polygon  # noqa: E402
 
 from kayak.db.models import HucName, Reach  # noqa: E402
 from kayak.db.reaches import get_reach_huc_counts  # noqa: E402
+from kayak.db.safety import ProductionWriteRefused  # noqa: E402
 from kayak.huc.assign import assign_one, load_huc12, run, upsert_huc_names  # noqa: E402
 
 
@@ -129,7 +130,7 @@ def test_run_assigns_inside_skips_outside_and_no_coords(session, synthetic_gpkg)
         patch.object(session, "close", lambda: None),
         patch.object(session, "commit", lambda: None),
     ):
-        counts = run(gpkg=synthetic_gpkg)
+        counts = run(gpkg=synthetic_gpkg, allow_production=True)
 
     session.refresh(inside)
     session.refresh(outside)
@@ -156,7 +157,7 @@ def test_run_overwrites_existing_huc4(session, synthetic_gpkg):
         patch.object(session, "close", lambda: None),
         patch.object(session, "commit", lambda: None),
     ):
-        counts = run(gpkg=synthetic_gpkg)
+        counts = run(gpkg=synthetic_gpkg, allow_production=True)
 
     session.refresh(reach)
     assert reach.huc == "170912340101"
@@ -184,7 +185,7 @@ def test_run_unchanged_when_huc_and_basin_match(session, synthetic_gpkg):
         patch.object(session, "close", lambda: None),
         patch.object(session, "commit", lambda: None),
     ):
-        counts = run(gpkg=synthetic_gpkg)
+        counts = run(gpkg=synthetic_gpkg, allow_production=True)
 
     session.refresh(reach)
     assert reach.huc == "170912340101"
@@ -212,7 +213,7 @@ def test_run_writes_basin_from_huc8_name(session, synthetic_gpkg):
         patch.object(session, "close", lambda: None),
         patch.object(session, "commit", lambda: None),
     ):
-        counts = run(gpkg=synthetic_gpkg)
+        counts = run(gpkg=synthetic_gpkg, allow_production=True)
 
     session.refresh(reach)
     assert reach.huc == "170912340101"
@@ -236,6 +237,14 @@ def test_dry_run_does_not_write(session, synthetic_gpkg):
     session.refresh(reach)
     assert reach.huc is None  # no write under dry_run
     assert counts["assigned"] == 1
+
+
+def test_run_refuses_configured_db(synthetic_gpkg):
+    """A non-dry-run with no --db targets the configured DB → refused before any
+    write (SA-3 / AC #6: reach.huc is dataset-owned). Proves the interlock is wired
+    into run(), not just the helper."""
+    with pytest.raises(ProductionWriteRefused):
+        run(gpkg=synthetic_gpkg)
 
 
 def test_upsert_huc_names_loads_only_read_levels(session, synthetic_gpkg):

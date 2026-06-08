@@ -37,12 +37,25 @@ from pathlib import Path
 # Reuse the build pipeline's station-name parsers so we stay in lockstep with
 # current behavior.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+from kayak.db.safety import ProductionWriteRefused, refuse_configured_db, resolve_db_path
 from kayak.web.build.gauges import (
     _parse_station_mixed,
     _parse_station_uppercase,
 )
 
-DEFAULT_DB = os.environ.get("KAYAK_DB", "/home/pat/DB/kayak.db")
+
+def _default_db() -> str | None:
+    """Honor the legacy KAYAK_DB override, else the engine's configured DB — so the
+    default ``--db`` is the same identity the prod-refuse interlock guards. Returns
+    None if the configured URL carries no path (e.g. in-memory ``sqlite://``); wrapped
+    so importing this script / ``--help`` never crashes on an odd ``DATABASE_URL``."""
+    try:
+        return os.environ.get("KAYAK_DB") or str(resolve_db_path(None))
+    except ValueError:
+        return None
+
+
+DEFAULT_DB = _default_db()
 DEFAULT_CACHE = "/home/pat/kayak/Gauge-metadata-cache/gauges.db"
 
 _DIRECTIONS = ("North", "South", "East", "West", "Middle")
@@ -325,8 +338,25 @@ def main() -> int:
     ap.add_argument("--db", default=DEFAULT_DB)
     ap.add_argument("--cache", default=DEFAULT_CACHE)
     ap.add_argument("--apply", action="store_true")
+    ap.add_argument(
+        "--allow-production",
+        action="store_true",
+        help="Override the production-DB refusal and write the configured DB directly "
+        "(gauge display columns are dataset-owned; normally write a scratch/dev copy "
+        "and export_metadata the result).",
+    )
     ap.add_argument("--limit", type=int, default=0, help="Show only the first N rows in preview.")
     args = ap.parse_args()
+
+    # gauge.river/location/display_name/sort_name are dataset-owned — refuse to
+    # mutate the configured production DB directly (SA / AC #6). Fail fast: write a
+    # scratch/dev copy and export_metadata the result, or pass --allow-production.
+    if args.apply:
+        try:
+            refuse_configured_db(args.db, allow_production=args.allow_production)
+        except ProductionWriteRefused as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
 
     conn = sqlite3.connect(args.db)
     conn.row_factory = sqlite3.Row

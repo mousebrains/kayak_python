@@ -26,9 +26,22 @@ import sys
 
 import httpx
 
+from kayak.db.safety import ProductionWriteRefused, refuse_configured_db, resolve_db_path
 from kayak.tracing.constants import M_TO_FT
 
-DEFAULT_DB = os.environ.get("KAYAK_DB", "/home/pat/DB/kayak.db")
+
+def _default_db() -> str | None:
+    """Honor the legacy KAYAK_DB override, else the engine's configured DB — so the
+    default ``--db`` is the same identity the prod-refuse interlock guards. Returns
+    None if the configured URL carries no path (e.g. in-memory ``sqlite://``); wrapped
+    so importing this script / ``--help`` never crashes on an odd ``DATABASE_URL``."""
+    try:
+        return os.environ.get("KAYAK_DB") or str(resolve_db_path(None))
+    except ValueError:
+        return None
+
+
+DEFAULT_DB = _default_db()
 EPQS_URL = "https://epqs.nationalmap.gov/v1/json"
 
 
@@ -163,10 +176,27 @@ def main() -> int:
     ap.add_argument("--db", default=DEFAULT_DB)
     ap.add_argument("--apply", action="store_true")
     ap.add_argument(
+        "--allow-production",
+        action="store_true",
+        help="Override the production-DB refusal and write the configured DB directly "
+        "(reach.elevation/gradient is dataset-owned; normally write a scratch/dev copy "
+        "and export_metadata the result).",
+    )
+    ap.add_argument(
         "--reach-ids", help="Comma-separated reach IDs to process (default: all eligible)"
     )
     ap.add_argument("--concurrency", type=int, default=8)
     args = ap.parse_args()
+
+    # reach.elevation/elevation_lost/gradient are dataset-owned — refuse to mutate
+    # the configured production DB directly (SA / AC #6). Fail fast, before any work:
+    # write a scratch/dev copy and export_metadata the result, or --allow-production.
+    if args.apply:
+        try:
+            refuse_configured_db(args.db, allow_production=args.allow_production)
+        except ProductionWriteRefused as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
 
     conn = sqlite3.connect(args.db)
     conn.row_factory = sqlite3.Row

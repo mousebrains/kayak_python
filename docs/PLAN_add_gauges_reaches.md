@@ -51,7 +51,7 @@ lands on prod via `levels sync-metadata`, matched by stable id. Covers **adding*
 | **orphan-check** | a fetch-active `source` has no `gauge_source` link | always add the `gauge_source.csv` join row; sandbox-verify |
 | **check-reaches** | `geom` has a `LINESTRING(` wrapper, <2 vertices, out-of-range coords, or endpoints drift >0.003° from the `lat/lon_start/end` columns | the tracer writes correct lon-first, no-wrapper geom; keep the endpoint columns in sync with the geom |
 | **reach/snapshot integrity** (`levels validate-dataset`) | the snapshot's reach-id sets diverge (an id in `reaches.json` / `reaches-gradient.json` / a child CSV with no `reach.csv` row, or a reach with no geom) | nothing to bump — the check derives from the dataset itself, so a metadata-only reach change needs **no code commit** and either repo may merge first. Keep the CSVs + both JSONs internally consistent (`export_metadata` does; hand edits must remove a reach *everywhere*). Run on the fixture in code CI; the real dataset is validated at deploy time (`deploy.sh`), with `kayak_data`'s CI taking it over pre-merge in S4b-2 |
-| **reach HUC** | a new/edited `reach` has NULL or hand-typed `huc` | run `levels assign-huc` on dev → 12-digit `reach.huc` + HUC8-name `reach.basin` into `reach.csv`. A NULL `huc` drops the reach from the watershed filter |
+| **reach HUC** | a new/edited `reach` has NULL or hand-typed `huc` | run `levels assign-huc --db <scratch copy>` (refuses the configured DB) → 12-digit `reach.huc` + HUC8-name `reach.basin`, then `export_metadata` into `reach.csv`. A NULL `huc` drops the reach from the watershed filter |
 | **canonical `agency`** | a `source.agency` uses a raw parser slug | use `'USGS'` / `'WA DOE'` / `'NWRFC'` / `'USBR'` / `'Calculation'` etc. |
 | **schema-only migrations** (`test_migrations_schema_only`) | a *metadata* change is written as a migration | metadata goes via CSV — a migration only appears here if you're **also** adding a column (schema), kept in `models.py` lockstep |
 
@@ -211,9 +211,10 @@ correctly. `SELECT COUNT(*) FROM observation WHERE source_id = …` is unchanged
   2. Replace the reach's entry in `reaches.json` (geom) and
      `reaches-gradient.json` (gradient_profile).
   3. Recompute `elevation` / `elevation_lost` / `length` / `gradient` /
-     `max_gradient` (`refresh_reach_elevations.py`, the DEM pipeline) and write them
-     to `reach.csv`.
-  4. If the **put-in** moved, re-run `levels assign-huc` (it's idempotent) — it may
+     `max_gradient` (`refresh_reach_elevations.py --db <scratch copy>`, the DEM
+     pipeline) and write them to `reach.csv`.
+  4. If the **put-in** moved, re-run `levels assign-huc --db <scratch copy>` (it's
+     idempotent) — it may
      update `huc`/`basin` in `reach.csv`.
 
 The cleanest way to regenerate the CSV + JSONs after dev edits is
@@ -252,7 +253,7 @@ boundary, and add a new reach for the downstream half.
      set A=348 to match its new McKenzie-Bridge gauge; B kept the old value, its
      gauge (177, `McKenzie_Rainbow` / NWRFC `CMRO3`, mainstem) having no
      `drainage_area`).
-4. **Re-derive both `huc`s** with `levels assign-huc` (their put-ins differ),
+4. **Re-derive both `huc`s** with `levels assign-huc --db <scratch copy>` (their put-ins differ),
    **recompute the arc-length midpoint** (`reach.latitude/longitude`) for both —
    `recompute_midpoints.py` has no `--reach-ids`, so either scope it inline or
    accept that `--all` only rewrites already-drifted reaches — and **re-key
@@ -321,16 +322,24 @@ switch:
   `build` / `export_metadata` / `sync-metadata` all run under `.venv`. Running
   `assign-huc` under brew python (or `trace` under `.venv`) fails on the missing
   import.
+- **Direct-DB writes refuse the configured DB (SA-3 / AC #6).** `assign-huc`,
+  `refresh_reach_elevations.py`, and `seed_gauge_display.py` author dataset-owned
+  columns, so they **refuse to mutate the configured `DATABASE_URL` directly** — run
+  them against an explicit **scratch copy** (`assign-huc --db <copy>`; the scripts'
+  `--db <copy>`), then `export_metadata` that copy into the reviewed `reach.csv` /
+  `gauge` edits. `--dry-run` (assign-huc) and the no-`--apply` previews read the
+  configured DB freely. `--allow-production` overrides the refusal (recovery only).
 - **Elevation / elevation_lost / gradient:** `scripts/refresh_reach_elevations.py
-  --reach-ids … --apply` (USGS 3DEP, httpx — dev-only).
+  --reach-ids … --apply --db <copy>` (USGS 3DEP, httpx — dev-only).
 - **`max_gradient` + `gradient_profile`:** the 3-stage `docs/one-offs/` DEM pipeline
   (`fetch_dem_tiles` → `sample_reach_elevations` → `compute_reach_gradient`),
   `DEM-cache/`.
-- **`huc` + `basin`:** `levels assign-huc` (brew python — needs the `[geo]` extra and
-  the WBD GPKG in `Trace-cache/`; prod can't run it). Point-in-polygons each put-in
-  (`latitude_start`/`longitude_start`) → 12-digit HUC12 into `reach.huc`, HUC8 name
-  into `reach.basin`; idempotent. Run it once endpoints are final, then read the
-  resulting `huc`/`basin` off the dev DB into `reach.csv`.
+- **`huc` + `basin`:** `levels assign-huc --db <scratch copy>` (brew python — needs the
+  `[geo]` extra and the WBD GPKG in `Trace-cache/`; prod can't run it; refuses the
+  configured DB). Point-in-polygons each put-in (`latitude_start`/`longitude_start`) →
+  12-digit HUC12 into `reach.huc`, HUC8 name into `reach.basin`; idempotent. Run it
+  once endpoints are final, then `export_metadata` the `huc`/`basin` off the scratch
+  copy into `reach.csv`.
 
 **Source of truth for AW reaches: the `aw_reach` cache**
 (`Gauge-metadata-cache/gauges.db`, populated by `match_aw_reaches.py`).
@@ -374,7 +383,7 @@ before any CSV row is written.
    ≥50% (canyons), **skip** when ≤ ~4 ft / ≤30% (braided lowland — at the 10 m DEM's
    ~8 ft RMSE noise floor).
 6. **Compute elevation + gradient_profile** once geoms are final:
-   `refresh_reach_elevations.py --apply` (3DEP EPQS), then
+   `refresh_reach_elevations.py --apply --db <scratch copy>` (3DEP EPQS), then
    `sample_reach_elevations.py` + `compute_reach_gradient.py --apply`. `sig_frac
    ≥75%` per reach indicates real signal. Reservoir-ending reaches produce a
    trailing non-significant bar; the plot keeps bars ≥0.5 mi wide.

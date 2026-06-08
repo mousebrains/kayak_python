@@ -10,6 +10,8 @@ from __future__ import annotations
 import argparse
 import sys
 
+from kayak.db.safety import ProductionWriteRefused
+
 
 def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Register the 'assign-huc' subcommand."""
@@ -34,6 +36,19 @@ def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> 
         default="Trace-cache/wbd.gpkg",
         help="Path to extracted WBD GeoPackage (built by scripts/extract_wbd.sh)",
     )
+    parser.add_argument(
+        "--db",
+        default=None,
+        help="Target SQLite DB/URL (default: the configured DATABASE_URL). reach.huc "
+        "is dataset-owned, so a real write refuses the configured production DB — "
+        "point this at a scratch/dev copy and export_metadata the result.",
+    )
+    parser.add_argument(
+        "--allow-production",
+        action="store_true",
+        help="Override the production-DB refusal and write the configured DB directly "
+        "(bypasses the reviewed-CSV + sync-metadata flow; for recovery only).",
+    )
 
 
 def assign_huc(args: argparse.Namespace) -> None:
@@ -51,4 +66,14 @@ def assign_huc(args: argparse.Namespace) -> None:
         )
         sys.exit(2)
 
-    impl.run(gpkg=args.gpkg, reach_id=args.reach_id, dry_run=args.dry_run)
+    try:
+        impl.run(
+            gpkg=args.gpkg,
+            reach_id=args.reach_id,
+            dry_run=args.dry_run,
+            db_url=args.db,
+            allow_production=args.allow_production,
+        )
+    except ProductionWriteRefused as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        sys.exit(2)
