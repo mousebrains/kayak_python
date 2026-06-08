@@ -20,15 +20,14 @@ Usage:
 
 import argparse
 import asyncio
-import os
 import sqlite3
 import sys
 
 import httpx
 
+from kayak.db.safety import ProductionWriteRefused, maintenance_target_db, refuse_configured_db
 from kayak.tracing.constants import M_TO_FT
 
-DEFAULT_DB = os.environ.get("KAYAK_DB", "/home/pat/DB/kayak.db")
 EPQS_URL = "https://epqs.nationalmap.gov/v1/json"
 
 
@@ -160,15 +159,42 @@ def _print_failures(failures: list) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--db", default=DEFAULT_DB)
+    ap.add_argument(
+        "--db",
+        default=None,
+        help="Target SQLite DB path/URL. REQUIRED for --apply (a scratch/dev copy, not "
+        "the configured DB); reads/dry-run fall back to $KAYAK_DB or DATABASE_URL.",
+    )
     ap.add_argument("--apply", action="store_true")
+    ap.add_argument(
+        "--allow-production",
+        action="store_true",
+        help="Override the production-DB refusal and write the configured DB directly "
+        "(reach.elevation/gradient is dataset-owned; normally write a scratch/dev copy "
+        "and export_metadata the result).",
+    )
     ap.add_argument(
         "--reach-ids", help="Comma-separated reach IDs to process (default: all eligible)"
     )
     ap.add_argument("--concurrency", type=int, default=8)
     args = ap.parse_args()
 
-    conn = sqlite3.connect(args.db)
+    # reach.elevation/elevation_lost/gradient are dataset-owned — refuse to mutate
+    # the configured production DB directly (SA / AC #6). A write (--apply) must name
+    # an explicit scratch/dev --db: an omitted --db resolves to the configured DB
+    # (refused below), so the legacy KAYAK_DB env can't silently become an --apply
+    # target. Fail fast, before any work.
+    if args.apply:
+        try:
+            refuse_configured_db(args.db, allow_production=args.allow_production)
+        except ProductionWriteRefused as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+
+    # Resolve the DB path (handles a bare path or a sqlite:// URL). On --apply the
+    # write target is the explicit --db, else the configured DB — never KAYAK_DB; a
+    # read may fall back to KAYAK_DB.
+    conn = sqlite3.connect(maintenance_target_db(args.db, for_write=args.apply))
     conn.row_factory = sqlite3.Row
 
     reaches = _load_reaches(conn, args.reach_ids)

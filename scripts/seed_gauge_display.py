@@ -28,7 +28,6 @@ changed.
 from __future__ import annotations
 
 import argparse
-import os
 import re
 import sqlite3
 import sys
@@ -37,12 +36,12 @@ from pathlib import Path
 # Reuse the build pipeline's station-name parsers so we stay in lockstep with
 # current behavior.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+from kayak.db.safety import ProductionWriteRefused, maintenance_target_db, refuse_configured_db
 from kayak.web.build.gauges import (
     _parse_station_mixed,
     _parse_station_uppercase,
 )
 
-DEFAULT_DB = os.environ.get("KAYAK_DB", "/home/pat/DB/kayak.db")
 DEFAULT_CACHE = "/home/pat/kayak/Gauge-metadata-cache/gauges.db"
 
 _DIRECTIONS = ("North", "South", "East", "West", "Middle")
@@ -322,13 +321,40 @@ def resolve_raw(
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--db", default=DEFAULT_DB)
+    ap.add_argument(
+        "--db",
+        default=None,
+        help="Target SQLite DB path/URL. REQUIRED for --apply (a scratch/dev copy, not "
+        "the configured DB); reads/dry-run fall back to $KAYAK_DB or DATABASE_URL.",
+    )
     ap.add_argument("--cache", default=DEFAULT_CACHE)
     ap.add_argument("--apply", action="store_true")
+    ap.add_argument(
+        "--allow-production",
+        action="store_true",
+        help="Override the production-DB refusal and write the configured DB directly "
+        "(gauge display columns are dataset-owned; normally write a scratch/dev copy "
+        "and export_metadata the result).",
+    )
     ap.add_argument("--limit", type=int, default=0, help="Show only the first N rows in preview.")
     args = ap.parse_args()
 
-    conn = sqlite3.connect(args.db)
+    # gauge.river/location/display_name/sort_name are dataset-owned — refuse to
+    # mutate the configured production DB directly (SA / AC #6). A write (--apply)
+    # must name an explicit scratch/dev --db: an omitted --db resolves to the
+    # configured DB (refused below), so the legacy KAYAK_DB env can't silently
+    # become an --apply target. Fail fast, before any work.
+    if args.apply:
+        try:
+            refuse_configured_db(args.db, allow_production=args.allow_production)
+        except ProductionWriteRefused as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+
+    # Resolve the DB path (handles a bare path or a sqlite:// URL). On --apply the
+    # write target is the explicit --db, else the configured DB — never KAYAK_DB; a
+    # read may fall back to KAYAK_DB.
+    conn = sqlite3.connect(maintenance_target_db(args.db, for_write=args.apply))
     conn.row_factory = sqlite3.Row
     metadata = load_metadata_cache(args.cache)
 

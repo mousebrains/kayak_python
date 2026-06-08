@@ -35,6 +35,7 @@ from kayak.db.reaches import (
     iter_reaches_with_putin,
     set_reach_huc,
 )
+from kayak.db.safety import as_sqlite_url, refuse_configured_db
 
 logger = logging.getLogger(__name__)
 
@@ -203,13 +204,26 @@ def run(
     gpkg: str | Path = "Trace-cache/wbd.gpkg",
     reach_id: int | None = None,
     dry_run: bool = False,
+    db_url: str | None = None,
+    allow_production: bool = False,
 ) -> dict[str, int]:
     """Assign HUC12 to every reach (or one with ``--reach-id``).
 
     Returns a counts dict keyed ``assigned`` (huc and/or basin written),
     ``huc_changed``, ``basin_changed`` (diagnostic sub-counts), ``unchanged``,
     ``outside_coverage``, ``no_coords``.
+
+    ``reach.huc``/``reach.basin`` are dataset-owned (they ride in ``reach.csv``),
+    so a real write refuses the configured production DB (dataset-separation SA /
+    AC #6): point ``db_url`` at a scratch/dev copy and ``export_metadata`` the
+    result, or pass ``allow_production=True`` to override. A ``dry_run`` reads only,
+    so it's exempt.
     """
+    # Fail fast on the safety violation (a real write to the configured prod DB)
+    # before doing any spatial work.
+    if not dry_run:
+        refuse_configured_db(db_url, allow_production=allow_production)
+
     gpkg_path = Path(gpkg)
     if not gpkg_path.exists():
         raise FileNotFoundError(
@@ -218,7 +232,7 @@ def run(
         )
 
     counts: dict[str, int] = defaultdict(int)
-    session = get_session()
+    session = get_session(as_sqlite_url(db_url) if db_url else None)
     try:
         # Upsert names FIRST (attribute-only reads, small memory) so the per-layer
         # DataFrames are released before we hold the HUC12 STRtree+GeoSeries
