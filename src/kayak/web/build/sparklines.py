@@ -7,12 +7,13 @@ from sqlalchemy.orm import Session
 from kayak.db.gauges import get_bulk_gauge_observations
 from kayak.db.models import DataType, Observation, Reach
 from kayak.utils.lttb import downsample, running_median
+from kayak.web.build._shared import BRAND_COLOR
 
 # Sparkline rendering
 SPARKLINE_MEDIAN_WINDOW_SECS = 3 * 3600  # 3-hour running median window
 SPARKLINE_DOWNSAMPLE_POINTS = 60  # Target points after LTTB downsampling
 SPARKLINE_STROKE_WIDTH = "1.5"
-SPARKLINE_COLOR = "#1b5591"
+SPARKLINE_COLOR = BRAND_COLOR  # dataset brand color (site.yaml); WKCC #1b5591 by default
 
 SPARKLINE_OBSERVATION_WINDOW = timedelta(hours=48)
 

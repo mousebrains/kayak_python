@@ -42,7 +42,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import TypeGuard
 
-from kayak.dataset import contract, layout
+from kayak.dataset import contract, layout, site
 
 # Cap per-file value errors so one badly-typed column can't flood the report.
 _MAX_VALUE_ERRORS = 20
@@ -173,6 +173,9 @@ def validate_dataset(dataset_dir: Path, warnings: list[str] | None = None) -> li
     reg_errors, reg_warnings = _check_regression(d)
     errors.extend(reg_errors)
     warn.extend(reg_warnings)
+    # (7d) site identity: an opt-in site.yaml must parse + pass the typed/safe-shape
+    #      gate (the engine + PHP both render it into HTML). Absent → no error.
+    errors.extend(_check_site_yaml(d))
     # (8) materialize + check-reaches — only when the dataset is otherwise clean.
     #     A wrong-typed value (e.g. a non-ISO datetime) would otherwise be loaded
     #     and crash SQLAlchemy's decoder mid-scan; the errors above already
@@ -1151,6 +1154,24 @@ def _check_regression(d: Path) -> tuple[list[str], list[str]]:
         if f.lower() != "readme.md"
     ]
     return errors, warnings
+
+
+def _check_site_yaml(d: Path) -> list[str]:
+    """Validate the opt-in ``site.yaml`` (S3a).
+
+    Absent → no error (the dataset keeps the engine's default identity). Present →
+    it must parse and every field must pass the typed/safe-shape gate in
+    :class:`kayak.dataset.site.SiteConfig` (the values are rendered into HTML by
+    both the static build and PHP, so a malformed color, non-http URL, unknown
+    key, or HTML-metacharacter in a name is rejected here at the deploy gate).
+    """
+    if not (d / site.SITE_YAML).is_file():
+        return []
+    try:
+        site.load_site_config(d)
+    except ValueError as exc:
+        return [str(exc)]
+    return []
 
 
 def _check_reaches_on_materialized(dataset_dir: Path) -> list[str]:

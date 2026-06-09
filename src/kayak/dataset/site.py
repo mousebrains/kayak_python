@@ -1,0 +1,125 @@
+"""Dataset-owned site identity (``site.yaml``) — S3a.
+
+A club running the engine supplies its own branding/identity through a
+``site.yaml`` at the dataset root (``DATASET_DIR``), alongside the
+:mod:`kayak.dataset.contract` ``dataset.yaml``. This is the presentation
+analogue of the metadata CSVs: typed, validated, dataset-owned content.
+
+**Resolution order** is *engine defaults < dataset ``site.yaml``*. The keys here
+have no host-env override today (the env-backed identity keys — ``SITE_URL``,
+``MAINTAINER_NAME``, ``MAIL_*`` — stay in :class:`kayak.config.KayakConfig`,
+which already layers env over its defaults). ``site.yaml`` is **opt-in**: a
+dataset without one renders with the engine defaults (which, through S3, remain
+the current WKCC values so production is unchanged — the generic-default flip is
+deferred to S3i).
+
+The values flow to two consumers: the static build (``kayak.web.build`` reads
+:func:`get_site_config`) and PHP (``levels emit-config`` embeds the resolved
+block in the runtime-config JSON). Because both render the values into HTML, the
+free-text/URL/color fields are validated to a safe shape here (fail-closed), and
+``levels validate-dataset`` runs the same validation at the deploy gate.
+"""
+
+from __future__ import annotations
+
+import re
+from functools import lru_cache
+from pathlib import Path
+
+import yaml
+from pydantic import BaseModel, ConfigDict, field_validator
+
+SITE_YAML = "site.yaml"
+
+# Hex color (#rrggbb) and a no-HTML-metacharacter guard for free-text fields that
+# land in HTML attributes/text (og:site_name, footer label) — reject the chars
+# that could break out of an attribute or inject a tag. Mirrors the fail-closed
+# spirit of the S2 regression sanitizer.
+_HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+_HTML_META_RE = re.compile(r"""[<>"'&]""")
+
+
+class SiteConfig(BaseModel):
+    """Typed site identity. Engine defaults are the current WKCC values (S3a).
+
+    ``extra="forbid"`` so an unknown ``site.yaml`` key is a hard error (caught by
+    ``validate-dataset``), matching the dataset contract's reject-unknown rule.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    site_name: str = "WKCC River Levels"
+    org_name: str = "Willamette Kayak and Canoe Club"
+    org_url: str = "https://wkcc.org"
+    brand_color: str = "#1b5591"
+    brand_color_dark: str = "#0d3057"
+    attribution: str = "levels.wkcc.org"
+
+    @field_validator("site_name", "org_name", "attribution")
+    @classmethod
+    def _safe_text(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("must be a non-empty string")
+        if _HTML_META_RE.search(v):
+            raise ValueError("must not contain HTML metacharacters (< > \" ' &)")
+        return v
+
+    @field_validator("brand_color", "brand_color_dark")
+    @classmethod
+    def _hex_color(cls, v: str) -> str:
+        if not _HEX_COLOR_RE.match(v):
+            raise ValueError(f"must be a #rrggbb hex color (got {v!r})")
+        return v
+
+    @field_validator("org_url")
+    @classmethod
+    def _http_url(cls, v: str) -> str:
+        if not (v.startswith("https://") or v.startswith("http://")):
+            raise ValueError(f"must be an http(s) URL (got {v!r})")
+        if _HTML_META_RE.search(v):
+            raise ValueError("must not contain HTML metacharacters")
+        return v
+
+
+def load_site_config(dataset_dir: Path) -> SiteConfig:
+    """Resolve the site identity for *dataset_dir*.
+
+    Absent ``site.yaml`` → all engine defaults. A present file is parsed (strict
+    safe YAML) and overlaid on the defaults; an unreadable/malformed file, a
+    non-mapping top level, an unknown key, or a field that fails validation raises
+    ``ValueError`` (corruption is distinct from absence). Mirrors
+    :func:`kayak.dataset.contract.load_dataset_meta`.
+    """
+    path = dataset_dir / SITE_YAML
+    if not path.is_file():
+        return SiteConfig()
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        raise ValueError(f"{SITE_YAML}: unreadable ({e})") from e
+    try:
+        data = yaml.safe_load(raw)
+    except yaml.YAMLError as e:
+        raise ValueError(f"{SITE_YAML}: invalid YAML ({e})") from e
+    if data is None:
+        return SiteConfig()  # an empty file is "no overrides", not corruption
+    if not isinstance(data, dict):
+        raise ValueError(f"{SITE_YAML}: top-level value must be a mapping")
+    try:
+        return SiteConfig(**data)
+    except ValueError as e:
+        # Pydantic ValidationError is a ValueError subclass; normalize the message.
+        raise ValueError(f"{SITE_YAML}: {e}") from e
+
+
+@lru_cache(maxsize=1)
+def get_site_config() -> SiteConfig:
+    """Cached site identity resolved from the configured ``DATASET_DIR``.
+
+    Mirrors :func:`kayak.config.get_config`: a singleton for the running process.
+    Tests that point ``DATASET_DIR`` at a fixture (or write a scratch
+    ``site.yaml``) must call ``get_site_config.cache_clear()`` to pick it up.
+    """
+    from kayak.config import DATASET_DIR
+
+    return load_site_config(DATASET_DIR)

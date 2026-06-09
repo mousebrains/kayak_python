@@ -30,6 +30,7 @@ from typing import Any
 from pydantic import SecretStr
 
 from kayak.config import KayakConfig
+from kayak.dataset.site import load_site_config
 
 DEFAULT_OUTPUT_PATH = "/etc/kayak/runtime-config.json"
 """Where the JSON snapshot lives on a production host."""
@@ -97,6 +98,11 @@ def build_config_data(cfg: KayakConfig) -> dict[str, Any]:
     db_url = data.get("database_url")
     if isinstance(db_url, str) and db_url.startswith("sqlite:///"):
         data["database_path"] = db_url.removeprefix("sqlite:///")
+
+    # Resolved dataset site identity (S3a) so PHP reads branding from the same
+    # typed source as the static build. Engine defaults when the dataset has no
+    # site.yaml; a malformed one would already have failed validate-dataset.
+    data["site"] = load_site_config(cfg.dataset_dir).model_dump(mode="json")
 
     return data
 
