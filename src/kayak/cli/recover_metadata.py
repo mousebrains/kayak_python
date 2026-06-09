@@ -1,23 +1,40 @@
-#!/usr/bin/env python3
-"""Export kayak metadata tables to CSV under data/db/.
+"""``levels recover-metadata`` — reconstruct the dataset CSVs from a database.
 
-Writes one CSV per metadata table, sorted by primary key so diffs are stable
-across exports. Excludes the append-only time-series tables and caches
-(observation, latest_observation, latest_gauge_observation) and the
-generator-owned source/fetch_url/gauge_source trio (those are written only by
-``levels generate-sources`` from the dataset's sources.yaml — S1's "no
-dual-writer window"). The
-large reach.geom and reach.gradient_profile columns go to separate JSONs
-(reaches.json and reaches-gradient.json, keyed by reach id) rather than
-reach.csv — they'd bloat every metadata-row diff and aren't regenerable on prod
-(the DEM/NHD/HUC trace stack is dev-only), so committing them keeps from-CSV
-rebuilds self-contained (map traces + gradient charts render). See R6.1.
+A **recovery-only** command: it dumps the metadata tables of a SQLite DB back to
+the ``data/db/*.csv`` + ``reaches.json`` / ``reaches-gradient.json`` shape so a
+lost or corrupted ``kayak_data`` checkout can be regenerated from a DB backup (or
+a dev re-trace can be projected into reviewable CSVs). The reviewed-CSV →
+``levels sync-metadata`` flow remains the *only* way metadata reaches the live DB;
+this is its inverse, used out-of-band and reviewed via a normal ``kayak_data`` PR.
 
-Usage:
-    python3 scripts/export_metadata.py                # uses ../DB/kayak.db
-    python3 scripts/export_metadata.py --db /path.db
-    python3 scripts/export_metadata.py --out data/db  # default
+It replaces the retired nightly reverse-sync (``scripts/snapshot_metadata.sh`` →
+``scripts/export_metadata.py``): with the editor write path off in prod there is
+no live DB→dataset reconciliation to run on a timer, so the export is demoted from
+an automated writer to this hand-run recovery tool.
+
+Writes one CSV per metadata table, sorted by primary key so diffs are stable.
+Exports :data:`kayak.dataset.layout.RECOVER_EXPORT_CSVS` — every contract CSV
+EXCEPT the generator-owned source/fetch_url/gauge_source trio (those are written
+only by ``levels generate-sources`` from the dataset's ``sources.yaml``). The
+large ``reach.geom`` / ``reach.gradient_profile`` columns go to the two JSON
+sidecars (keyed by reach id) rather than ``reach.csv`` — they'd bloat every
+metadata-row diff and aren't regenerable on prod (the DEM/NHD/HUC trace stack is
+dev-only). See review-3 R6.1.
+
+Recovery semantics:
+
+* ``--out`` is **required** (no ``DATASET_DIR`` default) and **refused if it
+  points inside the active ``DATASET_DIR``** — recovery output must land in a
+  scratch directory and be reviewed via a dataset PR, never overwrite the live
+  checkout in place.
+* ``--db`` is read-only (the DB is never mutated), defaulting to the configured
+  ``DATABASE_URL``, so no production-write interlock is needed.
+
+    levels recover-metadata --out /tmp/recovered            # from the configured DB
+    levels recover-metadata --db /path/backup.db --out /tmp/recovered
 """
+
+from __future__ import annotations
 
 import argparse
 import csv
@@ -29,22 +46,21 @@ from pathlib import Path
 
 from kayak.config import DATASET_DIR
 from kayak.dataset import layout
+from kayak.db.safety import resolve_db_path
 
-REPO_DIR = Path(__file__).resolve().parent.parent
-
-# The snapshot writer and the validator share ONE contract — the tables to
-# export (in order) and the columns held out to the JSON sidecars both come from
+# The recovery writer and the validator share ONE contract — the tables to export
+# (in order) and the columns held out to the JSON sidecars both come from
 # kayak.dataset.layout so they can't drift.
 # (reach.geom + reach.gradient_profile are large, machine-generated, and not
-# regenerable on prod, so each is snapshotted to its own JSON. See review-3 R6.1 /
+# regenerable on prod, so each goes to its own JSON. See review-3 R6.1 /
 # layout.EXCLUDED_COLUMNS.)
 #
-# The snapshot exports SNAPSHOT_EXPORT_CSVS — every contract CSV EXCEPT the
-# generator-owned source/fetch_url/gauge_source trio (dataset-separation S1):
-# `levels generate-sources` is their sole writer, so the nightly DB snapshot
-# must not race them. They remain part of the dataset (required + synced); only
-# this export side excludes them.
-METADATA_TABLES = list(layout.SNAPSHOT_EXPORT_CSVS)
+# RECOVER_EXPORT_CSVS is every contract CSV EXCEPT the generator-owned
+# source/fetch_url/gauge_source trio (dataset-separation S1): `levels
+# generate-sources` is their sole writer, so a recovery dump must not emit them —
+# regenerate those from the dataset's sources.yaml instead. They remain part of
+# the dataset (required + synced); only this export side excludes them.
+METADATA_TABLES = list(layout.RECOVER_EXPORT_CSVS)
 EXCLUDED_COLUMNS = layout.EXCLUDED_COLUMNS
 
 
@@ -130,9 +146,9 @@ def write_reaches_gradient_json(conn: sqlite3.Connection, out_dir: Path) -> tupl
     """Write reach.gradient_profile to reaches-gradient.json, keyed by reach id.
 
     Same rationale as write_reaches_json for geom: the per-reach sample JSON is
-    large (~83% of reach.csv) and not regenerable on prod, so it's snapshotted
-    here rather than carried in reach.csv. Loaded by scripts/import_metadata.py
-    via ``UPDATE reach SET gradient_profile``. review-3 R6.1.
+    large (~83% of reach.csv) and not regenerable on prod, so it's exported here
+    rather than carried in reach.csv. Loaded by scripts/import_metadata.py via
+    ``UPDATE reach SET gradient_profile``. review-3 R6.1.
     """
     data = {
         str(rid): gp
@@ -148,27 +164,43 @@ def write_reaches_gradient_json(conn: sqlite3.Connection, out_dir: Path) -> tupl
     return len(data), dest.stat().st_size
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--db",
-        default=str(REPO_DIR.parent / "DB" / "kayak.db"),
-        help="Path to SQLite database (default: ../DB/kayak.db)",
-    )
-    parser.add_argument(
-        "--out",
-        default=str(DATASET_DIR),
-        help="Output directory (default: the configured DATASET_DIR — data/db, "
-        "or the kayak_data clone post-split)",
-    )
-    args = parser.parse_args()
+def _refuse_in_dataset(out_dir: Path) -> str | None:
+    """Reject an ``--out`` that would write into the active ``DATASET_DIR``.
 
-    db_path = Path(args.db).resolve()
+    Recovery output is reviewed via a dataset PR, so it must land in a scratch
+    directory — never overwrite the live checkout in place. Returns an error
+    message to abort with, or ``None`` to proceed.
+    """
+    dataset = DATASET_DIR.resolve()
+    if out_dir == dataset or dataset in out_dir.parents:
+        return (
+            f"--out ({out_dir}) is inside the active DATASET_DIR ({dataset}); "
+            "recover-metadata must write to a scratch directory whose output is "
+            "reviewed via a kayak_data PR, not overwrite the live checkout in place."
+        )
+    return None
+
+
+def recover_metadata(args: argparse.Namespace) -> int:
+    """Entry point for ``levels recover-metadata``."""
+    db_path = resolve_db_path(args.db).resolve()
     out_dir = Path(args.out).resolve()
 
     if not db_path.exists():
-        print(f"Error: {db_path} does not exist", file=sys.stderr)
+        print(f"error: {db_path} does not exist", file=sys.stderr)
         return 1
+
+    refusal = _refuse_in_dataset(out_dir)
+    if refusal is not None:
+        print(f"error: {refusal}", file=sys.stderr)
+        return 1
+
+    print(
+        "recover-metadata: reconstructing dataset CSVs from a DB for RECOVERY/review "
+        "— this is the inverse of `levels sync-metadata`, NOT a deploy path. Review "
+        "the output via a kayak_data PR before it becomes the dataset.",
+        file=sys.stderr,
+    )
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -207,5 +239,23 @@ def main() -> int:
     return 0
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Register the 'recover-metadata' subcommand."""
+    parser = subparsers.add_parser(
+        "recover-metadata",
+        help="Recovery-only: reconstruct dataset CSVs + JSON sidecars from a DB "
+        "(inverse of sync-metadata; output reviewed via a kayak_data PR)",
+    )
+    parser.set_defaults(func=recover_metadata)
+    parser.add_argument(
+        "--db",
+        default=None,
+        help="SQLite URL/path to read (read-only; default: the configured DATABASE_URL)",
+    )
+    parser.add_argument(
+        "--out",
+        required=True,
+        help="Scratch output directory for the reconstructed CSVs + JSON sidecars. "
+        "Must NOT be inside DATASET_DIR (recovery output is reviewed via a PR, not "
+        "applied in place).",
+    )

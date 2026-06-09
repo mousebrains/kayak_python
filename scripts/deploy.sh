@@ -30,7 +30,7 @@ VENV_PIP="${KAYAK_HOME}/.venv/bin/pip"
 VENV_PY="${KAYAK_HOME}/.venv/bin/python"
 LEVELS="${KAYAK_HOME}/.venv/bin/levels"
 
-# The metadata snapshot (CSVs + reaches*.json) lives in a separate repo cloned
+# The metadata dataset (CSVs + reaches*.json) lives in a separate repo cloned
 # alongside the code repo (data-repo split). levels/import_metadata read it via
 # DATASET_DIR; export it here so they find it regardless of ~/.config/kayak/.env.
 KAYAK_DATA="${KAYAK_DATA:-${KAYAK_HOME}/kayak_data}"
@@ -62,8 +62,8 @@ if ! git diff-index --quiet HEAD --; then
     exit 1
 fi
 
-# Refuse unless on main — deploying a feature branch is the live-tree footgun
-# scripts/snapshot_metadata.sh guards against; deploy.sh must guard it too.
+# Refuse unless on main — deploying a feature branch is a live-tree footgun
+# (the venv imports whatever branch is checked out; see docs/live-tree-workflow.md).
 branch="$(git symbolic-ref --short HEAD 2>/dev/null || echo detached)"
 if [[ "$branch" != "main" ]]; then
     echo "ERR: deploy.sh must run on 'main' (got '$branch')" >&2
@@ -122,7 +122,7 @@ echo ">>> levels migrate"
 
 # --- 3.05. pull the metadata repo (kayak_data) -------------------------
 #
-# The metadata snapshot (CSVs + reaches*.json) lives in a separate repo
+# The metadata dataset (CSVs + reaches*.json) lives in a separate repo
 # (data-repo split); steps 3.1/3.25/3.26 apply whatever it now holds, read via
 # DATASET_DIR. Pull it here and record its old/new SHA so those steps can gate
 # on the metadata actually changing (the code-repo SHA no longer moves when only

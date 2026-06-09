@@ -8,7 +8,7 @@ Maintenance tools that *author* dataset-owned columns (``levels assign-huc``,
 ``scripts/refresh_reach_elevations.py``, ``scripts/seed_gauge_display.py``) keep a
 direct-DB write mode, but must run against an explicitly named scratch/dev copy and
 **refuse the configured production database** unless overridden. The dev flow stays
-"run on a scratch/dev DB → ``export_metadata`` → reviewed CSV edit → PR to
+"run on a scratch/dev DB → ``levels recover-metadata`` → reviewed CSV edit → PR to
 ``kayak_data`` → ``sync-metadata`` to prod".
 
 The complete set of *sanctioned* writers of dataset-owned rows to the live DB is:

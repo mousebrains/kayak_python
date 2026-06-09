@@ -54,6 +54,12 @@ class TestKnownEnvNames:
         assert "HC_FETCH_OSMB" in names
         assert "HC_STATUS" in names
 
+    def test_includes_retired_metadata_snapshot_hc(self) -> None:
+        # HC_METADATA_SNAPSHOT was retired with the kayak-metadata-snapshot unit
+        # (SA-teardown-B); it stays allowlisted for one release so a stale `.env`
+        # line can't fail deploy.sh's `--known-env --strict` gate.
+        assert "HC_METADATA_SNAPSHOT" in _known_env_names()
+
     def test_includes_usgs_api_key(self) -> None:
         # Read via os.environ by the OGC fetch (not a model field — the
         # secret must stay out of the www-data-readable config JSON),
@@ -112,6 +118,18 @@ class TestValidateConfig:
         with pytest.raises(SystemExit) as exc:
             validate_config(_args(known_env=True, strict=True))
         assert exc.value.code == 1
+
+    def test_known_env_strict_tolerates_retired_metadata_snapshot_hc(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # A stale HC_METADATA_SNAPSHOT left in a prod .env (the unit was retired
+        # in SA-teardown-B) must NOT fail the strict deploy gate — it's
+        # allowlisted for one release so it can't brick an otherwise-safe deploy.
+        monkeypatch.setenv("HC_METADATA_SNAPSHOT", "https://hc-ping.com/example")
+        with pytest.raises(SystemExit) as exc:
+            validate_config(_args(known_env=True, strict=True))
+        assert exc.value.code == 0
+        assert "HC_METADATA_SNAPSHOT" not in capsys.readouterr().err
 
     def test_known_env_warns_on_metadata_typo(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]

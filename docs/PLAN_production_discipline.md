@@ -26,7 +26,8 @@ while the audit plan covers cert monitor + test/CI maturity + architecture.
 counts refer to the pre-2026-05-14 state. As of 2026-05-14 the live
 host runs 12 timers (added kayak-backup-hourly, kayak-cert-expiry,
 kayak-cert-renewal-test, kayak-config-drift, kayak-metadata-snapshot;
-renamed kayak-backup → kayak-backup-weekly). See `deploy/SETUP.md`
+renamed kayak-backup → kayak-backup-weekly). (kayak-metadata-snapshot
+has since been retired — SA-teardown.) See `deploy/SETUP.md`
 §timer schedule for the authoritative current list.
 
 > **Cross-check:** plan drafted 2026-05-11 against the live host (`levels.mousebrains.com`, single Hetzner VPS, sole operator). Iterated 2026-05-12 against `main` at `ffbb387` plus the live `systemctl` state. A subsequent session should re-run the read-only commands in **§Reproduce** to confirm the current-state findings before any tier starts.
@@ -92,7 +93,6 @@ Each tier is several phases; **review gate between tiers**, not between phases.
    | `kayak-backup-hourly.service`    | hourly `*:38`     | local hourly DB snapshot |
    | `kayak-healthcheck.service`      | hourly `*:45`     | runs `scripts/health-check.sh` (data-freshness sentinel) |
    | `kayak-decimate.service`         | daily `02:32`     | thins old observations |
-   | `kayak-metadata-snapshot.service` | daily `04:30`    | commits metadata-CSV drift to git |
    | `kayak-cert-expiry.service`      | daily `06:30`     | TLS cert-days-remaining probe |
    | `kayak-editor-retention.service` | daily `03:42`     | editor-row retention sweep |
    | `kayak-cert-renewal-test.service` | weekly Mon 04:15 | `certbot renew --dry-run` |

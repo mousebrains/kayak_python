@@ -215,7 +215,7 @@ def run(
 
     ``reach.huc``/``reach.basin`` are dataset-owned (they ride in ``reach.csv``),
     so a real write refuses the configured production DB (dataset-separation SA /
-    AC #6): point ``db_url`` at a scratch/dev copy and ``export_metadata`` the
+    AC #6): point ``db_url`` at a scratch/dev copy and ``levels recover-metadata`` the
     result, or pass ``allow_production=True`` to override. A ``dry_run`` reads only,
     so it's exempt.
     """

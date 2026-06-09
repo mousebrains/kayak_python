@@ -68,8 +68,8 @@ def _column_order(
     Preserve the committed file's header order when present, else fall back to the
     canonical model order. Column order is **non-semantic** per the dataset
     contract (:mod:`kayak.dataset.layout` validates headers as a *set*; the loaders
-    key by name), and the two writers of these CSVs disagree on it: the prod
-    nightly snapshot (``scripts/export_metadata.py``) emits the live DB's physical
+    key by name), and the two writers of these CSVs disagree on it: the recovery
+    dump (``levels recover-metadata``) emits the live DB's physical
     ``PRAGMA table_info`` order, which for an ``ALTER``-added column like
     ``source.timezone`` (migration 0008) lands *last* — not at the model position.
     Preserving the committed order keeps ``--check`` a test of row *content* (the
@@ -123,10 +123,10 @@ def _write_csv(out_dir: Path, table: str, rows: list[dict[str, Any]], cols: list
     rows sorted by the table's primary-key tuple (a single ``id``, or the composite
     ``(gauge_id, source_id)`` for gauge_source).
 
-    DUAL-WRITER CONTRACT: this sort must stay byte-identical to the nightly snapshot
-    (``scripts/export_metadata.py``), whose ``order = ", ".join(pk_cols)`` SQL
+    DUAL-WRITER CONTRACT: this sort must stay byte-identical to the recovery dump
+    (``levels recover-metadata``), whose ``order = ", ".join(pk_cols)`` SQL
     ``ORDER BY`` is the same primary-key tuple. The byte round-trip ``--check`` is the
-    only guard on this alignment — if export_metadata's ordering or the layout PK
+    only guard on this alignment — if recover-metadata's ordering or the layout PK
     spec changes, both writers must move together."""
     pk = layout.primary_key_columns(table)
     ordered = sorted(rows, key=lambda r: tuple(int(r[c]) for c in pk))

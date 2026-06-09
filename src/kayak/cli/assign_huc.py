@@ -41,7 +41,7 @@ def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> 
         default=None,
         help="Target SQLite DB/URL (default: the configured DATABASE_URL). reach.huc "
         "is dataset-owned, so a real write refuses the configured production DB — "
-        "point this at a scratch/dev copy and export_metadata the result.",
+        "point this at a scratch/dev copy and `levels recover-metadata` the result.",
     )
     parser.add_argument(
         "--allow-production",

@@ -216,7 +216,6 @@ class KayakConfig(BaseSettings):
     hc_cert_expiry: AnyHttpUrl | None = None
     hc_cert_renewal_test: AnyHttpUrl | None = None
     hc_config_drift: AnyHttpUrl | None = None
-    hc_metadata_snapshot: AnyHttpUrl | None = None
     hc_recap: AnyHttpUrl | None = None
     hc_fetch_osmb: AnyHttpUrl | None = None
     hc_status: AnyHttpUrl | None = None
