@@ -471,11 +471,16 @@ This copies the service/timer units to `/etc/systemd/system/`, enables and start
 > Then drop the now-inert `HC_METADATA_SNAPSHOT=` line from
 > `~/.config/kayak/.env` (and `/etc/kayak/env` if present). It is allowlisted for
 > one release so a stale line can't fail `deploy.sh`'s `validate-config
-> --known-env --strict` gate, but should be removed. Re-running
+> --known-env --strict` gate, but should be removed. Separately, **pause or remove
+> the metadata-snapshot check on healthchecks.io** — the retired service pinged
+> `${HC_METADATA_SNAPSHOT}` on success, so its check otherwise stops receiving
+> pings and fires a false "down" alert once its grace period lapses (operator-only;
+> it lives in the healthchecks.io account, not on the host). Re-running
 > `install.service.sh` above also refreshes the comment-only-changed
 > `kayak-status.{service,timer}`, so the weekly `kayak-config-drift` check stays
-> green. (Enabling `kayak_data` `main` branch protection is the remaining
-> SA-teardown-C step.)
+> green. Finally, enable `kayak_data` `main` branch protection (require PR + the
+> `validate` check + `enforce_admins`) once the snapshot timer is confirmed
+> stopped — the last SA-teardown-C step.
 
 Verify:
 
