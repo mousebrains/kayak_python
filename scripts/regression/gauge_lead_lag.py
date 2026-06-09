@@ -54,6 +54,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import subprocess
 import sys
 from collections.abc import Callable
@@ -789,6 +790,16 @@ def _diff_stat(ec: np.ndarray, el: np.ndarray) -> Callable[[np.ndarray], float]:
     return lambda idx: float(np.sqrt((ec[idx] ** 2).mean()) - np.sqrt((el[idx] ** 2).mean()))
 
 
+def _resolve_out(out: Path | None, name: str) -> Path | None:
+    """Default ``--out`` to ``$DATASET_DIR/regression/<name>.md`` when ``DATASET_DIR``
+    is set in the env (stdlib ``os.environ`` only — keeps this script standalone, no
+    kayak import). An explicit ``--out`` wins; with neither, returns None (stdout)."""
+    if out is not None:
+        return out
+    dataset_dir = os.environ.get("DATASET_DIR")
+    return Path(dataset_dir) / "regression" / f"{name}.md" if dataset_dir else None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Sub-daily lead/lag of a gauge regression.")
     ap.add_argument("--target", default=DEFAULT_TARGET)
@@ -807,8 +818,15 @@ def main() -> int:
             "effective window, clamped to the gauges' actual overlap)."
         ),
     )
-    ap.add_argument("--out", type=Path, help="Markdown output path (also writes .svg).")
+    ap.add_argument(
+        "--out",
+        type=Path,
+        help="Markdown output path (also writes sibling .svg/.json). If omitted, "
+        "defaults to $DATASET_DIR/regression/<name>.md when DATASET_DIR is set in "
+        "the env, else prints to stdout.",
+    )
     args = ap.parse_args()
+    args.out = _resolve_out(args.out, args.name)
     predictors: list[str] = args.predictors or DEFAULT_PREDICTORS
     sites = [args.target, *predictors]
     step = args.grid_minutes * 60

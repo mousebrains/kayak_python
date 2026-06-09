@@ -1121,11 +1121,11 @@ def _check_regression(d: Path) -> tuple[list[str], list[str]]:
     """provenance_slug ↔ regression report integrity + content sanitization (S2).
 
     Returns ``(errors, warnings)``. The presence of a ``regression/`` directory is
-    the dataset's opt-in: while it is absent the reports live engine-side
-    (``docs/regression``, until the S2 file move), so declared slugs are not yet
-    expected in the dataset and the slug↔report check stays a non-fatal WARNING —
-    this keeps the deploy-time validator from bricking a deploy before the files
-    land in the dataset. Once the directory exists, the check is fully enforced:
+    the dataset's opt-in: while it is absent the dataset simply publishes no
+    regression reports, so declared slugs are a non-fatal WARNING, not an error —
+    this keeps the deploy-time validator from bricking a deploy on a dataset that
+    declares slugs but hasn't (yet) added the reports. Once the directory exists,
+    the check is fully enforced:
     ERROR on a slug with no report/sidecar, a referenced file that is missing, or
     content failing the security/shape gate; WARN on a report referenced by no slug
     (orphan).

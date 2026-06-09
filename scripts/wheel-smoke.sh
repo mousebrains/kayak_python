@@ -96,7 +96,14 @@ test -f "$DB"
 echo "    OK — schema created"
 
 echo "==> levels build (packaged data + web layer) → $DOCROOT"
-DATABASE_URL="sqlite:///$DB" OUTPUT_DIR="$DOCROOT" "$LEVELS" build >/dev/null
+# DATASET_DIR points at the committed fixture so build renders its regression
+# report (fixture_calc_from_usgs.*) from DATASET_DIR/regression/ — the S2-E2 path.
+# HOME → $WORK (and SUDO_USER cleared, to disable config's ~SUDO_USER/.env fallback)
+# so config doesn't read a developer's ~/.config/kayak/.env — which may set the
+# deprecated METADATA_DIR and clash with this DATASET_DIR. CI's HOME has no such file,
+# so this is a no-op there; it keeps the smoke hermetic.
+HOME="$WORK" SUDO_USER="" DATABASE_URL="sqlite:///$DB" OUTPUT_DIR="$DOCROOT" \
+    DATASET_DIR="$REPO_ROOT/tests/fixtures/dataset" "$LEVELS" build >/dev/null
 # The deployed site must carry assets sourced from every packaged tree.
 missing=0
 for rel in \
@@ -119,5 +126,20 @@ for rel in \
 done
 [ "$missing" -eq 0 ] || { echo "wheel-smoke FAILED: build output incomplete" >&2; exit 1; }
 echo "    OK — build deployed static + php + templates + license from the wheel"
+
+echo "==> regression reports rendered from DATASET_DIR/regression (S2-E2)"
+REG="$DOCROOT/static/regression"
+for rel in fixture_calc_from_usgs.html fixture_calc_from_usgs.svg fixture_calc_from_usgs.json; do
+    [ -f "$REG/$rel" ] || { echo "wheel-smoke FAILED: regression asset missing: $rel" >&2; exit 1; }
+done
+# The .md was rendered to HTML (sanitized — no raw <script>) and the .svg re-serialized.
+if grep -qi "<script" "$REG/fixture_calc_from_usgs.html"; then
+    echo "wheel-smoke FAILED: rendered regression HTML contains <script>" >&2; exit 1
+fi
+grep -q "Regression analysis" "$REG/fixture_calc_from_usgs.html" \
+    || { echo "wheel-smoke FAILED: rendered regression HTML missing expected content" >&2; exit 1; }
+grep -q "<svg" "$REG/fixture_calc_from_usgs.svg" \
+    || { echo "wheel-smoke FAILED: regression SVG not re-serialized" >&2; exit 1; }
+echo "    OK — regression report rendered + sanitized from the dataset"
 
 echo "==> wheel-smoke PASSED"

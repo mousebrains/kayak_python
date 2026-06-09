@@ -20,11 +20,11 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from kayak.config import BASE_DIR, OSMB_DIR, SITE_URL
+from kayak.config import BASE_DIR, DATASET_DIR, OSMB_DIR, SITE_URL
 from kayak.db.cache import get_all_latest_gauges
 from kayak.db.engine import get_session
 from kayak.db.gauges import get_calculated_gauge_ids
-from kayak.db.models import DataType, Gauge, HucName, LatestGaugeObservation, Reach
+from kayak.db.models import CalcExpression, DataType, Gauge, HucName, LatestGaugeObservation, Reach
 from kayak.db.reaches import all_state_names, reaches_query
 from kayak.resources import resource_dir
 from kayak.utils.pubhash import encode as pubhash_encode
@@ -109,7 +109,7 @@ def _osmb_url(static_dir: Path, filename: str) -> str:
 _BUILD_PROCESSED_STATIC: frozenset[str] = frozenset({"style.css", "levels.js", "filters.js"})
 
 
-def _deploy_static_assets(output_dir: Path) -> None:
+def _deploy_static_assets(output_dir: Path, *, provenance_slug_count: int = 0) -> None:
     """Copy committed + generated static assets into ``output_dir/static/``.
 
     Two sources, both outside the deploy target:
@@ -128,11 +128,11 @@ def _deploy_static_assets(output_dir: Path) -> None:
     worker controls scope ``/``. Directories (``images/``) propagate via
     ``copytree`` with ``dirs_exist_ok=True``.
 
-    Also publishes the regression-analysis artifacts: ``docs/regression/*.{svg,json}``
-    pass through verbatim into ``static/regression/`` for use by PHP
-    gauge_detail.php, and each ``docs/regression/*.md`` writeup is
-    rendered to a self-contained HTML page under the same directory so
-    the "Full analysis →" link works without exposing the repo.
+    Also publishes the regression-analysis artifacts from the dataset
+    (``DATASET_DIR/regression/*``): the validated ``.svg``/``.json`` are written
+    into ``static/regression/`` for use by PHP gauge_detail.php, and each
+    ``.md`` writeup is rendered to a self-contained HTML page under the same
+    directory so the "Full analysis →" link works without exposing the repo.
     """
     static_dir = output_dir / "static"
     static_dir.mkdir(parents=True, exist_ok=True)
@@ -148,11 +148,49 @@ def _deploy_static_assets(output_dir: Path) -> None:
     if OSMB_DIR.is_dir():
         for path in OSMB_DIR.glob("*.geojson"):
             shutil.copy2(path, static_dir / path.name)
-    _deploy_regression_artifacts(static_dir)
+    _deploy_regression_artifacts(static_dir, provenance_slug_count=provenance_slug_count)
 
 
-def _deploy_regression_artifacts(static_dir: Path) -> None:
-    """Render + sanitize ``docs/regression/*`` into ``static_dir/regression/``.
+def _count_regression_slugs(session: Session) -> int:
+    """Count calc rows that declare a regression report (non-empty ``provenance_slug``).
+
+    Drives the stale-checkout warning in :func:`_warn_regression_dir_missing` — the
+    build-time parallel to ``validate-dataset``'s slug↔dir check. Cheap read on the
+    existing build session (~tens of rows). Blank/whitespace slugs don't count.
+    """
+    return sum(
+        1
+        for s in session.scalars(
+            select(CalcExpression.provenance_slug).where(
+                CalcExpression.provenance_slug.is_not(None)
+            )
+        )
+        if s and s.strip()
+    )
+
+
+def _warn_regression_dir_missing(regression_src: Path, provenance_slug_count: int) -> None:
+    """Warn when calc rows declare reports but the dataset has no ``regression/``.
+
+    A non-zero ``provenance_slug_count`` means reports are *expected* but won't be
+    published — a stale/misconfigured ``DATASET_DIR`` checkout. The hourly pipeline
+    build doesn't pull the dataset, so this is the build-time parallel to
+    ``validate-dataset``'s deploy-time slug↔dir check. No-op when no slugs are
+    declared (a dataset that simply ships no regression reports is fine).
+    """
+    if not provenance_slug_count:
+        return
+    logger.warning(
+        "%d calc_expression provenance_slug(s) declared but %s is absent — "
+        "no regression reports will be published; is DATASET_DIR / the "
+        "kayak_data checkout stale?",
+        provenance_slug_count,
+        regression_src,
+    )
+
+
+def _deploy_regression_artifacts(static_dir: Path, *, provenance_slug_count: int = 0) -> None:
+    """Render + sanitize ``DATASET_DIR/regression/*`` into ``static_dir/regression/``.
 
     The .md/.svg/.json files are dataset-authored output served to anonymous
     users, so the engine does not trust them (see :mod:`kayak.web.regression`):
@@ -162,9 +200,14 @@ def _deploy_regression_artifacts(static_dir: Path) -> None:
     (fail-closed) — ``levels validate-dataset`` catches it earlier in the deploy.
     The markdown is pre-rendered to HTML because the kayak repo is private (a
     ``github.com/…md`` link would 404 for end users).
+
+    A dataset with no ``regression/`` directory simply serves no reports (early
+    return); ``provenance_slug_count`` (calc rows declaring a report) drives a
+    warning in that case via :func:`_warn_regression_dir_missing`.
     """
-    regression_src = BASE_DIR / "docs" / "regression"
+    regression_src = DATASET_DIR / "regression"
     if not regression_src.is_dir():
+        _warn_regression_dir_missing(regression_src, provenance_slug_count)
         return
     dst = static_dir / "regression"
     dst.mkdir(parents=True, exist_ok=True)
@@ -289,13 +332,13 @@ def _deploy_license_files(output_dir: Path) -> None:
             shutil.copy2(src, output_dir / name)
 
 
-def _deploy_source_files(output_dir: Path) -> None:
+def _deploy_source_files(output_dir: Path, *, provenance_slug_count: int = 0) -> None:
     """Copy source files from the repo into the output directory.
 
     Makes the output directory self-contained — no symlinks pointing
     back into the repo.  Covers static assets, PHP files, and config.
     """
-    _deploy_static_assets(output_dir)
+    _deploy_static_assets(output_dir, provenance_slug_count=provenance_slug_count)
     _deploy_php_files(output_dir)
     _deploy_config_files(output_dir)
     _deploy_license_files(output_dir)
@@ -339,8 +382,13 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
             )
         )
 
+        # How many calc rows declare a regression report — so the regression deploy
+        # can warn when reports are expected (slugs present) but DATASET_DIR/regression/
+        # is absent (a stale dataset checkout).
+        n_reg_slugs = _count_regression_slugs(session)
+
         # Deploy source files (static assets, PHP, config)
-        _deploy_source_files(output_dir)
+        _deploy_source_files(output_dir, provenance_slug_count=n_reg_slugs)
 
         # Generated static assets
         static_dir = output_dir / "static"

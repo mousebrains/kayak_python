@@ -590,3 +590,15 @@ def test_deploy_note_renders_and_reproduces():
     # Absent by default.
     md_plain = _render_toy_markdown(gpl, ["p1::111", "p2::222"])
     assert "Deployment note" not in md_plain
+
+
+def test_resolve_out_defaults_to_dataset_dir(monkeypatch) -> None:
+    gpl = _load_script()
+    # No --out + DATASET_DIR set → default under <dataset>/regression/ (S2-E2).
+    monkeypatch.setenv("DATASET_DIR", "/tmp/ds")
+    assert gpl._resolve_out(None, "foo_from_bar") == Path("/tmp/ds/regression/foo_from_bar.md")
+    # An explicit --out always wins.
+    assert gpl._resolve_out(Path("/x/y.md"), "foo_from_bar") == Path("/x/y.md")
+    # No --out + no DATASET_DIR → None (prints to stdout; standalone contract).
+    monkeypatch.delenv("DATASET_DIR", raising=False)
+    assert gpl._resolve_out(None, "foo_from_bar") is None
