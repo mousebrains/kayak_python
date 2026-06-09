@@ -216,3 +216,15 @@ def test_classify_verdict_branches():
         "stage_only",
     ):
         assert k in gll.VERDICT_LABEL
+
+
+def test_resolve_out_defaults_to_dataset_dir(monkeypatch) -> None:
+    gll = _load()
+    # No --out + DATASET_DIR set → default under <dataset>/regression/ (S2-E2).
+    monkeypatch.setenv("DATASET_DIR", "/tmp/ds")
+    assert gll._resolve_out(None, "x_leadlag") == Path("/tmp/ds/regression/x_leadlag.md")
+    # An explicit --out always wins.
+    assert gll._resolve_out(Path("/x/y.md"), "x_leadlag") == Path("/x/y.md")
+    # No --out + no DATASET_DIR → None (prints to stdout; standalone contract).
+    monkeypatch.delenv("DATASET_DIR", raising=False)
+    assert gll._resolve_out(None, "x_leadlag") is None

@@ -20,7 +20,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from kayak.config import BASE_DIR, OSMB_DIR, SITE_URL
+from kayak.config import BASE_DIR, DATASET_DIR, OSMB_DIR, SITE_URL
 from kayak.db.cache import get_all_latest_gauges
 from kayak.db.engine import get_session
 from kayak.db.gauges import get_calculated_gauge_ids
@@ -128,11 +128,11 @@ def _deploy_static_assets(output_dir: Path) -> None:
     worker controls scope ``/``. Directories (``images/``) propagate via
     ``copytree`` with ``dirs_exist_ok=True``.
 
-    Also publishes the regression-analysis artifacts: ``docs/regression/*.{svg,json}``
-    pass through verbatim into ``static/regression/`` for use by PHP
-    gauge_detail.php, and each ``docs/regression/*.md`` writeup is
-    rendered to a self-contained HTML page under the same directory so
-    the "Full analysis →" link works without exposing the repo.
+    Also publishes the regression-analysis artifacts from the dataset
+    (``DATASET_DIR/regression/*``): the validated ``.svg``/``.json`` are written
+    into ``static/regression/`` for use by PHP gauge_detail.php, and each
+    ``.md`` writeup is rendered to a self-contained HTML page under the same
+    directory so the "Full analysis →" link works without exposing the repo.
     """
     static_dir = output_dir / "static"
     static_dir.mkdir(parents=True, exist_ok=True)
@@ -152,7 +152,7 @@ def _deploy_static_assets(output_dir: Path) -> None:
 
 
 def _deploy_regression_artifacts(static_dir: Path) -> None:
-    """Render + sanitize ``docs/regression/*`` into ``static_dir/regression/``.
+    """Render + sanitize ``DATASET_DIR/regression/*`` into ``static_dir/regression/``.
 
     The .md/.svg/.json files are dataset-authored output served to anonymous
     users, so the engine does not trust them (see :mod:`kayak.web.regression`):
@@ -161,9 +161,10 @@ def _deploy_regression_artifacts(static_dir: Path) -> None:
     JSON sidecars are shape-checked. A nonconforming artifact fails the build
     (fail-closed) — ``levels validate-dataset`` catches it earlier in the deploy.
     The markdown is pre-rendered to HTML because the kayak repo is private (a
-    ``github.com/…md`` link would 404 for end users).
+    ``github.com/…md`` link would 404 for end users). A dataset with no
+    ``regression/`` directory simply serves no reports (early return).
     """
-    regression_src = BASE_DIR / "docs" / "regression"
+    regression_src = DATASET_DIR / "regression"
     if not regression_src.is_dir():
         return
     dst = static_dir / "regression"

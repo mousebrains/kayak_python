@@ -7,21 +7,23 @@ a markdown analysis report (window stability, parameter covariance,
 residual diagnostics) plus the `calc_expression` column values ready to
 paste into a new `calc_expression.csv` row in the `kayak_data` repo.
 
-Common case is single-predictor linear:
+With ``DATASET_DIR`` set (the kayak_data clone), ``--out`` defaults to
+``$DATASET_DIR/regression/<name>.md`` (+ sibling .svg/.json), so the report
+lands straight in the dataset for a reviewed PR. Common case, single-predictor
+linear:
 
-    python3 scripts/regression/gauge_pair_linear.py \\
+    DATASET_DIR=~/kayak_data python3 scripts/regression/gauge_pair_linear.py \\
         --predictor 14330000 --target 14328000 \\
         --start 1985-01-01 --end 2024-06-09 \\
-        --name rogue_14328000_from_14330000 \\
-        --out  docs/regression/rogue_14328000_from_14330000.md
+        --name rogue_14328000_from_14330000
 
 Multi-linear (use multiple --predictor flags). Each predictor adds a
 column to the design matrix:
 
-    python3 scripts/regression/gauge_pair_linear.py \\
+    DATASET_DIR=~/kayak_data python3 scripts/regression/gauge_pair_linear.py \\
         --predictor 14330000 --predictor 14337600 \\
         --target 14328000 --start 1985-01-01 --end 2024-06-09 \\
-        --name rogue_14328000_multi --out docs/regression/...md
+        --name rogue_14328000_multi
 
 Add a quadratic term per predictor with --quadratic:
 
@@ -50,6 +52,7 @@ import argparse
 import contextlib
 import json as _json
 import math
+import os
 import random
 import shlex
 import statistics
@@ -857,7 +860,7 @@ def render_markdown(  # noqa: C901 — assembly of many table sections; refactor
     note = (
         f"{family} regression fit. n={fit.n} daily means, "
         f"window {window_start}..{window_end}, r2={fit.r2:.4f}, "
-        f"RMSE={fit.rmse:.1f} cfs. See docs/regression/{name}.md."
+        f"RMSE={fit.rmse:.1f} cfs. See regression/{name}.md."
     )
     L("```")
     L("data_type:       flow")
@@ -1299,6 +1302,16 @@ def _quad_spec_from_args(
     return [p in quad_for for p in predictors]
 
 
+def _resolve_out(out: Path | None, name: str) -> Path | None:
+    """Default ``--out`` to ``$DATASET_DIR/regression/<name>.md`` when ``DATASET_DIR``
+    is set in the env (stdlib ``os.environ`` only — keeps this script standalone, no
+    kayak import). An explicit ``--out`` wins; with neither, returns None (stdout)."""
+    if out is not None:
+        return out
+    dataset_dir = os.environ.get("DATASET_DIR")
+    return Path(dataset_dir) / "regression" / f"{name}.md" if dataset_dir else None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=(
@@ -1342,7 +1355,9 @@ def main() -> int:
     ap.add_argument(
         "--out",
         type=Path,
-        help="Markdown output path. If omitted, prints to stdout.",
+        help="Markdown output path (also writes sibling .svg/.json). If omitted, "
+        "defaults to $DATASET_DIR/regression/<name>.md when DATASET_DIR is set in "
+        "the env, else prints to stdout.",
     )
     ap.add_argument(
         "--calc-handle",
@@ -1384,6 +1399,7 @@ def main() -> int:
         ),
     )
     args = ap.parse_args()
+    args.out = _resolve_out(args.out, args.name)
     leadlag = _load_leadlag(args.leadlag, args.out)
 
     predictors: list[str] = args.predictor

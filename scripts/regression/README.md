@@ -14,19 +14,24 @@ covariance, and emits a markdown analysis report plus the
 **Dependencies:** Python stdlib + numpy + `curl` on `PATH`. No kayak
 imports, so the tool runs without the project venv.
 
+**Output:** with `DATASET_DIR` set (the `kayak_data` clone), `--out` defaults to
+`$DATASET_DIR/regression/<name>.md` (+ sibling `.svg`/`.json`), so a report lands
+straight in the dataset for a reviewed PR. Pass `--out` explicitly to override, or
+omit `DATASET_DIR` to print to stdout. (`levels build` then renders + sanitizes
+these from `DATASET_DIR/regression/` into `/static/regression/`.)
+
 ## Common cases
 
 ### Single-predictor linear (the usual)
 
 ```bash
-python3 scripts/regression/gauge_pair_linear.py \
+DATASET_DIR=~/kayak_data python3 scripts/regression/gauge_pair_linear.py \
     --predictor 14330000 \
     --target    14328000 \
     --start     1985-01-01 \
     --end       2024-06-09 \
     --name      rogue_14328000_from_14330000 \
-    --calc-handle rp::14330000 \
-    --out       docs/regression/rogue_14328000_from_14330000.md
+    --calc-handle rp::14330000
 ```
 
 ### Multi-linear (two or more predictors)
@@ -35,12 +40,11 @@ Repeat `--predictor`. Each predictor adds one column to the design
 matrix:
 
 ```bash
-python3 scripts/regression/gauge_pair_linear.py \
+DATASET_DIR=~/kayak_data python3 scripts/regression/gauge_pair_linear.py \
     --predictor 14330000 --predictor 14337600 \
     --target    14328000 --start 1985-01-01 --end 2024-06-09 \
     --name      rogue_14328000_multi \
-    --calc-handle rp::14330000 --calc-handle ms::14337600 \
-    --out       docs/regression/rogue_14328000_multi.md
+    --calc-handle rp::14330000 --calc-handle ms::14337600
 ```
 
 ### Quadratic terms
@@ -50,10 +54,10 @@ single-predictor quadratic is `y = b0 + b1·x + b2·x²`, multi-predictor
 quadratic is `y = b0 + Σ bᵢ·xᵢ + Σ cᵢ·xᵢ²`):
 
 ```bash
-python3 scripts/regression/gauge_pair_linear.py \
+DATASET_DIR=~/kayak_data python3 scripts/regression/gauge_pair_linear.py \
     --predictor 14330000 --quadratic \
     --target 14328000 --start 1985-01-01 --end 2024-06-09 \
-    --name   rogue_14328000_quadratic --out docs/regression/...
+    --name   rogue_14328000_quadratic
 ```
 
 `--quadratic-for SITE` (repeatable; mutually exclusive with
@@ -65,11 +69,11 @@ hundreds of cfs of phantom signal), so drop it and keep only the
 significant squared term(s):
 
 ```bash
-python3 scripts/regression/gauge_pair_linear.py \
+DATASET_DIR=~/kayak_data python3 scripts/regression/gauge_pair_linear.py \
     --predictor 14307620 --predictor 14325000 \
     --quadratic-for 14307620 \
     --target 14323100 --start 1967-10-01 --end 1973-06-30 \
-    --name   smith_14323100_from_siuslaw_sfcoquille --out docs/regression/...
+    --name   smith_14323100_from_siuslaw_sfcoquille
 ```
 
 Reach for quadratic when the residual table in a prior linear fit shows
@@ -147,12 +151,11 @@ structure a daily fit averages away, from USGS **unit values** resampled to a
 **30-min** grid (`--grid-minutes`):
 
 ```bash
-python3 scripts/regression/gauge_lead_lag.py \
+DATASET_DIR=~/kayak_data python3 scripts/regression/gauge_lead_lag.py \
     --predictor 14162500 --predictor 14158850 \
     --predictor 14159500 --predictor 14161500 \
     --target 14159000 --start 1987-10-01 --end 1994-09-30 \
-    --grid-minutes 30 --name mckenzie_14159000_leadlag \
-    --out  docs/regression/mckenzie_14159000_leadlag.md
+    --grid-minutes 30 --name mckenzie_14159000_leadlag
 ```
 
 It estimates each predictor's lag by cross-correlating **first differences**

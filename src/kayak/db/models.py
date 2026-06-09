@@ -316,12 +316,12 @@ class CalcExpression(Base):
     expression: Mapped[str] = mapped_column(String(512), nullable=False)
     time_expression: Mapped[str | None] = mapped_column(Text)
     note: Mapped[str | None] = mapped_column(Text)
-    # Slug pointing at docs/regression/<slug>.md when the calc was derived
-    # from a regression fit. NULL = operational calc (ratio, sum, etc.)
-    # with no analysis doc. The kayak build copies the matching
-    # <slug>.{svg,json,html} into /static/regression/ and PHP
-    # gauge_detail.php renders them on both calc-target and predictor
-    # gauge pages.
+    # Slug naming the dataset's regression report (DATASET_DIR/regression/<slug>.md)
+    # when the calc was derived from a regression fit. NULL = operational calc
+    # (ratio, sum, etc.) with no analysis doc. The kayak build renders/sanitizes the
+    # matching <slug>.{svg,json,md→html} from DATASET_DIR/regression/ into
+    # /static/regression/ and PHP gauge_detail.php renders them on both calc-target
+    # and predictor gauge pages.
     provenance_slug: Mapped[str | None] = mapped_column(Text)
 
     # relationships
