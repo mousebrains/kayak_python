@@ -245,7 +245,7 @@ jobs:
       # scripts/ isn't strictly typed wholesale; gate the prod-path metadata
       # scripts that round-trip the live DB, plus the elevation refresh (httpx
       # now declared in the dev extra). The one-off harvest scripts stay out.
-      - run: mypy src/ scripts/import_metadata.py scripts/export_metadata.py scripts/refresh_reach_elevations.py
+      - run: mypy src/ scripts/import_metadata.py scripts/refresh_reach_elevations.py
 
   test:
     runs-on: ubuntu-24.04

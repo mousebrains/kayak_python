@@ -392,7 +392,7 @@ def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> 
     parser.add_argument(
         "--check",
         action="store_true",
-        help="Exit non-zero if any migration is pending (deploy/snapshot guard); applies nothing",
+        help="Exit non-zero if any migration is pending (deploy guard); applies nothing",
     )
     parser.add_argument(
         "--stamp",
@@ -438,13 +438,13 @@ def migrate(args: argparse.Namespace) -> None:
         pending = pending_migrations()
         if pending:
             versions = ", ".join(m.version for m in pending)
-            # Non-zero exit lets deploy/snapshot guards refuse to run against a
-            # half-migrated DB (scripts/snapshot_metadata.sh): the nightly git
-            # pull can bring migration files live without `levels migrate`.
+            # Non-zero exit lets the deploy guard (scripts/deploy.sh) refuse to run
+            # against a half-migrated DB: a git pull can bring migration files live
+            # without `levels migrate`.
             raise SystemExit(
                 "migrate --check: pending migration(s) not applied to this DB: "
                 + versions
-                + " — run `levels migrate` before snapshotting/deploying."
+                + " — run `levels migrate` before deploying."
             )
         print("migrate --check: all migrations applied.")
         return

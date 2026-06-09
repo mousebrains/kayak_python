@@ -21,9 +21,8 @@ ExecStart=/home/pat/.venv/bin/levels status --output /home/pat/var/status.html
 # paste the ping URL into ~/.config/kayak/.env to opt in.
 ExecStartPost=-/usr/bin/curl -fsS -m 10 --retry 3 -o /dev/null ${HC_STATUS}
 # Headroom over the rDNS budget in kayak.analytics.humans (_RDNS_TOTAL_BUDGET_S,
-# 45s) plus the systemctl/df/openssl probes. Matches kayak-metadata-snapshot, the
-# other nightly render. Must stay comfortably above the rDNS budget or systemd
-# kills the render mid-sweep (the 2026-05-23 timeout).
+# 45s) plus the systemctl/df/openssl probes. Must stay comfortably above the rDNS
+# budget or systemd kills the render mid-sweep (the 2026-05-23 timeout).
 TimeoutStartSec=300
 Nice=15
 

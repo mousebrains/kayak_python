@@ -334,7 +334,7 @@ def main() -> int:
         action="store_true",
         help="Override the production-DB refusal and write the configured DB directly "
         "(gauge display columns are dataset-owned; normally write a scratch/dev copy "
-        "and export_metadata the result).",
+        "and `levels recover-metadata` the result).",
     )
     ap.add_argument("--limit", type=int, default=0, help="Show only the first N rows in preview.")
     args = ap.parse_args()

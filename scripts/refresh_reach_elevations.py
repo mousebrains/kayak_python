@@ -171,7 +171,7 @@ def main() -> int:
         action="store_true",
         help="Override the production-DB refusal and write the configured DB directly "
         "(reach.elevation/gradient is dataset-owned; normally write a scratch/dev copy "
-        "and export_metadata the result).",
+        "and `levels recover-metadata` the result).",
     )
     ap.add_argument(
         "--reach-ids", help="Comma-separated reach IDs to process (default: all eligible)"

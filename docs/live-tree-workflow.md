@@ -4,17 +4,18 @@
 **git workspace**. This doc explains why that's a trap, the workaround we use,
 and how to recover if you find the live tree in a bad state.
 
-> **Update — data-repo split (Phase 6).** Two things below changed: (1) the nightly
-> metadata snapshot (`snapshot_metadata.sh`) now commits/pushes to the **separate
-> `kayak_data` repo**, never this code repo — so the code-repo live tree is no
-> longer git-*mutated* by any scheduled job, and the "snapshot on the wrong branch"
-> risk + its on-`main` guard now concern the `kayak_data` clone, not here. (2) The
-> live host's `kayak_python` deploy key is now **read-only** (deploy `git pull`
-> only), so you **cannot push from the live host** — worktrees inherit that, so
-> branch/PR pushes happen on a **separate dev machine**. To push from the host in a
-> pinch, `git -C /home/pat/kayak config --unset core.sshCommand` (reverts to the
-> personal key). The worktree discipline below still keeps the live tree on `main`;
-> only the *push* leg moved off-host.
+> **Update — data-repo split (Phase 6) + snapshot retirement (SA-teardown).** Two
+> things below changed: (1) the nightly reverse-sync metadata snapshot
+> (`snapshot_metadata.sh`) has been **retired** — it existed only to reconcile
+> editor-direct DB edits back to the dataset, which don't happen in prod — so **no
+> scheduled job git-mutates any repo** now (the old "snapshot on the wrong branch"
+> risk is gone with it; `levels recover-metadata` replaces it as a hand-run recovery
+> tool). (2) The live host's `kayak_python` deploy key is now **read-only** (deploy
+> `git pull` only), so you **cannot push from the live host** — worktrees inherit
+> that, so branch/PR pushes happen on a **separate dev machine**. To push from the
+> host in a pinch, `git -C /home/pat/kayak config --unset core.sshCommand` (reverts
+> to the personal key). The worktree discipline below still keeps the live tree on
+> `main`; only the *push* leg moved off-host.
 
 ## TL;DR
 
@@ -38,9 +39,8 @@ and how to recover if you find the live tree in a bad state.
 
 1. `pip install -e ".[dev]"` wrote an editable `.pth` into the venv pointing at
    `/home/pat/kayak/src`, so Python imports `kayak` straight from the working tree.
-2. The systemd units (`kayak-pipeline`, `kayak-status`, `kayak-decimate`,
-   `kayak-metadata-snapshot`, …) all run `/home/pat/.venv/bin/levels …`, which
-   imports from that tree.
+2. The systemd units (`kayak-pipeline`, `kayak-status`, `kayak-decimate`, …) all
+   run `/home/pat/.venv/bin/levels …`, which imports from that tree.
 3. So the *file on disk* — i.e. the checked-out branch — is the code that runs.
    There is no build/copy step between "edit" and "prod": the working tree **is**
    the deployed artifact.
@@ -51,15 +51,17 @@ and how to recover if you find the live tree in a bad state.
   live tree ~37 s before the hourly `kayak-pipeline.service` tick. Had it fired,
   that run would have executed *un-fixed* code (the fix being validated lived on
   another branch). Caught only by switching back in time.
-- **`snapshot_metadata.sh` on the wrong branch.** It hardcodes `BRANCH=main` but
-  committed on the *checked-out* branch and pushed `origin/main`. On a feature
-  branch it would have committed the nightly metadata snapshot off-main and
-  silently pushed nothing. Now guarded (see below). *(Pre-split history: the
-  snapshot now operates on the separate `kayak_data` clone, not this repo — see
-  the update note at the top.)*
-- **In general:** every scheduled job silently runs whatever is checked out —
-  usually harmless for the read-mostly, idempotent jobs (fetch, build, status),
-  but corrupting for the git-mutating one.
+- **`snapshot_metadata.sh` on the wrong branch (historical).** The retired nightly
+  snapshot hardcoded `BRANCH=main` but committed on the *checked-out* branch and
+  pushed `origin/main`; on a feature branch it would have committed off-main and
+  silently pushed nothing. The job has since been **removed entirely**
+  (SA-teardown), so this class of failure no longer exists — it stays here as the
+  incident that motivated the on-`main` discipline.
+- **In general:** every scheduled job silently runs whatever is checked out. All
+  the surviving jobs are read-mostly and idempotent (fetch, build, status); with
+  the reverse-sync snapshot retired there is no longer a git-mutating scheduled job
+  to corrupt a repo — but `git checkout` / `git pull` in the live tree still change
+  what prod runs.
 
 ## The workaround we use (Option A)
 
@@ -76,10 +78,10 @@ live checkout:
 
 - **Deploy = merge + pull.** Merge the PR on GitHub, then in the live tree run
   `git pull --ff-only` on `main`. That — and only that — changes what prod runs.
-- **Guardrail.** `scripts/snapshot_metadata.sh` refuses to run unless the
-  **`kayak_data` clone** is on `main` (bails non-zero → the existing `OnFailure`
-  email/ntfy fires), so the one git-mutating job — which now targets `kayak_data`,
-  not this repo — can never commit to the wrong branch.
+- **Guardrail.** `scripts/deploy.sh` refuses to run unless the live tree is on
+  `main` (exits non-zero otherwise), so a deploy can't run against a feature
+  branch. (The retired snapshot job carried its own on-`main` guard; it was removed
+  in SA-teardown along with the job.)
 
 ## Recovery: I found the live tree on a feature branch
 
@@ -99,7 +101,7 @@ Then check whether a scheduled job ran while off-`main`:
 
 ```bash
 journalctl --unit 'kayak-*' --since '<when it was switched>' --no-pager | less
-git log --oneline -5 <the-feature-branch>   # did the snapshot commit land here by mistake?
+git log --oneline -5 <the-feature-branch>   # did any stray commit land here by mistake?
 ```
 
 ## The deeper fix we deferred (Option B)

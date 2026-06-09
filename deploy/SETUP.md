@@ -61,7 +61,7 @@ python3 -m venv /home/pat/.venv
 
 ## 2.5 Metadata repo (`kayak_data`) — the data-repo split
 
-The metadata snapshots (the `*.csv` + `reaches*.json`) live in a **separate**
+The metadata dataset (the `*.csv` + `reaches*.json`) lives in a **separate**
 private repo, `kayak_data`, cloned alongside the code repo. Only schema migrations
 (`src/kayak/data/db/migrations/`) stay in the code repo. The code finds the clone via
 `DATASET_DIR` (§3).
@@ -71,14 +71,16 @@ private repo, `kayak_data`, cloned alongside the code repo. Only schema migratio
 sudo -u pat git clone git@github.com:mousebrains/kayak_data.git /home/pat/kayak_data
 ```
 
-**Snapshot write key.** The nightly `kayak-metadata-snapshot` timer pushes prod's
-metadata back to `kayak_data` (reconciling editor-approved prod edits). Give the
-prod host a **write** deploy key scoped to that one repo:
+**Deploy read key.** `scripts/deploy.sh` does a `git pull` of `kayak_data` to fetch
+the latest reviewed metadata, so the prod host needs a **read-only** deploy key
+scoped to that one repo. Write access is **not** needed: the reverse-sync snapshot
+that used to push prod edits back to `kayak_data` was retired in SA-teardown, so
+nothing on the host writes to that repo — metadata changes land via reviewed PRs.
 
 ```bash
-sudo -u pat ssh-keygen -t ed25519 -f /home/pat/.ssh/kayak_data_deploy -N "" -C "kayak-snapshot@prod"
+sudo -u pat ssh-keygen -t ed25519 -f /home/pat/.ssh/kayak_data_deploy -N "" -C "kayak-deploy@prod"
 # Add /home/pat/.ssh/kayak_data_deploy.pub to kayak_data → Settings → Deploy keys
-#   → ☑ Allow write access
+#   → leave "Allow write access" UNCHECKED (read-only)
 sudo -u pat git -C /home/pat/kayak_data config core.sshCommand \
   'ssh -i /home/pat/.ssh/kayak_data_deploy -o IdentitiesOnly=yes'
 ```
@@ -90,8 +92,10 @@ and their orphaned read-only deploy key (`kayak_python-ci-read`) on `kayak_data`
 were removed in the S4b-1 cleanup. The real dataset is validated at deploy time
 by `deploy.sh` (`validate-dataset`, step 3.08); engine-pinned pre-merge
 validation in `kayak_data`'s own CI is the next slice (S4b-2; see below). The
-code repo's `main` is branch-protected — nothing pushes to it except merged PRs,
-since the snapshot targets `kayak_data`, not the code repo.
+code repo's `main` is branch-protected — nothing pushes to it except merged PRs;
+with the reverse-sync snapshot retired, no automated job pushes to `kayak_data`
+either (its `main` is branch-protected once the snapshot timer is confirmed
+stopped on prod — SA-teardown-C).
 
 ### 2.6. S4b-2 prerequisite — `kayak_data` CI engine credential (planned)
 
@@ -192,12 +196,12 @@ ls /home/pat/public_html/*.html
 
 **Reach geometry (`reaches.json`).** `reach.geom` is excluded from
 `reach.csv` (large, and not regenerable on prod — the DEM/NHD trace stack
-is dev-only) and snapshotted to `kayak_data`'s `reaches.json`. The
+is dev-only) and written to `kayak_data`'s `reaches.json`. The
 `import_metadata.py` call above applies it on a fresh install. It is
 *not* migration-managed — the documented exception to "reach changes go
 via a migration" — so a dev re-trace reaches prod like this:
 
-1. dev: re-trace, then `python scripts/export_metadata.py` to refresh
+1. dev: re-trace, then `levels recover-metadata --out <scratch>` to regenerate
    `reaches.json`; commit it to `kayak_data`.
 2. prod: `scripts/deploy.sh` sees the changed `reaches.json` and runs
    `import_metadata.py --geom-only` automatically.
@@ -443,8 +447,6 @@ changes; PHP re-reads the file once per request.
 ```bash
 # The backup units write to /home/pat/backups (out of the repo, review-4 R5.6);
 # create it pat-owned before install — ReadWritePaths= needs it at unit start.
-# kayak-metadata-snapshot.service likewise binds /home/pat/kayak_data
-# (ReadWritePaths=) — the §2.5 clone above must already exist here.
 sudo -u pat mkdir -p /home/pat/backups
 sudo /home/pat/kayak/systemd/install.service.sh
 ```
@@ -457,13 +459,12 @@ Verify:
 systemctl list-timers 'kayak-*' --all
 ```
 
-Expected schedule (15 timers; most jittered via `RandomizedDelaySec=`):
+Expected schedule (14 timers; most jittered via `RandomizedDelaySec=`):
 - **kayak-pipeline.timer** — every hour at `:12` (fetches data, builds HTML)
 - **kayak-backup-hourly.timer** — every hour at `:38` (sqlite `.backup` + WAL checkpoint; 24-copy retention; RPO ≤ 1h)
 - **kayak-healthcheck.timer** — every hour at `:45` (data-freshness check)
 - **kayak-decimate.timer** — daily at 02:32 (thins old observations, VACUUM)
 - **kayak-editor-retention.timer** — daily at 03:45 (prunes expired editor sessions + magic links)
-- **kayak-metadata-snapshot.timer** — daily at 04:30 (commits metadata-table drift to the `kayak_data` repo)
 - **kayak-status.timer** — daily at 03:30 (renders the `/_internal/status` operator dashboard to `/home/pat/var/status.html`)
 - **kayak-fetch-osmb.timer** — daily at 03:30 (fetches Oregon State Marine Board hazard/access GeoJSON overlays)
 - **kayak-cert-expiry.timer** — daily at 06:30 (Let's Encrypt cert health probe; pages on <21 days remaining)

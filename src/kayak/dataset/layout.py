@@ -12,16 +12,15 @@ A dataset is a **complete projection** of the metadata schema: every
 both JSON sidecars (``{}`` when empty), so the validator treats a missing file
 as corruption, not as "this table is not applicable" — absence and emptiness are
 distinct, and emptiness is expressed by a header-only CSV / empty-object JSON.
-The files come from two writers: ``scripts/export_metadata.py`` (the nightly DB
-snapshot) writes ``SNAPSHOT_EXPORT_CSVS``, while the generator-owned
-``GENERATOR_OWNED_CSVS`` trio (source/fetch_url/gauge_source) is written only by
-``levels generate-sources`` from the dataset's ``sources.yaml`` — so the snapshot
-never races them (dataset-separation S1's "no dual-writer window"). Both writers
-together still produce every contract file.
+The files come from two writers: ``levels recover-metadata`` (the recovery dump
+that reconstructs a dataset from a DB) writes ``RECOVER_EXPORT_CSVS``, while the
+generator-owned ``GENERATOR_OWNED_CSVS`` trio (source/fetch_url/gauge_source) is
+written only by ``levels generate-sources`` from the dataset's ``sources.yaml``.
+Both writers together still produce every contract file.
 
 CSV column sets and types are derived from the SQLAlchemy models minus the
 columns that export to JSON sidecars or are runtime churn — exactly the rule
-``scripts/export_metadata.py`` writes by — so the descriptor cannot drift from
+``levels recover-metadata`` writes by — so the descriptor cannot drift from
 the schema. Headers are validated as a **set** (the loaders key by column name;
 column order is not semantically meaningful) after rejecting duplicate names.
 """
@@ -38,9 +37,10 @@ from kayak.db.models import Base
 # machine-generated geometry/gradient that export to the JSON sidecars instead.
 # They are PRESERVED (not reset) when a CSV omits them — applied via the sidecars,
 # not the CSV — which is the EXCLUDED-vs-OPTIONAL distinction the sync's
-# _reset_absent_optional_columns turns on. Mirrors
-# scripts/export_metadata.py::EXCLUDED_COLUMNS. (fetch_url.last_fetched_at lived
-# here until SA-2 relocated that runtime timestamp to the fetch_state table.)
+# _reset_absent_optional_columns turns on. The single source of truth: both
+# ``levels recover-metadata`` (export) and ``scripts/import_metadata.py`` (apply)
+# read this set. (fetch_url.last_fetched_at lived here until SA-2 relocated that
+# runtime timestamp to the fetch_state table.)
 EXCLUDED_COLUMNS: dict[str, set[str]] = {
     "reach": {"geom", "gradient_profile"},
 }
@@ -66,7 +66,7 @@ OPTIONAL_COLUMNS: dict[str, set[str]] = {
 UNKNOWN_STATION_POLICIES: tuple[str, ...] = ("ignore", "reject")
 
 # Every metadata table a dataset projects to a CSV, in export order
-# (scripts/export_metadata.py::METADATA_TABLES). A complete projection carries
+# (``levels recover-metadata``'s METADATA_TABLES). A complete projection carries
 # all of them — header-only when a table has no rows — so a missing file is
 # detectable corruption rather than silent optionality.
 CONTRACT_CSVS: tuple[str, ...] = (
@@ -90,17 +90,17 @@ CONTRACT_CSVS: tuple[str, ...] = (
 KNOWN_CSVS: tuple[str, ...] = CONTRACT_CSVS
 
 # CSVs whose sole writer is ``levels generate-sources`` (projected from the
-# dataset's ``sources.yaml``), NOT the nightly DB snapshot. The snapshot
-# (``scripts/export_metadata.py``) must not export these — otherwise two writers
-# race the same files and a fetch-time DB change could drift them out of the
-# byte-for-byte ``generate-sources --check`` (dataset-separation S1, "no
-# dual-writer window"). They stay in ``CONTRACT_CSVS`` — still required, still
-# applied by ``levels sync-metadata`` — only the *export* side excludes them.
+# dataset's ``sources.yaml``). A ``levels recover-metadata`` dump must NOT emit
+# these — regenerate them from ``sources.yaml`` instead, so a DB that drifted from
+# the registry can't overwrite the generator-owned files and break the
+# byte-for-byte ``generate-sources --check`` (dataset-separation S1). They stay in
+# ``CONTRACT_CSVS`` — still required, still applied by ``levels sync-metadata`` —
+# only the *export* side excludes them.
 GENERATOR_OWNED_CSVS: frozenset[str] = frozenset({"source", "fetch_url", "gauge_source"})
 
-# Tables the nightly snapshot exports: every contract CSV except the
+# Tables a `levels recover-metadata` dump exports: every contract CSV except the
 # generator-owned trio, in contract order.
-SNAPSHOT_EXPORT_CSVS: tuple[str, ...] = tuple(
+RECOVER_EXPORT_CSVS: tuple[str, ...] = tuple(
     t for t in CONTRACT_CSVS if t not in GENERATOR_OWNED_CSVS
 )
 
@@ -118,7 +118,7 @@ REACH_CHILD_CSVS: tuple[str, ...] = ("reach_state", "reach_class", "reach_guideb
 # Magnitude bounds for the geographic-coordinate columns, a domain check on top
 # of the Numeric(9, 6) precision/scale: a value can fit the scale yet still be
 # an impossible coordinate (e.g. latitude 95), and an absurd value (1e300) is
-# caught here too. export_metadata rounds coordinates to 6 dp on write so the
+# caught here too. recover-metadata rounds coordinates to 6 dp on write so the
 # declared scale is actually met.
 _LAT_RANGE = (-90.0, 90.0)
 _LON_RANGE = (-180.0, 180.0)

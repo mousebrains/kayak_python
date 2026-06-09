@@ -42,8 +42,8 @@ directly and lets us own the PRAGMA timing.
 * **The CSV must be internally consistent about parent/child removals.** Under
   ``foreign_keys=ON`` a removed parent cascades its junction/cache rows even if
   the CSV still lists them; such a CSV then diverges from the DB and the *next*
-  sync FK-fails on the now-orphaned child. ``export_metadata`` writes consistent
-  CSVs; hand edits must keep parent and child removals together.
+  sync FK-fails on the now-orphaned child. ``levels recover-metadata`` writes
+  consistent CSVs; hand edits must keep parent and child removals together.
 """
 
 from __future__ import annotations

@@ -2,8 +2,8 @@
 Description=Nightly render of the operator status page
 
 [Timer]
-# 03:30 — one hour before kayak-metadata-snapshot.timer at 04:30, so the
-# status page reflects the same on-disk state the snapshot then captures.
+# 03:30 — a quiet pre-dawn slot for the nightly status render, clear of the
+# pipeline/backup timers.
 OnCalendar=*-*-* 03:30:00
 RandomizedDelaySec=300
 Persistent=true

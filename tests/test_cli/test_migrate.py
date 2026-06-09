@@ -211,9 +211,9 @@ def test_apply_pending_runs_only_unapplied(
 
 
 def test_check_exits_nonzero_when_a_migration_is_pending(tmp_path: Path, engine: object) -> None:
-    # The snapshot/deploy guard: a migration file on disk but not yet in
+    # The deploy guard: a migration file on disk but not yet in
     # schema_migrations must make `levels migrate --check` exit non-zero, so
-    # scripts/snapshot_metadata.sh refuses to snapshot a half-migrated DB.
+    # scripts/deploy.sh refuses to deploy against a half-migrated DB.
     migrations_dir = tmp_path / "migrations"
     migrations_dir.mkdir()
     (migrations_dir / "0001_widget.sql").write_text("CREATE TABLE widget (id INTEGER PRIMARY KEY);")
@@ -245,7 +245,7 @@ def test_check_passes_when_all_applied(tmp_path: Path, engine: object) -> None:
 
 def test_check_passes_when_migrations_dir_absent(tmp_path: Path, engine: object) -> None:
     # No migrations dir at all → discover_migrations() returns [] → --check is a
-    # clean pass, never a false abort that would wedge the nightly snapshot.
+    # clean pass, never a false abort that would wedge a deploy.
     missing_dir = tmp_path / "does-not-exist"
     with (
         patch("kayak.cli.migrate.MIGRATIONS_DIR", missing_dir),

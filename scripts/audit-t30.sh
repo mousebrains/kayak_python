@@ -131,7 +131,6 @@ UNITS=(
   kayak-fail-test.service
   kayak-healthcheck.service        kayak-healthcheck.timer
   kayak-heartbeat.service          kayak-heartbeat.timer
-  kayak-metadata-snapshot.service  kayak-metadata-snapshot.timer
   kayak-notify-failure@.service
   kayak-pipeline.service           kayak-pipeline.timer
   kayak-recap.service              kayak-recap.timer
@@ -158,7 +157,7 @@ banner "6. Recent kayak unit logs (--no-pager -n 100 each, OnFailure-instances r
 for u in kayak-pipeline kayak-decimate kayak-backup-hourly kayak-backup-weekly \
          kayak-backup-offsite kayak-heartbeat kayak-healthcheck kayak-audit-gauges \
          kayak-cert-expiry kayak-cert-renewal-test kayak-config-drift \
-         kayak-editor-retention kayak-metadata-snapshot kayak-recap; do
+         kayak-editor-retention kayak-recap; do
   section "journal: $u"
   runS "journalctl --no-pager -n 100 -u $u.service"
 done
