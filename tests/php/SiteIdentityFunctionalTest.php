@@ -60,4 +60,22 @@ final class SiteIdentityFunctionalTest extends FunctionalTestCase
         $this->assertStringContainsString('content="#1b5591"', $html);
         $this->assertStringContainsString('content="#0d3057"', $html);
     }
+
+    public function testHeaderEscapesSiteNameAtRender(): void
+    {
+        // Defense-in-depth: SiteConfig already rejects HTML metacharacters in
+        // site_name, but the header must also escape at the render site — so a
+        // hand-tampered runtime-config (bypassing validate-dataset) can't break
+        // out of the content="…" attribute. install_for_tests skips SiteConfig.
+        Config::install_for_tests([
+            'editor_feature' => false,
+            'site' => ['site_name' => 'Evil" onmouseover=x <script>'],
+        ]);
+        $html = $this->renderHeader();
+        $this->assertStringContainsString(
+            '<meta property="og:site_name" content="Evil&quot; onmouseover=x &lt;script&gt;">',
+            $html,
+        );
+        $this->assertStringNotContainsString('Evil" onmouseover', $html);  // no raw break-out
+    }
 }
