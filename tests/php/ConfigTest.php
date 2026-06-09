@@ -116,6 +116,27 @@ final class ConfigTest extends TestCase
         $this->assertSame('https://fallback/', Config::url('site_url', 'https://fallback/'));
     }
 
+    public function testSiteReadsNestedBlock(): void
+    {
+        // S3a: site identity is a nested object emitted by `levels emit-config`.
+        $this->_install_fixture(['site' => ['site_name' => 'Foo Levels', 'brand_color' => '#abcdef']]);
+        $this->assertSame('Foo Levels', Config::site('site_name'));
+        $this->assertSame('#abcdef', Config::site('brand_color'));
+    }
+
+    public function testSiteDefaultWhenBlockAbsent(): void
+    {
+        $this->_install_fixture([]);
+        $this->assertSame('WKCC River Levels', Config::site('site_name', 'WKCC River Levels'));
+    }
+
+    public function testSiteDefaultWhenKeyMissingOrNonString(): void
+    {
+        $this->_install_fixture(['site' => ['brand_color' => 123]]);  // non-string value
+        $this->assertSame('#1b5591', Config::site('brand_color', '#1b5591'));
+        $this->assertSame('fallback', Config::site('absent_key', 'fallback'));
+    }
+
     public function testReturnsDefaultWhenKeyAbsent(): void
     {
         // Phase 4 removed the getenv() fallback. A key not in the JSON
