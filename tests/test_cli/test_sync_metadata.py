@@ -246,6 +246,103 @@ def test_dry_run_changes_nothing(tmp_path: Path) -> None:
     assert _scalar(db, "SELECT COUNT(*) FROM source WHERE id = 2") == 1
 
 
+def test_dry_run_reports_content_only_updates(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+    db = tmp_path / "k.db"
+    csv_dir = tmp_path / "csv"
+    csv_dir.mkdir()
+    _write_contract(csv_dir)
+    _schema(db)
+    _exec(
+        db,
+        [
+            "INSERT INTO calc_expression "
+            "(id, data_type, expression, time_expression, note, provenance_slug) "
+            "VALUES (1, 'flow', 'old_expr', 'old_time', "
+            "'See docs/regression/foo.md.', 'foo')",
+        ],
+    )
+    _write_csv(
+        csv_dir,
+        "calc_expression",
+        ["id", "data_type", "expression", "time_expression", "note", "provenance_slug"],
+        [[1, "flow", "old_expr", "old_time", "See regression/foo.md.", "foo"]],
+    )
+
+    rc = sync_metadata(_args(db, csv_dir, dry_run=True))
+
+    assert rc == 0
+    assert _scalar(db, "SELECT note FROM calc_expression WHERE id = 1") == (
+        "See docs/regression/foo.md."
+    )
+    out = capsys.readouterr().out
+    assert "(no changes" not in out
+    assert "~update" in out
+    plan_line = next(
+        line for line in out.splitlines() if line.strip().startswith("calc_expression")
+    )
+    assert plan_line.split() == ["calc_expression", "0", "1", "0"]
+
+
+def test_dry_run_reports_absent_optional_column_reset(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+    db = tmp_path / "k.db"
+    csv_dir = tmp_path / "csv"
+    csv_dir.mkdir()
+    _write_contract(csv_dir)
+    _schema(db)
+    _exec(
+        db,
+        [
+            "INSERT INTO fetch_url "
+            "(id, url, parser, is_active, unknown_station_policy) "
+            "VALUES (1, 'http://fu1', 'nwps', 1, 'ignore')",
+        ],
+    )
+    _write_csv(
+        csv_dir,
+        "fetch_url",
+        ["id", "url", "parser", "is_active"],
+        [[1, "http://fu1", "nwps", 1]],
+    )
+
+    rc = sync_metadata(_args(db, csv_dir, dry_run=True))
+
+    assert rc == 0
+    assert _scalar(db, "SELECT unknown_station_policy FROM fetch_url WHERE id = 1") == "ignore"
+    out = capsys.readouterr().out
+    plan_line = next(line for line in out.splitlines() if line.strip().startswith("fetch_url"))
+    assert plan_line.split() == ["fetch_url", "0", "1", "0"]
+
+
+def test_plan_ignores_fixed_precision_numeric_float_noise(tmp_path: Path) -> None:
+    db = tmp_path / "k.db"
+    csv_dir = tmp_path / "csv"
+    csv_dir.mkdir()
+    _write_contract(csv_dir)
+    _schema(db)
+    _exec(
+        db,
+        [
+            "INSERT INTO reach (id, name, latitude_start) "
+            "VALUES (1, 'Float noise', 44.918018000000004)",
+            "INSERT INTO reach (id, name, latitude_start) VALUES (2, 'Real change', 44.918019)",
+        ],
+    )
+    _write_csv(
+        csv_dir,
+        "reach",
+        ["id", "name", "latitude_start"],
+        [[1, "Float noise", "44.918018"], [2, "Real change", "44.918018"]],
+    )
+
+    conn = sqlite3.connect(db)
+    try:
+        plan = mc.compute_plan(conn, csv_dir)
+    finally:
+        conn.close()
+
+    assert plan.update_pks == {"reach": {(2,)}}
+
+
 def test_refused_delete_then_allow_deletes_applies_whole_batch(tmp_path: Path) -> None:
     """AC #8 + the deploy recovery flow: a refused delete leaves the DB byte-for-
     byte unchanged (not half-applied); the operator's --allow-deletes re-run then

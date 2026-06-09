@@ -38,6 +38,7 @@ from __future__ import annotations
 import csv
 import sqlite3
 from dataclasses import dataclass, field
+from decimal import Decimal
 from pathlib import Path
 from typing import cast
 
@@ -186,38 +187,81 @@ def foreign_key_violations(conn: sqlite3.Connection) -> list[tuple[object, ...]]
 # ---------------------------------------------------------------------------
 
 
-def _cast_pk(val: str | None, decl_type: str) -> object:
-    """Cast a CSV PK cell to the type the DB stores it as, so CSV and DB PK
-    tuples compare equal.
+def _cast_sqlite_cell(val: str | None, decl_type: str) -> object:
+    """Cast a CSV cell to the type SQLite returns for that column affinity.
 
     SQLite returns INTEGER PKs as ``int`` and REAL as ``float``; the CSV reader
     yields strings. Without this, ``"5"`` != ``5`` would read a surviving row as
-    BOTH an insert and a delete — the top correctness trap of the sync.
+    BOTH an insert and a delete, and same-content numeric/boolean fields would
+    look like updates on every dry-run.
     """
     if val is None or val == "":
         return None
     t = decl_type.upper()
+    if "BOOL" in t:
+        low = val.strip().lower()
+        if low in {"true", "t", "yes"}:
+            return 1
+        if low in {"false", "f", "no"}:
+            return 0
+        return int(val)
     if "INT" in t:
         return int(val)
-    if "REAL" in t or "FLOA" in t or "DOUB" in t:
+    if "REAL" in t or "FLOA" in t or "DOUB" in t or "NUM" in t or "DEC" in t:
         return float(val)
     return val
 
 
-def csv_pks(conn: sqlite3.Connection, in_dir: Path, table: str) -> set[tuple[object, ...]]:
-    """PK tuples present in ``<table>.csv`` (typed to match the DB)."""
+def _cast_pk(val: str | None, decl_type: str) -> object:
+    """Cast a CSV PK cell to the type the DB stores it as."""
+    return _cast_sqlite_cell(val, decl_type)
+
+
+def _table_col_types(conn: sqlite3.Connection, table: str) -> dict[str, str]:
+    """``{column_name: declared_type}`` for ``table``."""
+    return {c[1]: c[2] for c in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+
+
+def _quantized_decimal(value: object, scale: int) -> Decimal:
+    """A DB/CSV numeric value rounded to a fixed schema scale."""
+    return Decimal(str(value)).quantize(Decimal(1).scaleb(-scale))
+
+
+def _sync_values_equal(a: object, b: object, scale: int | None) -> bool:
+    """Equality under sync/recover semantics.
+
+    Fixed-precision ``Numeric(p, s)`` columns are exported to CSV at scale ``s``.
+    The live DB can still contain older full-precision floats from tracing, so
+    comparing raw doubles would report meaningless sub-scale updates.
+    """
+    if a is None or b is None:
+        return a is b
+    if scale is None:
+        return a == b
+    try:
+        return _quantized_decimal(a, scale) == _quantized_decimal(b, scale)
+    except (ArithmeticError, ValueError):
+        return a == b
+
+
+def _csv_rows_by_pk(
+    conn: sqlite3.Connection, in_dir: Path, table: str
+) -> tuple[list[str], dict[tuple[object, ...], dict[str, object]]]:
+    """CSV rows keyed by typed PK, with cells normalized to SQLite storage types."""
     csv_path = in_dir / f"{table}.csv"
     pk = _pk_cols(conn, table)
     if not pk or not csv_path.exists():
-        return set()
-    types = dict(pk)
-    names = [c for c, _ in pk]
-    out: set[tuple[object, ...]] = set()
+        return [], {}
+    pk_types = dict(pk)
+    pk_names = [c for c, _ in pk]
+    col_types = _table_col_types(conn, table)
+    out: dict[tuple[object, ...], dict[str, object]] = {}
     with csv_path.open(newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         if reader.fieldnames is None:
-            return set()  # header-less/empty file — nothing to diff (like absent)
-        missing = [c for c in names if c not in reader.fieldnames]
+            return [], {}  # header-less/empty file — nothing to diff (like absent)
+        header = list(reader.fieldnames)
+        missing = [c for c in pk_names if c not in header]
         if missing:
             # Without every PK column, row.get() yields (None, …) tuples that
             # match nothing → every CSV row reads as an insert and every DB row
@@ -226,9 +270,19 @@ def csv_pks(conn: sqlite3.Connection, in_dir: Path, table: str) -> set[tuple[obj
                 f"{table}.csv is missing primary-key column(s) {missing} "
                 "— refusing to diff (every row would read as both insert and delete)"
             )
+        unknown = [c for c in header if c not in col_types]
+        if unknown:
+            raise ValueError(f"{table}.csv references unknown column(s) {unknown}")
         for row in reader:
-            out.add(tuple(_cast_pk(row.get(c), types[c]) for c in names))
-    return out
+            pk_tuple = tuple(_cast_pk(row.get(c), pk_types[c]) for c in pk_names)
+            out[pk_tuple] = {c: _cast_sqlite_cell(row.get(c), col_types[c]) for c in header}
+    return header, out
+
+
+def csv_pks(conn: sqlite3.Connection, in_dir: Path, table: str) -> set[tuple[object, ...]]:
+    """PK tuples present in ``<table>.csv`` (typed to match the DB)."""
+    _header, rows = _csv_rows_by_pk(conn, in_dir, table)
+    return set(rows)
 
 
 def db_pks(conn: sqlite3.Connection, table: str) -> set[tuple[object, ...]]:
@@ -252,18 +306,85 @@ def source_observation_counts(conn: sqlite3.Connection, source_ids: set[int]) ->
     return out
 
 
+def _db_rows_by_pk(
+    conn: sqlite3.Connection, table: str, cols: list[str]
+) -> dict[tuple[object, ...], dict[str, object]]:
+    """DB ``cols`` keyed by typed PK for every row in ``table``."""
+    pk_names = [c for c, _ in _pk_cols(conn, table)]
+    if not pk_names or not cols:
+        return {}
+    select_cols = pk_names + cols
+    sql_cols = ", ".join(f'"{c}"' for c in select_cols)
+    out: dict[tuple[object, ...], dict[str, object]] = {}
+    for row in conn.execute(f"SELECT {sql_cols} FROM {table}"):
+        pk_tuple = tuple(row[: len(pk_names)])
+        out[pk_tuple] = dict(zip(cols, row[len(pk_names) :], strict=True))
+    return out
+
+
+def _update_pks(
+    conn: sqlite3.Connection,
+    table: str,
+    header: list[str],
+    csv_rows: dict[tuple[object, ...], dict[str, object]],
+    shared_pks: set[tuple[object, ...]],
+) -> set[tuple[object, ...]]:
+    """PKs whose existing DB row content would change under ``upsert_csvs``.
+
+    The comparison mirrors apply semantics:
+
+    * CSV header columns are upsert-owned, so differing values are updates.
+    * Columns omitted from the CSV are preserved, except generator-owned optional
+      columns, which ``import_table`` resets to NULL when absent from the header.
+    * Insert/delete rows are excluded; their net action is already reported.
+    """
+    from kayak.dataset import layout
+
+    pk_names = {c for c, _ in _pk_cols(conn, table)}
+    upsert_cols = [c for c in header if c not in pk_names]
+    updates: set[tuple[object, ...]] = set()
+    decimal_scales = {
+        s.name: s.decimal_spec[1] for s in layout.column_specs(table) if s.decimal_spec
+    }
+    if upsert_cols:
+        db_rows = _db_rows_by_pk(conn, table, upsert_cols)
+        for pk in shared_pks:
+            db_row = db_rows.get(pk)
+            if db_row is None:
+                continue
+            csv_row = csv_rows[pk]
+            if any(
+                not _sync_values_equal(csv_row[c], db_row[c], decimal_scales.get(c))
+                for c in upsert_cols
+            ):
+                updates.add(pk)
+
+    absent_optional = sorted(layout.optional_columns(table) - set(header))
+    if absent_optional:
+        db_cols = _table_col_types(conn, table)
+        reset_cols = [c for c in absent_optional if c in db_cols and c not in pk_names]
+        if reset_cols:
+            db_rows = _db_rows_by_pk(conn, table, reset_cols)
+            for pk in shared_pks - updates:
+                db_row = db_rows.get(pk)
+                if db_row is not None and any(db_row[c] is not None for c in reset_cols):
+                    updates.add(pk)
+    return updates
+
+
 @dataclass
 class SyncPlan:
     """What a sync would do, computed read-only:
 
-    ``insert_pks`` = rows in the CSV but not the DB (new); ``delete_pks`` = rows
-    in the DB but not the CSV (removed); ``source_obs_drops`` = observations a
-    source delete would drop. Rows in both are re-upserted (UPDATE) — not listed
-    here since they're not the risk surface.
+    ``insert_pks`` = rows in the CSV but not the DB (new); ``update_pks`` = rows
+    in both whose sync-owned content differs; ``delete_pks`` = rows in the DB but
+    not the CSV (removed); ``source_obs_drops`` = observations a source delete
+    would drop.
     """
 
     insert_pks: dict[str, set[tuple[object, ...]]] = field(default_factory=dict)
     delete_pks: dict[str, set[tuple[object, ...]]] = field(default_factory=dict)
+    update_pks: dict[str, set[tuple[object, ...]]] = field(default_factory=dict)
     source_obs_drops: dict[int, int] = field(default_factory=dict)
 
     @property
@@ -273,6 +394,10 @@ class SyncPlan:
     @property
     def total_inserts(self) -> int:
         return sum(len(v) for v in self.insert_pks.values())
+
+    @property
+    def total_updates(self) -> int:
+        return sum(len(v) for v in self.update_pks.values())
 
     @property
     def total_deletes(self) -> int:
@@ -289,12 +414,16 @@ def compute_plan(conn: sqlite3.Connection, in_dir: Path) -> SyncPlan:
     for table in LOAD_ORDER:
         if not (in_dir / f"{table}.csv").exists():
             continue
-        cpks = csv_pks(conn, in_dir, table)
+        header, csv_rows = _csv_rows_by_pk(conn, in_dir, table)
+        cpks = set(csv_rows)
         dpks = db_pks(conn, table)
         inserts = cpks - dpks
         deletes = dpks - cpks
+        updates = _update_pks(conn, table, header, csv_rows, cpks & dpks)
         if inserts:
             plan.insert_pks[table] = inserts
+        if updates:
+            plan.update_pks[table] = updates
         if deletes:
             plan.delete_pks[table] = deletes
     # source.id is INTEGER, so _cast_pk already typed these as int at runtime.
