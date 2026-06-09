@@ -42,7 +42,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import TypeGuard
 
-from kayak.dataset import contract, layout, site
+from kayak.dataset import contract, layout, region, site
 
 # Cap per-file value errors so one badly-typed column can't flood the report.
 _MAX_VALUE_ERRORS = 20
@@ -176,6 +176,9 @@ def validate_dataset(dataset_dir: Path, warnings: list[str] | None = None) -> li
     # (7d) site identity: an opt-in site.yaml must parse + pass the typed/safe-shape
     #      gate (the engine + PHP both render it into HTML). Absent → no error.
     errors.extend(_check_site_yaml(d))
+    # (7e) region presentation: an opt-in region.yaml (per-state links + weather)
+    #      must parse + pass the typed/safe-shape gate (links render into HTML).
+    errors.extend(_check_region_yaml(d))
     # (8) materialize + check-reaches — only when the dataset is otherwise clean.
     #     A wrong-typed value (e.g. a non-ISO datetime) would otherwise be loaded
     #     and crash SQLAlchemy's decoder mid-scan; the errors above already
@@ -1169,6 +1172,24 @@ def _check_site_yaml(d: Path) -> list[str]:
         return []
     try:
         site.load_site_config(d)
+    except ValueError as exc:
+        return [str(exc)]
+    return []
+
+
+def _check_region_yaml(d: Path) -> list[str]:
+    """Validate the opt-in ``region.yaml`` (S3b).
+
+    Absent → no error (the dataset keeps the engine's default region links). Present
+    → it must parse and every field must pass the typed/safe-shape gate in
+    :class:`kayak.dataset.region.RegionConfig` (the per-state links render into the
+    ``{state}.html`` landing pages, so a bad URL, non-http link, unknown key, or
+    HTML-metacharacter in a label is rejected here at the deploy gate).
+    """
+    if not (d / region.REGION_YAML).is_file():
+        return []
+    try:
+        region.load_region_config(d)
     except ValueError as exc:
         return [str(exc)]
     return []

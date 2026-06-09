@@ -1189,3 +1189,29 @@ def test_site_yaml_non_string_key_reports_not_crashes(dataset_copy: Path) -> Non
     (dataset_copy / "site.yaml").write_text("1: foo\n")
     errs = validate_dataset(dataset_copy)  # must not raise
     assert any("site.yaml" in e and "non-string key" in e for e in errs)
+
+
+# --------------------------------------------------------------------------- #
+# region.yaml — opt-in per-state links/weather (S3b)
+# --------------------------------------------------------------------------- #
+
+
+def test_region_yaml_absent_is_valid(dataset_copy: Path) -> None:
+    assert not (dataset_copy / "region.yaml").exists()
+    assert validate_dataset(dataset_copy) == []
+
+
+def test_valid_region_yaml_accepted(dataset_copy: Path) -> None:
+    (dataset_copy / "region.yaml").write_text(
+        "states:\n  Oregon:\n    weather_url: https://example.com/or\n"
+        "    links:\n      - {label: Foo, url: https://foo.example}\n"
+    )
+    assert validate_dataset(dataset_copy) == []
+
+
+def test_malformed_region_yaml_rejected(dataset_copy: Path) -> None:
+    (dataset_copy / "region.yaml").write_text(
+        "states:\n  Oregon:\n    links:\n      - {label: X, url: not-a-url}\n"
+    )
+    errs = validate_dataset(dataset_copy)
+    assert any("region.yaml" in e and "http" in e for e in errs)

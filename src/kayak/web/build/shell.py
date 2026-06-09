@@ -4,6 +4,7 @@ import html as html_mod
 from datetime import UTC, datetime
 from urllib.parse import quote as _urlquote
 
+from kayak.dataset.region import get_region_config
 from kayak.web.build._shared import (
     _FILTERS_JS_VERSION,
     _LEVELS_JS,
@@ -16,130 +17,9 @@ from kayak.web.build._shared import (
     _og_meta,
 )
 
-# Windy.com center coords for the "Weather" nav link, per active state.
-# These mirror the per-state external-resource URLs further down in this
-# file (the {State} Weather — Windy entries in _STATE_LINKS). Pages with
-# no active state (all-reaches index, map, gauges) fall back to a PNW
-# overview view; the user can pan from there.
-_STATE_WEATHER_URL: dict[str, str] = {
-    "Oregon": "https://www.windy.com/?44.0,-120.5,7",
-    "Washington": "https://www.windy.com/?47.5,-120.5,7",
-    "Idaho": "https://www.windy.com/?44.4,-114.7,7",
-    "Nevada": "https://www.windy.com/?39.5,-116.9,7",
-    "California": "https://www.windy.com/?37.2,-119.5,6",
-    "Montana": "https://www.windy.com/?46.9,-110.4,6",
-}
-_DEFAULT_WEATHER_URL = "https://www.windy.com/?43.0,-118.0,6"
-
-# Links for adjacent state pages
-_STATE_LINKS: dict[str, list[tuple[str, str]]] = {
-    "Oregon": [
-        (
-            "American Whitewater — Oregon",
-            "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-ORE",
-        ),
-        (
-            "Dreamflows — Oregon Coastal",
-            "https://www.dreamflows.com/flows.php?zone=panw&page=prod&form=norm&mark=All#Oregon_Coastal_Rivers",
-        ),
-        (
-            "Dreamflows — Oregon Central",
-            "https://www.dreamflows.com/flows.php?zone=panw&page=prod&form=norm&mark=All#Oregon_Central_Rivers",
-        ),
-        (
-            "Dreamflows — Oregon Eastern",
-            "https://www.dreamflows.com/flows.php?zone=panw&page=prod&form=norm&mark=All#Oregon_Eastern_Rivers",
-        ),
-        ("Oregon Kayaking", "https://oregonkayaking.net"),
-        ("USGS Oregon Water Data", "https://waterdata.usgs.gov/state/oregon/"),
-        ("USGS StreamStats", "https://streamstats.usgs.gov/ss/"),
-        ("NW River Forecast Center", "https://www.nwrfc.noaa.gov/rfc/"),
-        ("USBR Hydromet", "https://www.usbr.gov/pn/hydromet/datamenu.html"),
-        ("Willamette Kayak and Canoe Club", "https://wkcc.org"),
-        ("Oregon Whitewater Association", "https://oregonwhitewater.org"),
-        ("Oregon Weather — Windy", "https://www.windy.com/?44.0,-120.5,7"),
-        ("Oregon State Marine Board", "https://www.oregon.gov/osmb/pages/index.aspx"),
-        (
-            "Oregon Waterway Access Permits",
-            "https://www.oregon.gov/osmb/boater-info/pages/ais-faqs.aspx",
-        ),
-        (
-            "Report a boating obstruction (Oregon SMB)",
-            "https://oregon-boating-obstructions-geo.hub.arcgis.com",
-        ),
-    ],
-    "Washington": [
-        (
-            "American Whitewater — Washington",
-            "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-WSH",
-        ),
-        (
-            "Dreamflows — Washington",
-            "https://www.dreamflows.com/flows.php?zone=panw&page=prod&form=norm&mark=All#Washington_Rivers",
-        ),
-        ("USGS Washington Water Data", "https://waterdata.usgs.gov/state/washington/"),
-        ("USGS StreamStats", "https://streamstats.usgs.gov/ss/"),
-        ("NW River Forecast Center", "https://www.nwrfc.noaa.gov/rfc/"),
-        ("USBR Hydromet", "https://www.usbr.gov/pn/hydromet/datamenu.html"),
-        ("Professor Paddle", "https://www.professorpaddle.com"),
-        ("Washington Weather — Windy", "https://www.windy.com/?47.5,-120.5,7"),
-        ("Washington Kayak Club", "http://wakayakclub.clubexpress.com"),
-    ],
-    "Idaho": [
-        (
-            "American Whitewater — Idaho",
-            "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-IDA",
-        ),
-        (
-            "Dreamflows — Idaho",
-            "https://www.dreamflows.com/flows.php?zone=panw&page=prod&form=norm&mark=All#Idaho_Rivers",
-        ),
-        ("USGS Idaho Water Data", "https://waterdata.usgs.gov/state/idaho/"),
-        ("USGS StreamStats", "https://streamstats.usgs.gov/ss/"),
-        ("NW River Forecast Center", "https://www.nwrfc.noaa.gov/rfc/"),
-        ("USBR Hydromet", "https://www.usbr.gov/pn/hydromet/datamenu.html"),
-        ("Idaho Rivers United", "https://www.idahorivers.org"),
-        ("Idaho Whitewater Association", "https://idahowhitewater.org"),
-        ("Idaho Dept. of Water Resources", "https://idwr.idaho.gov"),
-        ("Idaho Weather — Windy", "https://www.windy.com/?44.4,-114.7,7"),
-    ],
-    "Nevada": [
-        ("USGS Nevada Water Data", "https://waterdata.usgs.gov/state/nevada/"),
-        ("USGS StreamStats", "https://streamstats.usgs.gov/ss/"),
-        ("Colorado Basin River Forecast Center", "https://www.cbrfc.noaa.gov"),
-        (
-            "American Whitewater — Nevada",
-            "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-NEV",
-        ),
-        ("USBR Hydromet", "https://www.usbr.gov/pn/hydromet/datamenu.html"),
-        ("Nevada Weather — Windy", "https://www.windy.com/?39.5,-116.9,7"),
-    ],
-    "California": [
-        ("Dreamflows", "https://www.dreamflows.com"),
-        (
-            "American Whitewater — California",
-            "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-CAL",
-        ),
-        ("USGS California Water Data", "https://waterdata.usgs.gov/state/california/"),
-        ("USGS StreamStats", "https://streamstats.usgs.gov/ss/"),
-        ("California Nevada River Forecast Center", "https://www.cnrfc.noaa.gov"),
-        ("California Creeks", "https://cacreeks.com"),
-        ("Gold Country Paddlers", "https://goldcountrypaddlers.org"),
-        ("California Weather — Windy", "https://www.windy.com/?37.2,-119.5,6"),
-    ],
-    "Montana": [
-        (
-            "American Whitewater — Montana",
-            "https://www.americanwhitewater.org/content/River/view/river-index/state/USA-MNT",
-        ),
-        ("USGS Montana Water Data", "https://waterdata.usgs.gov/state/montana/"),
-        ("USGS StreamStats", "https://streamstats.usgs.gov/ss/"),
-        ("NW River Forecast Center", "https://www.nwrfc.noaa.gov/rfc/"),
-        ("Missouri Basin River Forecast Center", "https://www.weather.gov/mbrfc/"),
-        ("USBR Hydromet", "https://www.usbr.gov/gp/hydromet/"),
-        ("Montana Weather — Windy", "https://www.windy.com/?46.9,-110.4,6"),
-    ],
-}
+# Per-state weather URLs + curated external-resource links moved to
+# kayak.dataset.region (S3b-1); read here via get_region_config() so a dataset
+# region.yaml can override them. Engine defaults reproduce the prior WKCC data.
 
 
 def _build_nav(
@@ -184,10 +64,11 @@ def _build_nav(
     if active_state:
         picker_href += f"?state={_urlquote(active_state)}"
     links.append(f'<a href="{picker_href}">{label}</a>')
-    weather_url = _STATE_WEATHER_URL.get(active_state, _DEFAULT_WEATHER_URL)
+    region = get_region_config()
+    weather_url = region.weather_url_for(active_state)
     weather_label = (
         f"{_STATE_ABBREVS.get(active_state, '')}<br>Weather"
-        if active_state in _STATE_WEATHER_URL
+        if region.has_state_weather(active_state)
         else "Weather"
     )
     links.append(f'<a href="{weather_url}">{weather_label}</a>')
@@ -327,12 +208,11 @@ def _build_placeholder_page(
     """Build the per-state landing page (e.g. Oregon.html, Montana.html).
 
     Renders cross-link anchors to the filtered all-states views and the
-    pre-filtered pickers, then a curated external-resource list from
-    ``_STATE_LINKS``. Reach-related anchors are suppressed when the state
-    has no entry in ``states`` (the reach-states list from
-    ``all_state_names()``) — e.g. Montana has gauges only in the first
-    pass, so the "Reaches in Montana" + "Reach picker — Montana" links
-    don't render until reaches land.
+    pre-filtered pickers, then a curated external-resource list from the
+    dataset region config (``kayak.dataset.region``). Reach-related anchors are
+    suppressed when the state has no entry in ``states`` (the reach-states list
+    from ``all_state_names()``) — e.g. a gauges-only state shows its gauge links
+    but not the "Reaches in …" / "Reach picker — …" anchors until reaches land.
     """
     nav_html = _build_nav(states, active_state=state)
     state_qs = _urlquote(state)
@@ -354,7 +234,7 @@ def _build_placeholder_page(
         f'<ul style="margin:0 0 1.5em 0;padding-left:1.2em">\n{cross_link_items}\n</ul>'
     )
 
-    links = _STATE_LINKS.get(state, [])
+    links = get_region_config().links_for(state)
     link_items = "\n".join(
         f'<li><a href="{url}" style="display:inline-flex;align-items:center;min-height:44px">{label}</a></li>'
         for label, url in links
