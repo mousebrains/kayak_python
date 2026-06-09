@@ -1,0 +1,14 @@
+{
+  "slug": "fixture_calc_from_usgs",
+  "target": "fixture",
+  "predictors": ["14150000"],
+  "quadratic": false,
+  "n": 100,
+  "window": ["2020-01-01", "2020-04-09"],
+  "r2": 0.99,
+  "rmse": 1.5,
+  "coefs": [
+    {"name": "intercept", "value": 0.0, "se": 0.1},
+    {"name": "x1 (14150000)", "value": 0.5, "se": 0.01}
+  ]
+}

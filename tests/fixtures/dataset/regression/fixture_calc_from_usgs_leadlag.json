@@ -1,0 +1,12 @@
+{
+  "slug": "fixture_calc_from_usgs_leadlag",
+  "target": "fixture",
+  "daily_doc": "fixture_calc_from_usgs",
+  "grid_minutes": 30,
+  "window": ["2020-01-01", "2020-04-09"],
+  "n_points": 4800,
+  "verdict": "contemporaneous",
+  "lags": [
+    {"site": "14150000", "label": "USGS 14150000", "applied_lag_h": 0.0, "corr": 0.98, "deployable": false}
+  ]
+}
