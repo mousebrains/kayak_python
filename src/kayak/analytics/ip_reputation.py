@@ -29,6 +29,8 @@ import os
 import urllib.request
 from pathlib import Path
 
+from kayak.config import STATUS_USER_AGENT
+
 logger = logging.getLogger(__name__)
 
 _FIREHOL_URL = "https://iplists.firehol.org/files/firehol_level1.netset"
@@ -40,7 +42,7 @@ _FIREHOL_CACHE_PATH = Path(
 )
 _FIREHOL_TTL_S = 7 * 86400  # 7 days
 _DOWNLOAD_TIMEOUT_S = 30
-_FETCH_UA = "Mozilla/5.0 (compatible; kayak-status; +https://levels.wkcc.org)"
+_FETCH_UA = STATUS_USER_AGENT
 
 # Sorted (lo_int, hi_int) interval lists, plus parallel lists of just
 # the lo_ints for bisect. Built once on first lookup.

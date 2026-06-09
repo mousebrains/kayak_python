@@ -13,16 +13,21 @@ from datetime import timedelta
 from pathlib import Path
 
 from kayak.config import SITE_URL
+from kayak.dataset.site import get_site_config
 
 logger = logging.getLogger(__name__)
+
+# Resolved dataset site identity (S3a). Engine defaults render the current values
+# when no site.yaml is present, so production is unchanged.
+_SITE = get_site_config()
 
 # Data freshness
 DATA_STALE_THRESHOLD = timedelta(hours=48)
 DATA_EXPIRY_THRESHOLD = timedelta(days=7)
 
-# Branding
-BRAND_COLOR = "#1b5591"
-BRAND_COLOR_DARK = "#0d3057"
+# Branding (dataset-driven via site.yaml; defaults to the current WKCC palette)
+BRAND_COLOR = _SITE.brand_color
+BRAND_COLOR_DARK = _SITE.brand_color_dark
 
 # Embedded license attribution for machine-readable outputs. Added at the
 # top level of every generated JSON file so the license travels with any
@@ -30,7 +35,7 @@ BRAND_COLOR_DARK = "#0d3057"
 _LICENSE_META = {
     "license": "CC BY-NC 4.0",
     "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
-    "attribution": "levels.wkcc.org",
+    "attribution": _SITE.attribution,
     "notice": (
         "Metadata + calculated values: CC BY-NC 4.0. Observations: public domain at source."
     ),
@@ -86,7 +91,7 @@ def _og_meta(title: str, desc: str, path: str = "") -> str:
     return (
         f"{canonical}"
         f'<meta property="og:type" content="website">\n'
-        f'<meta property="og:site_name" content="WKCC River Levels">\n'
+        f'<meta property="og:site_name" content="{_SITE.site_name}">\n'
         f'<meta property="og:title" content="{title}">\n'
         f'<meta property="og:description" content="{desc}">\n'
         f"{og_url}"

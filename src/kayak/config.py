@@ -291,6 +291,12 @@ MAINTAINER_NAME: str = _config.maintainer_name
 # pre-typed-config string-equal semantics (existing callers rstrip
 # defensively, but make the constant byte-identical for grep stability).
 SITE_URL: str = str(_config.site_url).rstrip("/")
+# Outbound User-Agent for the analytics/status fetchers (GeoIP DB, FireHOL,
+# BetterStack, privacy-relay lists). Derived from SITE_URL so it advertises the
+# running site rather than a hardcoded host — follows an env SITE_URL override
+# and, post-S3, a dataset-supplied canonical URL. Distinct from FETCH_USER_AGENT
+# (the data-feed pipeline's UA).
+STATUS_USER_AGENT: str = f"Mozilla/5.0 (compatible; kayak-status; +{SITE_URL})"
 
 # ``MAINTAINER_EMAIL`` module constant was removed in T3.3 closeout —
 # no consumers import it (grep -rn 'from kayak.config import' returned

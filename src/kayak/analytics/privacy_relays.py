@@ -40,6 +40,8 @@ import os
 import urllib.request
 from pathlib import Path
 
+from kayak.config import STATUS_USER_AGENT
+
 logger = logging.getLogger(__name__)
 
 _APPLE_URL = "https://mask-api.icloud.com/egress-ip-ranges.csv"
@@ -51,7 +53,7 @@ _APPLE_CACHE_PATH = Path(
 )
 _APPLE_TTL_S = 7 * 86400  # 7 days
 _DOWNLOAD_TIMEOUT_S = 30
-_FETCH_UA = "Mozilla/5.0 (compatible; kayak-status; +https://levels.wkcc.org)"
+_FETCH_UA = STATUS_USER_AGENT
 
 # Sorted (lo_int, hi_int, country, region, city) interval list, plus a
 # parallel list of just the lo_ints for bisect. Built once on first lookup.

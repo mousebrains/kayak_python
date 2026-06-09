@@ -38,6 +38,8 @@ from typing import Any
 
 import maxminddb
 
+from kayak.config import STATUS_USER_AGENT
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_DB_DIR = Path("/home/pat/kayak/var/geoip")
@@ -46,7 +48,7 @@ _CITY_NAME_GLOB = "dbip-city-lite-*.mmdb"
 _ASN_UPSTREAM = "https://download.db-ip.com/free/dbip-asn-lite-{ym}.mmdb.gz"
 _ASN_NAME_GLOB = "dbip-asn-lite-*.mmdb"
 _DOWNLOAD_TIMEOUT_S = 120  # City Lite is ~60 MB compressed; allow time on slow links
-_DOWNLOAD_UA = "Mozilla/5.0 (compatible; kayak-status; +https://levels.wkcc.org)"
+_DOWNLOAD_UA = STATUS_USER_AGENT
 
 _city_reader: maxminddb.Reader | None = None
 _city_reader_path: Path | None = None

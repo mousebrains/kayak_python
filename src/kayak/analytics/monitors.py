@@ -21,6 +21,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+from kayak.config import STATUS_USER_AGENT
+
 logger = logging.getLogger(__name__)
 
 _BETTERSTACK_URL = "https://uptime.betterstack.com/ips-by-cluster.json"
@@ -29,7 +31,7 @@ _BETTERSTACK_CACHE_PATH = Path(
 )
 _BETTERSTACK_TTL_S = 7 * 86400  # 7 days
 _DOWNLOAD_TIMEOUT_S = 15
-_FETCH_UA = "Mozilla/5.0 (compatible; kayak-status; +https://levels.wkcc.org)"
+_FETCH_UA = STATUS_USER_AGENT
 
 _betterstack_ips: set[str] | None = None
 _betterstack_fetch_disabled: bool = False
