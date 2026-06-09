@@ -453,6 +453,30 @@ sudo /home/pat/kayak/systemd/install.service.sh
 
 This copies the service/timer units to `/etc/systemd/system/`, enables and starts the timers. The `kayak-backup-offsite.service` is chained from `kayak-backup-weekly.service` via `OnSuccess=` and does not need its own timer.
 
+> **Upgrade note — SA-teardown-B (snapshot retirement).** `install.service.sh`
+> only *adds/refreshes* the units in its arrays; it never prunes a unit that was
+> removed from the repo. The retired `kayak-metadata-snapshot.{service,timer}` is
+> therefore left installed under `/etc/systemd/system` after the pull, and its
+> next scheduled fire (~04:30) would fail (`203/EXEC` — the script is deleted) and
+> trip the failure-notify chain nightly. So on the deploy that carries
+> SA-teardown-B — **before that next fire** — disable and remove it by hand:
+>
+> ```bash
+> sudo systemctl disable --now kayak-metadata-snapshot.timer
+> sudo rm /etc/systemd/system/kayak-metadata-snapshot.service \
+>         /etc/systemd/system/kayak-metadata-snapshot.timer
+> sudo systemctl daemon-reload
+> ```
+>
+> Then drop the now-inert `HC_METADATA_SNAPSHOT=` line from
+> `~/.config/kayak/.env` (and `/etc/kayak/env` if present). It is allowlisted for
+> one release so a stale line can't fail `deploy.sh`'s `validate-config
+> --known-env --strict` gate, but should be removed. Re-running
+> `install.service.sh` above also refreshes the comment-only-changed
+> `kayak-status.{service,timer}`, so the weekly `kayak-config-drift` check stays
+> green. (Enabling `kayak_data` `main` branch protection is the remaining
+> SA-teardown-C step.)
+
 Verify:
 
 ```bash

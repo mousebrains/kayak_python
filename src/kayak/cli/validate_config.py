@@ -74,6 +74,14 @@ _EXTRA_KNOWN = frozenset(
         # python side uses DATABASE_URL, so this is intentionally not a
         # model field (PR #119 review — same typo class as METADATA_DIR).
         "SQLITE_PATH",
+        # Retired in SA-teardown-B (the kayak-metadata-snapshot unit and its
+        # hc_metadata_snapshot field are gone). Tolerated for ONE release so a
+        # stale `HC_METADATA_SNAPSHOT=` line left in a prod `.env` /
+        # `/etc/kayak/env` can't fail `deploy.sh`'s `validate-config --known-env
+        # --strict` gate (it exits 1 on any unknown `HC_*` name) and brick an
+        # otherwise-safe deploy. Remove this entry — and the `.env` line — once
+        # the deploy carrying SA-teardown-B has landed.
+        "HC_METADATA_SNAPSHOT",
     }
 )
 
