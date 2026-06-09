@@ -12,16 +12,16 @@ be scored against truth:
 
 The old sum omits the ~87 mi^2 of EFSF drainage between the Stibnite gauge
 (19.3 mi^2) and the confluence, hence its large negative bias. The fitted
-coefficients backing `calc_expression` 12 come from
-docs/regression/efsf_13312000_from_johnson_stibnite.md (same OLS refit here,
-on exactly the scored days, for honesty).
+coefficients backing `calc_expression` 12 come from the kayak_data dataset's
+regression/efsf_13312000_from_johnson_stibnite.md (same OLS refit here, on
+exactly the scored days, for honesty).
 
 Reproduce:
     python3 docs/one-offs/efsf_calc_comparison.py
 
 Expected output (2026-06-04): old bias -113.3 / RMSE 191.3; new bias -0.0 /
-RMSE 26.5 (n=5044). Quoted by the EFSF entry in docs/regression/README.md and
-the kayak_data calc_expression.csv row-12 note.
+RMSE 26.5 (n=5044). Quoted by the EFSF entry in the kayak_data
+regression/README.md and the kayak_data calc_expression.csv row-12 note.
 """
 
 from __future__ import annotations
