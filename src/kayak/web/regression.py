@@ -277,7 +277,11 @@ def validate_svg(svg_text: str) -> str:
     # already rejected by defusedxml's forbid_dtd. In well-formed XML `<` is escaped in
     # text/attributes, so `<?`/`<!--` only appear as a real PI/comment.
     body = svg_text.lstrip()
-    if body.startswith("<?xml"):
+    # A real XML declaration is `<?xml` followed by whitespace (per the XML spec);
+    # strip one leading occurrence. A PI target like `xml-stylesheet` has a `-`, not
+    # whitespace, after `xml`, so it is NOT mistaken for the declaration and falls
+    # through to the reject below.
+    if re.match(r"<\?xml\s", body):
         decl_end = body.find("?>")
         body = body[decl_end + 2 :] if decl_end != -1 else ""
     if "<!--" in body or "<?" in body:

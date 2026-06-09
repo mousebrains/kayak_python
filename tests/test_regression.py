@@ -159,14 +159,27 @@ def test_svg_rejects_css_escape_in_attr() -> None:
     [
         '<svg xmlns="http://www.w3.org/2000/svg"><?xml-stylesheet href="javascript:1"?><rect/></svg>',
         '<svg xmlns="http://www.w3.org/2000/svg"><!-- comment --><rect/></svg>',
+        # A LEADING xml-stylesheet PI must not be mistaken for the XML declaration
+        # (its target is `xml-stylesheet`, not `xml` + whitespace).
+        '<?xml-stylesheet type="text/xsl" href="javascript:1"?>'
+        '<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>',
     ],
-    ids=["processing-instruction", "comment"],
+    ids=["in-body-pi", "comment", "leading-stylesheet-pi"],
 )
 def test_svg_rejects_pi_and_comment(payload: str) -> None:
     # Explicit rejection so the "reject nonconforming" contract doesn't rest on
     # ElementTree silently dropping PIs/comments.
     with pytest.raises(UnsafeContentError):
         validate_svg(payload)
+
+
+def test_svg_accepts_leading_xml_declaration() -> None:
+    # A genuine `<?xml …?>` declaration (target `xml` + whitespace) is allowed.
+    out = validate_svg(
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<svg xmlns="http://www.w3.org/2000/svg"><rect x="1" y="2"/></svg>'
+    )
+    assert out.startswith('<svg xmlns="http://www.w3.org/2000/svg"')
 
 
 def test_svg_rejects_foreign_namespace_element() -> None:
