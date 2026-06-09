@@ -503,6 +503,37 @@ def test_deploy_regression_warns_when_slugs_but_no_dir(tmp_path, monkeypatch, ca
     assert "no regression reports will be published" in caplog.text
 
 
+def test_count_regression_slugs(session):
+    # The count that drives the stale-checkout warning: non-empty provenance_slugs
+    # only. NULL and whitespace-only slugs don't count (they declare no report).
+    from kayak.db.models import CalcExpression, DataType
+
+    assert build_mod._count_regression_slugs(session) == 0
+    session.add_all(
+        [
+            CalcExpression(data_type=DataType.flow, expression="a", provenance_slug="rogue_at_x"),
+            CalcExpression(data_type=DataType.flow, expression="b", provenance_slug="smith_at_y"),
+            CalcExpression(data_type=DataType.flow, expression="c", provenance_slug=None),
+            CalcExpression(data_type=DataType.flow, expression="d", provenance_slug="   "),
+        ]
+    )
+    session.flush()
+    assert build_mod._count_regression_slugs(session) == 2
+
+
+def test_deploy_source_files_threads_slug_count_to_warning(tmp_path, monkeypatch, caplog):
+    # End-to-end threading: _deploy_source_files → _deploy_static_assets →
+    # _deploy_regression_artifacts must carry provenance_slug_count through all three
+    # hops, so the warning fires when the count is set but DATASET_DIR/regression/ is
+    # absent. Closes the gap between the leaf-level warn test and _build_to_dir.
+    monkeypatch.setattr(build_mod, "DATASET_DIR", tmp_path)  # no regression/ under it
+    monkeypatch.setattr(build_mod, "OSMB_DIR", tmp_path / "no-osmb")
+    output_dir = tmp_path / "out"
+    with caplog.at_level("WARNING"):
+        build_mod._deploy_source_files(output_dir, provenance_slug_count=7)
+    assert "7 calc_expression provenance_slug" in caplog.text
+
+
 def test_deploy_regression_skips_unsafe_stem(tmp_path, monkeypatch):
     # A file whose NAME isn't a safe slug (HTML metacharacters) must never be
     # processed/published — closes the orphan-filename <title> injection path.

@@ -151,6 +151,24 @@ def _deploy_static_assets(output_dir: Path, *, provenance_slug_count: int = 0) -
     _deploy_regression_artifacts(static_dir, provenance_slug_count=provenance_slug_count)
 
 
+def _count_regression_slugs(session: Session) -> int:
+    """Count calc rows that declare a regression report (non-empty ``provenance_slug``).
+
+    Drives the stale-checkout warning in :func:`_warn_regression_dir_missing` — the
+    build-time parallel to ``validate-dataset``'s slug↔dir check. Cheap read on the
+    existing build session (~tens of rows). Blank/whitespace slugs don't count.
+    """
+    return sum(
+        1
+        for s in session.scalars(
+            select(CalcExpression.provenance_slug).where(
+                CalcExpression.provenance_slug.is_not(None)
+            )
+        )
+        if s and s.strip()
+    )
+
+
 def _warn_regression_dir_missing(regression_src: Path, provenance_slug_count: int) -> None:
     """Warn when calc rows declare reports but the dataset has no ``regression/``.
 
@@ -366,16 +384,8 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
 
         # How many calc rows declare a regression report — so the regression deploy
         # can warn when reports are expected (slugs present) but DATASET_DIR/regression/
-        # is absent (a stale dataset checkout). Cheap query (~tens of rows).
-        n_reg_slugs = sum(
-            1
-            for s in session.scalars(
-                select(CalcExpression.provenance_slug).where(
-                    CalcExpression.provenance_slug.is_not(None)
-                )
-            )
-            if s and s.strip()
-        )
+        # is absent (a stale dataset checkout).
+        n_reg_slugs = _count_regression_slugs(session)
 
         # Deploy source files (static assets, PHP, config)
         _deploy_source_files(output_dir, provenance_slug_count=n_reg_slugs)
