@@ -600,3 +600,32 @@ def test_deploy_manifest_custom_brand(monkeypatch, tmp_path):
     manifest = _deploy_static_no_externals(monkeypatch, tmp_path)
     assert '"theme_color": "#abcdef"' in manifest
     assert "#1b5591" not in manifest
+
+
+def test_apply_brand_color_case_insensitive_noop(monkeypatch):
+    # Same color in a different case is a no-op (no pointless CSS-hash churn).
+    monkeypatch.setattr(shared_mod, "BRAND_COLOR", "#1B5591")
+    text = "a #1b5591 b"
+    assert shared_mod._apply_brand_color(text) == text
+
+
+def test_deploy_php_root_style_css_default_brand(tmp_path):
+    # The root /style.css (PHP no-hash fallback + regression-page stylesheet) keeps
+    # the default brand when no site.yaml is set.
+    output = tmp_path / "out"
+    output.mkdir()
+    build_mod._deploy_php_files(output)
+    css = (output / "style.css").read_text(encoding="utf-8")
+    assert "--c-primary: #1b5591;" in css
+
+
+def test_deploy_php_root_style_css_custom_brand(monkeypatch, tmp_path):
+    # A custom brand must reach the root /style.css too (the #158 review Medium —
+    # it was copied verbatim, leaving the fallback/regression pages WKCC-blue).
+    monkeypatch.setattr(shared_mod, "BRAND_COLOR", "#abcdef")
+    output = tmp_path / "out"
+    output.mkdir()
+    build_mod._deploy_php_files(output)
+    css = (output / "style.css").read_text(encoding="utf-8")
+    assert "--c-primary: #abcdef;" in css
+    assert "#1b5591" not in css

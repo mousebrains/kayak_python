@@ -42,9 +42,10 @@ def _apply_brand_color(text: str) -> str:
     substitutes the resolved :data:`BRAND_COLOR`. The default hex appears only at
     those brand declarations (the dark-mode ``--c-link`` is a different color), so
     a plain replace is safe. A no-op — byte-identical output — when the dataset
-    uses the default brand.
+    uses the default brand (case-insensitively, so ``#1B5591`` doesn't churn the
+    CSS hash for a visually identical color).
     """
-    if BRAND_COLOR == _DEFAULT_BRAND_COLOR:
+    if BRAND_COLOR.lower() == _DEFAULT_BRAND_COLOR.lower():
         return text
     return text.replace(_DEFAULT_BRAND_COLOR, BRAND_COLOR)
 

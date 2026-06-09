@@ -29,7 +29,6 @@ from kayak.db.reaches import all_state_names, reaches_query
 from kayak.resources import resource_dir
 from kayak.utils.pubhash import encode as pubhash_encode
 from kayak.web.build._shared import (
-    _CSS_PATH,
     _FILTERS_JS_PATH,
     _JS_PATH,
     _LICENSE_META,
@@ -303,7 +302,10 @@ def _deploy_php_files(output_dir: Path) -> None:
         if path.is_file():
             shutil.copy2(path, internal_dir / path.name)
 
-    shutil.copy2(_CSS_PATH, output_dir / "style.css")
+    # Root /style.css is the PHP no-hash fallback (header.php) and the stylesheet
+    # the generated regression pages link directly, so it must carry the dataset
+    # brand too — write the branded CSS (via _load_css), not a verbatim source copy.
+    _atomic_write(output_dir / "style.css", _load_css())
 
 
 def _deploy_config_files(output_dir: Path) -> None:
