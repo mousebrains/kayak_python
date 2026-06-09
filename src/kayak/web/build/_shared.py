@@ -13,7 +13,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from kayak.config import SITE_URL
-from kayak.dataset.site import get_site_config
+from kayak.dataset.site import SiteConfig, get_site_config
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,27 @@ DATA_EXPIRY_THRESHOLD = timedelta(days=7)
 # Branding (dataset-driven via site.yaml; defaults to the current WKCC palette)
 BRAND_COLOR = _SITE.brand_color
 BRAND_COLOR_DARK = _SITE.brand_color_dark
+# The brand color baked into the shipped static assets (style.css :root, manifest)
+# — the engine default. _apply_brand_color swaps it for the resolved BRAND_COLOR so
+# a dataset site.yaml rebrands the built CSS + PWA manifest (S3a-3).
+_DEFAULT_BRAND_COLOR = SiteConfig().brand_color
+
+
+def _apply_brand_color(text: str) -> str:
+    """Swap the engine-default brand color for the dataset-resolved one.
+
+    The shipped ``style.css`` (``:root`` ``--c-primary``/``--c-link``) and
+    ``manifest.json`` (``theme_color``) carry the engine-default ``#rrggbb``; this
+    substitutes the resolved :data:`BRAND_COLOR`. The default hex appears only at
+    those brand declarations (the dark-mode ``--c-link`` is a different color), so
+    a plain replace is safe. A no-op — byte-identical output — when the dataset
+    uses the default brand (case-insensitively, so ``#1B5591`` doesn't churn the
+    CSS hash for a visually identical color).
+    """
+    if BRAND_COLOR.lower() == _DEFAULT_BRAND_COLOR.lower():
+        return text
+    return text.replace(_DEFAULT_BRAND_COLOR, BRAND_COLOR)
+
 
 # Embedded license attribution for machine-readable outputs. Added at the
 # top level of every generated JSON file so the license travels with any
@@ -128,10 +149,13 @@ def _atomic_write(path: Path, content: str) -> None:
 
 def _load_css() -> str:
     try:
-        return _CSS_PATH.read_text()
+        css = _CSS_PATH.read_text()
     except FileNotFoundError:
         logger.warning("style.css not found at %s", _CSS_PATH)
         return ""
+    # Apply the dataset brand color before the caller hashes the CSS, so a custom
+    # brand yields its own content-addressed style-<hash>.css (S3a-3).
+    return _apply_brand_color(css)
 
 
 def _css_link_tag(css_hash: str) -> str:
