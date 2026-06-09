@@ -35,6 +35,7 @@ from kayak.web.build._shared import (
     _LICENSE_META,
     _NAV_STATES,
     _STATIC_DIR,
+    _apply_brand_color,
     _atomic_write,
     _css_link_tag,
     _load_css,
@@ -141,7 +142,14 @@ def _deploy_static_assets(output_dir: Path, *, provenance_slug_count: int = 0) -
             if path.name in _BUILD_PROCESSED_STATIC:
                 continue
             dst = output_dir if path.name == "sw.js" else static_dir
-            shutil.copy2(path, dst / path.name)
+            if path.name == "manifest.json":
+                # Apply the dataset brand color to the PWA theme_color (S3a-3);
+                # a no-op (same content) when the dataset uses the default brand.
+                (dst / path.name).write_text(
+                    _apply_brand_color(path.read_text(encoding="utf-8")), encoding="utf-8"
+                )
+            else:
+                shutil.copy2(path, dst / path.name)
         elif path.is_dir():
             shutil.copytree(path, static_dir / path.name, dirs_exist_ok=True)
     # Generated OSMB overlays staged outside the package by `levels fetch-osmb`.

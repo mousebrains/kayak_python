@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+import kayak.web.build._shared as shared_mod
 import kayak.web.build.deploy as build_mod
 from kayak.web.build.deploy import (
     _deploy_staging_to_live,
@@ -552,3 +553,50 @@ def test_deploy_regression_skips_unsafe_stem(tmp_path, monkeypatch):
     assert not (out / "bad<x>.svg").exists()
     assert not (out / "bad<x>.json").exists()
     assert not (out / "bad<x>.html").exists()
+
+
+# --------------------------------------------------------------------------- #
+# Brand color templating (S3a-3): CSS :root + manifest theme_color
+# --------------------------------------------------------------------------- #
+
+
+def test_apply_brand_color_default_is_noop():
+    # With the default brand, _apply_brand_color returns the text unchanged.
+    text = "a #1b5591 b"
+    assert shared_mod._apply_brand_color(text) == text
+
+
+def test_apply_brand_color_custom_substitutes(monkeypatch):
+    monkeypatch.setattr(shared_mod, "BRAND_COLOR", "#abcdef")
+    assert shared_mod._apply_brand_color("x #1b5591 y #1b5591") == "x #abcdef y #abcdef"
+
+
+def test_load_css_applies_custom_brand(monkeypatch):
+    # The built CSS recolors the :root brand vars; the default #1b5591 (which
+    # appears only at --c-primary/--c-link) is gone, the dark-mode link is untouched.
+    monkeypatch.setattr(shared_mod, "BRAND_COLOR", "#abcdef")
+    css = shared_mod._load_css()
+    assert "#abcdef" in css
+    assert "#1b5591" not in css
+    assert "#6ab0f3" in css  # dark-mode --c-link, a separate color, preserved
+
+
+def _deploy_static_no_externals(monkeypatch, tmp_path):
+    """Run _deploy_static_assets with OSMB + regression dirs absent."""
+    monkeypatch.setattr(build_mod, "OSMB_DIR", tmp_path / "no-osmb")
+    monkeypatch.setattr(build_mod, "DATASET_DIR", tmp_path / "no-ds")
+    output = tmp_path / "out"
+    build_mod._deploy_static_assets(output)
+    return (output / "static" / "manifest.json").read_text(encoding="utf-8")
+
+
+def test_deploy_manifest_default_brand_unchanged(monkeypatch, tmp_path):
+    manifest = _deploy_static_no_externals(monkeypatch, tmp_path)
+    assert '"theme_color": "#1b5591"' in manifest
+
+
+def test_deploy_manifest_custom_brand(monkeypatch, tmp_path):
+    monkeypatch.setattr(shared_mod, "BRAND_COLOR", "#abcdef")
+    manifest = _deploy_static_no_externals(monkeypatch, tmp_path)
+    assert '"theme_color": "#abcdef"' in manifest
+    assert "#1b5591" not in manifest
