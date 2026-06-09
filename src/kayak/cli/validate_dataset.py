@@ -1120,20 +1120,25 @@ def _regression_sanitize(regdir: Path, reachable: set[str]) -> list[str]:
 def _check_regression(d: Path) -> tuple[list[str], list[str]]:
     """provenance_slug ↔ regression report integrity + content sanitization (S2).
 
-    Returns ``(errors, warnings)``. ERROR: a slug with no report or sidecar, a
-    referenced file that is missing, or content failing the security/shape gate.
-    WARN: a report file referenced by no slug (orphan). No slugs and no
-    ``regression/`` dir ⇒ none configured (clean).
+    Returns ``(errors, warnings)``. The presence of a ``regression/`` directory is
+    the dataset's opt-in: while it is absent the reports live engine-side
+    (``docs/regression``, until the S2 file move), so declared slugs are not yet
+    expected in the dataset and the slug↔report check stays a non-fatal WARNING —
+    this keeps the deploy-time validator from bricking a deploy before the files
+    land in the dataset. Once the directory exists, the check is fully enforced:
+    ERROR on a slug with no report/sidecar, a referenced file that is missing, or
+    content failing the security/shape gate; WARN on a report referenced by no slug
+    (orphan).
     """
     regdir = d / _REGRESSION_DIR
     slugs, errors = _regression_slugs(d)
-    if not slugs and not regdir.is_dir():
-        return [], []  # none configured
     if not regdir.is_dir():
-        errors.append(
-            f"regression/ directory missing but provenance_slug(s) declared: {sorted(slugs)}"
-        )
-        return errors, []
+        if slugs:  # reports not yet managed by this dataset (transitional, pre file-move)
+            return errors, [
+                f"{len(slugs)} provenance_slug(s) declared but no regression/ directory "
+                "(reports not yet managed by this dataset)"
+            ]
+        return errors, []  # none configured
     reachable, closure_errors = _regression_closure(regdir, slugs)
     errors.extend(closure_errors)
     errors.extend(_regression_sanitize(regdir, reachable))

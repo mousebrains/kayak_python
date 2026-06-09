@@ -1054,10 +1054,15 @@ def test_regression_missing_linked_companion_errors(dataset_copy: Path) -> None:
     assert any("fixture_calc_from_usgs_leadlag.md" in e and "does not exist" in e for e in errs)
 
 
-def test_regression_missing_dir_with_declared_slug_errors(dataset_copy: Path) -> None:
+def test_regression_missing_dir_with_declared_slug_warns_not_errors(dataset_copy: Path) -> None:
+    # Transitional (pre file-move) state: slugs declared but no regression/ dir yet.
+    # Must NOT fail the deploy-time validator (deploy.sh runs it on the real dataset
+    # before D1 lands the files) — it is a non-fatal warning, not an error.
     shutil.rmtree(dataset_copy / "regression")
-    errs = validate_dataset(dataset_copy)
-    assert any("regression/ directory missing" in e for e in errs)
+    warnings: list[str] = []
+    errs = validate_dataset(dataset_copy, warnings)
+    assert errs == []
+    assert any("no regression/ directory" in w for w in warnings)
 
 
 def test_regression_invalid_slug_errors(dataset_copy: Path) -> None:

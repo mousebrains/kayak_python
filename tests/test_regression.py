@@ -154,6 +154,21 @@ def test_svg_rejects_css_escape_in_attr() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        '<svg xmlns="http://www.w3.org/2000/svg"><?xml-stylesheet href="javascript:1"?><rect/></svg>',
+        '<svg xmlns="http://www.w3.org/2000/svg"><!-- comment --><rect/></svg>',
+    ],
+    ids=["processing-instruction", "comment"],
+)
+def test_svg_rejects_pi_and_comment(payload: str) -> None:
+    # Explicit rejection so the "reject nonconforming" contract doesn't rest on
+    # ElementTree silently dropping PIs/comments.
+    with pytest.raises(UnsafeContentError):
+        validate_svg(payload)
+
+
 def test_svg_rejects_foreign_namespace_element() -> None:
     # A foreign-namespace element with an allowlisted localname (parser-differential).
     with pytest.raises(UnsafeContentError):

@@ -487,3 +487,23 @@ def test_deploy_regression_missing_dir_is_noop(tmp_path, monkeypatch):
     static_dir.mkdir(parents=True)
     build_mod._deploy_regression_artifacts(static_dir)  # must not raise
     assert not (static_dir / "regression").exists()
+
+
+def test_deploy_regression_skips_unsafe_stem(tmp_path, monkeypatch):
+    # A file whose NAME isn't a safe slug (HTML metacharacters) must never be
+    # processed/published — closes the orphan-filename <title> injection path.
+    monkeypatch.setattr(build_mod, "BASE_DIR", tmp_path)
+    _seed_regression(tmp_path)  # the clean r.{md,svg,json}
+    reg = tmp_path / "docs" / "regression"
+    (reg / "bad<x>.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>')
+    (reg / "bad<x>.json").write_text('{"slug":"x"}')
+    (reg / "bad<x>.md").write_text("# evil\n")
+    static_dir = tmp_path / "out" / "static"
+    static_dir.mkdir(parents=True)
+    build_mod._deploy_regression_artifacts(static_dir)
+
+    out = static_dir / "regression"
+    assert (out / "r.html").is_file()  # safe-stem report still published
+    assert not (out / "bad<x>.svg").exists()
+    assert not (out / "bad<x>.json").exists()
+    assert not (out / "bad<x>.html").exists()

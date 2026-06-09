@@ -40,6 +40,17 @@ class UnsafeContentError(ValueError):
 MAX_SIDECAR_BYTES = 64 * 1024
 MAX_SVG_BYTES = 2 * 1024 * 1024
 
+# A report file's stem must be a slug: the charset that ``calc_expression.provenance_slug``
+# and PHP's ``gauge_detail.php`` key on. The build skips any regression file whose stem
+# isn't one, so a stray/orphan file with HTML metacharacters in its NAME can never reach
+# the generated page (e.g. ``evil</title><script>…</script>.md``).
+SLUG_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def is_safe_slug(stem: str) -> bool:
+    """Whether a report-file stem is a safe slug (``[A-Za-z0-9_-]+``)."""
+    return bool(SLUG_RE.match(stem))
+
 
 # --------------------------------------------------------------------------- #
 # Markdown → sanitized HTML
@@ -258,6 +269,19 @@ def validate_svg(svg_text: str) -> str:
     """
     if len(svg_text.encode("utf-8")) > MAX_SVG_BYTES:
         raise UnsafeContentError(f"SVG exceeds {MAX_SVG_BYTES} bytes")
+    # Reject XML comments and processing instructions explicitly. ElementTree drops
+    # them on parse — so they wouldn't reach the re-serialized output today — but the
+    # "reject nonconforming" contract must not depend on that serializer detail (a PI
+    # like `<?xml-stylesheet href="javascript:…"?>` should be flagged, not silently
+    # dropped). A single leading `<?xml …?>` declaration is allowed. `<!` (DOCTYPE) is
+    # already rejected by defusedxml's forbid_dtd. In well-formed XML `<` is escaped in
+    # text/attributes, so `<?`/`<!--` only appear as a real PI/comment.
+    body = svg_text.lstrip()
+    if body.startswith("<?xml"):
+        decl_end = body.find("?>")
+        body = body[decl_end + 2 :] if decl_end != -1 else ""
+    if "<!--" in body or "<?" in body:
+        raise UnsafeContentError("SVG contains a comment or processing instruction")
     try:
         root = DefusedET.fromstring(
             svg_text, forbid_dtd=True, forbid_entities=True, forbid_external=True

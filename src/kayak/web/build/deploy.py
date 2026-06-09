@@ -8,6 +8,7 @@ other module in this package together.
 import argparse
 import filecmp
 import hashlib
+import html
 import json
 import logging
 import os
@@ -62,6 +63,7 @@ from kayak.web.build.sparklines import (
 )
 from kayak.web.regression import (
     UnsafeContentError,
+    is_safe_slug,
     render_markdown_safe,
     validate_json_sidecar,
     validate_svg,
@@ -166,8 +168,13 @@ def _deploy_regression_artifacts(static_dir: Path) -> None:
         return
     dst = static_dir / "regression"
     dst.mkdir(parents=True, exist_ok=True)
+    # Only process files whose stem is a safe slug (the charset PHP + the validator
+    # key on). This aligns the build's file set with the validator and ensures a
+    # stray/orphan file with HTML metacharacters in its NAME never reaches a page.
     # SVG plot: validate + re-serialize from the parsed tree (never serve verbatim).
     for path in sorted(regression_src.glob("*.svg")):
+        if not is_safe_slug(path.stem):
+            continue
         try:
             safe_svg = validate_svg(path.read_text(encoding="utf-8"))
         except UnsafeContentError as exc:
@@ -175,6 +182,8 @@ def _deploy_regression_artifacts(static_dir: Path) -> None:
         (dst / path.name).write_text(safe_svg, encoding="utf-8")
     # JSON fact-box: validate, then copy verbatim (data, not active content).
     for path in sorted(regression_src.glob("*.json")):
+        if not is_safe_slug(path.stem):
+            continue
         try:
             validate_json_sidecar(path.read_text(encoding="utf-8"))
         except UnsafeContentError as exc:
@@ -183,11 +192,12 @@ def _deploy_regression_artifacts(static_dir: Path) -> None:
     # Render each Markdown writeup to sanitized, kayak-styled standalone HTML. The
     # README.md sits alongside slug docs but is for repo maintainers — skip it.
     for path in sorted(regression_src.glob("*.md")):
-        if path.stem.lower() == "readme":
+        if path.stem.lower() == "readme" or not is_safe_slug(path.stem):
             continue
         html_body = render_markdown_safe(path.read_text(encoding="utf-8"))
-        title = path.stem.replace("_", " ")
-        html = (
+        # html.escape the title even though the stem is a safe slug (defence in depth).
+        title = html.escape(path.stem.replace("_", " "))
+        page = (
             f'<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8">'
             f"<title>{title} — Regression analysis</title>"
             '<meta name="viewport" content="width=device-width, initial-scale=1">'
@@ -205,7 +215,7 @@ def _deploy_regression_artifacts(static_dir: Path) -> None:
             f"{html_body}"
             "</main></body></html>\n"
         )
-        (dst / f"{path.stem}.html").write_text(html)
+        (dst / f"{path.stem}.html").write_text(page, encoding="utf-8")
 
 
 def _deploy_php_files(output_dir: Path) -> None:
