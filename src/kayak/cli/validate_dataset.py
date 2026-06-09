@@ -74,6 +74,13 @@ _ID_COUNTER_SPECS = {
     "next_id": layout.ColumnSpec("next_id", "int", nullable=False),
 }
 
+# Regression report content (S2): published md/svg/json under <dataset>/regression/,
+# linked from the site by calc_expression.provenance_slug.
+_REGRESSION_DIR = "regression"
+_REGRESSION_SLUG_RE = re.compile(r"^[A-Za-z0-9_-]+$")  # matches gauge_detail.php's slug check
+# ](./X.ext) — matches both `[text](./X)` links and `![alt](./X)` image embeds.
+_REGRESSION_REF_RE = re.compile(r"\]\(\./([A-Za-z0-9_-]+)\.(md|html|svg|json)\)")
+
 
 def addArgs(subparsers: argparse._SubParsersAction) -> None:
     p = subparsers.add_parser(
@@ -99,9 +106,15 @@ def _read_json(path: Path) -> dict:
     return data
 
 
-def validate_dataset(dataset_dir: Path) -> list[str]:
-    """Return a list of human-readable problems; empty means the dataset is valid."""
+def validate_dataset(dataset_dir: Path, warnings: list[str] | None = None) -> list[str]:
+    """Return a list of human-readable problems; empty means the dataset is valid.
+
+    Non-fatal advisories (e.g. an orphan regression report) are appended to
+    ``warnings`` when a list is supplied; they never affect the returned error
+    list, so existing callers/tests that ignore them are unchanged.
+    """
     d = dataset_dir
+    warn = warnings if warnings is not None else []
 
     # (0) the dataset contract — validate it before reading any content (S6.2).
     #     A missing dataset.yaml is "contract 0" and is rejected outright; an
@@ -154,6 +167,12 @@ def validate_dataset(dataset_dir: Path) -> list[str]:
         errors.extend(_check_cross_set(d))
     # (7b) gradient sidecar: validate the JSON encoded inside each profile string.
     errors.extend(_check_gradient_profiles(d))
+    # (7c) regression reports: every provenance_slug has its report + sidecars,
+    #      referenced files exist, and the served content passes the security/shape
+    #      gate. Orphan reports are advisory (appended to `warn`, never fatal).
+    reg_errors, reg_warnings = _check_regression(d)
+    errors.extend(reg_errors)
+    warn.extend(reg_warnings)
     # (8) materialize + check-reaches — only when the dataset is otherwise clean.
     #     A wrong-typed value (e.g. a non-ISO datetime) would otherwise be loaded
     #     and crash SQLAlchemy's decoder mid-scan; the errors above already
@@ -959,6 +978,176 @@ def _parse_reach_id_json(path: Path) -> tuple[set[int], list[str]]:
     return usable, errors
 
 
+def _regression_slugs(d: Path) -> tuple[set[str], list[str]]:
+    """Non-empty ``calc_expression.provenance_slug`` values + any format errors."""
+    ce = d / "calc_expression.csv"
+    if not ce.is_file():
+        return set(), []
+    slugs: set[str] = set()
+    errors: list[str] = []
+    for r in _csv_rows(ce):
+        s = (r.get("provenance_slug") or "").strip()
+        if not s:
+            continue
+        if _REGRESSION_SLUG_RE.match(s):
+            slugs.add(s)
+        else:
+            errors.append(f"calc_expression provenance_slug {_trunc(s)} is not a valid slug")
+    return slugs, errors
+
+
+def _strip_code_fences(text: str) -> str:
+    """Drop fenced code blocks so a ``](./x.md)`` shown as an example inside a fence
+    isn't mistaken for a real cross-reference.
+
+    A fence is ``` ``` ``` or ``~~~`` (≥3 of the same char) with <4 leading spaces
+    (CommonMark: 4+ spaces is an indented code block, not a fence); only a fence of
+    the *same* char closes the block.
+    """
+    out: list[str] = []
+    fence: str | None = None  # the opening marker char while inside a fence
+    for line in text.split("\n"):
+        stripped = line.lstrip(" ")
+        indent = len(line) - len(stripped)
+        is_fence = indent < 4 and stripped[:3] in ("```", "~~~")
+        if is_fence:
+            marker = stripped[0]
+            if fence is None:
+                fence = marker  # open
+            elif marker == fence:
+                fence = None  # close (matching char)
+            continue  # fence delimiters (and mismatched ones inside a block) are never refs
+        if fence is None:
+            out.append(line)
+    return "\n".join(out)
+
+
+def _regression_follow_refs(
+    regdir: Path, stem: str, slugs: set[str], reachable: set[str], queue: list[str]
+) -> list[str]:
+    """Follow ``stem``'s md cross-references: queue linked companion reports and
+    require any directly-referenced ``.svg``/``.json`` sidecar to exist. (Each
+    provenance slug's own triple is required separately, independent of link order.)
+    """
+    md = regdir / f"{stem}.md"
+    try:
+        text = _strip_code_fences(md.read_text(encoding="utf-8"))
+    except OSError as exc:
+        return [f"regression/{stem}.md: unreadable ({exc})"]
+    errors: list[str] = []
+    for name, ext in _REGRESSION_REF_RE.findall(text):
+        if ext in ("md", "html"):  # companion report (e.g. lead/lag)
+            cmd = f"{name}.md"
+            if (regdir / cmd).is_file():
+                reachable.add(cmd)
+                for sidecar_ext in ("svg", "json"):  # companion sidecars: reachable if present
+                    sc = f"{name}.{sidecar_ext}"
+                    if (regdir / sc).is_file():
+                        reachable.add(sc)
+                queue.append(name)
+            elif name not in slugs:  # a slug's own missing md is reported by the triple pass
+                errors.append(f"regression/{stem}.md links to ./{cmd} which does not exist")
+        else:  # directly referenced sidecar — must exist
+            fn = f"{name}.{ext}"
+            if (regdir / fn).is_file():
+                reachable.add(fn)
+            else:
+                errors.append(f"regression/{stem}.md references ./{fn} which does not exist")
+    return errors
+
+
+def _regression_closure(regdir: Path, slugs: set[str]) -> tuple[set[str], list[str]]:
+    """Reports reachable from the provenance slugs → (reachable filenames, errors).
+
+    Every slug requires its full ``{md,svg,json}`` triple (the trio PHP renders),
+    enforced in a first pass so the requirement never depends on link-traversal
+    order. A second pass follows ``](./X.md)`` / ``](./X.html)`` links to pull in
+    companion reports (e.g. lead/lag): a companion requires its linked ``.md`` and
+    any sidecar it directly references, while its ``.svg``/``.json`` (if present)
+    are marked reachable so they don't warn as orphans.
+    """
+    reachable: set[str] = set()
+    errors: list[str] = []
+    # Pass 1: each provenance slug's triple, order-independent.
+    for stem in sorted(slugs):
+        for ext in ("md", "svg", "json"):
+            fn = f"{stem}.{ext}"
+            if (regdir / fn).is_file():
+                reachable.add(fn)
+            else:
+                kind = "report" if ext == "md" else "sidecar"
+                errors.append(f"regression/{fn} missing ({kind} for provenance_slug {stem!r})")
+    # Pass 2: companion reports reachable via md links.
+    seen: set[str] = set()
+    queue: list[str] = sorted(slugs)
+    while queue:
+        stem = queue.pop()
+        if stem in seen:
+            continue
+        seen.add(stem)
+        if (regdir / f"{stem}.md").is_file():
+            errors.extend(_regression_follow_refs(regdir, stem, slugs, reachable, queue))
+    return reachable, errors
+
+
+def _regression_sanitize(regdir: Path, reachable: set[str]) -> list[str]:
+    """Run each reachable report file through the security/shape gate; unsafe → error."""
+    from kayak.web.regression import (
+        UnsafeContentError,
+        render_markdown_safe,
+        validate_json_sidecar,
+        validate_svg,
+    )
+
+    errors: list[str] = []
+    for name in sorted(reachable):
+        path = regdir / name
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+            if name.endswith(".md"):
+                render_markdown_safe(text)
+            elif name.endswith(".svg"):
+                validate_svg(text)
+            elif name.endswith(".json"):
+                validate_json_sidecar(text)
+        except (UnsafeContentError, OSError) as exc:
+            errors.append(f"regression/{name}: {exc}")
+    return errors
+
+
+def _check_regression(d: Path) -> tuple[list[str], list[str]]:
+    """provenance_slug ↔ regression report integrity + content sanitization (S2).
+
+    Returns ``(errors, warnings)``. ERROR: a slug with no report or sidecar, a
+    referenced file that is missing, or content failing the security/shape gate.
+    WARN: a report file referenced by no slug (orphan). No slugs and no
+    ``regression/`` dir ⇒ none configured (clean).
+    """
+    regdir = d / _REGRESSION_DIR
+    slugs, errors = _regression_slugs(d)
+    if not slugs and not regdir.is_dir():
+        return [], []  # none configured
+    if not regdir.is_dir():
+        errors.append(
+            f"regression/ directory missing but provenance_slug(s) declared: {sorted(slugs)}"
+        )
+        return errors, []
+    reachable, closure_errors = _regression_closure(regdir, slugs)
+    errors.extend(closure_errors)
+    errors.extend(_regression_sanitize(regdir, reachable))
+    present = {
+        p.name for p in regdir.iterdir() if p.is_file() and p.suffix in (".md", ".svg", ".json")
+    }
+    warnings = [
+        f"regression/{f} is not referenced by any provenance_slug report (orphan)"
+        for f in sorted(present - reachable)
+        if f.lower() != "readme.md"
+    ]
+    return errors, warnings
+
+
 def _check_reaches_on_materialized(dataset_dir: Path) -> list[str]:
     """Load the dataset into a throwaway file DB and run scan_for_issues by URL.
 
@@ -1028,11 +1217,15 @@ def _main(args: argparse.Namespace) -> int:
     if not dataset_dir.is_dir():
         print(f"validate-dataset: not a directory: {dataset_dir}")
         return 2
-    errors = validate_dataset(dataset_dir)
+    warnings: list[str] = []
+    errors = validate_dataset(dataset_dir, warnings)
+    for w in warnings:
+        print(f"  ! {w}")  # advisory — does not affect the exit code
     if errors:
         print(f"dataset validation FAILED ({dataset_dir}):")
         for e in errors:
             print(f"  - {e}")
         return 1
-    print(f"dataset validation OK ({dataset_dir})")
+    suffix = f" ({len(warnings)} warning(s))" if warnings else ""
+    print(f"dataset validation OK ({dataset_dir}){suffix}")
     return 0

@@ -18,6 +18,8 @@ dependencies = [
     "pydantic[email]>=2.7,<3",       # T3.3 typed config — 2.7 is first 3.13-supporting release; [email] pulls email-validator for EmailStr
     "pydantic-settings>=2.4,<3",      # T3.3 typed config — env-driven BaseSettings; 2.4 ships 3.13 wheels
     "markdown>=3.5",                  # Renders docs/regression/*.md → /static/regression/*.html at build time; pure-Python, no transitive deps
+    "nh3>=0.2",                       # HTML sanitizer (Rust/ammonia) — allowlists the rendered regression HTML (S2); ships cp313 wheels
+    "defusedxml>=0.7",               # XXE-safe XML/SVG parsing — validates regression SVG against a strict allowlist before serving (S2)
     "maxminddb>=2.5",                 # GeoIP country lookup for the status page; reads DB-IP Lite mmdb lazily downloaded to var/geoip/
 ]
 
@@ -123,6 +125,13 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 # maxminddb (DB-IP / MaxMind mmdb reader) ships no inline type stubs.
 module = "maxminddb.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# defusedxml ships no inline type stubs (types-defusedxml is a separate,
+# lagging package); the SVG validator (kayak.web.regression) only uses its
+# fromstring + exception types, which we wrap immediately.
+module = "defusedxml.*"
 ignore_missing_imports = true
 
 [tool.hatch.envs.default]

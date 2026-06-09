@@ -1,2 +1,2 @@
 id,data_type,expression,time_expression,note,provenance_slug
-1,flow,"round(greatest(0, 0.5 * fx::14150000::flow))",fx::14150000::flow,fixture calc: half of the USGS gauge,
+1,flow,"round(greatest(0, 0.5 * fx::14150000::flow))",fx::14150000::flow,fixture calc: half of the USGS gauge,fixture_calc_from_usgs

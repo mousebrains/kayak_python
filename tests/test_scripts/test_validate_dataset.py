@@ -16,7 +16,11 @@ from pathlib import Path
 
 import pytest
 
-from kayak.cli.validate_dataset import validate_dataset
+from kayak.cli.validate_dataset import (
+    _regression_closure,
+    _strip_code_fences,
+    validate_dataset,
+)
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "dataset"
 BUILDER = Path(__file__).resolve().parents[1] / "fixtures" / "build_dataset_fixture.py"
@@ -998,3 +1002,145 @@ def test_fixture_retired_ids_matches_builder() -> None:
     # The committed fixture retired_ids.yaml must equal the builder's literal.
     b = _load_builder()
     assert (FIXTURE / "retired_ids.yaml").read_text() == b.RETIRED_IDS_YAML_TEXT
+
+
+# --------------------------------------------------------------------------- #
+# Regression report content (S2): provenance_slug ↔ report + sidecar integrity.
+# The fixture ships a declared slug (`fixture_calc_from_usgs`) + its triple plus a
+# link-reachable lead/lag companion under tests/fixtures/dataset/regression/.
+# --------------------------------------------------------------------------- #
+
+
+def _clear_provenance_slug(d: Path) -> None:
+    _rewrite_csv(
+        d / "calc_expression.csv",
+        lambda rows: [r.update(provenance_slug="") for r in rows],
+    )
+
+
+def test_regression_fixture_has_no_orphan_warnings() -> None:
+    # The committed fixture's lead/lag companion is reachable via the main
+    # report's link, so it must NOT warn as an orphan.
+    warnings: list[str] = []
+    assert validate_dataset(FIXTURE, warnings) == []
+    assert warnings == []
+
+
+def test_regression_none_configured_is_clean(dataset_copy: Path) -> None:
+    # No slugs and no regression/ dir → "none configured", not an error.
+    _clear_provenance_slug(dataset_copy)
+    shutil.rmtree(dataset_copy / "regression")
+    warnings: list[str] = []
+    assert validate_dataset(dataset_copy, warnings) == []
+    assert warnings == []
+
+
+def test_regression_missing_declared_md_errors(dataset_copy: Path) -> None:
+    (dataset_copy / "regression" / "fixture_calc_from_usgs.md").unlink()
+    errs = validate_dataset(dataset_copy)
+    assert any("fixture_calc_from_usgs.md missing" in e for e in errs)
+
+
+def test_regression_missing_primary_sidecar_errors(dataset_copy: Path) -> None:
+    (dataset_copy / "regression" / "fixture_calc_from_usgs.json").unlink()
+    errs = validate_dataset(dataset_copy)
+    assert any("fixture_calc_from_usgs.json missing" in e for e in errs)
+
+
+def test_regression_missing_linked_companion_errors(dataset_copy: Path) -> None:
+    # The main report links to the lead/lag companion .md; removing it is an error.
+    (dataset_copy / "regression" / "fixture_calc_from_usgs_leadlag.md").unlink()
+    errs = validate_dataset(dataset_copy)
+    assert any("fixture_calc_from_usgs_leadlag.md" in e and "does not exist" in e for e in errs)
+
+
+def test_regression_missing_dir_with_declared_slug_errors(dataset_copy: Path) -> None:
+    shutil.rmtree(dataset_copy / "regression")
+    errs = validate_dataset(dataset_copy)
+    assert any("regression/ directory missing" in e for e in errs)
+
+
+def test_regression_invalid_slug_errors(dataset_copy: Path) -> None:
+    _rewrite_csv(
+        dataset_copy / "calc_expression.csv",
+        lambda rows: [r.update(provenance_slug="bad slug!") for r in rows],
+    )
+    errs = validate_dataset(dataset_copy)
+    assert any("is not a valid slug" in e for e in errs)
+
+
+def test_regression_orphan_report_warns_not_errors(dataset_copy: Path) -> None:
+    # A report file referenced by no slug is advisory (warning), not fatal.
+    (dataset_copy / "regression" / "stray_unused.md").write_text("# stray\n")
+    warnings: list[str] = []
+    errs = validate_dataset(dataset_copy, warnings)
+    assert errs == []  # orphan does not fail the dataset
+    assert any("stray_unused.md" in w and "orphan" in w for w in warnings)
+
+
+def test_regression_malicious_svg_errors(dataset_copy: Path) -> None:
+    (dataset_copy / "regression" / "fixture_calc_from_usgs.svg").write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
+    )
+    errs = validate_dataset(dataset_copy)
+    assert any("fixture_calc_from_usgs.svg" in e for e in errs)
+
+
+def test_regression_referenced_sidecar_missing_errors(dataset_copy: Path) -> None:
+    # The main report's svg is referenced by both the image embed and the primary
+    # triple; deleting it is a hard error (a published report would 404 its plot).
+    (dataset_copy / "regression" / "fixture_calc_from_usgs.svg").unlink()
+    errs = validate_dataset(dataset_copy)
+    assert any("fixture_calc_from_usgs.svg" in e for e in errs)
+
+
+@pytest.mark.parametrize("slugs", [("aaa", "zzz"), ("zzz", "aaa")])
+def test_regression_closure_requires_triple_regardless_of_link_order(
+    tmp_path: Path, slugs: tuple[str, str]
+) -> None:
+    # Two provenance slugs where one links the other; the linked slug ships only
+    # its .md (no .svg/.json). Its triple must be required no matter the BFS
+    # traversal order (regression guard for the LIFO-ordering gap).
+    reg = tmp_path / "regression"
+    reg.mkdir()
+    (reg / "aaa.md").write_text("# aaa\n")  # linked slug — missing its sidecars
+    (reg / "zzz.md").write_text("# zzz\n\n[see](./aaa.md)\n")
+    (reg / "zzz.svg").write_text("<svg/>")
+    (reg / "zzz.json").write_text('{"slug":"zzz"}')
+    _reachable, errors = _regression_closure(reg, set(slugs))
+    assert any("aaa.svg missing" in e for e in errors)
+    assert any("aaa.json missing" in e for e in errors)
+
+
+def test_regression_closure_ignores_refs_inside_code_fences(tmp_path: Path) -> None:
+    # A ](./ghost.md) shown as an example inside a fenced code block is NOT a real
+    # cross-reference and must not require ghost.md to exist.
+    reg = tmp_path / "regression"
+    reg.mkdir()
+    (reg / "r.md").write_text(
+        "# r\n\nReal docs.\n\n```\nLink syntax: [x](./ghost.md) and ![y](./ghost.svg)\n```\n"
+    )
+    (reg / "r.svg").write_text("<svg/>")
+    (reg / "r.json").write_text('{"slug":"r"}')
+    _reachable, errors = _regression_closure(reg, {"r"})
+    assert errors == []
+
+
+def test_strip_code_fences_removes_fenced_blocks() -> None:
+    text = "keep1\n```\nfenced [x](./y.md)\n```\nkeep2\n"
+    out = _strip_code_fences(text)
+    assert "keep1" in out and "keep2" in out
+    assert "fenced" not in out and "./y.md" not in out
+
+
+def test_strip_code_fences_handles_tilde_and_indented_fences() -> None:
+    # ~~~ fences are stripped; a ``` line inside a ~~~ block does not close it,
+    # so a real link AFTER the block survives the scan.
+    text = "~~~\n```\n[hidden](./h.md)\n~~~\n[real](./r.md)\n"
+    out = _strip_code_fences(text)
+    assert "./h.md" not in out  # inside the ~~~ block
+    assert "./r.md" in out  # after the block — a real reference, preserved
+    # A 4-space-indented ``` is an indented code block, not a fence (CommonMark),
+    # so it must NOT open a fence that swallows the following real link.
+    text2 = "    ```\n[real2](./r2.md)\n"
+    assert "./r2.md" in _strip_code_fences(text2)
