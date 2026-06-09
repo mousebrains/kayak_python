@@ -102,15 +102,16 @@ def _print_plan(plan: mc.SyncPlan, db_path: Path, csv_dir: Path) -> None:
     """Print the plan unconditionally — it's the command's report (esp. for
     --dry-run), so it must not depend on the log level."""
     print(f"sync-metadata plan  (db={db_path}  csv={csv_dir})")
-    tables = sorted(set(plan.insert_pks) | set(plan.delete_pks))
+    tables = sorted(set(plan.insert_pks) | set(plan.update_pks) | set(plan.delete_pks))
     if not tables:
         print("  (no changes — the DB already matches the CSVs)")
     else:
-        print(f"  {'table':<18} {'+insert':>8} {'-delete':>8}")
+        print(f"  {'table':<18} {'+insert':>8} {'~update':>8} {'-delete':>8}")
         for t in tables:
             print(
                 f"  {t:<18} "
                 f"{len(plan.insert_pks.get(t, set())):>8} "
+                f"{len(plan.update_pks.get(t, set())):>8} "
                 f"{len(plan.delete_pks.get(t, set())):>8}"
             )
     if plan.source_obs_drops:
