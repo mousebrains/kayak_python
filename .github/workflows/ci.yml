@@ -319,9 +319,12 @@ jobs:
       # a DoS via unhandled AssertionError in html.parser.HTMLParser on
       # malformed input. Two reasons to suppress:
       #   1. kayak's only `import markdown` is at build time in
-      #      src/kayak/web/build/deploy.py, rendering repo-controlled
-      #      docs/regression/*.md → static HTML. No untrusted input ever
-      #      reaches the library, so the DoS surface is nil.
+      #      src/kayak/web/build/deploy.py, rendering DATASET_DIR/regression/*.md
+      #      → static HTML. That input is dataset-authored (kayak_data) but
+      #      PR-reviewed and rendered/validated at `levels validate-dataset`
+      #      (the deploy gate), which would surface a parser-crashing file
+      #      before prod — so no adversarial input reaches the library at
+      #      runtime, and the DoS surface is nil.
       #   2. The OSV record has a malformed affected-range (introduced=0
       #      with an empty closing event), so pip-audit treats every
       #      markdown version as affected and reports "Fix Versions"

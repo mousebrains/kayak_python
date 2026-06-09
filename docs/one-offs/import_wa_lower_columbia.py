@@ -11,7 +11,7 @@ scripts/export_metadata.py (id_counters bumped by hand). Inserts:
 - 4 calc gauges + sources + calc_expressions at the retired USGS target
   sites: SF Toutle (14241500), Kalama bl Italian Cr (14223500), Coweeman nr
   Kelso (14245000), Green ab Beaver Cr (14240800). Coefficients from the
-  docs/regression/ fits named in each provenance_slug.
+  kayak_data regression/ fits named in each provenance_slug.
 - 11 AW reaches (geometry from the AW GraphQL API) + reach_state WA.
 
 Reproduce (the full pipeline producing the committed kayak_data state —
@@ -124,7 +124,7 @@ CALCS = [
         "quadratic terms (CIs straddle 0). Pre-1989 record excluded - 1980 eruption and "
         "SRS construction make the early Toutle series non-stationary. Co-located with "
         "the historical USGS site, no drainage-area scaling. See "
-        "docs/regression/sftoutle_14241500_from_tower_eflewis.md.",
+        "regression/sftoutle_14241500_from_tower_eflewis.md.",
         "sftoutle_14241500_from_tower_eflewis",
     ),
     (
@@ -147,7 +147,7 @@ CALCS = [
         "it plateaus at the calibrated edge. Fit calibrated on 1956-82 data - "
         "free-flowing basins, stationarity assumed (see the Coweeman note for the "
         "out-of-era evidence on the same donor). See "
-        "docs/regression/kalama_14223500_from_eflewis_tilton.md.",
+        "regression/kalama_14223500_from_eflewis_tilton.md.",
         "kalama_14223500_from_eflewis_tilton",
     ),
     (
@@ -167,7 +167,7 @@ CALCS = [
         "(2006-2019, n=3643, never seen by the fit): bias -1.1% of mean, r2=0.8910, "
         "RMSE=156.4 cfs - the 1950s-era relationship holds 25+ years later "
         "(docs/one-offs/coweeman_doe_validation.py). See "
-        "docs/regression/coweeman_14245000_from_eflewis.md.",
+        "regression/coweeman_14245000_from_eflewis.md.",
         "coweeman_14245000_from_eflewis",
     ),
     (
@@ -183,7 +183,7 @@ CALCS = [
         "Tilton CI [+0.055, +0.170] (monthly-block bootstrap). NF-SRS rejected (CI "
         "[-0.211, +0.105] straddles 0). Co-located with the historical USGS site at the "
         "AW run's take-out, no drainage-area scaling. See "
-        "docs/regression/green_14240800_from_tower_tilton.md.",
+        "regression/green_14240800_from_tower_tilton.md.",
         "green_14240800_from_tower_tilton",
     ),
 ]

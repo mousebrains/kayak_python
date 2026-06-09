@@ -19,7 +19,12 @@ from kayak.web.regression import (
     validate_svg,
 )
 
-_REG = Path(__file__).resolve().parent.parent / "docs" / "regression"
+# Representative regression artifacts. The real published reports live in the
+# kayak_data dataset (DATASET_DIR/regression/, not in this repo since S2-E3); the
+# committed test fixture mirrors their shape, so these run deterministically in CI
+# (a dataset clone is absent here). The real 25 reports are sanitizer-gated by
+# kayak_data's own `validate` CI (validate-dataset → _check_regression).
+_REG = Path(__file__).resolve().parent / "fixtures" / "dataset" / "regression"
 _REAL_SVGS = sorted(_REG.glob("*.svg"))
 _REAL_MDS = sorted(p for p in _REG.glob("*.md") if p.stem.lower() != "readme")
 _REAL_JSONS = sorted(_REG.glob("*.json"))
@@ -30,7 +35,7 @@ def _svg(body: str) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Real published artifacts must pass (move-verbatim invariant)
+# Representative (fixture) artifacts must pass the sanitizer/validator
 # --------------------------------------------------------------------------- #
 
 
