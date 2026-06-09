@@ -489,6 +489,20 @@ def test_deploy_regression_missing_dir_is_noop(tmp_path, monkeypatch):
     assert not (static_dir / "regression").exists()
 
 
+def test_deploy_regression_warns_when_slugs_but_no_dir(tmp_path, monkeypatch, caplog):
+    # Reports are expected (the DB declares provenance_slugs) but DATASET_DIR/regression/
+    # is absent — a stale/misconfigured checkout. Build must not fail, but must warn so
+    # the silently-dropped pages surface (parallel to validate-dataset's deploy check).
+    monkeypatch.setattr(build_mod, "DATASET_DIR", tmp_path)  # no regression/ under it
+    static_dir = tmp_path / "out" / "static"
+    static_dir.mkdir(parents=True)
+    with caplog.at_level("WARNING"):
+        build_mod._deploy_regression_artifacts(static_dir, provenance_slug_count=3)
+    assert not (static_dir / "regression").exists()  # no crash, no output
+    assert "3 calc_expression provenance_slug" in caplog.text
+    assert "no regression reports will be published" in caplog.text
+
+
 def test_deploy_regression_skips_unsafe_stem(tmp_path, monkeypatch):
     # A file whose NAME isn't a safe slug (HTML metacharacters) must never be
     # processed/published — closes the orphan-filename <title> injection path.
