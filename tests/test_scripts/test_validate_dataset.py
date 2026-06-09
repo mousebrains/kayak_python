@@ -1180,3 +1180,12 @@ def test_site_yaml_unknown_key_rejected(dataset_copy: Path) -> None:
     (dataset_copy / "site.yaml").write_text("site_name: X\nbogus: 1\n")
     errs = validate_dataset(dataset_copy)
     assert any("site.yaml" in e for e in errs)
+
+
+def test_site_yaml_non_string_key_reports_not_crashes(dataset_copy: Path) -> None:
+    # A non-string YAML key must surface as a validation error, not crash the
+    # validator with a TypeError (PR #155 review — _check_site_yaml caught only
+    # ValueError, so SiteConfig(**{1: ...})'s TypeError escaped).
+    (dataset_copy / "site.yaml").write_text("1: foo\n")
+    errs = validate_dataset(dataset_copy)  # must not raise
+    assert any("site.yaml" in e and "non-string key" in e for e in errs)

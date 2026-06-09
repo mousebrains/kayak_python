@@ -49,6 +49,19 @@ class TestLoadSiteConfig:
         with pytest.raises(ValueError, match="http"):
             site.load_site_config(tmp_path)
 
+    def test_bare_scheme_org_url_rejected(self, tmp_path: Path) -> None:
+        # A scheme with no host is a broken href — require a netloc, not just a prefix.
+        (tmp_path / site.SITE_YAML).write_text("org_url: http://\n")
+        with pytest.raises(ValueError, match="host"):
+            site.load_site_config(tmp_path)
+
+    def test_non_string_key_reports_not_crashes(self, tmp_path: Path) -> None:
+        # A YAML mapping with a non-string key (1: foo) must be a reported
+        # ValueError, not a raw TypeError from SiteConfig(**data) (PR #155 review).
+        (tmp_path / site.SITE_YAML).write_text("1: foo\n")
+        with pytest.raises(ValueError, match="non-string key"):
+            site.load_site_config(tmp_path)
+
     def test_html_metacharacter_in_name_rejected(self, tmp_path: Path) -> None:
         # site_name lands in an og:site_name HTML attribute — reject a break-out.
         (tmp_path / site.SITE_YAML).write_text("site_name: 'Evil\"><script>'\n")

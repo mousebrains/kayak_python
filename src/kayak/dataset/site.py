@@ -25,6 +25,7 @@ from __future__ import annotations
 import re
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlparse
 
 import yaml
 from pydantic import BaseModel, ConfigDict, field_validator
@@ -51,6 +52,9 @@ class SiteConfig(BaseModel):
     site_name: str = "WKCC River Levels"
     org_name: str = "Willamette Kayak and Canoe Club"
     org_url: str = "https://wkcc.org"
+    # Colors are strict 6-digit ``#rrggbb`` only — no 3-digit (#fff), ``rgb()``, or
+    # named colors. Stricter than CSS on purpose (the safe direction: the value
+    # lands in both an HTML attribute and a CSS property).
     brand_color: str = "#1b5591"
     brand_color_dark: str = "#0d3057"
     attribution: str = "levels.wkcc.org"
@@ -74,10 +78,11 @@ class SiteConfig(BaseModel):
     @field_validator("org_url")
     @classmethod
     def _http_url(cls, v: str) -> str:
-        if not (v.startswith("https://") or v.startswith("http://")):
-            raise ValueError(f"must be an http(s) URL (got {v!r})")
         if _HTML_META_RE.search(v):
             raise ValueError("must not contain HTML metacharacters")
+        parsed = urlparse(v)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            raise ValueError(f"must be an http(s) URL with a host (got {v!r})")
         return v
 
 
@@ -105,6 +110,13 @@ def load_site_config(dataset_dir: Path) -> SiteConfig:
         return SiteConfig()  # an empty file is "no overrides", not corruption
     if not isinstance(data, dict):
         raise ValueError(f"{SITE_YAML}: top-level value must be a mapping")
+    # YAML allows non-string mapping keys (e.g. ``1: foo``). ``SiteConfig(**data)``
+    # would raise a raw TypeError on those — which ``_check_site_yaml`` (catching
+    # only ValueError) would let escape as a validator crash. Reject them here as a
+    # reported error instead, naming the bad key (parallels contract.py).
+    bad_keys = [k for k in data if not isinstance(k, str)]
+    if bad_keys:
+        raise ValueError(f"{SITE_YAML}: non-string key(s): {sorted(bad_keys, key=str)}")
     try:
         return SiteConfig(**data)
     except ValueError as e:
