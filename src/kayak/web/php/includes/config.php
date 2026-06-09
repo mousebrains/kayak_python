@@ -206,6 +206,22 @@ final class Config
     }
 
     /**
+     * Read a string field from the nested dataset `site` identity block (S3a) —
+     * e.g. `Config::site('site_name')`. The block is emitted by `levels
+     * emit-config` from the validated `kayak.dataset.site.SiteConfig`, so values
+     * are already shape-checked; callers still escape at the render site. Falls
+     * back to $default when the block or key is absent or non-string.
+     */
+    public static function site(string $key, string $default = ''): string
+    {
+        $site = self::get('site', null);
+        if (is_array($site) && array_key_exists($key, $site) && is_string($site[$key])) {
+            return $site[$key];
+        }
+        return $default;
+    }
+
+    /**
      * Print the resolved config to stdout for `php show-config.php`
      * incident-response use. Matches `levels show-config --format table`
      * for human inspection.

@@ -17,6 +17,7 @@ declare(strict_types=1);
  * id (int, optional).
  */
 
+require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/pubhash_request.php';
 
@@ -127,6 +128,12 @@ function include_header(
     $host   = (string)($_SERVER['HTTP_HOST'] ?? 'levels.wkcc.org');
     $path   = strtok((string)($_SERVER['REQUEST_URI'] ?? '/'), '?');
     $url    = htmlspecialchars($scheme . '://' . $host . $path);
+    // Dataset site identity (S3a), with the engine defaults as fallbacks so a
+    // dataset without site.yaml renders the current values. Escaped for the
+    // double-quoted attribute context even though SiteConfig already validated them.
+    $og_site_name = htmlspecialchars(Config::site('site_name', 'WKCC River Levels'));
+    $theme_light  = htmlspecialchars(Config::site('brand_color', '#1b5591'));
+    $theme_dark   = htmlspecialchars(Config::site('brand_color_dark', '#0d3057'));
     echo <<<HTML
 <!DOCTYPE html>
 <html lang="en">
@@ -137,7 +144,7 @@ function include_header(
 <meta name="description" content="$esc_desc">
 <link rel="canonical" href="$url">
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="WKCC River Levels">
+<meta property="og:site_name" content="$og_site_name">
 <meta property="og:title" content="$esc_title">
 <meta property="og:description" content="$esc_desc">
 <meta property="og:url" content="$url">
@@ -148,8 +155,8 @@ function include_header(
 <meta name="twitter:title" content="$esc_title">
 <meta name="twitter:description" content="$esc_desc">
 <link rel="manifest" href="/static/manifest.json">
-<meta name="theme-color" content="#1b5591" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0d3057" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="$theme_light" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="$theme_dark" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="/static/favicon.ico">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
 <script src="/static/scroll-indicator.js" defer></script>
