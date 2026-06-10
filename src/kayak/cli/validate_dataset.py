@@ -43,6 +43,7 @@ from pathlib import Path
 from typing import TypeGuard
 
 from kayak.dataset import contract, layout, region, site
+from kayak.dataset import map as dataset_map  # `map` shadows the builtin → alias
 
 # Cap per-file value errors so one badly-typed column can't flood the report.
 _MAX_VALUE_ERRORS = 20
@@ -182,7 +183,11 @@ def validate_dataset(dataset_dir: Path, warnings: list[str] | None = None) -> li
     # (7e) region presentation: an opt-in region.yaml (per-state links + weather)
     #      must parse + pass the typed/safe-shape gate (links render into HTML).
     errors.extend(_check_region_yaml(d))
-    # (7f) site prose: opt-in site/*.md render clean; legal pages required when
+    # (7f) map config: an opt-in map.yaml (extent + overlay layers) must parse +
+    #      pass the typed/safe-shape gate (values render into the map JS / hrefs and
+    #      drive fetch-osmb's ArcGIS fetches).
+    errors.extend(_check_map_yaml(d))
+    # (7g) site prose: opt-in site/*.md render clean; legal pages required when
     #      the dataset is publishable.
     errors.extend(_check_site_prose(d))
     # (8) materialize + check-reaches — only when the dataset is otherwise clean.
@@ -1217,6 +1222,26 @@ def _check_region_yaml(d: Path) -> list[str]:
         return []
     try:
         region.load_region_config(d)
+    except ValueError as exc:
+        return [str(exc)]
+    return []
+
+
+def _check_map_yaml(d: Path) -> list[str]:
+    """Validate the opt-in ``map.yaml`` (S3d).
+
+    Absent → no error (the dataset keeps the engine's default map config). Present →
+    it must parse and every field must pass the typed/safe-shape gate in
+    :class:`kayak.dataset.map.MapConfig` (presentation + popup link render into the
+    map JS / an ``href``, and the ArcGIS endpoint/out_fields/bbox drive
+    ``fetch-osmb``, so a bad color, non-http URL, bad shape/popup key, duplicate
+    layer key/output filename, unknown key, or unsafe filename is rejected here at
+    the deploy gate).
+    """
+    if not (d / dataset_map.MAP_YAML).is_file():
+        return []
+    try:
+        dataset_map.load_map_config(d)
     except ValueError as exc:
         return [str(exc)]
     return []

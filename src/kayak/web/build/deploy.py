@@ -21,6 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from kayak.config import BASE_DIR, DATASET_DIR, OSMB_DIR, SITE_URL
+from kayak.dataset.map import get_map_config
 from kayak.db.cache import get_all_latest_gauges
 from kayak.db.engine import get_session
 from kayak.db.gauges import get_calculated_gauge_ids
@@ -122,10 +123,11 @@ def _deploy_static_assets(output_dir: Path, *, provenance_slug_count: int = 0) -
       wheel install finds them (S4a-2 slice B1). The build-processed trio
       (``style.css``/``levels.js``/``filters.js``) is skipped here — it is
       emitted as hashed/versioned variants by ``_build_to_dir``.
-    * the OSMB staging dir (``config.osmb_dir``) — ``*.geojson`` written by
-      ``levels fetch-osmb`` on its own cadence. Copying them in here puts
-      them in the build's ``kept`` set so ``_sweep_orphans`` preserves them
-      and ``_osmb_url`` resolves their ``?v=mtime`` URLs.
+    * the OSMB staging dir (``config.osmb_dir``) — GeoJSON files written by
+      ``levels fetch-osmb`` on its own cadence. Only files declared by the
+      resolved dataset map config are copied; stale staged files from removed or
+      renamed layers are intentionally left out so ``_sweep_orphans`` removes the
+      old public artifacts.
 
     ``sw.js`` lands at the output root (not under ``static/``) so the service
     worker controls scope ``/``. Directories (``images/``) propagate via
@@ -154,9 +156,15 @@ def _deploy_static_assets(output_dir: Path, *, provenance_slug_count: int = 0) -
                 shutil.copy2(path, dst / path.name)
         elif path.is_dir():
             shutil.copytree(path, static_dir / path.name, dirs_exist_ok=True)
-    # Generated OSMB overlays staged outside the package by `levels fetch-osmb`.
+    # Generated map overlays staged outside the package by `levels fetch-osmb`.
+    overlay_filenames = {
+        filename for filename, _endpoint, _fields in get_map_config().fetch_layers()
+    }
     if OSMB_DIR.is_dir():
-        for path in OSMB_DIR.glob("*.geojson"):
+        for filename in sorted(overlay_filenames):
+            path = OSMB_DIR / filename
+            if not path.is_file():
+                continue
             shutil.copy2(path, static_dir / path.name)
     _deploy_regression_artifacts(static_dir, provenance_slug_count=provenance_slug_count)
 

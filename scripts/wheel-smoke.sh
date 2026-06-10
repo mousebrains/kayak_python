@@ -90,6 +90,19 @@ echo "==> CLI entry point"
 "$LEVELS" --help >/dev/null
 echo "    OK — levels --help"
 
+echo "==> levels fetch-osmb no-op with empty dataset map config"
+EMPTY_MAP_DS="$WORK/empty-map-dataset"
+EMPTY_OSMB="$WORK/osmb-empty"
+mkdir -p "$EMPTY_MAP_DS"
+: > "$EMPTY_MAP_DS/map.yaml"
+HOME="$WORK" SUDO_USER="" DATASET_DIR="$EMPTY_MAP_DS" \
+    "$LEVELS" fetch-osmb --output-dir "$EMPTY_OSMB" >/dev/null
+if [ -n "$(find "$EMPTY_OSMB" -type f -print -quit)" ]; then
+    echo "wheel-smoke FAILED: empty map config wrote overlay files" >&2
+    exit 1
+fi
+echo "    OK — empty map.yaml disables overlay fetches without network"
+
 echo "==> levels init-db (packaged schema + migrations) → $DB"
 DATABASE_URL="sqlite:///$DB" "$LEVELS" init-db >/dev/null
 test -f "$DB"
@@ -112,6 +125,7 @@ for rel in \
     sw.js \
     static/map.js \
     static/leaflet.js \
+    static/site-config.json \
     latest.php \
     includes/db.php \
     _internal/index.php \
@@ -126,6 +140,12 @@ for rel in \
 done
 [ "$missing" -eq 0 ] || { echo "wheel-smoke FAILED: build output incomplete" >&2; exit 1; }
 echo "    OK — build deployed static + php + templates + license from the wheel"
+
+grep -q '"key": "dams"' "$DOCROOT/static/site-config.json" \
+    || { echo "wheel-smoke FAILED: generated site-config.json missing default map layer" >&2; exit 1; }
+grep -q '"center": \[' "$DOCROOT/static/site-config.json" \
+    || { echo "wheel-smoke FAILED: generated site-config.json missing default map view" >&2; exit 1; }
+echo "    OK — generated site-config.json from packaged map defaults"
 
 echo "==> regression reports rendered from DATASET_DIR/regression (S2-E2)"
 REG="$DOCROOT/static/regression"
