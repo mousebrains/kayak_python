@@ -756,6 +756,28 @@ class TestDeployStaticAssets:
     live map (the file would not be re-staged and the next build would sweep it).
     """
 
+    @staticmethod
+    def _map_config_for_overlay_files(*filenames: str):
+        from kayak.dataset.map import MapConfig, MapLayer
+
+        return MapConfig(
+            layers=[
+                MapLayer(
+                    key=f"layer{i}",
+                    label=f"Layer {i}",
+                    color="#abcdef",
+                    shape="circle",
+                    size=5,
+                    popup="access",
+                    popup_link="https://example.com/layer",
+                    output_filename=filename,
+                    endpoint="https://services.example.com/FeatureServer/0",
+                    out_fields=["name"],
+                )
+                for i, filename in enumerate(filenames)
+            ]
+        )
+
     def test_copies_packaged_assets_and_staged_osmb(self, tmp_path):
         from kayak.web.build import deploy
 
@@ -766,6 +788,11 @@ class TestDeployStaticAssets:
 
         with (
             mock.patch.object(deploy, "OSMB_DIR", osmb_dir),
+            mock.patch.object(
+                deploy,
+                "get_map_config",
+                return_value=self._map_config_for_overlay_files("osmb-dams.geojson"),
+            ),
             mock.patch.object(deploy, "_deploy_regression_artifacts"),
         ):
             deploy._deploy_static_assets(output)
@@ -784,6 +811,48 @@ class TestDeployStaticAssets:
         # hashed/versioned variants by _build_to_dir).
         for name in deploy._BUILD_PROCESSED_STATIC:
             assert not (static / name).exists(), name
+
+    def test_skips_stale_unconfigured_osmb_files(self, tmp_path):
+        from kayak.web.build import deploy
+
+        osmb_dir = tmp_path / "osmb"
+        osmb_dir.mkdir()
+        (osmb_dir / "configured.geojson").write_text('{"type":"FeatureCollection","features":[]}')
+        (osmb_dir / "stale.geojson").write_text('{"type":"FeatureCollection","features":[]}')
+        output = tmp_path / "out"
+
+        with (
+            mock.patch.object(deploy, "OSMB_DIR", osmb_dir),
+            mock.patch.object(
+                deploy,
+                "get_map_config",
+                return_value=self._map_config_for_overlay_files("configured.geojson"),
+            ),
+            mock.patch.object(deploy, "_deploy_regression_artifacts"),
+        ):
+            deploy._deploy_static_assets(output)
+
+        assert (output / "static" / "configured.geojson").is_file()
+        assert not (output / "static" / "stale.geojson").exists()
+
+    def test_empty_map_config_skips_all_staged_osmb_files(self, tmp_path):
+        from kayak.web.build import deploy
+
+        osmb_dir = tmp_path / "osmb"
+        osmb_dir.mkdir()
+        (osmb_dir / "stale.geojson").write_text('{"type":"FeatureCollection","features":[]}')
+        output = tmp_path / "out"
+
+        with (
+            mock.patch.object(deploy, "OSMB_DIR", osmb_dir),
+            mock.patch.object(
+                deploy, "get_map_config", return_value=self._map_config_for_overlay_files()
+            ),
+            mock.patch.object(deploy, "_deploy_regression_artifacts"),
+        ):
+            deploy._deploy_static_assets(output)
+
+        assert not list((output / "static").glob("*.geojson"))
 
     def test_missing_osmb_dir_is_tolerated(self, tmp_path):
         from kayak.web.build import deploy
