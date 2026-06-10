@@ -11,6 +11,7 @@ import tempfile
 from contextlib import suppress
 from datetime import timedelta
 from pathlib import Path
+from urllib.parse import quote as _urlquote
 
 from kayak.config import SITE_URL
 from kayak.dataset.site import SiteConfig, get_site_config
@@ -32,6 +33,18 @@ BRAND_COLOR_DARK = _SITE.brand_color_dark
 # — the engine default. _apply_brand_color swaps it for the resolved BRAND_COLOR so
 # a dataset site.yaml rebrands the built CSS + PWA manifest (S3a-3).
 _DEFAULT_BRAND_COLOR = SiteConfig().brand_color
+
+
+def _state_page_path(state: str) -> str:
+    """Site-relative URL path for a state landing page, percent-encoded.
+
+    The on-disk file is ``<state>.html`` (raw name, e.g. ``New Mexico.html``); the
+    served URL must encode the space (``/New%20Mexico.html``), which the server
+    decodes back to the file. One-word states are unchanged (encode is a no-op), so
+    prod output is byte-identical. Centralized so nav, og:url/canonical, and the
+    sitemap all build the same encoded path (S3b-2 review).
+    """
+    return f"/{_urlquote(state)}.html"
 
 
 def _apply_brand_color(text: str) -> str:
@@ -78,9 +91,6 @@ _STATE_ABBREVS = {
 }
 
 _ABBR_TO_STATE = {v: k for k, v in _STATE_ABBREVS.items()}
-
-# States shown in the nav bar (Oregon + adjacent states)
-_NAV_STATES = {"Oregon", "Washington", "Idaho", "Nevada", "California", "Montana"}
 
 
 # CSS is read once from the source tree and inlined into every page.

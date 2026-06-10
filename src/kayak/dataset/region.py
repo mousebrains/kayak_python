@@ -25,6 +25,8 @@ from urllib.parse import urlparse
 import yaml
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from kayak.dataset.layout import is_safe_state_name
+
 REGION_YAML = "region.yaml"
 
 # Labels are HTML text → reject every metacharacter. URLs land in a
@@ -85,6 +87,18 @@ class RegionConfig(BaseModel):
     @classmethod
     def _v_default_weather(cls, v: str) -> str:
         return _safe_http_url(v)
+
+    @field_validator("states")
+    @classmethod
+    def _v_state_names(cls, v: dict[str, StateRegion]) -> dict[str, StateRegion]:
+        # State keys become URL path segments, on-disk filenames, and HTML text in
+        # the build, so reject anything that could path-traverse or inject markup.
+        for name in v:
+            if not is_safe_state_name(name):
+                raise ValueError(
+                    f"state name {name!r} is not a safe name (ASCII letter words only)"
+                )
+        return v
 
     def weather_url_for(self, state: str) -> str:
         """The state's weather URL, falling back to ``default_weather_url``."""

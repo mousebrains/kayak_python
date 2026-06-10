@@ -75,6 +75,38 @@ class TestLoadRegionConfig:
         with pytest.raises(ValueError, match="must be a mapping"):
             region.load_region_config(tmp_path)
 
+    def test_path_traversal_state_key_rejected(self, tmp_path: Path) -> None:
+        # A state key becomes a filename + URL path in the build, so reject one that
+        # could path-traverse the staging tree (#160 review — High).
+        (tmp_path / region.REGION_YAML).write_text("states:\n  ../escaped:\n    links: []\n")
+        with pytest.raises(ValueError, match="safe name"):
+            region.load_region_config(tmp_path)
+
+    def test_html_metachar_state_key_rejected(self, tmp_path: Path) -> None:
+        # A state key is rendered into nav/title/meta, so reject HTML metacharacters.
+        (tmp_path / region.REGION_YAML).write_text(
+            'states:\n  "<img src=x onerror=alert(1)>":\n    links: []\n'
+        )
+        with pytest.raises(ValueError, match="safe name"):
+            region.load_region_config(tmp_path)
+
+    def test_trailing_whitespace_state_key_rejected(self, tmp_path: Path) -> None:
+        # Exact validation: a trailing space (would build /Oregon%20.html) is rejected.
+        (tmp_path / region.REGION_YAML).write_text('states:\n  "Oregon ":\n    links: []\n')
+        with pytest.raises(ValueError, match="safe name"):
+            region.load_region_config(tmp_path)
+
+
+def test_is_safe_state_name_is_exact() -> None:
+    # fullmatch, not match: the whole string must conform, so a trailing newline /
+    # space / control char is rejected (review — match() let "Oregon\n" through).
+    from kayak.dataset.layout import is_safe_state_name
+
+    assert is_safe_state_name("Oregon")
+    assert is_safe_state_name("New Mexico")
+    for bad in ("Oregon\n", "Oregon ", " Oregon", "   ", "", "Oregon\t", "../x", "<b>"):
+        assert not is_safe_state_name(bad), bad
+
     def test_ampersand_url_allowed(self, tmp_path: Path) -> None:
         # Query separators are legitimate in a URL (the WKCC Dreamflows links use them).
         (tmp_path / region.REGION_YAML).write_text(

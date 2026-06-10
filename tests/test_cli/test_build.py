@@ -627,15 +627,13 @@ class TestBuildNav:
         result = _build_nav(["Oregon", "Washington"], active_state="Oregon")
         assert 'class="active"' in result
 
-    def test_non_nav_states_excluded(self, session):
-        # _NAV_STATES is the source of truth for nav buttons (not
-        # `states`, which now plays a different role: it gates the
-        # body cross-link reach anchors in _build_placeholder_page).
-        # Wyoming/Utah aren't in _NAV_STATES → no nav button. Montana
-        # IS in _NAV_STATES, so it always shows up.
-        result = _build_nav(["Oregon", "Wyoming", "Utah"])
-        assert "WY" not in result
-        assert "UT" not in result
+    def test_nav_buttons_are_reaches_union_region(self, session):
+        # S3b-2: nav buttons = passed reach-states + dataset region config states
+        # (engine default = CA/ID/MT/NV/OR/WA), not a hardcoded allowlist.
+        result = _build_nav([])  # no reach-states → region config supplies the six
+        assert 'href="/Oregon.html"' in result
+        assert 'href="/Montana.html"' in result
+        assert 'href="/Wyoming.html"' not in result  # in neither set → no button
 
 
 class TestBuildLetterNav:

@@ -1215,3 +1215,41 @@ def test_malformed_region_yaml_rejected(dataset_copy: Path) -> None:
     )
     errs = validate_dataset(dataset_copy)
     assert any("region.yaml" in e and "http" in e for e in errs)
+
+
+def test_region_yaml_unsafe_state_key_rejected(dataset_copy: Path) -> None:
+    # A region state key becomes a filename/URL/HTML in the build — a path-traversal
+    # key must fail the deploy gate (#160 review — High).
+    (dataset_copy / "region.yaml").write_text("states:\n  ../escaped:\n    links: []\n")
+    errs = validate_dataset(dataset_copy)
+    assert any("region.yaml" in e and "safe name" in e for e in errs)
+
+
+def test_state_csv_unsafe_name_rejected(dataset_copy: Path) -> None:
+    # state.csv names also flow to filenames/URLs/HTML now (S3b-2) — gate them too.
+    def _mutate(rows: list[dict[str, str]]) -> None:
+        rows[0]["name"] = "../escaped"
+
+    _rewrite_csv(dataset_copy / "state.csv", _mutate)
+    errs = validate_dataset(dataset_copy)
+    assert any("state.csv" in e and "unsafe state name" in e for e in errs)
+
+
+def test_state_csv_trailing_space_name_rejected(dataset_copy: Path) -> None:
+    # Exact check on the RAW cell: the importer stores "Oregon " unstripped, so the
+    # build would emit /Oregon%20.html — the gate must catch it (review).
+    def _mutate(rows: list[dict[str, str]]) -> None:
+        rows[0]["name"] = rows[0]["name"] + " "
+
+    _rewrite_csv(dataset_copy / "state.csv", _mutate)
+    errs = validate_dataset(dataset_copy)
+    assert any("state.csv" in e and "unsafe state name" in e for e in errs)
+
+
+def test_state_csv_whitespace_only_name_rejected(dataset_copy: Path) -> None:
+    def _mutate(rows: list[dict[str, str]]) -> None:
+        rows[0]["name"] = "   "
+
+    _rewrite_csv(dataset_copy / "state.csv", _mutate)
+    errs = validate_dataset(dataset_copy)
+    assert any("state.csv" in e and "unsafe state name" in e for e in errs)
