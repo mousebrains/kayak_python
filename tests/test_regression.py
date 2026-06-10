@@ -15,6 +15,7 @@ import pytest
 from kayak.web.regression import (
     UnsafeContentError,
     render_markdown_safe,
+    render_markdown_to_html,
     validate_json_sidecar,
     validate_svg,
 )
@@ -94,6 +95,21 @@ def test_markdown_rewrites_md_links_to_html() -> None:
     html = render_markdown_safe("[companion](./other_leadlag.md)\n")
     assert "./other_leadlag.html" in html
     assert "./other_leadlag.md" not in html
+
+
+def test_render_markdown_to_html_is_generic_no_regression_filtering() -> None:
+    # The prose renderer (S3c) sanitizes but does NOT apply the regression-only
+    # filtering: it keeps a "## Future" section (dropped by render_markdown_safe)
+    # and leaves a ./x.md link untouched (render_markdown_safe rewrites it to .html).
+    # The link sits OUTSIDE the Future section so render_markdown_safe still emits
+    # it (rewritten) — render_markdown_safe drops the whole Future section.
+    md = "# Doc\n\n[c](./x.md)\n\n## Future\n\nplanned stuff\n"
+    generic = render_markdown_to_html(md)
+    assert "planned stuff" in generic and "./x.md" in generic
+    safe = render_markdown_safe(md)
+    assert "planned stuff" not in safe and "./x.html" in safe
+    # Both still sanitize active content.
+    assert "<script" not in render_markdown_to_html("<script>alert(1)</script>\n\n# T")
 
 
 def test_markdown_keeps_tables() -> None:

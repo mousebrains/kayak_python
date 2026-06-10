@@ -5,16 +5,18 @@ declare(strict_types=1);
  */
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
+require_once __DIR__ . '/includes/prose.php';
 
 header('Cache-Control: public, max-age=300');
 include_header(
-    'Privacy Policy — WKCC River Levels',
+    'Privacy Policy — ' . Config::site('site_name', 'WKCC River Levels'),
     '',
     'Privacy policy for the WKCC River Levels site — what data we collect and how we use it.'
 );
 ?>
 <!-- Annual review trigger: next review 2027-05-12 -->
 <div class="prose">
+<?php $__prose = prose_fragment('privacy'); if ($__prose !== null) { echo $__prose; } else { ?>
 <h2>Privacy Policy</h2>
 <p class="updated">Last updated: May 12, 2026</p>
 
@@ -113,5 +115,6 @@ including children under 13.</p>
 <h3>Changes to This Policy</h3>
 <p>If this policy changes, the updated version will be posted on this page with a
 revised date.</p>
+<?php } ?>
 </div>
 <?php include_footer(); ?>

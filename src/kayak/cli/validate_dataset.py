@@ -182,6 +182,9 @@ def validate_dataset(dataset_dir: Path, warnings: list[str] | None = None) -> li
     # (7e) region presentation: an opt-in region.yaml (per-state links + weather)
     #      must parse + pass the typed/safe-shape gate (links render into HTML).
     errors.extend(_check_region_yaml(d))
+    # (7f) site prose: opt-in site/*.md render clean; legal pages required when
+    #      the dataset is publishable.
+    errors.extend(_check_site_prose(d))
     # (8) materialize + check-reaches — only when the dataset is otherwise clean.
     #     A wrong-typed value (e.g. a non-ISO datetime) would otherwise be loaded
     #     and crash SQLAlchemy's decoder mid-scan; the errors above already
@@ -1217,6 +1220,54 @@ def _check_region_yaml(d: Path) -> list[str]:
     except ValueError as exc:
         return [str(exc)]
     return []
+
+
+# Prose pages (S3c). The legal trio is required for a publishable dataset (no
+# generic fallback); about is optional.
+_SITE_PROSE_PAGES: tuple[str, ...] = ("about", "disclaimer", "privacy", "contact")
+_PUBLISHABLE_REQUIRED_PROSE: tuple[str, ...] = ("privacy", "disclaimer", "contact")
+
+
+def _check_site_prose(d: Path) -> list[str]:
+    """Validate the opt-in site prose markdown (S3c).
+
+    The ``site/`` dir is the dataset's opt-in (like S2's ``regression/``): while it
+    is absent the engine serves its built-in prose, so nothing is required — this
+    keeps the deploy gate from bricking a publishable dataset that hasn't moved its
+    prose yet. **Once ``site/`` exists**, each present ``site/<page>.md`` must render
+    to clean HTML via the S2 sanitizer, and a ``publishable`` dataset must carry the
+    complete legal set (privacy, disclaimer, contact) — they have no generic
+    fallback, so a half-moved legal set is rejected. (S3i tightens this to require
+    ``site/`` unconditionally for publishable once the engine fallback is removed.)
+    """
+    from kayak.web.regression import render_markdown_to_html
+
+    site_dir = d / "site"
+    if not site_dir.is_dir():
+        return []  # opt-in: no site/ → engine prose fallback, nothing required yet
+
+    errors: list[str] = []
+    for page in _SITE_PROSE_PAGES:
+        md = site_dir / f"{page}.md"
+        if not md.is_file():
+            continue
+        try:
+            html = render_markdown_to_html(md.read_text(encoding="utf-8")).lower()
+        except (OSError, UnicodeDecodeError, ValueError) as exc:
+            errors.append(f"site/{page}.md: failed to render ({exc})")
+            continue
+        if "<script" in html or "onerror" in html or "javascript:" in html:
+            errors.append(f"site/{page}.md: rendered output contains active content")
+
+    try:
+        meta = contract.load_dataset_meta(d)
+    except ValueError:
+        meta = None
+    if isinstance(meta, dict) and meta.get("status") == "publishable":
+        for page in _PUBLISHABLE_REQUIRED_PROSE:
+            if not (site_dir / f"{page}.md").is_file():
+                errors.append(f"site/{page}.md is required for a publishable dataset")
+    return errors
 
 
 def _check_reaches_on_materialized(dataset_dir: Path) -> list[str]:

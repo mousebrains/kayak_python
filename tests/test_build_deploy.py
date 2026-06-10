@@ -629,3 +629,31 @@ def test_deploy_php_root_style_css_custom_brand(monkeypatch, tmp_path):
     css = (output / "style.css").read_text(encoding="utf-8")
     assert "--c-primary: #abcdef;" in css
     assert "#1b5591" not in css
+
+
+# --------------------------------------------------------------------------- #
+# Site prose fragments (S3c): DATASET_DIR/site/<page>.md → OUTPUT_DIR/prose/<page>.html
+# --------------------------------------------------------------------------- #
+
+
+def test_deploy_site_prose_renders_fragments(monkeypatch, tmp_path):
+    ds = tmp_path / "ds"
+    (ds / "site").mkdir(parents=True)
+    (ds / "site" / "about.md").write_text("## About\n\nWe are **Foo**. <script>x</script>\n")
+    monkeypatch.setattr(build_mod, "DATASET_DIR", ds)
+    output = tmp_path / "out"
+    output.mkdir()
+    build_mod._deploy_site_prose(output)
+    frag = (output / "prose" / "about.html").read_text(encoding="utf-8")
+    assert "<h2>About</h2>" in frag and "<strong>Foo</strong>" in frag
+    assert "<script" not in frag  # sanitized
+    # A page with no .md gets no fragment (PHP falls back).
+    assert not (output / "prose" / "privacy.html").exists()
+
+
+def test_deploy_site_prose_no_dir_is_noop(monkeypatch, tmp_path):
+    monkeypatch.setattr(build_mod, "DATASET_DIR", tmp_path / "no-ds")
+    output = tmp_path / "out"
+    output.mkdir()
+    build_mod._deploy_site_prose(output)  # must not raise
+    assert not (output / "prose").exists()

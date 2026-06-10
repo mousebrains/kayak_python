@@ -66,6 +66,7 @@ from kayak.web.regression import (
     UnsafeContentError,
     is_safe_slug,
     render_markdown_safe,
+    render_markdown_to_html,
     validate_json_sidecar,
     validate_svg,
 )
@@ -343,16 +344,44 @@ def _deploy_license_files(output_dir: Path) -> None:
             shutil.copy2(src, output_dir / name)
 
 
+# Prose pages whose body the PHP shell pulls from a dataset-rendered fragment
+# (S3c). Each maps to DATASET_DIR/site/<page>.md → OUTPUT_DIR/prose/<page>.html.
+_PROSE_PAGES: tuple[str, ...] = ("about", "disclaimer", "privacy", "contact")
+
+
+def _deploy_site_prose(output_dir: Path) -> None:
+    """Render the dataset's prose markdown into sanitized HTML fragments (S3c).
+
+    ``DATASET_DIR/site/<page>.md`` → ``OUTPUT_DIR/prose/<page>.html`` via the S2
+    sanitizer (``render_markdown_to_html`` — markdown + nh3 allowlist, no inline
+    ``<script>``/event handlers/external images). The PHP prose pages include the
+    fragment when present and fall back to their built-in body otherwise. A dataset
+    with no ``site/`` dir publishes no fragments (PHP falls back) — graceful.
+    """
+    src_dir = DATASET_DIR / "site"
+    if not src_dir.is_dir():
+        return
+    dst = output_dir / "prose"
+    dst.mkdir(parents=True, exist_ok=True)
+    for page in _PROSE_PAGES:
+        md = src_dir / f"{page}.md"
+        if md.is_file():
+            fragment = render_markdown_to_html(md.read_text(encoding="utf-8"))
+            (dst / f"{page}.html").write_text(fragment, encoding="utf-8")
+
+
 def _deploy_source_files(output_dir: Path, *, provenance_slug_count: int = 0) -> None:
     """Copy source files from the repo into the output directory.
 
     Makes the output directory self-contained — no symlinks pointing
-    back into the repo.  Covers static assets, PHP files, and config.
+    back into the repo.  Covers static assets, PHP files, config, and the
+    dataset-rendered prose fragments.
     """
     _deploy_static_assets(output_dir, provenance_slug_count=provenance_slug_count)
     _deploy_php_files(output_dir)
     _deploy_config_files(output_dir)
     _deploy_license_files(output_dir)
+    _deploy_site_prose(output_dir)
 
 
 def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
