@@ -1192,8 +1192,11 @@ def _check_state_names(d: Path, good_csvs: set[str]) -> list[str]:
         return []
     errors: list[str] = []
     for row in _csv_rows(d / "state.csv"):
-        name = (row.get("name") or "").strip()
-        if name and not layout.is_safe_state_name(name):
+        # Check the RAW cell — the CSV importer (metadata_csv) stores it unstripped,
+        # so all_state_names() (and the build) see the raw value; stripping/skipping
+        # here would pass "Oregon "/whitespace-only that the build then renders raw.
+        name = row.get("name") or ""
+        if not layout.is_safe_state_name(name):
             errors.append(f"state.csv: unsafe state name {name!r} (ASCII letter words only)")
     return errors
 

@@ -45,8 +45,13 @@ STATE_NAME_RE = re.compile(r"^[A-Za-z]+(?: [A-Za-z]+)*$")
 
 
 def is_safe_state_name(name: str) -> bool:
-    """True if *name* is a safe state/region name (ASCII letter words only)."""
-    return bool(STATE_NAME_RE.match(name))
+    """True if *name* is a safe state/region name (ASCII letter words only).
+
+    ``fullmatch`` (not ``match``) so the whole string must conform — ``match`` with
+    a ``$``-anchored pattern would accept a trailing newline (``"Oregon\\n"``), and a
+    trailing space / control char would slip through and reach the build raw.
+    """
+    return bool(STATE_NAME_RE.fullmatch(name))
 
 
 # Columns present on the model but NOT written to the table's CSV: large

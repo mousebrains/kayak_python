@@ -1233,3 +1233,23 @@ def test_state_csv_unsafe_name_rejected(dataset_copy: Path) -> None:
     _rewrite_csv(dataset_copy / "state.csv", _mutate)
     errs = validate_dataset(dataset_copy)
     assert any("state.csv" in e and "unsafe state name" in e for e in errs)
+
+
+def test_state_csv_trailing_space_name_rejected(dataset_copy: Path) -> None:
+    # Exact check on the RAW cell: the importer stores "Oregon " unstripped, so the
+    # build would emit /Oregon%20.html — the gate must catch it (review).
+    def _mutate(rows: list[dict[str, str]]) -> None:
+        rows[0]["name"] = rows[0]["name"] + " "
+
+    _rewrite_csv(dataset_copy / "state.csv", _mutate)
+    errs = validate_dataset(dataset_copy)
+    assert any("state.csv" in e and "unsafe state name" in e for e in errs)
+
+
+def test_state_csv_whitespace_only_name_rejected(dataset_copy: Path) -> None:
+    def _mutate(rows: list[dict[str, str]]) -> None:
+        rows[0]["name"] = "   "
+
+    _rewrite_csv(dataset_copy / "state.csv", _mutate)
+    errs = validate_dataset(dataset_copy)
+    assert any("state.csv" in e and "unsafe state name" in e for e in errs)
