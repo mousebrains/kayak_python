@@ -28,8 +28,10 @@
   };
   const STATUSES = ['low', 'okay', 'high', 'unknown'];
   const CLASS_TIERS = ['I', 'II', 'III', 'IV', 'V', '?'];
-  const DEFAULT_VIEW = [44.0, -120.5];
-  const DEFAULT_ZOOM = 7;
+  // Default map extent. Seeded so fail()/empty-bounds always have a value even
+  // if site-config.json never loads; overwritten from that config in applyConfig.
+  let DEFAULT_VIEW = [44.0, -120.5];
+  let DEFAULT_ZOOM = 7;
 
   // Item 1 of docs/done/PLAN_map_and_ui_tweaks.md: hover-opens-popup is desktop-
   // only. Touch-only devices keep tap-to-open (Leaflet's built-in click
@@ -79,43 +81,47 @@
   // markerPane is a built-in pane stacked above overlayPane, so dams +
   // obstructions clear everything else regardless of add order.
   const OSMB_HIT_RADIUS = 14;
-  // Popup function refs are forward references — they're function
-  // declarations later in this IIFE, which JS hoists to module top.
-  const OSMB_LAYER_DEFS = [
-    {
-      key: 'obstructions',
-      label: 'Obstructions',
-      color: '#ff00ff',
-      defaultOn: false,
-      attr: 'osmbObstructionsUrl',
-      popup: obstructionPopup,
-      shape: 'triangle',
-      size: 16,
-      zIndex: 200,
-    },
-    {
-      key: 'dams',
-      label: 'Dams / weirs',
-      color: '#6a1b9a',
-      defaultOn: false,
-      attr: 'osmbDamsUrl',
-      popup: damPopup,
-      shape: 'diamond',
-      size: 14,
-      zIndex: 100,
-    },
-    {
-      key: 'access',
-      label: 'Access sites',
-      color: '#1b5e20',
-      defaultOn: false,
-      attr: 'osmbAccessUrl',
-      popup: accessPopup,
-      shape: 'circle',
-      size: 5,
-      zIndex: 0,
-    },
-  ];
+  // Overlay layer defs come from the generated site-config.json (S3d) — no longer
+  // hardcoded here. applyConfig() fills this in (key/label/color/shape/size/zIndex/
+  // defaultOn/url + the resolved popup builder + its link) before renderMap runs.
+  // Empty until then, and stays empty if the config fetch fails (no overlays —
+  // graceful; they're default-OFF anyway).
+  let OSMB_LAYER_DEFS = [];
+  // Popup template key → engine-owned builder (the HTML stays engine-side, escaped).
+  // Forward refs to the hoisted function declarations later in this IIFE.
+  const POPUP_BUILDERS = {
+    obstructions: obstructionPopup,
+    dams: damPopup,
+    access: accessPopup,
+  };
+
+  // Translate a parsed site-config.json into the module's DEFAULT_VIEW / DEFAULT_ZOOM
+  // and OSMB_LAYER_DEFS. A null/garbage config leaves the seeded view and no overlays.
+  function applyConfig(cfg) {
+    if (cfg?.map && Array.isArray(cfg.map.center)) {
+      DEFAULT_VIEW = cfg.map.center;
+      if (typeof cfg.map.zoom === 'number') DEFAULT_ZOOM = cfg.map.zoom;
+    }
+    const layers = cfg && Array.isArray(cfg.layers) ? cfg.layers : [];
+    OSMB_LAYER_DEFS = layers
+      .filter(function (l) {
+        return POPUP_BUILDERS[l.popup];
+      })
+      .map(function (l) {
+        return {
+          key: l.key,
+          label: l.label,
+          color: l.color,
+          defaultOn: !!l.defaultOn,
+          shape: l.shape,
+          size: l.size,
+          zIndex: l.zIndex,
+          url: l.url || '',
+          popupFn: POPUP_BUILDERS[l.popup],
+          popupLink: l.popupLink || '',
+        };
+      });
+  }
 
   function esc(s) {
     const d = document.createElement('div');
@@ -218,11 +224,9 @@
   // either is missing, renderMap skips the gauge layer wholesale.
   const gaugesGeomUrl = mapEl.dataset.gaugesGeomUrl || '';
   const gaugesStateUrl = mapEl.dataset.gaugesStateUrl || '';
-  // OSMB overlay URLs — empty until the nightly fetcher has landed a file.
-  // Empty-string handling: fetchOptional short-circuits to null.
-  const osmbUrls = OSMB_LAYER_DEFS.map(function (d) {
-    return mapEl.dataset[d.attr] || '';
-  });
+  // Map config (default extent + OSMB overlay defs) — fetched, then applyConfig'd
+  // before renderMap. Empty attr / failed fetch → seeded view, no overlays.
+  const siteConfigUrl = mapEl.dataset.siteConfigUrl || '';
 
   const map = L.map('map');
   const topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
@@ -278,6 +282,21 @@
       });
   }
 
+  // The site-config fetch runs in parallel with the render-critical geom/state
+  // fetches; only the OSMB overlays (default-OFF) chain off it, so first paint is
+  // not delayed by the config round-trip. applyConfig() populates OSMB_LAYER_DEFS,
+  // then the overlays are fetched in that same order so osmbData[] stays aligned.
+  const osmbDataPromise = fetchOptional(siteConfigUrl, 'site-config').then(
+    function (cfg) {
+      applyConfig(cfg);
+      return Promise.all(
+        OSMB_LAYER_DEFS.map(function (d) {
+          return fetchOptional(d.url, 'osmb-' + d.key);
+        }),
+      );
+    },
+  );
+
   Promise.all([
     fetch(geomUrl).then(function (r) {
       if (!r.ok) throw new Error('geom ' + r.status);
@@ -289,11 +308,7 @@
     }),
     fetchOptional(gaugesGeomUrl, 'gauges-geom'),
     fetchOptional(gaugesStateUrl, 'gauges-state'),
-    Promise.all(
-      OSMB_LAYER_DEFS.map(function (d, i) {
-        return fetchOptional(osmbUrls[i], 'osmb-' + d.key);
-      }),
-    ),
+    osmbDataPromise,
   ])
     .then(function (res) {
       renderMap(res[0], res[1], res[2], res[3], res[4]);
@@ -868,14 +883,14 @@
           fillOpacity: 0,
           interactive: true,
         }).addTo(group);
-        hit.bindPopup(def.popup.bind(null, props));
+        hit.bindPopup(def.popupFn.bind(null, props, def.popupLink));
       } else {
         const marker = L.marker(ll, {
           icon: makeShapeIcon(def.shape, def.size, def.color),
           zIndexOffset: def.zIndex || 0,
           keyboard: false,
         }).addTo(group);
-        marker.bindPopup(def.popup.bind(null, props));
+        marker.bindPopup(def.popupFn.bind(null, props, def.popupLink));
       }
     }
     return group;
@@ -948,18 +963,11 @@
     });
   }
 
-  // Static landing URLs for the three OSMB popups. None of the layers
-  // support per-feature deep-linking (the AGOL dashboards/experiences
-  // don't update their URL on marker click), so each popup links to the
-  // OSMB-hosted overview page for its layer.
-  const OSMB_DAM_URL =
-    'https://www.oregon.gov/osmb/boating-facilities/Pages/Maps-and-Apps.aspx';
-  const OSMB_OBSTRUCTION_URL =
-    'https://geo.maps.arcgis.com/apps/dashboards/59f4dfde321f447b9245a1451c83e054';
-  const OSMB_ACCESS_URL =
-    'https://experience.arcgis.com/experience/72308dd6b893451690a14437cde89be8';
-
-  function obstructionPopup(p) {
+  // The popup builders take the layer's landing URL as a param (linkUrl) — it
+  // comes from site-config.json (popupLink). None of the layers support
+  // per-feature deep-linking (the AGOL dashboards/experiences don't update their
+  // URL on marker click), so each popup links to the layer's overview page.
+  function obstructionPopup(p, linkUrl) {
     const title = esc(p.obslocation || p.waterbody || 'Obstruction');
     const sub = [p.waterbody, p.waterbodysec]
       .filter(Boolean)
@@ -973,7 +981,7 @@
         : '';
     let html =
       '<a class="reach-popup" href="' +
-      OSMB_OBSTRUCTION_URL +
+      esc(linkUrl) +
       '" target="_blank" rel="noopener">' +
       '<div class="rp-name">' +
       title +
@@ -985,7 +993,7 @@
     return html;
   }
 
-  function damPopup(p) {
+  function damPopup(p, linkUrl) {
     const title = esc(p.damname || 'Dam');
     const sub = esc(p.waterbody || '');
     const sizeBits = [];
@@ -994,7 +1002,7 @@
     const portage = esc(p.portagedesc || p.navigate || '');
     let html =
       '<a class="reach-popup" href="' +
-      OSMB_DAM_URL +
+      esc(linkUrl) +
       '" target="_blank" rel="noopener">' +
       '<div class="rp-name">' +
       title +
@@ -1007,7 +1015,7 @@
     return html;
   }
 
-  function accessPopup(p) {
+  function accessPopup(p, linkUrl) {
     const title = esc(p.name || 'Access site');
     const sub = esc(p.waterway_name || '');
     const facility = esc(
@@ -1015,7 +1023,7 @@
     );
     let html =
       '<a class="reach-popup" href="' +
-      OSMB_ACCESS_URL +
+      esc(linkUrl) +
       '" target="_blank" rel="noopener">' +
       '<div class="rp-name">' +
       title +

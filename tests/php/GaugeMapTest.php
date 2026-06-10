@@ -185,25 +185,23 @@ final class GaugeMapTest extends TestCase
         $this->assertStringNotContainsString('data-gauge-id', $html);
     }
 
-    public function test_osmb_url_empty_when_file_missing(): void
+    public function test_site_config_url_empty_when_file_missing(): void
     {
-        // No overlay files staged → the three osmb-* attrs are empty strings.
+        // No site-config.json staged → the attr is an empty string (S3d). The
+        // per-layer osmb-* attrs are gone — layer URLs live inside the config.
         [, $html] = $this->render(['Gauge' => '44.5,-123.2']);
-        $this->assertStringContainsString('data-osmb-obstructions-url=""', $html);
-        $this->assertStringContainsString('data-osmb-dams-url=""', $html);
-        $this->assertStringContainsString('data-osmb-access-url=""', $html);
+        $this->assertStringContainsString('data-site-config-url=""', $html);
+        $this->assertStringNotContainsString('data-osmb-', $html);
     }
 
-    public function test_osmb_url_versioned_when_file_present(): void
+    public function test_site_config_url_versioned_when_file_present(): void
     {
-        // Stage one overlay file → its attr carries /static/<name>?v=<mtime>.
-        file_put_contents($this->docRoot . '/static/osmb-dams.geojson', '{}');
+        // Stage the config → its attr carries /static/site-config.json?v=<mtime>.
+        file_put_contents($this->docRoot . '/static/site-config.json', '{}');
         [, $html] = $this->render(['Gauge' => '44.5,-123.2']);
         $this->assertMatchesRegularExpression(
-            '#data-osmb-dams-url="/static/osmb-dams\.geojson\?v=\d+"#',
+            '#data-site-config-url="/static/site-config\.json\?v=\d+"#',
             $html
         );
-        // The un-staged ones stay empty.
-        $this->assertStringContainsString('data-osmb-obstructions-url=""', $html);
     }
 }

@@ -297,9 +297,7 @@ def _build_map_page(
     state_url: str,
     gauges_geom_url: str = "",
     gauges_state_url: str = "",
-    osmb_obstructions_url: str = "",
-    osmb_dams_url: str = "",
-    osmb_access_url: str = "",
+    site_config_url: str = "",
 ) -> str:
     """Build map.html with an interactive Leaflet map of all reaches.
 
@@ -309,9 +307,10 @@ def _build_map_page(
     static/map.js treats absent attrs as "no gauge layer to fetch".
     Defaulted for back-compat with the prior 4-arg signature.
 
-    ``osmb_*_url`` are the Oregon SMB hazard/access overlay GeoJSON URLs
-    (fetched nightly by ``levels fetch-osmb``). Same empty-string =
-    skip-fetch contract as the gauge layer.
+    ``site_config_url`` is the generated ``site-config.json`` URL (S3d): the map's
+    default extent + OSMB-style overlay layer defs. static/map.js fetches it and
+    builds its layers + view from it (the layer GeoJSON URLs live inside that JSON,
+    so the per-layer ``data-osmb-*-url`` attributes are gone).
     """
     nav_html = _build_nav(states, active_page="map")
 
@@ -385,7 +384,7 @@ main {{padding:0;max-width:none;}}
   {_build_right_cluster()}
 </header>
 <main>
-<div id="map" data-geom-url="{html_mod.escape(geom_url, quote=True)}" data-state-url="{html_mod.escape(state_url, quote=True)}" data-gauges-geom-url="{html_mod.escape(gauges_geom_url, quote=True)}" data-gauges-state-url="{html_mod.escape(gauges_state_url, quote=True)}" data-osmb-obstructions-url="{html_mod.escape(osmb_obstructions_url, quote=True)}" data-osmb-dams-url="{html_mod.escape(osmb_dams_url, quote=True)}" data-osmb-access-url="{html_mod.escape(osmb_access_url, quote=True)}"></div>
+<div id="map" data-geom-url="{html_mod.escape(geom_url, quote=True)}" data-state-url="{html_mod.escape(state_url, quote=True)}" data-gauges-geom-url="{html_mod.escape(gauges_geom_url, quote=True)}" data-gauges-state-url="{html_mod.escape(gauges_state_url, quote=True)}" data-site-config-url="{html_mod.escape(site_config_url, quote=True)}"></div>
 </main>
 {_build_footer_html()}
 <script src="/static/leaflet.js" defer></script>

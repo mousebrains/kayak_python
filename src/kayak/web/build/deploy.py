@@ -58,6 +58,7 @@ from kayak.web.build.shell import (
     _build_placeholder_page,
     _presentation_states,
 )
+from kayak.web.build.site_config import build_site_config
 from kayak.web.build.sparklines import (
     _build_sparkline,
     _select_sparkline_series,
@@ -471,11 +472,14 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
         state_url = "/static/reaches-state.json"
         gauges_geom_url = f"/static/gauges-geom.json?v={gauges_geom_hash}"
         gauges_state_url = "/static/gauges-state.json"
-        # OSMB overlays: empty string when the nightly fetch hasn't landed
-        # the file yet — map.js treats absent attrs as "no layer to fetch".
-        osmb_obstructions_url = _osmb_url(static_dir, "osmb-obstructions.geojson")
-        osmb_dams_url = _osmb_url(static_dir, "osmb-dams.geojson")
-        osmb_access_url = _osmb_url(static_dir, "osmb-access-sites.geojson")
+        # Map config (default extent + OSMB-style overlay layer defs) → one
+        # non-executable JSON the map JS fetches (S3d). The per-layer GeoJSON URL
+        # is still resolved here via _osmb_url (empty until the nightly fetch lands
+        # the file); the build owns file naming + cache-busting.
+        site_config_json = build_site_config(lambda fn: _osmb_url(static_dir, fn))
+        site_config_hash = hashlib.sha256(site_config_json.encode()).hexdigest()[:10]
+        _atomic_write(static_dir / "site-config.json", site_config_json)
+        site_config_url = f"/static/site-config.json?v={site_config_hash}"
         map_html = _build_map_page(
             css_link,
             states,
@@ -483,9 +487,7 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
             state_url,
             gauges_geom_url,
             gauges_state_url,
-            osmb_obstructions_url,
-            osmb_dams_url,
-            osmb_access_url,
+            site_config_url,
         )
         _atomic_write(output_dir / "map.html", map_html)
 
