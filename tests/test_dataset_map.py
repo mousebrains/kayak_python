@@ -127,6 +127,13 @@ class TestLoadMapConfig:
         with pytest.raises(ValueError, match="out_field"):
             dataset_map.load_map_config(tmp_path)
 
+    @pytest.mark.parametrize("key", ["s", "c", "gauges", "__proto__", "constructor", "prototype"])
+    def test_reserved_layer_key_rejected(self, tmp_path: Path, key: str) -> None:
+        bad = _LAYER_YAML.replace("key: hazards", f"key: {key}")
+        _write(tmp_path, "layers:\n" + bad)
+        with pytest.raises(ValueError, match="reserved"):
+            dataset_map.load_map_config(tmp_path)
+
     def test_duplicate_layer_keys_rejected(self, tmp_path: Path) -> None:
         _write(tmp_path, "layers:\n" + _LAYER_YAML + _LAYER_YAML)
         with pytest.raises(ValueError, match="duplicate"):

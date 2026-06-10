@@ -46,8 +46,11 @@ MAP_YAML = "map.yaml"
 
 _HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 # Layer key → DOM id / URL-hash token / object key; output filename → served path;
-# out_fields → ArcGIS query field names. Keep all to safe, injection-proof charsets.
+# out_fields → ArcGIS query field names. Keep all to safe, injection-proof charsets
+# and reserve names that collide with map.js hash state or plain JS object
+# prototypes.
 _KEY_RE = re.compile(r"^[a-z0-9_]+$")
+_RESERVED_LAYER_KEYS = frozenset({"s", "c", "gauges", "__proto__", "constructor", "prototype"})
 _FILENAME_RE = re.compile(r"^[A-Za-z0-9._-]+\.geojson$")
 _OUT_FIELD_RE = re.compile(r"^[A-Za-z0-9_]+$")
 _SHAPES = ("triangle", "diamond", "circle")
@@ -89,6 +92,8 @@ class MapLayer(BaseModel):
     def _v_key(cls, v: str) -> str:
         if not _KEY_RE.match(v):
             raise ValueError(f"key must match [a-z0-9_]+ (got {v!r})")
+        if v in _RESERVED_LAYER_KEYS:
+            raise ValueError(f"key {v!r} is reserved")
         return v
 
     @field_validator("shape")
