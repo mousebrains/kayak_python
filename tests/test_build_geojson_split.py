@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 from kayak.db.models import Reach, ReachClass, State
+from kayak.web.build._shared import _LICENSE_META
 from kayak.web.build.geojson import _build_reaches_state, _build_reaches_static
 
 
@@ -122,5 +123,5 @@ def test_outputs_carry_license_meta(session) -> None:
     state = json.loads(_build_reaches_state([r], set(), {}))
     for doc in (static, state):
         assert doc["_meta"]["license"] == "CC BY-NC 4.0"
-        assert doc["_meta"]["attribution"] == "levels.wkcc.org"
+        assert doc["_meta"]["attribution"] == _LICENSE_META["attribution"]
         assert doc["_meta"]["license_url"].startswith("https://creativecommons.org/")

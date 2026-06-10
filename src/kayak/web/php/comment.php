@@ -74,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $cr_id = (int)$db->lastInsertId();
 
             $maint_emails = maintainer_emails();
-            $site = rtrim(Config::str('site_url', 'https://levels.wkcc.org'), '/');
+            $site = mail_site_url();
             $email_body = render_maintainer_notification(
                 'Site feedback',
                 (string)$ed['email'],

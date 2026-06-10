@@ -621,7 +621,7 @@ def test_deploy_php_root_style_css_default_brand(tmp_path):
 
 def test_deploy_php_root_style_css_custom_brand(monkeypatch, tmp_path):
     # A custom brand must reach the root /style.css too (the #158 review Medium —
-    # it was copied verbatim, leaving the fallback/regression pages WKCC-blue).
+    # it was copied verbatim, leaving fallback/regression pages engine-blue).
     monkeypatch.setattr(shared_mod, "BRAND_COLOR", "#abcdef")
     output = tmp_path / "out"
     output.mkdir()

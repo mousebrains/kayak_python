@@ -64,8 +64,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $subj_txt = $subject   !== '' ? $subject   : '(no subject)';
             $src      = sanitize_source_url((string)($_POST['source_url'] ?? ''));
             $src_txt  = $src !== '' ? $src : '(direct)';
+            $site_name = mail_site_name();
             $email_body = <<<TXT
-Contact form submission from levels.wkcc.org
+Contact form submission from $site_name
 
 From:    $from_txt
 Subject: $subj_txt

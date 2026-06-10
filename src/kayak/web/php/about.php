@@ -9,9 +9,9 @@ require_once __DIR__ . '/includes/prose.php';
 
 header('Cache-Control: public, max-age=300');
 include_header(
-    'About — ' . Config::site('site_name', 'WKCC River Levels'),
+    'About — ' . Config::site('site_name', 'River Levels'),
     '',
-    'How the WKCC River Levels site came to be — a three-decade project to make real-time river data available to paddlers.'
+    'How this river levels site came to be — a project to make real-time river data available to paddlers.'
 );
 ?>
 <div class="prose">

@@ -11,17 +11,19 @@ from kayak.dataset import site
 
 class TestLoadSiteConfig:
     def test_absent_returns_engine_defaults(self, tmp_path: Path) -> None:
-        # Opt-in: no site.yaml → the engine's built-in identity (current WKCC
-        # values through S3), so a dataset without one renders unchanged.
+        # Opt-in: no site.yaml → generic engine identity. Production WKCC values
+        # are supplied by the WKCC dataset's explicit site.yaml.
         c = site.load_site_config(tmp_path)
-        assert c.site_name == "WKCC River Levels"
-        assert c.org_name == "Willamette Kayak and Canoe Club"
+        assert c.site_name == "River Levels"
+        assert c.org_name == "Kayak"
+        assert c.org_label == "Kayak"
+        assert c.org_url == "https://example.com"
         assert c.brand_color == "#1b5591"
-        assert c.attribution == "levels.wkcc.org"
+        assert c.attribution == "dataset contributors"
 
     def test_empty_file_is_no_overrides(self, tmp_path: Path) -> None:
         (tmp_path / site.SITE_YAML).write_text("")
-        assert site.load_site_config(tmp_path).site_name == "WKCC River Levels"
+        assert site.load_site_config(tmp_path).site_name == "River Levels"
 
     def test_overrides_applied_partially(self, tmp_path: Path) -> None:
         # A partial site.yaml overrides only the named keys; the rest keep defaults.
@@ -32,7 +34,12 @@ class TestLoadSiteConfig:
         assert c.site_name == "Foo Levels"
         assert c.brand_color == "#abcdef"
         assert c.org_name == "Foo Paddlers"
+        assert c.org_label == "FP"
         assert c.brand_color_dark == "#0d3057"  # untouched default
+
+    def test_org_label_ignores_stopwords(self, tmp_path: Path) -> None:
+        (tmp_path / site.SITE_YAML).write_text("org_name: Willamette Kayak and Canoe Club\n")
+        assert site.load_site_config(tmp_path).org_label == "WKCC"
 
     def test_unknown_key_rejected(self, tmp_path: Path) -> None:
         (tmp_path / site.SITE_YAML).write_text("bogus_key: 1\n")

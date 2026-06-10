@@ -9,10 +9,9 @@ declare(strict_types=1);
  * For dev/test: set MAIL_DUMP_DIR to write messages to files instead of
  * sending them. Useful when working locally without MTA configured.
  *
- * MAIL_FROM / MAIL_REPLY_TO / MAIL_DUMP_DIR resolve via Config (JSON,
- * env fallback baked into Config::str). The hardcoded `noreply@<host>`
- * + `noreply@levels.wkcc.org` defaults remain for "neither JSON nor
- * env sets a value" cases.
+ * MAIL_FROM / MAIL_REPLY_TO / MAIL_DUMP_DIR resolve via Config (JSON).
+ * Message bodies use the resolved dataset site identity block when present,
+ * with generic engine fallbacks.
  */
 
 require_once __DIR__ . '/config.php';
@@ -38,6 +37,14 @@ function mail_reply_to(): string {
 function mail_dump_dir(): ?string {
     $v = Config::str('mail_dump_dir');
     return $v !== '' ? $v : null;
+}
+
+function mail_site_name(): string {
+    return Config::site('site_name', 'River Levels');
+}
+
+function mail_site_url(): string {
+    return rtrim(Config::str('site_url', 'https://example.com'), '/');
 }
 
 /**
@@ -106,10 +113,12 @@ function send_email(string $to, string $subject, string $body, array $extra_head
 /** Render the magic-link email body. */
 function render_magic_link_email(string $link, string $ip, ?string $user_agent): string {
     $ua = $user_agent !== null && $user_agent !== '' ? substr($user_agent, 0, 200) : '(unknown browser)';
+    $site_name = mail_site_name();
+    $site_url = mail_site_url();
     return <<<TXT
 Hello,
 
-Click the link below to sign in to WKCC River Levels. The link expires in
+Click the link below to sign in to $site_name. The link expires in
 30 minutes and can only be used once.
 
   $link
@@ -122,8 +131,8 @@ If you did not request a login, ignore this email; no account activity
 will occur.
 
 —
-WKCC River Levels
-https://levels.wkcc.org
+$site_name
+$site_url
 TXT;
 }
 
@@ -138,6 +147,7 @@ function render_maintainer_notification(
 ): string {
     $notes_block  = $notes === ''      ? '(none)'   : $notes;
     $source_block = $source_url === '' ? '(direct)' : $source_url;
+    $site_name = mail_site_name();
     return <<<TXT
 A change has been proposed.
 
@@ -155,7 +165,7 @@ Notes to maintainer
 $notes_block
 
 —
-WKCC River Levels
+$site_name
 TXT;
 }
 
@@ -166,14 +176,16 @@ function render_editor_decision_email(
     string $reviewer_note
 ): string {
     $note_block = $reviewer_note === '' ? '' : "\nNote from the maintainer:\n$reviewer_note\n";
+    $site_name = mail_site_name();
+    $site_url = mail_site_url();
     return <<<TXT
 Your proposed change to $target_label has been $decision.
 $note_block
 Thank you for contributing.
 
 —
-WKCC River Levels
-https://levels.wkcc.org
+$site_name
+$site_url
 TXT;
 }
 
@@ -182,6 +194,8 @@ TXT;
  * pending but the maintainer has a question or comment to relay.
  */
 function render_editor_reply_email(string $target_label, string $reply_body): string {
+    $site_name = mail_site_name();
+    $site_url = mail_site_url();
     return <<<TXT
 The maintainer replied on your proposed change to $target_label:
 
@@ -191,13 +205,15 @@ Your proposal is still pending. You can update it by visiting the reach
 and submitting again, or wait for the maintainer's next action.
 
 —
-WKCC River Levels
-https://levels.wkcc.org
+$site_name
+$site_url
 TXT;
 }
 
 /** Reply + close combined: one email covering both the reply and the closure. */
 function render_editor_reply_and_close_email(string $target_label, string $reply_body): string {
+    $site_name = mail_site_name();
+    $site_url = mail_site_url();
     return <<<TXT
 The maintainer replied on your proposed change to $target_label:
 
@@ -206,7 +222,7 @@ $reply_body
 This proposal has been marked resolved. Thank you for contributing.
 
 —
-WKCC River Levels
-https://levels.wkcc.org
+$site_name
+$site_url
 TXT;
 }

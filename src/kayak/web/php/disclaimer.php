@@ -9,9 +9,9 @@ require_once __DIR__ . '/includes/prose.php';
 
 header('Cache-Control: public, max-age=300');
 include_header(
-    'Disclaimer — ' . Config::site('site_name', 'WKCC River Levels'),
+    'Disclaimer — ' . Config::site('site_name', 'River Levels'),
     '',
-    'Use-at-your-own-risk notice for the WKCC River Levels site. Paddling is inherently dangerous; you are responsible for your own safety.'
+    'Use-at-your-own-risk notice for this river levels site. Paddling is inherently dangerous; you are responsible for your own safety.'
 );
 ?>
 <div class="prose">

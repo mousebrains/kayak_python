@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest import mock
 
 from kayak.dataset import region as region_mod
+from kayak.dataset import site as site_mod
 from kayak.db.models import (
     DataType,
     FetchUrl,
@@ -18,7 +19,13 @@ from kayak.db.models import (
 )
 from kayak.web.build._shared import _atomic_write
 from kayak.web.build.levels import _build_html_table, _get_row_data, _levels_key
-from kayak.web.build.shell import _build_letter_nav, _build_map_page, _build_nav, _build_page
+from kayak.web.build.shell import (
+    _build_letter_nav,
+    _build_map_page,
+    _build_nav,
+    _build_page,
+    _build_right_cluster,
+)
 from kayak.web.build.sparklines import _build_sparkline, _select_sparkline_series
 
 COLS = [
@@ -644,6 +651,20 @@ class TestBuildNav:
         assert 'href="/Oregon.html"' in result
         assert 'href="/Montana.html"' in result
         assert 'href="/Wyoming.html"' not in result  # in neither set → no button
+
+    def test_right_cluster_uses_dataset_org_identity(self, tmp_path, monkeypatch):
+        (tmp_path / site_mod.SITE_YAML).write_text(
+            "org_name: Foo Paddlers\norg_url: https://foo.example\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("kayak.config.DATASET_DIR", tmp_path)
+        site_mod.get_site_config.cache_clear()
+        try:
+            result = _build_right_cluster()
+        finally:
+            site_mod.get_site_config.cache_clear()
+        assert 'href="https://foo.example"' in result
+        assert ">FP</a>" in result
 
 
 class TestBuildLetterNav:

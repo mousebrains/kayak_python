@@ -46,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $issued = issue_magic_link($email, $next);
             if (!$issued['banned']) {
                 $tok  = $issued['token'];
-                $base = rtrim(Config::str('site_url', 'https://levels.wkcc.org'), '/');
+                $base = mail_site_url();
                 $link = $base . '/auth.php?t=' . urlencode($tok)
                       . '&next=' . rawurlencode($next);
                 $body = render_magic_link_email(
@@ -54,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     (string)($_SERVER['REMOTE_ADDR'] ?? ''),
                     $_SERVER['HTTP_USER_AGENT'] ?? null
                 );
-                send_email($email, 'Sign in to WKCC River Levels', $body);
+                send_email($email, 'Sign in to ' . mail_site_name(), $body);
             }
             // Same response whether the email existed, was new, or is banned.
             $info = 'If that email can sign in, a login link is on its way. '
@@ -70,7 +70,7 @@ $csrf = htmlspecialchars(csrf_token());
 $next_attr = htmlspecialchars($next);
 
 header('Cache-Control: no-store');
-include_header('Sign in', '', 'Sign in to WKCC River Levels.', turnstile_script_tag());
+include_header('Sign in', '', 'Sign in to ' . mail_site_name() . '.', turnstile_script_tag());
 ?>
 <h2>Sign in</h2>
 

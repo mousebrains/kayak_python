@@ -43,10 +43,11 @@ class TestBuildConfigData:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # S3a: PHP reads site identity from the same resolved block. With no
-        # dataset site.yaml the engine defaults (current WKCC values) are emitted.
+        # dataset site.yaml the generic engine defaults are emitted.
         monkeypatch.setenv("DATASET_DIR", str(tmp_path))  # empty dataset dir → defaults
         data = build_config_data(KayakConfig())
-        assert data["site"]["site_name"] == "WKCC River Levels"
+        assert data["site"]["site_name"] == "River Levels"
+        assert data["site"]["org_label"] == "Kayak"
         assert data["site"]["brand_color"] == "#1b5591"
 
     def test_site_identity_reflects_dataset_override(
@@ -57,7 +58,7 @@ class TestBuildConfigData:
         data = build_config_data(KayakConfig())
         assert data["site"]["site_name"] == "Foo Levels"
         assert data["site"]["brand_color"] == "#abcdef"
-        assert data["site"]["org_name"] == "Willamette Kayak and Canoe Club"  # default kept
+        assert data["site"]["org_name"] == "Kayak"  # default kept
 
     def test_excludes_none_fields(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Strip all hc_*, mail_*, turnstile_* env vars so they default to None.

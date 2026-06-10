@@ -18,15 +18,15 @@ from kayak.dataset.site import SiteConfig, get_site_config
 
 logger = logging.getLogger(__name__)
 
-# Resolved dataset site identity (S3a). Engine defaults render the current values
-# when no site.yaml is present, so production is unchanged.
+# Resolved dataset site identity (S3a). Engine defaults are generic; the WKCC
+# deployment gets its identity from kayak_data/site.yaml.
 _SITE = get_site_config()
 
 # Data freshness
 DATA_STALE_THRESHOLD = timedelta(hours=48)
 DATA_EXPIRY_THRESHOLD = timedelta(days=7)
 
-# Branding (dataset-driven via site.yaml; defaults to the current WKCC palette)
+# Branding (dataset-driven via site.yaml; defaults to the generic engine palette)
 BRAND_COLOR = _SITE.brand_color
 BRAND_COLOR_DARK = _SITE.brand_color_dark
 # The brand color baked into the shipped static assets (style.css :root, manifest)

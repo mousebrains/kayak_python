@@ -9,9 +9,8 @@ analogue of the metadata CSVs: typed, validated, dataset-owned content.
 have no host-env override today (the env-backed identity keys — ``SITE_URL``,
 ``MAINTAINER_NAME``, ``MAIL_*`` — stay in :class:`kayak.config.KayakConfig`,
 which already layers env over its defaults). ``site.yaml`` is **opt-in**: a
-dataset without one renders with the engine defaults (which, through S3, remain
-the current WKCC values so production is unchanged — the generic-default flip is
-deferred to S3i).
+dataset without one renders with generic engine defaults. Production WKCC
+identity lives in the WKCC dataset's explicit ``site.yaml``.
 
 The values flow to two consumers: the static build (``kayak.web.build`` reads
 :func:`get_site_config`) and PHP (``levels emit-config`` embeds the resolved
@@ -25,6 +24,7 @@ from __future__ import annotations
 import re
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 import yaml
@@ -38,10 +38,33 @@ SITE_YAML = "site.yaml"
 # spirit of the S2 regression sanitizer.
 _HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 _HTML_META_RE = re.compile(r"""[<>"'&]""")
+_WORD_RE = re.compile(r"[A-Za-z0-9]+")
+_ORG_LABEL_STOPWORDS = {"and", "of", "the", "for"}
+
+
+def _safe_text_value(v: str) -> str:
+    if not v or not v.strip():
+        raise ValueError("must be a non-empty string")
+    if _HTML_META_RE.search(v):
+        raise ValueError("must not contain HTML metacharacters (< > \" ' &)")
+    return v
+
+
+def _short_org_label(name: str) -> str:
+    """Derive a compact nav label from an organization name.
+
+    ``Willamette Kayak and Canoe Club`` becomes ``WKCC``; short single-word
+    names remain unchanged. The input has already passed the safe-text validator.
+    """
+    words = _WORD_RE.findall(name)
+    initials = "".join(
+        word[0].upper() for word in words if word.lower() not in _ORG_LABEL_STOPWORDS
+    )
+    return initials if 2 <= len(initials) <= 6 else name
 
 
 class SiteConfig(BaseModel):
-    """Typed site identity. Engine defaults are the current WKCC values (S3a).
+    """Typed site identity. Engine defaults are generic; datasets own branding.
 
     ``extra="forbid"`` so an unknown ``site.yaml`` key is a hard error (caught by
     ``validate-dataset``), matching the dataset contract's reject-unknown rule.
@@ -49,24 +72,31 @@ class SiteConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    site_name: str = "WKCC River Levels"
-    org_name: str = "Willamette Kayak and Canoe Club"
-    org_url: str = "https://wkcc.org"
+    site_name: str = "River Levels"
+    org_name: str = "Kayak"
+    org_url: str = "https://example.com"
+    org_label: str = ""
     # Colors are strict 6-digit ``#rrggbb`` only — no 3-digit (#fff), ``rgb()``, or
     # named colors. Stricter than CSS on purpose (the safe direction: the value
     # lands in both an HTML attribute and a CSS property).
     brand_color: str = "#1b5591"
     brand_color_dark: str = "#0d3057"
-    attribution: str = "levels.wkcc.org"
+    attribution: str = "dataset contributors"
+
+    def model_post_init(self, __context: Any) -> None:
+        """Fill the compact organization label when the dataset omits it."""
+        if self.org_label == "":
+            object.__setattr__(self, "org_label", _short_org_label(self.org_name))
 
     @field_validator("site_name", "org_name", "attribution")
     @classmethod
     def _safe_text(cls, v: str) -> str:
-        if not v or not v.strip():
-            raise ValueError("must be a non-empty string")
-        if _HTML_META_RE.search(v):
-            raise ValueError("must not contain HTML metacharacters (< > \" ' &)")
-        return v
+        return _safe_text_value(v)
+
+    @field_validator("org_label")
+    @classmethod
+    def _safe_org_label(cls, v: str) -> str:
+        return _safe_text_value(v)
 
     @field_validator("brand_color", "brand_color_dark")
     @classmethod
