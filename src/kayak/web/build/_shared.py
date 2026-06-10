@@ -79,9 +79,6 @@ _STATE_ABBREVS = {
 
 _ABBR_TO_STATE = {v: k for k, v in _STATE_ABBREVS.items()}
 
-# States shown in the nav bar (Oregon + adjacent states)
-_NAV_STATES = {"Oregon", "Washington", "Idaho", "Nevada", "California", "Montana"}
-
 
 # CSS is read once from the source tree and inlined into every page.
 # Path arithmetic: __file__ is .../src/kayak/web/build/_shared.py, so

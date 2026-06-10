@@ -9,7 +9,6 @@ from kayak.web.build._shared import (
     _FILTERS_JS_VERSION,
     _LEVELS_JS,
     _MAP_JS_VERSION,
-    _NAV_STATES,
     _STATE_ABBREVS,
     BRAND_COLOR,
     BRAND_COLOR_DARK,
@@ -46,7 +45,7 @@ def _build_nav(
     gauges_cls = ' class="active"' if active_page == "gauges" else ""
     links.append(f'<a href="/map.html"{map_cls}>Map</a>')
     links.append(f'<a href="/gauges.html"{gauges_cls}>Gauges</a>')
-    for s in sorted(_NAV_STATES):
+    for s in sorted(states):
         abbrev = _STATE_ABBREVS.get(s, s)
         cls = ' class="active"' if s == active_state else ""
         links.append(f'<a href="/{s}.html"{cls}>{abbrev}</a>')

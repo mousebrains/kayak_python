@@ -627,15 +627,14 @@ class TestBuildNav:
         result = _build_nav(["Oregon", "Washington"], active_state="Oregon")
         assert 'class="active"' in result
 
-    def test_non_nav_states_excluded(self, session):
-        # _NAV_STATES is the source of truth for nav buttons (not
-        # `states`, which now plays a different role: it gates the
-        # body cross-link reach anchors in _build_placeholder_page).
-        # Wyoming/Utah aren't in _NAV_STATES → no nav button. Montana
-        # IS in _NAV_STATES, so it always shows up.
-        result = _build_nav(["Oregon", "Wyoming", "Utah"])
-        assert "WY" not in result
-        assert "UT" not in result
+    def test_nav_buttons_are_the_passed_states(self, session):
+        # S3b-2: nav buttons are driven by the passed `states` (all_state_names()),
+        # not a hardcoded allowlist — every passed state gets a button, and a
+        # state not passed gets none.
+        result = _build_nav(["Oregon", "Washington"])
+        assert 'href="/Oregon.html"' in result
+        assert 'href="/Washington.html"' in result
+        assert 'href="/Idaho.html"' not in result  # not passed → no button
 
 
 class TestBuildLetterNav:

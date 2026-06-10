@@ -32,7 +32,6 @@ from kayak.web.build._shared import (
     _FILTERS_JS_PATH,
     _JS_PATH,
     _LICENSE_META,
-    _NAV_STATES,
     _STATIC_DIR,
     _apply_brand_color,
     _atomic_write,
@@ -484,13 +483,11 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
         # so no per-state gauges.<slug>.html artifact is generated.
         _write_gauges_page(session, all_latest, states, css_link, output_dir)
 
-        # Per-state landing pages — generated for every state in
-        # _NAV_STATES, independent of reach presence. Montana has no
-        # reaches yet but does have gauges, so the landing page exists
-        # and links to the filtered /gauges.html view; reach-related
-        # anchors are suppressed inside _build_placeholder_page when
-        # the state has no entry in `states` (the reach-states list).
-        for state in sorted(_NAV_STATES):
+        # Per-state landing pages — one per state with visible reaches
+        # (``all_state_names()``; S3b-2 dropped the hardcoded nav allowlist).
+        # A landing page links to the filtered /index.html + /gauges.html views
+        # and the curated dataset region links for that state.
+        for state in sorted(states):
             links_page = _build_placeholder_page(css_link, states, state)
             _atomic_write(output_dir / f"{state}.html", links_page)
 
@@ -519,10 +516,9 @@ def _emit_sitemap(
     urls.append((f"{site}/gauges.html", "hourly", "0.8"))
     urls.append((f"{site}/map.html", "daily", "0.8"))
     urls.append((f"{site}/custom_gauges.php", "daily", "0.6"))
-    # State landing pages exist for every _NAV_STATES entry — including
-    # gauges-only states like Montana — so list all of them, not just
-    # the reach-states.
-    for state in sorted(_NAV_STATES):
+    # One landing page per state with visible reaches (matches the set written
+    # above; S3b-2 drives both off all_state_names() rather than an allowlist).
+    for state in sorted(states):
         urls.append((f"{site}/{state}.html", "hourly", "0.9"))
     urls.append((f"{site}/about.php", "monthly", "0.4"))
     urls.append((f"{site}/disclaimer.php", "monthly", "0.4"))
