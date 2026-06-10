@@ -282,19 +282,17 @@
       });
   }
 
-  // The site-config fetch runs in parallel with the render-critical geom/state
-  // fetches; only the OSMB overlays (default-OFF) chain off it, so first paint is
-  // not delayed by the config round-trip. applyConfig() populates OSMB_LAYER_DEFS,
-  // then the overlays are fetched in that same order so osmbData[] stays aligned.
-  const osmbDataPromise = fetchOptional(siteConfigUrl, 'site-config').then(
-    function (cfg) {
-      applyConfig(cfg);
-      return Promise.all(
-        OSMB_LAYER_DEFS.map(function (d) {
-          return fetchOptional(d.url, 'osmb-' + d.key);
-        }),
-      );
-    },
+  // Split the config from the heavy overlay data so first paint is gated ONLY on
+  // the required reach data (+ best-effort gauges):
+  //   - site-config.json is tiny (~1KB), same-origin, and fail-safe — fetched and
+  //     applied (DEFAULT_VIEW/ZOOM + OSMB_LAYER_DEFS) BEFORE render so the view, the
+  //     layer control, and the URL hash are correct in one pass. A failed/slow-to-
+  //     -fail fetch resolves null → seeded view + no overlays; render still proceeds.
+  //   - the (potentially large) OSMB overlay GeoJSON is NOT fetched here — each
+  //     layer lazy-loads its data on first toggle (see loadOsmb), so a slow/large
+  //     overlay never blanks the reach map. Mirrors feature-map.js.
+  const cfgApplied = fetchOptional(siteConfigUrl, 'site-config').then(
+    applyConfig,
   );
 
   Promise.all([
@@ -308,17 +306,17 @@
     }),
     fetchOptional(gaugesGeomUrl, 'gauges-geom'),
     fetchOptional(gaugesStateUrl, 'gauges-state'),
-    osmbDataPromise,
+    cfgApplied,
   ])
     .then(function (res) {
-      renderMap(res[0], res[1], res[2], res[3], res[4]);
+      renderMap(res[0], res[1], res[2], res[3]);
     })
     .catch(function (e) {
       console.error('map data load failed:', e);
       fail('Map data failed to load.');
     });
 
-  function renderMap(geom, state, gaugesGeom, gaugesState, osmbData) {
+  function renderMap(geom, state, gaugesGeom, gaugesState) {
     const initial = parseHash();
     const sSet = new Set(initial.s === null ? STATUSES : initial.s);
     const cSet = new Set(initial.c === null ? CLASS_TIERS : initial.c);
@@ -328,12 +326,37 @@
     let showGauges = hasGaugeLayer && initial.gauges;
     const osmbLayers = {};
     const osmbVisible = {};
-    OSMB_LAYER_DEFS.forEach(function (d, i) {
-      const data = osmbData ? osmbData[i] : null;
-      if (!data) return;
-      osmbLayers[d.key] = buildOsmbLayer(data, d);
+    const osmbLoaded = {};
+    const osmbDefByKey = {};
+    OSMB_LAYER_DEFS.forEach(function (d) {
+      osmbDefByKey[d.key] = d;
+    });
+
+    // Lazy-load + populate one OSMB overlay's GeoJSON, once. Keeps the (large)
+    // overlay data off the first-paint path — it streams into the already-added
+    // empty layer group. A failed fetch resets the flag so a re-toggle retries.
+    function loadOsmb(key) {
+      if (osmbLoaded[key]) return;
+      const d = osmbDefByKey[key];
+      if (!d?.url) return;
+      osmbLoaded[key] = true;
+      fetchOptional(d.url, 'osmb-' + key).then(function (data) {
+        if (data) populateOsmbLayer(osmbLayers[key], data, d);
+        else osmbLoaded[key] = false;
+      });
+    }
+
+    // Overlay groups start EMPTY; a layer with no GeoJSON URL (the nightly fetch
+    // hasn't landed it) gets no group → no checkbox. A layer toggled on by the URL
+    // hash loads its data now (into the on-map empty group).
+    OSMB_LAYER_DEFS.forEach(function (d) {
+      if (!d.url) return;
+      osmbLayers[d.key] = L.layerGroup();
       osmbVisible[d.key] = initial.osmb[d.key];
-      if (osmbVisible[d.key]) osmbLayers[d.key].addTo(map);
+      if (osmbVisible[d.key]) {
+        loadOsmb(d.key);
+        osmbLayers[d.key].addTo(map);
+      }
     });
 
     // Dark halo casing 2px wider than the colored line at 0.75 opacity.
@@ -830,8 +853,12 @@
         osmbVisible[key] = on;
         const lyr = osmbLayers[key];
         if (!lyr) return;
-        if (on) lyr.addTo(map);
-        else map.removeLayer(lyr);
+        if (on) {
+          loadOsmb(key); // lazy-load the GeoJSON on first toggle-on
+          lyr.addTo(map);
+        } else {
+          map.removeLayer(lyr);
+        }
       }
       applyZOrder();
       writeHash(sSet, cSet, showGauges, osmbVisible);
@@ -857,8 +884,7 @@
   // overlayPane) for the z-order the user requested.
   const OSMB_CANVAS_RENDERER = L.canvas();
 
-  function buildOsmbLayer(data, def) {
-    const group = L.layerGroup();
+  function populateOsmbLayer(group, data, def) {
     const features = data?.features || [];
     for (let i = 0; i < features.length; i++) {
       const f = features[i];
@@ -893,7 +919,6 @@
         marker.bindPopup(def.popupFn.bind(null, props, def.popupLink));
       }
     }
-    return group;
   }
 
   // Build an L.divIcon with inline SVG for the non-circle OSMB markers.
