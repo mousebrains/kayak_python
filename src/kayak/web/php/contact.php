@@ -17,6 +17,7 @@ require_once __DIR__ . '/includes/sanity.php';
 require_once __DIR__ . '/includes/source_url.php';
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
+require_once __DIR__ . '/includes/prose.php';
 
 // Intentionally not gated on require_editor_feature(): the contact form is
 // for anyone (no account required), and the footer links to it
@@ -106,10 +107,12 @@ header('Cache-Control: no-store');
 include_header('Contact the maintainer', '', 'Send a message to the site maintainer.', turnstile_script_tag());
 ?>
 <h2>Contact the maintainer</h2>
+<?php $__prose = prose_fragment('contact'); if ($__prose !== null) { echo $__prose; } else { ?>
 <p style="font-size:.85rem;color:var(--c-text-muted)">
   Send a message to the person who runs this site. No account needed.
   Leave your email if you want a reply.
 </p>
+<?php } ?>
 
 <?php if ($saved): ?>
   <p style="padding:.6rem;background:#e8f4ea;border:1px solid #b7dcc0;border-radius:4px">

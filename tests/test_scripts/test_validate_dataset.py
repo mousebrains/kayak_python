@@ -1253,3 +1253,33 @@ def test_state_csv_whitespace_only_name_rejected(dataset_copy: Path) -> None:
     _rewrite_csv(dataset_copy / "state.csv", _mutate)
     errs = validate_dataset(dataset_copy)
     assert any("state.csv" in e and "unsafe state name" in e for e in errs)
+
+
+# --------------------------------------------------------------------------- #
+# site/*.md prose — opt-in, legal trio required when publishable (S3c)
+# --------------------------------------------------------------------------- #
+
+
+def test_site_prose_absent_is_valid(dataset_copy: Path) -> None:
+    # The fixture is publishable but ships no site/ dir — opt-in, so still valid
+    # (the engine serves its built-in prose until the dataset moves it).
+    assert not (dataset_copy / "site").exists()
+    assert validate_dataset(dataset_copy) == []
+
+
+def test_publishable_with_site_dir_requires_legal_prose(dataset_copy: Path) -> None:
+    # Once site/ exists, a publishable dataset must carry the full legal set; a
+    # half-moved set (only about) is rejected.
+    (dataset_copy / "site").mkdir()
+    (dataset_copy / "site" / "about.md").write_text("## About\n\nHi.\n")
+    errs = validate_dataset(dataset_copy)
+    assert any("site/privacy.md is required" in e for e in errs)
+    assert any("site/disclaimer.md is required" in e for e in errs)
+    assert any("site/contact.md is required" in e for e in errs)
+
+
+def test_complete_site_prose_accepted(dataset_copy: Path) -> None:
+    (dataset_copy / "site").mkdir()
+    for page in ("about", "disclaimer", "privacy", "contact"):
+        (dataset_copy / "site" / f"{page}.md").write_text(f"## {page.title()}\n\nText.\n")
+    assert validate_dataset(dataset_copy) == []

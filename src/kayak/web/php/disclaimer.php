@@ -5,15 +5,17 @@ declare(strict_types=1);
  */
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
+require_once __DIR__ . '/includes/prose.php';
 
 header('Cache-Control: public, max-age=300');
 include_header(
-    'Disclaimer — WKCC River Levels',
+    'Disclaimer — ' . Config::site('site_name', 'WKCC River Levels'),
     '',
     'Use-at-your-own-risk notice for the WKCC River Levels site. Paddling is inherently dangerous; you are responsible for your own safety.'
 );
 ?>
 <div class="prose">
+<?php $__prose = prose_fragment('disclaimer'); if ($__prose !== null) { echo $__prose; } else { ?>
 <h2>Disclaimer</h2>
 <p class="updated">Last updated: April 22, 2026</p>
 
@@ -84,5 +86,6 @@ and policies are their own.</p>
 <p>This disclaimer may be updated from time to time. The revised version
 will be posted on this page with a new date. Your continued use of the site
 constitutes acceptance of the current version.</p>
+<?php } ?>
 </div>
 <?php include_footer(); ?>

@@ -156,15 +156,17 @@ def _img_src_local_only(tag: str, attr: str, value: str) -> str | None:
     return value
 
 
-def render_markdown_safe(md_text: str) -> str:
-    """Render a regression report's Markdown to a sanitized HTML fragment.
+def render_markdown_to_html(md_text: str) -> str:
+    """Render Markdown to a sanitized HTML fragment (markdown + nh3 allowlist).
 
-    Filters maintainer sections, renders via python-markdown (tables +
-    fenced_code), then ``nh3.clean`` to the allowlist — stripping raw HTML,
-    event handlers, disallowed URL schemes, and external image sources. Pure.
+    The generic core: ``python-markdown`` (tables + fenced_code) → ``nh3.clean`` to
+    the allowlist — stripping raw HTML, event handlers, disallowed URL schemes, and
+    external image sources. Pure. Shared by the regression reports (via
+    :func:`render_markdown_safe`, which pre-filters maintainer-only sections) and the
+    dataset prose pages (S3c), which want the sanitizer but **not** the
+    regression-specific section/link filtering.
     """
-    filtered = _filter_regression_md_for_html(md_text)
-    html = _markdown.markdown(filtered, extensions=["tables", "fenced_code"])
+    html = _markdown.markdown(md_text, extensions=["tables", "fenced_code"])
     return nh3.clean(
         html,
         tags=_NH3_TAGS,
@@ -174,6 +176,16 @@ def render_markdown_safe(md_text: str) -> str:
         attribute_filter=_img_src_local_only,
         strip_comments=True,
     )
+
+
+def render_markdown_safe(md_text: str) -> str:
+    """Render a regression report's Markdown to a sanitized HTML fragment.
+
+    Drops maintainer-only sections + the reproduce preamble
+    (:func:`_filter_regression_md_for_html`), then renders + sanitizes via
+    :func:`render_markdown_to_html`. Pure.
+    """
+    return render_markdown_to_html(_filter_regression_md_for_html(md_text))
 
 
 # --------------------------------------------------------------------------- #

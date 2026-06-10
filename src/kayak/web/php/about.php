@@ -5,15 +5,17 @@ declare(strict_types=1);
  */
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
+require_once __DIR__ . '/includes/prose.php';
 
 header('Cache-Control: public, max-age=300');
 include_header(
-    'About — WKCC River Levels',
+    'About — ' . Config::site('site_name', 'WKCC River Levels'),
     '',
     'How the WKCC River Levels site came to be — a three-decade project to make real-time river data available to paddlers.'
 );
 ?>
 <div class="prose">
+<?php $__prose = prose_fragment('about'); if ($__prose !== null) { echo $__prose; } else { ?>
 <h2>About</h2>
 <p class="updated">Last updated: April 23, 2026</p>
 
@@ -89,5 +91,6 @@ If you find it useful and want to help keep it going, please consider
 joining or contributing to the club.</p>
 <p>Pat's time on this project is entirely voluntary.</p>
 </div>
+<?php } ?>
 </div>
 <?php include_footer(); ?>
