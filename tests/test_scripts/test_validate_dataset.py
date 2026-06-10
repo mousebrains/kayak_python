@@ -78,6 +78,12 @@ def test_optional_unknown_station_policy_column_accepted(dataset_copy: Path) -> 
     assert validate_dataset(dataset_copy) == []
 
 
+def test_map_yaml_is_validated(dataset_copy: Path) -> None:
+    (dataset_copy / "map.yaml").write_text("center: [200.0, 0.0]\n")
+    errs = validate_dataset(dataset_copy)
+    assert any("map.yaml" in e and "center" in e for e in errs)
+
+
 def test_unexpected_extra_column_still_rejected(dataset_copy: Path) -> None:
     """Allowing OPTIONAL columns to be absent must NOT let an arbitrary unknown
     column through — a non-contract column is still a shape error."""

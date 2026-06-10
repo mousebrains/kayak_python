@@ -112,6 +112,7 @@ for rel in \
     sw.js \
     static/map.js \
     static/leaflet.js \
+    static/site-config.json \
     latest.php \
     includes/db.php \
     _internal/index.php \
@@ -126,6 +127,12 @@ for rel in \
 done
 [ "$missing" -eq 0 ] || { echo "wheel-smoke FAILED: build output incomplete" >&2; exit 1; }
 echo "    OK — build deployed static + php + templates + license from the wheel"
+
+grep -q '"key": "dams"' "$DOCROOT/static/site-config.json" \
+    || { echo "wheel-smoke FAILED: generated site-config.json missing default map layer" >&2; exit 1; }
+grep -q '"center": \[' "$DOCROOT/static/site-config.json" \
+    || { echo "wheel-smoke FAILED: generated site-config.json missing default map view" >&2; exit 1; }
+echo "    OK — generated site-config.json from packaged map defaults"
 
 echo "==> regression reports rendered from DATASET_DIR/regression (S2-E2)"
 REG="$DOCROOT/static/regression"
