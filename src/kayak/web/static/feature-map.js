@@ -8,17 +8,19 @@
 //                     — clickable per-reach polylines, each opens a popup
 //                     linking to /description.php?id=<id>. Used on the
 //                     gauge page; omitted on reach pages.
-//   data-osmb-obstructions-url / data-osmb-dams-url / data-osmb-access-url
-//                     — Oregon SMB overlay GeoJSON URLs. Empty when the
-//                     nightly fetcher hasn't landed the file yet; absent
-//                     URLs mean "don't register that overlay". The layers
-//                     default OFF and lazy-fetch on first toggle, so an
-//                     untoggled page incurs zero overlay bandwidth.
+//   data-site-config-url
+//                     — generated site-config.json URL (map default extent +
+//                     OSMB-style overlay layer defs). Fetched after first paint;
+//                     each layer's GeoJSON URL lives inside it. Layers default OFF
+//                     and lazy-fetch their GeoJSON on first toggle, so an untoggled
+//                     page incurs zero overlay bandwidth. Empty/failed fetch → no
+//                     overlays.
 //
-// OSMB rendering logic (shapes, popups, link URLs) is intentionally
-// duplicated from static/map.js — both consumers are small enough that
-// a one-file refactor isn't worth the IIFE-global plumbing yet. If a
-// third consumer appears, extract to static/osmb-layers.js.
+// The overlay layer DATA (presentation + popup links) now lives in the shared
+// site-config.json (S3d), so it is no longer duplicated here. The popup HTML
+// builders (shapes, escaping) are still duplicated from static/map.js — both
+// consumers are small enough that extracting them isn't worth the plumbing yet;
+// if a third consumer appears, extract to static/osmb-layers.js.
 (function () {
   'use strict';
   function esc(s) {
@@ -64,72 +66,78 @@
   );
   topo.addTo(map);
 
-  // OSMB overlays — see header comment. Layers start empty and get
-  // populated on first overlayadd; default OFF (no addTo before the
-  // control is built). bounds[] below is intentionally NOT updated with
-  // OSMB markers — toggling on must not pan/zoom the map.
-  const OSMB_DAM_URL =
-    'https://www.oregon.gov/osmb/boating-facilities/Pages/Maps-and-Apps.aspx';
-  const OSMB_OBSTRUCTION_URL =
-    'https://geo.maps.arcgis.com/apps/dashboards/59f4dfde321f447b9245a1451c83e054';
-  const OSMB_ACCESS_URL =
-    'https://experience.arcgis.com/experience/72308dd6b893451690a14437cde89be8';
+  // OSMB overlays — see header comment. Layer presentation + popup links come
+  // from the generated site-config.json (S3d, data-site-config-url), no longer
+  // hardcoded here. Layers default OFF and lazy-fetch their GeoJSON on first
+  // toggle, so an untoggled page incurs zero overlay bandwidth. bounds[] below is
+  // intentionally NOT updated with OSMB markers — toggling on must not pan/zoom
+  // the map.
   const OSMB_CANVAS_RENDERER = L.canvas();
   const OSMB_HIT_RADIUS = 14;
-  const OSMB_LAYER_DEFS = [
-    {
-      key: 'obstructions',
-      label: 'Obstructions',
-      color: '#ff00ff',
-      attr: 'osmbObstructionsUrl',
-      shape: 'triangle',
-      size: 16,
-      zIndex: 200,
-      popup: obstructionPopup,
-    },
-    {
-      key: 'dams',
-      label: 'Dams / weirs',
-      color: '#6a1b9a',
-      attr: 'osmbDamsUrl',
-      shape: 'diamond',
-      size: 14,
-      zIndex: 100,
-      popup: damPopup,
-    },
-    {
-      key: 'access',
-      label: 'Access sites',
-      color: '#1b5e20',
-      attr: 'osmbAccessUrl',
-      shape: 'circle',
-      size: 5,
-      zIndex: 0,
-      popup: accessPopup,
-    },
-  ];
+  // Popup template key → engine-owned builder (HTML stays engine-side, escaped).
+  const POPUP_BUILDERS = {
+    obstructions: obstructionPopup,
+    dams: damPopup,
+    access: accessPopup,
+  };
+  let OSMB_LAYER_DEFS = [];
   const osmbLayers = {};
   const osmbUrls = {};
   const osmbLoaded = {};
-  const overlays = {};
-  OSMB_LAYER_DEFS.forEach(function (d) {
-    const url = el.dataset[d.attr] || '';
-    if (!url) return;
-    osmbUrls[d.key] = url;
-    osmbLayers[d.key] = L.layerGroup();
-    const swatch =
-      '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:' +
-      d.color +
-      ';border:1px solid rgba(0,0,0,.15);margin-right:6px;vertical-align:middle"></span>';
-    overlays[swatch + d.label] = osmbLayers[d.key];
-  });
 
-  L.control
-    .layers({ Topo: topo, Street: street, Satellite: satellite }, overlays, {
-      collapsed: true,
-    })
+  // Base map control built immediately (overlays added once the config resolves —
+  // first paint never waits on it). Keep the control ref so addOverlay can append.
+  const layersControl = L.control
+    .layers(
+      { Topo: topo, Street: street, Satellite: satellite },
+      {},
+      { collapsed: true },
+    )
     .addTo(map);
   L.control.scale({ imperial: true, metric: false }).addTo(map);
+
+  // Fetch the map config, then register each overlay layer (default OFF). An empty
+  // attr / failed fetch → no overlays (graceful); the base map already rendered.
+  const siteConfigUrl = el.dataset.siteConfigUrl || '';
+  if (siteConfigUrl) {
+    fetch(siteConfigUrl)
+      .then(function (r) {
+        if (!r.ok) throw new Error('site-config ' + r.status);
+        return r.json();
+      })
+      .then(function (cfg) {
+        const layers = cfg && Array.isArray(cfg.layers) ? cfg.layers : [];
+        OSMB_LAYER_DEFS = layers
+          .filter(function (l) {
+            return POPUP_BUILDERS[l.popup] && l.url;
+          })
+          .map(function (l) {
+            return {
+              key: l.key,
+              label: l.label,
+              color: l.color,
+              shape: l.shape,
+              size: l.size,
+              zIndex: l.zIndex,
+              url: l.url,
+              popupFn: POPUP_BUILDERS[l.popup],
+              popupLink: l.popupLink || '',
+            };
+          });
+        OSMB_LAYER_DEFS.forEach(function (d) {
+          osmbUrls[d.key] = d.url;
+          osmbLayers[d.key] = L.layerGroup();
+          const swatch =
+            '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:' +
+            d.color +
+            ';border:1px solid rgba(0,0,0,.15);margin-right:6px;vertical-align:middle"></span>';
+          layersControl.addOverlay(osmbLayers[d.key], swatch + d.label);
+        });
+      })
+      .catch(function (err) {
+        console.warn('site-config fetch failed:', err);
+      });
+  }
 
   // Lazy-fetch on first toggle. Markers stream in after the layer is
   // already on the map; the brief "empty layer for a second" gap is
@@ -184,14 +192,14 @@
           fillOpacity: 0,
           interactive: true,
         }).addTo(lg);
-        hit.bindPopup(def.popup.bind(null, props));
+        hit.bindPopup(def.popupFn.bind(null, props, def.popupLink));
       } else {
         const marker = L.marker(ll, {
           icon: makeShapeIcon(def.shape, def.size, def.color),
           zIndexOffset: def.zIndex || 0,
           keyboard: false,
         }).addTo(lg);
-        marker.bindPopup(def.popup.bind(null, props));
+        marker.bindPopup(def.popupFn.bind(null, props, def.popupLink));
       }
     }
   }
@@ -258,7 +266,7 @@
     });
   }
 
-  function obstructionPopup(p) {
+  function obstructionPopup(p, linkUrl) {
     const title = esc(p.obslocation || p.waterbody || 'Obstruction');
     const sub = [p.waterbody, p.waterbodysec]
       .filter(Boolean)
@@ -272,7 +280,7 @@
         : '';
     let html =
       '<a class="reach-popup" href="' +
-      OSMB_OBSTRUCTION_URL +
+      esc(linkUrl) +
       '" target="_blank" rel="noopener">' +
       '<div class="rp-name">' +
       title +
@@ -284,7 +292,7 @@
     return html;
   }
 
-  function damPopup(p) {
+  function damPopup(p, linkUrl) {
     const title = esc(p.damname || 'Dam');
     const sub = esc(p.waterbody || '');
     const sizeBits = [];
@@ -293,7 +301,7 @@
     const portage = esc(p.portagedesc || p.navigate || '');
     let html =
       '<a class="reach-popup" href="' +
-      OSMB_DAM_URL +
+      esc(linkUrl) +
       '" target="_blank" rel="noopener">' +
       '<div class="rp-name">' +
       title +
@@ -306,7 +314,7 @@
     return html;
   }
 
-  function accessPopup(p) {
+  function accessPopup(p, linkUrl) {
     const title = esc(p.name || 'Access site');
     const sub = esc(p.waterway_name || '');
     const facility = esc(
@@ -314,7 +322,7 @@
     );
     let html =
       '<a class="reach-popup" href="' +
-      OSMB_ACCESS_URL +
+      esc(linkUrl) +
       '" target="_blank" rel="noopener">' +
       '<div class="rp-name">' +
       title +
@@ -325,9 +333,17 @@
     return html;
   }
   const bounds = [];
+  // Gauge marker = the site brand color, read from the (already brand-resolved,
+  // dark-mode-aware) CSS custom property so the map matches the theme — single
+  // source, no hardcoded brand hex (S3d, deferred from S3a-3). Put-in/Take-out
+  // stay semantic green/red. Fallback covers a stylesheet that hasn't loaded.
+  const PRIMARY =
+    getComputedStyle(document.documentElement)
+      .getPropertyValue('--c-primary')
+      .trim() || '#1b5591';
   const colors = {
     'Put-in': '#1a7a1a',
-    Gauge: '#1b5591',
+    Gauge: PRIMARY,
     'Take-out': '#b30000',
   };
   const gaugeId = parseInt(el.dataset.gaugeId || '0', 10);
@@ -335,7 +351,7 @@
   for (const k in pts) {
     const c = pts[k].split(',');
     const ll = [parseFloat(c[0]), parseFloat(c[1])];
-    const color = colors[k] || '#1b5591';
+    const color = colors[k] || PRIMARY;
     const dot = L.circleMarker(ll, {
       radius: 6,
       fillColor: color,

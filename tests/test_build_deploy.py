@@ -657,3 +657,44 @@ def test_deploy_site_prose_no_dir_is_noop(monkeypatch, tmp_path):
     output.mkdir()
     build_mod._deploy_site_prose(output)  # must not raise
     assert not (output / "prose").exists()
+
+
+# --------------------------------------------------------------------------- #
+# site-config.json generation (S3d)
+# --------------------------------------------------------------------------- #
+
+
+def test_build_site_config_engine_defaults() -> None:
+    import json
+
+    from kayak.web.build.site_config import build_site_config
+
+    # osmb_url resolver returns a versioned URL for the dams file only (mirrors a
+    # build where just one overlay GeoJSON has been staged).
+    def osmb_url(fn: str) -> str:
+        return f"/static/{fn}?v=42" if fn == "osmb-dams.geojson" else ""
+
+    cfg = json.loads(build_site_config(osmb_url))
+    assert cfg["map"] == {"center": [44.0, -120.5], "zoom": 7}
+    layers = {layer["key"]: layer for layer in cfg["layers"]}
+    assert set(layers) == {"obstructions", "dams", "access"}
+    # The dams layer carries the resolved URL; the unstaged ones are empty.
+    assert layers["dams"]["url"] == "/static/osmb-dams.geojson?v=42"
+    assert layers["obstructions"]["url"] == ""
+    # Presentation + popup template/link are carried through.
+    assert layers["dams"]["color"] == "#6a1b9a"
+    assert layers["dams"]["shape"] == "diamond"
+    assert layers["dams"]["popup"] == "dams"
+    assert layers["dams"]["popupLink"].startswith("https://www.oregon.gov/osmb/")
+    assert layers["obstructions"]["defaultOn"] is False
+
+
+def test_build_site_config_is_stable() -> None:
+    # sort_keys makes the output reproducible across builds (byte-identity anchor
+    # for the S3d-1 ↔ S3d-2 invariant: defaults must serialize identically).
+    from kayak.web.build.site_config import build_site_config
+
+    a = build_site_config(lambda fn: "")
+    b = build_site_config(lambda fn: "")
+    assert a == b
+    assert a.endswith("\n")

@@ -101,20 +101,19 @@ function gm_render_map(
     $color_attr  = htmlspecialchars($track_color);
     $rt_attr     = htmlspecialchars($rt_json);
 
-    // OSMB overlay URLs — same /static/<file>?v=<mtime> contract used by
-    // map.html (deploy.py builds the equivalent URL for that page). Empty
-    // string when the nightly fetcher hasn't landed the file yet; the JS
-    // treats absent URLs as "no layer to register".
-    $osmb_url = static function (string $name): string {
+    // Map config (default extent + OSMB-style overlay layer defs) — the build
+    // generates /static/site-config.json; feature-map.js fetches it and builds
+    // its overlay layers + popups from it (the per-layer GeoJSON URLs live inside
+    // that JSON). Same /static/<file>?v=<mtime> contract map.html uses; empty
+    // string when the file isn't present (JS falls back to no overlays).
+    $static_url = static function (string $name): string {
         $path = $_SERVER['DOCUMENT_ROOT'] . '/static/' . $name;
         if (!is_file($path)) {
             return '';
         }
         return '/static/' . $name . '?v=' . (string)filemtime($path);
     };
-    $obs_attr = htmlspecialchars($osmb_url('osmb-obstructions.geojson'));
-    $dam_attr = htmlspecialchars($osmb_url('osmb-dams.geojson'));
-    $acc_attr = htmlspecialchars($osmb_url('osmb-access-sites.geojson'));
+    $site_config_attr = htmlspecialchars($static_url('site-config.json'));
 
     $gauge_id_attr = $gauge_id !== null
         ? ' data-gauge-id="' . $gauge_id . '" data-gauge-h="' . pubhash_encode($gauge_id) . '"'
@@ -126,9 +125,7 @@ function gm_render_map(
         . ' data-track="' . $track_attr . '"'
         . ' data-track-color="' . $color_attr . '"'
         . ' data-reach-tracks="' . $rt_attr . '"'
-        . ' data-osmb-obstructions-url="' . $obs_attr . '"'
-        . ' data-osmb-dams-url="' . $dam_attr . '"'
-        . ' data-osmb-access-url="' . $acc_attr . '"'
+        . ' data-site-config-url="' . $site_config_attr . '"'
         . $gauge_id_attr
         . '></div>';
     return true;

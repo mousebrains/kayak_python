@@ -684,10 +684,15 @@ class TestBuildMapPage:
             ["Oregon"],
             "/static/reaches-geom.json?v=abc123",
             "/static/reaches-state.json",
+            site_config_url="/static/site-config.json?v=def456",
         )
         assert 'id="map"' in result
         assert 'data-geom-url="/static/reaches-geom.json?v=abc123"' in result
         assert 'data-state-url="/static/reaches-state.json"' in result
+        # S3d: the map config URL is wired; the per-layer OSMB attrs are gone
+        # (the layer URLs now live inside site-config.json).
+        assert 'data-site-config-url="/static/site-config.json?v=def456"' in result
+        assert "data-osmb-" not in result
 
 
 class TestLevelsKey:
