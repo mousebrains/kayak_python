@@ -10,11 +10,21 @@ from __future__ import annotations
 
 import pytest
 
+from kayak.dataset import region as region_mod
 from kayak.web.build.shell import _build_nav, _build_placeholder_page
 
 # The states with visible reaches in the live DB — what all_state_names() returns
 # and what S3b-2 drives nav/landing pages off of (no hardcoded allowlist).
 _STATES = ["California", "Idaho", "Montana", "Nevada", "Oregon", "Washington"]
+
+
+@pytest.fixture(autouse=True)
+def _isolated_region_config(tmp_path, monkeypatch):
+    """Keep nav tests independent from the operator's configured dataset."""
+    monkeypatch.setattr("kayak.config.DATASET_DIR", tmp_path)
+    region_mod.get_region_config.cache_clear()
+    yield tmp_path
+    region_mod.get_region_config.cache_clear()
 
 
 @pytest.mark.parametrize("state", _STATES)
@@ -69,12 +79,17 @@ def test_nav_bar_picker_omits_state_when_no_active_state() -> None:
     assert "?state=" not in html.split('href="/picker.php"')[1].split("</a>")[0]
 
 
-def test_nav_bar_states_are_reaches_union_region_config() -> None:
+def test_nav_bar_states_are_reaches_union_region_config(tmp_path) -> None:
     """S3b-2: nav buttons = reach-states (the passed `states`) plus the dataset region
-    config's states (engine default = the six). With no reach-states passed, the
-    region config alone supplies the six; a state in neither set gets no button."""
-    html = _build_nav([], active_state="Oregon")  # no reach-states → region only
-    for st in _STATES:  # the engine-default region states
+    config's states. The generic engine default has no states, so seed an explicit
+    region.yaml fixture instead of depending on local/live config."""
+    (tmp_path / region_mod.REGION_YAML).write_text(
+        "states:\n  Montana:\n    links: []\n",
+        encoding="utf-8",
+    )
+    region_mod.get_region_config.cache_clear()
+    html = _build_nav(["Oregon"], active_state="Oregon")
+    for st in ("Montana", "Oregon"):
         assert f'href="/{st}.html"' in html, f"missing nav button for {st}"
     assert 'href="/Wyoming.html"' not in html  # in neither set → no button
 
@@ -82,7 +97,7 @@ def test_nav_bar_states_are_reaches_union_region_config() -> None:
 def test_nav_bar_includes_reach_state_absent_from_region_config() -> None:
     """A state with reaches but not in the region config still gets a button (union),
     so a state with content never silently vanishes from nav."""
-    html = _build_nav(["Wyoming"])  # a reach-state not in the engine-default region
+    html = _build_nav(["Wyoming"])  # a reach-state not in the empty generic region
     assert 'href="/Wyoming.html"' in html and ">WY</a>" in html
 
 

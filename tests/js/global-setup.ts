@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
@@ -9,9 +9,10 @@ import net from 'node:net';
  *
  *   1. Mint a tmp dir + sqlite path
  *   2. Run `levels init-db` against it (seeds schema + states + sources)
- *   3. Spawn `php -S 127.0.0.1:<port> -t public_html` against it
- *   4. Poll the port until it accepts
- *   5. Hand the {pid, tmpDir, dbPath, port} off to globalTeardown via env vars
+ *   3. Create a tiny explicit dataset-region fixture for one state landing page
+ *   4. Spawn `php -S 127.0.0.1:<port> -t public_html` against it
+ *   5. Poll the port until it accepts
+ *   6. Hand the {pid, tmpDir, dbPath, port} off to globalTeardown via env vars
  *
  * Mirrors tests/php/IntegrationTestCase.php's setUpBeforeClass; same
  * pattern, different runner. See docs/done/PLAN_js_smoke_tests.md Phase 1.
@@ -36,12 +37,35 @@ export default async function globalSetup(): Promise<void> {
   const dbPath = path.join(baseTmp, 'kayak-test.db');
   const databaseUrl = `sqlite:///${dbPath}`;
   const configJsonPath = path.join(baseTmp, 'runtime-config.json');
+  const datasetDir = baseTmp;
+  writeFileSync(
+    path.join(datasetDir, 'region.yaml'),
+    [
+      'default_weather_url: https://example.com/weather',
+      'states:',
+      '  Oregon:',
+      '    weather_url: https://example.com/weather/or',
+      '    links: []',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+  const baseEnv = { ...process.env };
+  for (const key of Object.keys(baseEnv)) {
+    if (['DATASET_DIR', 'METADATA_DIR'].includes(key.toUpperCase())) {
+      delete baseEnv[key];
+    }
+  }
 
   // Env shared by `levels init-db`, `levels build`, and
   // `levels emit-config`. SQLITE_PATH lets PHP's _sqlite_path()
   // fallback chain still resolve if Config::str('database_path')
   // ever returns the empty default; DATABASE_URL drives SQLAlchemy
-  // and seeds the JSON's database_path key.
+  // and seeds the JSON's database_path key. DATASET_DIR points at the
+  // one-file region fixture above so the generic engine still emits a
+  // deterministic /Oregon.html page for smoke coverage. Drop inherited
+  // dataset path env vars and point HOME at the tmpdir so the operator's
+  // ~/.config/kayak/.env cannot conflict.
   // EDITOR_FEATURE=1 covers two spec families with one server:
   //   * smoke.spec.ts — page-load assertions; the editor feature flag
   //     doesn't change any of the pages it visits (per-state HTML,
@@ -54,9 +78,12 @@ export default async function globalSetup(): Promise<void> {
   // the emitted JSON has the keys editor.spec.ts requires; without
   // them, Phase 4 Config strict-mode dies HTTP-500 on first read.
   const sharedEnv = {
-    ...process.env,
+    ...baseEnv,
+    HOME: baseTmp,
+    SUDO_USER: '',
     SQLITE_PATH: dbPath,
     DATABASE_URL: databaseUrl,
+    DATASET_DIR: datasetDir,
     EDITOR_FEATURE: '1',
     MAIL_FROM: 'test@example.com',
     SITE_URL: 'http://127.0.0.1',

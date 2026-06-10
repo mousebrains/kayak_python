@@ -44,14 +44,11 @@ test('/reach.php?st=OR loads with no JS errors', async ({ page }) => {
 });
 
 test('/Oregon.html loads with no JS errors', async ({ page }) => {
-  // Per-state landing page emitted by `levels build` — a curated
-  // index of external resources (American Whitewater, Dreamflows,
-  // USGS state water data, …) plus top-of-page cross-link anchors
-  // into the filtered all-states views (`gauges.html#st=Oregon`,
-  // `picker.php?state=Oregon`, etc.). No internal levels table,
-  // so no filter-bar — those live on /gauges.html and /index.html.
-  // The page does pull in `scroll-indicator.js`; assert the page
-  // loads + cross-link anchor renders + no JS errors fire.
+  // Per-state landing page emitted by `levels build` from the explicit
+  // region.yaml fixture in global-setup.ts. No internal levels table, so no
+  // filter-bar — those live on /gauges.html and /index.html. The page does
+  // pull in `scroll-indicator.js`; assert the page loads + cross-link anchor
+  // renders + no JS errors fire.
   const errors = captureJsErrors(page);
 
   const resp = await page.goto('/Oregon.html');

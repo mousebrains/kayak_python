@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
+from kayak.dataset import region as region_mod
 from kayak.db.models import (
     DataType,
     FetchUrl,
@@ -627,10 +628,19 @@ class TestBuildNav:
         result = _build_nav(["Oregon", "Washington"], active_state="Oregon")
         assert 'class="active"' in result
 
-    def test_nav_buttons_are_reaches_union_region(self, session):
-        # S3b-2: nav buttons = passed reach-states + dataset region config states
-        # (engine default = CA/ID/MT/NV/OR/WA), not a hardcoded allowlist.
-        result = _build_nav([])  # no reach-states → region config supplies the six
+    def test_nav_buttons_are_reaches_union_region(self, session, tmp_path, monkeypatch):
+        # S3b-2: nav buttons = passed reach-states + dataset region config states,
+        # not a hardcoded allowlist or generic engine default.
+        (tmp_path / region_mod.REGION_YAML).write_text(
+            "states:\n  Montana:\n    links: []\n  Oregon:\n    links: []\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("kayak.config.DATASET_DIR", tmp_path)
+        region_mod.get_region_config.cache_clear()
+        try:
+            result = _build_nav(["Oregon"])  # reach-states union dataset region states
+        finally:
+            region_mod.get_region_config.cache_clear()
         assert 'href="/Oregon.html"' in result
         assert 'href="/Montana.html"' in result
         assert 'href="/Wyoming.html"' not in result  # in neither set → no button

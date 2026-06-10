@@ -19,7 +19,7 @@ from kayak.web.build._shared import (
 
 # Per-state weather URLs + curated external-resource links moved to
 # kayak.dataset.region (S3b-1); read here via get_region_config() so a dataset
-# region.yaml can override them. Engine defaults reproduce the prior WKCC data.
+# region.yaml owns them. Engine defaults are generic and contain no curated links.
 
 
 def _presentation_states(states: list[str]) -> list[str]:
