@@ -21,6 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from kayak.config import BASE_DIR, DATASET_DIR, OSMB_DIR, SITE_URL
+from kayak.dataset.region import get_region_config
 from kayak.db.cache import get_all_latest_gauges
 from kayak.db.engine import get_session
 from kayak.db.gauges import get_calculated_gauge_ids
@@ -37,6 +38,7 @@ from kayak.web.build._shared import (
     _atomic_write,
     _css_link_tag,
     _load_css,
+    _state_page_path,
 )
 from kayak.web.build.gauges import _write_gauges_page
 from kayak.web.build.geojson import (
@@ -483,11 +485,15 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
         # so no per-state gauges.<slug>.html artifact is generated.
         _write_gauges_page(session, all_latest, states, css_link, output_dir)
 
-        # Per-state landing pages — one per state with visible reaches
-        # (``all_state_names()``; S3b-2 dropped the hardcoded nav allowlist).
-        # A landing page links to the filtered /index.html + /gauges.html views
-        # and the curated dataset region links for that state.
-        for state in sorted(states):
+        # Per-state landing pages — one per "presentation state": a state with
+        # visible reaches (states) OR listed in the dataset region config (S3b-2
+        # dropped the hardcoded _NAV_STATES allowlist). The union keeps region-only
+        # (e.g. gauges-only) states and never silently drops a reach-state; `states`
+        # (all_state_names) drives the reach-anchor suppression inside
+        # _build_placeholder_page. The on-disk filename keeps the raw state name;
+        # the served URL is percent-encoded (_state_page_path).
+        presentation_states = sorted(set(states) | set(get_region_config().states))
+        for state in presentation_states:
             links_page = _build_placeholder_page(css_link, states, state)
             _atomic_write(output_dir / f"{state}.html", links_page)
 
@@ -516,10 +522,11 @@ def _emit_sitemap(
     urls.append((f"{site}/gauges.html", "hourly", "0.8"))
     urls.append((f"{site}/map.html", "daily", "0.8"))
     urls.append((f"{site}/custom_gauges.php", "daily", "0.6"))
-    # One landing page per state with visible reaches (matches the set written
-    # above; S3b-2 drives both off all_state_names() rather than an allowlist).
-    for state in sorted(states):
-        urls.append((f"{site}/{state}.html", "hourly", "0.9"))
+    # One landing page per presentation state — matches the set written above
+    # (reach-states union region-config states; S3b-2). Percent-encode the loc so a
+    # multi-word state name is a valid URL.
+    for state in sorted(set(states) | set(get_region_config().states)):
+        urls.append((f"{site}{_state_page_path(state)}", "hourly", "0.9"))
     urls.append((f"{site}/about.php", "monthly", "0.4"))
     urls.append((f"{site}/disclaimer.php", "monthly", "0.4"))
     urls.append((f"{site}/privacy.php", "monthly", "0.4"))

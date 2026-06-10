@@ -69,10 +69,25 @@ def test_nav_bar_picker_omits_state_when_no_active_state() -> None:
     assert "?state=" not in html.split('href="/picker.php"')[1].split("</a>")[0]
 
 
-def test_nav_bar_shows_exactly_the_passed_states() -> None:
-    """S3b-2: the header nav buttons are the passed `states` (all_state_names()),
-    not a hardcoded allowlist — a state in the list gets a button, one not in it
-    doesn't."""
-    html = _build_nav(_STATES, active_state="Oregon")
-    assert 'href="/Montana.html"' in html and ">MT</a>" in html  # in the list → button
-    assert 'href="/Wyoming.html"' not in html  # not in the list → no button
+def test_nav_bar_states_are_reaches_union_region_config() -> None:
+    """S3b-2: nav buttons = reach-states (the passed `states`) plus the dataset region
+    config's states (engine default = the six). With no reach-states passed, the
+    region config alone supplies the six; a state in neither set gets no button."""
+    html = _build_nav([], active_state="Oregon")  # no reach-states → region only
+    for st in _STATES:  # the engine-default region states
+        assert f'href="/{st}.html"' in html, f"missing nav button for {st}"
+    assert 'href="/Wyoming.html"' not in html  # in neither set → no button
+
+
+def test_nav_bar_includes_reach_state_absent_from_region_config() -> None:
+    """A state with reaches but not in the region config still gets a button (union),
+    so a state with content never silently vanishes from nav."""
+    html = _build_nav(["Wyoming"])  # a reach-state not in the engine-default region
+    assert 'href="/Wyoming.html"' in html and ">WY</a>" in html
+
+
+def test_nav_bar_percent_encodes_multiword_state_url() -> None:
+    """A multi-word state name is percent-encoded in the nav href path (review)."""
+    html = _build_nav(["New Mexico"])  # reach-state with a space
+    assert 'href="/New%20Mexico.html"' in html
+    assert 'href="/New Mexico.html"' not in html  # never a raw space in the URL

@@ -627,14 +627,13 @@ class TestBuildNav:
         result = _build_nav(["Oregon", "Washington"], active_state="Oregon")
         assert 'class="active"' in result
 
-    def test_nav_buttons_are_the_passed_states(self, session):
-        # S3b-2: nav buttons are driven by the passed `states` (all_state_names()),
-        # not a hardcoded allowlist — every passed state gets a button, and a
-        # state not passed gets none.
-        result = _build_nav(["Oregon", "Washington"])
+    def test_nav_buttons_are_reaches_union_region(self, session):
+        # S3b-2: nav buttons = passed reach-states + dataset region config states
+        # (engine default = CA/ID/MT/NV/OR/WA), not a hardcoded allowlist.
+        result = _build_nav([])  # no reach-states → region config supplies the six
         assert 'href="/Oregon.html"' in result
-        assert 'href="/Washington.html"' in result
-        assert 'href="/Idaho.html"' not in result  # not passed → no button
+        assert 'href="/Montana.html"' in result
+        assert 'href="/Wyoming.html"' not in result  # in neither set → no button
 
 
 class TestBuildLetterNav:

@@ -14,6 +14,7 @@ from kayak.web.build._shared import (
     BRAND_COLOR_DARK,
     _editor_feature_on,
     _og_meta,
+    _state_page_path,
 )
 
 # Per-state weather URLs + curated external-resource links moved to
@@ -45,10 +46,16 @@ def _build_nav(
     gauges_cls = ' class="active"' if active_page == "gauges" else ""
     links.append(f'<a href="/map.html"{map_cls}>Map</a>')
     links.append(f'<a href="/gauges.html"{gauges_cls}>Gauges</a>')
-    for s in sorted(states):
+    # State buttons (S3b-2 replaced the hardcoded _NAV_STATES allowlist): a state
+    # appears if it has visible reaches (the `states` arg = all_state_names()) OR is
+    # listed in the dataset region config (curated links, possibly gauges-only). The
+    # union means no state with content silently vanishes from nav, and region-only
+    # states (no reaches) still get a button + landing page.
+    nav_states = set(states) | set(get_region_config().states)
+    for s in sorted(nav_states):
         abbrev = _STATE_ABBREVS.get(s, s)
         cls = ' class="active"' if s == active_state else ""
-        links.append(f'<a href="/{s}.html"{cls}>{abbrev}</a>')
+        links.append(f'<a href="{_state_page_path(s)}"{cls}>{abbrev}</a>')
     # Picker links carry ?state=<full-name> when active_state is set,
     # so a user arriving from a state landing page (e.g. Oregon.html) lands
     # in a picker pre-focused on that state. picker.php / gauge_picker.php
@@ -247,7 +254,7 @@ def _build_placeholder_page(
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{state} River Levels</title>
 <meta name="description" content="Real-time river levels, flow, and gage data for {state} from USGS, NOAA, USACE, and other agencies.">
-{_og_meta(f"{state} River Levels", f"Real-time river levels, flow, and gage data for {state} from USGS, NOAA, USACE, and other agencies.", f"/{state}.html")}
+{_og_meta(f"{state} River Levels", f"Real-time river levels, flow, and gage data for {state} from USGS, NOAA, USACE, and other agencies.", _state_page_path(state))}
 <meta name="theme-color" content="{BRAND_COLOR}" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="{BRAND_COLOR_DARK}" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="/static/favicon.ico">
