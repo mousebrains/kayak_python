@@ -11,16 +11,16 @@ from kayak.dataset import region
 
 class TestEngineDefault:
     def test_absent_returns_engine_defaults(self, tmp_path: Path) -> None:
-        # Opt-in: no region.yaml → the engine's built-in WKCC region data.
+        # No region.yaml → generic engine defaults; regional links live in the dataset.
         r = region.load_region_config(tmp_path)
-        assert r.weather_url_for("Oregon") == "https://www.windy.com/?44.0,-120.5,7"
-        assert len(r.links_for("Oregon")) == 15
-        assert r.has_state_weather("Oregon") is True
+        assert r.weather_url_for("Oregon") == "https://www.windy.com/?0.0,0.0,2"
+        assert r.links_for("Oregon") == []
+        assert r.has_state_weather("Oregon") is False
 
     def test_default_weather_fallback(self, tmp_path: Path) -> None:
         r = region.load_region_config(tmp_path)
         # A state with no entry falls back to default_weather_url, label "Weather".
-        assert r.weather_url_for("Nowhere") == "https://www.windy.com/?43.0,-118.0,6"
+        assert r.weather_url_for("Nowhere") == "https://www.windy.com/?0.0,0.0,2"
         assert r.has_state_weather("Nowhere") is False
         assert r.links_for("Nowhere") == []
 
@@ -44,7 +44,7 @@ class TestLoadRegionConfig:
         (tmp_path / region.REGION_YAML).write_text("")
         r = region.load_region_config(tmp_path)
         assert r.states == {}
-        assert r.weather_url_for("Oregon") == "https://www.windy.com/?43.0,-118.0,6"
+        assert r.weather_url_for("Oregon") == "https://www.windy.com/?0.0,0.0,2"
 
     def test_unknown_top_key_rejected(self, tmp_path: Path) -> None:
         (tmp_path / region.REGION_YAML).write_text("bogus: 1\n")
