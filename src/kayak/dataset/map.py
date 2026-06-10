@@ -22,9 +22,8 @@ NOT popup HTML/templates or arbitrary ArcGIS query text (engine-owned). Every va
 renders into HTML / an ``href`` / a fetched URL, and the map JS's sinks are not all
 quote-safe, so each value is validated to a safe shape **here** (fail-closed) — this
 model, not the JS, is the guarantee — and ``levels validate-dataset`` runs the same
-validation at the deploy gate. Engine defaults are the current WKCC/Oregon values,
-so a dataset without ``map.yaml`` builds and fetches identically. The generic-default
-flip is deferred to S3i.
+validation at the deploy gate. Engine defaults are generic and empty; production
+WKCC/Oregon values live in the WKCC dataset's ``map.yaml``.
 """
 
 from __future__ import annotations
@@ -32,7 +31,6 @@ from __future__ import annotations
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
 
 import yaml
 from pydantic import BaseModel, ConfigDict, field_validator
@@ -134,13 +132,13 @@ class MapLayer(BaseModel):
 
 
 class MapConfig(BaseModel):
-    """Typed map config. Engine defaults are the current WKCC/Oregon values (S3d)."""
+    """Typed map config. Engine defaults are generic and contain no overlay layers."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    center: list[float] = [44.0, -120.5]
-    zoom: int = 7
-    bbox: list[float] = [-124.7, 41.9, -116.4, 46.3]
+    center: list[float] = [0.0, 0.0]
+    zoom: int = 2
+    bbox: list[float] = [-180.0, -90.0, 180.0, 90.0]
     layers: list[MapLayer] = []
 
     @field_validator("center")
@@ -214,71 +212,23 @@ class MapConfig(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
-# Engine defaults — the current WKCC/Oregon map config. The presentation half was
-# moved here from web/build/site_config.py (S3d-1). The fetch half was transcribed
-# from cli/fetch_osmb.py's former _LAYERS / _OREGON_BBOX table, so the default live
-# fetch stays identical until the WKCC dataset carries map.yaml and S3i
-# genericizes these defaults.
+# Engine defaults — a generic empty map config. WKCC/Oregon-specific extent,
+# ArcGIS endpoints, fields, filenames, and layer presentation are dataset-owned
+# in kayak_data/map.yaml as of S3d-D2.
 # --------------------------------------------------------------------------- #
 
-_DEFAULT_CENTER: list[float] = [44.0, -120.5]
-_DEFAULT_ZOOM = 7
-_DEFAULT_BBOX: list[float] = [-124.7, 41.9, -116.4, 46.3]
-_ARCGIS = "https://services.arcgis.com/uUvqNMGPm7axC2dD/arcgis/rest/services"
-
-_DEFAULT_LAYERS: tuple[dict[str, Any], ...] = (
-    {
-        "key": "obstructions",
-        "label": "Obstructions",
-        "color": "#ff00ff",
-        "shape": "triangle",
-        "size": 16,
-        "z_index": 200,
-        "default_on": False,
-        "popup": "obstructions",
-        "popup_link": "https://geo.maps.arcgis.com/apps/dashboards/59f4dfde321f447b9245a1451c83e054",
-        "output_filename": "osmb-obstructions.geojson",
-        "endpoint": f"{_ARCGIS}/BORT_Public_View/FeatureServer/0",
-        "out_fields": ["waterbody", "waterbodysec", "obslocation", "obsdescript", "recordtime"],
-    },
-    {
-        "key": "dams",
-        "label": "Dams / weirs",
-        "color": "#6a1b9a",
-        "shape": "diamond",
-        "size": 14,
-        "z_index": 100,
-        "default_on": False,
-        "popup": "dams",
-        "popup_link": "https://www.oregon.gov/osmb/boating-facilities/Pages/Maps-and-Apps.aspx",
-        "output_filename": "osmb-dams.geojson",
-        "endpoint": f"{_ARCGIS}/service_d258e7b477f546d0917e868b1330ab3c/FeatureServer/0",
-        "out_fields": ["damname", "waterbody", "damheight", "damwidth", "portagedesc", "navigate"],
-    },
-    {
-        "key": "access",
-        "label": "Access sites",
-        "color": "#1b5e20",
-        "shape": "circle",
-        "size": 5,
-        "z_index": 0,
-        "default_on": False,
-        "popup": "access",
-        "popup_link": "https://experience.arcgis.com/experience/72308dd6b893451690a14437cde89be8",
-        "output_filename": "osmb-access-sites.geojson",
-        "endpoint": f"{_ARCGIS}/Boating_Access_Sites_OA/FeatureServer/0",
-        "out_fields": ["name", "waterway_name", "facility_type", "launch_type"],
-    },
-)
+_DEFAULT_CENTER: list[float] = [0.0, 0.0]
+_DEFAULT_ZOOM = 2
+_DEFAULT_BBOX: list[float] = [-180.0, -90.0, 180.0, 90.0]
 
 
 def _engine_default() -> MapConfig:
-    """Build the engine-default MapConfig from the WKCC/Oregon data above."""
+    """Build the generic engine-default MapConfig."""
     return MapConfig(
         center=list(_DEFAULT_CENTER),
         zoom=_DEFAULT_ZOOM,
         bbox=list(_DEFAULT_BBOX),
-        layers=[MapLayer(**spec) for spec in _DEFAULT_LAYERS],
+        layers=[],
     )
 
 

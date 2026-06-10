@@ -28,10 +28,10 @@
   };
   const STATUSES = ['low', 'okay', 'high', 'unknown'];
   const CLASS_TIERS = ['I', 'II', 'III', 'IV', 'V', '?'];
-  // Default map extent. Seeded so fail()/empty-bounds always have a value even
-  // if site-config.json never loads; overwritten from that config in applyConfig.
-  let DEFAULT_VIEW = [44.0, -120.5];
-  let DEFAULT_ZOOM = 7;
+  // Generic default map extent. Seeded so fail()/empty-bounds always have a value
+  // even if site-config.json never loads; overwritten from that config in applyConfig.
+  let DEFAULT_VIEW = [0.0, 0.0];
+  let DEFAULT_ZOOM = 2;
 
   // Item 1 of docs/done/PLAN_map_and_ui_tweaks.md: hover-opens-popup is desktop-
   // only. Touch-only devices keep tap-to-open (Leaflet's built-in click
@@ -62,10 +62,10 @@
   // 0.55 mirrors `.rp-stale` opacity in style.css for the reach popup.
   const GAUGE_STALE_OPACITY = 0.55;
 
-  // Oregon SMB overlay markers. Colors chosen to NOT collide with the
-  // reach palette (orange/chartreuse/red/cyan) or the gauge color (which
-  // reuses the reach palette): magenta for hazards, deep purple for
-  // dams, dark green for access.
+  // Configured map overlay markers. Colors should NOT collide with the reach
+  // palette (orange/chartreuse/red/cyan) or the gauge color (which reuses the
+  // reach palette): magenta for hazards, deep purple for dams, dark green for
+  // access.
   //
   // Shape distinguishes hazard tier at a glance — triangle (warning)
   // for obstructions sits above diamond (fixed structure) for dams sits

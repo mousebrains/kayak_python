@@ -5,10 +5,11 @@ default extent plus the OSMB-style overlay-layer presentation. ``static/map.js``
 ``static/feature-map.js`` fetch it and build their layer defs + default view from it,
 replacing the layer-def constants previously **duplicated** across both files.
 
-The values come from the dataset map config (:mod:`kayak.dataset.map`), which
-defaults to the current WKCC/Oregon values — so the built site is byte-identical
-until a dataset opts in via ``map.yaml``. The JSON schema and the JS consumers are
-unchanged from S3d-1 (which sourced the same values from inline literals).
+The values come from the dataset map config (:mod:`kayak.dataset.map`). The engine
+default is a generic empty map config; a production dataset supplies its own
+``map.yaml`` for regional extent and overlay layers. The JSON schema and the JS
+consumers are unchanged from S3d-1 (which sourced the same values from inline
+literals).
 """
 
 from __future__ import annotations
@@ -27,8 +28,7 @@ def build_site_config(osmb_url: Callable[[str], str]) -> str:
     (the nightly fetch hasn't landed it). Passed in so the build owns file naming and
     cache-busting; the JS treats an empty ``url`` as "no layer to fetch".
 
-    Output is ``sort_keys``-stable so the build is reproducible and the
-    no-``map.yaml`` build stays byte-identical to S3d-1.
+    Output is ``sort_keys``-stable so the build is reproducible.
     """
     cfg = get_map_config()
     layers: list[dict[str, object]] = []

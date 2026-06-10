@@ -31,32 +31,18 @@ def _write(tmp_path: Path, body: str) -> Path:
 
 class TestEngineDefault:
     def test_absent_returns_engine_defaults(self, tmp_path: Path) -> None:
-        # Opt-in: no map.yaml → the engine's built-in WKCC/Oregon map config.
+        # No map.yaml → generic engine defaults; regional layers live in the dataset.
         m = dataset_map.load_map_config(tmp_path)
         assert m == dataset_map._engine_default()
-        assert m.center == [44.0, -120.5]
-        assert m.zoom == 7
-        assert m.bbox == [-124.7, 41.9, -116.4, 46.3]
-        assert [layer.key for layer in m.layers] == ["obstructions", "dams", "access"]
+        assert m.center == [0.0, 0.0]
+        assert m.zoom == 2
+        assert m.bbox == [-180.0, -90.0, 180.0, 90.0]
+        assert m.layers == []
 
     def test_default_fetch_and_presentation_shapes(self, tmp_path: Path) -> None:
         m = dataset_map.load_map_config(tmp_path)
-        fetch = m.fetch_layers()
-        assert fetch[0][0] == "osmb-obstructions.geojson"
-        assert fetch[0][1].startswith("https://services.arcgis.com/")
-        assert fetch[0][2] == (
-            "waterbody",
-            "waterbodysec",
-            "obslocation",
-            "obsdescript",
-            "recordtime",
-        )
-        pres = m.presentation_layers()
-        assert pres[1]["key"] == "dams"
-        assert pres[1]["color"] == "#6a1b9a"
-        assert pres[1]["zIndex"] == 100
-        assert pres[1]["popup"] == "dams"
-        assert pres[1]["filename"] == "osmb-dams.geojson"
+        assert m.fetch_layers() == []
+        assert m.presentation_layers() == []
 
 
 class TestLoadMapConfig:
@@ -74,7 +60,7 @@ class TestLoadMapConfig:
         _write(tmp_path, "")
         m = dataset_map.load_map_config(tmp_path)
         assert m.layers == []  # explicit empty file = default extent, no overlays
-        assert m.center == [44.0, -120.5]
+        assert m.center == [0.0, 0.0]
 
     def test_unknown_top_key_rejected(self, tmp_path: Path) -> None:
         _write(tmp_path, "bogus: 1\n")
