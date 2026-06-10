@@ -141,11 +141,15 @@ done
 [ "$missing" -eq 0 ] || { echo "wheel-smoke FAILED: build output incomplete" >&2; exit 1; }
 echo "    OK — build deployed static + php + templates + license from the wheel"
 
-grep -q '"key": "dams"' "$DOCROOT/static/site-config.json" \
-    || { echo "wheel-smoke FAILED: generated site-config.json missing default map layer" >&2; exit 1; }
-grep -q '"center": \[' "$DOCROOT/static/site-config.json" \
-    || { echo "wheel-smoke FAILED: generated site-config.json missing default map view" >&2; exit 1; }
-echo "    OK — generated site-config.json from packaged map defaults"
+"$PY" - "$DOCROOT/static/site-config.json" <<'PYEOF'
+import json
+import sys
+
+path = sys.argv[1]
+cfg = json.load(open(path, encoding="utf-8"))
+assert cfg == {"map": {"center": [0.0, 0.0], "zoom": 2}, "layers": []}, cfg
+PYEOF
+echo "    OK — generated generic site-config.json from packaged map defaults"
 
 echo "==> regression reports rendered from DATASET_DIR/regression (S2-E2)"
 REG="$DOCROOT/static/regression"

@@ -664,37 +664,41 @@ def test_deploy_site_prose_no_dir_is_noop(monkeypatch, tmp_path):
 # --------------------------------------------------------------------------- #
 
 
-def test_build_site_config_engine_defaults() -> None:
+def test_build_site_config_engine_defaults(monkeypatch, tmp_path) -> None:
     import json
 
+    from kayak.dataset import map as dataset_map
     from kayak.web.build.site_config import build_site_config
 
-    # osmb_url resolver returns a versioned URL for the dams file only (mirrors a
-    # build where just one overlay GeoJSON has been staged).
+    monkeypatch.setattr("kayak.config.DATASET_DIR", tmp_path)
+    dataset_map.get_map_config.cache_clear()
+
+    # No dataset map.yaml means the engine contributes no regional overlay layers.
     def osmb_url(fn: str) -> str:
-        return f"/static/{fn}?v=42" if fn == "osmb-dams.geojson" else ""
+        raise AssertionError(f"no default overlay filename should be resolved: {fn}")
 
-    cfg = json.loads(build_site_config(osmb_url))
-    assert cfg["map"] == {"center": [44.0, -120.5], "zoom": 7}
-    layers = {layer["key"]: layer for layer in cfg["layers"]}
-    assert set(layers) == {"obstructions", "dams", "access"}
-    # The dams layer carries the resolved URL; the unstaged ones are empty.
-    assert layers["dams"]["url"] == "/static/osmb-dams.geojson?v=42"
-    assert layers["obstructions"]["url"] == ""
-    # Presentation + popup template/link are carried through.
-    assert layers["dams"]["color"] == "#6a1b9a"
-    assert layers["dams"]["shape"] == "diamond"
-    assert layers["dams"]["popup"] == "dams"
-    assert layers["dams"]["popupLink"].startswith("https://www.oregon.gov/osmb/")
-    assert layers["obstructions"]["defaultOn"] is False
+    try:
+        cfg = json.loads(build_site_config(osmb_url))
+    finally:
+        dataset_map.get_map_config.cache_clear()
+
+    assert cfg["map"] == {"center": [0.0, 0.0], "zoom": 2}
+    assert cfg["layers"] == []
 
 
-def test_build_site_config_is_stable() -> None:
+def test_build_site_config_is_stable(monkeypatch, tmp_path) -> None:
     # sort_keys makes the output reproducible across builds (byte-identity anchor
-    # for the S3d-1 ↔ S3d-2 invariant: defaults must serialize identically).
+    # for the generated site-config artifact).
+    from kayak.dataset import map as dataset_map
     from kayak.web.build.site_config import build_site_config
 
-    a = build_site_config(lambda fn: "")
-    b = build_site_config(lambda fn: "")
+    monkeypatch.setattr("kayak.config.DATASET_DIR", tmp_path)
+    dataset_map.get_map_config.cache_clear()
+    try:
+        a = build_site_config(lambda fn: "")
+        b = build_site_config(lambda fn: "")
+    finally:
+        dataset_map.get_map_config.cache_clear()
+
     assert a == b
     assert a.endswith("\n")

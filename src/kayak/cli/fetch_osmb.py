@@ -4,12 +4,12 @@ Pulls the dataset map config's ArcGIS Feature Service layers as GeoJSON and writ
 them to the configured OSMB staging dir (``OSMB_DIR``; ``config.osmb_dir``), where
 ``levels build`` picks them up via ``_deploy_static_assets`` and copies them into
 ``OUTPUT_DIR/static``. The command name and staging variable stay OSMB-named for
-compatibility, but the layer list comes from ``DATASET_DIR/map.yaml`` when present.
-The staging dir is kept outside the package (generated runtime data, not an engine
-resource — S4a-2 slice B1). Files are atomic-replaced only when the content changed,
-so an unchanged response preserves the file's mtime — that mtime feeds the
-``?v=<mtime>`` cache-bust URLs on map.html, so the browser cache stays warm across
-nightly no-op runs.
+compatibility. The engine default has no overlay layers; a dataset supplies layers
+with ``DATASET_DIR/map.yaml``. The staging dir is kept outside the package
+(generated runtime data, not an engine resource — S4a-2 slice B1). Files are
+atomic-replaced only when the content changed, so an unchanged response preserves
+the file's mtime — that mtime feeds the ``?v=<mtime>`` cache-bust URLs on map.html,
+so the browser cache stays warm across nightly no-op runs.
 
 Run nightly (see ``systemd/kayak-fetch-osmb.{service,timer}``); the
 data updates rarely.
