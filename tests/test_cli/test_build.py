@@ -4,6 +4,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
+import pytest
+
 from kayak.dataset import region as region_mod
 from kayak.dataset import site as site_mod
 from kayak.db.models import (
@@ -932,6 +934,41 @@ class TestDeployPhpConfigLicense:
         deploy._deploy_license_files(out)
         assert (out / "LICENSE.txt").is_file()
         assert (out / "LICENSE-DATA.txt").is_file()
+
+    def test_deploy_license_files_prefers_dataset_data_license(self, tmp_path, monkeypatch):
+        from kayak.web.build import deploy
+
+        ds = tmp_path / "ds"
+        ds.mkdir()
+        (ds / "LICENSE-DATA.txt").write_text("Dataset-specific data license\n", encoding="utf-8")
+        monkeypatch.setattr(deploy, "DATASET_DIR", ds)
+
+        out = tmp_path / "out"
+        out.mkdir()
+        deploy._deploy_license_files(out)
+
+        assert (out / "LICENSE-DATA.txt").read_text(encoding="utf-8") == (
+            "Dataset-specific data license\n"
+        )
+
+    def test_deploy_license_files_rejects_non_file_dataset_license(self, tmp_path, monkeypatch):
+        from kayak.web.build import deploy
+
+        ds = tmp_path / "ds"
+        (ds / "LICENSE-DATA.txt").mkdir(parents=True)
+        monkeypatch.setattr(deploy, "DATASET_DIR", ds)
+
+        out = tmp_path / "out"
+        out.mkdir()
+        with pytest.raises(RuntimeError, match=r"LICENSE-DATA\.txt.*regular file"):
+            deploy._deploy_license_files(out)
+
+    def test_packaged_data_license_fallback_is_generic(self):
+        from kayak.resources import resource_dir
+
+        text = (resource_dir("web", "legal") / "LICENSE-DATA.txt").read_text(encoding="utf-8")
+        assert "levels.wkcc.org" not in text
+        assert "Willamette Kayak" not in text
 
     def test_packaged_license_matches_repo_root(self):
         """The repo-root LICENSE/LICENSE-DATA (GitHub + pyproject convention)

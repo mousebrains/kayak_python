@@ -336,21 +336,28 @@ def _deploy_config_files(output_dir: Path) -> None:
 
 
 def _deploy_license_files(output_dir: Path) -> None:
-    """Copy LICENSE (GPL v3) and LICENSE-DATA (CC BY-NC 4.0) into the output.
+    """Copy engine and dataset license files into the output.
 
-    Packaged copies ship inside the wheel at ``src/kayak/web/legal/*.txt``
-    (S4a-2 slice B2; the repo-root ``LICENSE``/``LICENSE-DATA`` stay for the
-    GitHub/pyproject convention, and a test guards the two against drift),
-    resolved via ``resource_dir`` so a wheel install finds them. Served as
-    ``.txt`` so nginx returns ``text/plain`` and browsers render them inline;
-    the footer in ``src/kayak/web/php/includes/footer.php`` and the static-page
-    footer link to ``/LICENSE.txt`` and ``/LICENSE-DATA.txt``.
+    The software license remains engine-owned and ships in the wheel. The public
+    data license is dataset-owned when ``DATASET_DIR/LICENSE-DATA.txt`` exists;
+    a generic packaged fallback remains for fixtures/scaffolds and old datasets.
+    Served as ``.txt`` so nginx returns ``text/plain`` and browsers render them
+    inline; the footer links to ``/LICENSE.txt`` and ``/LICENSE-DATA.txt``.
     """
     legal_dir = resource_dir("web", "legal")
-    for name in ("LICENSE.txt", "LICENSE-DATA.txt"):
-        src = legal_dir / name
-        if src.is_file():
-            shutil.copy2(src, output_dir / name)
+    software_license = legal_dir / "LICENSE.txt"
+    if software_license.is_file():
+        shutil.copy2(software_license, output_dir / "LICENSE.txt")
+
+    dataset_license = DATASET_DIR / "LICENSE-DATA.txt"
+    if dataset_license.exists():
+        if dataset_license.is_symlink() or not dataset_license.is_file():
+            raise RuntimeError(f"{dataset_license} must be a regular file")
+        data_license = dataset_license
+    else:
+        data_license = legal_dir / "LICENSE-DATA.txt"
+    if data_license.is_file():
+        shutil.copy2(data_license, output_dir / "LICENSE-DATA.txt")
 
 
 # Prose pages whose body the PHP shell pulls from a dataset-rendered fragment
