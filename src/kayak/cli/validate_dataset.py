@@ -155,6 +155,9 @@ def validate_dataset(dataset_dir: Path, warnings: list[str] | None = None) -> li
     errors.extend(_check_id_counters(d, retired))
     # (5b) source-name wiring invariants (e.g. USGS station ids).
     errors.extend(_check_source_names(d, good_csvs))
+    # (5b') state names must be safe — they become URL/filename/HTML in the build
+    #       (S3b-2 made the served state set data-driven).
+    errors.extend(_check_state_names(d, good_csvs))
     # (5c) source<->gauge cardinality (every source has exactly one gauge) + the
     #      gauge_source / reach.gauge_id FK references.
     errors.extend(_check_gauge_source(d, good_csvs))
@@ -1175,6 +1178,24 @@ def _check_site_yaml(d: Path) -> list[str]:
     except ValueError as exc:
         return [str(exc)]
     return []
+
+
+def _check_state_names(d: Path, good_csvs: set[str]) -> list[str]:
+    """Reject state.csv names that aren't safe to use as a URL/filename/HTML text.
+
+    S3b-2 made the served state set data-driven (the build writes ``<name>.html``
+    and renders the name), so a path-separator / ``..`` / HTML-metacharacter name
+    would path-traverse the staging tree or inject markup. Mirrors the same gate on
+    region.yaml keys (:class:`kayak.dataset.region.RegionConfig`).
+    """
+    if "state" not in good_csvs:
+        return []
+    errors: list[str] = []
+    for row in _csv_rows(d / "state.csv"):
+        name = (row.get("name") or "").strip()
+        if name and not layout.is_safe_state_name(name):
+            errors.append(f"state.csv: unsafe state name {name!r} (ASCII letter words only)")
+    return errors
 
 
 def _check_region_yaml(d: Path) -> list[str]:

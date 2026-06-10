@@ -22,6 +22,17 @@ from kayak.web.build._shared import (
 # region.yaml can override them. Engine defaults reproduce the prior WKCC data.
 
 
+def _presentation_states(states: list[str]) -> list[str]:
+    """The states that get nav buttons + a landing page + a sitemap entry (S3b-2).
+
+    The union of *states* (reach-states from ``all_state_names()``) and the dataset
+    region config's states: a state appears if it has visible reaches OR curated
+    region links (incl. a gauges-only / reach-less state). Centralized so the nav,
+    the landing-page loop, and the sitemap can't drift to inconsistent sets.
+    """
+    return sorted(set(states) | set(get_region_config().states))
+
+
 def _build_nav(
     states: list[str],
     active_state: str = "",
@@ -46,14 +57,11 @@ def _build_nav(
     gauges_cls = ' class="active"' if active_page == "gauges" else ""
     links.append(f'<a href="/map.html"{map_cls}>Map</a>')
     links.append(f'<a href="/gauges.html"{gauges_cls}>Gauges</a>')
-    # State buttons (S3b-2 replaced the hardcoded _NAV_STATES allowlist): a state
-    # appears if it has visible reaches (the `states` arg = all_state_names()) OR is
-    # listed in the dataset region config (curated links, possibly gauges-only). The
-    # union means no state with content silently vanishes from nav, and region-only
-    # states (no reaches) still get a button + landing page.
-    nav_states = set(states) | set(get_region_config().states)
-    for s in sorted(nav_states):
-        abbrev = _STATE_ABBREVS.get(s, s)
+    # State buttons come from the presentation set (reach-states + region config;
+    # S3b-2). Names are gated to ASCII letter words at the dataset boundary, but
+    # escape the rendered label as defense-in-depth (a no-op for safe names).
+    for s in _presentation_states(states):
+        abbrev = html_mod.escape(_STATE_ABBREVS.get(s, s))
         cls = ' class="active"' if s == active_state else ""
         links.append(f'<a href="{_state_page_path(s)}"{cls}>{abbrev}</a>')
     # Picker links carry ?state=<full-name> when active_state is set,
@@ -221,15 +229,16 @@ def _build_placeholder_page(
     but not the "Reaches in …" / "Reach picker — …" anchors until reaches land.
     """
     nav_html = _build_nav(states, active_state=state)
-    state_qs = _urlquote(state)
+    state_qs = _urlquote(state)  # state in a URL query/fragment
+    esc_state = html_mod.escape(state)  # state as HTML text (defense-in-depth)
     has_reaches = state in states
     cross_links: list[tuple[str, str]] = []
     if has_reaches:
-        cross_links.append((f"Reaches in {state}", f"/index.html#st={state_qs}"))
-    cross_links.append((f"Live {state} gauges", f"/gauges.html#st={state_qs}"))
+        cross_links.append((f"Reaches in {esc_state}", f"/index.html#st={state_qs}"))
+    cross_links.append((f"Live {esc_state} gauges", f"/gauges.html#st={state_qs}"))
     if has_reaches:
-        cross_links.append((f"Reach picker — {state}", f"/picker.php?state={state_qs}"))
-    cross_links.append((f"Gauge picker — {state}", f"/gauge_picker.php?state={state_qs}"))
+        cross_links.append((f"Reach picker — {esc_state}", f"/picker.php?state={state_qs}"))
+    cross_links.append((f"Gauge picker — {esc_state}", f"/gauge_picker.php?state={state_qs}"))
     cross_link_items = "\n".join(
         f'<li><a href="{url}" '
         f'style="display:inline-flex;align-items:center;min-height:44px;font-weight:600">'
@@ -252,9 +261,9 @@ def _build_placeholder_page(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{state} River Levels</title>
-<meta name="description" content="Real-time river levels, flow, and gage data for {state} from USGS, NOAA, USACE, and other agencies.">
-{_og_meta(f"{state} River Levels", f"Real-time river levels, flow, and gage data for {state} from USGS, NOAA, USACE, and other agencies.", _state_page_path(state))}
+<title>{esc_state} River Levels</title>
+<meta name="description" content="Real-time river levels, flow, and gage data for {esc_state} from USGS, NOAA, USACE, and other agencies.">
+{_og_meta(f"{esc_state} River Levels", f"Real-time river levels, flow, and gage data for {esc_state} from USGS, NOAA, USACE, and other agencies.", _state_page_path(state))}
 <meta name="theme-color" content="{BRAND_COLOR}" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="{BRAND_COLOR_DARK}" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="/static/favicon.ico">
@@ -272,7 +281,7 @@ def _build_placeholder_page(
   {_build_right_cluster()}
 </header>
 <main>
-<h2>{state}</h2>
+<h2>{esc_state}</h2>
 {cross_links_html}
 {links_html}
 </main>

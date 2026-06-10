@@ -27,11 +27,27 @@ column order is not semantically meaningful) after rejecting duplicate names.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 import sqlalchemy as sa
 
 from kayak.db.models import Base
+
+# A state/region display name safe to use as a URL path segment, a filesystem
+# filename, and HTML text: ASCII letter words separated by single spaces (every
+# US state name fits — "New Mexico", "North Dakota"). The build writes
+# ``<name>.html`` and renders the name into nav/title/meta, and S3b-2 made the
+# name data-driven (region.yaml keys + state.csv), so this gate blocks a dataset
+# name from path-traversing the staging tree or injecting HTML. Shared by
+# ``region.RegionConfig`` (region.yaml keys) and ``validate-dataset`` (state.csv).
+STATE_NAME_RE = re.compile(r"^[A-Za-z]+(?: [A-Za-z]+)*$")
+
+
+def is_safe_state_name(name: str) -> bool:
+    """True if *name* is a safe state/region name (ASCII letter words only)."""
+    return bool(STATE_NAME_RE.match(name))
+
 
 # Columns present on the model but NOT written to the table's CSV: large
 # machine-generated geometry/gradient that export to the JSON sidecars instead.

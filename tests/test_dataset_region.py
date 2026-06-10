@@ -75,6 +75,21 @@ class TestLoadRegionConfig:
         with pytest.raises(ValueError, match="must be a mapping"):
             region.load_region_config(tmp_path)
 
+    def test_path_traversal_state_key_rejected(self, tmp_path: Path) -> None:
+        # A state key becomes a filename + URL path in the build, so reject one that
+        # could path-traverse the staging tree (#160 review — High).
+        (tmp_path / region.REGION_YAML).write_text("states:\n  ../escaped:\n    links: []\n")
+        with pytest.raises(ValueError, match="safe name"):
+            region.load_region_config(tmp_path)
+
+    def test_html_metachar_state_key_rejected(self, tmp_path: Path) -> None:
+        # A state key is rendered into nav/title/meta, so reject HTML metacharacters.
+        (tmp_path / region.REGION_YAML).write_text(
+            'states:\n  "<img src=x onerror=alert(1)>":\n    links: []\n'
+        )
+        with pytest.raises(ValueError, match="safe name"):
+            region.load_region_config(tmp_path)
+
     def test_ampersand_url_allowed(self, tmp_path: Path) -> None:
         # Query separators are legitimate in a URL (the WKCC Dreamflows links use them).
         (tmp_path / region.REGION_YAML).write_text(
