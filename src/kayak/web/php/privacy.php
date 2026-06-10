@@ -9,9 +9,9 @@ require_once __DIR__ . '/includes/prose.php';
 
 header('Cache-Control: public, max-age=300');
 include_header(
-    'Privacy Policy — ' . Config::site('site_name', 'WKCC River Levels'),
+    'Privacy Policy — ' . Config::site('site_name', 'River Levels'),
     '',
-    'Privacy policy for the WKCC River Levels site — what data we collect and how we use it.'
+    'Privacy policy for this river levels site — what data we collect and how we use it.'
 );
 ?>
 <!-- Annual review trigger: next review 2027-05-12 -->

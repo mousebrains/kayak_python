@@ -162,6 +162,18 @@ final class MailTest extends TestCase
         $this->assertStringContainsString('https://x/login?t=abc', $body);
         $this->assertStringContainsString('IP address: 1.2.3.4', $body);
         $this->assertStringContainsString('Mozilla/5.0', $body);
+        $this->assertStringContainsString("River Levels\nhttps://example.com", $body);
+    }
+
+    public function test_render_magic_link_email_uses_site_identity(): void
+    {
+        $this->installConfig([
+            'site_url' => 'https://foo.example',
+            'site' => ['site_name' => 'Foo Levels'],
+        ]);
+        $body = render_magic_link_email('https://foo.example/auth?t=abc', '1.2.3.4', null);
+        $this->assertStringContainsString('sign in to Foo Levels', $body);
+        $this->assertStringContainsString("Foo Levels\nhttps://foo.example", $body);
     }
 
     public function test_render_magic_link_email_unknown_browser(): void

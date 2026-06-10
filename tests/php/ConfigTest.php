@@ -127,7 +127,7 @@ final class ConfigTest extends TestCase
     public function testSiteDefaultWhenBlockAbsent(): void
     {
         $this->_install_fixture([]);
-        $this->assertSame('WKCC River Levels', Config::site('site_name', 'WKCC River Levels'));
+        $this->assertSame('River Levels', Config::site('site_name', 'River Levels'));
     }
 
     public function testSiteDefaultWhenKeyMissingOrNonString(): void

@@ -51,6 +51,36 @@ function css_head_block(): string {
     return $block;
 }
 
+function site_org_label_from_name(string $name): string {
+    preg_match_all('/[A-Za-z0-9]+/', $name, $matches);
+    $stop = ['and' => true, 'of' => true, 'the' => true, 'for' => true];
+    $initials = '';
+    foreach ($matches[0] as $word) {
+        if (isset($stop[strtolower($word)])) {
+            continue;
+        }
+        $initials .= strtoupper($word[0]);
+    }
+    return strlen($initials) >= 2 && strlen($initials) <= 6 ? $initials : $name;
+}
+
+function site_org_label(): string {
+    $label = Config::site('org_label');
+    if ($label !== '') {
+        return $label;
+    }
+    return site_org_label_from_name(Config::site('org_name', 'Kayak'));
+}
+
+function site_org_url(): string {
+    $url = Config::site('org_url', 'https://example.com');
+    $scheme = parse_url($url, PHP_URL_SCHEME);
+    if (($scheme === 'http' || $scheme === 'https') && filter_var($url, FILTER_VALIDATE_URL) !== false) {
+        return $url;
+    }
+    return 'https://example.com';
+}
+
 /** Render the nav bar as an HTML string.
  *
  * The single "Picker" link points at /picker.php on reach-context pages and
@@ -104,7 +134,8 @@ function render_nav(string $active, array $context): string {
         $right .= '<span class="site-nav-id" title="' . htmlspecialchars((string)$ed['email']) . '">'
                 . $label . '</span>';
     }
-    $right .= '<a href="https://wkcc.org" rel="noopener" target="_blank">WKCC</a>';
+    $right .= '<a href="' . htmlspecialchars(site_org_url()) . '" rel="noopener" target="_blank">'
+            . htmlspecialchars(site_org_label()) . '</a>';
     $right .= '</nav>';
 
     return $left . $right;
@@ -125,13 +156,13 @@ function include_header(
         : 'Real-time river levels, flow, and gage data from USGS, NOAA, USACE, and other government agencies.';
     $nav = render_nav($active, $context);
     $scheme = (bool)($_SERVER['HTTPS'] ?? '') ? 'https' : 'http';
-    $host   = (string)($_SERVER['HTTP_HOST'] ?? 'levels.wkcc.org');
+    $host   = (string)($_SERVER['HTTP_HOST'] ?? 'example.com');
     $path   = strtok((string)($_SERVER['REQUEST_URI'] ?? '/'), '?');
     $url    = htmlspecialchars($scheme . '://' . $host . $path);
-    // Dataset site identity (S3a), with the engine defaults as fallbacks so a
-    // dataset without site.yaml renders the current values. Escaped for the
+    // Dataset site identity (S3a), with generic engine defaults as fallbacks.
+    // Escaped for the
     // double-quoted attribute context even though SiteConfig already validated them.
-    $og_site_name = htmlspecialchars(Config::site('site_name', 'WKCC River Levels'));
+    $og_site_name = htmlspecialchars(Config::site('site_name', 'River Levels'));
     $theme_light  = htmlspecialchars(Config::site('brand_color', '#1b5591'));
     $theme_dark   = htmlspecialchars(Config::site('brand_color_dark', '#0d3057'));
     echo <<<HTML

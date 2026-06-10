@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from urllib.parse import quote as _urlquote
 
 from kayak.dataset.region import get_region_config
+from kayak.dataset.site import get_site_config
 from kayak.web.build._shared import (
     _FILTERS_JS_VERSION,
     _LEVELS_JS,
@@ -90,10 +91,13 @@ def _build_nav(
 
 
 def _build_right_cluster() -> str:
-    """Right cluster on the header bar — just WKCC, desktop-only via CSS."""
+    """Right cluster on the header bar — dataset organization link."""
+    site = get_site_config()
+    org_url = html_mod.escape(site.org_url, quote=True)
+    org_label = html_mod.escape(site.org_label)
     return (
         '<nav class="site-nav-right" aria-label="Account and external">'
-        '<a href="https://wkcc.org" rel="noopener" target="_blank">WKCC</a>'
+        f'<a href="{org_url}" rel="noopener" target="_blank">{org_label}</a>'
         "</nav>"
     )
 

@@ -367,7 +367,7 @@ function _send_proposal_notification(
     if ($maint_emails === []) {
         return;
     }
-    $site = rtrim(Config::str('site_url', 'https://levels.wkcc.org'), '/');
+    $site = mail_site_url();
     $summary_lines = [];
     foreach (($payload['reach'] ?? []) as $f => $v) {
         $cur = (string)($reach[$f] ?? '');

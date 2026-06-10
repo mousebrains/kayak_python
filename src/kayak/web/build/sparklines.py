@@ -13,7 +13,7 @@ from kayak.web.build._shared import BRAND_COLOR
 SPARKLINE_MEDIAN_WINDOW_SECS = 3 * 3600  # 3-hour running median window
 SPARKLINE_DOWNSAMPLE_POINTS = 60  # Target points after LTTB downsampling
 SPARKLINE_STROKE_WIDTH = "1.5"
-SPARKLINE_COLOR = BRAND_COLOR  # dataset brand color (site.yaml); WKCC #1b5591 by default
+SPARKLINE_COLOR = BRAND_COLOR  # dataset brand color (site.yaml); engine blue by default
 
 SPARKLINE_OBSERVATION_WINDOW = timedelta(hours=48)
 
