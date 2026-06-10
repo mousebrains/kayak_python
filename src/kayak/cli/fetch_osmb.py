@@ -1,14 +1,15 @@
-"""Fetch OSMB (Oregon State Marine Board) hazard + access GeoJSON layers.
+"""Fetch configured map overlay GeoJSON layers.
 
-Pulls three public AGOL feature services as GeoJSON and writes them to the
-configured OSMB staging dir (``OSMB_DIR``; ``config.osmb_dir``), where
-``levels build`` picks them up via ``_deploy_static_assets`` and copies them
-into ``OUTPUT_DIR/static``. The staging dir is kept outside the package
-(generated runtime data, not an engine resource — S4a-2 slice B1). Files are
-atomic-replaced only when the content changed, so an unchanged response
-preserves the file's mtime —
-that mtime feeds the ``?v=<mtime>`` cache-bust URLs on map.html, so the
-browser cache stays warm across nightly no-op runs.
+Pulls the dataset map config's ArcGIS Feature Service layers as GeoJSON and writes
+them to the configured OSMB staging dir (``OSMB_DIR``; ``config.osmb_dir``), where
+``levels build`` picks them up via ``_deploy_static_assets`` and copies them into
+``OUTPUT_DIR/static``. The command name and staging variable stay OSMB-named for
+compatibility, but the layer list comes from ``DATASET_DIR/map.yaml`` when present.
+The staging dir is kept outside the package (generated runtime data, not an engine
+resource — S4a-2 slice B1). Files are atomic-replaced only when the content changed,
+so an unchanged response preserves the file's mtime — that mtime feeds the
+``?v=<mtime>`` cache-bust URLs on map.html, so the browser cache stays warm across
+nightly no-op runs.
 
 Run nightly (see ``systemd/kayak-fetch-osmb.{service,timer}``); the
 data updates rarely.
@@ -19,55 +20,28 @@ import json
 import logging
 import urllib.parse
 from pathlib import Path
+from typing import cast
 
 from kayak.config import OSMB_DIR
+from kayak.dataset.map import get_map_config
 from kayak.utils.http_client import fetch as http_fetch
 from kayak.web.build._shared import _atomic_write_bytes
 
 logger = logging.getLogger(__name__)
 
 
-# Base URLs kept un-parameterized so they stay grep-able against AGOL's REST
-# catalog. ``out_fields`` matches what the corresponding popup formatter in
-# static/map.js reads — anything else would just bloat the served GeoJSON.
-_LAYERS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    (
-        "osmb-obstructions.geojson",
-        "https://services.arcgis.com/uUvqNMGPm7axC2dD/arcgis/rest/services/BORT_Public_View/FeatureServer/0",
-        ("waterbody", "waterbodysec", "obslocation", "obsdescript", "recordtime"),
-    ),
-    (
-        "osmb-dams.geojson",
-        "https://services.arcgis.com/uUvqNMGPm7axC2dD/arcgis/rest/services/service_d258e7b477f546d0917e868b1330ab3c/FeatureServer/0",
-        ("damname", "waterbody", "damheight", "damwidth", "portagedesc", "navigate"),
-    ),
-    (
-        "osmb-access-sites.geojson",
-        "https://services.arcgis.com/uUvqNMGPm7axC2dD/arcgis/rest/services/Boating_Access_Sites_OA/FeatureServer/0",
-        ("name", "waterway_name", "facility_type", "launch_type"),
-    ),
-)
+BBox = tuple[float, float, float, float]
 
 # Defensive cap on pagination — bigger than any layer we expect from
 # OSMB so we never tail-spin if the server keeps returning full pages.
 _MAX_PAGES = 50
-
-# Oregon bounding box (W, S, E, N) with a small margin for coastal
-# ramps + Columbia-border features. Used to drop features whose
-# coordinates fall outside any plausible Oregon waterway — OSMB pins
-# statewide grant-funded programs and orgs (facility_type=
-# "Statewide Regional Project") onto placeholder offshore coordinates
-# in the Pacific (~lon -125.5, lat 43.7) because they don't correspond
-# to a physical site. Applied to every layer defensively; obstructions
-# + dams are clean today but the same OSMB convention could spread.
-_OREGON_BBOX = (-124.7, 41.9, -116.4, 46.3)
 
 
 def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     """Register the 'fetch-osmb' subcommand."""
     parser = subparsers.add_parser(
         "fetch-osmb",
-        help="Fetch Oregon SMB boating obstruction/dam/access GeoJSON to the OSMB staging dir",
+        help="Fetch configured map overlay GeoJSON to the OSMB staging dir",
     )
     parser.add_argument(
         "--output-dir",
@@ -78,14 +52,21 @@ def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -
 
 
 def fetch_osmb(args: argparse.Namespace) -> None:
-    """Fetch OSMB layers. Exits non-zero if every layer fails."""
+    """Fetch configured map layers. Exits non-zero if every configured layer fails."""
     output_dir = Path(args.output_dir) if args.output_dir else OSMB_DIR
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    cfg = get_map_config()
+    layers = cfg.fetch_layers()
+    if not layers:
+        logger.info("fetch-osmb: no map overlay layers configured")
+        return
+    bbox = cast(BBox, tuple(cfg.bbox))
+
     successes = 0
-    for filename, base_url, out_fields in _LAYERS:
+    for filename, base_url, out_fields in layers:
         try:
-            body, feature_count = _fetch_all_pages(base_url, out_fields)
+            body, feature_count = _fetch_all_pages(base_url, out_fields, bbox)
         except Exception as exc:
             logger.error("fetch-osmb: %s failed: %s", filename, exc)
             continue
@@ -101,10 +82,10 @@ def fetch_osmb(args: argparse.Namespace) -> None:
         successes += 1
 
     if successes == 0:
-        raise SystemExit("fetch-osmb: every layer failed; see logs")
+        raise SystemExit("fetch-osmb: every configured layer failed; see logs")
 
 
-def _fetch_all_pages(base_url: str, out_fields: tuple[str, ...]) -> tuple[bytes, int]:
+def _fetch_all_pages(base_url: str, out_fields: tuple[str, ...], bbox: BBox) -> tuple[bytes, int]:
     """Fetch every page of *base_url* and return a merged FeatureCollection.
 
     AGOL caps each response at the service's maxRecordCount. The page
@@ -131,7 +112,7 @@ def _fetch_all_pages(base_url: str, out_fields: tuple[str, ...]) -> tuple[bytes,
         # "shorter than first page = last page" termination still
         # works when intermediate pages happen to be mostly junk.
         page_count = len(features)
-        all_features.extend(f for f in features if _in_oregon_bbox(f))
+        all_features.extend(f for f in features if _in_bbox(f, bbox))
         if first_page_size is None:
             first_page_size = page_count
         if not page_count or page_count < first_page_size:
@@ -145,14 +126,14 @@ def _fetch_all_pages(base_url: str, out_fields: tuple[str, ...]) -> tuple[bytes,
     return body, len(all_features)
 
 
-def _in_oregon_bbox(feature: dict) -> bool:
-    """True if *feature* is a Point inside the Oregon bbox; drops malformed too."""
+def _in_bbox(feature: dict, bbox: BBox) -> bool:
+    """True if *feature* is a Point inside the configured bbox; drops malformed too."""
     geom = feature.get("geometry") or {}
     coords = geom.get("coordinates")
     if not isinstance(coords, list) or len(coords) < 2:
         return False
     lon, lat = coords[0], coords[1]
-    w, s, e, n = _OREGON_BBOX
+    w, s, e, n = bbox
     return bool(w <= lon <= e and s <= lat <= n)
 
 

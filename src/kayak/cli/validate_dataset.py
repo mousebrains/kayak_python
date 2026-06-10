@@ -184,8 +184,8 @@ def validate_dataset(dataset_dir: Path, warnings: list[str] | None = None) -> li
     #      must parse + pass the typed/safe-shape gate (links render into HTML).
     errors.extend(_check_region_yaml(d))
     # (7f) map config: an opt-in map.yaml (extent + overlay layers) must parse +
-    #      pass the typed/safe-shape gate (values render into the map JS / hrefs; the
-    #      fetch fields are validated ahead of the follow-up fetch-osmb wiring).
+    #      pass the typed/safe-shape gate (values render into the map JS / hrefs and
+    #      drive fetch-osmb's ArcGIS fetches).
     errors.extend(_check_map_yaml(d))
     # (7g) site prose: opt-in site/*.md render clean; legal pages required when
     #      the dataset is publishable.
@@ -1233,10 +1233,10 @@ def _check_map_yaml(d: Path) -> list[str]:
     Absent → no error (the dataset keeps the engine's default map config). Present →
     it must parse and every field must pass the typed/safe-shape gate in
     :class:`kayak.dataset.map.MapConfig` (presentation + popup link render into the
-    map JS / an ``href``, and the ArcGIS endpoint/out_fields/bbox are validated
-    ahead of the follow-up ``fetch-osmb`` wiring, so a bad color, non-http URL, bad
-    shape/popup key, duplicate layer key/output filename, unknown key, or unsafe
-    filename is rejected here at the deploy gate).
+    map JS / an ``href``, and the ArcGIS endpoint/out_fields/bbox drive
+    ``fetch-osmb``, so a bad color, non-http URL, bad shape/popup key, duplicate
+    layer key/output filename, unknown key, or unsafe filename is rejected here at
+    the deploy gate).
     """
     if not (d / dataset_map.MAP_YAML).is_file():
         return []

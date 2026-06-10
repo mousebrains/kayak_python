@@ -90,6 +90,19 @@ echo "==> CLI entry point"
 "$LEVELS" --help >/dev/null
 echo "    OK — levels --help"
 
+echo "==> levels fetch-osmb no-op with empty dataset map config"
+EMPTY_MAP_DS="$WORK/empty-map-dataset"
+EMPTY_OSMB="$WORK/osmb-empty"
+mkdir -p "$EMPTY_MAP_DS"
+: > "$EMPTY_MAP_DS/map.yaml"
+HOME="$WORK" SUDO_USER="" DATASET_DIR="$EMPTY_MAP_DS" \
+    "$LEVELS" fetch-osmb --output-dir "$EMPTY_OSMB" >/dev/null
+if [ -n "$(find "$EMPTY_OSMB" -type f -print -quit)" ]; then
+    echo "wheel-smoke FAILED: empty map config wrote overlay files" >&2
+    exit 1
+fi
+echo "    OK — empty map.yaml disables overlay fetches without network"
+
 echo "==> levels init-db (packaged schema + migrations) → $DB"
 DATABASE_URL="sqlite:///$DB" "$LEVELS" init-db >/dev/null
 test -f "$DB"

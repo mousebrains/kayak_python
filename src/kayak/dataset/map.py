@@ -6,18 +6,15 @@ dataset root (``DATASET_DIR``); resolution is *engine defaults < dataset
 ``map.yaml``* (a present file fully defines the config — replace, not merge). The
 map analogue of :mod:`kayak.dataset.site` / :mod:`kayak.dataset.region`.
 
-S3d-2 consumers read this config:
+S3d consumers read this config:
   - :mod:`kayak.web.build.site_config` renders the presentation half into the
     generated ``static/site-config.json`` the map JS fetches
     (:meth:`MapConfig.presentation_layers`).
+  - :mod:`kayak.cli.fetch_osmb` reads the ArcGIS fetch half
+    (:meth:`MapConfig.fetch_layers`): endpoint + out_fields + output filename,
+    filtered to :attr:`MapConfig.bbox`.
   - :mod:`kayak.cli.validate_dataset` applies the same fail-closed validation when
     ``map.yaml`` is present.
-
-The model also carries the ArcGIS fetch half
-(:meth:`MapConfig.fetch_layers`): endpoint + out_fields + output filename, filtered
-to :attr:`MapConfig.bbox`. ``fetch-osmb`` still reads its legacy hardcoded OSMB
-layers in this S3d-2 slice so the live deployment path remains unchanged; wiring
-that command to this model is the next S3d step.
 
 **Security boundary:** the dataset supplies layer presentation, the popup *template
 key* + *link*, the ArcGIS endpoint, out_fields, output filename, and the bbox —
@@ -26,9 +23,8 @@ renders into HTML / an ``href`` / a fetched URL, and the map JS's sinks are not 
 quote-safe, so each value is validated to a safe shape **here** (fail-closed) — this
 model, not the JS, is the guarantee — and ``levels validate-dataset`` runs the same
 validation at the deploy gate. Engine defaults are the current WKCC/Oregon values,
-so a dataset without ``map.yaml`` builds identically; the fetch command also remains
-identical until its own wiring slice lands. The generic-default flip is deferred to
-S3i.
+so a dataset without ``map.yaml`` builds and fetches identically. The generic-default
+flip is deferred to S3i.
 """
 
 from __future__ import annotations
@@ -214,11 +210,10 @@ class MapConfig(BaseModel):
 
 # --------------------------------------------------------------------------- #
 # Engine defaults — the current WKCC/Oregon map config. The presentation half was
-# moved here from web/build/site_config.py (S3d-1). The fetch half is transcribed
-# from cli/fetch_osmb.py's _LAYERS / _OREGON_BBOX ahead of S3d-3, where the command
-# will start reading this model; for S3d-2 it remains a compatibility-preserving
-# no-op for live fetches. Emptied/genericized in S3i once the WKCC dataset carries
-# map.yaml.
+# moved here from web/build/site_config.py (S3d-1). The fetch half was transcribed
+# from cli/fetch_osmb.py's former _LAYERS / _OREGON_BBOX table, so the default live
+# fetch stays identical until the WKCC dataset carries map.yaml and S3i
+# genericizes these defaults.
 # --------------------------------------------------------------------------- #
 
 _DEFAULT_CENTER: list[float] = [44.0, -120.5]
