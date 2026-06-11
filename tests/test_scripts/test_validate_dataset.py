@@ -12,6 +12,8 @@ import csv
 import importlib.util
 import json
 import shutil
+import struct
+import zlib
 from pathlib import Path
 
 import pytest
@@ -66,6 +68,35 @@ def _add_column(path: Path, col: str, value: str) -> None:
         w = csv.DictWriter(fh, fieldnames=fieldnames)
         w.writeheader()
         w.writerows(rows)
+
+
+def _write_required_site_prose(dataset: Path) -> None:
+    site = dataset / "site"
+    site.mkdir(exist_ok=True)
+    for page in ("privacy", "disclaimer", "contact"):
+        (site / f"{page}.md").write_text(f"## {page.title()}\n\nText.\n", encoding="utf-8")
+
+
+def _png_bytes(width: int, height: int) -> bytes:
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        body = kind + data
+        return (
+            struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
+        )
+
+    raw = b"".join(b"\x00" + b"\x00\x00\x00" * width for _ in range(height))
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(raw))
+        + chunk(b"IEND", b"")
+    )
+
+
+def _ico_bytes(width: int, height: int) -> bytes:
+    png = _png_bytes(width, height)
+    directory = struct.pack("<BBBBHHII", width, height, 0, 0, 1, 32, len(png), 22)
+    return struct.pack("<HHH", 0, 1, 1) + directory + png
 
 
 def test_optional_unknown_station_policy_column_accepted(dataset_copy: Path) -> None:
@@ -1307,3 +1338,58 @@ def test_complete_site_prose_accepted(dataset_copy: Path) -> None:
     for page in ("about", "disclaimer", "privacy", "contact"):
         (dataset_copy / "site" / f"{page}.md").write_text(f"## {page.title()}\n\nText.\n")
     assert validate_dataset(dataset_copy) == []
+
+
+def test_site_assets_valid_set_accepted(dataset_copy: Path) -> None:
+    _write_required_site_prose(dataset_copy)
+    assets = dataset_copy / "site" / "assets"
+    assets.mkdir()
+    (assets / "README.md").write_text("# Assets\n", encoding="utf-8")
+    (assets / "favicon.ico").write_bytes(_ico_bytes(32, 32))
+    (assets / "icon-180.png").write_bytes(_png_bytes(180, 180))
+    (assets / "icon-192.png").write_bytes(_png_bytes(192, 192))
+    (assets / "og-image.png").write_bytes(_png_bytes(1200, 630))
+
+    assert validate_dataset(dataset_copy) == []
+
+
+def test_site_assets_reject_unexpected_file(dataset_copy: Path) -> None:
+    _write_required_site_prose(dataset_copy)
+    assets = dataset_copy / "site" / "assets"
+    assets.mkdir()
+    (assets / "script.js").write_text("alert(1)\n", encoding="utf-8")
+
+    errs = validate_dataset(dataset_copy)
+    assert any("site/assets/script.js" in e and "unexpected site asset" in e for e in errs)
+
+
+def test_site_assets_reject_wrong_dimensions(dataset_copy: Path) -> None:
+    _write_required_site_prose(dataset_copy)
+    assets = dataset_copy / "site" / "assets"
+    assets.mkdir()
+    (assets / "og-image.png").write_bytes(_png_bytes(1200, 600))
+
+    errs = validate_dataset(dataset_copy)
+    assert any("site/assets/og-image.png" in e and "1200x630" in e for e in errs)
+
+
+def test_site_assets_reject_symlink(dataset_copy: Path, tmp_path: Path) -> None:
+    _write_required_site_prose(dataset_copy)
+    assets = dataset_copy / "site" / "assets"
+    assets.mkdir()
+    target = tmp_path / "outside.png"
+    target.write_bytes(_png_bytes(1200, 630))
+    (assets / "og-image.png").symlink_to(target)
+
+    errs = validate_dataset(dataset_copy)
+    assert any("site/assets/og-image.png" in e and "symlinks" in e for e in errs)
+
+
+def test_site_assets_reject_symlinked_asset_dir(dataset_copy: Path, tmp_path: Path) -> None:
+    _write_required_site_prose(dataset_copy)
+    outside = tmp_path / "outside-assets"
+    outside.mkdir()
+    (dataset_copy / "site" / "assets").symlink_to(outside)
+
+    errs = validate_dataset(dataset_copy)
+    assert any(e == "site/assets: symlinks are not supported" for e in errs)

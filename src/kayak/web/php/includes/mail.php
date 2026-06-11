@@ -25,13 +25,24 @@ function mail_from(): string {
 }
 
 /**
- * Reply-To address. Distinct from From so DMARC/DKIM align with the From
- * domain (Gmail) while users see a polished reply address on the wkcc.org
- * domain. Override via env MAIL_REPLY_TO if needed.
+ * Reply-To address. Distinct from From so DMARC/DKIM can align with a relay
+ * From domain while users see an address on the configured site domain.
+ * Override via MAIL_REPLY_TO when the deployment wants a specific mailbox.
  */
 function mail_reply_to(): string {
     $v = Config::str('mail_reply_to');
-    return $v !== '' ? $v : 'noreply@levels.wkcc.org';
+    if ($v !== '') return $v;
+
+    $site_url = Config::url('site_url');
+    $host = $site_url !== '' ? parse_url($site_url, PHP_URL_HOST) : null;
+    if (is_string($host) && $host !== '') {
+        $candidate = "noreply@$host";
+        if (filter_var($candidate, FILTER_VALIDATE_EMAIL) !== false) {
+            return $candidate;
+        }
+    }
+
+    return mail_from();
 }
 
 function mail_dump_dir(): ?string {
