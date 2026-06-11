@@ -18,3 +18,4 @@
 # § Phase 5.3 / 5.7 for the residual-count rationale.
 
 KAYAK_HOME=/home/pat
+SITE_URL=https://levels.wkcc.org

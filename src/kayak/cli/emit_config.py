@@ -29,7 +29,7 @@ from typing import Any
 
 from pydantic import SecretStr
 
-from kayak.config import KayakConfig
+from kayak.config import KayakConfig, require_explicit_site_url_for_publishable_dataset
 from kayak.dataset.site import load_site_config
 
 DEFAULT_OUTPUT_PATH = "/etc/kayak/runtime-config.json"
@@ -87,6 +87,10 @@ def build_config_data(cfg: KayakConfig) -> dict[str, Any]:
       ``sqlite:///`` URL prefix. PHP's PDO constructor wants a path,
       not a SQLAlchemy URL.
     """
+    site_url_errors = require_explicit_site_url_for_publishable_dataset(cfg.dataset_dir)
+    if site_url_errors:
+        raise RuntimeError("; ".join(site_url_errors))
+
     data = cfg.model_dump(mode="json", exclude_none=True)
     for name in type(cfg).model_fields:
         if name not in data:
@@ -138,7 +142,11 @@ def _atomic_write(path: Path, content: str, mode: int = DEFAULT_MODE) -> None:
 def emit_config(args: argparse.Namespace) -> None:
     """Write the resolved KayakConfig JSON snapshot."""
     cfg = KayakConfig()
-    data = build_config_data(cfg)
+    try:
+        data = build_config_data(cfg)
+    except RuntimeError as e:
+        print(f"ERROR: emit-config failed: {e}", file=sys.stderr)
+        sys.exit(1)
     content = _render_json(data)
 
     if args.dry_run:
@@ -157,7 +165,11 @@ def emit_config(args: argparse.Namespace) -> None:
 def show_config(args: argparse.Namespace) -> None:
     """Print the resolved KayakConfig to stdout for human inspection."""
     cfg = KayakConfig()
-    data = build_config_data(cfg)
+    try:
+        data = build_config_data(cfg)
+    except RuntimeError as e:
+        print(f"ERROR: show-config failed: {e}", file=sys.stderr)
+        sys.exit(1)
 
     if args.format == "json":
         sys.stdout.write(_render_json(data))

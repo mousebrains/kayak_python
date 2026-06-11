@@ -26,6 +26,8 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from kayak.resources import resource_dir
 
+GENERIC_SITE_URL = "https://levels.example.org"
+
 
 def _config_env_path() -> Path | None:
     """Locate ``~/.config/kayak/.env``, with a SUDO_USER fallback.
@@ -175,7 +177,7 @@ class KayakConfig(BaseSettings):
         validation_alias="MAINTAINER_EMAIL",
     )
     maintainer_name: str = "Pat Welch"
-    site_url: AnyHttpUrl = Field(default=AnyHttpUrl("https://levels.wkcc.org"))
+    site_url: AnyHttpUrl = Field(default=AnyHttpUrl(GENERIC_SITE_URL))
 
     # Notifications
     ntfy_topic: str | None = None
@@ -297,6 +299,37 @@ SITE_URL: str = str(_config.site_url).rstrip("/")
 # and, post-S3, a dataset-supplied canonical URL. Distinct from FETCH_USER_AGENT
 # (the data-feed pipeline's UA).
 STATUS_USER_AGENT: str = f"Mozilla/5.0 (compatible; kayak-status; +{SITE_URL})"
+
+
+def site_url_is_explicitly_configured() -> bool:
+    """Return whether ``SITE_URL`` came from env/dotenv rather than the fallback."""
+    return any(name.upper() == "SITE_URL" and value.strip() for name, value in os.environ.items())
+
+
+def require_explicit_site_url_for_publishable_dataset(dataset_dir: Path) -> list[str]:
+    """Require publishable deployments to set ``SITE_URL`` explicitly.
+
+    The generic engine fallback is useful for scaffold/dev contexts, but a
+    publishable dataset writes canonical URLs, OpenGraph URLs, sitemap entries,
+    robots.txt, and PHP runtime config. If the operator forgot ``SITE_URL``, those
+    public artifacts would silently point at the generic example host.
+    """
+    try:
+        from kayak.dataset.contract import load_dataset_meta
+
+        meta = load_dataset_meta(dataset_dir)
+    except ValueError:
+        return []
+    if not isinstance(meta, dict) or meta.get("status") != "publishable":
+        return []
+    if site_url_is_explicitly_configured():
+        return []
+    return [
+        "SITE_URL must be set explicitly for a publishable dataset; "
+        "add SITE_URL=https://<public-host> to /etc/kayak/env or "
+        "~/.config/kayak/.env before building/deploying."
+    ]
+
 
 # ``MAINTAINER_EMAIL`` module constant was removed in T3.3 closeout —
 # no consumers import it (grep -rn 'from kayak.config import' returned

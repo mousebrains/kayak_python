@@ -411,6 +411,58 @@ def test_build_creates_output_dir_if_missing(
     assert (live / "index.html").read_text() == "v1"
 
 
+def test_build_to_dir_refuses_publishable_dataset_without_site_url(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "dataset.yaml").write_text(
+        "contract_version: 1\n"
+        "dataset_id: test\n"
+        "name: Test Levels\n"
+        "status: publishable\n"
+        "license: CC-BY-NC-4.0\n"
+        'engine_test_ref: "0000000000000000000000000000000000000000"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(build_mod, "DATASET_DIR", tmp_path)
+    monkeypatch.delenv("SITE_URL", raising=False)
+    monkeypatch.setattr(
+        build_mod,
+        "get_session",
+        lambda: pytest.fail("build should fail before opening the DB"),
+    )
+
+    with pytest.raises(RuntimeError, match="SITE_URL must be set explicitly"):
+        build_mod._build_to_dir(tmp_path / "out", argparse.Namespace())
+
+
+def test_build_reports_publishable_site_url_error_cleanly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "dataset.yaml").write_text(
+        "contract_version: 1\n"
+        "dataset_id: test\n"
+        "name: Test Levels\n"
+        "status: publishable\n"
+        "license: CC-BY-NC-4.0\n"
+        'engine_test_ref: "0000000000000000000000000000000000000000"\n',
+        encoding="utf-8",
+    )
+    live = tmp_path / "public_html"
+    monkeypatch.setattr(build_mod, "DATASET_DIR", tmp_path)
+    monkeypatch.delenv("SITE_URL", raising=False)
+    monkeypatch.setattr(
+        build_mod,
+        "get_session",
+        lambda: pytest.fail("build should fail before opening the DB"),
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        build_mod.build(argparse.Namespace(output_dir=str(live)))
+    assert exc.value.code == 1
+    assert "SITE_URL must be set explicitly" in capsys.readouterr().err
+    assert not (live / ".staging").exists()
+
+
 def test_build_cleans_staging_on_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """If _build_to_dir raises mid-build, the staging dir is torn down so a
     retry doesn't trip over stale scratch state. Live is untouched."""

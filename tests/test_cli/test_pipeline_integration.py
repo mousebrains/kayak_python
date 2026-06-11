@@ -362,7 +362,14 @@ def test_pipeline_fetch_through_build(fixture: _ParserFixture, tmp_path: Path) -
     engine_mod.get_session_factory(db_url)
 
     with (
-        patch.dict("os.environ", {"DATABASE_URL": db_url, "OUTPUT_DIR": str(output_dir)}),
+        patch.dict(
+            "os.environ",
+            {
+                "DATABASE_URL": db_url,
+                "OUTPUT_DIR": str(output_dir),
+                "SITE_URL": "https://levels.example.org",
+            },
+        ),
         patch("kayak.cli.pipeline.fetch_usgs_ogc.fetch_usgs_ogc", return_value=None),
     ):
         try:

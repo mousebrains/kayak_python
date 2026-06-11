@@ -162,6 +162,7 @@ DATABASE_URL=sqlite:////home/pat/DB/kayak.db
 SQLITE_PATH=/home/pat/DB/kayak.db
 OUTPUT_DIR=/home/pat/public_html
 DATASET_DIR=/home/pat/kayak_data
+SITE_URL=https://levels.wkcc.org
 EDITOR_FEATURE=1
 EOF
 ```
@@ -340,8 +341,9 @@ env[SQLITE_PATH] = /home/pat/DB/kayak.db
 Two deploy-time files land under `/etc/kayak/`:
 
 - `env` (mode 0644 root:root, world-readable) — `KAYAK_HOME=/home/pat`
-  path indirection consumed by `kayak-*.service` `ExecStart=` lines
-  and the helper shell scripts. NOT a secret.
+  path indirection plus the public `SITE_URL=https://levels.wkcc.org`.
+  These are consumed by `kayak-*.service` `ExecStart=` lines, the helper shell
+  scripts, and deploy-time Python commands. NOT secrets.
 - `secrets.env` (mode 0600 root:www-data) — the Cloudflare Turnstile
   site-verify secret, kept out of world-readable nginx config and
   exposed only to PHP-FPM workers.
@@ -773,6 +775,7 @@ cat > /home/pat/.config/kayak/.env <<'EOF'
 SQLITE_PATH=/home/pat/DB/kayak.db
 DATABASE_URL=sqlite:////home/pat/DB/kayak.db
 DATASET_DIR=/home/pat/kayak_data
+SITE_URL=https://levels.wkcc.org
 OUTPUT_DIR=/home/pat/public_html
 EDITOR_FEATURE=1
 EOF
