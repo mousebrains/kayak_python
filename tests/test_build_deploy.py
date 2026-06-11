@@ -585,12 +585,20 @@ def test_load_css_applies_custom_brand(monkeypatch):
 
 def _deploy_static_no_externals(monkeypatch, tmp_path, site_config: SiteConfig | None = None):
     """Run _deploy_static_assets with OSMB + regression dirs absent."""
+    output = _deploy_static_no_externals_output(monkeypatch, tmp_path, site_config)
+    return (output / "static" / "manifest.json").read_text(encoding="utf-8")
+
+
+def _deploy_static_no_externals_output(
+    monkeypatch, tmp_path, site_config: SiteConfig | None = None
+):
+    """Run _deploy_static_assets with OSMB + regression dirs absent."""
     monkeypatch.setattr(build_mod, "OSMB_DIR", tmp_path / "no-osmb")
     monkeypatch.setattr(build_mod, "DATASET_DIR", tmp_path / "no-ds")
     monkeypatch.setattr(build_mod, "get_site_config", lambda: site_config or SiteConfig())
     output = tmp_path / "out"
     build_mod._deploy_static_assets(output)
-    return (output / "static" / "manifest.json").read_text(encoding="utf-8")
+    return output
 
 
 def test_deploy_manifest_default_identity_and_brand(monkeypatch, tmp_path):
@@ -621,6 +629,28 @@ def test_deploy_manifest_custom_site_identity(monkeypatch, tmp_path):
     data = json.loads(manifest)
     assert data["name"] == "Example Levels"
     assert data["short_name"] == "Example"
+
+
+def test_deploy_security_txt_default_is_packaged_noop(monkeypatch, tmp_path):
+    output = _deploy_static_no_externals_output(monkeypatch, tmp_path)
+    security_txt = (output / "static" / "security.txt").read_text(encoding="utf-8")
+    packaged = (build_mod._STATIC_DIR / "security.txt").read_text(encoding="utf-8")
+    assert security_txt == packaged
+
+
+def test_deploy_security_txt_custom_site_fields(monkeypatch, tmp_path):
+    output = _deploy_static_no_externals_output(
+        monkeypatch,
+        tmp_path,
+        SiteConfig(
+            security_contact="mailto:security@example.org",
+            security_expires="2027-12-31T00:00:00Z",
+        ),
+    )
+    security_txt = (output / "static" / "security.txt").read_text(encoding="utf-8")
+    assert "Contact: mailto:security@example.org\n" in security_txt
+    assert "Expires: 2027-12-31T00:00:00Z\n" in security_txt
+    assert "Preferred-Languages: en\n" in security_txt
 
 
 def test_apply_brand_color_case_insensitive_noop(monkeypatch):

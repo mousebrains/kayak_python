@@ -125,6 +125,26 @@ def _render_manifest(text: str) -> str:
     return json.dumps(manifest, indent=2) + "\n"
 
 
+def _replace_security_txt_line(text: str, field: str, value: str) -> str:
+    lines = text.splitlines()
+    prefix = f"{field}: "
+    for i, line in enumerate(lines):
+        if line.startswith(prefix):
+            lines[i] = f"{prefix}{value}"
+            return "\n".join(lines) + "\n"
+    raise ValueError(f"security.txt template missing {field}: line")
+
+
+def _render_security_txt(text: str) -> str:
+    """Render optional dataset-owned security.txt contact/expiry overrides."""
+    site = get_site_config()
+    if site.security_contact:
+        text = _replace_security_txt_line(text, "Contact", site.security_contact)
+    if site.security_expires:
+        text = _replace_security_txt_line(text, "Expires", site.security_expires)
+    return text
+
+
 def _deploy_static_assets(output_dir: Path, *, provenance_slug_count: int = 0) -> None:
     """Copy committed + generated static assets into ``output_dir/static/``.
 
@@ -161,6 +181,11 @@ def _deploy_static_assets(output_dir: Path, *, provenance_slug_count: int = 0) -
             if path.name == "manifest.json":
                 (dst / path.name).write_text(
                     _render_manifest(path.read_text(encoding="utf-8")),
+                    encoding="utf-8",
+                )
+            elif path.name == "security.txt":
+                (dst / path.name).write_text(
+                    _render_security_txt(path.read_text(encoding="utf-8")),
                     encoding="utf-8",
                 )
             else:

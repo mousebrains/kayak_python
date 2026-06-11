@@ -22,6 +22,7 @@ free-text/URL/color fields are validated to a safe shape here (fail-closed), and
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -38,6 +39,9 @@ SITE_YAML = "site.yaml"
 # spirit of the S2 regression sanitizer.
 _HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 _HTML_META_RE = re.compile(r"""[<>"'&]""")
+_LINE_BREAK_RE = re.compile(r"[\r\n]")
+_WHITESPACE_RE = re.compile(r"\s")
+_SECURITY_EXPIRES_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 _WORD_RE = re.compile(r"[A-Za-z0-9]+")
 _ORG_LABEL_STOPWORDS = {"and", "of", "the", "for"}
 
@@ -78,6 +82,9 @@ class SiteConfig(BaseModel):
     org_label: str = ""
     manifest_name: str = ""
     manifest_short_name: str = "Levels"
+    # Empty means use the packaged security.txt line; datasets opt in per field.
+    security_contact: str = ""
+    security_expires: str = ""
     # Colors are strict 6-digit ``#rrggbb`` only — no 3-digit (#fff), ``rgb()``, or
     # named colors. Stricter than CSS on purpose (the safe direction: the value
     # lands in both an HTML attribute and a CSS property).
@@ -101,6 +108,43 @@ class SiteConfig(BaseModel):
     @classmethod
     def _safe_manifest_name(cls, v: str) -> str:
         return v if v == "" else _safe_text_value(v)
+
+    @field_validator("security_contact")
+    @classmethod
+    def _security_contact(cls, v: str) -> str:
+        if v == "":
+            return v
+        if not v.strip():
+            raise ValueError("must be empty or a non-empty URI")
+        if _LINE_BREAK_RE.search(v):
+            raise ValueError("must not contain line breaks")
+        if _WHITESPACE_RE.search(v):
+            raise ValueError("must not contain whitespace")
+        parsed = urlparse(v)
+        if parsed.scheme == "mailto":
+            if not parsed.path or "@" not in parsed.path:
+                raise ValueError("mailto contact must include an email address")
+            return v
+        if parsed.scheme in ("http", "https") and parsed.netloc:
+            return v
+        raise ValueError("must be a mailto:, http:, or https: URI")
+
+    @field_validator("security_expires")
+    @classmethod
+    def _security_expires(cls, v: str) -> str:
+        if v == "":
+            return v
+        if not v.strip():
+            raise ValueError("must be empty or an RFC3339 UTC timestamp")
+        if _LINE_BREAK_RE.search(v):
+            raise ValueError("must not contain line breaks")
+        if not _SECURITY_EXPIRES_RE.match(v):
+            raise ValueError("must be an RFC3339 UTC timestamp like 2027-05-20T00:00:00Z")
+        try:
+            datetime.strptime(v, "%Y-%m-%dT%H:%M:%SZ")
+        except ValueError as e:
+            raise ValueError("must be a valid RFC3339 UTC timestamp") from e
+        return v
 
     @field_validator("org_label")
     @classmethod

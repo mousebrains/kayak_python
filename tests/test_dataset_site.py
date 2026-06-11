@@ -22,6 +22,8 @@ class TestLoadSiteConfig:
         assert c.attribution == "dataset contributors"
         assert c.manifest_name == "River Levels"
         assert c.manifest_short_name == "Levels"
+        assert c.security_contact == ""
+        assert c.security_expires == ""
 
     def test_empty_file_is_no_overrides(self, tmp_path: Path) -> None:
         (tmp_path / site.SITE_YAML).write_text("")
@@ -57,6 +59,37 @@ class TestLoadSiteConfig:
     def test_empty_manifest_short_name_rejected(self, tmp_path: Path) -> None:
         (tmp_path / site.SITE_YAML).write_text('manifest_short_name: "  "\n')
         with pytest.raises(ValueError, match="non-empty"):
+            site.load_site_config(tmp_path)
+
+    def test_security_txt_overrides_applied(self, tmp_path: Path) -> None:
+        (tmp_path / site.SITE_YAML).write_text(
+            "security_contact: mailto:security@example.org\n"
+            'security_expires: "2027-05-20T00:00:00Z"\n'
+        )
+        c = site.load_site_config(tmp_path)
+        assert c.security_contact == "mailto:security@example.org"
+        assert c.security_expires == "2027-05-20T00:00:00Z"
+
+    def test_security_contact_rejects_line_break(self, tmp_path: Path) -> None:
+        (tmp_path / site.SITE_YAML).write_text(
+            'security_contact: "mailto:security@example.org\\nPolicy: https://example.org"\n'
+        )
+        with pytest.raises(ValueError, match="line breaks"):
+            site.load_site_config(tmp_path)
+
+    def test_security_contact_rejects_bad_scheme(self, tmp_path: Path) -> None:
+        (tmp_path / site.SITE_YAML).write_text("security_contact: ftp://example.org/report\n")
+        with pytest.raises(ValueError, match="mailto"):
+            site.load_site_config(tmp_path)
+
+    def test_security_contact_rejects_whitespace(self, tmp_path: Path) -> None:
+        (tmp_path / site.SITE_YAML).write_text('security_contact: "mailto:security @example.org"\n')
+        with pytest.raises(ValueError, match="whitespace"):
+            site.load_site_config(tmp_path)
+
+    def test_security_expires_rejects_bad_timestamp(self, tmp_path: Path) -> None:
+        (tmp_path / site.SITE_YAML).write_text('security_expires: "2027-99-20T00:00:00Z"\n')
+        with pytest.raises(ValueError, match="valid RFC3339"):
             site.load_site_config(tmp_path)
 
     def test_org_label_ignores_stopwords(self, tmp_path: Path) -> None:
