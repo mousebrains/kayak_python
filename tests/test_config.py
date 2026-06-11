@@ -109,8 +109,15 @@ class TestKayakConfigEnvReads:
         assert cfg.maintainer_emails == []
         assert cfg.editor_feature is False
         assert cfg.editor_session_ttl_days == 7
-        assert str(cfg.site_url).startswith("https://levels.wkcc.org")
+        assert str(cfg.site_url).startswith("https://levels.example.org")
         assert cfg.database_url.startswith("sqlite:///")
+
+    def test_site_url_env_override_preserves_live_host(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("SITE_URL", "https://levels.wkcc.org")
+        cfg = KayakConfig()
+        assert str(cfg.site_url).startswith("https://levels.wkcc.org")
 
 
 class TestDatasetDirRoot:

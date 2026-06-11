@@ -175,7 +175,7 @@ class KayakConfig(BaseSettings):
         validation_alias="MAINTAINER_EMAIL",
     )
     maintainer_name: str = "Pat Welch"
-    site_url: AnyHttpUrl = Field(default=AnyHttpUrl("https://levels.wkcc.org"))
+    site_url: AnyHttpUrl = Field(default=AnyHttpUrl("https://levels.example.org"))
 
     # Notifications
     ntfy_topic: str | None = None
