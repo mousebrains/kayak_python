@@ -188,8 +188,8 @@ def validate_dataset(dataset_dir: Path, warnings: list[str] | None = None) -> li
     #      pass the typed/safe-shape gate (values render into the map JS / hrefs and
     #      drive fetch-osmb's ArcGIS fetches).
     errors.extend(_check_map_yaml(d))
-    # (7g) site prose: opt-in site/*.md render clean; legal pages required when
-    #      the dataset is publishable.
+    # (7g) site prose: site/*.md render clean; legal pages are required when the
+    #      dataset is publishable.
     errors.extend(_check_site_prose(d))
     # (7h) site assets: optional public image overrides must match the typed
     #      allowlist before build copies them into /static.
@@ -1251,51 +1251,85 @@ def _check_map_yaml(d: Path) -> list[str]:
     return []
 
 
-# Prose pages (S3c). Once a publishable dataset opts into site prose, the legal
-# trio is required; about is optional.
+# Prose pages (S3c/S3i). Publishable datasets must carry their legal/contact
+# pages; about is optional.
 _SITE_PROSE_PAGES: tuple[str, ...] = ("about", "disclaimer", "privacy", "contact")
 _PUBLISHABLE_REQUIRED_PROSE: tuple[str, ...] = ("privacy", "disclaimer", "contact")
 
 
-def _check_site_prose(d: Path) -> list[str]:
-    """Validate the opt-in site prose markdown (S3c).
+def _is_publishable_dataset(d: Path) -> bool:
+    try:
+        meta = contract.load_dataset_meta(d)
+    except ValueError:
+        return False
+    return isinstance(meta, dict) and meta.get("status") == "publishable"
 
-    The ``site/`` dir is the dataset's opt-in (like S2's ``regression/``): while it
-    is absent the engine serves its built-in prose, so nothing is required — this
-    keeps the deploy gate from bricking a publishable dataset that hasn't moved its
-    prose yet. **Once ``site/`` exists**, each present ``site/<page>.md`` must render
-    to clean HTML via the S2 sanitizer, and a ``publishable`` dataset must carry the
-    complete legal set (privacy, disclaimer, contact) so a half-moved legal set is
-    rejected. (S3i tightens this to require ``site/`` unconditionally for
-    publishable once the engine fallback is removed.)
+
+def _missing_publishable_prose_errors(site_dir: Path) -> list[str]:
+    return [
+        f"site/{page}.md is required for a publishable dataset"
+        for page in _PUBLISHABLE_REQUIRED_PROSE
+        if not (site_dir / f"{page}.md").is_file()
+    ]
+
+
+def _check_one_site_prose_page(
+    md: Path, page: str, render_markdown_to_html: Callable[[str], str]
+) -> list[str]:
+    if md.is_symlink():
+        return [f"site/{page}.md: symlinks are not supported"]
+    if md.exists() and not md.is_file():
+        return [f"site/{page}.md: must be a regular file"]
+    if not md.is_file():
+        return []
+
+    errors: list[str] = []
+    try:
+        html = render_markdown_to_html(md.read_text(encoding="utf-8")).lower()
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
+        errors.append(f"site/{page}.md: failed to render ({exc})")
+        return errors
+    if "<script" in html or "onerror" in html or "javascript:" in html:
+        errors.append(f"site/{page}.md: rendered output contains active content")
+    return errors
+
+
+def _check_site_prose(d: Path) -> list[str]:
+    """Validate dataset-owned site prose markdown (S3c/S3i).
+
+    Each present ``site/<page>.md`` must render to clean HTML via the S2 sanitizer.
+    For ``publishable`` datasets the legal/contact trio (privacy, disclaimer,
+    contact) is required unconditionally, so a production dataset cannot publish
+    with only the engine's generic PHP fallbacks. ``scaffold`` datasets may still
+    omit ``site/`` while being assembled.
     """
     from kayak.web.regression import render_markdown_to_html
 
     site_dir = d / "site"
+    publishable = _is_publishable_dataset(d)
+
+    if site_dir.is_symlink():
+        return ["site: symlinks are not supported"]
+
+    if site_dir.exists() and not site_dir.is_dir():
+        path_errors = ["site: must be a directory"]
+        if publishable:
+            path_errors.extend(_missing_publishable_prose_errors(site_dir))
+        return path_errors
+
     if not site_dir.is_dir():
-        return []  # opt-in: no site/ → engine prose fallback, nothing required yet
+        if publishable:
+            return _missing_publishable_prose_errors(site_dir)
+        return []
 
     errors: list[str] = []
     for page in _SITE_PROSE_PAGES:
-        md = site_dir / f"{page}.md"
-        if not md.is_file():
-            continue
-        try:
-            html = render_markdown_to_html(md.read_text(encoding="utf-8")).lower()
-        except (OSError, UnicodeDecodeError, ValueError) as exc:
-            errors.append(f"site/{page}.md: failed to render ({exc})")
-            continue
-        if "<script" in html or "onerror" in html or "javascript:" in html:
-            errors.append(f"site/{page}.md: rendered output contains active content")
+        errors.extend(
+            _check_one_site_prose_page(site_dir / f"{page}.md", page, render_markdown_to_html)
+        )
 
-    try:
-        meta = contract.load_dataset_meta(d)
-    except ValueError:
-        meta = None
-    if isinstance(meta, dict) and meta.get("status") == "publishable":
-        for page in _PUBLISHABLE_REQUIRED_PROSE:
-            if not (site_dir / f"{page}.md").is_file():
-                errors.append(f"site/{page}.md is required for a publishable dataset")
+    if publishable:
+        errors.extend(_missing_publishable_prose_errors(site_dir))
     return errors
 
 

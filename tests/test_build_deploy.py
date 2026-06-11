@@ -774,6 +774,34 @@ def test_deploy_site_prose_no_dir_is_noop(monkeypatch, tmp_path):
     assert not (output / "prose").exists()
 
 
+def test_deploy_site_prose_rejects_symlinked_site_dir(monkeypatch, tmp_path):
+    ds = tmp_path / "ds"
+    outside = tmp_path / "outside-site"
+    outside.mkdir()
+    ds.mkdir()
+    (ds / "site").symlink_to(outside)
+    monkeypatch.setattr(build_mod, "DATASET_DIR", ds)
+
+    output = tmp_path / "out"
+    output.mkdir()
+    with pytest.raises(RuntimeError, match="site symlinks are not supported"):
+        build_mod._deploy_site_prose(output)
+
+
+def test_deploy_site_prose_rejects_symlinked_page(monkeypatch, tmp_path):
+    ds = tmp_path / "ds"
+    (ds / "site").mkdir(parents=True)
+    target = tmp_path / "privacy.md"
+    target.write_text("# Outside\n\nNot dataset-owned.\n", encoding="utf-8")
+    (ds / "site" / "privacy.md").symlink_to(target)
+    monkeypatch.setattr(build_mod, "DATASET_DIR", ds)
+
+    output = tmp_path / "out"
+    output.mkdir()
+    with pytest.raises(RuntimeError, match=r"site/privacy\.md symlinks are not supported"):
+        build_mod._deploy_site_prose(output)
+
+
 # --------------------------------------------------------------------------- #
 # site-config.json generation (S3d)
 # --------------------------------------------------------------------------- #

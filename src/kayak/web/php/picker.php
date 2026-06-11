@@ -117,22 +117,34 @@ require_once __DIR__ . '/includes/footer.php';
 // Server-render pill lists so filters.js can wire them up without an
 // additional round trip. Also keep the auto-checked primary state so the
 // picker table populates immediately on first load.
-$all_states = array_column(
-    db_query($db, 'SELECT DISTINCT st.name FROM state st
+$state_rows = db_query($db, 'SELECT st.name, COUNT(DISTINCT r.id) AS reach_count
+                FROM state st
                 JOIN reach_state rs ON st.id = rs.state_id
                 JOIN reach r ON rs.reach_id = r.id
-                WHERE r.no_show = 0 ORDER BY st.name')->fetchAll(),
-    'name'
-);
+                WHERE r.no_show = 0
+                GROUP BY st.name
+                ORDER BY st.name')->fetchAll();
+$all_states = array_column($state_rows, 'name');
 
 // Optional ?state=<full name> — when present and valid, that state becomes
 // the auto-checked primary so users arriving from a state landing page
-// (e.g. Oregon.html) land in a picker focused on their current state.
-// Falls back to Oregon when missing, empty, or not in $all_states.
+// land in a picker focused on their current state. Otherwise use the state with
+// the most visible reaches, with alphabetical order as the deterministic tie
+// break from the query above.
 $state_param = filter_input(INPUT_GET, 'state', FILTER_DEFAULT);
-$primary_state = (is_string($state_param) && in_array($state_param, $all_states, true))
-    ? $state_param
-    : 'Oregon';
+if (is_string($state_param) && in_array($state_param, $all_states, true)) {
+    $primary_state = $state_param;
+} else {
+    $primary_state = '';
+    $best_reach_count = -1;
+    foreach ($state_rows as $row) {
+        $reach_count = (int)($row['reach_count'] ?? 0);
+        if ($reach_count > $best_reach_count) {
+            $primary_state = (string)$row['name'];
+            $best_reach_count = $reach_count;
+        }
+    }
+}
 $all_basins = array_column(
     db_query($db, "SELECT DISTINCT basin FROM reach
                 WHERE no_show = 0 AND basin IS NOT NULL AND basin != ''

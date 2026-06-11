@@ -77,6 +77,14 @@ def _write_required_site_prose(dataset: Path) -> None:
         (site / f"{page}.md").write_text(f"## {page.title()}\n\nText.\n", encoding="utf-8")
 
 
+def _set_dataset_status(dataset: Path, status: str) -> None:
+    manifest = dataset / "dataset.yaml"
+    text = manifest.read_text(encoding="utf-8")
+    manifest.write_text(
+        text.replace("status: publishable\n", f"status: {status}\n"), encoding="utf-8"
+    )
+
+
 def _png_bytes(width: int, height: int) -> bytes:
     def chunk(kind: bytes, data: bytes) -> bytes:
         body = kind + data
@@ -976,6 +984,12 @@ def test_fixture_dataset_yaml_matches_builder() -> None:
     assert (FIXTURE / "dataset.yaml").read_text() == b.DATASET_YAML_TEXT
 
 
+def test_fixture_site_prose_matches_builder() -> None:
+    b = _load_builder()
+    for name, content in b.SITE_PROSE.items():
+        assert (FIXTURE / "site" / name).read_text() == content
+
+
 # --- retired ids (retired_ids.yaml) — S6.3 --------------------------------
 
 
@@ -1311,20 +1325,28 @@ def test_state_csv_whitespace_only_name_rejected(dataset_copy: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# site/*.md prose — opt-in, legal trio required when publishable (S3c)
+# site/*.md prose — legal trio required when publishable (S3c/S3i)
 # --------------------------------------------------------------------------- #
 
 
-def test_site_prose_absent_is_valid(dataset_copy: Path) -> None:
-    # The fixture is publishable but ships no site/ dir — opt-in, so still valid
-    # (the engine serves its built-in prose until the dataset moves it).
-    assert not (dataset_copy / "site").exists()
+def test_scaffold_site_prose_absent_is_valid(dataset_copy: Path) -> None:
+    shutil.rmtree(dataset_copy / "site")
+    _set_dataset_status(dataset_copy, "scaffold")
     assert validate_dataset(dataset_copy) == []
 
 
+def test_publishable_site_prose_absent_requires_legal_prose(dataset_copy: Path) -> None:
+    shutil.rmtree(dataset_copy / "site")
+    errs = validate_dataset(dataset_copy)
+    assert any("site/privacy.md is required" in e for e in errs)
+    assert any("site/disclaimer.md is required" in e for e in errs)
+    assert any("site/contact.md is required" in e for e in errs)
+
+
 def test_publishable_with_site_dir_requires_legal_prose(dataset_copy: Path) -> None:
-    # Once site/ exists, a publishable dataset must carry the full legal set; a
-    # half-moved set (only about) is rejected.
+    # A publishable dataset must carry the full legal set; a half-moved set
+    # (only about) is rejected.
+    shutil.rmtree(dataset_copy / "site")
     (dataset_copy / "site").mkdir()
     (dataset_copy / "site" / "about.md").write_text("## About\n\nHi.\n")
     errs = validate_dataset(dataset_copy)
@@ -1334,10 +1356,46 @@ def test_publishable_with_site_dir_requires_legal_prose(dataset_copy: Path) -> N
 
 
 def test_complete_site_prose_accepted(dataset_copy: Path) -> None:
+    shutil.rmtree(dataset_copy / "site")
     (dataset_copy / "site").mkdir()
     for page in ("about", "disclaimer", "privacy", "contact"):
         (dataset_copy / "site" / f"{page}.md").write_text(f"## {page.title()}\n\nText.\n")
     assert validate_dataset(dataset_copy) == []
+
+
+def test_site_prose_rejects_site_file(dataset_copy: Path) -> None:
+    shutil.rmtree(dataset_copy / "site")
+    (dataset_copy / "site").write_text("not a directory\n", encoding="utf-8")
+    errs = validate_dataset(dataset_copy)
+    assert any(e == "site: must be a directory" for e in errs)
+
+
+def test_site_prose_rejects_symlinked_site_dir(dataset_copy: Path, tmp_path: Path) -> None:
+    shutil.rmtree(dataset_copy / "site")
+    outside = tmp_path / "outside-site"
+    outside.mkdir()
+    (dataset_copy / "site").symlink_to(outside)
+
+    errs = validate_dataset(dataset_copy)
+    assert any(e == "site: symlinks are not supported" for e in errs)
+
+
+def test_site_prose_rejects_symlinked_page(dataset_copy: Path, tmp_path: Path) -> None:
+    target = tmp_path / "privacy.md"
+    target.write_text("# Outside\n\nNot dataset-owned.\n", encoding="utf-8")
+    (dataset_copy / "site" / "privacy.md").unlink()
+    (dataset_copy / "site" / "privacy.md").symlink_to(target)
+
+    errs = validate_dataset(dataset_copy)
+    assert any(e == "site/privacy.md: symlinks are not supported" for e in errs)
+
+
+def test_site_prose_rejects_dangling_symlinked_site_dir(dataset_copy: Path, tmp_path: Path) -> None:
+    shutil.rmtree(dataset_copy / "site")
+    (dataset_copy / "site").symlink_to(tmp_path / "missing-site")
+
+    errs = validate_dataset(dataset_copy)
+    assert any(e == "site: symlinks are not supported" for e in errs)
 
 
 def test_site_assets_valid_set_accepted(dataset_copy: Path) -> None:
