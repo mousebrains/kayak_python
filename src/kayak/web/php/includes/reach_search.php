@@ -190,9 +190,9 @@ function _aggregate_reach_readings(PDO $db, array $results): array
 }
 
 /**
- * Roll up classes (Class III, IV, ...) and guidebook abbreviations
- * (SS5, AW, ...) per reach. Soggy Sneakers editions collapse to a
- * single SS<editions> label; non-SS guides keep two-letter abbrevs.
+ * Roll up classes (Class III, IV, ...) and guidebook short labels
+ * (SS5, AW, ...) per reach. Labels with a letter prefix and numeric suffix
+ * collapse to one combined label per prefix (SS5 + SS3 -> SS53).
  * Reaches with aw_id but no guidebook row still get an "AW" entry.
  *
  * @param  list<array{id: int, name: string, river: string|null, description: string|null, gauge_id: int|null, latitude_start: float|null, longitude_start: float|null, latitude_end: float|null, longitude_end: float|null, latitude: float|null, longitude: float|null, sort_name: string|null, aw_id: int|null, geom: string|null}>  $results
@@ -217,44 +217,32 @@ function _aggregate_reach_classes_and_guides(PDO $db, array $results): array
         $reach_classes[$c['reach_id']][] = $c['name'];
     }
 
+    $short_label_sql = _reach_search_guidebook_short_label_sql($db);
     $gb_stmt = $db->prepare(
-        "SELECT rg.reach_id, g.id AS gid, g.title
+        "SELECT rg.reach_id, g.id AS gid, g.title, $short_label_sql
          FROM reach_guidebook rg
          JOIN guidebook g ON g.id = rg.guidebook_id
          WHERE rg.reach_id IN ($ph)
          ORDER BY g.sort_order, g.title, g.edition"
     );
     $gb_stmt->execute($reach_ids);
-    // Soggy Sneakers edition number by guidebook id.
-    $ss_edition = [9 => 1, 2 => 3, 3 => 4, 4 => 5];
-    // Non-SS guidebook abbreviation map.
-    $gb_abbrev = [
-        5 => 'ID',    // Idaho
-        6 => 'WA',    // Guide to WW Rivers of Washington
-        7 => 'PO',    // Paddling Oregon
-        8 => 'AW',    // American Whitewater
-        10 => 'OK',   // Oregon Kayaking
-        11 => 'DF',   // Dreamflows
-    ];
-    $reach_ss = [];  // reach_id => [edition numbers]
-    /** @var list<array{reach_id: int, gid: int, title: string}> $gb_rows */
+    $reach_grouped_guides = [];  // reach_id => prefix => suffixes
+    /** @var list<array{reach_id: int, gid: int, title: string, short_label: string|null}> $gb_rows */
     $gb_rows = $gb_stmt->fetchAll();
     foreach ($gb_rows as $gb) {
-        $gid = $gb['gid'];
         $rid = $gb['reach_id'];
-        if (isset($ss_edition[$gid])) {
-            $reach_ss[$rid][] = $ss_edition[$gid];
-        } else {
-            $abbr = $gb_abbrev[$gid] ?? substr($gb['title'], 0, 2);
-            $reach_guides[$rid][$abbr] = true;
-        }
+        $label = _reach_search_guidebook_short_label($gb);
+        _reach_search_add_guide_label($reach_guides, $reach_grouped_guides, $rid, $label);
     }
-    // Build "SS531" style labels from collected editions (newest first)
-    // and prepend so SS appears before non-SS guides.
-    foreach ($reach_ss as $rid => $editions) {
-        rsort($editions);
-        $ss_label = 'SS' . implode('', $editions);
-        $reach_guides[$rid] = [$ss_label => true] + ($reach_guides[$rid] ?? []);
+    // Build "SS531" style labels from collected suffixes (newest first) and
+    // prepend grouped guide labels so they appear before plain labels.
+    foreach ($reach_grouped_guides as $rid => $by_prefix) {
+        $grouped = [];
+        foreach ($by_prefix as $prefix => $suffixes) {
+            rsort($suffixes, SORT_NATURAL);
+            $grouped[$prefix . implode('', $suffixes)] = true;
+        }
+        $reach_guides[$rid] = $grouped + ($reach_guides[$rid] ?? []);
     }
 
     foreach ($results as $r) {
@@ -264,6 +252,70 @@ function _aggregate_reach_classes_and_guides(PDO $db, array $results): array
     }
 
     return [$reach_classes, $reach_guides];
+}
+
+function _reach_search_guidebook_short_label_sql(PDO $db): string
+{
+    $stmt = $db->query('PRAGMA table_info(guidebook)');
+    if ($stmt === false) {
+        return 'NULL AS short_label';
+    }
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        if (is_array($row) && ($row['name'] ?? null) === 'short_label') {
+            return 'g.short_label AS short_label';
+        }
+    }
+    return 'NULL AS short_label';
+}
+
+/**
+ * Dataset guidebook.short_label when present; legacy ID labels only keep current
+ * production output stable until kayak_data populates the dataset-owned column.
+ *
+ * @param array{gid: int, title: string, short_label: string|null} $gb
+ */
+function _reach_search_guidebook_short_label(array $gb): string
+{
+    $label = trim($gb['short_label'] ?? '');
+    if ($label !== '') {
+        return $label;
+    }
+
+    return _reach_search_legacy_guidebook_short_label($gb['gid'], $gb['title']);
+}
+
+function _reach_search_legacy_guidebook_short_label(int $guidebook_id, string $title): string
+{
+    $labels = [
+        9 => 'SS1',
+        2 => 'SS3',
+        3 => 'SS4',
+        4 => 'SS5',
+        5 => 'ID',
+        6 => 'WA',
+        7 => 'PO',
+        8 => 'AW',
+        10 => 'OK',
+        11 => 'DF',
+    ];
+    return $labels[$guidebook_id] ?? substr($title, 0, 2);
+}
+
+/**
+ * @param array<int, array<string, true>> $reach_guides
+ * @param array<int, array<string, list<string>>> $reach_grouped_guides
+ */
+function _reach_search_add_guide_label(
+    array &$reach_guides,
+    array &$reach_grouped_guides,
+    int $reach_id,
+    string $label,
+): void {
+    if (preg_match('/^([A-Z]{1,8})([0-9]+)$/', $label, $m) === 1) {
+        $reach_grouped_guides[$reach_id][$m[1]][] = $m[2];
+        return;
+    }
+    $reach_guides[$reach_id][$label] = true;
 }
 
 /**
@@ -309,7 +361,7 @@ function _render_search_results_table(
         $swatch = '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:'
             . $color . ';margin-right:4px" title="Map marker color"></span>';
         $cls = htmlspecialchars(implode(', ', $reach_classes[$r['id']] ?? []));
-        $guides = implode(', ', array_keys($reach_guides[$r['id']] ?? []));
+        $guides = htmlspecialchars(implode(', ', array_keys($reach_guides[$r['id']] ?? [])));
         $rhref = pubhash_url('reach', $r['id']);
         $rhandle = pubhash_encode($r['id']);
         echo "<tr><td><a href=\"{$rhref}\">{$rhandle}</a></td><td>{$swatch}<a href=\"{$rhref}\">$rname</a></td>"

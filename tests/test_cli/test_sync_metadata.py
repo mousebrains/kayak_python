@@ -694,7 +694,7 @@ def test_unsupported_contract_version_refused(tmp_path: Path, capsys) -> None:  
 
 
 # ---------------------------------------------------------------------------
-# Generator-owned OPTIONAL column reset on sync ([P3], S1-fetch-2 follow-up).
+# OPTIONAL column reset on sync ([P3], S1-fetch-2 / S3 follow-up).
 # ---------------------------------------------------------------------------
 
 
@@ -727,6 +727,26 @@ def test_sync_resets_absent_optional_column_keeps_other_columns(tmp_path: Path) 
         conn.close()
     assert policy is None  # OPTIONAL column reset to the default (= reject)
     assert parser == "nwps"  # non-optional column preserved on omit
+
+
+def test_sync_resets_absent_optional_guidebook_short_label(tmp_path: Path) -> None:
+    db = tmp_path / "k.db"
+    _schema(db)
+    conn = sqlite3.connect(db)
+    try:
+        conn.execute(
+            "INSERT INTO guidebook (id, title, short_label) VALUES (1, 'Example Guide', 'EG')"
+        )
+        conn.commit()
+        csv_dir = tmp_path / "csv"
+        csv_dir.mkdir()
+        _write_csv(csv_dir, "guidebook", ["id", "title"], [[1, "Example Guide"]])
+        mc.import_table(conn, csv_dir / "guidebook.csv")
+        conn.commit()
+        label = conn.execute("SELECT short_label FROM guidebook WHERE id = 1").fetchone()[0]
+    finally:
+        conn.close()
+    assert label is None
 
 
 def test_sync_no_write_when_optional_column_already_default(tmp_path: Path) -> None:

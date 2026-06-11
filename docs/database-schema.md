@@ -293,6 +293,7 @@ Published guidebooks that reference river reaches (Soggy Sneakers, Paddling Oreg
 | `author` | TEXT | |
 | `url` | TEXT | |
 | `sort_order` | INTEGER | Controls display order in the reach-detail page |
+| `short_label` | VARCHAR(32) | Optional compact guide chip label for search results |
 
 ### `reach_guidebook`
 

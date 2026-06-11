@@ -68,15 +68,14 @@ EXCLUDED_COLUMNS: dict[str, set[str]] = {
 
 # Nullable columns a CSV MAY omit (vs. the complete-projection default that every
 # model column is present). `unknown_station_policy` is the per-URL opt-in added
-# in S1: a dataset that wants the all-reject default simply leaves the column out,
-# so `generate-sources` omits it when no URL opts in. This keeps the column's
-# introduction backward-compatible — an older committed `fetch_url.csv` (no
-# column) stays valid and byte-stable under `generate-sources --check`, which the
-# base-pin CI trust boundary requires (a dataset can't validate against the new
-# engine in the same PR that bumps the pin). When the column IS present it is
-# validated like any other.
+# in S1; `guidebook.short_label` is the S3 presentation label expanded before
+# every dataset has populated it. A dataset that wants the default simply leaves
+# the optional column out. This keeps column introductions backward-compatible —
+# older committed CSVs stay valid until a later data pin populates the column and
+# a later contract step can make it required/remove legacy fallbacks.
 OPTIONAL_COLUMNS: dict[str, set[str]] = {
     "fetch_url": {"unknown_station_policy"},
+    "guidebook": {"short_label"},
 }
 
 # Canonical authoring values for fetch_url.unknown_station_policy (S1). Blank/absent
