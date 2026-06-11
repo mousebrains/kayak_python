@@ -13,6 +13,13 @@ def _args(**kw: bool) -> Namespace:
     return Namespace(known_env=kw.get("known_env", False), strict=kw.get("strict", False))
 
 
+@pytest.fixture(autouse=True)
+def _clean_dataset_env(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATASET_DIR", str(tmp_path / "dataset"))
+    monkeypatch.delenv("METADATA_DIR", raising=False)
+    monkeypatch.delenv("SITE_URL", raising=False)
+
+
 class TestKnownEnvNames:
     """The allowlist is derived from KayakConfig's fields + aliases + extras."""
 
@@ -86,6 +93,50 @@ class TestValidateConfig:
     """`validate-config` returns the right exit code per scenario."""
 
     def test_exits_zero_when_config_is_valid(self, capsys: pytest.CaptureFixture[str]) -> None:
+        with pytest.raises(SystemExit) as exc:
+            validate_config(_args())
+        assert exc.value.code == 0
+        assert "OK" in capsys.readouterr().out
+
+    def test_fails_for_publishable_dataset_without_explicit_site_url(
+        self,
+        tmp_path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        (tmp_path / "dataset.yaml").write_text(
+            "contract_version: 1\n"
+            "dataset_id: test\n"
+            "name: Test Levels\n"
+            "status: publishable\n"
+            "license: CC-BY-NC-4.0\n"
+            'engine_test_ref: "0000000000000000000000000000000000000000"\n',
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("DATASET_DIR", str(tmp_path))
+        monkeypatch.delenv("SITE_URL", raising=False)
+        with pytest.raises(SystemExit) as exc:
+            validate_config(_args())
+        assert exc.value.code == 1
+        assert "SITE_URL must be set explicitly" in capsys.readouterr().err
+
+    def test_passes_for_publishable_dataset_with_explicit_site_url(
+        self,
+        tmp_path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        (tmp_path / "dataset.yaml").write_text(
+            "contract_version: 1\n"
+            "dataset_id: test\n"
+            "name: Test Levels\n"
+            "status: publishable\n"
+            "license: CC-BY-NC-4.0\n"
+            'engine_test_ref: "0000000000000000000000000000000000000000"\n',
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("DATASET_DIR", str(tmp_path))
+        monkeypatch.setenv("SITE_URL", "https://levels.wkcc.org")
         with pytest.raises(SystemExit) as exc:
             validate_config(_args())
         assert exc.value.code == 0

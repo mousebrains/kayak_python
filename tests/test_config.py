@@ -119,6 +119,53 @@ class TestKayakConfigEnvReads:
         cfg = KayakConfig()
         assert str(cfg.site_url).startswith("https://levels.wkcc.org")
 
+    def test_publishable_dataset_requires_explicit_site_url(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (tmp_path / "dataset.yaml").write_text(
+            "contract_version: 1\n"
+            "dataset_id: test\n"
+            "name: Test Levels\n"
+            "status: publishable\n"
+            "license: CC-BY-NC-4.0\n"
+            'engine_test_ref: "0000000000000000000000000000000000000000"\n',
+            encoding="utf-8",
+        )
+        monkeypatch.delenv("SITE_URL", raising=False)
+        errors = config.require_explicit_site_url_for_publishable_dataset(tmp_path)
+        assert errors
+        assert "SITE_URL must be set explicitly" in errors[0]
+
+    def test_publishable_dataset_accepts_explicit_site_url(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (tmp_path / "dataset.yaml").write_text(
+            "contract_version: 1\n"
+            "dataset_id: test\n"
+            "name: Test Levels\n"
+            "status: publishable\n"
+            "license: CC-BY-NC-4.0\n"
+            'engine_test_ref: "0000000000000000000000000000000000000000"\n',
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("SITE_URL", "https://levels.wkcc.org")
+        assert config.require_explicit_site_url_for_publishable_dataset(tmp_path) == []
+
+    def test_scaffold_dataset_allows_generic_site_url(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (tmp_path / "dataset.yaml").write_text(
+            "contract_version: 1\n"
+            "dataset_id: test\n"
+            "name: Test Levels\n"
+            "status: scaffold\n"
+            "license: CC-BY-NC-4.0\n"
+            'engine_test_ref: "0000000000000000000000000000000000000000"\n',
+            encoding="utf-8",
+        )
+        monkeypatch.delenv("SITE_URL", raising=False)
+        assert config.require_explicit_site_url_for_publishable_dataset(tmp_path) == []
+
 
 class TestDatasetDirRoot:
     """S6.1: DATASET_DIR is the dataset root; METADATA_DIR is a deprecated alias

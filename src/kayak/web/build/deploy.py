@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import shutil
+import sys
 from contextlib import suppress
 from pathlib import Path
 from typing import Any
@@ -20,7 +21,13 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from kayak.config import BASE_DIR, DATASET_DIR, OSMB_DIR, SITE_URL
+from kayak.config import (
+    BASE_DIR,
+    DATASET_DIR,
+    OSMB_DIR,
+    SITE_URL,
+    require_explicit_site_url_for_publishable_dataset,
+)
 from kayak.dataset.assets import dataset_asset_overrides
 from kayak.dataset.map import get_map_config
 from kayak.dataset.site import get_site_config
@@ -78,6 +85,10 @@ from kayak.web.regression import (
 logger = logging.getLogger(__name__)
 
 _ROBOTS_SITE_URL_TOKEN = "__SITE_URL__"
+
+
+class SiteUrlConfigError(RuntimeError):
+    """Raised when publishable output would be built with the fallback site URL."""
 
 
 def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
@@ -472,6 +483,10 @@ def _deploy_source_files(output_dir: Path, *, provenance_slug_count: int = 0) ->
 
 def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
     """Generate all site content into output_dir."""
+    site_url_errors = require_explicit_site_url_for_publishable_dataset(DATASET_DIR)
+    if site_url_errors:
+        raise SiteUrlConfigError("; ".join(site_url_errors))
+
     session = get_session()
     try:
         columns = _get_builder_columns()
@@ -792,7 +807,11 @@ def build(args: argparse.Namespace) -> None:
         shutil.rmtree(staging)
     staging.mkdir(parents=True)
     try:
-        _build_to_dir(staging, args)
+        try:
+            _build_to_dir(staging, args)
+        except SiteUrlConfigError as e:
+            print(f"ERROR: build failed: {e}", file=sys.stderr)
+            sys.exit(1)
         # Set ACLs on staging so shutil.copy2 carries them via xattrs into
         # each <live>/<file>.new temp, which then rename-replaces the final.
         # Without this, copy2's empty-xattr copy would clobber the inherited

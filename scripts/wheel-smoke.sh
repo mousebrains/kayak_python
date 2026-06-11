@@ -116,6 +116,7 @@ echo "==> levels build (packaged data + web layer) → $DOCROOT"
 # deprecated METADATA_DIR and clash with this DATASET_DIR. CI's HOME has no such file,
 # so this is a no-op there; it keeps the smoke hermetic.
 HOME="$WORK" SUDO_USER="" DATABASE_URL="sqlite:///$DB" OUTPUT_DIR="$DOCROOT" \
+    SITE_URL="https://levels.example.org" \
     DATASET_DIR="$REPO_ROOT/tests/fixtures/dataset" "$LEVELS" build >/dev/null
 # The deployed site must carry assets sourced from every packaged tree.
 missing=0

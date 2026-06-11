@@ -29,7 +29,7 @@ import sys
 
 from pydantic import AliasChoices, ValidationError
 
-from kayak.config import KayakConfig
+from kayak.config import KayakConfig, require_explicit_site_url_for_publishable_dataset
 
 # Env-var names matching one of these prefixes are checked against the
 # allowlist. Prefix-only matching was rejected because ``OUTPUT_FORMAT``
@@ -120,7 +120,7 @@ def _known_env_names() -> set[str]:
 
 def validate_config(args: argparse.Namespace) -> None:
     try:
-        KayakConfig()
+        cfg = KayakConfig()
     except ValidationError as e:
         print("ERROR: KayakConfig validation failed", file=sys.stderr)
         print(str(e), file=sys.stderr)
@@ -128,6 +128,13 @@ def validate_config(args: argparse.Namespace) -> None:
     except Exception as e:
         print(f"ERROR: validate-config could not run: {e!r}", file=sys.stderr)
         sys.exit(2)
+
+    site_url_errors = require_explicit_site_url_for_publishable_dataset(cfg.dataset_dir)
+    if site_url_errors:
+        print("ERROR: KayakConfig validation failed", file=sys.stderr)
+        for err in site_url_errors:
+            print(err, file=sys.stderr)
+        sys.exit(1)
 
     warned = 0
     if args.known_env:

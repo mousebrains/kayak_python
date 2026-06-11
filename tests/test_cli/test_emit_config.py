@@ -28,6 +28,13 @@ def _args(out: Path, *, dry_run: bool = False) -> Namespace:
     return Namespace(out=str(out), dry_run=dry_run)
 
 
+@pytest.fixture(autouse=True)
+def _clean_dataset_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATASET_DIR", str(tmp_path / "dataset"))
+    monkeypatch.delenv("METADATA_DIR", raising=False)
+    monkeypatch.delenv("SITE_URL", raising=False)
+
+
 class TestBuildConfigData:
     """``build_config_data`` produces a JSON-shape dict for KayakConfig."""
 
@@ -96,6 +103,23 @@ class TestBuildConfigData:
         data = build_config_data(KayakConfig())
         assert "database_path" not in data
         assert data["database_url"] == "postgresql://localhost/kayak"
+
+    def test_publishable_dataset_requires_explicit_site_url(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (tmp_path / "dataset.yaml").write_text(
+            "contract_version: 1\n"
+            "dataset_id: test\n"
+            "name: Test Levels\n"
+            "status: publishable\n"
+            "license: CC-BY-NC-4.0\n"
+            'engine_test_ref: "0000000000000000000000000000000000000000"\n',
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("DATASET_DIR", str(tmp_path))
+        monkeypatch.delenv("SITE_URL", raising=False)
+        with pytest.raises(RuntimeError, match="SITE_URL must be set explicitly"):
+            build_config_data(KayakConfig())
 
 
 class TestEmitConfig:
@@ -167,6 +191,30 @@ class TestEmitConfig:
         content = out_path.read_text()
         assert content.endswith("}\n")
         assert not content.endswith("}\n\n")
+
+    def test_publishable_dataset_without_site_url_exits_cleanly(
+        self,
+        tmp_path: Path,
+        out_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        (tmp_path / "dataset.yaml").write_text(
+            "contract_version: 1\n"
+            "dataset_id: test\n"
+            "name: Test Levels\n"
+            "status: publishable\n"
+            "license: CC-BY-NC-4.0\n"
+            'engine_test_ref: "0000000000000000000000000000000000000000"\n',
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("DATASET_DIR", str(tmp_path))
+        monkeypatch.delenv("SITE_URL", raising=False)
+        with pytest.raises(SystemExit) as exc:
+            emit_config(_args(out_path))
+        assert exc.value.code == 1
+        assert "SITE_URL must be set explicitly" in capsys.readouterr().err
+        assert not out_path.exists()
 
 
 class TestShowConfig:
