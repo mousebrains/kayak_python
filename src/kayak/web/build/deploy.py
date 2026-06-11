@@ -75,6 +75,8 @@ from kayak.web.regression import (
 
 logger = logging.getLogger(__name__)
 
+_ROBOTS_SITE_URL_TOKEN = "__SITE_URL__"
+
 
 def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     """Register the 'build' subcommand."""
@@ -320,19 +322,29 @@ def _deploy_php_files(output_dir: Path) -> None:
 
 
 def _deploy_config_files(output_dir: Path) -> None:
-    """Copy the install templates (``404.html``, ``robots.txt``) into the output root.
+    """Copy/render install templates (``404.html``, ``robots.txt``) into the output root.
 
     These ship inside the package at ``src/kayak/web/install-templates`` (S4a-2
-    slice B2), resolved via ``resource_dir`` so a wheel install finds them. Only
-    present files are copied — the rest of the output dir is the deploy target,
-    populated by the generated content path. (No ``.htaccess`` — the site is
-    nginx-served; a club switching to Apache would add one to the templates dir.)
+    slice B2), resolved via ``resource_dir`` so a wheel install finds them. The
+    crawler policy lives in the packaged ``robots.txt`` template, but the public
+    sitemap URL is rendered from ``SITE_URL`` so the engine does not ship a
+    host-specific robots file. (No ``.htaccess`` — the site is nginx-served; a
+    club switching to Apache would add one to the templates dir.)
     """
     templates_dir = resource_dir("web", "install-templates")
-    for name in ("404.html", "robots.txt"):
-        src = templates_dir / name
-        if src.is_file():
-            shutil.copy2(src, output_dir / name)
+    error_404 = templates_dir / "404.html"
+    if error_404.is_file():
+        shutil.copy2(error_404, output_dir / "404.html")
+
+    robots = templates_dir / "robots.txt"
+    if robots.is_file():
+        text = robots.read_text(encoding="utf-8")
+        if _ROBOTS_SITE_URL_TOKEN not in text:
+            raise RuntimeError(f"{robots} must contain {_ROBOTS_SITE_URL_TOKEN}")
+        _atomic_write(
+            output_dir / "robots.txt",
+            text.replace(_ROBOTS_SITE_URL_TOKEN, SITE_URL.rstrip("/")),
+        )
 
 
 def _deploy_license_files(output_dir: Path) -> None:

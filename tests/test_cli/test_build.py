@@ -917,14 +917,34 @@ class TestDeployPhpConfigLicense:
         assert (out / "_internal" / "index.php").is_file()  # maintainer dashboard
         assert (out / "style.css").is_file()  # css at output root for php header
 
-    def test_deploy_config_files(self, tmp_path):
+    def test_deploy_config_files(self, tmp_path, monkeypatch):
         from kayak.web.build import deploy
 
         out = tmp_path / "out"
         out.mkdir()
+        monkeypatch.setattr(deploy, "SITE_URL", "https://example.test/base/")
         deploy._deploy_config_files(out)
         assert (out / "404.html").is_file()
         assert (out / "robots.txt").is_file()
+        robots = (out / "robots.txt").read_text(encoding="utf-8")
+        assert "Sitemap: https://example.test/base/sitemap.xml" in robots
+        assert "__SITE_URL__" not in robots
+
+    def test_deploy_config_files_rejects_unparameterized_robots(self, tmp_path, monkeypatch):
+        from kayak.web.build import deploy
+
+        templates = tmp_path / "templates"
+        templates.mkdir()
+        (templates / "robots.txt").write_text(
+            "User-agent: *\nAllow: /\n\nSitemap: https://example.test/sitemap.xml\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(deploy, "resource_dir", lambda *parts: templates)
+
+        out = tmp_path / "out"
+        out.mkdir()
+        with pytest.raises(RuntimeError, match=r"robots\.txt.*__SITE_URL__"):
+            deploy._deploy_config_files(out)
 
     def test_deploy_license_files(self, tmp_path):
         from kayak.web.build import deploy
@@ -969,6 +989,13 @@ class TestDeployPhpConfigLicense:
         text = (resource_dir("web", "legal") / "LICENSE-DATA.txt").read_text(encoding="utf-8")
         assert "levels.wkcc.org" not in text
         assert "Willamette Kayak" not in text
+
+    def test_packaged_robots_template_is_site_url_parameterized(self):
+        from kayak.resources import resource_dir
+
+        text = (resource_dir("web", "install-templates") / "robots.txt").read_text(encoding="utf-8")
+        assert "Sitemap: __SITE_URL__/sitemap.xml" in text
+        assert "levels.wkcc.org" not in text
 
     def test_packaged_license_matches_repo_root(self):
         """The repo-root LICENSE/LICENSE-DATA (GitHub + pyproject convention)

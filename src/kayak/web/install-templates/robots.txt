@@ -66,4 +66,4 @@ Disallow: /levels.csv
 Disallow: /levels.text
 Allow: /
 
-Sitemap: https://levels.wkcc.org/sitemap.xml
+Sitemap: __SITE_URL__/sitemap.xml
