@@ -1264,8 +1264,7 @@ def _unknown_gauge_state_errors(d: Path, state_abbrevs: set[str]) -> list[str]:
     if not unknown_gauge_abbrevs:
         return []
     details = ", ".join(
-        f"{abbrev} (gauge ids: "
-        f"{', '.join(ids[:5])}{', ...' if len(ids) > 5 else ''})"
+        f"{abbrev} (gauge ids: {', '.join(ids[:5])}{', ...' if len(ids) > 5 else ''})"
         for abbrev, ids in sorted(unknown_gauge_abbrevs.items())
     )
     return [f"gauge.csv references state abbreviations not in state.csv: {details}"]

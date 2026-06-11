@@ -98,9 +98,7 @@ def _get_row_data(
         "drainage": reach.basin or "",
         # Render the cell as the 2-letter abbreviation (rightmost column on
         # index.html). Filter still uses full state names via data-state.
-        "state": ", ".join(s.abbreviation or s.name for s in reach.states)
-        if reach.states
-        else "",
+        "state": ", ".join(s.abbreviation or s.name for s in reach.states) if reach.states else "",
         "db_name": reach.name,
         "class": ", ".join(c.name for c in reach.classes) if reach.classes else "",
     }
