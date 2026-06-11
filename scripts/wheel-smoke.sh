@@ -66,6 +66,7 @@ checks = [
     (("web", "static", "images"), "marker-icon.png"),
     (("web", "php"), "latest.php"),
     (("web", "php", "includes"), "db.php"),
+    (("web", "php", "includes"), "states.php"),
     (("web", "php", "_internal"), "index.php"),
     (("web", "install-templates"), "404.html"),
     (("web", "install-templates"), "robots.txt"),
@@ -129,6 +130,7 @@ for rel in \
     static/site-config.json \
     latest.php \
     includes/db.php \
+    includes/states.php \
     _internal/index.php \
     404.html \
     robots.txt \

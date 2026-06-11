@@ -17,7 +17,7 @@ require_once __DIR__ . '/../../src/kayak/web/php/includes/custom_gauges_handler.
  * (low/okay/high/null with the tie-break), the URL-order reorder, the
  * state + nested HUC6/HUC8 watershed filter (with huc_name lookups and
  * the "(no HUC)" branch), and the 8-column table's flow/inflow/gage
- * fallback, gage feet, and temp cells.
+ * fallback, gage feet, temp cells, and dataset-backed state labels.
  */
 final class CustomGaugesHandlerFunctionalTest extends FunctionalTestCase
 {
@@ -35,9 +35,13 @@ final class CustomGaugesHandlerFunctionalTest extends FunctionalTestCase
     private static int $gaugeNullRollup = 0;
     /** gauge with no readings at all → blank flow cell (else branch, line 433) */
     private static int $gaugeBlank = 0;
+    /** gauge in a synthetic dataset state that was never in the PHP hardcoded map */
+    private static int $gaugeDatasetState = 0;
 
     protected static function seedDatabase(PDO $db): void
     {
+        $db->exec("INSERT INTO state (name, abbreviation) VALUES ('Atlantis', 'ZZ')");
+
         // HUC name lookups for the nested watershed filter.
         Fixtures::hucName($db, '17090010', 8, 'Middle Willamette');
         Fixtures::hucName($db, '17110005', 8, 'Puget Sound');
@@ -116,6 +120,15 @@ final class CustomGaugesHandlerFunctionalTest extends FunctionalTestCase
 
         // --- blank gauge: no readings of any kind → empty flow/gage/temp cells.
         self::$gaugeBlank = Fixtures::gauge($db, ['river' => 'Deschutes', 'location' => 'Maupin']);
+
+        // --- synthetic dataset state: proves state labels come from the DB, not
+        //     an engine-owned allowlist of the current WKCC presentation states.
+        self::$gaugeDatasetState = Fixtures::gauge($db, [
+            'river' => 'Mystery', 'location' => 'Lagoon', 'state' => 'ZZ', 'huc' => '17090010',
+        ]);
+        Fixtures::latestGaugeObservation($db, self::$gaugeDatasetState, [
+            'data_type' => 'flow', 'value' => 42.0,
+        ]);
     }
 
     public function testRendersStatusRollupLabels(): void
@@ -146,7 +159,7 @@ final class CustomGaugesHandlerFunctionalTest extends FunctionalTestCase
         $ids = [self::$gaugeOkay, self::$gaugeLow, self::$gaugeHigh];
         $html = $this->capture(fn() => handle_custom_gauges($this->pdo(), $ids, implode(',', array_map('pubhash_encode', $ids))));
 
-        // State filter: abbrevs map to display names via CUSTOM_GAUGES_STATE_ABBREVS.
+        // State filter: abbrevs map to display names via the state table.
         $this->assertStringContainsString('data-group="state"', $html);
         $this->assertStringContainsString('value="Oregon"', $html);
         $this->assertStringContainsString('value="Washington"', $html);
@@ -160,6 +173,16 @@ final class CustomGaugesHandlerFunctionalTest extends FunctionalTestCase
         $this->assertStringContainsString('Yamhill', $html);
         // HUC6 parent name resolved from huc_name.
         $this->assertStringContainsString('Willamette', $html);
+    }
+
+    public function testStateLabelsComeFromStateTable(): void
+    {
+        $ids = [self::$gaugeOkay, self::$gaugeDatasetState];
+        $html = $this->capture(fn() => handle_custom_gauges($this->pdo(), $ids, implode(',', array_map('pubhash_encode', $ids))));
+
+        $this->assertStringContainsString('Mystery', $html);
+        $this->assertStringContainsString('value="Atlantis"', $html);
+        $this->assertStringContainsString('data-state="Atlantis"', $html);
     }
 
     public function testNoHucBranchAndInflowFallback(): void

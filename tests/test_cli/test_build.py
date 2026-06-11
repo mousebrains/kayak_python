@@ -914,6 +914,7 @@ class TestDeployPhpConfigLicense:
         deploy._deploy_php_files(out)
         assert (out / "latest.php").is_file()  # a top-level page
         assert (out / "includes" / "db.php").is_file()  # includes/
+        assert (out / "includes" / "states.php").is_file()  # state-reference helper
         assert (out / "_internal" / "index.php").is_file()  # maintainer dashboard
         assert (out / "style.css").is_file()  # css at output root for php header
 

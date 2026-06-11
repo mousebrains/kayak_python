@@ -11,17 +11,11 @@ declare(strict_types=1);
  */
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/pubhash_request.php';
-
-$STATE_ABBREVS = [
-    'AZ' => 'Arizona',  'CA' => 'California', 'CO' => 'Colorado',
-    'ID' => 'Idaho',    'KS' => 'Kansas',     'MT' => 'Montana',
-    'NV' => 'Nevada',   'NM' => 'New Mexico', 'OR' => 'Oregon',
-    'UT' => 'Utah',     'WA' => 'Washington', 'WY' => 'Wyoming',
-];
-$ABBREV_TO_STATE = $STATE_ABBREVS;
-$STATE_TO_ABBREV = array_flip($STATE_ABBREVS);
+require_once __DIR__ . '/includes/states.php';
 
 $db = get_db();
+$ABBREV_TO_STATE = state_names_by_abbreviation($db);
+$STATE_TO_ABBREV = array_flip($ABBREV_TO_STATE);
 
 // -----------------------------------------------------------------------
 // AJAX JSON endpoint — one row per gauge for client-side filter/render.
@@ -39,10 +33,12 @@ if (is_int($ajax) && $ajax !== 0) {
     }
 
     // Translate full names → postal abbreviations (gauge.state stores 'OR').
-    $abbrevs = array_values(array_filter(array_map(
-        fn($n) => $STATE_TO_ABBREV[$n] ?? null,
-        $state_names
-    )));
+    $abbrevs = [];
+    foreach ($state_names as $name) {
+        if (isset($STATE_TO_ABBREV[$name])) {
+            $abbrevs[] = $STATE_TO_ABBREV[$name];
+        }
+    }
     if ($abbrevs === []) {
         echo '[]';
         exit;
