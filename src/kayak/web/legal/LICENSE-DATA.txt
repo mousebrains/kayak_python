@@ -1,90 +1,65 @@
-                         KAYAK PROJECT DATA LICENSE
+                         KAYAK DATA LICENSE FALLBACK
 
-The kayak project at https://levels.wkcc.org aggregates river-level
-data from multiple sources. Different layers of the dataset carry different
-licenses, reflecting their origin and the curatorial labor invested in them.
+This file is the kayak engine's generic fallback data-license notice. A
+deployment should provide its own DATASET_DIR/LICENSE-DATA.txt describing the
+actual dataset, provenance, attribution, and any non-default terms. When that
+dataset file exists, the build publishes it instead of this fallback.
 
 ================================================================================
 DATABASE AND METADATA
 ================================================================================
 
-Licensed under Creative Commons Attribution-NonCommercial 4.0 International
-(CC BY-NC 4.0).
+Unless a deployment supplies a more specific dataset license, curated river
+metadata is published under Creative Commons Attribution-NonCommercial 4.0
+International (CC BY-NC 4.0).
 
     https://creativecommons.org/licenses/by-nc/4.0/
 
-Covers: reach descriptions, classifications, source-to-gauge linkings,
-calculation expressions for virtual gauges, rating tables, geometry
-(LineString traces, put-in / take-out coordinates), guidebook references,
-and all curatorial fields in the database schema documented in
-docs/database-schema.md.
+Curated metadata may include reach descriptions, classifications,
+source-to-gauge linkings, calculation expressions for virtual gauges, rating
+tables, geometry, guidebook references, and other human-maintained fields.
 
 You are free to:
-    Share   — copy and redistribute the material in any medium or format.
-    Adapt   — remix, transform, and build upon the material.
+    Share   - copy and redistribute the material in any medium or format.
+    Adapt   - remix, transform, and build upon the material.
 
 Under the following terms:
-    Attribution    — you must give appropriate credit, link to this license,
-                     and indicate if changes were made. A reasonable
-                     attribution: "Data from levels.wkcc.org,
-                     CC BY-NC 4.0."
-    NonCommercial  — you may not use this material for commercial purposes.
+    Attribution    - give appropriate credit, link to this license, and
+                     indicate if changes were made.
+    NonCommercial  - do not use this material for commercial purposes.
 
 ================================================================================
 CALCULATED GAUGE SERIES
 ================================================================================
 
-The numerical output of calculated / virtual gauges — gauges whose values are
-computed from a formula stored in calc_expression — is also licensed under
-CC BY-NC 4.0. Although the inputs are public-domain observations, the
-formulas themselves are curatorial work; the resulting series exists only
-because of the curator's expression.
+Calculated or virtual gauge series are licensed under the same terms as the
+curated metadata unless the dataset's own license says otherwise. Although
+their source observations may be public-domain data, the formulas are
+curatorial work.
 
 ================================================================================
 OBSERVATION TIME-SERIES
 ================================================================================
 
-The raw observation values stored in the observation table — the numbers
-fetched from government agencies — are in the public domain at source.
-
-U.S. federal agency data is not subject to copyright under 17 U.S.C. § 105.
-State agency data is generally public records (state-specific terms apply
-but are similarly permissive).
-
-Data sources (please credit the originating agency when redistributing):
-
-    - U.S. Geological Survey (USGS)
-      https://waterdata.usgs.gov/
-    - National Oceanic and Atmospheric Administration (NOAA),
-      via the Northwest River Forecast Center
-      https://www.nwrfc.noaa.gov/
-    - U.S. Army Corps of Engineers (USACE)
-    - U.S. Bureau of Reclamation (USBR)
-      https://www.usbr.gov/pn/hydromet/
-    - Idaho Department of Water Resources (IDWR)
-    - Washington State Department of Ecology
-    - Oregon Department of Environmental Quality
-
-Anyone is free to fetch observation data directly from the originating source.
+Raw observation values fetched from government agencies are generally public
+domain or public-record data at the originating source. Check and credit the
+originating agency when redistributing observations.
 
 ================================================================================
 CODE
 ================================================================================
 
-The Python pipeline (src/kayak/) and PHP web layer (php/) are licensed under
-the GNU General Public License version 3 or later. See the LICENSE file at
-the repository root for the full text.
+The kayak engine's Python pipeline and PHP web layer are licensed under the
+GNU General Public License version 3 or later. See LICENSE.txt for the full
+software license text.
 
 ================================================================================
 SUMMARY
 ================================================================================
 
-    Layer                          License
+    Layer                          Default
     ---------------------------    --------------------------------------------
-    Code (Python + PHP)            GPL v3 or later (see LICENSE)
-    Database / metadata            CC BY-NC 4.0
-    Calculated gauge series        CC BY-NC 4.0
-    Observation time-series        Public domain at source (credit the agency)
-
-For commercial-use licensing inquiries, contact the project maintainers via
-the website's contact form.
+    Code (Python + PHP)            GPL v3 or later (see LICENSE.txt)
+    Database / metadata            CC BY-NC 4.0 unless dataset overrides
+    Calculated gauge series        CC BY-NC 4.0 unless dataset overrides
+    Observation time-series        Public domain/public records at source
