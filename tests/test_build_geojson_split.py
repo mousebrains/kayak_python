@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
+from kayak.dataset.license import get_data_license
 from kayak.db.models import Reach, ReachClass, State
-from kayak.web.build._shared import _LICENSE_META
 from kayak.web.build.geojson import _build_reaches_state, _build_reaches_static
 
 
@@ -116,12 +117,34 @@ def test_reach_without_geometry_is_skipped(session) -> None:
     assert state == {}
 
 
-def test_outputs_carry_license_meta(session) -> None:
-    """Every generated JSON file embeds CC BY-NC 4.0 attribution at top level."""
+def _write_dataset_yaml(tmp_path: Path, *, license_value: str) -> None:
+    (tmp_path / "dataset.yaml").write_text(
+        "contract_version: 1\n"
+        "dataset_id: test\n"
+        "name: Test Levels\n"
+        "status: scaffold\n"
+        f"license: {license_value}\n"
+        'engine_test_ref: "0000000000000000000000000000000000000000"\n',
+        encoding="utf-8",
+    )
+
+
+def test_outputs_carry_dataset_license_meta(session, tmp_path, monkeypatch) -> None:
+    """Every generated JSON file embeds dataset-owned license metadata."""
+    _write_dataset_yaml(tmp_path, license_value="CC0-1.0")
+    monkeypatch.setattr("kayak.config.DATASET_DIR", tmp_path)
+    get_data_license.cache_clear()
+
     r = _mk_reach(session, 200, name="r200", display="R200", geom="-122 44,-122.1 44.1")
-    static = json.loads(_build_reaches_static([r]))
-    state = json.loads(_build_reaches_state([r], set(), {}))
+    try:
+        static = json.loads(_build_reaches_static([r]))
+        state = json.loads(_build_reaches_state([r], set(), {}))
+    finally:
+        get_data_license.cache_clear()
+
     for doc in (static, state):
-        assert doc["_meta"]["license"] == "CC BY-NC 4.0"
-        assert doc["_meta"]["attribution"] == _LICENSE_META["attribution"]
-        assert doc["_meta"]["license_url"].startswith("https://creativecommons.org/")
+        assert doc["_meta"]["license"] == "CC0 1.0"
+        assert doc["_meta"]["license_url"] == "https://creativecommons.org/publicdomain/zero/1.0/"
+        assert doc["_meta"]["notice"] == (
+            "Metadata + calculated values: CC0 1.0. Observations: public domain at source."
+        )

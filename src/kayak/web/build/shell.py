@@ -13,6 +13,7 @@ from kayak.web.build._shared import (
     _STATE_ABBREVS,
     BRAND_COLOR,
     BRAND_COLOR_DARK,
+    _data_license_label,
     _editor_feature_on,
     _og_meta,
     _state_page_path,
@@ -118,13 +119,14 @@ def _build_footer_html() -> str:
     items.append('<a href="/disclaimer.php">Disclaimer</a>')
     items.append('<a href="/privacy.php">Privacy Policy</a>')
     links = " &middot; ".join(items)
+    data_license_label = html_mod.escape(_data_license_label())
     return (
         "<footer>\n"
         f"<p>{links}</p>\n"
         "<p>Data sourced from USGS, NOAA, USACE, USBR, "
         "and other government agencies.</p>\n"
         '<p>Code: <a href="/LICENSE.txt">GPL v3</a> '
-        '&middot; Data: <a href="/LICENSE-DATA.txt">CC BY-NC 4.0</a></p>\n'
+        f'&middot; Data: <a href="/LICENSE-DATA.txt">{data_license_label}</a></p>\n'
         "</footer>"
     )
 
