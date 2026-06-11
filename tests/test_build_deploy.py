@@ -8,12 +8,14 @@ orphans. The legacy symlink-swap and one-shot migration paths are gone.
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 import pytest
 
 import kayak.web.build._shared as shared_mod
 import kayak.web.build.deploy as build_mod
+from kayak.dataset.site import SiteConfig
 from kayak.web.build.deploy import (
     _deploy_staging_to_live,
     _sweep_orphans,
@@ -581,18 +583,22 @@ def test_load_css_applies_custom_brand(monkeypatch):
     assert "#6ab0f3" in css  # dark-mode --c-link, a separate color, preserved
 
 
-def _deploy_static_no_externals(monkeypatch, tmp_path):
+def _deploy_static_no_externals(monkeypatch, tmp_path, site_config: SiteConfig | None = None):
     """Run _deploy_static_assets with OSMB + regression dirs absent."""
     monkeypatch.setattr(build_mod, "OSMB_DIR", tmp_path / "no-osmb")
     monkeypatch.setattr(build_mod, "DATASET_DIR", tmp_path / "no-ds")
+    monkeypatch.setattr(build_mod, "get_site_config", lambda: site_config or SiteConfig())
     output = tmp_path / "out"
     build_mod._deploy_static_assets(output)
     return (output / "static" / "manifest.json").read_text(encoding="utf-8")
 
 
-def test_deploy_manifest_default_brand_unchanged(monkeypatch, tmp_path):
+def test_deploy_manifest_default_identity_and_brand(monkeypatch, tmp_path):
     manifest = _deploy_static_no_externals(monkeypatch, tmp_path)
-    assert '"theme_color": "#1b5591"' in manifest
+    data = json.loads(manifest)
+    assert data["name"] == "River Levels"
+    assert data["short_name"] == "Levels"
+    assert data["theme_color"] == "#1b5591"
 
 
 def test_deploy_manifest_custom_brand(monkeypatch, tmp_path):
@@ -600,6 +606,21 @@ def test_deploy_manifest_custom_brand(monkeypatch, tmp_path):
     manifest = _deploy_static_no_externals(monkeypatch, tmp_path)
     assert '"theme_color": "#abcdef"' in manifest
     assert "#1b5591" not in manifest
+
+
+def test_deploy_manifest_custom_site_identity(monkeypatch, tmp_path):
+    manifest = _deploy_static_no_externals(
+        monkeypatch,
+        tmp_path,
+        SiteConfig(
+            site_name="Example River Levels",
+            manifest_name="Example Levels",
+            manifest_short_name="Example",
+        ),
+    )
+    data = json.loads(manifest)
+    assert data["name"] == "Example Levels"
+    assert data["short_name"] == "Example"
 
 
 def test_apply_brand_color_case_insensitive_noop(monkeypatch):

@@ -20,6 +20,8 @@ class TestLoadSiteConfig:
         assert c.org_url == "https://example.com"
         assert c.brand_color == "#1b5591"
         assert c.attribution == "dataset contributors"
+        assert c.manifest_name == "River Levels"
+        assert c.manifest_short_name == "Levels"
 
     def test_empty_file_is_no_overrides(self, tmp_path: Path) -> None:
         (tmp_path / site.SITE_YAML).write_text("")
@@ -35,7 +37,27 @@ class TestLoadSiteConfig:
         assert c.brand_color == "#abcdef"
         assert c.org_name == "Foo Paddlers"
         assert c.org_label == "FP"
+        assert c.manifest_name == "Foo Levels"
         assert c.brand_color_dark == "#0d3057"  # untouched default
+
+    def test_manifest_overrides_applied(self, tmp_path: Path) -> None:
+        (tmp_path / site.SITE_YAML).write_text(
+            "site_name: Foo River Levels\nmanifest_name: Foo Levels\nmanifest_short_name: Foo\n"
+        )
+        c = site.load_site_config(tmp_path)
+        assert c.site_name == "Foo River Levels"
+        assert c.manifest_name == "Foo Levels"
+        assert c.manifest_short_name == "Foo"
+
+    def test_manifest_name_rejects_html_metacharacter(self, tmp_path: Path) -> None:
+        (tmp_path / site.SITE_YAML).write_text("manifest_name: 'Foo <script>'\n")
+        with pytest.raises(ValueError, match="metacharacter"):
+            site.load_site_config(tmp_path)
+
+    def test_empty_manifest_short_name_rejected(self, tmp_path: Path) -> None:
+        (tmp_path / site.SITE_YAML).write_text('manifest_short_name: "  "\n')
+        with pytest.raises(ValueError, match="non-empty"):
+            site.load_site_config(tmp_path)
 
     def test_org_label_ignores_stopwords(self, tmp_path: Path) -> None:
         (tmp_path / site.SITE_YAML).write_text("org_name: Willamette Kayak and Canoe Club\n")

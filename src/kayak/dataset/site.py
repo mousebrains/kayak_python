@@ -76,6 +76,8 @@ class SiteConfig(BaseModel):
     org_name: str = "Kayak"
     org_url: str = "https://example.com"
     org_label: str = ""
+    manifest_name: str = ""
+    manifest_short_name: str = "Levels"
     # Colors are strict 6-digit ``#rrggbb`` only — no 3-digit (#fff), ``rgb()``, or
     # named colors. Stricter than CSS on purpose (the safe direction: the value
     # lands in both an HTML attribute and a CSS property).
@@ -84,14 +86,21 @@ class SiteConfig(BaseModel):
     attribution: str = "dataset contributors"
 
     def model_post_init(self, __context: Any) -> None:
-        """Fill the compact organization label when the dataset omits it."""
+        """Fill derived display fields when the dataset omits them."""
         if self.org_label == "":
             object.__setattr__(self, "org_label", _short_org_label(self.org_name))
+        if self.manifest_name == "":
+            object.__setattr__(self, "manifest_name", self.site_name)
 
-    @field_validator("site_name", "org_name", "attribution")
+    @field_validator("site_name", "org_name", "attribution", "manifest_short_name")
     @classmethod
     def _safe_text(cls, v: str) -> str:
         return _safe_text_value(v)
+
+    @field_validator("manifest_name")
+    @classmethod
+    def _safe_manifest_name(cls, v: str) -> str:
+        return v if v == "" else _safe_text_value(v)
 
     @field_validator("org_label")
     @classmethod
