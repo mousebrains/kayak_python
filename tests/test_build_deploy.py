@@ -8,7 +8,10 @@ orphans. The legacy symlink-swap and one-shot migration paths are gone.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import struct
+import zlib
 from pathlib import Path
 
 import pytest
@@ -107,6 +110,27 @@ def _write(p: Path, content: str, mode: int = 0o644) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(content)
     p.chmod(mode)
+
+
+def _png_bytes(width: int, height: int, rgb: bytes = b"\x00\x00\x00") -> bytes:
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        body = kind + data
+        return (
+            struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
+        )
+
+    raw = b"".join(b"\x00" + rgb * width for _ in range(height))
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(raw))
+        + chunk(b"IEND", b"")
+    )
+
+
+def _png_size(data: bytes) -> tuple[int, int]:
+    assert data[:8] == b"\x89PNG\r\n\x1a\n"
+    return struct.unpack(">II", data[16:24])
 
 
 def test_deploy_to_empty_live(tmp_path: Path) -> None:
@@ -652,6 +676,45 @@ def test_deploy_security_txt_custom_site_fields(monkeypatch, tmp_path):
     assert "Contact: mailto:security@example.org\n" in security_txt
     assert "Expires: 2027-12-31T00:00:00Z\n" in security_txt
     assert "Preferred-Languages: en\n" in security_txt
+
+
+def test_deploy_static_assets_prefers_dataset_site_assets(monkeypatch, tmp_path):
+    ds = tmp_path / "ds"
+    asset_dir = ds / "site" / "assets"
+    asset_dir.mkdir(parents=True)
+    override = _png_bytes(1200, 630, b"\x10\x20\x30")
+    (asset_dir / "og-image.png").write_bytes(override)
+
+    output = tmp_path / "out"
+    monkeypatch.setattr(build_mod, "OSMB_DIR", tmp_path / "no-osmb")
+    monkeypatch.setattr(build_mod, "DATASET_DIR", ds)
+    monkeypatch.setattr(build_mod, "get_site_config", lambda: SiteConfig())
+    build_mod._deploy_static_assets(output)
+
+    assert (output / "static" / "og-image.png").read_bytes() == override
+
+
+def test_deploy_static_assets_rejects_invalid_dataset_site_assets(monkeypatch, tmp_path):
+    ds = tmp_path / "ds"
+    asset_dir = ds / "site" / "assets"
+    asset_dir.mkdir(parents=True)
+    (asset_dir / "og-image.png").write_bytes(_png_bytes(1200, 600))
+
+    output = tmp_path / "out"
+    monkeypatch.setattr(build_mod, "OSMB_DIR", tmp_path / "no-osmb")
+    monkeypatch.setattr(build_mod, "DATASET_DIR", ds)
+    monkeypatch.setattr(build_mod, "get_site_config", lambda: SiteConfig())
+
+    with pytest.raises(RuntimeError, match="invalid dataset site/assets"):
+        build_mod._deploy_static_assets(output)
+
+
+def test_packaged_og_image_fallback_is_generic():
+    data = (build_mod._STATIC_DIR / "og-image.png").read_bytes()
+    old_wkcc_sha256 = "bd455472ece6dfded63de4e08d4c0a34c42ec6b6424998d2d81c3c42ee010a39"
+
+    assert hashlib.sha256(data).hexdigest() != old_wkcc_sha256
+    assert _png_size(data) == (1200, 630)
 
 
 def test_apply_brand_color_case_insensitive_noop(monkeypatch):

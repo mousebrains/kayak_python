@@ -54,14 +54,26 @@ final class MailTest extends TestCase
 
     public function test_mail_from_override(): void
     {
-        $this->installConfig(['mail_from' => 'bot@levels.wkcc.org']);
-        $this->assertSame('bot@levels.wkcc.org', mail_from());
+        $this->installConfig(['mail_from' => 'bot@example.org']);
+        $this->assertSame('bot@example.org', mail_from());
     }
 
     public function test_mail_reply_to_default(): void
     {
-        $this->installConfig([]);
+        $this->installConfig(['site_url' => 'https://levels.wkcc.org']);
         $this->assertSame('noreply@levels.wkcc.org', mail_reply_to());
+    }
+
+    public function test_mail_reply_to_without_site_url_falls_back_to_mail_from(): void
+    {
+        $this->installConfig(['mail_from' => 'noreply@example.net']);
+        $this->assertSame('noreply@example.net', mail_reply_to());
+    }
+
+    public function test_mail_reply_to_default_uses_site_url_host(): void
+    {
+        $this->installConfig(['site_url' => 'https://foo.example/base']);
+        $this->assertSame('noreply@foo.example', mail_reply_to());
     }
 
     public function test_mail_reply_to_override(): void
@@ -95,7 +107,7 @@ final class MailTest extends TestCase
     public function test_send_email_dumps_file_and_returns_true(): void
     {
         $dir = $this->useDumpDir();
-        $this->installConfig(['mail_dump_dir' => $dir, 'mail_from' => 'bot@levels.wkcc.org']);
+        $this->installConfig(['mail_dump_dir' => $dir, 'mail_from' => 'bot@example.org']);
         $ok = send_email('user@example.com', 'Hello there', 'Body line');
         $this->assertTrue($ok);
 
@@ -104,7 +116,7 @@ final class MailTest extends TestCase
         $contents = (string) file_get_contents($files[0]);
         $this->assertStringContainsString('To: user@example.com', $contents);
         $this->assertStringContainsString('Subject: Hello there', $contents);
-        $this->assertStringContainsString('From: bot@levels.wkcc.org', $contents);
+        $this->assertStringContainsString('From: bot@example.org', $contents);
         $this->assertStringContainsString("\nBody line\n", $contents);
     }
 

@@ -42,6 +42,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import TypeGuard
 
+from kayak.dataset import assets as dataset_assets
 from kayak.dataset import contract, layout, region, site
 from kayak.dataset import map as dataset_map  # `map` shadows the builtin → alias
 
@@ -190,6 +191,9 @@ def validate_dataset(dataset_dir: Path, warnings: list[str] | None = None) -> li
     # (7g) site prose: opt-in site/*.md render clean; legal pages required when
     #      the dataset is publishable.
     errors.extend(_check_site_prose(d))
+    # (7h) site assets: optional public image overrides must match the typed
+    #      allowlist before build copies them into /static.
+    errors.extend(_check_site_assets(d))
     # (8) materialize + check-reaches — only when the dataset is otherwise clean.
     #     A wrong-typed value (e.g. a non-ISO datetime) would otherwise be loaded
     #     and crash SQLAlchemy's decoder mid-scan; the errors above already
@@ -1293,6 +1297,11 @@ def _check_site_prose(d: Path) -> list[str]:
             if not (site_dir / f"{page}.md").is_file():
                 errors.append(f"site/{page}.md is required for a publishable dataset")
     return errors
+
+
+def _check_site_assets(d: Path) -> list[str]:
+    """Validate optional public image overrides under ``site/assets/`` (S3 assets)."""
+    return dataset_assets.validate_site_assets(d)
 
 
 def _check_reaches_on_materialized(dataset_dir: Path) -> list[str]:

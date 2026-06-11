@@ -40,6 +40,18 @@ class TestConfigDefaults:
         assert isinstance(config.OUTPUT_DIR, str)
 
 
+class TestEnvExample:
+    def test_env_example_uses_generic_deployment_defaults(self) -> None:
+        text = (Path(__file__).resolve().parents[1] / ".env.example").read_text(encoding="utf-8")
+        for needle in (
+            "levels.wkcc.org",
+            "/home/pat",
+            "pat.kayak@gmail.com",
+            "noreply@levels.wkcc.org",
+        ):
+            assert needle not in text
+
+
 class TestKayakConfigEnvReads:
     """KayakConfig() picks up env vars at instantiation."""
 

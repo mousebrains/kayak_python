@@ -21,6 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from kayak.config import BASE_DIR, DATASET_DIR, OSMB_DIR, SITE_URL
+from kayak.dataset.assets import dataset_asset_overrides
 from kayak.dataset.map import get_map_config
 from kayak.dataset.site import get_site_config
 from kayak.db.cache import get_all_latest_gauges
@@ -145,6 +146,18 @@ def _render_security_txt(text: str) -> str:
     return text
 
 
+def _deploy_dataset_site_assets(static_dir: Path) -> None:
+    """Copy validated dataset-owned site assets over packaged static fallbacks."""
+    try:
+        overrides = dataset_asset_overrides(DATASET_DIR)
+    except ValueError as exc:
+        raise RuntimeError(f"invalid dataset site/assets: {exc}") from exc
+    for name, path in overrides.items():
+        if path.is_symlink() or not path.is_file():
+            raise RuntimeError(f"invalid dataset site/assets: {path} must be a regular file")
+        shutil.copy2(path, static_dir / name)
+
+
 def _deploy_static_assets(output_dir: Path, *, provenance_slug_count: int = 0) -> None:
     """Copy committed + generated static assets into ``output_dir/static/``.
 
@@ -192,6 +205,7 @@ def _deploy_static_assets(output_dir: Path, *, provenance_slug_count: int = 0) -
                 shutil.copy2(path, dst / path.name)
         elif path.is_dir():
             shutil.copytree(path, static_dir / path.name, dirs_exist_ok=True)
+    _deploy_dataset_site_assets(static_dir)
     # Generated map overlays staged outside the package by `levels fetch-osmb`.
     overlay_filenames = {
         filename for filename, _endpoint, _fields in get_map_config().fetch_layers()
@@ -339,9 +353,9 @@ def _deploy_php_files(output_dir: Path) -> None:
 
     # _internal/ — maintainer-only dashboard. Mirror the includes/ pattern:
     # a single flat dir; deeper structure can be added later if the
-    # dashboard grows into multiple PHP files. nginx only routes
-    # `/_internal/` and `/_internal/index.php` on the canonical
-    # levels.wkcc.org vhost (the mousebrains vhost holds a 404 guard)
+    # dashboard grows into multiple PHP files. A deployment routes
+    # `/_internal/` and `/_internal/index.php` only on its canonical internal
+    # vhost; alternate public vhosts should hold a 404 guard
     # (docs/done/PLAN_internal_dashboard.md Phase 2.4).
     internal_dir = output_dir / "_internal"
     internal_dir.mkdir(parents=True, exist_ok=True)
