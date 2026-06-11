@@ -14,6 +14,7 @@ from pathlib import Path
 from urllib.parse import quote as _urlquote
 
 from kayak.config import SITE_URL
+from kayak.dataset.license import get_data_license
 from kayak.dataset.site import SiteConfig, get_site_config
 
 logger = logging.getLogger(__name__)
@@ -63,17 +64,15 @@ def _apply_brand_color(text: str) -> str:
     return text.replace(_DEFAULT_BRAND_COLOR, BRAND_COLOR)
 
 
-# Embedded license attribution for machine-readable outputs. Added at the
-# top level of every generated JSON file so the license travels with any
-# downloaded copy. See LICENSE-DATA at the repo root for the full terms.
-_LICENSE_META = {
-    "license": "CC BY-NC 4.0",
-    "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
-    "attribution": _SITE.attribution,
-    "notice": (
-        "Metadata + calculated values: CC BY-NC 4.0. Observations: public domain at source."
-    ),
-}
+def _data_license_label() -> str:
+    """Dataset-owned public data-license label for footers."""
+    return get_data_license().label
+
+
+def _license_meta() -> dict[str, str]:
+    """Machine-readable data-license metadata for downloadable JSON outputs."""
+    return get_data_license().as_json_meta(attribution=_SITE.attribution)
+
 
 _STATE_ABBREVS = {
     "Arizona": "AZ",

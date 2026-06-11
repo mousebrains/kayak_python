@@ -56,6 +56,8 @@ class TestBuildConfigData:
         assert data["site"]["site_name"] == "River Levels"
         assert data["site"]["org_label"] == "Kayak"
         assert data["site"]["brand_color"] == "#1b5591"
+        assert data["data_license"]["label"] == "CC BY-NC 4.0"
+        assert data["data_license"]["url"] == "https://creativecommons.org/licenses/by-nc/4.0/"
 
     def test_site_identity_reflects_dataset_override(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -66,6 +68,45 @@ class TestBuildConfigData:
         assert data["site"]["site_name"] == "Foo Levels"
         assert data["site"]["brand_color"] == "#abcdef"
         assert data["site"]["org_name"] == "Kayak"  # default kept
+
+    def test_data_license_reflects_dataset_contract(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (tmp_path / "dataset.yaml").write_text(
+            "contract_version: 1\n"
+            "dataset_id: test\n"
+            "name: Test Levels\n"
+            "status: scaffold\n"
+            "license: CC0-1.0\n"
+            'engine_test_ref: "0000000000000000000000000000000000000000"\n',
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("DATASET_DIR", str(tmp_path))
+        data = build_config_data(KayakConfig())
+        assert data["data_license"] == {
+            "id": "CC0-1.0",
+            "label": "CC0 1.0",
+            "notice": (
+                "Metadata + calculated values: CC0 1.0. Observations: public domain at source."
+            ),
+            "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        }
+
+    def test_data_license_manifest_error_is_clean_runtime_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (tmp_path / "dataset.yaml").write_text(
+            "contract_version: 1\n"
+            "dataset_id: test\n"
+            "name: Test Levels\n"
+            "status: scaffold\n"
+            "license: ''\n"
+            'engine_test_ref: "0000000000000000000000000000000000000000"\n',
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("DATASET_DIR", str(tmp_path))
+        with pytest.raises(RuntimeError, match="license must be a non-empty string"):
+            build_config_data(KayakConfig())
 
     def test_excludes_none_fields(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Strip all hc_*, mail_*, turnstile_* env vars so they default to None.

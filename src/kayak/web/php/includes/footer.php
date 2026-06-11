@@ -24,13 +24,18 @@ function include_footer(): void {
     $items[] = '<a href="/disclaimer.php">Disclaimer</a>';
     $items[] = '<a href="/privacy.php">Privacy Policy</a>';
     $links = implode(' &middot; ', $items);
+    $data_license_label = htmlspecialchars(
+        Config::data_license('label', 'CC BY-NC 4.0'),
+        ENT_QUOTES | ENT_SUBSTITUTE,
+        'UTF-8',
+    );
 
     echo <<<HTML
 </main>
 <footer>
 <p>$links</p>
 <p>Data sourced from USGS, NOAA, USACE, USBR, and other government agencies.</p>
-<p>Code: <a href="/LICENSE.txt">GPL v3</a> &middot; Data: <a href="/LICENSE-DATA.txt">CC BY-NC 4.0</a></p>
+<p>Code: <a href="/LICENSE.txt">GPL v3</a> &middot; Data: <a href="/LICENSE-DATA.txt">$data_license_label</a></p>
 </footer>
 <script src="/static/levels.js" defer></script>
 <script src="/static/plot-hover.js" defer></script>

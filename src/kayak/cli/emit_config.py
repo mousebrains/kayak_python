@@ -30,6 +30,7 @@ from typing import Any
 from pydantic import SecretStr
 
 from kayak.config import KayakConfig, require_explicit_site_url_for_publishable_dataset
+from kayak.dataset.license import load_data_license
 from kayak.dataset.site import load_site_config
 
 DEFAULT_OUTPUT_PATH = "/etc/kayak/runtime-config.json"
@@ -103,10 +104,16 @@ def build_config_data(cfg: KayakConfig) -> dict[str, Any]:
     if isinstance(db_url, str) and db_url.startswith("sqlite:///"):
         data["database_path"] = db_url.removeprefix("sqlite:///")
 
-    # Resolved dataset site identity (S3a) so PHP reads branding from the same
-    # typed source as the static build. Engine defaults when the dataset has no
-    # site.yaml; a malformed one would already have failed validate-dataset.
-    data["site"] = load_site_config(cfg.dataset_dir).model_dump(mode="json")
+    try:
+        # Resolved dataset site identity (S3a) so PHP reads branding from the same
+        # typed source as the static build. Engine defaults when the dataset has no
+        # site.yaml; a malformed one would already have failed validate-dataset.
+        data["site"] = load_site_config(cfg.dataset_dir).model_dump(mode="json")
+        # Resolved dataset data license (S3). PHP renders its public footer from the
+        # same dataset.yaml value the static build and JSON metadata use.
+        data["data_license"] = load_data_license(cfg.dataset_dir).as_config()
+    except ValueError as e:
+        raise RuntimeError(str(e)) from e
 
     return data
 

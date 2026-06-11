@@ -222,6 +222,22 @@ final class Config
     }
 
     /**
+     * Read a string field from the nested dataset `data_license` block (S3).
+     */
+    public static function data_license(string $key, string $default = ''): string
+    {
+        $license = self::get('data_license', null);
+        if (
+            is_array($license)
+            && array_key_exists($key, $license)
+            && is_string($license[$key])
+        ) {
+            return $license[$key];
+        }
+        return $default;
+    }
+
+    /**
      * Print the resolved config to stdout for `php show-config.php`
      * incident-response use. Matches `levels show-config --format table`
      * for human inspection.

@@ -137,6 +137,21 @@ final class ConfigTest extends TestCase
         $this->assertSame('fallback', Config::site('absent_key', 'fallback'));
     }
 
+    public function testDataLicenseReadsNestedBlock(): void
+    {
+        // S3: data-license presentation is emitted from dataset.yaml.
+        $this->_install_fixture(['data_license' => ['label' => 'CC0 1.0', 'url' => 'https://example.com/license']]);
+        $this->assertSame('CC0 1.0', Config::data_license('label'));
+        $this->assertSame('https://example.com/license', Config::data_license('url'));
+    }
+
+    public function testDataLicenseDefaultWhenBlockAbsentOrNonString(): void
+    {
+        $this->_install_fixture(['data_license' => ['label' => 123]]);
+        $this->assertSame('CC BY-NC 4.0', Config::data_license('label', 'CC BY-NC 4.0'));
+        $this->assertSame('fallback', Config::data_license('absent_key', 'fallback'));
+    }
+
     public function testReturnsDefaultWhenKeyAbsent(): void
     {
         // Phase 4 removed the getenv() fallback. A key not in the JSON
@@ -205,6 +220,7 @@ final class ConfigTest extends TestCase
             $this->assertTrue(Config::bool('editor_feature'));
             $this->assertSame(['a@example.com', 'b@example.com'], Config::list('maintainer_emails'));
             $this->assertSame('https://emit-config-test.example.com', rtrim(Config::str('site_url'), '/'));
+            $this->assertSame('CC BY-NC 4.0', Config::data_license('label'));
             // Derived key — proves emit-config's database_path step ran.
             $this->assertSame('/tmp/parity.db', Config::str('database_path'));
         } finally {

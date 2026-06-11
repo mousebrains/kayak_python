@@ -41,11 +41,11 @@ from kayak.utils.pubhash import encode as pubhash_encode
 from kayak.web.build._shared import (
     _FILTERS_JS_PATH,
     _JS_PATH,
-    _LICENSE_META,
     _STATIC_DIR,
     _apply_brand_color,
     _atomic_write,
     _css_link_tag,
+    _license_meta,
     _load_css,
     _state_page_path,
 )
@@ -889,5 +889,5 @@ def _build_and_write(
                 sparklines[str(reach.gauge.id)] = svg
     static_dir = output_dir / "static"
     static_dir.mkdir(parents=True, exist_ok=True)
-    sparklines_out: dict[str, Any] = {"_meta": _LICENSE_META, **sparklines}
+    sparklines_out: dict[str, Any] = {"_meta": _license_meta(), **sparklines}
     _atomic_write(static_dir / "sparklines.json", json.dumps(sparklines_out))

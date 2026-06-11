@@ -9,7 +9,7 @@ from kayak.db.models import DataType, Gauge, LatestGaugeObservation, Reach
 from kayak.utils.class_tiers import parse_class_tiers
 from kayak.utils.pubhash import encode as pubhash_encode
 from kayak.utils.simplify import parse_geom, simplify
-from kayak.web.build._shared import _LICENSE_META
+from kayak.web.build._shared import _license_meta
 from kayak.web.build.gauges import (
     _gauge_observation_age,
     _gauge_status_from_reaches,
@@ -92,7 +92,7 @@ def _build_reaches_static(
         }
         features.append({"type": "Feature", "properties": props, "geometry": geometry})
     return json.dumps(
-        {"_meta": _LICENSE_META, "type": "FeatureCollection", "features": features},
+        {"_meta": _license_meta(), "type": "FeatureCollection", "features": features},
         separators=(",", ":"),
     )
 
@@ -124,7 +124,7 @@ def _build_reaches_state(
     matches the listing pages even when the level threshold lives on a
     different data type than the displayed value.
     """
-    out: dict[str, dict] = {"_meta": _LICENSE_META}
+    out: dict[str, dict] = {"_meta": _license_meta()}
     for reach in reaches:
         # Only emit reaches whose geometry also makes it into the static
         # file; otherwise the client would carry state it cannot paint.
@@ -203,7 +203,7 @@ def _build_gauges_static(gauges: list[Gauge]) -> str:
             }
         )
     return json.dumps(
-        {"_meta": _LICENSE_META, "type": "FeatureCollection", "features": features},
+        {"_meta": _license_meta(), "type": "FeatureCollection", "features": features},
         separators=(",", ":"),
     )
 
@@ -233,7 +233,7 @@ def _build_gauges_state(
     already omits them so the client wouldn't paint anyway). Per Item 2a
     of ``docs/done/PLAN_map_and_ui_tweaks.md``.
     """
-    out: dict[str, object] = {"_meta": _LICENSE_META}
+    out: dict[str, object] = {"_meta": _license_meta()}
     for g in gauges:
         if g.latitude is None or g.longitude is None:
             continue
