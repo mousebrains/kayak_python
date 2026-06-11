@@ -12,20 +12,23 @@ require_once __DIR__ . '/IntegrationTestCase.php';
  * multi-state border-gauge case (gauge.state = 'OR,WA' must surface under both
  * Oregon and Washington, in the pills and the AJAX filter).
  *
- * Seed: 3 gauges — one in OR, one in MT, one OR,WA border gauge (the Columbia
- * mainstem shape). State pills are emitted only for states that have at least
- * one gauge with current observations, so each seed needs a
- * latest_gauge_observation row.
+ * Seed: 4 gauges — one in OR, one in MT, one OR,WA border gauge (the Columbia
+ * mainstem shape), and one synthetic ZZ state row that is not in the historical
+ * hardcoded PHP map. State pills are emitted only for states that have at least
+ * one gauge with current observations, so each seed needs a latest_gauge_observation
+ * row.
  */
 final class GaugePickerIntegrationTest extends IntegrationTestCase
 {
     protected static function seedDatabase(PDO $db): void
     {
+        $db->exec("INSERT INTO state (name, abbreviation) VALUES ('Atlantis', 'ZZ')");
         $db->exec(
             "INSERT INTO gauge (id, name, display_name, state, huc) VALUES
              (8001, 'PICKER_OR',   'Picker Oregon', 'OR',    '17090011'),
              (8002, 'PICKER_MT',   'Picker Montana','MT',    '17010205'),
-             (8003, 'PICKER_ORWA', 'Picker Border', 'OR,WA', '17080003')"
+             (8003, 'PICKER_ORWA', 'Picker Border', 'OR,WA', '17080003'),
+             (8004, 'PICKER_ZZ',   'Picker Custom', 'ZZ',    '00000000')"
         );
         // Each needs a latest_gauge_observation row so the picker's
         // "states with current data" query picks it up.
@@ -33,7 +36,8 @@ final class GaugePickerIntegrationTest extends IntegrationTestCase
             "INSERT INTO latest_gauge_observation (gauge_id, data_type, value, observed_at) VALUES
              (8001, 'flow', 1000.0,   datetime('now', '-1 hour')),
              (8002, 'flow', 500.0,    datetime('now', '-1 hour')),
-             (8003, 'flow', 250000.0, datetime('now', '-1 hour'))"
+             (8003, 'flow', 250000.0, datetime('now', '-1 hour')),
+             (8004, 'flow', 42.0,     datetime('now', '-1 hour'))"
         );
     }
 
@@ -139,6 +143,16 @@ final class GaugePickerIntegrationTest extends IntegrationTestCase
         $this->assertStringContainsString('value="Oregon"', $resp['body']);
     }
 
+    public function testStatePillsComeFromStateTable(): void
+    {
+        // Atlantis/ZZ is seeded only in the state table, not in the historical
+        // PHP hardcoded map. The picker must use dataset-backed state labels.
+        $resp = $this->request('/gauge_picker.php');
+
+        $this->assertSame(200, $resp['status']);
+        $this->assertStringContainsString('value="Atlantis"', $resp['body']);
+    }
+
     public function testAjaxBorderGaugeMatchesWashingtonAlone(): void
     {
         // A border gauge stored as 'OR,WA' must match a Washington-only
@@ -151,6 +165,17 @@ final class GaugePickerIntegrationTest extends IntegrationTestCase
         $row = self::rowById($rows, 8003);
         $this->assertNotNull($row, 'OR,WA gauge should match a Washington-only filter');
         $this->assertSame('Oregon,Washington', $row['state'] ?? null);
+    }
+
+    public function testAjaxUsesStateTableLabels(): void
+    {
+        $resp = $this->request('/gauge_picker.php', ['ajax' => '1', 'states' => 'Atlantis']);
+
+        $this->assertSame(200, $resp['status']);
+        $rows = json_decode($resp['body'], true);
+        $row = self::rowById($rows, 8004);
+        $this->assertNotNull($row, 'ZZ gauge should match the dataset-backed Atlantis state');
+        $this->assertSame('Atlantis', $row['state'] ?? null);
     }
 
     public function testAjaxBorderGaugeMatchesOregonAlongsideSingleState(): void

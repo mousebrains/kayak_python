@@ -22,14 +22,7 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/pubhash_request.php';
 require_once __DIR__ . '/header.php';
 require_once __DIR__ . '/footer.php';
-
-/** Two-letter abbrev → display name for the State filter pill. */
-const CUSTOM_GAUGES_STATE_ABBREVS = [
-    'AZ' => 'Arizona',  'CA' => 'California', 'CO' => 'Colorado',
-    'ID' => 'Idaho',    'KS' => 'Kansas',     'MT' => 'Montana',
-    'NV' => 'Nevada',   'NM' => 'New Mexico', 'OR' => 'Oregon',
-    'UT' => 'Utah',     'WA' => 'Washington', 'WY' => 'Wyoming',
-];
+require_once __DIR__ . '/states.php';
 
 /**
  * Dispatch and write the full HTTP response.
@@ -42,8 +35,9 @@ function handle_custom_gauges(PDO $db, array $ids, string $handle_csv): void
     $gauges_by_id = _load_custom_gauges_rows($db, $ids);
     $status_by_gauge = _load_custom_gauges_status_rollup($db, $ids);
     $rows = _custom_gauges_reorder_by_position($gauges_by_id, $ids);
+    $state_names_by_abbrev = state_names_by_abbreviation($db);
 
-    $filters = _compute_custom_gauges_filters($rows);
+    $filters = _compute_custom_gauges_filters($rows, $state_names_by_abbrev);
     [$huc8_names, $huc6_names, $huc6_groups] = _load_custom_gauges_huc_groups(
         $db,
         array_keys($filters['huc8_present']),
@@ -60,7 +54,7 @@ function handle_custom_gauges(PDO $db, array $ids, string $handle_csv): void
         $filters['has_no_huc'],
         $handle_csv,
     );
-    _render_custom_gauges_table($rows, $status_by_gauge);
+    _render_custom_gauges_table($rows, $status_by_gauge, $state_names_by_abbrev);
     _render_custom_gauges_footer();
 
     include_footer();
@@ -205,13 +199,14 @@ function _custom_gauges_reorder_by_position(array $gauges_by_id, array $ids): ar
  * filter pills only offer values that map to something visible.
  *
  * @param  list<array{state_abbrev: string|null, huc: string|null}> $rows
+ * @param  array<string, string>                                    $state_names_by_abbrev
  * @return array{
  *     states:       array<string, true>,
  *     huc8_present: array<string, true>,
  *     has_no_huc:   bool
  * }
  */
-function _compute_custom_gauges_filters(array $rows): array
+function _compute_custom_gauges_filters(array $rows, array $state_names_by_abbrev): array
 {
     $states_present = [];
     $huc8_present   = [];
@@ -221,8 +216,8 @@ function _compute_custom_gauges_filters(array $rows): array
         // it so each state contributes a pill, mirroring the static build.
         foreach (explode(',', $r['state_abbrev'] ?? '') as $abbrev) {
             $abbrev = trim($abbrev);
-            if ($abbrev !== '' && isset(CUSTOM_GAUGES_STATE_ABBREVS[$abbrev])) {
-                $states_present[CUSTOM_GAUGES_STATE_ABBREVS[$abbrev]] = true;
+            if ($abbrev !== '' && isset($state_names_by_abbrev[$abbrev])) {
+                $states_present[$state_names_by_abbrev[$abbrev]] = true;
             }
         }
         $huc = $r['huc'] ?? '';
@@ -379,8 +374,9 @@ function _render_custom_gauges_header(
  *
  * @param list<array{id: int, river: string, location: string, state_abbrev: string|null, huc: string|null, flow: float|null, flow_time: string|null, inflow: float|null, inflow_time: string|null, gage: float|null, gage_time: string|null, temperature: float|null, temp_time: string|null}> $rows
  * @param array<int, array{label: ?string, counts: array<string, int>}>  $status_by_gauge
+ * @param array<string, string>                                          $state_names_by_abbrev
  */
-function _render_custom_gauges_table(array $rows, array $status_by_gauge): void
+function _render_custom_gauges_table(array $rows, array $status_by_gauge, array $state_names_by_abbrev): void
 {
     ?>
 <table class="levels">
@@ -404,8 +400,8 @@ function _render_custom_gauges_table(array $rows, array $status_by_gauge): void
     $state_names = [];
     foreach (explode(',', $r['state_abbrev'] ?? '') as $abbrev) {
         $abbrev = trim($abbrev);
-        if (isset(CUSTOM_GAUGES_STATE_ABBREVS[$abbrev])) {
-            $state_names[] = CUSTOM_GAUGES_STATE_ABBREVS[$abbrev];
+        if (isset($state_names_by_abbrev[$abbrev])) {
+            $state_names[] = $state_names_by_abbrev[$abbrev];
         }
     }
     $state = implode(',', $state_names);
