@@ -212,20 +212,24 @@ Implementation: new `levels editor-retention` CLI + daily `kayak-editor-retentio
 ## D-T4.5 — `security.txt` content
 
 - **Date:** 2026-05-12
-- **Decision:** **Option A + D** (Keep current RFC 9116 minimum; add Expires refresh to annual maintenance calendar).
-- **Status:** Active (no file change today; calendar item for 2027-04-01)
+- **Decision:** **Option A + D** (Keep the production RFC 9116 minimum; add Expires refresh to annual maintenance calendar).
+- **Status:** Active (WKCC production values now live in the dataset `site.yaml`; calendar item for 2027-04-01)
 - **Backing analysis:** [tier4-audit.md](tier4-audit.md) Phase 4.5.
 
 ### Choice
 
-Current content (`src/kayak/web/static/security.txt`) stays as-is:
+WKCC production content is dataset-owned in `kayak_data/site.yaml`:
 ```
 Contact: mailto:pat.kayak@gmail.com
 Expires: 2027-05-20T00:00:00Z
 Preferred-Languages: en
 ```
 
-Calendar reminder for 2027-04-01: refresh `Expires:` to 2028-05-20 (or +1 year from refresh date).
+The engine fallback at `src/kayak/web/static/security.txt` is generic scaffold
+content; deployment renders the dataset values when present.
+
+Calendar reminder for 2027-04-01: refresh the dataset `security_expires` value
+to 2028-05-20 (or +1 year from refresh date).
 
 Defer PGP `Encryption:` line and `Acknowledgments:` / `Policy:` lines until concrete triggers.
 
@@ -254,7 +258,9 @@ Defer PGP `Encryption:` line and `Acknowledgments:` / `Policy:` lines until conc
 
 ### Choice
 
-Keep the current `security.txt` minimum (`Contact: mailto:pat.kayak@gmail.com` + `Expires:` + `Preferred-Languages:` — fixed by D-T4.5). No GitHub Security Advisories (GHSA), no HackerOne, no bug bounty.
+Keep the current production `security.txt` minimum (dataset-owned `Contact` +
+`Expires`, plus `Preferred-Languages` from the engine template — fixed by
+D-T4.5). No GitHub Security Advisories (GHSA), no HackerOne, no bug bounty.
 
 ### Rationale
 
@@ -318,7 +324,7 @@ Best-effort response. Concrete commitments documented in `incident-response.md`:
 **Annual light touch** (every 12 months from Tier 5 closeout, so next: ~2027-05-12):
 - Re-read findings.md + decisions.md.
 - Check whether re-evaluation triggers fired since last review.
-- Refresh src/kayak/web/static/security.txt Expires line (per D-T4.5).
+- Refresh the WKCC dataset `security_expires` value (per D-T4.5).
 - Update README Tier status table.
 - Effort: ~half-day.
 

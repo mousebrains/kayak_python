@@ -1,3 +1,3 @@
-Contact: mailto:pat.kayak@gmail.com
+Contact: mailto:security@example.com
 Expires: 2027-05-20T00:00:00Z
 Preferred-Languages: en

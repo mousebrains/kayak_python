@@ -636,6 +636,7 @@ def test_deploy_security_txt_default_is_packaged_noop(monkeypatch, tmp_path):
     security_txt = (output / "static" / "security.txt").read_text(encoding="utf-8")
     packaged = (build_mod._STATIC_DIR / "security.txt").read_text(encoding="utf-8")
     assert security_txt == packaged
+    assert "pat.kayak@gmail.com" not in security_txt
 
 
 def test_deploy_security_txt_custom_site_fields(monkeypatch, tmp_path):
