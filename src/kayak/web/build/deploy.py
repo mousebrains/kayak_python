@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from kayak.config import BASE_DIR, DATASET_DIR, OSMB_DIR, SITE_URL
 from kayak.dataset.map import get_map_config
+from kayak.dataset.site import get_site_config
 from kayak.db.cache import get_all_latest_gauges
 from kayak.db.engine import get_session
 from kayak.db.gauges import get_calculated_gauge_ids
@@ -115,6 +116,15 @@ def _osmb_url(static_dir: Path, filename: str) -> str:
 _BUILD_PROCESSED_STATIC: frozenset[str] = frozenset({"style.css", "levels.js", "filters.js"})
 
 
+def _render_manifest(text: str) -> str:
+    """Render the packaged PWA manifest with dataset-owned site identity."""
+    manifest = json.loads(_apply_brand_color(text))
+    site = get_site_config()
+    manifest["name"] = site.manifest_name
+    manifest["short_name"] = site.manifest_short_name
+    return json.dumps(manifest, indent=2) + "\n"
+
+
 def _deploy_static_assets(output_dir: Path, *, provenance_slug_count: int = 0) -> None:
     """Copy committed + generated static assets into ``output_dir/static/``.
 
@@ -149,10 +159,9 @@ def _deploy_static_assets(output_dir: Path, *, provenance_slug_count: int = 0) -
                 continue
             dst = output_dir if path.name == "sw.js" else static_dir
             if path.name == "manifest.json":
-                # Apply the dataset brand color to the PWA theme_color (S3a-3);
-                # a no-op (same content) when the dataset uses the default brand.
                 (dst / path.name).write_text(
-                    _apply_brand_color(path.read_text(encoding="utf-8")), encoding="utf-8"
+                    _render_manifest(path.read_text(encoding="utf-8")),
+                    encoding="utf-8",
                 )
             else:
                 shutil.copy2(path, dst / path.name)
