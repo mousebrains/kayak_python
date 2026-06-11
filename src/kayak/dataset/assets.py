@@ -35,10 +35,10 @@ _SITE_ASSET_SPECS = {spec.filename: spec for spec in SITE_ASSETS}
 def validate_site_assets(dataset_dir: Path) -> list[str]:
     """Validate optional ``site/assets/`` files and return focused errors."""
     asset_dir = dataset_dir / SITE_ASSETS_DIR
-    if not asset_dir.exists():
-        return []
     if asset_dir.is_symlink():
         return [f"{SITE_ASSETS_DIR}: symlinks are not supported"]
+    if not asset_dir.exists():
+        return []
     if not asset_dir.is_dir():
         return [f"{SITE_ASSETS_DIR}: must be a directory"]
 

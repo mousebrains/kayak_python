@@ -1393,3 +1393,13 @@ def test_site_assets_reject_symlinked_asset_dir(dataset_copy: Path, tmp_path: Pa
 
     errs = validate_dataset(dataset_copy)
     assert any(e == "site/assets: symlinks are not supported" for e in errs)
+
+
+def test_site_assets_reject_dangling_symlinked_asset_dir(
+    dataset_copy: Path, tmp_path: Path
+) -> None:
+    _write_required_site_prose(dataset_copy)
+    (dataset_copy / "site" / "assets").symlink_to(tmp_path / "missing-assets")
+
+    errs = validate_dataset(dataset_copy)
+    assert any(e == "site/assets: symlinks are not supported" for e in errs)
