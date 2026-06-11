@@ -10,7 +10,6 @@ from kayak.db.reaches import classify_level
 from kayak.utils.class_tiers import parse_class_tiers
 from kayak.utils.pubhash import encode as pubhash_encode
 from kayak.web.build._shared import (
-    _STATE_ABBREVS,
     DATA_EXPIRY_THRESHOLD,
     DATA_STALE_THRESHOLD,
 )
@@ -99,7 +98,7 @@ def _get_row_data(
         "drainage": reach.basin or "",
         # Render the cell as the 2-letter abbreviation (rightmost column on
         # index.html). Filter still uses full state names via data-state.
-        "state": ", ".join(_STATE_ABBREVS.get(s.name, s.name) for s in reach.states)
+        "state": ", ".join(s.abbreviation or s.name for s in reach.states)
         if reach.states
         else "",
         "db_name": reach.name,

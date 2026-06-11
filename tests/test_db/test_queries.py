@@ -26,6 +26,8 @@ from kayak.db.reaches import (
     get_reach,
     get_reach_by_name,
     reaches_query,
+    state_abbreviations_by_name,
+    state_names_by_abbreviation,
 )
 from kayak.db.sources import get_calculated_source_ids
 
@@ -77,6 +79,21 @@ def test_all_state_names_sorted(session):
 
     result = all_state_names(session)
     assert result == ["ID", "OR", "WA"]
+
+
+def test_state_abbreviation_maps(session):
+    """state abbreviation helpers return non-null dataset labels."""
+    session.add_all(
+        [
+            State(name="Oregon", abbreviation="OR"),
+            State(name="Atlantis", abbreviation="ZZ"),
+            State(name="No Abbrev", abbreviation=None),
+        ]
+    )
+    session.flush()
+
+    assert state_abbreviations_by_name(session) == {"Atlantis": "ZZ", "Oregon": "OR"}
+    assert state_names_by_abbreviation(session) == {"OR": "Oregon", "ZZ": "Atlantis"}
 
 
 # ---------------------------------------------------------------------------

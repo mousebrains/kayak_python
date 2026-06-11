@@ -160,6 +160,7 @@ def validate_dataset(dataset_dir: Path, warnings: list[str] | None = None) -> li
     # (5b') state names must be safe — they become URL/filename/HTML in the build
     #       (S3b-2 made the served state set data-driven).
     errors.extend(_check_state_names(d, good_csvs))
+    errors.extend(_check_state_references(d, good_csvs))
     # (5c) source<->gauge cardinality (every source has exactly one gauge) + the
     #      gauge_source / reach.gauge_id FK references.
     errors.extend(_check_gauge_source(d, good_csvs))
@@ -1211,6 +1212,79 @@ def _check_state_names(d: Path, good_csvs: set[str]) -> list[str]:
         if not layout.is_safe_state_name(name):
             errors.append(f"state.csv: unsafe state name {name!r} (ASCII letter words only)")
     return errors
+
+
+def _state_names_and_abbreviations(d: Path, good_csvs: set[str]) -> tuple[set[str], set[str]]:
+    if "state" not in good_csvs:
+        return set(), set()
+    state_names: set[str] = set()
+    state_abbrevs: set[str] = set()
+    for row in _csv_rows(d / "state.csv"):
+        name = row.get("name") or ""
+        abbreviation = row.get("abbreviation") or ""
+        if name:
+            state_names.add(name)
+        if abbreviation:
+            state_abbrevs.add(abbreviation)
+    return state_names, state_abbrevs
+
+
+def _check_state_references(d: Path, good_csvs: set[str]) -> list[str]:
+    """State presentation references must point at dataset-owned state.csv rows.
+
+    Static/PHP presentation now derives labels from ``state.csv``. A gauge-state
+    abbreviation or ``region.yaml`` state key outside that file would silently lose
+    labels or nav resources at build/runtime, so fail it at the dataset gate.
+    """
+    if "state" not in good_csvs:
+        return []
+    state_names, state_abbrevs = _state_names_and_abbreviations(d, good_csvs)
+
+    errors: list[str] = []
+    errors.extend(_check_gauge_state_references(d, good_csvs, state_abbrevs))
+    errors.extend(_check_region_state_references(d, state_names))
+    return errors
+
+
+def _check_gauge_state_references(
+    d: Path, good_csvs: set[str], state_abbrevs: set[str]
+) -> list[str]:
+    if "gauge" in good_csvs:
+        return _unknown_gauge_state_errors(d, state_abbrevs)
+    return []
+
+
+def _unknown_gauge_state_errors(d: Path, state_abbrevs: set[str]) -> list[str]:
+    unknown_gauge_abbrevs: dict[str, list[str]] = {}
+    for row in _csv_rows(d / "gauge.csv"):
+        raw = row.get("state") or ""
+        for abbreviation in (part.strip() for part in raw.split(",")):
+            if abbreviation and abbreviation not in state_abbrevs:
+                unknown_gauge_abbrevs.setdefault(abbreviation, []).append(row.get("id") or "?")
+    if not unknown_gauge_abbrevs:
+        return []
+    details = ", ".join(
+        f"{abbrev} (gauge ids: "
+        f"{', '.join(ids[:5])}{', ...' if len(ids) > 5 else ''})"
+        for abbrev, ids in sorted(unknown_gauge_abbrevs.items())
+    )
+    return [f"gauge.csv references state abbreviations not in state.csv: {details}"]
+
+
+def _check_region_state_references(d: Path, state_names: set[str]) -> list[str]:
+    if (d / region.REGION_YAML).is_file():
+        try:
+            region_config = region.load_region_config(d)
+        except ValueError:
+            # _check_region_yaml reports shape/safety errors; do not duplicate them here.
+            return []
+        unknown_region_states = sorted(set(region_config.states) - state_names)
+        if unknown_region_states:
+            return [
+                "region.yaml states are not present in state.csv: "
+                + ", ".join(repr(s) for s in unknown_region_states)
+            ]
+    return []
 
 
 def _check_region_yaml(d: Path) -> list[str]:

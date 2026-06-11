@@ -9,6 +9,8 @@ from kayak.web.build.gauges import _apply_gauge_metadata, _build_gauges_filter_b
 from kayak.web.build.levels import _build_filter_bar, _collect_filter_data, _row_filter_attrs
 from kayak.web.build.shell import _build_page
 
+STATE_NAMES_BY_ABBREV = {"OR": "Oregon", "WA": "Washington"}
+
 
 def _mk(session, **kw) -> Reach:
     r = Reach(**kw)
@@ -19,7 +21,8 @@ def _mk(session, **kw) -> Reach:
 
 
 def _state(session, name: str) -> State:
-    s = State(name=name)
+    abbreviation = {"Oregon": "OR", "Washington": "WA"}.get(name)
+    s = State(name=name, abbreviation=abbreviation)
     session.add(s)
     session.flush()
     return s
@@ -473,13 +476,21 @@ def test_apply_gauge_metadata_multistate_splits_to_full_names() -> None:
     table) matches each and the gauge filters under both. A single-state gauge
     still maps to one name (back-compat)."""
     border: dict = {}
-    _apply_gauge_metadata(border, Gauge(name="border", state="OR,WA", huc="17070105"))
+    _apply_gauge_metadata(
+        border,
+        Gauge(name="border", state="OR,WA", huc="17070105"),
+        STATE_NAMES_BY_ABBREV,
+    )
     assert border["state"] == "Oregon,Washington"
     assert border["state_abbrev"] == "OR,WA"
     assert border["huc8"] == "17070105"
 
     single: dict = {}
-    _apply_gauge_metadata(single, Gauge(name="single", state="WA", huc="17020005"))
+    _apply_gauge_metadata(
+        single,
+        Gauge(name="single", state="WA", huc="17020005"),
+        STATE_NAMES_BY_ABBREV,
+    )
     assert single["state"] == "Washington"
     assert single["state_abbrev"] == "WA"
 

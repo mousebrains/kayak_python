@@ -18,6 +18,7 @@ from kayak.db.models import (
     Reach,
     ReachClass,
     Source,
+    State,
 )
 from kayak.web.build._shared import _atomic_write
 from kayak.web.build.levels import _build_html_table, _get_row_data, _levels_key
@@ -80,6 +81,8 @@ COLS = [
 
 COLS_SIMPLE = COLS[:2]  # Just name + flow
 
+STATE_ABBREVS = {"Oregon": "OR", "Washington": "WA", "Wyoming": "WY"}
+
 
 def _make_reaches(session, count=1):
     """Create *count* minimal reaches with gauges for builder tests."""
@@ -117,6 +120,17 @@ class TestGetRowData:
         assert row["display_name"] == "No Gauge River"
         assert "flow" not in row
         assert "time" not in row
+
+    def test_state_cell_uses_dataset_abbreviation(self, session):
+        state = State(name="Atlantis", abbreviation="ZZ")
+        reach = Reach(name="custom_state", display_name="Custom State River")
+        reach.states.append(state)
+        session.add(reach)
+        session.flush()
+
+        row = _get_row_data(reach, set(), {})
+
+        assert row["state"] == "ZZ"
 
     def test_reach_with_gauge_and_latest(self, session):
         gauge = Gauge(name="g1")
@@ -629,29 +643,38 @@ class TestBuildHTMLTable:
 
 class TestBuildNav:
     def test_includes_map_and_picker(self, session):
-        result = _build_nav(["Oregon", "Washington"])
+        result = _build_nav(["Oregon", "Washington"], state_abbrevs=STATE_ABBREVS)
         assert "map.html" in result
         assert "picker.php" in result
 
     def test_active_state_highlighted(self, session):
-        result = _build_nav(["Oregon", "Washington"], active_state="Oregon")
+        result = _build_nav(
+            ["Oregon", "Washington"],
+            active_state="Oregon",
+            state_abbrevs=STATE_ABBREVS,
+        )
         assert 'class="active"' in result
+
+    def test_nav_labels_use_dataset_abbreviations(self, session):
+        result = _build_nav(["Oregon"], state_abbrevs={"Oregon": "XX"})
+        assert ">XX</a>" in result
+        assert ">OR</a>" not in result
 
     def test_nav_buttons_are_reaches_union_region(self, session, tmp_path, monkeypatch):
         # S3b-2: nav buttons = passed reach-states + dataset region config states,
         # not a hardcoded allowlist or generic engine default.
         (tmp_path / region_mod.REGION_YAML).write_text(
-            "states:\n  Montana:\n    links: []\n  Oregon:\n    links: []\n",
+            "states:\n  Washington:\n    links: []\n  Oregon:\n    links: []\n",
             encoding="utf-8",
         )
         monkeypatch.setattr("kayak.config.DATASET_DIR", tmp_path)
         region_mod.get_region_config.cache_clear()
         try:
-            result = _build_nav(["Oregon"])  # reach-states union dataset region states
+            result = _build_nav(["Oregon"], state_abbrevs=STATE_ABBREVS)
         finally:
             region_mod.get_region_config.cache_clear()
         assert 'href="/Oregon.html"' in result
-        assert 'href="/Montana.html"' in result
+        assert 'href="/Washington.html"' in result
         assert 'href="/Wyoming.html"' not in result  # in neither set → no button
 
     def test_right_cluster_uses_dataset_org_identity(self, tmp_path, monkeypatch):

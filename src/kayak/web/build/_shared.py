@@ -74,24 +74,6 @@ def _license_meta() -> dict[str, str]:
     return get_data_license().as_json_meta(attribution=_SITE.attribution)
 
 
-_STATE_ABBREVS = {
-    "Arizona": "AZ",
-    "California": "CA",
-    "Colorado": "CO",
-    "Idaho": "ID",
-    "Kansas": "KS",
-    "Montana": "MT",
-    "Nevada": "NV",
-    "New Mexico": "NM",
-    "Oregon": "OR",
-    "Utah": "UT",
-    "Washington": "WA",
-    "Wyoming": "WY",
-}
-
-_ABBR_TO_STATE = {v: k for k, v in _STATE_ABBREVS.items()}
-
-
 # CSS is read once from the source tree and inlined into every page.
 # Path arithmetic: __file__ is .../src/kayak/web/build/_shared.py, so
 # .parent.parent reaches .../src/kayak/web — append "static" to land at

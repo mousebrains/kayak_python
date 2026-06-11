@@ -1272,7 +1272,7 @@ def test_region_yaml_absent_is_valid(dataset_copy: Path) -> None:
 
 def test_valid_region_yaml_accepted(dataset_copy: Path) -> None:
     (dataset_copy / "region.yaml").write_text(
-        "states:\n  Oregon:\n    weather_url: https://example.com/or\n"
+        "states:\n  Washington:\n    weather_url: https://example.com/wa\n"
         "    links:\n      - {label: Foo, url: https://foo.example}\n"
     )
     assert validate_dataset(dataset_copy) == []
@@ -1322,6 +1322,29 @@ def test_state_csv_whitespace_only_name_rejected(dataset_copy: Path) -> None:
     _rewrite_csv(dataset_copy / "state.csv", _mutate)
     errs = validate_dataset(dataset_copy)
     assert any("state.csv" in e and "unsafe state name" in e for e in errs)
+
+
+def test_gauge_state_abbreviation_must_exist_in_state_csv(dataset_copy: Path) -> None:
+    def _mutate(rows: list[dict[str, str]]) -> None:
+        rows[0]["state"] = "OR,ZZ"
+
+    _rewrite_csv(dataset_copy / "gauge.csv", _mutate)
+    errs = validate_dataset(dataset_copy)
+    assert any("gauge.csv" in e and "ZZ" in e and "state.csv" in e for e in errs)
+
+
+def test_gauge_state_abbreviation_rejected_when_state_csv_empty(dataset_copy: Path) -> None:
+    _rewrite_csv(dataset_copy / "state.csv", lambda rows: rows.clear())
+
+    errs = validate_dataset(dataset_copy)
+    assert any("gauge.csv" in e and "state.csv" in e for e in errs)
+
+
+def test_region_yaml_state_must_exist_in_state_csv(dataset_copy: Path) -> None:
+    (dataset_copy / "region.yaml").write_text("states:\n  Atlantis:\n    links: []\n")
+
+    errs = validate_dataset(dataset_copy)
+    assert any("region.yaml" in e and "Atlantis" in e and "state.csv" in e for e in errs)
 
 
 # --------------------------------------------------------------------------- #

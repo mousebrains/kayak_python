@@ -5,6 +5,7 @@ import json
 import logging
 import re
 import sqlite3
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -15,9 +16,9 @@ from sqlalchemy.orm import Session
 from kayak.config import BASE_DIR
 from kayak.db.gauges import get_calculated_gauge_ids
 from kayak.db.models import DataType, Gauge, HucName, LatestGaugeObservation, Reach
+from kayak.db.reaches import state_abbreviations_by_name, state_names_by_abbreviation
 from kayak.utils.pubhash import encode as pubhash_encode
 from kayak.web.build._shared import (
-    _ABBR_TO_STATE,
     DATA_EXPIRY_THRESHOLD,
     DATA_STALE_THRESHOLD,
     _atomic_write,
@@ -276,7 +277,11 @@ def _gauge_observation_age(row: dict[str, Any]) -> object:
     return None
 
 
-def _apply_gauge_metadata(row: dict[str, Any], g: Gauge) -> None:
+def _apply_gauge_metadata(
+    row: dict[str, Any],
+    g: Gauge,
+    state_names_by_abbrev: Mapping[str, str],
+) -> None:
     """Fill state/HUC/drainage/elevation columns from the gauge row.
 
     Filter pills come straight from the gauge row — gauges.html no longer
@@ -292,7 +297,7 @@ def _apply_gauge_metadata(row: dict[str, Any], g: Gauge) -> None:
     state_abbrevs = [a.strip() for a in (g.state or "").split(",") if a.strip()]
     gauge_huc = g.huc or ""
     row["state"] = ",".join(
-        name for name in (_ABBR_TO_STATE.get(a, "") for a in state_abbrevs) if name
+        name for name in (state_names_by_abbrev.get(a, "") for a in state_abbrevs) if name
     )
     row["state_abbrev"] = ",".join(state_abbrevs)
     row["huc6"] = gauge_huc[:6] if len(gauge_huc) >= 6 else ""
@@ -306,6 +311,7 @@ def _collect_gauge_rows(
     session: Session,
     all_latest: dict[tuple[int, DataType], LatestGaugeObservation],
     metadata: dict[str, dict[str, str]],
+    state_names_by_abbrev: Mapping[str, str],
     calculated_gauge_ids: set[int] | None = None,
 ) -> list[dict[str, Any]]:
     """Build one row per gauge with at least one current observation.
@@ -346,7 +352,7 @@ def _collect_gauge_rows(
             continue
         if age_tag == "stale":
             row["stale"] = True
-        _apply_gauge_metadata(row, g)
+        _apply_gauge_metadata(row, g, state_names_by_abbrev)
         status, status_counts = _gauge_status_from_reaches(reaches, calc_ids, all_latest)
         if status is not None:
             row["status"] = status
@@ -539,9 +545,11 @@ def _write_gauges_page(
 ) -> None:
     """Render gauges.html and merge sparklines."""
     metadata = _load_station_metadata()
+    state_abbrevs = state_abbreviations_by_name(session)
+    state_names_by_abbrev = state_names_by_abbreviation(session)
     gauge_ids_with_data = list({gid for gid, _ in all_latest})
     calc_ids = get_calculated_gauge_ids(session, gauge_ids_with_data)
-    rows = _collect_gauge_rows(session, all_latest, metadata, calc_ids)
+    rows = _collect_gauge_rows(session, all_latest, metadata, state_names_by_abbrev, calc_ids)
 
     filename = "gauges.html"
     title = "River Gauges"
@@ -568,6 +576,7 @@ def _write_gauges_page(
         active_page="gauges",
         picker_kind="gauge",
         path=f"/{filename}",
+        state_abbrevs=state_abbrevs,
     )
     _atomic_write(output_dir / filename, page_html)
 
