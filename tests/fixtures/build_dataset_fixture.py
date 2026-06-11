@@ -365,6 +365,26 @@ RETIRED_IDS_YAML_TEXT = (
     "{}\n"
 )
 
+SITE_PROSE = {
+    "privacy.md": (
+        "# Privacy\n\n"
+        "This fixture dataset is used by the kayak engine's automated tests. It does "
+        "not operate a public service or collect user accounts by itself.\n\n"
+        "A real deployment should replace this page with its own privacy notice.\n"
+    ),
+    "disclaimer.md": (
+        "# Disclaimer\n\n"
+        "This fixture dataset is for software testing. River levels, reach details, "
+        "and calculations may be incomplete or synthetic.\n\n"
+        "Do not use this fixture as a navigation or safety tool.\n"
+    ),
+    "contact.md": (
+        "# Contact\n\n"
+        "For this fixture dataset, contact the deployment maintainer or test "
+        "operator configured for the site.\n"
+    ),
+}
+
 
 def _sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -529,6 +549,13 @@ def main(argv: list[str] | None = None) -> int:
     reg_dir.mkdir(exist_ok=True)
     for name, content in _REGRESSION_FILES.items():
         (reg_dir / name).write_text(content)
+
+    # Site prose (S3i) — publishable datasets carry legal/contact prose in
+    # DATASET_DIR/site instead of relying on generic engine PHP fallbacks.
+    site_dir = OUT / "site"
+    site_dir.mkdir(exist_ok=True)
+    for name, content in SITE_PROSE.items():
+        (site_dir / name).write_text(content)
 
     # Dataset contract manifest (S6.2) — fixed literal (see DATASET_YAML_TEXT).
     (OUT / "dataset.yaml").write_text(DATASET_YAML_TEXT)

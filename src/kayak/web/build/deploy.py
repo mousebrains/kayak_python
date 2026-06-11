@@ -431,16 +431,26 @@ def _deploy_site_prose(output_dir: Path) -> None:
     ``DATASET_DIR/site/<page>.md`` → ``OUTPUT_DIR/prose/<page>.html`` via the S2
     sanitizer (``render_markdown_to_html`` — markdown + nh3 allowlist, no inline
     ``<script>``/event handlers/external images). The PHP prose pages include the
-    fragment when present and fall back to their built-in body otherwise. A dataset
-    with no ``site/`` dir publishes no fragments (PHP falls back) — graceful.
+    fragment when present and fall back to their built-in body otherwise. A
+    scaffold/legacy dataset with no ``site/`` dir publishes no fragments (PHP
+    falls back) — graceful. Publishable datasets are required to provide the legal
+    trio by ``validate-dataset``.
     """
     src_dir = DATASET_DIR / "site"
+    if src_dir.is_symlink():
+        raise RuntimeError("invalid dataset site prose: site symlinks are not supported")
     if not src_dir.is_dir():
         return
     dst = output_dir / "prose"
     dst.mkdir(parents=True, exist_ok=True)
     for page in _PROSE_PAGES:
         md = src_dir / f"{page}.md"
+        if md.is_symlink():
+            raise RuntimeError(
+                f"invalid dataset site prose: site/{page}.md symlinks are not supported"
+            )
+        if md.exists() and not md.is_file():
+            raise RuntimeError(f"invalid dataset site prose: site/{page}.md must be a regular file")
         if md.is_file():
             fragment = render_markdown_to_html(md.read_text(encoding="utf-8"))
             (dst / f"{page}.html").write_text(fragment, encoding="utf-8")
