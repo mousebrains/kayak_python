@@ -997,6 +997,22 @@ class TestDeployPhpConfigLicense:
         assert "Sitemap: __SITE_URL__/sitemap.xml" in text
         assert "levels.wkcc.org" not in text
 
+    def test_packaged_php_prose_fallbacks_are_generic(self):
+        from kayak.resources import resource_dir
+
+        php = resource_dir("web", "php")
+        forbidden = (
+            "levels.wkcc.org",
+            "Willamette Kayak",
+            "WKCC",
+            "Pat Welch",
+            "Soggy Sneakers",
+        )
+        for page in ("about.php", "privacy.php", "disclaimer.php"):
+            text = (php / page).read_text(encoding="utf-8")
+            for needle in forbidden:
+                assert needle not in text
+
     def test_packaged_license_matches_repo_root(self):
         """The repo-root LICENSE/LICENSE-DATA (GitHub + pyproject convention)
         and the packaged copies the deploy serves must not drift."""

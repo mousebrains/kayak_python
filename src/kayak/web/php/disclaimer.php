@@ -17,14 +17,15 @@ include_header(
 <div class="prose">
 <?php $__prose = prose_fragment('disclaimer'); if ($__prose !== null) { echo $__prose; } else { ?>
 <h2>Disclaimer</h2>
-<p class="updated">Last updated: April 22, 2026</p>
+<p class="updated">Generic fallback. The deploying dataset should provide its
+own disclaimer.</p>
 
 <div class="warn">
 <p><strong>Whitewater paddling, kayaking, canoeing, rafting, and any other
 activity on moving water are inherently dangerous and can result in serious
 injury or death.</strong> Your safety on the water is your responsibility —
 not the responsibility of this website, its operators, contributors, or the
-Willamette Kayak and Canoe Club.</p>
+organization that runs this deployment.</p>
 </div>
 
 <h3>Information Is Provided "As Is"</h3>
@@ -65,12 +66,10 @@ on-the-water judgment.</p>
 
 <h3>No Liability</h3>
 <p>To the fullest extent permitted by law, the operators, maintainers, and
-contributors of this website, and the Willamette Kayak and Canoe Club, its
-officers, directors, members, and volunteers, <strong>disclaim all liability</strong>
-for any loss, injury, illness, death, property damage, or other harm
-resulting from use of, reliance on, or inability to use this site or any
-information it contains. Your use of this site is entirely at your own
-risk.</p>
+contributors of this website <strong>disclaim all liability</strong> for any
+loss, injury, illness, death, property damage, or other harm resulting from use
+of, reliance on, or inability to use this site or any information it contains.
+Your use of this site is entirely at your own risk.</p>
 
 <p>This disclaimer applies whether the claim arises in contract, tort
 (including negligence), strict liability, or any other legal theory, and
