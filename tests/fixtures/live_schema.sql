@@ -154,6 +154,7 @@ CREATE TABLE guidebook (
 	edition VARCHAR(24),
 	author TEXT,
 	url TEXT, sort_order INTEGER,
+	short_label VARCHAR(32),
 	PRIMARY KEY (id)
 );
 CREATE TABLE huc_name (

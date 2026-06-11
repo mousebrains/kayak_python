@@ -21,8 +21,8 @@ require_once __DIR__ . '/../../src/kayak/web/php/includes/reach_search.php';
  *
  * Covers all three query variants (q+st, q only, st only), the
  * single-match redirect, the no-match empty state, the results table
- * with/without gauge readings, the class/guidebook rollup (Soggy
- * Sneakers editions, non-SS abbrevs, AW-from-aw_id), and the map
+ * with/without gauge readings, the class/guidebook rollup (dataset
+ * short labels, legacy fallback labels, AW-from-aw_id), and the map
  * payload (reach coords + downsampled geom track + gauges with coords),
  * plus the no-coords → no-map branch.
  */
@@ -79,9 +79,15 @@ final class ReachSearchFunctionalTest extends FunctionalTestCase
         Fixtures::linkGaugeSource($db, self::$gaugeInflow, $srcInflow);
         Fixtures::latestObservation($db, $srcInflow, ['data_type' => 'inflow', 'value' => 777.0]);
 
-        // --- guidebooks: a Soggy Sneakers edition (id 9 ⇒ SS1) + a non-SS ---
+        // --- guidebooks: a Soggy Sneakers edition, a dataset-labeled guide,
+        //     and one legacy-fallback guide for pre-data-pin compatibility.
         Fixtures::insertReturning($db, 'guidebook', ['id' => 9, 'title' => 'Soggy Sneakers']);
-        Fixtures::insertReturning($db, 'guidebook', ['id' => 7, 'title' => 'Paddling Oregon']);
+        Fixtures::insertReturning($db, 'guidebook', [
+            'id' => 7,
+            'title' => 'Paddling Oregon',
+            'short_label' => 'PG',
+        ]);
+        Fixtures::insertReturning($db, 'guidebook', ['id' => 10, 'title' => 'Oregon Kayaking']);
 
         // --- Alpha River: gauged (flow), coords + a multi-point geom track ---
         // geom is "lon lat,lon lat,..." (the renderer flips to [lat,lon]).
@@ -102,8 +108,9 @@ final class ReachSearchFunctionalTest extends FunctionalTestCase
         ]);
         Fixtures::reachClass($db, self::$reachAlpha, ['name' => 'III']);
         Fixtures::linkReachState($db, self::$reachAlpha, self::$orStateId);
-        Fixtures::linkReachGuidebook($db, self::$reachAlpha, 9);  // SS1
-        Fixtures::linkReachGuidebook($db, self::$reachAlpha, 7);  // PO
+        Fixtures::linkReachGuidebook($db, self::$reachAlpha, 9);   // legacy SS1
+        Fixtures::linkReachGuidebook($db, self::$reachAlpha, 7);   // dataset PG
+        Fixtures::linkReachGuidebook($db, self::$reachAlpha, 10);  // legacy OK
 
         // --- Alpine Creek: inflow-only gauge, coords (start only), no geom ---
         self::$reachAlpine = Fixtures::reach($db, [
@@ -163,6 +170,24 @@ final class ReachSearchFunctionalTest extends FunctionalTestCase
         return (int) $stmt->fetchColumn();
     }
 
+    public function testGuidebookShortLabelSqlFallsBackBeforeMigration(): void
+    {
+        $db = new PDO('sqlite::memory:');
+        $db->exec('CREATE TABLE guidebook (id INTEGER PRIMARY KEY, title TEXT NOT NULL)');
+
+        $this->assertSame('NULL AS short_label', _reach_search_guidebook_short_label_sql($db));
+    }
+
+    public function testGuidebookShortLabelSqlUsesColumnAfterMigration(): void
+    {
+        $db = new PDO('sqlite::memory:');
+        $db->exec(
+            'CREATE TABLE guidebook (id INTEGER PRIMARY KEY, title TEXT NOT NULL, short_label VARCHAR(32))',
+        );
+
+        $this->assertSame('g.short_label AS short_label', _reach_search_guidebook_short_label_sql($db));
+    }
+
     public function testSingleMatchRedirects(): void
     {
         // "Solo" matches exactly one reach → 302 to its detail page.
@@ -192,9 +217,10 @@ final class ReachSearchFunctionalTest extends FunctionalTestCase
         // Inflow fallback on Alpine (no flow row): "777 cfs".
         $this->assertStringContainsString('777 cfs', $html);
 
-        // Guides rollup: SS1 + PO on Alpha, plus AW from its aw_id.
+        // Guides rollup: SS1 + dataset PG + legacy OK on Alpha, plus AW from its aw_id.
         $this->assertStringContainsString('SS1', $html);
-        $this->assertStringContainsString('PO', $html);
+        $this->assertStringContainsString('PG', $html);
+        $this->assertStringContainsString('OK', $html);
         $this->assertStringContainsString('AW', $html);
         // Class column.
         $this->assertStringContainsString('III', $html);

@@ -157,6 +157,33 @@ def test_bad_unknown_station_policy_value_rejected(dataset_copy: Path) -> None:
     assert any("unknown_station_policy must be blank or one of" in e for e in errs)
 
 
+def test_optional_guidebook_short_label_column_accepted(dataset_copy: Path) -> None:
+    (dataset_copy / "guidebook.csv").write_text(
+        "id,title,subtitle,edition,author,url,sort_order,short_label\n1,Example Guide,,,,,1,EG\n",
+        encoding="utf-8",
+    )
+    _rewrite_csv(
+        dataset_copy / "id_counters.csv",
+        lambda rows: [r.update(next_id="2") for r in rows if r["table"] == "guidebook"],
+    )
+
+    assert validate_dataset(dataset_copy) == []
+
+
+def test_bad_guidebook_short_label_rejected(dataset_copy: Path) -> None:
+    (dataset_copy / "guidebook.csv").write_text(
+        "id,title,subtitle,edition,author,url,sort_order,short_label\n1,Example Guide,,,,,1,<b>\n",
+        encoding="utf-8",
+    )
+    _rewrite_csv(
+        dataset_copy / "id_counters.csv",
+        lambda rows: [r.update(next_id="2") for r in rows if r["table"] == "guidebook"],
+    )
+
+    errs = validate_dataset(dataset_copy)
+    assert any("guidebook.csv" in e and "short_label" in e for e in errs)
+
+
 def test_missing_required_file(dataset_copy: Path) -> None:
     (dataset_copy / "id_counters.csv").unlink()
     errs = validate_dataset(dataset_copy)

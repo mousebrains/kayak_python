@@ -61,6 +61,7 @@ _CANONICAL_ID = re.compile(r"^[1-9][0-9]*$")
 _INT_RE = re.compile(r"^-?[0-9]+$")
 _FLOAT_RE = re.compile(r"^-?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][-+]?[0-9]+)?$")
 _DECIMAL_RE = re.compile(r"^-?[0-9]+(?:\.[0-9]+)?$")  # fixed-point (coordinates)
+_GUIDEBOOK_SHORT_LABEL_RE = re.compile(r"^[A-Z][A-Z0-9]{0,15}$")
 # DateTime as exported (SQLAlchemy/SQLite text): "YYYY-MM-DD[ T]HH:MM:SS[.ffffff]".
 # A grammar is needed because fromisoformat() also accepts compact forms like
 # "20240101" that SQLite would store with INTEGER affinity. Fractional seconds
@@ -161,6 +162,7 @@ def validate_dataset(dataset_dir: Path, warnings: list[str] | None = None) -> li
     #       (S3b-2 made the served state set data-driven).
     errors.extend(_check_state_names(d, good_csvs))
     errors.extend(_check_state_references(d, good_csvs))
+    errors.extend(_check_guidebook_short_labels(d, good_csvs))
     # (5c) source<->gauge cardinality (every source has exactly one gauge) + the
     #      gauge_source / reach.gauge_id FK references.
     errors.extend(_check_gauge_source(d, good_csvs))
@@ -712,6 +714,20 @@ def _check_fetch_url_policy(d: Path, good_csvs: set[str]) -> list[str]:
             errors.append(
                 f"fetch_url.csv[{i}]: unknown_station_policy must be blank or one of "
                 f"{allowed} (got {_trunc(raw)})"
+            )
+    return errors
+
+
+def _check_guidebook_short_labels(d: Path, good_csvs: set[str]) -> list[str]:
+    """Optional guidebook.short_label values are compact public UI labels."""
+    if "guidebook" not in good_csvs:
+        return []
+    errors: list[str] = []
+    for i, row in enumerate(_csv_rows(d / "guidebook.csv")):
+        raw = (row.get("short_label") or "").strip()
+        if raw and not _GUIDEBOOK_SHORT_LABEL_RE.fullmatch(raw):
+            errors.append(
+                f"guidebook.csv[{i}]: short_label must match [A-Z][A-Z0-9]{{0,15}} when present"
             )
     return errors
 

@@ -5,11 +5,12 @@ sidecars go through ``scripts/import_metadata.py``, which no longer touches this
 module) loads ``data/db/*.csv`` rows by primary key —
 ``INSERT … ON CONFLICT(<pk>) DO UPDATE`` — so a CSV may omit columns
 (``reach.geom`` / ``reach.gradient_profile``, applied via the JSON sidecars) and
-have them survive on existing rows. **Exception:** a *generator-owned optional*
-column (:func:`kayak.dataset.layout.optional_columns`, e.g.
-``fetch_url.unknown_station_policy``) that the CSV omits is RESET to its default
-(NULL) — for those columns "absent" means "the default", not "keep the DB value",
-so the dataset's "no column ⇒ default" meaning holds at the sync layer too
+have them survive on existing rows. **Exception:** an optional contract column
+(:func:`kayak.dataset.layout.optional_columns`, e.g.
+``fetch_url.unknown_station_policy`` or ``guidebook.short_label``) that the CSV
+omits is RESET to its default (NULL) — for those columns "absent" means "the
+default", not "keep the DB value", so the dataset's "no column ⇒ default" meaning
+holds at the sync layer too
 (otherwise a stale opt-in would linger after an opt-out). This deliberately
 differs from the ``EXCLUDED_COLUMNS`` sidecar columns above (``reach.geom`` /
 ``reach.gradient_profile``), which an omitted CSV must preserve. The **delete**
@@ -130,16 +131,17 @@ def import_table(conn: sqlite3.Connection, csv_path: Path) -> int:
 
 
 def _reset_absent_optional_columns(conn: sqlite3.Connection, table: str, header: list[str]) -> None:
-    """Reset generator-owned OPTIONAL columns to their default (NULL) when the CSV
+    """Reset OPTIONAL columns to their default (NULL) when the CSV
     omits them, so "absent column ⇒ the default" holds in the DB too.
 
     The upsert only touches columns named in the CSV header, so without this an
     existing value (e.g. ``fetch_url.unknown_station_policy='ignore'`` from a prior
     opt-in) would survive a CSV that has since dropped the column — leaving the
     runtime ignoring undeclared stations even though the dataset says "default
-    reject". Only :func:`layout.optional_columns` are reset; the schema's
-    ``EXCLUDED_COLUMNS`` sidecar columns (``reach.geom`` / ``reach.gradient_profile``)
-    are intentionally NOT touched — an omitted CSV must preserve them (they're
+    reject". Only :func:`layout.optional_columns` are reset; ordinary omitted
+    columns and the schema's ``EXCLUDED_COLUMNS`` sidecar columns (``reach.geom`` /
+    ``reach.gradient_profile``) are intentionally NOT touched — an omitted CSV
+    must preserve them (they're
     applied via the JSON sidecars). The ``IS NOT NULL`` guard keeps a no-op sync a
     no-op (no write when there's nothing to clear).
     """
@@ -334,7 +336,7 @@ def _update_pks(
     The comparison mirrors apply semantics:
 
     * CSV header columns are upsert-owned, so differing values are updates.
-    * Columns omitted from the CSV are preserved, except generator-owned optional
+    * Columns omitted from the CSV are preserved, except optional contract
       columns, which ``import_table`` resets to NULL when absent from the header.
     * Insert/delete rows are excluded; their net action is already reported.
     """
