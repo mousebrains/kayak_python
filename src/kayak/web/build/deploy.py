@@ -35,7 +35,7 @@ from kayak.db.cache import get_all_latest_gauges
 from kayak.db.engine import get_session
 from kayak.db.gauges import get_calculated_gauge_ids
 from kayak.db.models import CalcExpression, DataType, Gauge, HucName, LatestGaugeObservation, Reach
-from kayak.db.reaches import all_state_names, reaches_query
+from kayak.db.reaches import all_state_names, reaches_query, state_abbreviations_by_name
 from kayak.resources import resource_dir
 from kayak.utils.pubhash import encode as pubhash_encode
 from kayak.web.build._shared import (
@@ -491,6 +491,7 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
     try:
         columns = _get_builder_columns()
         states = all_state_names(session)
+        state_abbrevs = state_abbreviations_by_name(session)
         css = _load_css()
         css_hash = hashlib.sha256(css.encode()).hexdigest()[:10]
         css_link = _css_link_tag(css_hash)
@@ -588,6 +589,7 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
             gauges_geom_url,
             gauges_state_url,
             site_config_url,
+            state_abbrevs=state_abbrevs,
         )
         _atomic_write(output_dir / "map.html", map_html)
 
@@ -606,6 +608,7 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
             filename="index.html",
             preloaded=(calculated_gauge_ids, all_latest),
             is_all_page=True,
+            state_abbrevs=state_abbrevs,
         )
 
         # gauges.html — supplemental all-gauges listing. all_latest (loaded
@@ -628,7 +631,7 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
             if target.resolve().parent != output_dir.resolve():
                 logger.error("skipping unsafe state-page name %r (escapes output dir)", state)
                 continue
-            links_page = _build_placeholder_page(css_link, states, state)
+            links_page = _build_placeholder_page(css_link, states, state, state_abbrevs)
             _atomic_write(target, links_page)
 
         _emit_sitemap(output_dir, states, index_reaches, session)
@@ -838,6 +841,7 @@ def _build_and_write(
     is_all_page: bool = False,
     preloaded: tuple[set[int], dict[tuple[int, DataType], LatestGaugeObservation]] | None = None,
     filename: str | None = None,
+    state_abbrevs: dict[str, str] | None = None,
 ) -> None:
     """Build and write the HTML page + sparklines for a state (or all)."""
     label = state or "all"
@@ -874,6 +878,7 @@ def _build_and_write(
         letters=letters,
         filter_bar_html=filter_bar_html,
         path=f"/{filename}",
+        state_abbrevs=state_abbrevs,
     )
     _atomic_write(output_dir / filename, page_html)
 

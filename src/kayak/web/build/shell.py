@@ -1,6 +1,7 @@
 """HTML page-shell helpers: nav, footer, letter-nav, page wrappers."""
 
 import html as html_mod
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from urllib.parse import quote as _urlquote
 
@@ -10,7 +11,6 @@ from kayak.web.build._shared import (
     _FILTERS_JS_VERSION,
     _LEVELS_JS,
     _MAP_JS_VERSION,
-    _STATE_ABBREVS,
     BRAND_COLOR,
     BRAND_COLOR_DARK,
     _data_license_label,
@@ -40,6 +40,7 @@ def _build_nav(
     active_state: str = "",
     active_page: str = "",
     picker_kind: str = "reach",
+    state_abbrevs: Mapping[str, str] | None = None,
 ) -> str:
     """Build abbreviation-based nav bar; each state links to its {State}.html page.
 
@@ -62,8 +63,9 @@ def _build_nav(
     # State buttons come from the presentation set (reach-states + region config;
     # S3b-2). Names are gated to ASCII letter words at the dataset boundary, but
     # escape the rendered label as defense-in-depth (a no-op for safe names).
+    state_abbrevs = state_abbrevs or {}
     for s in _presentation_states(states):
-        abbrev = html_mod.escape(_STATE_ABBREVS.get(s, s))
+        abbrev = html_mod.escape(state_abbrevs.get(s, s))
         cls = ' class="active"' if s == active_state else ""
         links.append(f'<a href="{_state_page_path(s)}"{cls}>{abbrev}</a>')
     # Picker links carry ?state=<full-name> when active_state is set,
@@ -83,7 +85,7 @@ def _build_nav(
     region = get_region_config()
     weather_url = region.weather_url_for(active_state)
     weather_label = (
-        f"{_STATE_ABBREVS.get(active_state, '')}<br>Weather"
+        f"{html_mod.escape(state_abbrevs.get(active_state, active_state))}<br>Weather"
         if region.has_state_weather(active_state)
         else "Weather"
     )
@@ -150,6 +152,7 @@ def _build_page(
     active_page: str = "",
     picker_kind: str = "reach",
     path: str = "",
+    state_abbrevs: Mapping[str, str] | None = None,
 ) -> str:
     """Wrap the table HTML in a complete HTML document linking to external CSS."""
     nav_html = _build_nav(
@@ -157,6 +160,7 @@ def _build_page(
         active_state=current_state,
         active_page=active_page,
         picker_kind=picker_kind,
+        state_abbrevs=state_abbrevs,
     )
     letter_nav_html = _build_letter_nav(letters) if letters else ""
     now_utc = datetime.now(UTC)
@@ -224,6 +228,7 @@ def _build_placeholder_page(
     css_link: str,
     states: list[str],
     state: str,
+    state_abbrevs: Mapping[str, str] | None = None,
 ) -> str:
     """Build the per-state landing page (e.g. Oregon.html, Montana.html).
 
@@ -234,7 +239,7 @@ def _build_placeholder_page(
     from ``all_state_names()``) — e.g. a gauges-only state shows its gauge links
     but not the "Reaches in …" / "Reach picker — …" anchors until reaches land.
     """
-    nav_html = _build_nav(states, active_state=state)
+    nav_html = _build_nav(states, active_state=state, state_abbrevs=state_abbrevs)
     state_qs = _urlquote(state)  # state in a URL query/fragment
     esc_state = html_mod.escape(state)  # state as HTML text (defense-in-depth)
     has_reaches = state in states
@@ -304,6 +309,7 @@ def _build_map_page(
     gauges_geom_url: str = "",
     gauges_state_url: str = "",
     site_config_url: str = "",
+    state_abbrevs: Mapping[str, str] | None = None,
 ) -> str:
     """Build map.html with an interactive Leaflet map of all reaches.
 
@@ -318,7 +324,7 @@ def _build_map_page(
     builds its layers + view from it (the layer GeoJSON URLs live inside that JSON,
     so the per-layer ``data-osmb-*-url`` attributes are gone).
     """
-    nav_html = _build_nav(states, active_page="map")
+    nav_html = _build_nav(states, active_page="map", state_abbrevs=state_abbrevs)
 
     return f"""<!DOCTYPE html>
 <html lang="en">

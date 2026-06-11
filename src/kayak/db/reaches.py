@@ -29,6 +29,29 @@ def all_state_names(session: Session) -> list[str]:
     return list(rows)
 
 
+def state_abbreviations_by_name(session: Session) -> dict[str, str]:
+    """Return dataset state abbreviations keyed by full state name."""
+    rows = session.execute(
+        select(State.name, State.abbreviation)
+        .where(State.abbreviation.is_not(None))
+        .order_by(State.name)
+    ).all()
+    return {name: abbreviation for name, abbreviation in rows if abbreviation}
+
+
+def state_names_by_abbreviation(session: Session) -> dict[str, str]:
+    """Return dataset state names keyed by abbreviation."""
+    return {
+        abbreviation: name
+        for name, abbreviation in session.execute(
+            select(State.name, State.abbreviation)
+            .where(State.abbreviation.is_not(None))
+            .order_by(State.abbreviation)
+        ).all()
+        if abbreviation
+    }
+
+
 def reaches_query(
     session: Session,
     *,
