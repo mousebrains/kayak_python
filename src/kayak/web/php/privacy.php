@@ -18,29 +18,22 @@ include_header(
 <div class="prose">
 <?php $__prose = prose_fragment('privacy'); if ($__prose !== null) { echo $__prose; } else { ?>
 <h2>Privacy Policy</h2>
-<p class="updated">Last updated: May 12, 2026</p>
-
-<p>This website (<strong>levels.wkcc.org</strong>) is operated by the
-<a href="https://wkcc.org">Willamette Kayak and Canoe Club</a> (WKCC) to provide
-real-time river level, flow, and gauge data for paddlers in the Pacific Northwest.</p>
+<p class="updated">Generic fallback. The deploying dataset should provide its
+own privacy policy.</p>
 
 <h3>Data We Collect</h3>
-<p>This site collects <strong>minimal data</strong>:</p>
+<p>This river levels engine is designed to collect minimal data:</p>
 <ul>
   <li><strong>Server access logs:</strong> When you visit a page, our web server records
       your IP address, the page requested, your browser's user-agent string, the referring
       URL, and a timestamp. This is standard web server logging.</li>
-  <li><strong>Cookies, if you choose to contribute:</strong> Browsing alone sets no cookies.
-      If you sign in to propose edits or leave a comment, we set two cookies:
-      <code>ed_sess</code> (a random value identifying your login session, valid for
-      seven days) and <code>ed_csrf</code> (a form-submission security token). Both are
-      HttpOnly, SameSite=Strict, and marked Secure on HTTPS. They are used only for
-      authentication and form security — not for tracking.</li>
+  <li><strong>Cookies, if contribution features are enabled:</strong> Browsing alone sets no
+      application cookies. If you sign in to propose edits or leave a comment, the site
+      uses session and form-security cookies for authentication and CSRF protection.</li>
   <li><strong>Contributor email address:</strong> If you sign in, we store your email
       address so we can send you the one-time login link, notify you when the maintainer
       reviews your proposed edits, and attribute your approved contributions to you
-      on the site (if you provide a display name). You can request deletion at any
-      time by contacting the club.</li>
+      on the site if you provide a display name.</li>
   <li><strong>Proposed edits and comments:</strong> Anything you submit through the
       Comment form is stored in our database for the maintainer to review.</li>
   <li><strong>No analytics or tracking:</strong> We do not use Google Analytics, Facebook
@@ -48,13 +41,10 @@ real-time river level, flow, and gauge data for paddlers in the Pacific Northwes
 </ul>
 
 <h3>Login Email and Bot Protection</h3>
-<p>Login links are emailed via our server's outgoing mail, which relays through
-Google's mail infrastructure. See
-<a href="https://policies.google.com/privacy">Google's privacy policy</a>
-for details on that step. Sign-in and contact forms use
-<a href="https://www.cloudflare.com/privacypolicy/">Cloudflare Turnstile</a>
-to deter automated abuse. Turnstile is typically invisible (no puzzle
-challenge); when active it sees your IP address and browser details.</p>
+<p>When editor or contact features are enabled, the deployment may use outgoing
+email and bot-protection services configured by the operator. Those services may
+process the information needed to deliver email or verify that a form submission
+is not automated abuse.</p>
 
 <h3>How We Use Server Logs</h3>
 <p>Access logs are used solely for:</p>
@@ -90,14 +80,13 @@ including children under 13.</p>
 <p>You can ask us to:</p>
 <ul>
   <li><strong>Delete your account and associated data.</strong> Email
-      <a href="https://wkcc.org">the club</a> with the email address you registered.
-      We will delete your editor record, any login sessions, pending magic-link tokens,
-      and proposed edits/comments. The historical audit trail (which fields were changed
-      on which reach, and when) is retained for site-integrity purposes, but the link
-      back to your identity is severed.</li>
-  <li><strong>Export your contributions.</strong> Email the club with the same address;
-      we will send you a JSON copy of your editor record, your proposed edits, and the
-      portion of the audit trail attributed to you.</li>
+      the site operator with the email address you registered. The operator can
+      delete your editor record, login sessions, pending magic-link tokens, and
+      proposed edits/comments. The historical audit trail may be retained for
+      site-integrity purposes with the identity link severed.</li>
+  <li><strong>Export your contributions.</strong> Ask the operator for a copy of
+      your editor record, proposed edits, and the portion of the audit trail
+      attributed to you.</li>
   <li><strong>Update your display name</strong> from your account page after signing in.</li>
 </ul>
 <p>Cookies and short-lived data we retain on a schedule:</p>
@@ -110,7 +99,7 @@ including children under 13.</p>
       is broken when you request account deletion (see above).</li>
 </ul>
 <p>If you have other questions or concerns about your data, please contact the
-<a href="https://wkcc.org">Willamette Kayak and Canoe Club</a>.</p>
+site operator.</p>
 
 <h3>Changes to This Policy</h3>
 <p>If this policy changes, the updated version will be posted on this page with a

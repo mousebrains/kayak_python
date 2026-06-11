@@ -1247,8 +1247,8 @@ def _check_map_yaml(d: Path) -> list[str]:
     return []
 
 
-# Prose pages (S3c). The legal trio is required for a publishable dataset (no
-# generic fallback); about is optional.
+# Prose pages (S3c). Once a publishable dataset opts into site prose, the legal
+# trio is required; about is optional.
 _SITE_PROSE_PAGES: tuple[str, ...] = ("about", "disclaimer", "privacy", "contact")
 _PUBLISHABLE_REQUIRED_PROSE: tuple[str, ...] = ("privacy", "disclaimer", "contact")
 
@@ -1261,9 +1261,9 @@ def _check_site_prose(d: Path) -> list[str]:
     keeps the deploy gate from bricking a publishable dataset that hasn't moved its
     prose yet. **Once ``site/`` exists**, each present ``site/<page>.md`` must render
     to clean HTML via the S2 sanitizer, and a ``publishable`` dataset must carry the
-    complete legal set (privacy, disclaimer, contact) — they have no generic
-    fallback, so a half-moved legal set is rejected. (S3i tightens this to require
-    ``site/`` unconditionally for publishable once the engine fallback is removed.)
+    complete legal set (privacy, disclaimer, contact) so a half-moved legal set is
+    rejected. (S3i tightens this to require ``site/`` unconditionally for
+    publishable once the engine fallback is removed.)
     """
     from kayak.web.regression import render_markdown_to_html
 
