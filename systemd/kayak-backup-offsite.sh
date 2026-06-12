@@ -14,9 +14,13 @@ set -euo pipefail
 : "${KAYAK_HOME:=/home/pat}"
 [ -r /etc/kayak/env ] && . /etc/kayak/env
 
-BACKUP_DIR="${KAYAK_HOME}/backups"  # out of the repo (review-4 R5.6); see kayak-backup-hourly.sh
-REMOTE="gdrive-crypt"
-KEEP=26
+# S8 (Batch 4): backup policy is host configuration. These knobs come from
+# /etc/kayak/env (KAYAK_BACKUP_DIR / KAYAK_OFFSITE_REMOTE / KAYAK_OFFSITE_KEEP,
+# schema of record: kayak.host.HostConfig); the fallbacks mirror HostConfig's
+# defaults so an env-less host behaves exactly as before.
+BACKUP_DIR="${KAYAK_BACKUP_DIR:-${KAYAK_HOME}/backups}"  # out of the repo (review-4 R5.6)
+REMOTE="${KAYAK_OFFSITE_REMOTE:-gdrive-crypt}"
+KEEP="${KAYAK_OFFSITE_KEEP:-26}"
 
 mapfile -t backups < <(ls -1r "$BACKUP_DIR"/backup-[0-9]*T[0-9]*Z.db.gz 2>/dev/null)
 

@@ -67,6 +67,13 @@ _EXTRA_KNOWN = frozenset(
         "KAYAK_HOME",  # Phase 5 (T3.4) — declared early so this scan doesn't false-positive
         "KAYAK_DATA",  # scripts/deploy.sh export — path of the kayak_data metadata clone
         "KAYAK_VENV",  # scripts/regenerate_schema_svg.sh dev-side venv override
+        # Typed host config (kayak.host — S7/S8 Batch 4): the file override,
+        # plus the backup-job knobs the systemd shell scripts read from
+        # /etc/kayak/env (their defaults mirror HostConfig's).
+        "KAYAK_HOST_CONFIG",
+        "KAYAK_BACKUP_DIR",
+        "KAYAK_OFFSITE_REMOTE",
+        "KAYAK_OFFSITE_KEEP",
         # Read via os.environ by fetch_usgs_ogc.py / fetch_usgs_sites.py.
         # Deliberately NOT a KayakConfig field: emit-config would write it
         # into the www-data-readable runtime-config.json, and PHP has no

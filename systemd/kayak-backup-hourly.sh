@@ -28,7 +28,8 @@ DB="${SQLITE_PATH:-${KAYAK_HOME}/DB/kayak.db}"
 # the live editable tree must never reach backups. Weekly/offsite + the two
 # .service ReadWritePaths use the same dir; SETUP.md provisions it before the
 # timers run (ReadWritePaths needs it to exist at unit start).
-BACKUP_DIR="${KAYAK_HOME}/backups"
+# S8: host-configurable via /etc/kayak/env (schema: kayak.host.HostConfig).
+BACKUP_DIR="${KAYAK_BACKUP_DIR:-${KAYAK_HOME}/backups}"
 KEEP=24
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 DEST="$BACKUP_DIR/hourly-$STAMP.db"

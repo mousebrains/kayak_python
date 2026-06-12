@@ -19,3 +19,17 @@
 
 KAYAK_HOME=/home/pat
 SITE_URL=https://levels.wkcc.org
+
+# --- Typed host config (S7/S8, Batch 4) ------------------------------------
+# The schema of record for non-secret host shape (status-page knobs, backup
+# policy) is kayak.host.HostConfig, read from /etc/kayak/host.yaml (override
+# the location with KAYAK_HOST_CONFIG). A missing file keeps the engine
+# defaults, which currently mirror this host's values.
+#
+# The backup shell scripts read their policy knobs from THIS env file (the
+# units can't read YAML); keep them in lockstep with host.yaml when you set
+# either. Defaults shown:
+#KAYAK_HOST_CONFIG=/etc/kayak/host.yaml
+#KAYAK_BACKUP_DIR=/home/pat/backups
+#KAYAK_OFFSITE_REMOTE=gdrive-crypt
+#KAYAK_OFFSITE_KEEP=26
