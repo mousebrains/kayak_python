@@ -363,6 +363,33 @@ def _stub_build_to_dir_factory(files: dict[str, str]):
     return _stub
 
 
+def test_build_requires_explicit_output_dir(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No --output-dir and no $OUTPUT_DIR → hard error with guidance (S3h):
+    the old in-repo public_html/ default is gone; build writes only a
+    caller-supplied directory."""
+    monkeypatch.delenv("OUTPUT_DIR", raising=False)
+    with pytest.raises(SystemExit):
+        build_mod.build(argparse.Namespace(output_dir=None))
+
+
+@pytest.mark.parametrize("sub", ["", "public_html", "src/kayak/web"])
+def test_build_refuses_engine_checkout_output(sub: str) -> None:
+    """The engine source tree (root or any subdir) is refused as output."""
+    target = build_mod.BASE_DIR / sub if sub else build_mod.BASE_DIR
+    with pytest.raises(SystemExit):
+        build_mod.build(argparse.Namespace(output_dir=str(target)))
+
+
+def test_build_refuses_dataset_dir_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """DATASET_DIR (and anything below it) is refused as output — generated
+    HTML must never mix into the reviewed dataset checkout."""
+    monkeypatch.setattr(build_mod, "DATASET_DIR", tmp_path)
+    with pytest.raises(SystemExit):
+        build_mod.build(argparse.Namespace(output_dir=str(tmp_path / "regression")))
+
+
 def test_build_stages_then_renames(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """build() stages, rename-deploys, sweeps orphans, cleans the staging dir."""
     live = tmp_path / "public_html"
@@ -438,7 +465,11 @@ def test_build_to_dir_refuses_publishable_dataset_without_site_url(
 def test_build_reports_publishable_site_url_error_cleanly(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    (tmp_path / "dataset.yaml").write_text(
+    # Dataset and output are SIBLINGS: the S3h output guard refuses an output
+    # dir inside DATASET_DIR before the site-URL check this test targets runs.
+    dataset = tmp_path / "dataset"
+    dataset.mkdir()
+    (dataset / "dataset.yaml").write_text(
         "contract_version: 1\n"
         "dataset_id: test\n"
         "name: Test Levels\n"
@@ -448,7 +479,7 @@ def test_build_reports_publishable_site_url_error_cleanly(
         encoding="utf-8",
     )
     live = tmp_path / "public_html"
-    monkeypatch.setattr(build_mod, "DATASET_DIR", tmp_path)
+    monkeypatch.setattr(build_mod, "DATASET_DIR", dataset)
     monkeypatch.delenv("SITE_URL", raising=False)
     monkeypatch.setattr(
         build_mod,

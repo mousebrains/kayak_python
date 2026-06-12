@@ -96,8 +96,9 @@ def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -
     parser = subparsers.add_parser("build", help="Generate static HTML files to output directory")
     parser.add_argument(
         "--output-dir",
-        default=os.environ.get("OUTPUT_DIR", str(BASE_DIR / "public_html")),
-        help="Output directory (default: $OUTPUT_DIR or public_html/)",
+        default=os.environ.get("OUTPUT_DIR"),
+        help="Output directory (default: $OUTPUT_DIR; required — build writes only "
+        "a caller-supplied directory outside the engine and dataset trees)",
     )
     parser.set_defaults(func=build)
 
@@ -782,6 +783,34 @@ def _sweep_orphans(live: Path, kept: set[Path]) -> list[Path]:
 _STAGING_DIRNAME = ".staging"
 
 
+def _refuse_unsafe_output(output_dir: Path) -> None:
+    """Refuse an engine or dataset tree as build output (dataset-separation S3h).
+
+    Writing into the engine checkout was the old dev default and left stray
+    artifacts / clobbered tracked files; writing into the dataset would mix
+    generated output into reviewed content. The engine-checkout root is only
+    checked when ``BASE_DIR`` really is a source tree (in a wheel install it
+    resolves to a meaningless interpreter-relative path), while the installed
+    package tree and ``DATASET_DIR`` are always refused.
+    """
+    from importlib.resources import files
+
+    out = output_dir.resolve()
+    roots: list[tuple[str, Path]] = []
+    if (BASE_DIR / "src" / "kayak").is_dir() or (BASE_DIR / "pyproject.toml").is_file():
+        roots.append(("engine checkout", BASE_DIR.resolve()))
+    roots.append(("installed engine package", Path(str(files("kayak"))).resolve()))
+    roots.append(("dataset (DATASET_DIR)", Path(DATASET_DIR).resolve()))
+    for label, root in roots:
+        if out == root or root in out.parents:
+            print(
+                f"ERROR: refusing to build into the {label} ({root}). "
+                "Set OUTPUT_DIR to a directory outside the engine and dataset trees.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+
 def build(args: argparse.Namespace) -> None:
     """Generate static HTML files into output_dir.
 
@@ -799,11 +828,18 @@ def build(args: argparse.Namespace) -> None:
     nginx's ``location ~ /\\.`` dotfile rule blocks ``/.staging/*`` access,
     so this dir is invisible to clients.
     """
-    output_dir = Path(
-        getattr(args, "output_dir", None)
-        or os.environ.get("OUTPUT_DIR")
-        or str(BASE_DIR / "public_html")
-    )
+    raw_output = getattr(args, "output_dir", None) or os.environ.get("OUTPUT_DIR")
+    if not raw_output:
+        print(
+            "ERROR: no output directory — set OUTPUT_DIR (or pass --output-dir). "
+            "Build writes only a caller-supplied directory outside the engine and "
+            "dataset trees (dataset-separation S3h); the old in-repo public_html/ "
+            "default is gone.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    output_dir = Path(raw_output)
+    _refuse_unsafe_output(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     staging = output_dir / _STAGING_DIRNAME
     if staging.exists():

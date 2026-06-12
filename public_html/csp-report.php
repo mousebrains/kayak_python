@@ -1,1 +1,0 @@
-../src/kayak/web/php/csp-report.php
