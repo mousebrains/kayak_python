@@ -479,9 +479,18 @@ function _render_review_list(PDO $db, ?string $flash, ?string $flash_err): void
     _render_review_flash($flash, $flash_err);
 
     echo '<p style="font-size:.85rem">Status: ';
+    // SA-lite: 'approved' is a real work queue (endorsed diffs awaiting a
+    // kayak_data PR + deploy), so badge its count — the default filter is
+    // 'pending' and an endorsed backlog must not hide behind it.
+    $endorsed_st = $db->prepare(
+        "SELECT COUNT(*) FROM change_request WHERE status = 'approved'"
+    );
+    $endorsed_st->execute();
+    $endorsed = (int)$endorsed_st->fetchColumn();
     foreach (REVIEW_LIST_STATUSES as $s) {
         $cls = $s === $q_status ? ' style="font-weight:700"' : '';
-        echo '<a href="/review.php?status=' . $s . '"' . $cls . '>' . $s . '</a> &nbsp;';
+        $label = $s === 'approved' && $endorsed > 0 ? $s . ' (' . $endorsed . ')' : $s;
+        echo '<a href="/review.php?status=' . $s . '"' . $cls . '>' . $label . '</a> &nbsp;';
     }
     echo '<a href="/admin.php" style="float:right">Admin</a>';
     echo '</p>';

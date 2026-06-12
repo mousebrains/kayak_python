@@ -19,11 +19,11 @@ Every code path that touches the editor account model (`editor`, `editor_session
 | `auth.php` | `/auth.php` | none (token-gated) | POST | t (hex), next | csrf_token, t, next | editor_magic_link | editor_magic_link, editor_session, editor (last_login_at) | — | HTML interstitial → redirect |
 | `comment.php` | `/comment.php` | require_editor | POST | — | csrf_token, subject, body, notes_to_maint, source_url, website (honeypot) | change_request | change_request | mail | HTML → redirect |
 | `contact.php` | `/contact.php` | **none** | POST | — | csrf_token, from_email, subject, body, cf-turnstile-response, source_url, website (honeypot) | — | — | turnstile, mail | HTML |
-| `edit.php` | `/edit.php` | require_maintainer | POST | id, type (reach\|gauge) | csrf_token, target_type, reach_id\|gauge_id, dynamic field set | reach\|gauge, edit_history | reach\|gauge, edit_history | — | HTML form → success page |
+| `edit.php` | `/edit.php` | require_maintainer | POST | id, type (reach\|gauge) | csrf_token, target_type, reach_id\|gauge_id, dynamic field set | reach\|gauge (read) | change_request (self-endorsed frozen diff — SA-lite/D1; never reach\|gauge\|edit_history) | — | HTML form → frozen-for-review page |
 | `login.php` | `/login.php` | none (feature-gated) | POST | next | csrf_token, email, cf-turnstile-response, next | editor | editor, editor_magic_link | turnstile, mail | HTML form / info |
 | `logout.php` | `/logout.php` | require_editor_feature | POST | — | csrf_token | — | editor_session (revoke) | — | HTML form → / |
 | `propose.php` | `/propose.php` | require_editor (maintainer→`/edit.php`) | POST | type, id | csrf_token, target_type, target_id, tier-dependent fields, notes_to_maint, source_url, website | reach, reach_class, change_request | change_request | mail | HTML form / success |
-| `review.php` | `/review.php` | require_maintainer | POST | id (optional), status (enum) | csrf_token, id, action (5 variants), reviewer_note, reach_<field>, classes, flow_low/high/data_type | change_request, editor (JOIN), reach\|gauge | change_request, edit_history | mail | HTML list / detail form |
+| `review.php` | `/review.php` | require_maintainer | POST | id (optional), status (enum) | csrf_token, id, action (5 variants), reviewer_note, reach_<field>, classes, flow_low/high/data_type | change_request, editor (JOIN), reach\|gauge | change_request only (SA-lite/D1: approve freezes the diff in applied_json; never reach\|reach_class\|edit_history) | mail | HTML list / detail form |
 
 Read-only consumers (referenced by the plan but out of inventory depth):
 
@@ -40,7 +40,7 @@ Notable counts derived from above:
 - **POST endpoints (all require CSRF):** all 10.
 - **Endpoints that send mail:** 4 (`comment.php`, `contact.php`, `login.php`, `review.php`).
 - **Endpoints that consume Turnstile:** 2 (`login.php`, `contact.php`).
-- **Endpoints that write to `edit_history`:** 2 (`edit.php`, `review.php`).
+- **Endpoints that write to `edit_history`:** 0 since SA-lite/D1 (historically `edit.php` + `review.php`; the table is the pre-SA-lite audit record).
 
 ## DB tables holding PII, credentials, or auth-relevant data
 
@@ -121,7 +121,7 @@ Per-column classification:
 | `status` | enum (pending/approved/rejected/resolved) | internal | workflow state |
 | `reviewed_at` | datetime nullable | internal | when reviewed |
 | `reviewed_by` | int FK editor.id (SET NULL) | internal | which maintainer reviewed |
-| `applied_json` | text nullable | internal | exact JSON written on approve (after any maintainer tweaks) |
+| `applied_json` | text nullable | internal | the frozen endorsed diff (SA-lite; after any maintainer tweaks). Pre-SA-lite rows: exact JSON written on approve |
 | `reviewer_note` | text nullable | internal | feedback shown to proposer |
 
 ### `change_request_attachment` (`src/kayak/db/models.py:804`) — **schema only; not wired**
@@ -147,7 +147,7 @@ Per-column classification:
 | `id` | int PK | internal | row id |
 | `target_type` | enum (same as change_request) | internal | which table changed |
 | `target_id` | int nullable | internal | row id within target_type |
-| `change_request_id` | int FK change_request.id (SET NULL) | internal | NULL for direct maintainer edits via `/edit.php` |
+| `change_request_id` | int FK change_request.id (SET NULL) | internal | NULL for pre-SA-lite direct maintainer edits via `/edit.php` (no new rows since SA-lite) |
 | `field` | varchar(64) | internal | column name |
 | `old_value` | text nullable | internal | before |
 | `new_value` | text nullable | internal | after |
