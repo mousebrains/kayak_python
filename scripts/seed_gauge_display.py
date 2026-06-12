@@ -28,7 +28,6 @@ changed.
 from __future__ import annotations
 
 import argparse
-import os
 import re
 import sqlite3
 import sys
@@ -37,16 +36,19 @@ from pathlib import Path
 # Reuse the build pipeline's station-name parsers so we stay in lockstep with
 # current behavior.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-from kayak.db.safety import ProductionWriteRefused, maintenance_target_db, refuse_configured_db
+from _gauge_metadata_cache import DEFAULT_GAUGE_METADATA_CACHE
+
+from kayak.db.safety import (
+    ProductionWriteRefused,
+    maintenance_target_db,
+    refuse_configured_db,
+)
 from kayak.web.build.gauges import (
     _parse_station_mixed,
     _parse_station_uppercase,
 )
 
-DEFAULT_CACHE = os.environ.get(
-    "GAUGE_METADATA_CACHE",
-    str(Path(__file__).resolve().parent.parent / "Gauge-metadata-cache" / "gauges.db"),
-)
+DEFAULT_CACHE = str(DEFAULT_GAUGE_METADATA_CACHE)
 
 _DIRECTIONS = ("North", "South", "East", "West", "Middle")
 _DIRECTION_LETTERS = {

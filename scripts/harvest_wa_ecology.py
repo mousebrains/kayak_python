@@ -8,21 +8,16 @@ Backs the public app https://gis.ecology.wa.gov/portal/apps/instant/basic/index.
 from __future__ import annotations
 
 import json
-import os
 import re
 import sqlite3
 import sys
 import urllib.request
 from datetime import datetime
-from pathlib import Path
+
+from _gauge_metadata_cache import DEFAULT_GAUGE_METADATA_CACHE
 
 LAYER = "https://gis.ecology.wa.gov/serverext/rest/services/EAP/FlowMonitoringStations/MapServer/0"
-DB = Path(
-    os.environ.get(
-        "GAUGE_METADATA_CACHE",
-        str(Path(__file__).resolve().parent.parent / "Gauge-metadata-cache" / "gauges.db"),
-    )
-)
+DB = DEFAULT_GAUGE_METADATA_CACHE
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
 LATEST_RE = re.compile(r"Latest values as of\s+(\d+/\d+/\d+\s+\d+:\d+:\d+\s+[AP]M)")
 

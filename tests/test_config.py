@@ -108,6 +108,44 @@ class TestKayakConfigEnvReads:
         cfg = KayakConfig()
         assert str(cfg.gauge_metadata_cache) == "/srv/gauge-metadata/gauges.db"
 
+    def test_script_helper_reads_gauge_metadata_cache_env(self, tmp_path: Path) -> None:
+        cache = tmp_path / "gauges.db"
+        scripts_dir = Path(__file__).resolve().parents[1] / "scripts"
+        env = os.environ.copy()
+        env["HOME"] = str(tmp_path)
+        env.pop("SUDO_USER", None)
+        env["GAUGE_METADATA_CACHE"] = str(cache)
+        env["PYTHONPATH"] = os.pathsep.join([str(scripts_dir), _SRC, env.get("PYTHONPATH", "")])
+        code = (
+            "from _gauge_metadata_cache import DEFAULT_GAUGE_METADATA_CACHE; "
+            "print(DEFAULT_GAUGE_METADATA_CACHE)"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            env=env,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        assert result.stdout.strip() == str(cache)
+
+    def test_audit_gauges_help_tolerates_empty_audit_email(self, tmp_path: Path) -> None:
+        env = os.environ.copy()
+        env["HOME"] = str(tmp_path)
+        env.pop("SUDO_USER", None)
+        env["AUDIT_EMAIL"] = ""
+        env["PYTHONPATH"] = _SRC
+        script = Path(__file__).resolve().parents[1] / "scripts" / "audit_gauges.py"
+        result = subprocess.run(
+            [sys.executable, str(script), "--help"],
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "--cache-db" in result.stdout
+
     def test_gauge_metadata_cache_default_is_outside_the_package(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
