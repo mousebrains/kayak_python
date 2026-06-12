@@ -28,7 +28,13 @@ SITE_URL=https://levels.wkcc.org
 #
 # The backup shell scripts read their policy knobs from THIS env file (the
 # units can't read YAML); keep them in lockstep with host.yaml when you set
-# either. Defaults shown:
+# either. CAVEAT until the Batch 4C unit renderer lands: the shipped units
+# sandbox-pin ReadWritePaths to the DEFAULT paths, so moving KAYAK_BACKUP_DIR
+# (or host.yaml's status_output) also requires editing the matching unit's
+# ReadWritePaths/--output, or systemd denies the write. Values are validated
+# at deploy time (`levels validate-config`) AND by the scripts themselves
+# (fail-closed; e.g. a non-positive KAYAK_OFFSITE_KEEP aborts before any
+# rclone delete). Defaults shown:
 #KAYAK_HOST_CONFIG=/etc/kayak/host.yaml
 #KAYAK_BACKUP_DIR=/home/pat/backups
 #KAYAK_OFFSITE_REMOTE=gdrive-crypt

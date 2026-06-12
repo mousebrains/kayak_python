@@ -15,6 +15,9 @@ WorkingDirectory=/home/pat/kayak
 Environment=KAYAK_HOME=/home/pat
 EnvironmentFile=-/etc/kayak/env
 EnvironmentFile=-/home/pat/.config/kayak/.env
+# --output + ReadWritePaths lockstep (PR #189 review P2): host.yaml's
+# status_output only takes effect when this literal --output (and the
+# sandbox path below) move with it; the Batch 4C renderer unifies them.
 ExecStart=/home/pat/.venv/bin/levels status --output /home/pat/var/status.html
 # `-` prefix tolerates an empty/missing HC_STATUS env var — same convention
 # as kayak-healthcheck.service. Create the check at healthchecks.io and

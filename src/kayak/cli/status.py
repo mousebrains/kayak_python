@@ -450,9 +450,9 @@ def _render_backups_cert(now: dt.datetime) -> str:
     return (
         "<h2>Backups &amp; cert</h2>\n"
         "<table>\n"
-        + _age_row("Hourly backup (~/backups/hourly-*.db.gz)", hourly, HOURLY_WARN_S)
+        + _age_row(f"Hourly backup ({host.backup_dir}/hourly-*.db.gz)", hourly, HOURLY_WARN_S)
         + "\n"
-        + _age_row("Weekly backup (~/backups/backup-*.db.gz)", weekly, WEEKLY_WARN_S)
+        + _age_row(f"Weekly backup ({host.backup_dir}/backup-*.db.gz)", weekly, WEEKLY_WARN_S)
         + "\n"
         + offsite_row
         + "\n"

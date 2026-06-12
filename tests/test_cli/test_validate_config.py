@@ -191,6 +191,43 @@ class TestValidateConfig:
         err = capsys.readouterr().err
         assert "MAINTAINER_EMIAL" in err
 
+    def test_backup_knob_bad_keep_fails_even_without_strict(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # PR #189 review P1: KAYAK_OFFSITE_KEEP=0 must hard-fail the deploy
+        # gate (offsite prune with KEEP=0 would delete every remote backup).
+        monkeypatch.setenv("KAYAK_OFFSITE_KEEP", "0")
+        with pytest.raises(SystemExit) as exc:
+            validate_config(_args())
+        assert exc.value.code == 1
+        assert "at least 1" in capsys.readouterr().err
+
+    def test_backup_knob_colon_remote_fails(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("KAYAK_OFFSITE_REMOTE", "gdrive-crypt:")
+        with pytest.raises(SystemExit) as exc:
+            validate_config(_args())
+        assert exc.value.code == 1
+        assert "colon" in capsys.readouterr().err
+
+    def test_backup_knob_relative_dir_fails(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("KAYAK_BACKUP_DIR", "backups")
+        with pytest.raises(SystemExit) as exc:
+            validate_config(_args())
+        assert exc.value.code == 1
+        assert "absolute" in capsys.readouterr().err
+
+    def test_backup_knob_good_values_pass(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("KAYAK_BACKUP_DIR", "/var/lib/kayak/backups")
+        monkeypatch.setenv("KAYAK_OFFSITE_REMOTE", "b2-crypt")
+        monkeypatch.setenv("KAYAK_OFFSITE_KEEP", "12")
+        with pytest.raises(SystemExit) as exc:
+            validate_config(_args())
+        assert exc.value.code == 0
+
     def test_known_env_strict_fails_on_unknown_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("MAINTAINER_EMIAL", "typo@example.com")
         with pytest.raises(SystemExit) as exc:

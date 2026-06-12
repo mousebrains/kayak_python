@@ -124,5 +124,10 @@ class TestStatusConsumesHostConfig:
         out = status_mod._render_backups_cert(dt.datetime.now(dt.UTC))
         assert "rclone → b2-crypt:" in out
         assert "levels.example.org" in out
+        # The row LABELS name the directory actually probed (PR #189 review
+        # P2: a configured backup_dir must not be reported as ~/backups).
+        assert f"Hourly backup ({tmp_path}/hourly-*.db.gz)" in out
+        assert f"Weekly backup ({tmp_path}/backup-*.db.gz)" in out
+        assert "~/backups" not in out
         assert "gdrive-crypt" not in out
         assert "levels.wkcc.org" not in out

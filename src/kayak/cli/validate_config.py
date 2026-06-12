@@ -127,6 +127,44 @@ def _known_env_names() -> set[str]:
     return names | _EXTRA_KNOWN
 
 
+def _scan_unknown_env() -> int:
+    """Warn on config-shaped env names that aren't declared fields."""
+    warned = 0
+    known = _known_env_names()
+    for name in sorted(os.environ):
+        if not name.startswith(_CONFIG_PREFIXES):
+            continue
+        if name in known:
+            continue
+        print(
+            f"WARN: env var {name} is not a declared KayakConfig field "
+            "(typo? new feature? see src/kayak/config.py)",
+            file=sys.stderr,
+        )
+        warned += 1
+    return warned
+
+
+def _backup_env_knob_errors() -> list[str]:
+    """Validate the S8 backup env knobs' values via the HostConfig schema."""
+    from kayak.host import HostConfig
+
+    overrides: dict[str, object] = {}
+    if (v := os.environ.get("KAYAK_BACKUP_DIR")) is not None:
+        overrides["backup_dir"] = v
+    if (v := os.environ.get("KAYAK_OFFSITE_REMOTE")) is not None:
+        overrides["offsite_remote"] = v
+    if (v := os.environ.get("KAYAK_OFFSITE_KEEP")) is not None:
+        overrides["offsite_keep"] = v
+    if not overrides:
+        return []
+    try:
+        HostConfig(**overrides)  # type: ignore[arg-type]
+    except ValueError as e:
+        return [str(e)]
+    return []
+
+
 def validate_config(args: argparse.Namespace) -> None:
     try:
         cfg = KayakConfig()
@@ -145,20 +183,21 @@ def validate_config(args: argparse.Namespace) -> None:
             print(err, file=sys.stderr)
         sys.exit(1)
 
-    warned = 0
-    if args.known_env:
-        known = _known_env_names()
-        for name in sorted(os.environ):
-            if not name.startswith(_CONFIG_PREFIXES):
-                continue
-            if name in known:
-                continue
-            print(
-                f"WARN: env var {name} is not a declared KayakConfig field "
-                "(typo? new feature? see src/kayak/config.py)",
-                file=sys.stderr,
-            )
-            warned += 1
+    # Backup env knobs (S8): the shell scripts consume these from
+    # /etc/kayak/env, so validate their VALUES here with the same invariants
+    # as kayak.host.HostConfig — being a *known name* is not enough
+    # (PR #189 review P1: KAYAK_OFFSITE_KEEP=0 would otherwise pass this
+    # gate and the offsite prune loop would delete every remote backup; the
+    # scripts also fail closed on their own, this catches it at deploy time
+    # with a better message).
+    host_knob_errors = _backup_env_knob_errors()
+    if host_knob_errors:
+        print("ERROR: backup env knob validation failed", file=sys.stderr)
+        for err in host_knob_errors:
+            print(f"  {err}", file=sys.stderr)
+        sys.exit(1)
+
+    warned = _scan_unknown_env() if args.known_env else 0
 
     if warned and args.strict:
         print(f"validate-config: FAIL ({warned} unknown env var(s))", file=sys.stderr)

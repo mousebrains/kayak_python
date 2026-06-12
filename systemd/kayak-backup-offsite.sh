@@ -22,6 +22,24 @@ BACKUP_DIR="${KAYAK_BACKUP_DIR:-${KAYAK_HOME}/backups}"  # out of the repo (revi
 REMOTE="${KAYAK_OFFSITE_REMOTE:-gdrive-crypt}"
 KEEP="${KAYAK_OFFSITE_KEEP:-26}"
 
+# Fail-closed knob validation BEFORE any rclone copy/delete (PR #189 review
+# P1): KEEP=0 (or garbage) would otherwise start the prune loop at index 0
+# and delete EVERY offsite backup, including the one just uploaded. The
+# deploy gate (validate-config) checks the same invariants, but a timer run
+# must not trust that the env was deployed through the gate.
+if ! [[ "$KEEP" =~ ^[1-9][0-9]*$ ]]; then
+    echo "Error: KAYAK_OFFSITE_KEEP must be a positive integer (got '${KEEP}')" >&2
+    exit 1
+fi
+if [[ "$REMOTE" == *:* || -z "$REMOTE" ]]; then
+    echo "Error: KAYAK_OFFSITE_REMOTE must be a bare rclone remote name, no colon (got '${REMOTE}')" >&2
+    exit 1
+fi
+if [[ "$BACKUP_DIR" != /* ]]; then
+    echo "Error: KAYAK_BACKUP_DIR must be an absolute path (got '${BACKUP_DIR}')" >&2
+    exit 1
+fi
+
 mapfile -t backups < <(ls -1r "$BACKUP_DIR"/backup-[0-9]*T[0-9]*Z.db.gz 2>/dev/null)
 
 if [[ ${#backups[@]} -eq 0 ]]; then
