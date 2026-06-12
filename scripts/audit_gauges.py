@@ -35,12 +35,9 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
-CACHE_DB = Path(
-    os.environ.get(
-        "GAUGE_METADATA_CACHE",
-        str(SCRIPT_DIR.parent / "Gauge-metadata-cache" / "gauges.db"),
-    )
-)
+from _gauge_metadata_cache import DEFAULT_GAUGE_METADATA_CACHE  # noqa: E402
+
+CACHE_DB = DEFAULT_GAUGE_METADATA_CACHE
 KAYAK_DB = Path.home() / "DB" / "kayak.db"
 
 

@@ -25,14 +25,13 @@ Run:
 from __future__ import annotations
 
 import concurrent.futures
-import os
 import re
 import sqlite3
 import sys
 from datetime import UTC, datetime
-from pathlib import Path
 
 import requests
+from _gauge_metadata_cache import DEFAULT_GAUGE_METADATA_CACHE
 
 STATION_JS_URL = "https://www.usbr.gov/pn/hydromet/station.js"
 DECOD_URL = "https://www.usbr.gov/pn/hydromet/decod_params.html"
@@ -178,14 +177,7 @@ def fetch_inventory(session: requests.Session, code: str) -> tuple[list[str], in
 
 
 def main() -> None:
-    db_path = (
-        sys.argv[1]
-        if len(sys.argv) > 1
-        else os.environ.get(
-            "GAUGE_METADATA_CACHE",
-            str(Path(__file__).resolve().parent.parent / "Gauge-metadata-cache" / "gauges.db"),
-        )
-    )
+    db_path = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_GAUGE_METADATA_CACHE
 
     session = requests.Session()
     session.headers.update({"User-Agent": "kayak-pn-harvester/1.0"})

@@ -16,9 +16,9 @@ import os
 import sqlite3
 import sys
 import time
-from pathlib import Path
 
 import requests
+from _gauge_metadata_cache import DEFAULT_GAUGE_METADATA_CACHE
 
 STATES = ["Oregon", "Washington", "Idaho", "Nevada", "California", "Montana"]
 OGC_BASE = "https://api.waterdata.usgs.gov/ogcapi/v0"
@@ -189,14 +189,7 @@ def fetch_last_dates(site_nos, api_key=None):
 
 
 def main():
-    db_path = (
-        sys.argv[1]
-        if len(sys.argv) > 1
-        else os.environ.get(
-            "GAUGE_METADATA_CACHE",
-            str(Path(__file__).resolve().parent.parent / "Gauge-metadata-cache" / "gauges.db"),
-        )
-    )
+    db_path = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_GAUGE_METADATA_CACHE
 
     api_key = os.environ.get("USGS_API_KEY")
 

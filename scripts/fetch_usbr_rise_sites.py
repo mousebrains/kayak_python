@@ -25,14 +25,13 @@ Run:
     python scripts/fetch_usbr_rise_sites.py [path/to/gauges.db]
 """
 
-import os
 import re
 import sqlite3
 import sys
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 import requests
+from _gauge_metadata_cache import DEFAULT_GAUGE_METADATA_CACHE
 
 RISE_BASE = "https://data.usbr.gov/rise/api"
 PAGE_SIZE = 100
@@ -195,14 +194,7 @@ def _build_site_row(loc: dict, location_end: dict[int, str], cutoff: str) -> dic
 
 
 def main() -> None:
-    db_path = (
-        sys.argv[1]
-        if len(sys.argv) > 1
-        else os.environ.get(
-            "GAUGE_METADATA_CACHE",
-            str(Path(__file__).resolve().parent.parent / "Gauge-metadata-cache" / "gauges.db"),
-        )
-    )
+    db_path = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_GAUGE_METADATA_CACHE
 
     session = requests.Session()
     session.headers.update({"Accept": "application/vnd.api+json"})
