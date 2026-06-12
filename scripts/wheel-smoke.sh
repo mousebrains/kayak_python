@@ -56,8 +56,9 @@ root = str(files("kayak"))
 assert "site-packages" in root, f"kayak not imported from site-packages: {root}"
 
 # (parts, a file that must ship under it)
+# (data/sources.yaml is gone — the S1-cleanup removed the engine seed; the
+# source registry is dataset content.)
 checks = [
-    (("data",), "sources.yaml"),
     (("data",), "builder.yaml"),
     (("data", "db", "migrations"), "0001_baseline.sql"),
     (("data", "db", "migrations"), "manifest.csv"),

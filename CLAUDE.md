@@ -33,21 +33,20 @@ python3 -m venv /home/pat/.venv
 /home/pat/.venv/bin/pip install -e ".[dev]"
 git clone git@github.com:mousebrains/kayak_data.git /home/pat/kayak_data  # the metadata dataset
 echo 'DATASET_DIR=/home/pat/kayak_data' >> ~/.config/kayak/.env          # point the code at it
-/home/pat/.venv/bin/levels init-db --no-seed            # Empty schema + stamp migrations
+/home/pat/.venv/bin/levels init-db                      # Empty schema + stamp migrations
 /home/pat/.venv/bin/levels sync-metadata                # Load gauges/reaches/sources CSVs (by id) from DATASET_DIR
 /home/pat/.venv/bin/python scripts/import_metadata.py   # Apply the reach geom/gradient JSON sidecars
 /home/pat/.venv/bin/levels pipeline                     # Fetch live data and generate HTML
 ```
 
-`init-db` creates the schema and stamps migrations; `--no-seed` skips the
-`sources.yaml` state/source seed so the canonical rows from the metadata CSVs
-(`DATASET_DIR`, applied by `levels sync-metadata` — matched by stable id) load without
-duplicate-by-name sources. `import_metadata.py` then applies the reach geometry
+`init-db` creates the schema and stamps migrations — schema only (the S1-cleanup
+removed the former `sources.yaml` state/source seed; `--no-seed` survives one
+release as a deprecated no-op). All metadata — states, sources, gauges, reaches —
+loads from the dataset CSVs via `levels sync-metadata` (matched by stable id).
+`import_metadata.py` then applies the reach geometry
 sidecars (`reaches.json` / `reaches-gradient.json`), which `sync-metadata` excludes.
 Without the metadata load every source is an orphan with no `gauge_source`
 link, so `levels pipeline` fails at `orphan-check` and the site renders empty.
-A plain `levels init-db` (seeded from `src/kayak/data/sources.yaml`) is enough for a
-fetch-only smoke test.
 
 ### Working on the live host
 
@@ -79,7 +78,7 @@ pip install -e ".[dev]"              # Install in editable mode with dev deps (p
 # or: uv sync --locked --all-extras (matches CI)
 
 levels --help                        # CLI entry point (registered in pyproject.toml)
-levels init-db                       # Create tables, seed states/sources, stamp migrations
+levels init-db                       # Create tables and stamp migrations (schema only)
 levels migrate                       # Apply any pending src/kayak/data/db/migrations/*.sql files
 levels pipeline                      # fetch → fetch-usgs-ogc → calc-rating → update-gauge-cache → calculator → build → orphan-check → check-reaches
 levels build                         # Generate static HTML/CSV/text to public_html/
@@ -199,7 +198,7 @@ Multi-source gauges aggregate across all linked sources directly: `update-gauge-
 
 Single normalized SQLite database (`kayak.db`). Schema defined in `src/kayak/db/models.py` (SQLAlchemy 2.x ORM, 25 tables; live DB adds `schema_migrations` for 26 total). Key tables:
 
-- `source` / `gauge` / `gauge_source` — data sources and physical gauge stations. `source.timezone` is an IANA TZ name (populated from `sources.yaml` → `stations:`) used by `BaseParser.dump_to_db` to localize naive timestamps from feeds that publish local time (USBR's per-station local TZ; wa.gov PST year-round). NULL = treat naive as UTC.
+- `source` / `gauge` / `gauge_source` — data sources and physical gauge stations. `source.timezone` is an IANA TZ name (carried by the dataset's `sources.yaml` registry → `source.csv` via `levels generate-sources`) used by `BaseParser.dump_to_db` to localize naive timestamps from feeds that publish local time (USBR's per-station local TZ; wa.gov PST year-round). NULL = treat naive as UTC.
 - `observation` — time-series data (source_id, observed_at, data_type, value)
 - `latest_observation` / `latest_gauge_observation` — cached most-recent reading with delta_per_hour
 - `reach` / `reach_state` / `reach_class` / `reach_guidebook` — paddleable runs with state, class, and guidebook relationships
@@ -223,7 +222,7 @@ Evolution splits into two distinct flows — **schema** changes (table shape) go
 
 ### Parser System
 
-Parsers inherit from `BaseParser` (in `src/kayak/parsers/base.py`) and register via `@register("name")` decorator. Each parser implements `parse_records(text) -> list[ObservationRecord]` (abstract, pure — no DB); `BaseParser.parse(text)` wraps it with the `dump_to_db` + buffer-flush path. Only override `parse()` to emit a syntax-error log line (see `nwps`, `usace_cda`, `nwrfc_xml`). `ensure_all_loaded()` imports all parser modules to trigger registration. Parser names match entries in `src/kayak/data/sources.yaml`.
+Parsers inherit from `BaseParser` (in `src/kayak/parsers/base.py`) and register via `@register("name")` decorator. Each parser implements `parse_records(text) -> list[ObservationRecord]` (abstract, pure — no DB); `BaseParser.parse(text)` wraps it with the `dump_to_db` + buffer-flush path. Only override `parse()` to emit a syntax-error log line (see `nwps`, `usace_cda`, `nwrfc_xml`). `ensure_all_loaded()` imports all parser modules to trigger registration. Parser names match the dataset registry's `parser:` values (`sources.yaml` in `DATASET_DIR`, validated by `levels generate-sources --check`).
 
 ### CLI Pattern
 

@@ -71,13 +71,15 @@ abstract class IntegrationTestCase extends TestCase
         }
         self::$dbPath = $dbPath;
 
-        // Allow subclasses to seed additional rows on top of init-db's
-        // reference data (states, fetch_urls, sources). Connects via a
-        // throwaway PDO; the test server connects independently.
+        // init-db is schema-only (dataset-separation S1-cleanup), so seed the
+        // state reference rows the tests' lookups expect, then let subclasses
+        // seed their fixture rows on top. Connects via a throwaway PDO; the
+        // test server connects independently.
         $seedPdo = new PDO('sqlite:' . $dbPath);
         $seedPdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $seedPdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
         $seedPdo->exec('PRAGMA foreign_keys=ON');
+        self::seedStateRows($seedPdo);
         static::seedDatabase($seedPdo);
         $seedPdo = null;
 
@@ -288,6 +290,28 @@ abstract class IntegrationTestCase extends TestCase
             $body,
             'inline <script> would clash with prod CSP',
         );
+    }
+
+    /**
+     * Seed the state reference rows tests look up by abbreviation.
+     *
+     * `levels init-db` is schema-only since the dataset-separation
+     * S1-cleanup (states load via `levels sync-metadata` in production),
+     * so the harness seeds the same twelve states the retired
+     * `_seed_states()` provided, keeping per-class fixtures unchanged.
+     */
+    private static function seedStateRows(PDO $db): void
+    {
+        $states = [
+            ['Utah', 'UT'], ['Oregon', 'OR'], ['Arizona', 'AZ'],
+            ['California', 'CA'], ['Washington', 'WA'], ['Colorado', 'CO'],
+            ['Kansas', 'KS'], ['Montana', 'MT'], ['Idaho', 'ID'],
+            ['Wyoming', 'WY'], ['Nevada', 'NV'], ['New Mexico', 'NM'],
+        ];
+        $st = $db->prepare('INSERT INTO state (name, abbreviation) VALUES (?, ?)');
+        foreach ($states as $row) {
+            $st->execute($row);
+        }
     }
 
     /**

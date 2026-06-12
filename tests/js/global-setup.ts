@@ -8,7 +8,7 @@ import net from 'node:net';
  * Boot a self-contained kayak test environment for Playwright:
  *
  *   1. Mint a tmp dir + sqlite path
- *   2. Run `levels init-db` against it (seeds schema + states + sources)
+ *   2. Run `levels init-db` against it (schema only — S1-cleanup; specs seed their own rows)
  *   3. Create a tiny explicit dataset-region fixture for one state landing page
  *   4. Spawn `php -S 127.0.0.1:<port> -t public_html` against it
  *   5. Poll the port until it accepts

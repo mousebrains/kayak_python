@@ -246,7 +246,7 @@ Each tier is several phases; **review gate between tiers**, not between phases.
 2. **Phase 4.2 — Common-failure runbooks.** Per-failure entries in `docs/operations.md` or sub-files:
    - **DB corruption:** restore from a local snapshot at `/home/pat/backups/backup-YYYYMMDDTHHMMSSZ.db.gz` (gzipped; written weekly by `kayak-backup.service`) or from the rclone offsite copy (`docs/offsite-backup.md` exists; cross-link). Per [feedback_never_overwrite_db], take a fresh `sqlite3 .backup` of the live DB first.
    - **Build pipeline stuck:** `journalctl -u kayak-pipeline.service -n 100` to diagnose; `sudo systemctl restart kayak-pipeline.timer` (build runs as the last stage of the pipeline since the build.py split)
-   - **Source feed broken:** find in `src/kayak/data/sources.yaml`, set `disabled: true`, file with vendor, redeploy
+   - **Source feed broken:** find in the dataset's `sources.yaml`, set `enabled: false`, run `levels generate-sources`, PR to `kayak_data`, file with vendor, redeploy
    - **SSL cert expired:** `sudo certbot renew --dry-run` first; then real renew; `nginx -s reload`
    - **Disk full:** `levels decimate`; check `~/logs/`; check `/tmp/`
    - **nginx misconfig after deploy:** `sudo nginx -t` to diagnose; revert via Phase 3.4 rollback

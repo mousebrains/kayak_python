@@ -57,7 +57,6 @@ _SRC = Path(__file__).resolve().parents[1] / "src" / "kayak"
 # any later writer added to the SAME file, so keep these files single-purpose (or
 # split the writer out) rather than growing a second mutation into an allowlisted one.
 ALLOWLIST: dict[str, str] = {
-    "cli/init_db.py": "fresh-DB seeding (state/source/fetch_url from sources.yaml)",
     "cli/validate_dataset.py": "applies reach geom/gradient to a TEMP validation DB",
     "huc/assign.py": "assign-huc maintenance tool — refuses the configured prod DB (SA-3)",
     "db/reaches.py": "set_reach_huc, called only by the assign-huc maintenance tool",

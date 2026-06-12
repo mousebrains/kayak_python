@@ -84,7 +84,7 @@ left active still wastes fetches and noise, so the checklist stands.)
 The fix is a checklist, not a tool — run
 through this before deleting a source's row from `kayak_data`'s
 `source.csv` (plus its `gauge_source.csv` link, and `fetch_url.csv` /
-the code repo's `src/kayak/data/sources.yaml` if it's a fetch source).
+the dataset's `sources.yaml` registry entry if it's a fetch source).
 
 ### 1. List every fetch_url referenced by the deleted sources
 
@@ -269,8 +269,9 @@ The one sibling invariant still worth a follow-on plan is:
 > `scripts/import_metadata.py` applies the reach geom/gradient JSON sidecars.
 > This section is the recovery runbook, not an open problem.
 
-`levels init-db` seeds `state`, `source`, and `fetch_url` from
-`src/kayak/data/sources.yaml` but **does not** create any `gauge_source` links
+`levels init-db` used to seed `state`, `source`, and `fetch_url` from the
+engine's `sources.yaml` (the S1-cleanup made init-db schema-only; everything
+now loads via `sync-metadata`) and never created any `gauge_source` links
 (only migration 0020 ever `INSERT`s into `gauge_source`, and only as a
 fix). So `init-db` + `migrate` *alone* yields a DB where every
 fetch-backed source is an orphan — `levels orphan-check` would flag

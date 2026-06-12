@@ -1,7 +1,10 @@
-"""YAML config file loaders for sources, builder columns, and description fields.
+"""YAML config file loaders for builder columns and description fields.
 
-These replace the database-stored configuration tables (URLParse, BuilderColumn,
+These replace the database-stored configuration tables (BuilderColumn,
 DescriptionField) with static YAML files packaged under ``kayak/data/``.
+(The former ``load_sources()``/``sources.yaml`` seed was removed by the
+dataset-separation S1-cleanup; the dataset's source registry +
+``levels generate-sources`` own source/fetch_url definitions.)
 """
 
 from functools import lru_cache
@@ -30,31 +33,6 @@ def _load_yaml(filename: str) -> dict[str, Any]:
         ) from None
     except yaml.YAMLError as e:
         raise ValueError(f"Error parsing {path}: {e}") from e
-
-
-@lru_cache(maxsize=1)
-def load_sources() -> list[dict[str, Any]]:
-    """Load source URL/parser definitions from src/kayak/data/sources.yaml.
-
-    Returns list of dicts with keys: parser, url, hours, stations.
-    ``stations`` is a dict mapping station code → IANA TZ name, empty if
-    not specified in YAML. Skips parser sections with ``enabled: false``.
-    """
-    data = _load_yaml("sources.yaml")
-    sources: list[dict[str, Any]] = []
-    for parser_name, section in data.items():
-        if not section.get("enabled", True):
-            continue
-        for entry in section.get("urls", []):
-            sources.append(
-                {
-                    "parser": parser_name,
-                    "url": entry["url"],
-                    "hours": entry.get("hours", ""),
-                    "stations": entry.get("stations", {}) or {},
-                }
-            )
-    return sources
 
 
 @lru_cache(maxsize=1)

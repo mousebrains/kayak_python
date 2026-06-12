@@ -21,7 +21,7 @@ Usage:
     python3 scripts/import_metadata.py --db /path.db --in <dataset dir>
 
 Fresh-DB load:
-    levels init-db --no-seed              # empty tables + stamped migrations
+    levels init-db                        # empty tables + stamped migrations (schema-only)
     levels sync-metadata                  # CSV metadata, matched by id (delete-safe)
     python3 scripts/import_metadata.py    # geom + gradient sidecars
     levels pipeline

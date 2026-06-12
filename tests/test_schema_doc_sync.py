@@ -103,6 +103,6 @@ def test_schema_doc_has_no_stale_columns() -> None:
 # enum listed every agency in use) was removed in the dataset-separation
 # test-repointing: code tests must not read a kayak_data clone. It was a
 # doc-prose vs real-data coverage check with no code-standalone home (there is
-# no authoritative agency enum in the engine — canonical_agency() only maps a
-# few parser slugs). The data repo's CI can re-add such a doc/data coverage
+# no authoritative agency enum in the engine — agency values are dataset
+# content via sources.yaml). The data repo's CI can re-add such a doc/data coverage
 # check if wanted; the two doc<->ORM guards above stay code-only.

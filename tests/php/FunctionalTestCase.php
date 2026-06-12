@@ -67,6 +67,7 @@ abstract class FunctionalTestCase extends TestCase
         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
         $pdo->exec('PRAGMA foreign_keys=ON');
+        self::seedStateRows($pdo);
         static::seedDatabase($pdo);
         self::$pdo = $pdo;
     }
@@ -103,6 +104,28 @@ abstract class FunctionalTestCase extends TestCase
         unset($GLOBALS['__kayak_test_db']);
         $_COOKIE = [];
         $GLOBALS['__kayak_editor_cache_gen'] = ($GLOBALS['__kayak_editor_cache_gen'] ?? 0) + 1;
+    }
+
+    /**
+     * Seed the state reference rows tests look up by abbreviation.
+     *
+     * `levels init-db` is schema-only since the dataset-separation
+     * S1-cleanup (states load via `levels sync-metadata` in production),
+     * so the harness seeds the same twelve states the retired
+     * `_seed_states()` provided, keeping per-class fixtures unchanged.
+     */
+    private static function seedStateRows(PDO $db): void
+    {
+        $states = [
+            ['Utah', 'UT'], ['Oregon', 'OR'], ['Arizona', 'AZ'],
+            ['California', 'CA'], ['Washington', 'WA'], ['Colorado', 'CO'],
+            ['Kansas', 'KS'], ['Montana', 'MT'], ['Idaho', 'ID'],
+            ['Wyoming', 'WY'], ['Nevada', 'NV'], ['New Mexico', 'NM'],
+        ];
+        $st = $db->prepare('INSERT INTO state (name, abbreviation) VALUES (?, ?)');
+        foreach ($states as $row) {
+            $st->execute($row);
+        }
     }
 
     /** Override to seed reference + fixture rows once per class. */

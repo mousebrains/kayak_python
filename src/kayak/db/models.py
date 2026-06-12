@@ -174,7 +174,8 @@ class Source(Base):
     error on those stations.
 
     ``timezone`` is an IANA TZ name (``America/Boise``, ``America/Los_Angeles``,
-    ``Etc/GMT+8``) seeded from the ``stations:`` block in src/kayak/data/sources.yaml
+    ``Etc/GMT+8``) carried by the dataset's source registry (``sources.yaml`` →
+    ``source.csv`` via ``levels generate-sources``, applied by ``sync-metadata``)
     and consumed by ``BaseParser.dump_to_db`` to localize naive timestamps
     before UTC conversion. NULL (the default) means "treat naive timestamps
     as UTC" — the correct behavior for parsers whose feed is already UTC.
