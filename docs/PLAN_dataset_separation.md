@@ -951,6 +951,23 @@ pages. Do this before any new work merges so every later deploy carries
 a small, reviewable delta. Rollback: check out the previous engine +
 dataset SHAs and re-run deploy.sh.
 
+> **Checkpoint 0 verified COMPLETE 2026-06-12.** Prod was already at the
+> tip of both repos (engine `1546afb`/#185, dataset `dcce1b1`/kd#52;
+> migrations applied through 0077; runtime-config installed Jun 11
+> 21:37). Functional verification passed: pipeline green, sync-metadata
+> dry-run reports no pending diff, PHP titles via `Config::site`,
+> dataset prose fragments serving, `site-config.json`, manifest
+> identity + brand color, robots sitemap, security.txt, state pages 200.
+> One real issue found and fixed: stale PR-review/build scratch
+> checkouts (~850 MB, `/tmp/kayak-pr*`) had filled the 964 MB `/tmp`
+> tmpfs, which made `levels validate-dataset` fail with SQLITE_FULL
+> (`tempfile.TemporaryDirectory()` lives in `/tmp`) — and would have
+> aborted the next `deploy.sh` at the step-3.08 validate gate. Removed
+> after confirming nothing held them open; validate passes. Ops note for
+> S7: review/build scratch dirs belong under a disk-backed cache path
+> (`/var/cache/kayak` in the S7 layout), not a RAM-backed tmpfs sized at
+> half of a 2 GB host.
+
 **Batch 1 — engine close-out (1 engine PR, deploy-neutral):** R1 + R2 +
 R6.
 
@@ -1001,7 +1018,11 @@ against the ~31 engine and ~35 dataset PRs that S3 alone consumed.
   deploy") stands. The full §SA bridge remains on file as a post-split
   enhancement if editor traffic ever justifies it. Rationale: the bridge
   is the only remaining L besides S7, and current editor volume is one
-  club's maintainers.
+  club's maintainers. Measured on prod 2026-06-12: 11 editor accounts,
+  9 sessions in the last 30 days, but only 6 change requests ever
+  (1 rejected, 5 resolved, 0 pending; latest 2026-05-22) — the
+  approve-applies-to-DB path has effectively never been the change
+  vehicle.
 - **D2 — S7 trim.** Keep: immutable paired releases, single-symlink
   activation, maintenance mode, stop-all-consumers, backup-before-
   migrate, rollback, generated units/vhosts/status, wrapper executables.
@@ -1009,10 +1030,9 @@ against the ~31 engine and ~35 dataset PRs that S3 alone consumed.
   over release-input manifests and the orchestrator minimum-version
   negotiation with SHA-256 digest checks of the wheel + dataset snapshot
   recorded in `release.json`. Amend §S7 if accepted.
-- **D3 — `audit_ignore.yaml` ownership.** It is WKCC suppression
-  content (G5), currently shipped as a packaged engine resource — a
-  deviation from this plan. Recommended: move it to dataset `ops/` in
-  R3; alternatively document the deviation as accepted.
+- **D3 — `audit_ignore.yaml` ownership. ACCEPTED 2026-06-12:** move it
+  to dataset `ops/` in R3 (it is WKCC suppression content, G5; shipping
+  it as a packaged engine resource was a deviation from this plan).
 
 ### Reproduce / cross-check
 
