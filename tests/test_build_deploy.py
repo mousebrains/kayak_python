@@ -380,9 +380,7 @@ def test_build_refuses_engine_checkout_output(sub: str) -> None:
         build_mod.build(argparse.Namespace(output_dir=str(target)))
 
 
-def test_build_refuses_dataset_dir_output(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_build_refuses_dataset_dir_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """DATASET_DIR (and anything below it) is refused as output — generated
     HTML must never mix into the reviewed dataset checkout."""
     monkeypatch.setattr(build_mod, "DATASET_DIR", tmp_path)

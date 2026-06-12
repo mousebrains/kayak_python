@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
@@ -37,7 +37,11 @@ export default async function globalSetup(): Promise<void> {
   const dbPath = path.join(baseTmp, 'kayak-test.db');
   const databaseUrl = `sqlite:///${dbPath}`;
   const configJsonPath = path.join(baseTmp, 'runtime-config.json');
-  const datasetDir = baseTmp;
+  // The dataset fixture lives in its own subdir, a SIBLING of the docroot:
+  // `levels build` refuses an output dir inside DATASET_DIR (S3h guard), so
+  // DATASET_DIR must not be baseTmp itself (the docroot's parent).
+  const datasetDir = path.join(baseTmp, 'dataset');
+  mkdirSync(datasetDir);
   writeFileSync(
     path.join(datasetDir, 'region.yaml'),
     [
