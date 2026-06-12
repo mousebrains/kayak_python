@@ -25,6 +25,7 @@ import html
 import os
 import socket
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -510,29 +511,44 @@ def _atomic_write(path: Path, content: str) -> None:
 
 
 def run(args: argparse.Namespace) -> int:
-    tz = ZoneInfo(args.tz)
+    # Host-config resolution happens HERE, not at parser construction:
+    # main.py registers every subcommand's addArgs on each CLI invocation,
+    # so loading host.yaml there would make a malformed file crash every
+    # unrelated command with a traceback (PR #189 review P2). A bad file is
+    # a clean per-command failure instead, and validate-config reports it
+    # as a deploy-gate error.
+    try:
+        host = get_host_config()
+    except ValueError as e:
+        print(f"ERROR: host config invalid: {e}", file=sys.stderr)
+        return 1
+    output = args.output or host.status_output
+    tz = ZoneInfo(args.tz or host.timezone)
+    log_glob = args.log_glob or host.nginx_log_glob
     now = dt.datetime.now(tz)
     page = _render_page(
         now=now,
         hours=args.hours,
         bucket_hours=args.bucket_hours,
         tz=tz,
-        log_glob=args.log_glob,
+        log_glob=log_glob,
     )
-    _atomic_write(Path(args.output), page)
+    _atomic_write(Path(output), page)
     return 0
 
 
 def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    host = get_host_config()
+    # Defaults are None sentinels resolved in run() from the typed host
+    # config (kayak.host) — see the note there for why addArgs must not
+    # load host.yaml.
     parser = subparsers.add_parser(
         "status",
         help="Render the operator status page to HTML (nightly via kayak-status.timer)",
     )
     parser.add_argument(
         "--output",
-        default=host.status_output,
-        help=f"Output path (default {host.status_output})",
+        default=None,
+        help="Output path (default: host config status_output)",
     )
     parser.add_argument(
         "--hours", type=int, default=24, help="Traffic window in hours (default 24)"
@@ -540,12 +556,10 @@ def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> 
     parser.add_argument(
         "--bucket-hours", type=int, default=4, help="Traffic bucket size in hours (default 4)"
     )
-    parser.add_argument(
-        "--tz", default=host.timezone, help=f"IANA timezone (default {host.timezone})"
-    )
+    parser.add_argument("--tz", default=None, help="IANA timezone (default: host config timezone)")
     parser.add_argument(
         "--log-glob",
-        default=host.nginx_log_glob,
-        help=f"Nginx access-log glob (default {host.nginx_log_glob})",
+        default=None,
+        help="Nginx access-log glob (default: host config nginx_log_glob)",
     )
     parser.set_defaults(func=run)

@@ -191,6 +191,20 @@ class TestValidateConfig:
         err = capsys.readouterr().err
         assert "MAINTAINER_EMIAL" in err
 
+    def test_malformed_host_yaml_fails_cleanly(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path
+    ) -> None:
+        # PR #189 review P2: the deploy gate must report a bad host.yaml as a
+        # controlled error (its consumers load it lazily, so without this the
+        # typo would only surface when `levels status` runs).
+        bad = tmp_path / "host.yaml"
+        bad.write_text("bogus_knob: 1\n")
+        monkeypatch.setenv("KAYAK_HOST_CONFIG", str(bad))
+        with pytest.raises(SystemExit) as exc:
+            validate_config(_args())
+        assert exc.value.code == 1
+        assert "host config validation failed" in capsys.readouterr().err
+
     def test_backup_knob_bad_keep_fails_even_without_strict(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:

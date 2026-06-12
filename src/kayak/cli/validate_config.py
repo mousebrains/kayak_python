@@ -183,6 +183,18 @@ def validate_config(args: argparse.Namespace) -> None:
             print(err, file=sys.stderr)
         sys.exit(1)
 
+    # Typed host config (S7): a malformed /etc/kayak/host.yaml must be a
+    # clean deploy-gate failure here — its consumers load it lazily (a bad
+    # file otherwise only surfaces when `levels status` runs; PR #189 P2).
+    from kayak.host import load_host_config
+
+    try:
+        load_host_config()
+    except ValueError as e:
+        print("ERROR: host config validation failed", file=sys.stderr)
+        print(f"  {e}", file=sys.stderr)
+        sys.exit(1)
+
     # Backup env knobs (S8): the shell scripts consume these from
     # /etc/kayak/env, so validate their VALUES here with the same invariants
     # as kayak.host.HostConfig — being a *known name* is not enough

@@ -103,6 +103,71 @@ class TestLoadHostConfig:
         assert host.load_host_config(f).offsite_keep == 26
 
 
+class TestLazyHostConfigLoading:
+    def test_cli_parser_builds_with_malformed_host_yaml(self, tmp_path: Path) -> None:
+        """A malformed host.yaml must not crash unrelated commands: main.py
+        registers every subcommand's addArgs per invocation, so addArgs must
+        not load host.yaml (PR #189 review P2)."""
+        import os
+        import subprocess
+        import sys
+
+        bad = tmp_path / "host.yaml"
+        bad.write_text("timezone: [broken\n")
+        proc = subprocess.run(
+            [sys.executable, "-m", "kayak.cli.main", "init-db", "--help"],
+            env={**os.environ, "KAYAK_HOST_CONFIG": str(bad)},
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert proc.returncode == 0, proc.stderr
+        assert "Traceback" not in proc.stderr
+
+    def test_status_run_reports_bad_host_config_cleanly(
+        self, tmp_path: Path, monkeypatch, capsys
+    ) -> None:
+        import argparse
+
+        from kayak.cli import status as status_mod
+
+        def _boom() -> host.HostConfig:
+            raise ValueError("host.yaml: malformed")
+
+        monkeypatch.setattr(status_mod, "get_host_config", _boom)
+        rc = status_mod.run(
+            argparse.Namespace(output=None, hours=24, bucket_hours=4, tz=None, log_glob=None)
+        )
+        assert rc == 1
+        assert "host config invalid" in capsys.readouterr().err
+
+    def test_status_run_resolves_none_defaults_from_host_config(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """--output/--tz/--log-glob default to None at parse time and resolve
+        from HostConfig inside run()."""
+        import argparse
+
+        from kayak.cli import status as status_mod
+
+        cfg = host.HostConfig(status_output=str(tmp_path / "out.html"), timezone="UTC")
+        monkeypatch.setattr(status_mod, "get_host_config", lambda: cfg)
+        seen: dict[str, object] = {}
+
+        def _fake_render(**kw: object) -> str:
+            seen.update(kw)
+            return "<html>ok</html>"
+
+        monkeypatch.setattr(status_mod, "_render_page", _fake_render)
+        rc = status_mod.run(
+            argparse.Namespace(output=None, hours=24, bucket_hours=4, tz=None, log_glob=None)
+        )
+        assert rc == 0
+        assert (tmp_path / "out.html").read_text() == "<html>ok</html>"
+        assert str(seen["tz"]) == "UTC"
+        assert seen["log_glob"] == cfg.nginx_log_glob
+
+
 class TestStatusConsumesHostConfig:
     def test_backups_cert_section_uses_host_values(self, tmp_path: Path, monkeypatch) -> None:
         """The status page's backup/cert section renders the configured
