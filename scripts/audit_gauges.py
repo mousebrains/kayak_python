@@ -175,18 +175,18 @@ def find_new_nwps_gauges(cache, kayak):
 def load_audit_ignore(path: Path | None = None) -> set[tuple[str, str, int]]:
     """Load the (kind, gauge_id, reach_id) tuples to suppress from candidates.
 
-    See ``src/kayak/data/audit_ignore.yaml`` for the schema. Missing file is fine —
-    returns an empty set so the audit runs clean before any entries exist.
+    The suppressions are dataset content (which candidates a deployment has
+    judged not-actually-useful is regional knowledge, G5), so the default
+    resolves ``DATASET_DIR/ops/audit_ignore.yaml`` — the schema is documented
+    in that file in ``kayak_data``. Missing file is fine — returns an empty
+    set so the audit runs clean before any entries exist.
     """
     if path is None:
-        # audit_ignore.yaml is a packaged engine resource (it moved under the
-        # kayak package in the dataset-separation work), so resolve it via the
-        # package rather than the old repo-root ``data/`` path, which no longer
-        # exists. Local import keeps this script importable without kayak on the
-        # path until the ignore file is actually loaded.
-        from kayak.resources import resource_dir
+        # Local import keeps this script importable without kayak on the path
+        # until the ignore file is actually loaded.
+        from kayak.config import DATASET_DIR
 
-        path = resource_dir("data", "audit_ignore.yaml")
+        path = DATASET_DIR / "ops" / "audit_ignore.yaml"
     if not path.is_file():
         return set()
     import yaml  # local import — only this code path needs PyYAML

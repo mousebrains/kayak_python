@@ -43,7 +43,7 @@ sudo -u pat mkdir -p /home/pat/.ssh
 
 # Add pat to the adm group so the log-reading timers/scripts work without
 # root: kayak-recap reads journald (journalctl --unit kayak-*) and
-# scripts/audit-t30.sh tails /var/log/{nginx/*,fail2ban,auth,mail}.log
+# kayak_data ops/audit-t30.sh tails /var/log/{nginx/*,fail2ban,auth,mail}.log
 # (mode 640, group adm).
 sudo usermod -aG adm pat
 
