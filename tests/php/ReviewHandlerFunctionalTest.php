@@ -198,12 +198,15 @@ final class ReviewHandlerFunctionalTest extends FunctionalTestCase
 
         [$flash, $err] = _review_handle_post($this->pdo(), $crId, 'approve', $maint['id']);
         $this->assertNull($err);
-        $this->assertSame('Approved and applied.', $flash);
+        $this->assertSame('Endorsed — the diff is frozen below. Land it as a kayak_data PR, then Mark resolved once the deploy ships it.', $flash);
 
-        $this->assertSame('approved', $this->fetchCr($crId)['status']);
+        $cr = $this->fetchCr($crId);
+        $this->assertSame('approved', $cr['status']);
+        // SA-lite: the diff is frozen, the reach is NOT written.
+        $this->assertStringContainsString('approved via handler', (string)$cr['applied_json']);
         $st = $this->pdo()->prepare('SELECT description FROM reach WHERE id = ?');
         $st->execute([$reachId]);
-        $this->assertSame('approved via handler', $st->fetchColumn());
+        $this->assertNotSame('approved via handler', $st->fetchColumn(), 'endorse must not write');
         // Editor was emailed the decision.
         $this->assertGreaterThan(0, count(glob(self::$mailDir . '/*') ?: []));
     }
@@ -216,10 +219,13 @@ final class ReviewHandlerFunctionalTest extends FunctionalTestCase
         $this->withCsrfPost(['reach_description' => 'maintainer wording', 'reviewer_note' => '']);
 
         [$flash] = _review_handle_post($this->pdo(), $crId, 'approve', $maint['id']);
-        $this->assertSame('Approved and applied.', $flash);
+        $this->assertSame('Endorsed — the diff is frozen below. Land it as a kayak_data PR, then Mark resolved once the deploy ships it.', $flash);
+        // The maintainer overlay wins in the FROZEN diff (nothing is applied).
+        $applied = json_decode((string)$this->fetchCr($crId)['applied_json'], true);
+        $this->assertSame('maintainer wording', $applied['reach']['description']);
         $st = $this->pdo()->prepare('SELECT description FROM reach WHERE id = ?');
         $st->execute([$reachId]);
-        $this->assertSame('maintainer wording', $st->fetchColumn(), 'POST overlay overrides the proposal');
+        $this->assertNotSame('maintainer wording', $st->fetchColumn(), 'endorse must not write');
     }
 
     public function testPostApproveWithClassBlockOverlay(): void
@@ -244,12 +250,14 @@ final class ReviewHandlerFunctionalTest extends FunctionalTestCase
         ]);
 
         [$flash] = _review_handle_post($db, $crId, 'approve', $maint['id']);
-        $this->assertSame('Approved and applied.', $flash);
-        $st = $db->prepare('SELECT name, low, low_data_type FROM reach_class WHERE reach_id = ? ORDER BY id');
+        $this->assertSame('Endorsed — the diff is frozen below. Land it as a kayak_data PR, then Mark resolved once the deploy ships it.', $flash);
+        // The class overlay lands in the FROZEN diff; reach_class rows untouched.
+        $applied = json_decode((string)$this->fetchCr($crId)['applied_json'], true);
+        $this->assertSame(['IV', 'V'], $applied['reach_class']['names']);
+        $this->assertSame('gauge', $applied['reach_class']['range']['data_type']);
+        $st = $db->prepare('SELECT COUNT(*) FROM reach_class WHERE reach_id = ?');
         $st->execute([$reach]);
-        $rows = $st->fetchAll();
-        $this->assertSame(['IV', 'V'], array_column($rows, 'name'));
-        $this->assertSame('gauge', $rows[0]['low_data_type']);
+        $this->assertSame(0, (int)$st->fetchColumn(), 'endorse must not write classes');
     }
 
     public function testPostApproveTargetMissingReturnsErrFlash(): void
@@ -430,10 +438,25 @@ final class ReviewHandlerFunctionalTest extends FunctionalTestCase
         $this->assertStringContainsString('something went wrong', $html, 'error flash rendered');
         $this->assertStringContainsString('Maintainer notes', $html);
         $this->assertStringContainsString('applied this', $html);
-        $this->assertStringContainsString('Applied payload', $html);
+        $this->assertStringContainsString('Endorsed changes (frozen for data review)', $html);
         $this->assertStringContainsString('final text', $html);
-        // Terminal state: no approve button / decision form.
+        // No approve button — but an endorsed request offers the SA-lite
+        // close-the-loop action with the land-it instructions.
         $this->assertStringNotContainsString('value="approve"', $html);
+        $this->assertStringContainsString('kayak_data', $html);
+        $this->assertStringContainsString('value="resolve"', $html);
+        $this->assertStringContainsString('Mark resolved (deployed)', $html);
+    }
+
+    public function testRenderDetailResolvedShowsNoFormAtAll(): void
+    {
+        [$crId] = $this->seedScenario(
+            ['reach' => ['description' => 'x']],
+            ['status' => 'resolved', 'reviewer_note' => 'done'],
+        );
+        $html = $this->capture(fn() => _render_review_detail($this->pdo(), $crId, null, null, self::CSRF));
+        $this->assertStringNotContainsString('value="approve"', $html);
+        $this->assertStringNotContainsString('value="resolve"', $html);
     }
 
     public function testRenderDetailUnknownIdRenders404(): void

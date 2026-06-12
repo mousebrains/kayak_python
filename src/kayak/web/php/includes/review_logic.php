@@ -103,13 +103,36 @@ function review_approve(PDO $db, array $cr, array $applied, int $maint_id, strin
     $cur = review_load_target_state($db, $type, $tid);
     if ($cur === null) return ['ok' => false, 'err' => 'Target missing'];
 
-    $db->beginTransaction();
+    // SA-lite (dataset-separation D1): approval ENDORSES the change for data
+    // review — it freezes the maintainer-edited diff in applied_json and
+    // writes NOTHING else. The dataset repo is the only metadata authority
+    // (sync-metadata would silently revert a direct DB write at the next
+    // deploy), so the maintainer lands the frozen diff as an ordinary
+    // kayak_data PR and marks the request resolved once it deploys.
+    //
+    // Filter the frozen payload against the proposable-fields allowlist:
+    // propose_handler only ever writes these keys, but a tampered
+    // payload_json must not freeze arbitrary keys for a later operator to
+    // copy into the dataset (same defensive posture as the pre-SA-lite
+    // SQL-identifier check, review-4 R1.4).
+    $reach_payload = $applied['reach'] ?? [];
+    if (!is_array($reach_payload)) {
+        $reach_payload = [];
+    }
+    $allowed_fields = array_merge(REACH_TEXT_FIELDS, REACH_FULL_FIELDS);
+    foreach (array_keys($reach_payload) as $k) {
+        if (!in_array($k, $allowed_fields, true)) {
+            error_log('review_approve: dropped non-allowlisted reach field '
+                . var_export($k, true) . ' (change_request ' . (string)$cr['id'] . ')');
+        }
+    }
+    $applied['reach'] = array_intersect_key($reach_payload, array_flip($allowed_fields));
+
+    // Claim the row: only succeeds if status is still 'pending', so two
+    // concurrent maintainers (e.g. two browser tabs) can't both endorse —
+    // the single CAS UPDATE is the whole transaction now.
+    $merged_note = merge_reviewer_note($cr['reviewer_note'] ?? '', $new_note);
     try {
-        // Claim the row up front: only succeeds if status is still 'pending'.
-        // Two concurrent maintainers (e.g. two browser tabs) would otherwise
-        // both pass the pre-transaction status check, both UPDATE the reach
-        // (clobbering each other), and both write edit_history rows.
-        $merged_note = merge_reviewer_note($cr['reviewer_note'] ?? '', $new_note);
         $claim = $db->prepare(
             "UPDATE change_request
              SET status = 'approved', reviewed_at = datetime('now'),
@@ -123,92 +146,13 @@ function review_approve(PDO $db, array $cr, array $applied, int $maint_id, strin
             $cr['id'],
         ]);
         if ($claim->rowCount() === 0) {
-            $db->rollBack();
             return ['ok' => false, 'err' => 'Already reviewed by another maintainer.'];
         }
-
-        // Apply reach columns. The field name is interpolated as a SQL identifier
-        // below ($f is not bindable), so intersect the payload keys against the
-        // proposable-fields allowlist: a tampered payload_json cannot inject a
-        // column name (review-4 R1.4). propose_handler only ever writes these keys;
-        // the re-check here is defensive.
-        $reach_payload = $applied['reach'] ?? [];
-        if (!is_array($reach_payload)) {
-            $reach_payload = [];
-        }
-        $allowed_fields = array_merge(REACH_TEXT_FIELDS, REACH_FULL_FIELDS);
-        foreach (array_keys($reach_payload) as $k) {
-            if (!in_array($k, $allowed_fields, true)) {
-                error_log('review_approve: dropped non-allowlisted reach field '
-                    . var_export($k, true) . ' (change_request ' . (string)$cr['id'] . ')');
-            }
-        }
-        $reach_apply = array_intersect_key($reach_payload, array_flip($allowed_fields));
-        if ($reach_apply !== []) {
-            $sets = [];
-            $params = [];
-            foreach ($reach_apply as $f => $v) {
-                $sets[] = "$f = ?";
-                $params[] = ($v === '' || $v === null) ? null : $v;
-            }
-            $sets[] = "updated_at = datetime('now')";
-            $params[] = $tid;
-            $db->prepare('UPDATE reach SET ' . implode(', ', $sets) . ' WHERE id = ?')
-                ->execute($params);
-
-            foreach ($reach_apply as $f => $v) {
-                $old = $cur['reach'][$f] ?? null;
-                $db->prepare(
-                    "INSERT INTO edit_history
-                     (target_type, target_id, change_request_id, field, old_value, new_value,
-                      changed_at, changed_by)
-                     VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?)"
-                )->execute([$type, $tid, $cr['id'], $f,
-                            $old === null ? null : (string)$old,
-                            $v   === null ? null : (string)$v,
-                            'maintainer:' . $maint_id]);
-            }
-        }
-
-        // Apply reach_class: names + shared flow range. Replace set atomically.
-        if (isset($applied['reach_class'])) {
-            $old = $cur['reach_class'];
-            $new = $applied['reach_class'];
-            $old_dump = json_encode($old, JSON_UNESCAPED_SLASHES);
-            $new_dump = json_encode($new, JSON_UNESCAPED_SLASHES);
-            if ($old_dump !== $new_dump) {
-                $names = $new['names'] ?? [];
-                $range = $new['range'] ?? ['low' => null, 'high' => null, 'data_type' => 'flow'];
-                $dt = $range['data_type'] ?? 'flow';
-                $db->prepare('DELETE FROM reach_class WHERE reach_id = ?')->execute([$tid]);
-                $ins = $db->prepare(
-                    'INSERT INTO reach_class
-                     (reach_id, name, low, low_data_type, high, high_data_type)
-                     VALUES (?, ?, ?, ?, ?, ?)'
-                );
-                foreach ($names as $n) {
-                    $ins->execute([$tid, $n,
-                                   $range['low']  ?? null, $dt,
-                                   $range['high'] ?? null, $dt]);
-                }
-                $db->prepare(
-                    "INSERT INTO edit_history
-                     (target_type, target_id, change_request_id, field, old_value, new_value, changed_at, changed_by)
-                     VALUES (?, ?, ?, 'reach_class', ?, ?, datetime('now'), ?)"
-                )->execute([$type, $tid, $cr['id'], $old_dump, $new_dump, 'maintainer:' . $maint_id]);
-            }
-        }
-
-        $db->commit();
     } catch (Throwable $e) {
-        $db->rollBack();
-        // Log the full message server-side; never echo it to the response.
-        // The raw PDOException text leaks schema details (column names, FK
-        // constraints) and stack-frame paths. Maintainers see the detail
-        // in the journal; the user sees a generic confirmation that the
-        // attempt failed.
+        // Log the full message server-side; never echo it to the response
+        // (raw PDOException text leaks schema details and paths).
         error_log('review_approve: ' . $e->getMessage());
-        return ['ok' => false, 'err' => 'apply failed (see server log for details)'];
+        return ['ok' => false, 'err' => 'endorse failed (see server log for details)'];
     }
     return ['ok' => true];
 }
@@ -305,7 +249,7 @@ function review_resolve(PDO $db, array $cr, string $new_note, int $maint_id): bo
         "UPDATE change_request
          SET status = 'resolved', reviewed_at = datetime('now'),
              reviewed_by = ?, reviewer_note = ?
-         WHERE id = ? AND status = 'pending'"
+         WHERE id = ? AND status IN ('pending', 'approved')"
     );
     $stmt->execute([$maint_id, $merged, $cr['id']]);
     return $stmt->rowCount() > 0;

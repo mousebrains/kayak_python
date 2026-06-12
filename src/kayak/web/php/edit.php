@@ -13,9 +13,12 @@ declare(strict_types=1);
  * here automatically for the reach path so there's a single canonical
  * direct-edit path.
  *
- * Every field that actually changes is logged to edit_history with
- * changed_by='maintainer:<editor_id>' and change_request_id=NULL — the
- * same schema review.php uses when approving an editor proposal.
+ * SA-lite (dataset-separation D1): saving no longer writes the live
+ * table — the changed fields are frozen as a self-endorsed
+ * change_request (status 'approved') that the review queue renders with
+ * land-it-as-a-kayak_data-PR instructions; the dataset repo is the only
+ * metadata authority. (Pre-SA-lite saves wrote the table directly and
+ * logged edit_history rows.)
  *
  * Type defaults to 'reach' for backward compatibility; 'gauge' edits
  * gauge-metadata fields (location, coordinates, elevation, etc.).
@@ -86,11 +89,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_csrf();
 
     // Compare each submitted editable field against the current row; only
-    // changed values get into the UPDATE and the audit log. Empty
-    // submissions are skipped (matches the legacy behavior — clearing a
-    // field requires a separate flow that this form doesn't offer yet).
-    $sets = [];
-    $params = [];
+    // changed values get into the frozen diff. Empty submissions are
+    // skipped (matches the legacy behavior — clearing a field requires a
+    // separate flow that this form doesn't offer yet).
     $changes = [];
     foreach ($editable_fields as $field) {
         if (!isset($_POST[$field])) continue;
@@ -105,56 +106,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $old = $row[$field] ?? null;
         if ((string)$old === (string)$val) continue;
 
-        $sets[] = "$field = ?";
-        $params[] = $val;
         $changes[$field] = ['old' => $old, 'new' => $val];
     }
 
+    // SA-lite (dataset-separation D1): a direct edit no longer writes the
+    // live table — the dataset repo is the only metadata authority, and a
+    // direct write would be silently reverted by the next deploy's
+    // sync-metadata. Instead, freeze the diff as a self-endorsed
+    // change_request (status 'approved'), which shows up in the review
+    // queue with the same land-it-as-a-kayak_data-PR instructions as an
+    // endorsed editor proposal.
+    $cr_id = null;
     if ($changes !== []) {
-        $db->beginTransaction();
+        $frozen = [];
+        foreach ($changes as $field => $pair) {
+            $frozen[$field] = $pair['new'];
+        }
+        $payload = json_encode([$type => $frozen], JSON_UNESCAPED_SLASHES);
         try {
-            if ($table === 'reach') {
-                $sets[] = "updated_at = datetime('now')";
-            }
-            $params[] = $id;
-            $db->prepare('UPDATE ' . $table . ' SET ' . implode(', ', $sets) . ' WHERE id = ?')
-                ->execute($params);
-
-            $hist = $db->prepare(
-                "INSERT INTO edit_history
-                   (target_type, target_id, change_request_id, field, old_value, new_value,
-                    changed_at, changed_by)
-                 VALUES (?, ?, NULL, ?, ?, ?, datetime('now'), ?)"
-            );
-            $changed_by = 'maintainer:' . (int)$maintainer['id'];
-            foreach ($changes as $field => $pair) {
-                $hist->execute([
-                    $type,
-                    $id,
-                    $field,
-                    $pair['old'] === null ? null : (string)$pair['old'],
-                    (string)$pair['new'],
-                    $changed_by,
-                ]);
-            }
-            $db->commit();
+            $db->prepare(
+                "INSERT INTO change_request
+                   (target_type, target_id, editor_id, subject, payload_json,
+                    status, submitted_at, reviewed_at, reviewed_by, applied_json)
+                 VALUES (?, ?, ?, ?, ?, 'approved', datetime('now'), datetime('now'), ?, ?)"
+            )->execute([
+                $type,
+                $id,
+                (int)$maintainer['id'],
+                'Direct edit: ' . (string)$name,
+                $payload !== false ? $payload : '{}',
+                (int)$maintainer['id'],
+                $payload !== false ? $payload : '{}',
+            ]);
+            $cr_id = (int)$db->lastInsertId();
         } catch (Throwable $e) {
-            $db->rollBack();
-            error_log('edit.php: apply failed: ' . $e->getMessage());
+            error_log('edit.php: freeze failed: ' . $e->getMessage());
             http_response_code(500);
             exit('Save failed — see server log.');
         }
     }
 
     header('Cache-Control: no-cache');
-    include_header('Changes Saved', '', '', '', ['type' => $type, 'id' => $id]);
-    echo '<h2>Changes Saved</h2>';
-    if ($changes !== []) {
+    include_header('Changes Frozen for Data Review', '', '', '', ['type' => $type, 'id' => $id]);
+    echo '<h2>Changes Frozen for Data Review</h2>';
+    if ($changes !== [] && $cr_id !== null) {
         $n = count($changes);
         $fields = implode(', ', array_keys($changes));
-        echo '<p>Saved ' . $n . ' field' . ($n === 1 ? '' : 's')
+        echo '<p>Froze ' . $n . ' field' . ($n === 1 ? '' : 's')
            . ' for <strong>' . htmlspecialchars($name) . '</strong>: '
            . '<code>' . htmlspecialchars($fields) . '</code></p>';
+        echo '<p style="padding:.5rem;background:#fff8e1;border:1px solid #e6d28a;border-radius:4px">'
+           . 'Nothing changed on the live site yet: the dataset repo is the only '
+           . 'metadata authority. Land the frozen diff as a <code>kayak_data</code> PR, '
+           . 'then mark <a href="/review.php?id=' . $cr_id . '">request #' . $cr_id . '</a> '
+           . 'resolved once the deploy ships it.</p>';
     } else {
         echo '<p>No changes to save for <strong>' . htmlspecialchars($name) . '</strong>.</p>';
     }

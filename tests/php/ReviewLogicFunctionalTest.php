@@ -88,10 +88,10 @@ final class ReviewLogicFunctionalTest extends FunctionalTestCase
     }
 
     // -----------------------------------------------------------------------
-    // review_approve — reach-column + reach_class mutation
+    // review_approve — SA-lite (D1): endorse + freeze, never mutate metadata
     // -----------------------------------------------------------------------
 
-    public function testApproveAppliesReachColumnsAndWritesHistory(): void
+    public function testApproveFreezesDiffWithoutWritingMetadata(): void
     {
         $db = $this->pdo();
         $maint = Fixtures::editor($db, ['status' => 'maintainer']);
@@ -107,17 +107,20 @@ final class ReviewLogicFunctionalTest extends FunctionalTestCase
         $applied = ['reach' => ['description' => 'brand new desc', 'features' => 'a rapid']];
         $res = review_approve($db, $cr, $applied, $maint, 'looks good');
 
-        $this->assertTrue($res['ok'], 'approve must succeed');
+        $this->assertTrue($res['ok'], 'endorse must succeed');
 
-        // Reach columns updated.
+        // SA-lite: the reach row is NOT touched — the dataset repo is the only
+        // metadata authority (a direct write would be reverted by the next
+        // deploy's sync-metadata). This assertion is the criterion-6 guard.
         $st = $db->prepare('SELECT description, features, updated_at FROM reach WHERE id = ?');
         $st->execute([$reach]);
         $row = $st->fetch();
-        $this->assertSame('brand new desc', $row['description']);
-        $this->assertSame('a rapid', $row['features']);
-        $this->assertNotNull($row['updated_at'], 'updated_at stamped');
+        $this->assertSame('old desc', $row['description'], 'reach column must NOT change');
+        $this->assertNull($row['features'], 'reach column must NOT change');
+        $this->assertNull($row['updated_at'], 'updated_at must NOT be stamped');
 
-        // change_request claimed: status -> approved, note merged, applied_json set.
+        // change_request claimed: status -> approved (endorsed), note merged,
+        // applied_json carries the frozen maintainer-edited diff.
         $crAfter = $this->fetchCr($cr['id']);
         $this->assertSame('approved', $crAfter['status']);
         $this->assertSame($maint, (int)$crAfter['reviewed_by']);
@@ -126,24 +129,13 @@ final class ReviewLogicFunctionalTest extends FunctionalTestCase
         $this->assertStringContainsString('maintainer]', (string)$crAfter['reviewer_note']);
         $applied_json = json_decode((string)$crAfter['applied_json'], true);
         $this->assertSame('brand new desc', $applied_json['reach']['description']);
+        $this->assertSame('a rapid', $applied_json['reach']['features']);
 
-        // One edit_history row per changed field, with old/new values + actor.
-        $st = $db->prepare(
-            'SELECT field, old_value, new_value, changed_by FROM edit_history
-             WHERE change_request_id = ? ORDER BY field'
-        );
-        $st->execute([$cr['id']]);
-        $hist = $st->fetchAll();
-        $this->assertCount(2, $hist);
-        $byField = array_column($hist, null, 'field');
-        $this->assertSame('old desc', $byField['description']['old_value']);
-        $this->assertSame('brand new desc', $byField['description']['new_value']);
-        $this->assertSame('maintainer:' . $maint, $byField['description']['changed_by']);
-        // features had no prior value -> old_value NULL.
-        $this->assertNull($byField['features']['old_value']);
+        // No audit rows: nothing was applied.
+        $this->assertSame(0, $this->historyCount($cr['id']));
     }
 
-    public function testApproveBlankValueStoredAsNull(): void
+    public function testApproveFreezesBlankOverlayAndLeavesColumn(): void
     {
         $db = $this->pdo();
         $maint = Fixtures::editor($db, ['status' => 'maintainer']);
@@ -151,13 +143,16 @@ final class ReviewLogicFunctionalTest extends FunctionalTestCase
         $reach = Fixtures::reach($db, ['description' => 'something', 'river' => 'R']);
         $cr = $this->seedCr($editor, $reach, ['reach' => ['description' => '']]);
 
-        // Empty-string overlay collapses to NULL in the reach column.
+        // The blank overlay freezes verbatim (the empty-string -> NULL collapse
+        // is now the dataset editor's call when landing the CSV change).
         $res = review_approve($db, $cr, ['reach' => ['description' => '']], $maint, '');
         $this->assertTrue($res['ok']);
 
         $st = $db->prepare('SELECT description FROM reach WHERE id = ?');
         $st->execute([$reach]);
-        $this->assertNull($st->fetchColumn());
+        $this->assertSame('something', $st->fetchColumn(), 'reach untouched');
+        $applied_json = json_decode((string)$this->fetchCr($cr['id'])['applied_json'], true);
+        $this->assertSame('', $applied_json['reach']['description']);
     }
 
     public function testApproveDropsNonAllowlistedReachField(): void
@@ -167,17 +162,13 @@ final class ReviewLogicFunctionalTest extends FunctionalTestCase
         $editor = Fixtures::editor($db);
         $reach = Fixtures::reach($db, ['description' => 'old desc', 'river' => 'R']);
 
-        // Capture a real reach column the proposal must NOT be able to set.
-        $st = $db->prepare('SELECT no_show FROM reach WHERE id = ?');
-        $st->execute([$reach]);
-        $noShowBefore = $st->fetchColumn();
-
-        // Tampered payload_json: a legit field plus two non-proposable reach columns.
-        // R1.4: the apply path interpolates the column name as a SQL identifier, so it
-        // intersects payload keys against the proposable-fields allowlist. The forged
-        // keys are dropped (not written); the legit field applies and approve succeeds.
+        // Tampered payload: a legit field plus two non-proposable reach columns.
+        // R1.4 carried into SA-lite: forged keys must not survive into the
+        // FROZEN diff either — an operator copies applied_json into the
+        // dataset, so a forged key would otherwise launder itself into a
+        // reviewed CSV edit.
         $applied = ['reach' => [
-            'description' => 'new desc',  // allowlisted -> applied
+            'description' => 'new desc',  // allowlisted -> frozen
             'no_show'     => 1,           // real column, not proposable -> dropped
             'id'          => 999999,      // dropped
         ]];
@@ -186,26 +177,24 @@ final class ReviewLogicFunctionalTest extends FunctionalTestCase
         $res = review_approve($db, $cr, $applied, $maint, '');
         $this->assertTrue($res['ok'], 'forged keys are dropped, not fatal');
 
-        $st = $db->prepare('SELECT id, description, no_show FROM reach WHERE id = ?');
+        $applied_json = json_decode((string)$this->fetchCr($cr['id'])['applied_json'], true);
+        $this->assertSame(['description' => 'new desc'], $applied_json['reach']);
+
+        // Nothing applied anywhere.
+        $st = $db->prepare('SELECT description, no_show FROM reach WHERE id = ?');
         $st->execute([$reach]);
         $row = $st->fetch();
-        $this->assertSame('new desc', $row['description'], 'allowlisted field applied');
-        $this->assertSame($noShowBefore, $row['no_show'], 'non-proposable no_show untouched');
-        $this->assertSame($reach, (int)$row['id'], 'forged id ignored');
-
-        // edit_history only for the allowlisted field.
-        $st = $db->prepare('SELECT field FROM edit_history WHERE change_request_id = ?');
-        $st->execute([$cr['id']]);
-        $this->assertSame(['description'], array_column($st->fetchAll(), 'field'));
+        $this->assertSame('old desc', $row['description']);
+        $this->assertSame(0, $this->historyCount($cr['id']));
     }
 
-    public function testApproveReplacesReachClassSetAndLogsDiff(): void
+    public function testApproveFreezesReachClassWithoutReplacingRows(): void
     {
         $db = $this->pdo();
         $maint = Fixtures::editor($db, ['status' => 'maintainer']);
         $editor = Fixtures::editor($db);
         $reach = Fixtures::reach($db, ['river' => 'Class River']);
-        // Pre-existing classes that should be wiped and replaced.
+        // Pre-existing classes must SURVIVE — pre-SA-lite approve replaced them.
         Fixtures::reachClass($db, $reach, ['name' => 'II', 'low' => 100.0, 'low_data_type' => 'flow', 'high' => 200.0, 'high_data_type' => 'flow']);
         Fixtures::reachClass($db, $reach, ['name' => 'II+']);
 
@@ -221,46 +210,28 @@ final class ReviewLogicFunctionalTest extends FunctionalTestCase
         $res = review_approve($db, $cr, $applied, $maint, '');
         $this->assertTrue($res['ok']);
 
-        $st = $db->prepare('SELECT name, low, high, low_data_type FROM reach_class WHERE reach_id = ? ORDER BY id');
+        $st = $db->prepare('SELECT name FROM reach_class WHERE reach_id = ? ORDER BY id');
         $st->execute([$reach]);
-        $rows = $st->fetchAll();
-        $this->assertSame(['III', 'III+', 'IV'], array_column($rows, 'name'));
-        // Shared range applied to every row.
-        $this->assertEqualsWithDelta(300.0, (float)$rows[0]['low'], 0.001);
-        $this->assertEqualsWithDelta(800.0, (float)$rows[0]['high'], 0.001);
-        $this->assertSame('flow', $rows[2]['low_data_type']);
+        $this->assertSame(['II', 'II+'], array_column($st->fetchAll(), 'name'), 'classes untouched');
 
-        // A single reach_class edit_history row carrying the JSON diff.
-        $st = $db->prepare("SELECT old_value, new_value FROM edit_history WHERE change_request_id = ? AND field = 'reach_class'");
-        $st->execute([$cr['id']]);
-        $h = $st->fetch();
-        $this->assertNotFalse($h);
-        $this->assertStringContainsString('"II"', (string)$h['old_value']);
-        $this->assertStringContainsString('"III+"', (string)$h['new_value']);
+        $applied_json = json_decode((string)$this->fetchCr($cr['id'])['applied_json'], true);
+        $this->assertSame(['III', 'III+', 'IV'], $applied_json['reach_class']['names']);
+        $this->assertSame(0, $this->historyCount($cr['id']));
     }
 
-    public function testApproveSkipsReachClassWhenUnchanged(): void
+    public function testResolveClosesEndorsedRequest(): void
     {
+        // SA-lite loop closure: after the dataset PR deploys, the maintainer
+        // marks the endorsed (approved) request resolved.
         $db = $this->pdo();
         $maint = Fixtures::editor($db, ['status' => 'maintainer']);
         $editor = Fixtures::editor($db);
-        $reach = Fixtures::reach($db, ['river' => 'NoChange River']);
-        Fixtures::reachClass($db, $reach, ['name' => 'III', 'low' => 500.0, 'low_data_type' => 'flow', 'high' => 1000.0, 'high_data_type' => 'flow']);
+        $reach = Fixtures::reach($db, ['river' => 'R']);
+        $cr = $this->seedCr($editor, $reach, ['reach' => ['description' => 'x']]);
+        $this->assertTrue(review_approve($db, $cr, ['reach' => ['description' => 'x']], $maint, '')['ok']);
 
-        // applied reach_class identical to current -> the $old_dump===$new_dump
-        // guard short-circuits: no DELETE/INSERT, no edit_history row.
-        $applied = [
-            'reach' => [],
-            'reach_class' => [
-                'names' => ['III'],
-                'range' => ['low' => 500.0, 'high' => 1000.0, 'data_type' => 'flow'],
-            ],
-        ];
-        $cr = $this->seedCr($editor, $reach, $applied);
-
-        $res = review_approve($db, $cr, $applied, $maint, '');
-        $this->assertTrue($res['ok']);
-        $this->assertSame(0, $this->historyCount($cr['id']), 'unchanged reach_class writes no history');
+        $this->assertTrue(review_resolve($db, $this->fetchCr($cr['id']), 'deployed', $maint));
+        $this->assertSame('resolved', $this->fetchCr($cr['id'])['status']);
     }
 
     public function testApproveTargetMissingReturnsError(): void
@@ -274,42 +245,8 @@ final class ReviewLogicFunctionalTest extends FunctionalTestCase
         $res = review_approve($db, $cr, ['reach' => ['description' => 'x']], $maint, '');
         $this->assertFalse($res['ok']);
         $this->assertSame('Target missing', $res['err']);
-        // CR untouched (no transaction even started).
+        // CR untouched.
         $this->assertSame('pending', $this->fetchCr($cr['id'])['status']);
-    }
-
-    public function testApproveCaughtExceptionRollsBackAndReportsGenericError(): void
-    {
-        $db = $this->pdo();
-        $maint = Fixtures::editor($db, ['status' => 'maintainer']);
-        $editor = Fixtures::editor($db);
-        $reach = Fixtures::reach($db, ['description' => 'keep me', 'river' => 'R']);
-        // A reach_class range with low > high violates ck_reach_class_low_le_high,
-        // so the INSERT throws inside the try -> rollback. (A bogus reach *column*
-        // no longer reaches the UPDATE — the R1.4 allowlist drops it — so the
-        // catch/rollback path is exercised via the reach_class CHECK instead.)
-        $applied = [
-            'reach'       => ['description' => 'should not persist'],
-            'reach_class' => [
-                'names' => ['III'],
-                'range' => ['low' => 900.0, 'high' => 100.0, 'data_type' => 'flow'],
-            ],
-        ];
-        $cr = $this->seedCr($editor, $reach, $applied);
-
-        $res = review_approve($db, $cr, $applied, $maint, 'note');
-        $this->assertFalse($res['ok']);
-        $this->assertStringContainsString('apply failed', (string)$res['err']);
-
-        // Rolled back: status pending, the reach UPDATE reverted, no classes, no history.
-        $this->assertSame('pending', $this->fetchCr($cr['id'])['status']);
-        $st = $db->prepare('SELECT description FROM reach WHERE id = ?');
-        $st->execute([$reach]);
-        $this->assertSame('keep me', $st->fetchColumn());
-        $st = $db->prepare('SELECT COUNT(*) FROM reach_class WHERE reach_id = ?');
-        $st->execute([$reach]);
-        $this->assertSame(0, (int)$st->fetchColumn());
-        $this->assertSame(0, $this->historyCount($cr['id']));
     }
 
     // -----------------------------------------------------------------------
