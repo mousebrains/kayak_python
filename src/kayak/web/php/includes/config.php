@@ -222,6 +222,30 @@ final class Config
     }
 
     /**
+     * Read a list-of-strings field from the nested dataset `site` block —
+     * e.g. `Config::site_lines('nav_title')`. Returns [] when the block, the
+     * key, or any entry has the wrong shape (fail-closed to the caller's
+     * fallback); callers still escape at the render site.
+     *
+     * @return list<string>
+     */
+    public static function site_lines(string $key): array
+    {
+        $site = self::get('site', null);
+        if (!is_array($site) || !array_key_exists($key, $site) || !is_array($site[$key])) {
+            return [];
+        }
+        $out = [];
+        foreach ($site[$key] as $line) {
+            if (!is_string($line)) {
+                return [];
+            }
+            $out[] = $line;
+        }
+        return $out;
+    }
+
+    /**
      * Read a string field from the nested dataset `data_license` block (S3).
      */
     public static function data_license(string $key, string $default = ''): string

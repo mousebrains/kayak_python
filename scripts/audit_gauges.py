@@ -175,19 +175,26 @@ def find_new_nwps_gauges(cache, kayak):
 def load_audit_ignore(path: Path | None = None) -> set[tuple[str, str, int]]:
     """Load the (kind, gauge_id, reach_id) tuples to suppress from candidates.
 
-    See ``src/kayak/data/audit_ignore.yaml`` for the schema. Missing file is fine —
-    returns an empty set so the audit runs clean before any entries exist.
+    The suppressions are dataset content (which candidates a deployment has
+    judged not-actually-useful is regional knowledge, G5), so the default
+    resolves ``DATASET_DIR/ops/audit_ignore.yaml`` — the schema is documented
+    in that file in ``kayak_data``. A missing file returns an empty set (a
+    fresh region audits clean) but says so on stderr: a half-rolled-out
+    dataset must not silently become "ignore nothing" and re-flood the audit
+    digest (PR #187 live review).
     """
     if path is None:
-        # audit_ignore.yaml is a packaged engine resource (it moved under the
-        # kayak package in the dataset-separation work), so resolve it via the
-        # package rather than the old repo-root ``data/`` path, which no longer
-        # exists. Local import keeps this script importable without kayak on the
-        # path until the ignore file is actually loaded.
-        from kayak.resources import resource_dir
+        # Local import keeps this script importable without kayak on the path
+        # until the ignore file is actually loaded.
+        from kayak.config import DATASET_DIR
 
-        path = resource_dir("data", "audit_ignore.yaml")
+        path = DATASET_DIR / "ops" / "audit_ignore.yaml"
     if not path.is_file():
+        print(
+            f"audit_gauges: no ignore file at {path} — running with an empty "
+            "suppression set (expected only for a fresh region's dataset)",
+            file=sys.stderr,
+        )
         return set()
     import yaml  # local import — only this code path needs PyYAML
 
@@ -250,7 +257,7 @@ def find_candidates_near_reaches(
 
     ``kind`` is "USGS" or "NWPS" — used to key into ``ignore``, which
     suppresses specific (kind, gauge_id, reach_id) pairs marked as
-    not-actually-useful in ``src/kayak/data/audit_ignore.yaml``. Suppression
+    not-actually-useful in ``DATASET_DIR/ops/audit_ignore.yaml``. Suppression
     happens before the per-gauge dedup so a gauge that's wrong for the
     closest reach can still surface against a more-distant reach where
     it'd actually fit.

@@ -96,9 +96,16 @@ def _build_nav(
 
 
 def _site_home_heading() -> str:
-    """Visible site title in the header, sourced from dataset site identity."""
-    site_name = html_mod.escape(get_site_config().site_name)
-    return f'<h1><a href="/index.html">{site_name}</a></h1>'
+    """Visible site title in the header, sourced from dataset site identity.
+
+    ``nav_title`` (1-2 short lines) renders stacked via ``<br>`` — the same
+    width-conserving idiom as the ``Reach<br>Picker`` buttons beside it —
+    falling back to ``site_name`` on one line when the dataset doesn't set it.
+    """
+    site = get_site_config()
+    lines = site.nav_title or (site.site_name,)
+    brand = "<br>".join(html_mod.escape(line) for line in lines)
+    return f'<h1><a href="/index.html">{brand}</a></h1>'
 
 
 def _build_right_cluster() -> str:

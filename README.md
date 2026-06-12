@@ -57,6 +57,11 @@ source .venv/bin/activate
 git clone git@github.com:mousebrains/kayak_data.git ../kayak_data
 export DATASET_DIR="$(cd ../kayak_data && pwd)"   # or persist in ~/.config/kayak/.env
 
+# 2c. Pick a build output dir OUTSIDE the repo and dataset (required — S3h:
+#     `levels build`, which `levels pipeline` runs, has no default and refuses
+#     the engine/dataset trees).
+export OUTPUT_DIR=~/public_html_dev               # or persist in ~/.config/kayak/.env
+
 # 3. Create the schema (empty tables + stamped migrations; schema only —
 #    the former sources.yaml seeding is gone, --no-seed is a deprecated no-op)
 levels init-db
@@ -80,14 +85,13 @@ levels pipeline
 levels emit-config --out ~/.config/kayak/runtime-config.json
 
 # 7. Serve locally
-KAYAK_CONFIG_PATH=~/.config/kayak/runtime-config.json php -S localhost:8000 -t public_html
+KAYAK_CONFIG_PATH=~/.config/kayak/runtime-config.json php -S localhost:8000 -t "$OUTPUT_DIR"
 ```
 
-> **Set `OUTPUT_DIR` on a dev machine.** Unset, `levels build` (which `levels
-> pipeline` runs) writes into the repo's own `public_html/`, clobbering the
-> tracked dev symlinks there and dropping stray artifacts under `static/`. Set
-> `OUTPUT_DIR` to a non-repo path (e.g. `~/public_html_dev`) in
-> `~/.config/kayak/.env` and serve that instead — `KAYAK_CONFIG_PATH=…
+> **`OUTPUT_DIR` is required.** `levels build` (which `levels pipeline`
+> runs) has no default output directory and refuses the engine or dataset
+> trees (S3h) — set `OUTPUT_DIR` to a non-repo path (e.g. `~/public_html_dev`)
+> in `~/.config/kayak/.env` and serve that — `KAYAK_CONFIG_PATH=…
 > php -S localhost:8000 -t "$OUTPUT_DIR"` (config step 6 above). See
 > `.env.example` and CLAUDE.md for the full rationale.
 
@@ -107,7 +111,7 @@ shell config makes activation noisy: replace every `levels …` with
 | `levels fetch-usgs-ogc` | Fetch USGS continuous data via the OGC API for gauges linked to a USGS source |
 | `levels calc-rating` | Interpolate missing flow/gage values using rating tables |
 | `levels calculator` | Evaluate calculated expressions (synthetic gauges) |
-| `levels build` | Generate static HTML/CSV/text to `public_html/` |
+| `levels build` | Generate static HTML/CSV/text to `$OUTPUT_DIR` (required; outside the repo) |
 | `levels decimate` | Thin old observations (keeps 90d full, 1h/365d, 6h/archive) |
 | `levels seed-maintainer --email …` | Create or promote an editor row to status=maintainer |
 | `levels trace --putin … --takeout …` | Trace a reach along NHD HR flowlines |

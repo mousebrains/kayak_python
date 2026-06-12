@@ -197,7 +197,7 @@ Trace-cache/                         # Gitignored
 scripts/
 ├── trace_reach.py                   # Trace a single reach (CLI tool)
 ├── extract_trace_data.sh            # Pre-extract HUC4 GDBs → GPKGs
-├── fetch_nhd.sh                     # Download raw NHD HR GDBs from USGS S3
+├── fetch_nhd.sh                     # Download raw NHD HR GDBs (takes the dataset repo's regional list, e.g. kayak_data ops/nhd_downloads.txt — S3g)
 ├── extract_nhd_flowlines.sh         # (legacy) Extract named flowlines for merge
 ├── extract_osm_waterways.sh         # (legacy) Extract OSM waterways for merge
 └── merge_flowlines.py               # (legacy) Merge NHD+OSM named streams

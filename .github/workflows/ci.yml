@@ -36,7 +36,7 @@ jobs:
           cache-dependency-path: pyproject.toml
       # Pin to the version in uv.lock / .pre-commit-config.yaml so the format
       # gate can't drift when ruff ships a release (the churn behind df6e422).
-      - run: pip install ruff==0.15.11
+      - run: pip install ruff==0.15.17
       - run: ruff check src/ tests/ scripts/ docs/one-offs/
       - run: ruff format --check src/ tests/ scripts/ docs/one-offs/
 
@@ -75,7 +75,7 @@ jobs:
       - name: Install biome
         uses: biomejs/setup-biome@4c91541eaada48f67d7dbd7833600ce162b68f51 # v2
         with:
-          version: 2.4.11
+          version: 2.5.0
 
       - name: PHP syntax check
         run: |

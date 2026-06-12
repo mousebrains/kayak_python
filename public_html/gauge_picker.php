@@ -1,1 +1,0 @@
-../src/kayak/web/php/gauge_picker.php

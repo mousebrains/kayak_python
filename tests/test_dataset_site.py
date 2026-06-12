@@ -51,6 +51,30 @@ class TestLoadSiteConfig:
         assert c.manifest_name == "Foo Levels"
         assert c.manifest_short_name == "Foo"
 
+    def test_nav_title_two_lines_accepted(self, tmp_path: Path) -> None:
+        # Compact stacked header brand (1-2 lines, rendered <br>-joined).
+        (tmp_path / site.SITE_YAML).write_text('nav_title: ["River", "Levels"]\n')
+        assert site.load_site_config(tmp_path).nav_title == ("River", "Levels")
+
+    def test_nav_title_default_is_empty(self, tmp_path: Path) -> None:
+        # Unset → empty tuple → renderers fall back to site_name.
+        assert site.load_site_config(tmp_path).nav_title == ()
+
+    def test_nav_title_three_lines_rejected(self, tmp_path: Path) -> None:
+        (tmp_path / site.SITE_YAML).write_text('nav_title: ["a", "b", "c"]\n')
+        with pytest.raises(ValueError, match="at most 2"):
+            site.load_site_config(tmp_path)
+
+    def test_nav_title_html_metacharacter_rejected(self, tmp_path: Path) -> None:
+        (tmp_path / site.SITE_YAML).write_text('nav_title: ["<b>River", "Levels"]\n')
+        with pytest.raises(ValueError, match="metacharacter"):
+            site.load_site_config(tmp_path)
+
+    def test_nav_title_empty_line_rejected(self, tmp_path: Path) -> None:
+        (tmp_path / site.SITE_YAML).write_text('nav_title: ["River", "  "]\n')
+        with pytest.raises(ValueError, match="non-empty"):
+            site.load_site_config(tmp_path)
+
     def test_manifest_name_rejects_html_metacharacter(self, tmp_path: Path) -> None:
         (tmp_path / site.SITE_YAML).write_text("manifest_name: 'Foo <script>'\n")
         with pytest.raises(ValueError, match="metacharacter"):

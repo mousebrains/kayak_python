@@ -77,6 +77,10 @@ class SiteConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     site_name: str = "River Levels"
+    # Optional compact header brand: 1-2 short lines rendered stacked in the
+    # nav h1 (joined with <br>, like the Reach<br>Picker buttons beside it) so
+    # the brand conserves horizontal width. Empty tuple = use site_name.
+    nav_title: tuple[str, ...] = ()
     org_name: str = "Kayak"
     org_url: str = "https://example.com"
     org_label: str = ""
@@ -103,6 +107,18 @@ class SiteConfig(BaseModel):
     @classmethod
     def _safe_text(cls, v: str) -> str:
         return _safe_text_value(v)
+
+    @field_validator("nav_title")
+    @classmethod
+    def _safe_nav_title(cls, v: tuple[str, ...]) -> tuple[str, ...]:
+        # Element type/coercion is pydantic's job (a non-string line is a
+        # ValidationError, itself a ValueError for _check_site_yaml); this
+        # enforces the 1-2-line shape and the no-HTML-metacharacter rule.
+        if len(v) > 2:
+            raise ValueError("nav_title supports at most 2 lines")
+        for line in v:
+            _safe_text_value(line)
+        return v
 
     @field_validator("manifest_name")
     @classmethod

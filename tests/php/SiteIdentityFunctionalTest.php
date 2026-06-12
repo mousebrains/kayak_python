@@ -94,4 +94,52 @@ final class SiteIdentityFunctionalTest extends FunctionalTestCase
         );
         $this->assertStringNotContainsString('Evil" onmouseover', $html);  // no raw break-out
     }
+
+    public function testHeaderRendersStackedNavTitle(): void
+    {
+        // nav_title (1–2 lines) renders <br>-stacked in the h1, the same
+        // width-conserving idiom as the Reach<br>Picker nav buttons; the full
+        // site_name stays in og:site_name / titles.
+        Config::install_for_tests([
+            'editor_feature' => false,
+            'site' => [
+                'site_name' => 'WKCC River Levels',
+                'nav_title' => ['River', 'Levels'],
+            ],
+        ]);
+        $html = $this->renderHeader();
+        $this->assertStringContainsString('<h1><a href="/index.html">River<br>Levels</a></h1>', $html);
+        $this->assertStringContainsString(
+            '<meta property="og:site_name" content="WKCC River Levels">',
+            $html,
+        );
+    }
+
+    public function testHeaderEscapesNavTitleLinesAtRender(): void
+    {
+        // Defense-in-depth, same rationale as site_name: a hand-tampered
+        // runtime-config must not break out of the h1 via a nav_title line.
+        Config::install_for_tests([
+            'editor_feature' => false,
+            'site' => ['nav_title' => ['<b>River', 'Levels']],
+        ]);
+        $html = $this->renderHeader();
+        $this->assertStringContainsString(
+            '<h1><a href="/index.html">&lt;b&gt;River<br>Levels</a></h1>',
+            $html,
+        );
+        $this->assertStringNotContainsString('<b>River', $html);
+    }
+
+    public function testHeaderNavTitleWrongShapeFallsBackToSiteName(): void
+    {
+        // A malformed nav_title (non-list / non-string entries) fails closed to
+        // the single-line site_name rather than rendering garbage.
+        Config::install_for_tests([
+            'editor_feature' => false,
+            'site' => ['site_name' => 'Foo Levels', 'nav_title' => [1, 2]],
+        ]);
+        $html = $this->renderHeader();
+        $this->assertStringContainsString('<h1><a href="/index.html">Foo Levels</a></h1>', $html);
+    }
 }

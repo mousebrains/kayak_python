@@ -120,6 +120,27 @@ def test_nav_bar_includes_reach_state_absent_from_region_config() -> None:
     assert 'href="/Wyoming.html"' in html and ">WY</a>" in html
 
 
+def test_site_home_heading_renders_stacked_nav_title(monkeypatch) -> None:
+    """nav_title (1-2 lines) renders <br>-stacked in the h1 — the same
+    width-conserving idiom as the Reach<br>Picker buttons beside it."""
+    from kayak.dataset.site import SiteConfig
+    from kayak.web.build import shell as shell_mod
+
+    monkeypatch.setattr(
+        shell_mod, "get_site_config", lambda: SiteConfig(nav_title=("River", "Levels"))
+    )
+    assert shell_mod._site_home_heading() == '<h1><a href="/index.html">River<br>Levels</a></h1>'
+
+
+def test_site_home_heading_falls_back_to_site_name(monkeypatch) -> None:
+    """Without nav_title the h1 stays the single-line site_name (escaped)."""
+    from kayak.dataset.site import SiteConfig
+    from kayak.web.build import shell as shell_mod
+
+    monkeypatch.setattr(shell_mod, "get_site_config", lambda: SiteConfig(site_name="Foo Levels"))
+    assert shell_mod._site_home_heading() == '<h1><a href="/index.html">Foo Levels</a></h1>'
+
+
 def test_region_urls_with_query_strings_escape_in_rendered_html(tmp_path) -> None:
     """A legitimate `&` in a region weather/link URL must render as `&amp;` in
     the emitted href attributes (the carried S3b Dreamflows finding). Guarded at

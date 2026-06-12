@@ -175,27 +175,36 @@ def test_candidate_name_override_within_half_mile():
     assert [c[1] for c in audit.find_candidates_near_reaches(on_top, db, kind="USGS")] == ["ONTOP"]
 
 
-def test_audit_ignore_default_resolves_packaged_resource():
-    """Regression for the dataset-separation move (plan S4a-2 slice A):
-    audit_ignore.yaml now ships *inside* the kayak package, so
-    ``load_audit_ignore()`` with no args must resolve it via
-    importlib.resources — not the old repo-root ``data/audit_ignore.yaml``
-    path, which no longer exists. If the default path silently breaks, the
-    function returns an empty set and every hand-triaged suppression is lost,
-    re-flooding the weekly audit email with previously-ignored false positives.
+def test_audit_ignore_default_resolves_dataset_ops_file(monkeypatch, tmp_path):
+    """The suppressions are dataset content (S3g / finishing-plan R3 + D3):
+    ``load_audit_ignore()`` with no args must resolve
+    ``DATASET_DIR/ops/audit_ignore.yaml``. If the default path silently breaks,
+    the function returns an empty set and every hand-triaged suppression is
+    lost, re-flooding the weekly audit email with previously-ignored false
+    positives — so prove the default actually finds and parses the file.
     """
-    from kayak.resources import resource_dir
-
-    packaged = resource_dir("data", "audit_ignore.yaml")
-    assert packaged.is_file(), f"packaged audit_ignore.yaml not shipped: {packaged}"
-
+    ops = tmp_path / "ops"
+    ops.mkdir()
+    (ops / "audit_ignore.yaml").write_text(
+        "ignored_candidates:\n  - {kind: USGS, gauge_id: '14000000', reach_id: 1}\n"
+    )
     audit = _load_audit()
+    monkeypatch.setattr("kayak.config.DATASET_DIR", tmp_path)
     default = audit.load_audit_ignore()
-    # Non-empty proves the file was actually found and parsed: a broken default
-    # path returns set() because the file reads as "missing".
-    assert default, "load_audit_ignore() default returned empty — packaged file not found"
-    # The default must resolve to the same packaged file as an explicit path.
-    assert default == audit.load_audit_ignore(path=packaged)
+    assert default == {("USGS", "14000000", 1)}
+    # The default must resolve to the same file as an explicit path.
+    assert default == audit.load_audit_ignore(path=ops / "audit_ignore.yaml")
+
+
+def test_audit_ignore_missing_dataset_file_is_empty_but_loud(monkeypatch, tmp_path, capsys):
+    """A dataset without ops/audit_ignore.yaml audits clean (empty set) so a
+    fresh region isn't forced to create suppressions — but it must say so on
+    stderr, so a half-rolled-out dataset can't silently become "ignore
+    nothing" (PR #187 live review)."""
+    audit = _load_audit()
+    monkeypatch.setattr("kayak.config.DATASET_DIR", tmp_path)
+    assert audit.load_audit_ignore() == set()
+    assert "empty suppression set" in capsys.readouterr().err
 
 
 def test_refresh_caches_uses_requested_cache_path(monkeypatch, tmp_path):

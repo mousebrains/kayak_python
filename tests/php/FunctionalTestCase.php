@@ -94,7 +94,11 @@ abstract class FunctionalTestCase extends TestCase
         $_POST = [];
         $_COOKIE = [];
         $_SERVER['REQUEST_METHOD'] = 'GET';
-        $_SERVER['DOCUMENT_ROOT'] = dirname(__DIR__, 2) . '/public_html';
+        // A scratch (intentionally absent) docroot: the repo no longer tracks a
+        // public_html/ symlink farm (S3h), and handlers must degrade gracefully
+        // when a docroot file is missing. Tests that need docroot files create
+        // their own temp dir and override this.
+        $_SERVER['DOCUMENT_ROOT'] = sys_get_temp_dir() . '/kayak-func-docroot-absent';
         $_SERVER['HTTP_HOST'] = 'levels.test';
         $_SERVER['REQUEST_URI'] = '/';
     }

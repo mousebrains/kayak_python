@@ -22,7 +22,7 @@ The development environment uses these paths (configured in `~/.config/kayak/.en
 
 **Metadata repo (data-repo split):** the metadata CSVs + `reaches*.json` live in a **separate** repo, `kayak_data`, cloned alongside the code repo and located via the `DATASET_DIR` env var (the former `METADATA_DIR` is a deprecated alias, honored for one release with a warning; S6.1). The default *value* stays `data/db` (repo-root; path resolution unchanged — metadata is club-specific external data, not a packaged engine resource), but the CSVs no longer live in the code repo — clone `kayak_data` and point `DATASET_DIR` at it. Only the schema migrations stay in the code repo, and they ship *inside* the package at `src/kayak/data/db/migrations/`. `levels sync-metadata` (apply the CSV diff) and `import_metadata` (apply the geom/gradient sidecars) read `DATASET_DIR`; `levels recover-metadata` reconstructs the dataset from a DB into a scratch dir for recovery. Humans edit metadata via a PR to `kayak_data` (the single authority for metadata) — there is no reverse sync from the live DB back to the dataset. See [`deploy/SETUP.md`](deploy/SETUP.md).
 
-**`OUTPUT_DIR` convention:** the live host sets `OUTPUT_DIR=/home/pat/public_html` (outside the repo), so `levels build` writes to the nginx docroot and never touches the repo tree. On a separate dev machine, set `OUTPUT_DIR=/home/<user>/public_html_dev` (or similar non-repo path) in `~/.config/kayak/.env` and serve with `KAYAK_CONFIG_PATH=… php -S localhost:8000 -t "$OUTPUT_DIR"` (see § Running the PHP Web Layer for the config step). The default (unset) writes back into the repo's `public_html/`, which clobbers tracked dev symlinks and drops stray artifacts under `static/`. See `.env.example` for the full rationale.
+**`OUTPUT_DIR` convention:** `OUTPUT_DIR` is **required** — `levels build` has no default and refuses the engine or dataset trees as output (S3h; the tracked `public_html/` dev-symlink farm is gone). The live host sets `OUTPUT_DIR=/home/pat/public_html` (outside the repo), so `levels build` writes to the nginx docroot and never touches the repo tree. On a dev machine, set `OUTPUT_DIR=/home/<user>/public_html_dev` (or similar non-repo path) in `~/.config/kayak/.env` and serve with `KAYAK_CONFIG_PATH=… php -S localhost:8000 -t "$OUTPUT_DIR"` (see § Running the PHP Web Layer for the config step). See `.env.example` for the full rationale.
 
 POSIX ACLs grant `www-data`: traverse on `/home/pat` (not `/home/pat/kayak`), read on the docroot `/home/pat/public_html` (a real dir outside the repo — `levels build` copies PHP/static in) and on the operator status cache `/home/pat/var/status.html` (relocated out of the repo by R2.6/#47, so `www-data` reads zero repo paths), read-write on `/home/pat/DB`.
 
@@ -33,6 +33,7 @@ python3 -m venv /home/pat/.venv
 /home/pat/.venv/bin/pip install -e ".[dev]"
 git clone git@github.com:mousebrains/kayak_data.git /home/pat/kayak_data  # the metadata dataset
 echo 'DATASET_DIR=/home/pat/kayak_data' >> ~/.config/kayak/.env          # point the code at it
+echo 'OUTPUT_DIR=/home/pat/public_html' >> ~/.config/kayak/.env          # required: build refuses engine/dataset trees (S3h)
 /home/pat/.venv/bin/levels init-db                      # Empty schema + stamp migrations
 /home/pat/.venv/bin/levels sync-metadata                # Load gauges/reaches/sources CSVs (by id) from DATASET_DIR
 /home/pat/.venv/bin/python scripts/import_metadata.py   # Apply the reach geom/gradient JSON sidecars
@@ -81,7 +82,7 @@ levels --help                        # CLI entry point (registered in pyproject.
 levels init-db                       # Create tables and stamp migrations (schema only)
 levels migrate                       # Apply any pending src/kayak/data/db/migrations/*.sql files
 levels pipeline                      # fetch → fetch-usgs-ogc → calc-rating → update-gauge-cache → calculator → build → orphan-check → check-reaches
-levels build                         # Generate static HTML/CSV/text to public_html/
+levels build                         # Generate static HTML/CSV/text to $OUTPUT_DIR (required)
 
 # Less-common subcommands (see `levels <cmd> --help` for details)
 levels fetch                         # One shot of the pipeline's first stage
@@ -122,7 +123,7 @@ Ruff config: Python 3.13 target, 100-char line length, rules `E W F I UP B SIM R
 # fatal-on-missing): emit one first and point KAYAK_CONFIG_PATH at it.
 levels emit-config --out ~/.config/kayak/runtime-config.json
 KAYAK_CONFIG_PATH=~/.config/kayak/runtime-config.json \
-    php -S localhost:8000 -t public_html  # Serve PHP pages + static build output
+    php -S localhost:8000 -t "$OUTPUT_DIR"  # Serve PHP pages + static build output
 ```
 
 ### PHP Tooling
@@ -182,7 +183,7 @@ Runs these steps in order:
 3. **calc-rating** — interpolates missing flow from gage height (or vice versa) using `Rating`/`RatingData` tables
 4. **update-gauge-cache** — recomputes gauge-level latest observation values
 5. **calculator** — evaluates `CalcExpression` formulas referencing `LatestObservation` values
-6. **build** — generates per-state HTML pages, CSV, and text files to `public_html/`; inlines CSS and SVG sparklines
+6. **build** — generates per-state HTML pages, CSV, and text files to `$OUTPUT_DIR` (required; refuses the engine/dataset trees — S3h); inlines CSS and SVG sparklines
 7. **orphan-check** — soft-fails the run (after build) if any fetch-active source lacks a `gauge_source` link; the existing systemd `OnFailure` chain emails + ntfys on the non-zero exit. See `docs/done/PLAN_orphan_sources.md`.
 8. **check-reaches** — soft-fails the run (after build) if any `reach.geom` fails the format / endpoint validator (`kayak.cli.check_reaches.scan_for_issues`); raises so the same `OnFailure` chain fires.
 
@@ -190,7 +191,7 @@ Multi-source gauges aggregate across all linked sources directly: `update-gauge-
 
 ### Two-Layer Web Architecture
 
-**Python (static generation):** `levels build` writes self-contained HTML pages to `public_html/` with inlined CSS (from `src/kayak/web/static/style.css`) and SVG sparklines. These are the main river levels tables.
+**Python (static generation):** `levels build` writes self-contained HTML pages to `$OUTPUT_DIR` with inlined CSS (from `src/kayak/web/static/style.css`) and SVG sparklines. These are the main river levels tables.
 
 **PHP (dynamic pages):** PHP files in `src/kayak/web/php/` handle interactive features — description pages with plots, data APIs, editing, the reach picker, and source/gauge browsers. Both layers share the same database (`database_path` from the runtime-config JSON for PHP, with `SQLITE_PATH` as env fallback; `DATABASE_URL` for Python).
 

@@ -137,6 +137,27 @@ final class ConfigTest extends TestCase
         $this->assertSame('fallback', Config::site('absent_key', 'fallback'));
     }
 
+    public function testSiteLinesReadsStringList(): void
+    {
+        // nav_title: the compact stacked header brand (list of 1–2 lines).
+        $this->_install_fixture(['site' => ['nav_title' => ['River', 'Levels']]]);
+        $this->assertSame(['River', 'Levels'], Config::site_lines('nav_title'));
+    }
+
+    public function testSiteLinesFailsClosedOnWrongShape(): void
+    {
+        // Absent block / absent key / non-list / non-string entry → [] so the
+        // caller's fallback (site_name) renders instead of garbage.
+        $this->_install_fixture([]);
+        $this->assertSame([], Config::site_lines('nav_title'));
+        $this->_install_fixture(['site' => []]);
+        $this->assertSame([], Config::site_lines('nav_title'));
+        $this->_install_fixture(['site' => ['nav_title' => 'River Levels']]);
+        $this->assertSame([], Config::site_lines('nav_title'));
+        $this->_install_fixture(['site' => ['nav_title' => ['River', 2]]]);
+        $this->assertSame([], Config::site_lines('nav_title'));
+    }
+
     public function testDataLicenseReadsNestedBlock(): void
     {
         // S3: data-license presentation is emitted from dataset.yaml.

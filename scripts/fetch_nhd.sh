@@ -1,32 +1,61 @@
 #!/usr/bin/env bash
-# Download NHD (National Hydrography Dataset) state GeoPackage files
-# and NHDPlus HR HUC4 files for OR, WA, ID, NV, northern CA, and western MT.
+# Download NHD (National Hydrography Dataset) state GeoPackage files and
+# NHDPlus HR HUC4 files named by a dataset-supplied download list.
+#
+# The TOOL is generic engine tooling — part of the Trace-cache toolchain with
+# scripts/extract_*.sh, whose defaults read this checkout's Trace-cache/NHD.
+# WHICH states/HUC4s to download is regional knowledge and lives in the
+# dataset repo (S3g / gap G5): e.g. kayak_data ops/nhd_downloads.txt.
 #
 # Run on a machine with sufficient RAM and disk (files are ~200MB-1GB each).
 #
 # Usage:
-#   bash scripts/fetch_nhd.sh [DEST_DIR]
+#   bash scripts/fetch_nhd.sh ../kayak_data/ops/nhd_downloads.txt [DEST_DIR]
 #
-# Default destination: ./Trace-cache/NHD/
+# List format (one entry per line; '#' starts a comment):
+#   state NHD_H_Oregon_State_GPKG.zip   # medium-res state GeoPackage zip name
+#   huc4 1707                           # NHDPlus HR HUC4 GDB code
+#
+# Default destination: this checkout's Trace-cache/NHD/.
 
 set -euo pipefail
 
-DEST="${1:-$(dirname "$0")/../Trace-cache/NHD}"
+LIST="${1:?Usage: bash scripts/fetch_nhd.sh <download-list> [DEST_DIR] (the regional list lives in the dataset repo, e.g. ../kayak_data/ops/nhd_downloads.txt)}"
+DEST="${2:-$(dirname "$0")/../Trace-cache/NHD}"
+
+if [[ ! -f "$LIST" ]]; then
+    echo "Error: download list not found: $LIST"
+    exit 1
+fi
+
+STATE_FILES=()
+HR_HUCS=()
+while read -r kind value _; do
+    [[ -z "$kind" || "$kind" == \#* ]] && continue
+    case "$kind" in
+        state) STATE_FILES+=("$value") ;;
+        huc4) HR_HUCS+=("$value") ;;
+        *)
+            echo "Error: unknown entry kind '$kind' in $LIST (expected 'state' or 'huc4')"
+            exit 1
+            ;;
+    esac
+done <"$LIST"
+
+if [[ ${#STATE_FILES[@]} -eq 0 && ${#HR_HUCS[@]} -eq 0 ]]; then
+    echo "Error: $LIST declares no 'state' or 'huc4' entries"
+    exit 1
+fi
+
 mkdir -p "$DEST/state" "$DEST/hr"
 
 S3="https://prd-tnm.s3.amazonaws.com/StagedProducts"
 
 # --- Medium resolution: full state GeoPackages ---
-STATE_FILES=(
-    "NHD_H_Oregon_State_GPKG.zip"
-    "NHD_H_Washington_State_GPKG.zip"
-    "NHD_H_Idaho_State_GPKG.zip"
-    "NHD_H_Nevada_State_GPKG.zip"
-    "NHD_H_California_State_GPKG.zip"
-)
-
 echo "=== NHD Medium Resolution (State GeoPackages) ==="
-for f in "${STATE_FILES[@]}"; do
+# ${arr[@]+...} guards the empty-array case under `set -u` on bash 3.2
+# (the dev Mac's /bin/bash), where "${arr[@]}" alone is "unbound variable".
+for f in ${STATE_FILES[@]+"${STATE_FILES[@]}"}; do
     dest="$DEST/state/$f"
     if [[ -f "$dest" ]]; then
         echo "  Already have $f, skipping"
@@ -37,38 +66,9 @@ for f in "${STATE_FILES[@]}"; do
 done
 
 # --- High resolution: NHDPlus HR by HUC4 ---
-# HUC4 regions covering OR, WA, ID, NV, and northern CA (north of 40°):
-#   1701 - Pacific Northwest (WA/OR coast)
-#   1702 - Willamette
-#   1703 - Lower Columbia
-#   1704 - Upper Columbia (WA)
-#   1705 - Middle Columbia (OR/WA)
-#   1706 - Central Oregon
-#   1707 - Middle Snake (ID/OR)
-#   1708 - Upper Snake (ID)
-#   1709 - Closed basins (NV/OR)
-#   1710 - Oregon closed basins
-#   1711 - Puget Sound (WA)
-#   1712 - WA coast
-#   1601 - Great Basin (NV)
-#   1602 - Great Basin (NV)
-#   1603 - Great Basin (NV)
-#   1604 - Humboldt (NV)
-#   1801 - Klamath-Trinity-Smith (NorCal)
-#   1802 - Klamath (OR/CA)
-#   1803 - NorCal (north of 40°)
-#   1002 - Missouri Headwaters (MT: Big Hole, Jefferson, Madison)
-#   1003 - Missouri-Marias (MT: Missouri, Dearborn, Smith, Sun, Belt Creek)
-HR_HUCS=(
-    1701 1702 1703 1704 1705 1706 1707 1708 1709 1710 1711 1712
-    1601 1602 1603 1604
-    1801 1802 1803
-    1002 1003
-)
-
 echo ""
 echo "=== NHDPlus HR (HUC4 GeoDatabase) ==="
-for huc in "${HR_HUCS[@]}"; do
+for huc in ${HR_HUCS[@]+"${HR_HUCS[@]}"}; do
     f="NHDPLUS_H_${huc}_HU4_GDB.zip"
     dest="$DEST/hr/$f"
     if [[ -f "$dest" ]]; then
