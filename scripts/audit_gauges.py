@@ -257,7 +257,7 @@ def find_candidates_near_reaches(
 
     ``kind`` is "USGS" or "NWPS" — used to key into ``ignore``, which
     suppresses specific (kind, gauge_id, reach_id) pairs marked as
-    not-actually-useful in ``src/kayak/data/audit_ignore.yaml``. Suppression
+    not-actually-useful in ``DATASET_DIR/ops/audit_ignore.yaml``. Suppression
     happens before the per-gauge dedup so a gauge that's wrong for the
     closest reach can still surface against a more-distant reach where
     it'd actually fit.
