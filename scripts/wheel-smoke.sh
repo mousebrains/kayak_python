@@ -170,4 +170,18 @@ grep -q "<svg" "$REG/fixture_calc_from_usgs.svg" \
     || { echo "wheel-smoke FAILED: regression SVG not re-serialized" >&2; exit 1; }
 echo "    OK — regression report rendered + sanitized from the dataset"
 
+echo "==> regional neutrality (acceptance criterion 9)"
+# The build above used the non-WKCC fixture dataset and a generic SITE_URL, so
+# any WKCC/Willamette token in the output is engine leakage — site output must
+# contain regional content only when the dataset supplies it. One known
+# residual is excluded: status.php's CORS allow-list is host configuration
+# that S7's typed host config parameterizes (finishing-plan R2 deferral).
+leaks=$(grep -rilE "wkcc|willamette" "$DOCROOT" | grep -v "/status\.php$" || true)
+if [ -n "$leaks" ]; then
+    echo "$leaks" >&2
+    echo "wheel-smoke FAILED: WKCC tokens leaked into a fixture-dataset build" >&2
+    exit 1
+fi
+echo "    OK — fixture-dataset build output carries no WKCC tokens (status.php excluded — S7)"
+
 echo "==> wheel-smoke PASSED"
