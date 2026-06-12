@@ -111,6 +111,13 @@ becomes a secret in `kayak_data` (the repo whose CI reads).
 > `kayak_data`. The commands below are the **from-scratch** runbook; re-running
 > them on the live setup would replace the working key/secret, so only run them on
 > a fresh install.
+>
+> **Dependabot (2026-06-12):** Dependabot-triggered runs read the **Dependabot**
+> secret store, not Actions secrets, so `kayak_data`'s Dependabot PRs need their
+> own copy of `KAYAK_ENGINE_DEPLOY_KEY` or the required validate gate fails on the
+> engine checkout. Configured with a second dedicated read-only deploy key
+> (`kayak_data-dependabot-read` on `kayak_python`) installed via
+> `gh secret set KAYAK_ENGINE_DEPLOY_KEY --app dependabot -R mousebrains/kayak_data`.
 
 One-time setup:
 
