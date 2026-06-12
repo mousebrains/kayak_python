@@ -164,6 +164,13 @@ function include_header(
     // SiteConfig already validated them.
     $site_name    = htmlspecialchars(Config::site('site_name', 'River Levels'));
     $og_site_name = $site_name;
+    // Compact stacked header brand (nav_title, 1–2 lines joined with <br> —
+    // the same width-conserving idiom as the Reach<br>Picker nav buttons);
+    // falls back to site_name on one line when the dataset doesn't set it.
+    $nav_lines = Config::site_lines('nav_title');
+    $nav_brand = $nav_lines === []
+        ? $site_name
+        : implode('<br>', array_map('htmlspecialchars', $nav_lines));
     $theme_light  = htmlspecialchars(Config::site('brand_color', '#1b5591'));
     $theme_dark   = htmlspecialchars(Config::site('brand_color_dark', '#0d3057'));
     echo <<<HTML
@@ -198,7 +205,7 @@ $css_block
 <body>
 <a href="#main" class="skip-link">Skip to main content</a>
 <header>
-  <h1><a href="/index.html">$site_name</a></h1>
+  <h1><a href="/index.html">$nav_brand</a></h1>
   $nav
 </header>
 <main id="main">
