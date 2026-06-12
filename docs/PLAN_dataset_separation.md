@@ -54,7 +54,10 @@ from earlier passes:
 - `levels init-dataset <dir>` scaffolds datasets; there is no separately
   maintained template repository.
 
-Status: sixth-pass review complete; implementation has not started.
+Status: seventh pass (2026-06-11) — implementation is most of the way
+through the sequence; see "Seventh pass — implementation status and
+finishing schedule" at the end of this document for the verified
+landed/remaining split and the consolidated finishing plan.
 
 Implementation sequence: S4a -> S6 -> S4b -> S9 -> S1 -> SA -> S2 ->
 S3 -> S7 -> S8 -> S5. S4 establishes the test boundary, S6 establishes
@@ -800,3 +803,234 @@ updates: S4a now has no throwaway root/header implementation, data PRs cannot
 self-select a weaker validator, proposal child rows preserve IDs across
 renames, source retirement has one explicit tombstone/purge model, and paired
 activation uses one release symlink plus maintenance-mode DB rollback.
+
+## Seventh pass — implementation status and finishing schedule (2026-06-11)
+
+Verified against `kayak_python` `main` (`1546afb`, PR #185) and
+`kayak_data` `main` (`dcce1b1`, PR #52) on 2026-06-11 — by inspecting the
+trees and CI workflows, not from session notes. This pass records what
+landed, what remains, and a finishing schedule whose explicit goal is to
+minimize the two per-change overheads the S3 cadence paid heavily:
+the dev loop (PR -> review -> fix -> merge) and the ops loop (review
+dataset PR -> merge -> pull -> deploy on the live host).
+
+### Landed (verified)
+
+- **S4a — done.** `tests/fixtures/dataset/`, `levels validate-dataset`,
+  every runtime resource packaged and resolved via `importlib.resources`,
+  and the `wheel-smoke` CI job (`scripts/wheel-smoke.sh`) installing the
+  wheel outside the checkout.
+- **S6 — done.** `DATASET_DIR` with the deprecated `METADATA_DIR` alias
+  (S6.1); `dataset.yaml` contract v1 (#130/kd#8); `retired_ids.yaml`
+  (#131/kd#9); the fail-closed production gate
+  `kayak.dataset.contract.gate_for_use` wired into `sync-metadata` and
+  build (S6.4), with `scaffold`/`publishable` status enforcement.
+  `upgrade-dataset` is intentionally absent until a contract 2 exists.
+- **S4b — done except the canary.** Code CI has no `kayak_data`
+  checkout, secret, or sibling-path read (S4b-1; Dependabot runs clean).
+  `kayak_data`'s `validate.yml` is the required, branch-protected gate:
+  it reads `engine_test_ref` from the PR **base** commit, enforces
+  pin-only bump discipline (kd#46), checks out the engine with a
+  read-only deploy key, installs hash-locked (`uv sync --locked`), then
+  runs `validate-dataset`, `generate-sources --check` (generated-CSV
+  drift), a clean sync, an idempotent second sync, and a build smoke.
+  Missing: the scheduled non-required canary against engine `main`.
+  Note the engine `ci.yml` comment claiming "S4b-2 ... not yet live" is
+  stale.
+- **S9 — done.** Active migrations are packaged with `manifest.csv`
+  SHA-256 digests; mixed history is frozen under
+  `legacy/migrations_frozen/`; data-only files moved byte-for-byte to
+  `kayak_data/history/sql/` (56 files) whose digests `validate.yml`
+  re-verifies; the schema-only guard rejects DML in migrations > 0074.
+- **S1 — done except the cleanup slice.** Fetch is DB-driven (#141);
+  runtime auto-create is retired; `sources.yaml` lives in the dataset
+  root as the human-edited authority and `levels generate-sources`
+  emits/validates `source.csv` + `fetch_url.csv` + `gauge_source.csv`,
+  with the `--check` drift gate in dataset CI. Remaining: `init-db`
+  still has the seeded mode reading the engine-side
+  `src/kayak/data/sources.yaml` (`_seed_states`/`sync_sources`);
+  `generate_sources.py` itself names the pending "S1-cleanup slice".
+- **SA — teardown done; the bridge was never built.** All-or-nothing
+  sync (#146), runtime `fetch_state` table (#147), CI writer-boundary
+  guard + tool prod-refuse interlock (#148), `import_metadata.py`
+  sidecar-only (#149), reverse-sync snapshot retired and
+  `recover-metadata` added (#150); `kayak_data` `main` is
+  branch-protected. **Not built:** the proposal->PR state machine and
+  privileged worker. `review_logic.php` still `UPDATE`s `reach` and
+  `INSERT`s `reach_class` directly on the live DB. With the snapshot
+  retired this is now a silent-revert trap: `sync-metadata` updates any
+  row that differs from the CSVs, so an editor-approved change is
+  un-done at the next deploy unless someone hand-ports it to
+  `kayak_data` first. Acceptance criteria 6 and 7 are open solely
+  because of this path.
+- **S2 — done** (#152–#154, kd#15–#17). Regression content serves from
+  `DATASET_DIR/regression` through the nh3/defusedxml sanitizers.
+- **S3 — done except g/h and residue.** S3a identity, S3b region, S3c
+  prose, S3d map layers + generated `site-config.json`, S3e assets
+  (manifest/security.txt/robots/icons), S3f license preference, and the
+  S3i generic-default flips all landed (#155–#185; kd#18–#52), including
+  the generic presentation-fallback guard test (#184).
+
+### Remaining inventory
+
+- **R1 — S1-cleanup (S).** Remove `init-db` seeding
+  (`_seed_states`/`sync_sources`/`load_sources` and the engine
+  `src/kayak/data/sources.yaml`); schema-only init becomes the only
+  behavior (`--no-seed` stays one release as a deprecated no-op); sweep
+  docs/CLAUDE.md ("plain init-db ... fetch-only smoke test" is gone);
+  fix the stale S4b comment in `ci.yml`.
+- **R2 — S3i residue (S).** Remove the engine root `LICENSE-DATA` and
+  `src/kayak/web/legal/LICENSE-DATA.txt` (safe only after checkpoint 0
+  deploys the dataset-owned license); sweep remaining WKCC strings in
+  `analytics/_log_sources.py`, `web/build/_shared.py`,
+  `web/php/status.php`, `web/php/_internal/index.php`; the carried
+  un-escaped `&` in Dreamflows hrefs; optional `_STATE_ABBREVS` from
+  `state.csv`; extend the #184 guard toward criterion 9's built-output
+  assertion. (The other ~60 WKCC/`/home/pat` hits are in `conf/`,
+  `deploy/`, `scripts/check-*`, `status.py` — that is S7/S8 scope, not
+  S3.)
+- **R3 — S3g ops-input move (S-M).** WKCC inputs out of `scripts/` into
+  dataset `ops/`: the `fetch_nhd.sh` HUC4 list, `harvest_wa_ecology.py`,
+  `fetch_usbr_pn_sites.py`/`fetch_usbr_rise_sites.py` defaults,
+  `audit-t30.sh`; generic provider clients and geometry stay
+  engine-side. Includes the `audit_ignore.yaml` ownership decision
+  (D3 below).
+- **R4 — S3h output hygiene (M).** Untrack `public_html/` (31 files,
+  including the dev symlinks); build refuses an engine or dataset root
+  as output and writes only a caller-supplied staging directory.
+  Prod-neutral: the live host's `OUTPUT_DIR` is already outside the
+  repo. Dev-workflow docs change with it.
+- **R5 — close the editor-approval gap (decision D1).** The only
+  remaining metadata writer outside `sync-metadata`/migrations.
+- **R6 — S4b canary (S).** Scheduled, non-required `kayak_data`
+  workflow validating against engine `main`.
+- **R7 — S7 with S8 folded in (L).** Typed host config (including the
+  S8 backup settings — same surface, one review), rendered
+  units/vhosts/status wrappers, `/opt/kayak` immutable paired releases,
+  `kayak-deploy`, maintenance mode + rollback, clean-VM install smoke;
+  then the one-time WKCC host migration. Tagged releases already exist
+  (v1.2.0, `scripts/release.sh`), so the wheel-based release input is
+  available.
+- **R8 — S5 (M).** `levels init-dataset` (+ `--example`), the
+  new-region runbook, and the full criterion-1 acceptance automation.
+- **R9 — deferred deprecation removals (S).** `METADATA_DIR` alias,
+  the `HC_METADATA_SNAPSHOT` allowlist entry, the `--no-seed` no-op.
+
+Acceptance-criteria scorecard: 2, 3, 5, 8 done; 11 mostly done (verify
+each failure mode in R8's acceptance run); 1 and 9 partial (R8, R2);
+6 and 7 open (R5); 4, 10, 12 open (R7, R8).
+
+### Finishing schedule
+
+Process rules — these remove most of the S3-era overhead:
+
+1. **Pin policy.** Bump `engine_test_ref` once per batch (or before a
+   deploy checkpoint), not once per engine PR. kd#24–#52 spent roughly
+   fifteen review cycles on pin-only PRs; a bump is required only when a
+   dataset PR's required gate needs newer engine behavior.
+2. **Batch-scoped engine PRs.** One M-sized PR per batch below, each
+   leaving production deployable; split only at a real review boundary.
+3. **Deploys only at named checkpoints.** Everything between checkpoints
+   is deploy-neutral for the live host.
+
+**Checkpoint 0 — deploy the merged backlog (ops only, no PRs).** First
+verify what the live tree is actually running (`git -C /home/pat/kayak
+log -1` vs `origin/main`; same for the dataset clone) — everything since
+the last deploy, including migrations 0075–0077 and the dataset-owned
+identity/prose/map/license stack, lands in this one delta. Extreme-care
+steps: take the routine DB backup; stage a scratch build
+(`OUTPUT_DIR=<scratch> levels build`) and diff it against the live
+docroot expecting only intended deltas (guidebook short labels, prose
+fragments, `site-config.json`, manifest/security.txt identity); then run
+`scripts/deploy.sh` (it pulls the dataset, migrates, validates, syncs,
+emits config, builds) and verify status page + orphan-check + spot
+pages. Do this before any new work merges so every later deploy carries
+a small, reviewable delta. Rollback: check out the previous engine +
+dataset SHAs and re-run deploy.sh.
+
+**Batch 1 — engine close-out (1 engine PR, deploy-neutral):** R1 + R2 +
+R6.
+
+**Batch 2 — repo hygiene (1 engine PR + 1 kd PR, deploy-neutral):** R3 +
+R4. The kd PR adds `ops/` content verbatim with provenance notes; no pin
+bump needed (the validator does not inspect `ops/`).
+
+**Batch 3 — SA-lite (1 engine PR; one additive schema migration if the
+proposal status enum grows):** R5 per D1.
+
+**Checkpoint 1 — one routine deploy of batches 1–3.**
+
+**Batch 4 — S7 + S8 (3 engine PRs):**
+- 4A: typed host-config surface + renderers (units, vhosts, status,
+  backup) — additive and prod-neutral; current WKCC paths become the
+  example host config.
+- 4B: paired-release layout + `kayak-deploy` + maintenance/rollback +
+  the clean-VM smoke.
+- 4C: runbooks (install layout, activation, rollback, host
+  config/backup/restore) + the one-time WKCC migration plan.
+Rehearse on the arm64 test VM as a true virgin install (this is the
+already-planned from-scratch install); iterate there, never on prod.
+
+**Checkpoint 2 — the S7 cutover (the one genuinely risky deploy).**
+Maintenance window; verified-restorable DB/asset backup; install the
+paired release under `/opt/kayak`; flip the symlink; health checks; keep
+the old `/home/pat` layout dormant for instant rollback until the new
+layout has survived a full pipeline cycle and a backup run.
+
+**Batch 5 — S5 (1 engine PR, no deploy):** R8, then run the full
+acceptance checklist (criteria 1–12) and record the results here.
+
+**Batch 6 — deprecations (1 engine PR + 1 kd pin PR, rides the next
+routine deploy):** R9 + the criterion-12 documentation sweep.
+
+Totals: ~7 engine PRs, ~3 dataset PRs, 3 deploys plus one ride-along —
+against the ~31 engine and ~35 dataset PRs that S3 alone consumed.
+
+### Decisions needed (recommendations inline)
+
+- **D1 — SA scope.** Recommended: SA-lite. Approve stops writing the
+  DB; the action becomes "Send for data review", which freezes the
+  validated field diff on the proposal page; the maintainer lands it as
+  an ordinary `kayak_data` PR (hand edit or `recover-metadata`-assisted)
+  and the proposal advances merged -> deployed when the deploy lands.
+  Amend criterion 7 to drop the automated-worker requirement — the
+  load-bearing property ("production changes only after merge and
+  deploy") stands. The full §SA bridge remains on file as a post-split
+  enhancement if editor traffic ever justifies it. Rationale: the bridge
+  is the only remaining L besides S7, and current editor volume is one
+  club's maintainers.
+- **D2 — S7 trim.** Keep: immutable paired releases, single-symlink
+  activation, maintenance mode, stop-all-consumers, backup-before-
+  migrate, rollback, generated units/vhosts/status, wrapper executables.
+  Trim for a single-operator deployment: replace signature verification
+  over release-input manifests and the orchestrator minimum-version
+  negotiation with SHA-256 digest checks of the wheel + dataset snapshot
+  recorded in `release.json`. Amend §S7 if accepted.
+- **D3 — `audit_ignore.yaml` ownership.** It is WKCC suppression
+  content (G5), currently shipped as a packaged engine resource — a
+  deviation from this plan. Recommended: move it to dataset `ops/` in
+  R3; alternatively document the deviation as accepted.
+
+### Reproduce / cross-check
+
+```bash
+# Open and merged PR state
+gh pr list --repo mousebrains/kayak_python --state open
+gh pr list --repo mousebrains/kayak_python --state merged --limit 40
+gh pr list --repo mousebrains/kayak_data --state merged --limit 30
+# S4b gate, pin discipline, drift check, sync/build smoke
+git -C ../kayak_data show origin/main:.github/workflows/validate.yml
+# S9 split
+ls src/kayak/data/db/migrations | tail; git ls-files | grep migrations_frozen
+git -C ../kayak_data ls-tree -r --name-only origin/main history | wc -l
+# S1 cleanup pending
+grep -n "S1-cleanup" src/kayak/cli/generate_sources.py
+grep -n "sync_sources\|_seed_states" src/kayak/cli/init_db.py
+# SA gap (editor writes; sync reverts DB-side drift)
+grep -n "UPDATE reach\|INSERT INTO reach_class" \
+  src/kayak/web/php/includes/review_logic.php
+sed -n '1,10p' src/kayak/cli/sync_metadata.py
+# S3 residue
+git grep -il wkcc -- src scripts systemd deploy conf
+git ls-files public_html | wc -l   # S3h: still tracked
+```
