@@ -196,12 +196,15 @@ def test_audit_ignore_default_resolves_dataset_ops_file(monkeypatch, tmp_path):
     assert default == audit.load_audit_ignore(path=ops / "audit_ignore.yaml")
 
 
-def test_audit_ignore_missing_dataset_file_is_empty(monkeypatch, tmp_path):
-    """A dataset without ops/audit_ignore.yaml audits clean (empty set), so a
-    fresh region isn't forced to create suppressions before the first run."""
+def test_audit_ignore_missing_dataset_file_is_empty_but_loud(monkeypatch, tmp_path, capsys):
+    """A dataset without ops/audit_ignore.yaml audits clean (empty set) so a
+    fresh region isn't forced to create suppressions — but it must say so on
+    stderr, so a half-rolled-out dataset can't silently become "ignore
+    nothing" (PR #187 live review)."""
     audit = _load_audit()
     monkeypatch.setattr("kayak.config.DATASET_DIR", tmp_path)
     assert audit.load_audit_ignore() == set()
+    assert "empty suppression set" in capsys.readouterr().err
 
 
 def test_refresh_caches_uses_requested_cache_path(monkeypatch, tmp_path):

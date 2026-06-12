@@ -119,6 +119,12 @@ final class ReviewIntegrationTest extends IntegrationTestCase
 
     public function testMaintainerGetDetailRendersForm(): void
     {
+        // Order-independence: testPostApproveAppliesChange mutates the shared
+        // reach's description, and executionOrder="defects" (result cache) can
+        // run it first — pin the precondition this test asserts on rather than
+        // depending on declaration order (latent flake caught 2026-06-12).
+        self::testDb()->prepare('UPDATE reach SET description = ? WHERE id = ?')
+            ->execute(['Original description.', self::REACH_ID]);
         $maint = self::seedEditorSession('detail-maint@example.com', 'maintainer');
         $editor = self::seedEditorSession('detail-editor@example.com', 'full');
         $cr_id = self::seedPendingCR($editor['editor_id'], 'NEW DETAIL TEXT');

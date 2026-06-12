@@ -57,6 +57,11 @@ source .venv/bin/activate
 git clone git@github.com:mousebrains/kayak_data.git ../kayak_data
 export DATASET_DIR="$(cd ../kayak_data && pwd)"   # or persist in ~/.config/kayak/.env
 
+# 2c. Pick a build output dir OUTSIDE the repo and dataset (required — S3h:
+#     `levels build`, which `levels pipeline` runs, has no default and refuses
+#     the engine/dataset trees).
+export OUTPUT_DIR=~/public_html_dev               # or persist in ~/.config/kayak/.env
+
 # 3. Create the schema (empty tables + stamped migrations; schema only —
 #    the former sources.yaml seeding is gone, --no-seed is a deprecated no-op)
 levels init-db

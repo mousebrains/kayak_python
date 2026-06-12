@@ -33,6 +33,7 @@ python3 -m venv /home/pat/.venv
 /home/pat/.venv/bin/pip install -e ".[dev]"
 git clone git@github.com:mousebrains/kayak_data.git /home/pat/kayak_data  # the metadata dataset
 echo 'DATASET_DIR=/home/pat/kayak_data' >> ~/.config/kayak/.env          # point the code at it
+echo 'OUTPUT_DIR=/home/pat/public_html' >> ~/.config/kayak/.env          # required: build refuses engine/dataset trees (S3h)
 /home/pat/.venv/bin/levels init-db                      # Empty schema + stamp migrations
 /home/pat/.venv/bin/levels sync-metadata                # Load gauges/reaches/sources CSVs (by id) from DATASET_DIR
 /home/pat/.venv/bin/python scripts/import_metadata.py   # Apply the reach geom/gradient JSON sidecars
