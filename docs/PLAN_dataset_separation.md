@@ -1018,6 +1018,18 @@ bump needed (the validator does not inspect `ops/`).
 **Batch 3 — SA-lite (1 engine PR; one additive schema migration if the
 proposal status enum grows):** R5 per D1.
 
+> **Batch 3 IN REVIEW 2026-06-12:** engine PR #188. No schema migration
+> was needed — `approved` is re-documented as *endorsed for data
+> review*, the frozen diff lives in `applied_json`, and the existing
+> `resolved` status closes the loop after the dataset PR deploys.
+> Implementation found and covered the SECOND live writer: `edit.php`
+> (maintainer direct edits) now freezes a self-endorsed change_request
+> instead of UPDATEing reach/gauge. `edit_history` becomes a historical
+> (pre-SA-lite) audit record. Criteria 6 and 7 (as amended) close when
+> #188 merges. Batches 1–2 are fully merged (engine #186/#187; dataset
+> kd#53–#57 incl. the first Dependabot PR) — Checkpoint 1's deploy can
+> happen any time.
+
 **Checkpoint 1 — one routine deploy of batches 1–3.**
 
 **Batch 4 — S7 + S8 (3 engine PRs):**
