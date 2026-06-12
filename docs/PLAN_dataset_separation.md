@@ -908,16 +908,22 @@ dataset PR -> merge -> pull -> deploy on the live host).
   behavior (`--no-seed` stays one release as a deprecated no-op); sweep
   docs/CLAUDE.md ("plain init-db ... fetch-only smoke test" is gone);
   fix the stale S4b comment in `ci.yml`.
-- **R2 — S3i residue (S).** Remove the engine root `LICENSE-DATA` and
-  `src/kayak/web/legal/LICENSE-DATA.txt` (safe only after checkpoint 0
-  deploys the dataset-owned license); sweep remaining WKCC strings in
+- **R2 — S3i residue (S).** Sweep remaining WKCC strings in
   `analytics/_log_sources.py`, `web/build/_shared.py`,
   `web/php/status.php`, `web/php/_internal/index.php`; the carried
   un-escaped `&` in Dreamflows hrefs; optional `_STATE_ABBREVS` from
   `state.csv`; extend the #184 guard toward criterion 9's built-output
   assertion. (The other ~60 WKCC/`/home/pat` hits are in `conf/`,
   `deploy/`, `scripts/check-*`, `status.py` — that is S7/S8 scope, not
-  S3.)
+  S3.) *Corrections from Batch 1 implementation (2026-06-12): the
+  engine root `LICENSE-DATA` and packaged `web/legal/LICENSE-DATA.txt`
+  are already the generic fallback (byte-identical "KAYAK DATA LICENSE
+  FALLBACK" text, no WKCC claims) — the earlier "remove engine WKCC
+  license text" item was stale, nothing to remove. `status.php`'s WKCC
+  hit is its CORS allow-list (status.mousebrains.com + canonical host +
+  alias) — that is host configuration, deferred to S7's typed host
+  config with a tracking exclusion in the wheel-smoke neutrality check.
+  `_shared.py`'s hit is an accurate history comment, not residue.*
 - **R3 — S3g ops-input move (S-M).** WKCC inputs out of `scripts/` into
   dataset `ops/`: the `fetch_nhd.sh` HUC4 list, `harvest_wa_ecology.py`,
   `fetch_usbr_pn_sites.py`/`fetch_usbr_rise_sites.py` defaults,
@@ -996,6 +1002,14 @@ dataset SHAs and re-run deploy.sh.
 
 **Batch 1 — engine close-out (1 engine PR, deploy-neutral):** R1 + R2 +
 R6.
+
+> **Batch 1 IN REVIEW 2026-06-12:** engine PR #186 (R1 schema-only
+> init-db + R2 escaping/neutrality-guard/comment sweep) and kayak_data
+> PR #53 (R6 weekly canary vs engine `main`). R1 also took
+> `cli/init_db.py` off the writer-boundary ALLOWLIST; the PHP test
+> harnesses now seed the twelve state reference rows the retired
+> `_seed_states()` provided. See the R2 corrections note above for the
+> two items that needed no change.
 
 **Batch 2 — repo hygiene (1 engine PR + 1 kd PR, deploy-neutral):** R3 +
 R4. The kd PR adds `ops/` content verbatim with provenance notes; no pin
