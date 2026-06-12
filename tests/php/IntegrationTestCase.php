@@ -35,6 +35,8 @@ abstract class IntegrationTestCase extends TestCase
     protected static string $mailDumpDir = '';
     /** Tmp runtime-config.json the php -S subprocess reads via KAYAK_CONFIG_PATH. */
     private static string $configJsonPath = '';
+    /** Per-class temp docroot served by php -S (symlinks into the source tree). */
+    private static string $docrootPath = '';
 
     public static function setUpBeforeClass(): void
     {
@@ -85,7 +87,13 @@ abstract class IntegrationTestCase extends TestCase
 
         // 2. Spawn `php -S 127.0.0.1:0 -t <docroot>` with the env vars PHP
         // normally gets from nginx fastcgi_param plus the test SQLITE_PATH.
-        $docroot = $repoRoot . '/public_html';
+        // The repo no longer tracks a public_html/ symlink farm (S3h), so the
+        // harness builds the same shape in a per-class temp docroot: the PHP
+        // entrypoints + includes/ + _internal/ symlinked from the source tree,
+        // and an empty static/ (handlers must degrade gracefully on missing
+        // static assets, exactly as before).
+        $docroot = self::makeDocroot($repoRoot);
+        self::$docrootPath = $docroot;
         // MAIL_DUMP_DIR makes send_email() write messages to files in this
         // tmp dir instead of invoking the real mail() (which on prod hands
         // off to msmtp and actually delivers — verified by a bounce loop
@@ -185,6 +193,10 @@ abstract class IntegrationTestCase extends TestCase
             unlink(self::$configJsonPath);
         }
         self::$configJsonPath = '';
+        if (self::$docrootPath !== '' && is_dir(self::$docrootPath)) {
+            self::removeDocroot(self::$docrootPath);
+        }
+        self::$docrootPath = '';
         // Clean up the mail-dump dir: each test class gets its own so a
         // failure in one doesn't pollute the next.
         if (self::$mailDumpDir !== '' && is_dir(self::$mailDumpDir)) {
@@ -290,6 +302,40 @@ abstract class IntegrationTestCase extends TestCase
             $body,
             'inline <script> would clash with prod CSP',
         );
+    }
+
+    /**
+     * Build the per-class temp docroot `php -S` serves: PHP entrypoints,
+     * includes/, and _internal/ symlinked from src/kayak/web/php, plus an
+     * empty static/ dir (mirrors the retired tracked public_html/ farm).
+     */
+    private static function makeDocroot(string $repoRoot): string
+    {
+        $docroot = sys_get_temp_dir() . '/kayak-int-docroot-' . uniqid('', true);
+        mkdir($docroot . '/static', 0755, true);
+        $phpSrc = $repoRoot . '/src/kayak/web/php';
+        $entrypoints = glob($phpSrc . '/*.php');
+        if ($entrypoints === false || $entrypoints === []) {
+            throw new RuntimeException("no PHP entrypoints found under $phpSrc");
+        }
+        foreach ($entrypoints as $f) {
+            symlink($f, $docroot . '/' . basename($f));
+        }
+        symlink($phpSrc . '/includes', $docroot . '/includes');
+        symlink($phpSrc . '/_internal', $docroot . '/_internal');
+        return $docroot;
+    }
+
+    /** Remove the temp docroot (top-level symlinks + the empty static dir). */
+    private static function removeDocroot(string $docroot): void
+    {
+        foreach (glob($docroot . '/*') ?: [] as $entry) {
+            if (is_link($entry) || is_file($entry)) {
+                unlink($entry);
+            }
+        }
+        @rmdir($docroot . '/static');
+        @rmdir($docroot);
     }
 
     /**
