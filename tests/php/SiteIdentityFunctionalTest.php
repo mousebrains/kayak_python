@@ -52,6 +52,7 @@ final class SiteIdentityFunctionalTest extends FunctionalTestCase
             '<a href="https://foo.example" rel="noopener" target="_blank">FP</a>',
             $html,
         );
+        $this->assertStringContainsString('<h1><a href="/index.html">Foo Levels</a></h1>', $html);
     }
 
     public function testHeaderFallsBackToEngineDefaults(): void
@@ -69,6 +70,7 @@ final class SiteIdentityFunctionalTest extends FunctionalTestCase
             '<a href="https://example.com" rel="noopener" target="_blank">Kayak</a>',
             $html,
         );
+        $this->assertStringContainsString('<h1><a href="/index.html">River Levels</a></h1>', $html);
     }
 
     public function testHeaderEscapesSiteNameAtRender(): void
@@ -84,6 +86,10 @@ final class SiteIdentityFunctionalTest extends FunctionalTestCase
         $html = $this->renderHeader();
         $this->assertStringContainsString(
             '<meta property="og:site_name" content="Evil&quot; onmouseover=x &lt;script&gt;">',
+            $html,
+        );
+        $this->assertStringContainsString(
+            '<h1><a href="/index.html">Evil&quot; onmouseover=x &lt;script&gt;</a></h1>',
             $html,
         );
         $this->assertStringNotContainsString('Evil" onmouseover', $html);  // no raw break-out

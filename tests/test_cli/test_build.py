@@ -2,10 +2,14 @@
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 import pytest
 
+import kayak.web.build._shared as shared_mod
+import kayak.web.build.gauges as gauges_mod
+import kayak.web.build.shell as shell_mod
 from kayak.dataset import region as region_mod
 from kayak.dataset import site as site_mod
 from kayak.db.models import (
@@ -27,6 +31,7 @@ from kayak.web.build.shell import (
     _build_map_page,
     _build_nav,
     _build_page,
+    _build_placeholder_page,
     _build_right_cluster,
 )
 from kayak.web.build.sparklines import _build_sparkline, _select_sparkline_series
@@ -719,6 +724,57 @@ class TestBuildPage:
         assert "<p>test</p>" in result
         assert "River Levels" in result
         assert "Updated" in result
+
+    def test_visible_site_title_uses_dataset_identity(self, monkeypatch):
+        monkeypatch.setattr(
+            shell_mod,
+            "get_site_config",
+            lambda: site_mod.SiteConfig(site_name="Example Levels"),
+        )
+
+        page = _build_page(
+            "<p>test</p>",
+            "",
+            ["Oregon"],
+            "Oregon",
+            "Oregon - Example Levels",
+        )
+        placeholder = _build_placeholder_page("", ["Oregon"], "Oregon")
+        map_page = _build_map_page("", ["Oregon"], "/g.json", "/s.json")
+
+        for html in (page, placeholder, map_page):
+            assert '<h1><a href="/index.html">Example Levels</a></h1>' in html
+        assert "<title>Oregon - Example Levels</title>" in page
+        assert "<title>Oregon - Example Levels</title>" in placeholder
+        assert "<title>River Map - Example Levels</title>" in map_page
+
+    def test_gauges_page_title_uses_dataset_identity(self, monkeypatch, session, tmp_path):
+        monkeypatch.setattr(
+            gauges_mod,
+            "get_site_config",
+            lambda: site_mod.SiteConfig(site_name="Example Levels"),
+        )
+        monkeypatch.setattr(
+            shell_mod,
+            "get_site_config",
+            lambda: site_mod.SiteConfig(site_name="Example Levels"),
+        )
+
+        gauges_mod._write_gauges_page(session, {}, [], "", tmp_path)
+
+        html = (tmp_path / "gauges.html").read_text(encoding="utf-8")
+        assert "<title>River Gauges - Example Levels</title>" in html
+        assert '<h1><a href="/index.html">Example Levels</a></h1>' in html
+
+    def test_og_meta_escapes_attribute_values(self, monkeypatch):
+        monkeypatch.setattr(shared_mod, "_SITE", SimpleNamespace(site_name='Site " <Name>'))
+
+        html = shared_mod._og_meta('Title " <x>', 'Desc " <y>', "/Oregon.html")
+
+        assert 'content="Site &quot; &lt;Name&gt;"' in html
+        assert 'content="Title &quot; &lt;x&gt;"' in html
+        assert 'content="Desc &quot; &lt;y&gt;"' in html
+        assert 'Title " <x>' not in html
 
     def test_letter_nav_included(self):
         result = _build_page(

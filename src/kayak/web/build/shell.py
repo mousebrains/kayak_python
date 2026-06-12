@@ -45,7 +45,7 @@ def _build_nav(
     """Build abbreviation-based nav bar; each state links to its {State}.html page.
 
     The all-reaches levels table lives at /index.html and is reached via the
-    "River Levels" h1 home link. The per-state pages (Oregon.html etc.) are
+    dataset-branded h1 home link. The per-state pages (Oregon.html etc.) are
     curated link indexes of external resources (American Whitewater,
     Dreamflows, agency dashboards).
 
@@ -91,6 +91,12 @@ def _build_nav(
     )
     links.append(f'<a href="{weather_url}">{weather_label}</a>')
     return "\n    ".join(links)
+
+
+def _site_home_heading() -> str:
+    """Visible site title in the header, sourced from dataset site identity."""
+    site_name = html_mod.escape(get_site_config().site_name)
+    return f'<h1><a href="/index.html">{site_name}</a></h1>'
 
 
 def _build_right_cluster() -> str:
@@ -198,7 +204,7 @@ def _build_page(
 <body>
 <a href="#main" class="skip-link">Skip to main content</a>
 <header>
-  <h1><a href="/index.html">River Levels</a></h1>
+  {_site_home_heading()}
   <nav aria-label="State navigation" data-scroll-indicate>
     {nav_html}
   </nav>
@@ -266,15 +272,17 @@ def _build_placeholder_page(
         for label, url in links
     )
     links_html = f"<ul>\n{link_items}\n</ul>" if links else ""
+    page_title = f"{state} - {get_site_config().site_name}"
+    esc_page_title = html_mod.escape(page_title)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{esc_state} River Levels</title>
+<title>{esc_page_title}</title>
 <meta name="description" content="Real-time river levels, flow, and gage data for {esc_state} from USGS, NOAA, USACE, and other agencies.">
-{_og_meta(f"{esc_state} River Levels", f"Real-time river levels, flow, and gage data for {esc_state} from USGS, NOAA, USACE, and other agencies.", _state_page_path(state))}
+{_og_meta(page_title, f"Real-time river levels, flow, and gage data for {esc_state} from USGS, NOAA, USACE, and other agencies.", _state_page_path(state))}
 <meta name="theme-color" content="{BRAND_COLOR}" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="{BRAND_COLOR_DARK}" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="/static/favicon.ico">
@@ -285,7 +293,7 @@ def _build_placeholder_page(
 </head>
 <body>
 <header>
-  <h1><a href="/index.html">River Levels</a></h1>
+  {_site_home_heading()}
   <nav aria-label="State navigation" data-scroll-indicate>
     {nav_html}
   </nav>
@@ -325,15 +333,17 @@ def _build_map_page(
     the legacy per-layer ``data-osmb-*-url`` attributes are gone).
     """
     nav_html = _build_nav(states, active_page="map", state_abbrevs=state_abbrevs)
+    page_title = f"River Map - {get_site_config().site_name}"
+    esc_page_title = html_mod.escape(page_title)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>River Map</title>
+<title>{esc_page_title}</title>
 <meta name="description" content="Interactive map of river reaches with real-time flow and level data.">
-{_og_meta("River Map", "Interactive map of river reaches with real-time flow and level data.", "/map.html")}
+{_og_meta(page_title, "Interactive map of river reaches with real-time flow and level data.", "/map.html")}
 <meta name="theme-color" content="{BRAND_COLOR}" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="{BRAND_COLOR_DARK}" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="/static/favicon.ico">
@@ -389,7 +399,7 @@ main {{padding:0;max-width:none;}}
 </head>
 <body>
 <header>
-  <h1><a href="/index.html">River Levels</a></h1>
+  {_site_home_heading()}
   <nav aria-label="State navigation" data-scroll-indicate>
     {nav_html}
   </nav>
