@@ -2,7 +2,9 @@
 # Extract named flowlines from NHDPlus HR HUC4 GDB files into a single GeoPackage.
 #
 # Run after the dataset repo's ops/fetch_nhd.sh (regional download list —
-# S3g) on a machine with ogr2ogr (brew install gdal).
+# S3g) on a machine with ogr2ogr (brew install gdal). Pass THIS engine
+# checkout's Trace-cache/NHD as that script's required destination so the
+# extractors' defaults below find the files.
 #
 # Usage:
 #   bash scripts/extract_nhd_flowlines.sh [NHD_DIR] [OUTPUT]
@@ -18,7 +20,8 @@ OUTPUT="${2:-$NHD_DIR/named_flowlines.gpkg}"
 HR_DIR="$NHD_DIR/hr"
 
 if [[ ! -d "$HR_DIR" ]]; then
-    echo "Error: $HR_DIR not found. Run kayak_data ops/fetch_nhd.sh first."
+    echo "Error: $HR_DIR not found. Run the dataset repo ops/fetch_nhd.sh first,"
+    echo "passing this engine checkout Trace-cache/NHD as its required destination."
     exit 1
 fi
 
