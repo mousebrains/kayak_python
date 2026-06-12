@@ -35,7 +35,12 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
-CACHE_DB = SCRIPT_DIR.parent / "Gauge-metadata-cache" / "gauges.db"
+CACHE_DB = Path(
+    os.environ.get(
+        "GAUGE_METADATA_CACHE",
+        str(SCRIPT_DIR.parent / "Gauge-metadata-cache" / "gauges.db"),
+    )
+)
 KAYAK_DB = Path.home() / "DB" / "kayak.db"
 
 
@@ -109,7 +114,7 @@ def _shares_river_identity(gauge_name: str | None, *reach_names: str | None) -> 
     return bool(gtoks & rtoks)
 
 
-def refresh_caches():
+def refresh_caches(cache_db: str | Path = CACHE_DB):
     """Re-run the USGS and NWPS site fetch scripts."""
     print("=" * 60)
     print("Refreshing gauge metadata caches")
@@ -119,12 +124,14 @@ def refresh_caches():
     from fetch_usgs_sites import main as fetch_usgs
 
     saved_argv = sys.argv
-    sys.argv = [sys.argv[0], str(CACHE_DB)]
-    print("\n--- USGS sites ---")
-    fetch_usgs()
-    print("\n--- NWPS sites ---")
-    fetch_nwps()
-    sys.argv = saved_argv
+    try:
+        sys.argv = [sys.argv[0], str(cache_db)]
+        print("\n--- USGS sites ---")
+        fetch_usgs()
+        print("\n--- NWPS sites ---")
+        fetch_nwps()
+    finally:
+        sys.argv = saved_argv
 
 
 def find_new_usgs_gauges(cache, kayak, active_only=True):
@@ -591,10 +598,12 @@ def main():  # noqa: C901 — pre-existing complexity; tracked in task #45 refac
     )
     args = parser.parse_args()
 
-    if not args.no_refresh:
-        refresh_caches()
+    cache_db = Path(args.cache_db)
 
-    cache = sqlite3.connect(args.cache_db)
+    if not args.no_refresh:
+        refresh_caches(cache_db)
+
+    cache = sqlite3.connect(cache_db)
     kayak = sqlite3.connect(args.kayak_db)
 
     # --- New gauges ---

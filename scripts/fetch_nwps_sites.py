@@ -5,9 +5,11 @@ Downloads gauge metadata from the NWPS API and stores all US gauges in an
 cover CNRFC/MBRFC/CBRFC etc. alongside the main PNW set.
 """
 
+import os
 import sqlite3
 import sys
 import time
+from pathlib import Path
 
 import requests
 
@@ -35,7 +37,14 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 
 
 def main():
-    db_path = sys.argv[1] if len(sys.argv) > 1 else "/home/pat/kayak/Gauge-metadata-cache/gauges.db"
+    db_path = (
+        sys.argv[1]
+        if len(sys.argv) > 1
+        else os.environ.get(
+            "GAUGE_METADATA_CACHE",
+            str(Path(__file__).resolve().parent.parent / "Gauge-metadata-cache" / "gauges.db"),
+        )
+    )
 
     # NWPS returns the same full gauge list regardless of state= parameter, and the
     # endpoint throttles under repeated calls (504). Fetch once with retries.

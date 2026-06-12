@@ -149,6 +149,16 @@ class KayakConfig(BaseSettings):
         validation_alias=AliasChoices("MAP_LAYERS_DIR", "OSMB_DIR"),
     )
 
+    # Build/audit-time cache of external gauge metadata (USGS/NWPS/etc.).
+    # The gauges page uses it only as a best-effort display-name fallback; the
+    # gauge audit refreshes it on its own cadence. Keep the historical
+    # ``Gauge-metadata-cache/gauges.db`` default for live deploy compatibility,
+    # but make the path env-owned so frozen installs and future deployments can
+    # place this generated runtime cache outside the engine checkout.
+    gauge_metadata_cache: Path = Field(
+        default_factory=lambda: BASE_DIR / "Gauge-metadata-cache" / "gauges.db"
+    )
+
     # Dataset root — the directory holding the club-specific dataset (the
     # ``*.csv`` + ``reaches*.json`` the metadata-single-source flow treats as the
     # source of truth; S6 gives it a versioned contract). Read from ``DATASET_DIR``
@@ -299,6 +309,8 @@ METADATA_DIR: Path = _config.dataset_dir
 MAP_LAYERS_DIR: Path = _config.map_layers_dir
 # Compatibility alias for existing deploy env/scripts and imports.
 OSMB_DIR: Path = _config.map_layers_dir
+# Generated runtime cache for supplemental gauge metadata.
+GAUGE_METADATA_CACHE: Path = _config.gauge_metadata_cache
 FETCH_TIMEOUT: int = _config.fetch_timeout
 FETCH_BUDGET: int = _config.fetch_budget
 FETCH_USER_AGENT: str = _config.fetch_user_agent

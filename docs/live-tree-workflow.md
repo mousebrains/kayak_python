@@ -124,21 +124,21 @@ at a time; the table below tracks what is now packaged vs. still repo-root:
 | committed `static/` assets (map.js, leaflet, images, manifest, sw.js, …) | **packaged** under `src/kayak/web/static/` | `web/build/deploy.py`, `_shared.py` via the packaged dir | ✅ resolved by S4a-2 slice B1 |
 | generated map-layer GeoJSON (`*.geojson`) | map-layer staging dir (`MAP_LAYERS_DIR`; legacy alias `OSMB_DIR`; default `BASE_DIR/var/osmb`) | `levels fetch-map-layers` writes; `deploy.py` copies into `OUTPUT_DIR/static` | ✅ not a blocker — env-located generated runtime data, like `output_dir` |
 | regression reports (`*.{md,svg,json}`) | external `kayak_data` clone (`DATASET_DIR/regression/`) | `web/build/deploy.py` via `DATASET_DIR` (env), not `BASE_DIR` | ✅ not a blocker — env-located dataset content (S2-E2 moved the read off `BASE_DIR/docs/regression`) |
-| `Gauge-metadata-cache/` | repo root | gauges build | build-time input, not import-time — deferred to S3 / lower priority |
+| gauge metadata cache (`gauges.db`) | cache path (`GAUGE_METADATA_CACHE`; default `BASE_DIR/Gauge-metadata-cache/gauges.db`) | `scripts/audit_gauges.py`/fetchers write; gauges build reads | ✅ not a blocker — env-located generated runtime cache, current default kept for live compatibility |
 
 `src/kayak/web/static/style.css` was already package-relative. With slices A + B1
 + B2 done, the engine's Python-side defaults, schema migrations, committed web
 static assets, the PHP layer, install templates, and `LICENSE` files all survive
 a non-editable `pip install .` as-is (the repo-root `LICENSE`/`LICENSE-DATA` stay
 for GitHub/pyproject; a test guards the packaged copies against drift); the
-metadata dataset, regression reports, and generated map-layer GeoJSON are intentionally
-env-located (`DATASET_DIR` / `MAP_LAYERS_DIR`) rather than working-tree-relative. The only
-remaining `BASE_DIR` call site is the build/cache input above
-(`Gauge-metadata-cache/`) — deferred to S3 as a build-time read, not an
-import-time blocker. The PHP layer needs no special handling beyond
+metadata dataset, regression reports, generated map-layer GeoJSON, and the gauge
+metadata cache are intentionally env-located (`DATASET_DIR` / `MAP_LAYERS_DIR` /
+`GAUGE_METADATA_CACHE`) rather than packaged engine resources; their current
+`BASE_DIR` defaults are compatibility defaults for live/dev runtime state, not
+source-resource lookups. The PHP layer needs no special handling beyond
 the relocation, since `levels build` only copies it into the output docroot. A
-true frozen (non-editable) `pip install .` is now viable for everything except
-those build-time inputs, and the `wheel-smoke` CI job (`scripts/wheel-smoke.sh`,
+true frozen (non-editable) `pip install .` is now viable across the packaged
+engine/runtime-resource surface, and the `wheel-smoke` CI job (`scripts/wheel-smoke.sh`,
 S4a-2 slice C) continuously verifies it — it builds the wheel, installs it into a
 fresh venv outside the checkout, and runs `init-db` + `build` against the
 packaged resources, so a regression to a repo-root `BASE_DIR` read fails CI.

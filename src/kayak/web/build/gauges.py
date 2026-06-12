@@ -13,7 +13,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from kayak.config import BASE_DIR
+from kayak.config import GAUGE_METADATA_CACHE
 from kayak.db.gauges import get_calculated_gauge_ids
 from kayak.db.models import DataType, Gauge, HucName, LatestGaugeObservation, Reach
 from kayak.db.reaches import state_abbreviations_by_name, state_names_by_abbreviation
@@ -30,7 +30,7 @@ from kayak.web.build.sparklines import _select_sparkline_series, _sparkline_svg_
 logger = logging.getLogger(__name__)
 
 
-_METADATA_CACHE_PATH = BASE_DIR / "Gauge-metadata-cache" / "gauges.db"
+_METADATA_CACHE_PATH = GAUGE_METADATA_CACHE
 
 # Trailing state code — ", OR" / ",OR" / " OR" / " OREG" / ", OREG.". Explicit
 # list avoids false-matching any uppercase 2-letter token ("N JUNCTION", etc.).
@@ -47,7 +47,7 @@ _SMALL_WORDS = {"of", "the", "at", "in", "on", "to", "and", "or"}
 
 
 def _load_station_metadata() -> dict[str, dict[str, str]]:
-    """Read descriptive station names from the Gauge-metadata-cache.
+    """Read descriptive station names from the configured gauge metadata cache.
 
     Returns a dict with three sub-dicts keyed by ``lid`` / ``site_no``:
     ``nwrfc`` (mixed case), ``nwps`` (mixed case), ``usgs`` (UPPERCASE).

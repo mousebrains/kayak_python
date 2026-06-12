@@ -24,7 +24,8 @@ TimeoutStartSec=600
 Nice=15
 
 # Sandboxing. The audit reads kayak.db (SQLite WAL needs write to its dir)
-# and writes gauge metadata to Gauge-metadata-cache/gauges.db.
+# and writes gauge metadata to GAUGE_METADATA_CACHE. The default remains
+# /home/pat/kayak/Gauge-metadata-cache/gauges.db for live compatibility.
 NoNewPrivileges=yes
 PrivateTmp=yes
 PrivateDevices=yes

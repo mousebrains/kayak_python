@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import importlib.util
 import sqlite3
+import sys
+import types
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -194,3 +196,28 @@ def test_audit_ignore_default_resolves_packaged_resource():
     assert default, "load_audit_ignore() default returned empty — packaged file not found"
     # The default must resolve to the same packaged file as an explicit path.
     assert default == audit.load_audit_ignore(path=packaged)
+
+
+def test_refresh_caches_uses_requested_cache_path(monkeypatch, tmp_path):
+    """``--cache-db`` must drive both refresh writers and subsequent reads."""
+    audit = _load_audit()
+    cache = tmp_path / "configured-cache.db"
+    calls: list[tuple[str, list[str]]] = []
+
+    def fake_usgs_main() -> None:
+        calls.append(("usgs", list(sys.argv)))
+
+    def fake_nwps_main() -> None:
+        calls.append(("nwps", list(sys.argv)))
+
+    monkeypatch.setitem(sys.modules, "fetch_usgs_sites", types.SimpleNamespace(main=fake_usgs_main))
+    monkeypatch.setitem(sys.modules, "fetch_nwps_sites", types.SimpleNamespace(main=fake_nwps_main))
+
+    original_argv = list(sys.argv)
+    audit.refresh_caches(cache)
+
+    assert calls == [
+        ("usgs", [original_argv[0], str(cache)]),
+        ("nwps", [original_argv[0], str(cache)]),
+    ]
+    assert sys.argv == original_argv
