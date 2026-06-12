@@ -101,7 +101,7 @@ function gm_render_map(
     $color_attr  = htmlspecialchars($track_color);
     $rt_attr     = htmlspecialchars($rt_json);
 
-    // Map config (default extent + OSMB-style overlay layer defs) — the build
+    // Map config (default extent + map overlay layer defs) — the build
     // generates /static/site-config.json; feature-map.js fetches it and builds
     // its overlay layers + popups from it (the per-layer GeoJSON URLs live inside
     // that JSON). Same /static/<file>?v=<mtime> contract map.html uses; empty

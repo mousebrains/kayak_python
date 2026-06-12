@@ -122,7 +122,7 @@ at a time; the table below tracks what is now packaged vs. still repo-root:
 | metadata dataset (the `*.csv` + `reaches*.json`) | external `kayak_data` clone | `DATASET_DIR` (env), not `BASE_DIR` | ✅ not a blocker — external **by design** (club-specific data); a frozen install locates it by env, not working tree |
 | `php/` web layer + install templates (`.htaccess`/`404.html`/`robots.txt`) + `LICENSE`/`LICENSE-DATA` | **packaged** under `src/kayak/web/{php,install-templates,legal}/` | `web/build/deploy.py` via `kayak.resources` | ✅ resolved by S4a-2 slice B2 |
 | committed `static/` assets (map.js, leaflet, images, manifest, sw.js, …) | **packaged** under `src/kayak/web/static/` | `web/build/deploy.py`, `_shared.py` via the packaged dir | ✅ resolved by S4a-2 slice B1 |
-| generated OSMB GeoJSON (`osmb-*.geojson`) | OSMB staging dir (`OSMB_DIR`; default `BASE_DIR/var/osmb`) | `cli/fetch_osmb.py` writes; `deploy.py` copies into `OUTPUT_DIR/static` | ✅ not a blocker — env-located generated runtime data, like `output_dir` |
+| generated map-layer GeoJSON (`*.geojson`) | map-layer staging dir (`MAP_LAYERS_DIR`; legacy alias `OSMB_DIR`; default `BASE_DIR/var/osmb`) | `levels fetch-map-layers` writes; `deploy.py` copies into `OUTPUT_DIR/static` | ✅ not a blocker — env-located generated runtime data, like `output_dir` |
 | regression reports (`*.{md,svg,json}`) | external `kayak_data` clone (`DATASET_DIR/regression/`) | `web/build/deploy.py` via `DATASET_DIR` (env), not `BASE_DIR` | ✅ not a blocker — env-located dataset content (S2-E2 moved the read off `BASE_DIR/docs/regression`) |
 | `Gauge-metadata-cache/` | repo root | gauges build | build-time input, not import-time — deferred to S3 / lower priority |
 
@@ -131,8 +131,8 @@ at a time; the table below tracks what is now packaged vs. still repo-root:
 static assets, the PHP layer, install templates, and `LICENSE` files all survive
 a non-editable `pip install .` as-is (the repo-root `LICENSE`/`LICENSE-DATA` stay
 for GitHub/pyproject; a test guards the packaged copies against drift); the
-metadata dataset, regression reports, and generated OSMB GeoJSON are intentionally
-env-located (`DATASET_DIR` / `OSMB_DIR`) rather than working-tree-relative. The only
+metadata dataset, regression reports, and generated map-layer GeoJSON are intentionally
+env-located (`DATASET_DIR` / `MAP_LAYERS_DIR`) rather than working-tree-relative. The only
 remaining `BASE_DIR` call site is the build/cache input above
 (`Gauge-metadata-cache/`) — deferred to S3 as a build-time read, not an
 import-time blocker. The PHP layer needs no special handling beyond

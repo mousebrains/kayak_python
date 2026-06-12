@@ -9,7 +9,7 @@ require_once __DIR__ . '/../../src/kayak/web/php/includes/gauge_map.php';
  * Unit tests for php/includes/gauge_map.php.
  *
  * gm_render_map() echoes a <div> and reads $_SERVER['DOCUMENT_ROOT'] (for
- * the OSMB overlay-URL closure). We point DOCUMENT_ROOT at a temp dir and
+ * the map-overlay URL closure). We point DOCUMENT_ROOT at a temp dir and
  * capture stdout, then assert on the emitted data-* JSON. The geom-string
  * parser is reached via the $geom arg and via $reach_tracks.
  */
@@ -171,7 +171,7 @@ final class GaugeMapTest extends TestCase
         $this->assertSame([], $this->attr($html, 'reach-tracks'));
     }
 
-    // --- gauge id + osmb overlay urls ------------------------------------
+    // --- gauge id + map overlay URLs -------------------------------------
 
     public function test_gauge_id_attr_emitted_when_set(): void
     {
@@ -188,7 +188,7 @@ final class GaugeMapTest extends TestCase
     public function test_site_config_url_empty_when_file_missing(): void
     {
         // No site-config.json staged → the attr is an empty string (S3d). The
-        // per-layer osmb-* attrs are gone — layer URLs live inside the config.
+        // legacy per-layer data-osmb-* attrs are gone; URLs live inside the config.
         [, $html] = $this->render(['Gauge' => '44.5,-123.2']);
         $this->assertStringContainsString('data-site-config-url=""', $html);
         $this->assertStringNotContainsString('data-osmb-', $html);

@@ -1,5 +1,5 @@
 [Unit]
-Description=Fetch Oregon SMB hazard/access GeoJSON overlays
+Description=Fetch configured map overlay GeoJSON
 After=network-online.target
 OnFailure=kayak-notify-failure@%n.service
 
@@ -25,17 +25,18 @@ ExecStartPost=-/usr/bin/curl -fsS -m 10 --retry 3 -o /dev/null ${HC_FETCH_OSMB}
 TimeoutStartSec=300
 Nice=15
 
-# Sandboxing. The fetcher only writes GeoJSON files to the OSMB staging dir
-# (OSMB_DIR; default BASE_DIR/var/osmb — `levels build` later copies them into
-# OUTPUT_DIR/static) and reads no other state — no DB, no secrets.
+# Sandboxing. The fetcher only writes GeoJSON files to the map-layer staging dir
+# (MAP_LAYERS_DIR preferred; legacy OSMB_DIR/default BASE_DIR/var/osmb still
+# honored — `levels build` later copies them into OUTPUT_DIR/static) and reads no
+# other state — no DB, no secrets.
 NoNewPrivileges=yes
 PrivateTmp=yes
 PrivateDevices=yes
 ProtectSystem=strict
 ProtectHome=read-only
-# OSMB_DIR default is /home/pat/kayak/var/osmb. The dir is kept present by the
-# tracked var/osmb/.gitkeep so systemd's setup-time existence check passes on a
-# fresh clone; scope write to just it (not the whole var/, which holds other
+# The compatibility default is /home/pat/kayak/var/osmb. The dir is kept present
+# by the tracked var/osmb/.gitkeep so systemd's setup-time existence check passes
+# on a fresh clone; scope write to just it (not the whole var/, which holds other
 # components' runtime state).
 ReadWritePaths=/home/pat/kayak/var/osmb
 ProtectKernelTunables=yes

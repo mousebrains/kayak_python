@@ -102,7 +102,7 @@ def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -
     parser.set_defaults(func=build)
 
 
-def _osmb_url(static_dir: Path, filename: str) -> str:
+def _map_layer_url(static_dir: Path, filename: str) -> str:
     """Build a /static/<file>?v=<mtime> URL, or "" if the file isn't there.
 
     Source-of-truth for mtime is the staged copy under ``static_dir``;
@@ -575,9 +575,9 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
         gauges_state_url = "/static/gauges-state.json"
         # Map config (default extent + overlay layer defs) → one
         # non-executable JSON the map JS fetches (S3d). The per-layer GeoJSON URL
-        # is still resolved here via _osmb_url (empty until the nightly fetch lands
+        # is still resolved here via _map_layer_url (empty until the nightly fetch lands
         # the file); the build owns file naming + cache-busting.
-        site_config_json = build_site_config(lambda fn: _osmb_url(static_dir, fn))
+        site_config_json = build_site_config(lambda fn: _map_layer_url(static_dir, fn))
         site_config_hash = hashlib.sha256(site_config_json.encode()).hexdigest()[:10]
         _atomic_write(static_dir / "site-config.json", site_config_json)
         site_config_url = f"/static/site-config.json?v={site_config_hash}"
