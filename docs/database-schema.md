@@ -198,7 +198,7 @@ A paddleable section of river with put-in/take-out coordinates, metadata, and an
 | Column | Type | Notes |
 |---|---|---|
 | `id` | INTEGER | PK, autoincrement |
-| `updated_at` | DATETIME | Stamped by `review.php` approvals and `edit.php` direct edits |
+| `updated_at` | DATETIME | Stamped by `sync-metadata` applies (pre-SA-lite, also by `review.php`/`edit.php` writes) |
 | `gauge_id` | INTEGER | FK → `gauge.id` ON DELETE SET NULL |
 | `name` | VARCHAR(64) | Unique internal slug |
 | `display_name` | TEXT | Rendered on the site |
@@ -368,7 +368,7 @@ Single-use magic link tokens emailed for account verification / login. 30-minute
 
 ### `change_request`
 
-Editor-submitted proposal queue. Polymorphic `target_type`; payload is JSON shaped by target. Only maintainer approval writes into the live tables (see `review.php::review_approve`).
+Editor-submitted proposal queue. Polymorphic `target_type`; payload is JSON shaped by target. Maintainer approval **endorses** the change for data review (SA-lite, dataset-separation D1): `review_approve` freezes the maintainer-edited diff in `applied_json` and writes nothing else — the change reaches production only via a reviewed `kayak_data` merge + deploy, after which the maintainer marks the request resolved.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -380,11 +380,11 @@ Editor-submitted proposal queue. Polymorphic `target_type`; payload is JSON shap
 | `subject` | VARCHAR(256) | |
 | `payload_json` | TEXT | Not null |
 | `notes_to_maint` | TEXT | |
-| `status` | VARCHAR(12) | `pending`, `approved`, `rejected`, `auto_applied` |
+| `status` | VARCHAR(12) | `pending`, `approved` (endorsed for data review), `rejected`, `resolved`, `auto_applied` (unused) |
 | `reviewed_at` | DATETIME | |
 | `reviewed_by` | INTEGER | FK → `editor.id` ON DELETE SET NULL |
 | `reviewer_note` | TEXT | |
-| `applied_json` | TEXT | Snapshot of what actually got written on approve |
+| `applied_json` | TEXT | The frozen endorsed diff (SA-lite); pre-SA-lite rows hold the snapshot of what was written on approve |
 | `source_url` | TEXT | Same-origin page the submission came from (sanitized by `sanitize_source_url`); shown in the maintainer review UI |
 
 **Indexes:** `ix_change_request_status`, `ix_change_request_target` on (target_type, target_id), `ix_change_request_editor_id`.
@@ -410,7 +410,7 @@ Uploaded binaries (trip-report photos). Phase 1 ships the schema; no upload endp
 
 ### `edit_history`
 
-Audit trail of fields actually written to the live tables. Populated by both the maintainer's direct-edit path (`edit.php` — Phase 6 of the 2026-04-22 plan wires this in) and by approval of a `change_request` (`review.php`). `changed_by` is `"maintainer:<editor_id>"` or `"editor:<editor_id>"`.
+Audit trail of fields written to the live tables by the pre-SA-lite editor flows (`edit.php` direct edits and `review.php` approvals). **Historical since SA-lite (dataset-separation D1)**: no PHP path writes metadata anymore — endorsed diffs freeze in `change_request.applied_json` and land via reviewed `kayak_data` merges — so this table gains no new rows; existing rows remain as the audit record of that era. `changed_by` is `"maintainer:<editor_id>"` or `"editor:<editor_id>"`.
 
 | Column | Type | Notes |
 |---|---|---|

@@ -184,8 +184,11 @@ final class ReviewIntegrationTest extends IntegrationTestCase
         $this->assertSame('pending', $row['status']);
     }
 
-    public function testPostApproveAppliesChange(): void
+    public function testPostApproveEndorsesWithoutWriting(): void
     {
+        // SA-lite (dataset-separation D1): approve = endorse for data review.
+        // The diff freezes in applied_json; the reach row must NOT change —
+        // the dataset repo is the only metadata authority (criterion 6).
         $maint = self::seedEditorSession('approve-maint@example.com', 'maintainer');
         $editor = self::seedEditorSession('approve-editor@example.com', 'full');
         $cr_id = self::seedPendingCR($editor['editor_id'], 'APPROVED DESCRIPTION VALUE');
@@ -199,24 +202,40 @@ final class ReviewIntegrationTest extends IntegrationTestCase
             'action' => 'approve',
             // Approve form mirrors payload fields back as reach_<field>.
             'reach_description' => 'APPROVED DESCRIPTION VALUE',
-            'reviewer_note' => 'Looks good — applying.',
+            'reviewer_note' => 'Looks good — endorsing.',
         ];
 
         $resp = $this->request('/review.php', [], $cookies, 'POST', $post);
 
         $this->assertSame(200, $resp['status']);
-        $this->assertStringContainsString('Approved and applied', $resp['body']);
+        $this->assertStringContainsString('Endorsed', $resp['body']);
+        $this->assertStringContainsString('kayak_data', $resp['body']);
 
-        // CR transitioned and applied_json captured the applied payload.
+        // CR transitioned and applied_json froze the endorsed payload.
         $db = self::testDb();
         $cr = $db->query("SELECT status, applied_json FROM change_request WHERE id = $cr_id")->fetch();
         $this->assertSame('approved', $cr['status']);
         $applied = json_decode((string)$cr['applied_json'], true);
         $this->assertSame('APPROVED DESCRIPTION VALUE', $applied['reach']['description'] ?? null);
 
-        // Reach row picked up the new description.
+        // The reach row did NOT pick up the description; no audit rows either.
         $reach = $db->query('SELECT description FROM reach WHERE id = ' . self::REACH_ID)->fetch();
-        $this->assertSame('APPROVED DESCRIPTION VALUE', $reach['description']);
+        $this->assertNotSame('APPROVED DESCRIPTION VALUE', $reach['description']);
+        $hist = (int)$db->query(
+            "SELECT COUNT(*) FROM edit_history WHERE change_request_id = $cr_id"
+        )->fetchColumn();
+        $this->assertSame(0, $hist);
+
+        // Close the loop: Mark resolved (deployed) from the endorsed view.
+        $resolve = [
+            'csrf_token' => $maint['csrf_token'],
+            'id' => (string)$cr_id,
+            'action' => 'resolve',
+        ];
+        $resp2 = $this->request('/review.php', [], $cookies, 'POST', $resolve);
+        $this->assertSame(200, $resp2['status']);
+        $cr2 = $db->query("SELECT status FROM change_request WHERE id = $cr_id")->fetch();
+        $this->assertSame('resolved', $cr2['status']);
     }
 
     public function testPostRejectMarksRejected(): void

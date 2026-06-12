@@ -12,8 +12,8 @@ import { randomBytes, createHash } from 'node:crypto';
  *   2. As the editor: GET /propose.php, submit a description tweak,
  *      verify the change_request row landed pending.
  *   3. As the maintainer: GET /review.php list + detail, POST approve,
- *      verify (a) reach.description updated, (b) edit_history row
- *      written, (c) change_request.status='approved'.
+ *      verify (a) the diff froze in applied_json (SA-lite: the reach row is
+ *      UNCHANGED, no edit_history), (b) change_request.status='approved'.
  *
  * The PHP server is shared with smoke.spec.ts (one global-setup boot);
  * EDITOR_FEATURE=1 is set there so /propose.php and /review.php exist.
@@ -188,21 +188,28 @@ test.describe.serial('editor journey: login → propose → review → approve',
     await page.fill('textarea[name="reach_description"]', approvedDescription);
     await page.click('button[type="submit"][value="approve"]');
 
-    await expect(page.locator('body')).toContainText('Approved and applied');
+    // SA-lite (dataset-separation D1): approve = endorse for data review.
+    await expect(page.locator('body')).toContainText('Endorsed');
+    await expect(page.locator('body')).toContainText('kayak_data');
 
-    // Reach row picked up the new description.
+    // The reach row must NOT change — the dataset repo is the only metadata
+    // authority; the next deploy's sync-metadata would revert a direct write.
     const reach = sqliteExec(
       `SELECT description FROM reach WHERE id = ${reachId};`,
     ).trim();
-    expect(reach).toBe(approvedDescription);
+    expect(reach).toBe('Original description.');
 
-    // CR transitioned to approved.
+    // CR transitioned to approved (endorsed) with the frozen diff.
     const crStatus = sqliteExec(
       `SELECT status FROM change_request WHERE id = ${changeRequestId};`,
     ).trim();
     expect(crStatus).toBe('approved');
+    const frozen = sqliteExec(
+      `SELECT applied_json FROM change_request WHERE id = ${changeRequestId};`,
+    ).trim();
+    expect(frozen).toContain(approvedDescription);
 
-    // edit_history captured the diff for audit.
+    // Endorse writes no audit rows (nothing was applied).
     const histCount = parseInt(
       sqliteExec(
         `SELECT COUNT(*) FROM edit_history
@@ -211,6 +218,6 @@ test.describe.serial('editor journey: login → propose → review → approve',
       ).trim(),
       10,
     );
-    expect(histCount).toBeGreaterThan(0);
+    expect(histCount).toBe(0);
   });
 });

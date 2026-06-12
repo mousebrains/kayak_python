@@ -115,30 +115,31 @@ final class ReviewApproveRaceTest extends TestCase
         $seed = $this->seed($db);
         $applied = ['reach' => ['description' => 'new desc']];
 
-        // First approval succeeds, applies the reach changes, writes history
+        // First endorse succeeds and freezes the diff (SA-lite: the reach row
+        // itself is never written — the dataset repo is the metadata authority).
         $r1 = review_approve($db, $seed['cr'], $applied, $seed['maint_id'], 'lgtm');
         $this->assertTrue($r1['ok'], 'first approve must succeed');
 
         $reach = $db->query('SELECT description FROM reach WHERE id = ' . $seed['reach_id'])->fetch();
-        $this->assertSame('new desc', $reach['description']);
+        $this->assertNotSame('new desc', $reach['description'], 'endorse must not write the reach');
 
-        $history_before = (int)$db->query(
-            'SELECT COUNT(*) FROM edit_history WHERE change_request_id = ' . $seed['cr_id']
+        $frozen = (string)$db->query(
+            'SELECT applied_json FROM change_request WHERE id = ' . $seed['cr_id']
         )->fetchColumn();
-        $this->assertGreaterThan(0, $history_before, 'first approve must write edit_history');
+        $this->assertStringContainsString('new desc', $frozen, 'first approve freezes the diff');
 
         // Second approval (using a stale $cr that still says 'pending', which
-        // is exactly the state both browser tabs would have read) must NOT
-        // re-apply; it must report the row was already reviewed.
+        // is exactly the state both browser tabs would have read) must lose
+        // the CAS claim and report the row was already reviewed.
         $r2 = review_approve($db, $seed['cr'], $applied, $seed['maint_id'], 'me too');
         $this->assertFalse($r2['ok'], 'second approve must NOT succeed');
         $this->assertStringContainsString('Already reviewed', (string)$r2['err']);
 
-        // No additional edit_history rows from the second call
+        // Still zero audit rows: nothing is ever applied on endorse.
         $history_after = (int)$db->query(
             'SELECT COUNT(*) FROM edit_history WHERE change_request_id = ' . $seed['cr_id']
         )->fetchColumn();
-        $this->assertSame($history_before, $history_after, 'second approve must not write history');
+        $this->assertSame(0, $history_after, 'endorse writes no edit_history');
 
         // change_request still shows the FIRST maintainer's note, not "me too"
         $note = (string)$db->query(

@@ -88,7 +88,12 @@ function _review_handle_post(PDO $db, ?int $cr_id, ?string $action, int $maint_i
     if ($cr === false) {
         http_terminate(404, 'change_request not found');
     }
-    if ($cr['status'] !== 'pending') {
+    // Pending requests accept every action; an endorsed ('approved') request
+    // accepts only the SA-lite loop-closer — Mark resolved after the dataset
+    // PR deploys. Other terminal states accept nothing.
+    if ($cr['status'] === 'approved' && $action === 'resolve') {
+        // fall through to the switch below
+    } elseif ($cr['status'] !== 'pending') {
         return [null, 'This request has already been ' . $cr['status'] . '.'];
     }
 
@@ -99,7 +104,7 @@ function _review_handle_post(PDO $db, ?int $cr_id, ?string $action, int $maint_i
             $result = review_approve($db, $cr, $applied, $maint_id, $approve_note);
             if ($result['ok']) {
                 review_notify_editor($db, $cr, 'approved', $approve_note);
-                return ['Approved and applied.', null];
+                return ['Endorsed — the diff is frozen below. Land it as a kayak_data PR, then Mark resolved once the deploy ships it.', null];
             }
             return [null, $result['err'] ?? 'Apply failed.'];
 
@@ -233,7 +238,7 @@ function _render_review_detail(
     _render_review_meta_table($cr, $payload);
 
     if ($cr['status'] !== 'pending') {
-        _render_review_terminal_state($cr, $applied);
+        _render_review_terminal_state($cr, $applied, $csrf);
         include_footer();
         return;
     }
@@ -295,7 +300,7 @@ function _render_review_meta_table(array $cr, array $payload): void
  * @param array{id: int, target_type: string, target_id: int|null, editor_id: int, submitted_at: string, subject: string|null, payload_json: string, notes_to_maint: string|null, status: string, reviewed_at: string|null, reviewed_by: int|null, reviewer_note: string|null, applied_json: string|null, source_url: string|null, editor_email: string, editor_name: string|null, editor_status: string} $cr
  * @param array<array-key, mixed>|null $applied  decoded applied_json payload (untrusted shape).
  */
-function _render_review_terminal_state(array $cr, ?array $applied): void
+function _render_review_terminal_state(array $cr, ?array $applied, string $csrf): void
 {
     if (($cr['reviewer_note'] ?? '') !== '') {
         echo '<h3>Maintainer notes</h3>';
@@ -304,8 +309,28 @@ function _render_review_terminal_state(array $cr, ?array $applied): void
     }
     if (($applied ?? []) !== []) {
         $applied_json = json_encode($applied, JSON_PRETTY_PRINT);
-        echo '<h3>Applied payload</h3><pre style="white-space:pre-wrap">'
+        $heading = $cr['status'] === 'approved'
+            ? 'Endorsed changes (frozen for data review)'
+            : 'Endorsed changes';
+        echo '<h3>' . $heading . '</h3><pre style="white-space:pre-wrap">'
            . htmlspecialchars($applied_json !== false ? $applied_json : '') . '</pre>';
+    }
+    if ($cr['status'] === 'approved') {
+        // SA-lite (dataset-separation D1): production changes only via a
+        // reviewed kayak_data merge + deploy — guide the maintainer through
+        // the manual hop, then let them close the loop here.
+        $target = $cr['target_type'] === 'reach' && $cr['target_id'] !== null
+            ? 'reach id ' . (string)$cr['target_id']
+            : htmlspecialchars($cr['target_type']);
+        echo '<p style="padding:.5rem;background:#fff8e1;border:1px solid #e6d28a;border-radius:4px">'
+           . 'Apply the frozen diff above to <strong>' . $target . '</strong> in a '
+           . '<code>kayak_data</code> PR (the dataset is the only metadata authority); '
+           . 'after it merges and deploys, mark this request resolved.</p>';
+        echo '<form method="POST" action="/review.php">';
+        echo '<input type="hidden" name="csrf_token" value="' . $csrf . '">';
+        echo '<input type="hidden" name="id" value="' . $cr['id'] . '">';
+        echo '<button type="submit" name="action" value="resolve">Mark resolved (deployed)</button>';
+        echo '</form>';
     }
     echo '<p><a href="/review.php">Back to queue</a></p>';
 }
@@ -342,7 +367,7 @@ function _render_review_form(array $cr, array $payload, ?array $cur, string $csr
     }
     echo '<p style="margin-top:.5rem">';
     if ($cr['target_type'] === 'reach') {
-        echo '<button type="submit" name="action" value="approve">Approve and apply</button>';
+        echo '<button type="submit" name="action" value="approve">Send for data review</button>';
     }
     echo ' <button type="submit" name="action" value="reply">Send reply (keep pending)</button>';
     echo ' <button type="submit" name="action" value="reply_and_close">Reply and close</button>';
@@ -454,9 +479,18 @@ function _render_review_list(PDO $db, ?string $flash, ?string $flash_err): void
     _render_review_flash($flash, $flash_err);
 
     echo '<p style="font-size:.85rem">Status: ';
+    // SA-lite: 'approved' is a real work queue (endorsed diffs awaiting a
+    // kayak_data PR + deploy), so badge its count — the default filter is
+    // 'pending' and an endorsed backlog must not hide behind it.
+    $endorsed_st = $db->prepare(
+        "SELECT COUNT(*) FROM change_request WHERE status = 'approved'"
+    );
+    $endorsed_st->execute();
+    $endorsed = (int)$endorsed_st->fetchColumn();
     foreach (REVIEW_LIST_STATUSES as $s) {
         $cls = $s === $q_status ? ' style="font-weight:700"' : '';
-        echo '<a href="/review.php?status=' . $s . '"' . $cls . '>' . $s . '</a> &nbsp;';
+        $label = $s === 'approved' && $endorsed > 0 ? $s . ' (' . $endorsed . ')' : $s;
+        echo '<a href="/review.php?status=' . $s . '"' . $cls . '>' . $label . '</a> &nbsp;';
     }
     echo '<a href="/admin.php" style="float:right">Admin</a>';
     echo '</p>';

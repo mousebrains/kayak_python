@@ -75,7 +75,12 @@ class ChangeTarget(enum.StrEnum):
 
 
 class ChangeStatus(enum.StrEnum):
-    """Moderation status of a change_request row."""
+    """Moderation status of a change_request row.
+
+    ``approved`` = endorsed for data review (SA-lite, D1): the frozen diff
+    awaits a ``kayak_data`` PR + deploy, after which the maintainer marks
+    the request ``resolved``.
+    """
 
     pending = "pending"
     approved = "approved"
@@ -790,10 +795,13 @@ class EditorMagicLink(Base):
 class ChangeRequest(Base):
     """A proposed change to a reach, gauge, source, or a site-level comment.
 
-    payload_json shape depends on target_type (see design doc). Only
-    maintainer approval writes the change into the live tables; the
-    applied_json column captures exactly what was written after any
-    maintainer edits.
+    payload_json shape depends on target_type (see design doc). Since the
+    dataset-separation SA-lite change (decision D1), maintainer approval
+    ENDORSES the change for data review — applied_json freezes the
+    maintainer-edited diff, the change reaches production only via a
+    reviewed ``kayak_data`` merge + deploy, and the maintainer marks the
+    request resolved afterward. (Pre-SA-lite approvals wrote the live
+    tables directly; old applied_json rows record what was written then.)
     """
 
     __tablename__ = "change_request"

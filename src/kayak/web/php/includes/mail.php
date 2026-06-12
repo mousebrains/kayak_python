@@ -187,11 +187,16 @@ function render_editor_decision_email(
     string $reviewer_note
 ): string {
     $note_block = $reviewer_note === '' ? '' : "\nNote from the maintainer:\n$reviewer_note\n";
+    // SA-lite (D1): approval endorses the change for data review; it reaches
+    // the site only after the dataset change merges and deploys.
+    $timing = $decision === 'approved'
+        ? "\nIt will appear on the site after the next data release.\n"
+        : '';
     $site_name = mail_site_name();
     $site_url = mail_site_url();
     return <<<TXT
 Your proposed change to $target_label has been $decision.
-$note_block
+$timing$note_block
 Thank you for contributing.
 
 —
