@@ -125,6 +125,7 @@ class KayakConfig(BaseSettings):
     model_config = SettingsConfigDict(
         case_sensitive=False,
         extra="forbid",
+        populate_by_name=True,
         validate_default=True,
     )
 
@@ -132,15 +133,21 @@ class KayakConfig(BaseSettings):
     database_url: str = Field(default_factory=_default_database_url)
     output_dir: Path = Field(default_factory=_default_output_dir)
 
-    # Staging dir for build-EXTERNAL generated static inputs — today only the
-    # OSMB hazard/access GeoJSON written by ``levels fetch-osmb``, which runs on
-    # its own cadence and is then copied into ``OUTPUT_DIR/static`` by
-    # ``levels build``. Like ``output_dir``/``dataset_dir`` it is a
-    # ``BASE_DIR``-relative dev default overridden by env (``OSMB_DIR``) in real
-    # deployments; it is deliberately NOT under the packaged ``DATA_DIR``/web
-    # assets (it holds generated runtime data, not engine resources, and a wheel
-    # install's package dir may be read-only).
-    osmb_dir: Path = Field(default_factory=lambda: BASE_DIR / "var" / "osmb")
+    # Staging dir for build-EXTERNAL generated static inputs — map overlay
+    # GeoJSON written by ``levels fetch-map-layers`` (or the compatibility alias
+    # ``levels fetch-osmb``), which runs on its own cadence and is then copied
+    # into ``OUTPUT_DIR/static`` by ``levels build``. Like
+    # ``output_dir``/``dataset_dir`` it is a ``BASE_DIR``-relative dev default
+    # overridden by env (``MAP_LAYERS_DIR`` preferred, ``OSMB_DIR`` still
+    # honored) in real deployments; it is deliberately NOT under the packaged
+    # ``DATA_DIR``/web assets (it holds generated runtime data, not engine
+    # resources, and a wheel install's package dir may be read-only). The field
+    # name stays ``osmb_dir`` for source compatibility with existing direct
+    # ``KayakConfig(osmb_dir=...)`` callers.
+    osmb_dir: Path = Field(
+        default_factory=lambda: BASE_DIR / "var" / "osmb",
+        validation_alias=AliasChoices("MAP_LAYERS_DIR", "OSMB_DIR"),
+    )
 
     # Dataset root — the directory holding the club-specific dataset (the
     # ``*.csv`` + ``reaches*.json`` the metadata-single-source flow treats as the
@@ -229,6 +236,11 @@ class KayakConfig(BaseSettings):
             return [s.strip() for s in v.split(",") if s.strip()]
         return v
 
+    @property
+    def map_layers_dir(self) -> Path:
+        """Preferred name for the generated map-overlay staging directory."""
+        return self.osmb_dir
+
 
 @lru_cache(maxsize=1)
 def get_config() -> KayakConfig:
@@ -283,8 +295,10 @@ DATASET_DIR: Path = _config.dataset_dir
 # Deprecated alias of DATASET_DIR, kept for one release so existing
 # ``from kayak.config import METADATA_DIR`` callers keep working.
 METADATA_DIR: Path = _config.dataset_dir
-# Staging dir for build-external generated static inputs (OSMB GeoJSON).
-OSMB_DIR: Path = _config.osmb_dir
+# Staging dir for build-external generated static inputs (map overlay GeoJSON).
+MAP_LAYERS_DIR: Path = _config.map_layers_dir
+# Compatibility alias for existing deploy env/scripts and imports.
+OSMB_DIR: Path = _config.map_layers_dir
 FETCH_TIMEOUT: int = _config.fetch_timeout
 FETCH_BUDGET: int = _config.fetch_budget
 FETCH_USER_AGENT: str = _config.fetch_user_agent

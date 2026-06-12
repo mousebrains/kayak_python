@@ -805,11 +805,12 @@ class TestAtomicWrite:
 
 class TestDeployStaticAssets:
     """S4a-2 slice B1: committed assets are copied from the *packaged*
-    web/static dir (so a wheel install finds them), and OSMB GeoJSON staged
-    outside the package via ``config.osmb_dir`` flows through the build output
-    — which is what puts it in the build's ``kept`` set so ``_sweep_orphans``
-    preserves it. A break here silently drops the OSMB hazard layers from the
-    live map (the file would not be re-staged and the next build would sweep it).
+    web/static dir (so a wheel install finds them), and map overlay GeoJSON
+    staged outside the package via ``config.map_layers_dir`` flows through the
+    build output — which is what puts it in the build's ``kept`` set so
+    ``_sweep_orphans`` preserves it. A break here silently drops overlay layers
+    from the live map (the file would not be re-staged and the next build would
+    sweep it).
     """
 
     @staticmethod
@@ -843,7 +844,7 @@ class TestDeployStaticAssets:
         output = tmp_path / "out"
 
         with (
-            mock.patch.object(deploy, "OSMB_DIR", osmb_dir),
+            mock.patch.object(deploy, "MAP_LAYERS_DIR", osmb_dir),
             mock.patch.object(
                 deploy,
                 "get_map_config",
@@ -878,7 +879,7 @@ class TestDeployStaticAssets:
         output = tmp_path / "out"
 
         with (
-            mock.patch.object(deploy, "OSMB_DIR", osmb_dir),
+            mock.patch.object(deploy, "MAP_LAYERS_DIR", osmb_dir),
             mock.patch.object(
                 deploy,
                 "get_map_config",
@@ -900,7 +901,7 @@ class TestDeployStaticAssets:
         output = tmp_path / "out"
 
         with (
-            mock.patch.object(deploy, "OSMB_DIR", osmb_dir),
+            mock.patch.object(deploy, "MAP_LAYERS_DIR", osmb_dir),
             mock.patch.object(
                 deploy, "get_map_config", return_value=self._map_config_for_overlay_files()
             ),
@@ -915,7 +916,7 @@ class TestDeployStaticAssets:
 
         output = tmp_path / "out"
         with (
-            mock.patch.object(deploy, "OSMB_DIR", tmp_path / "does-not-exist"),
+            mock.patch.object(deploy, "MAP_LAYERS_DIR", tmp_path / "does-not-exist"),
             mock.patch.object(deploy, "_deploy_regression_artifacts"),
         ):
             deploy._deploy_static_assets(output)

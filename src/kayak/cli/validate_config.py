@@ -51,6 +51,7 @@ _CONFIG_PREFIXES = (
     "KAYAK_",
     "DATASET_",
     "METADATA_",  # deprecated alias of DATASET_DIR (S6.1) — kept one release
+    "MAP_LAYERS_",
     "USGS_",
     "SQLITE_",
 )

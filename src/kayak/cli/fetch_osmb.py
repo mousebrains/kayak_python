@@ -1,15 +1,16 @@
 """Fetch configured map overlay GeoJSON layers.
 
 Pulls the dataset map config's ArcGIS Feature Service layers as GeoJSON and writes
-them to the configured OSMB staging dir (``OSMB_DIR``; ``config.osmb_dir``), where
-``levels build`` picks them up via ``_deploy_static_assets`` and copies them into
-``OUTPUT_DIR/static``. The command name and staging variable stay OSMB-named for
-compatibility. The engine default has no overlay layers; a dataset supplies layers
-with ``DATASET_DIR/map.yaml``. The staging dir is kept outside the package
-(generated runtime data, not an engine resource — S4a-2 slice B1). Files are
-atomic-replaced only when the content changed, so an unchanged response preserves
-the file's mtime — that mtime feeds the ``?v=<mtime>`` cache-bust URLs on map.html,
-so the browser cache stays warm across nightly no-op runs.
+them to the configured map-layer staging dir (``MAP_LAYERS_DIR`` preferred;
+``OSMB_DIR`` still honored), where ``levels build`` picks them up via
+``_deploy_static_assets`` and copies them into ``OUTPUT_DIR/static``. The legacy
+``fetch-osmb`` command remains as a compatibility alias for existing systemd
+units. The engine default has no overlay layers; a dataset supplies layers with
+``DATASET_DIR/map.yaml``. The staging dir is kept outside the package (generated
+runtime data, not an engine resource — S4a-2 slice B1). Files are atomic-replaced
+only when the content changed, so an unchanged response preserves the file's mtime
+— that mtime feeds the ``?v=<mtime>`` cache-bust URLs on map.html, so the browser
+cache stays warm across nightly no-op runs.
 
 Run nightly (see ``systemd/kayak-fetch-osmb.{service,timer}``); the
 data updates rarely.
@@ -19,10 +20,11 @@ import argparse
 import json
 import logging
 import urllib.parse
+from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
-from kayak.config import OSMB_DIR
+from kayak.config import MAP_LAYERS_DIR
 from kayak.dataset.map import get_map_config
 from kayak.utils.http_client import fetch as http_fetch
 from kayak.web.build._shared import _atomic_write_bytes
@@ -38,28 +40,57 @@ _MAX_PAGES = 50
 
 
 def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
-    """Register the 'fetch-osmb' subcommand."""
-    parser = subparsers.add_parser(
+    """Register map-layer fetch subcommands."""
+    _add_parser(
+        subparsers,
+        "fetch-map-layers",
+        "Fetch configured map overlay GeoJSON to the map-layer staging dir",
+        fetch_map_layers,
+    )
+    _add_parser(
+        subparsers,
         "fetch-osmb",
-        help="Fetch configured map overlay GeoJSON to the OSMB staging dir",
+        "Compatibility alias for fetch-map-layers",
+        fetch_osmb,
+    )
+
+
+def _add_parser(
+    subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]",
+    name: str,
+    help_text: str,
+    handler: Callable[[argparse.Namespace], None],
+) -> None:
+    parser = subparsers.add_parser(
+        name,
+        help=help_text,
     )
     parser.add_argument(
         "--output-dir",
         default=None,
-        help="Directory to write GeoJSON files (default: the configured OSMB_DIR)",
+        help="Directory to write GeoJSON files (default: the configured MAP_LAYERS_DIR)",
     )
-    parser.set_defaults(func=fetch_osmb)
+    parser.set_defaults(func=handler)
+
+
+def fetch_map_layers(args: argparse.Namespace) -> None:
+    """Fetch configured map layers. Exits non-zero if every configured layer fails."""
+    _fetch_configured_layers(args, command_name="fetch-map-layers")
 
 
 def fetch_osmb(args: argparse.Namespace) -> None:
-    """Fetch configured map layers. Exits non-zero if every configured layer fails."""
-    output_dir = Path(args.output_dir) if args.output_dir else OSMB_DIR
+    """Compatibility wrapper for ``levels fetch-osmb``."""
+    _fetch_configured_layers(args, command_name="fetch-osmb")
+
+
+def _fetch_configured_layers(args: argparse.Namespace, *, command_name: str) -> None:
+    output_dir = Path(args.output_dir) if args.output_dir else MAP_LAYERS_DIR
     output_dir.mkdir(parents=True, exist_ok=True)
 
     cfg = get_map_config()
     layers = cfg.fetch_layers()
     if not layers:
-        logger.info("fetch-osmb: no map overlay layers configured")
+        logger.info("%s: no map overlay layers configured", command_name)
         return
     bbox = cast(BBox, tuple(cfg.bbox))
 
@@ -68,13 +99,14 @@ def fetch_osmb(args: argparse.Namespace) -> None:
         try:
             body, feature_count = _fetch_all_pages(base_url, out_fields, bbox)
         except Exception as exc:
-            logger.error("fetch-osmb: %s failed: %s", filename, exc)
+            logger.error("%s: %s failed: %s", command_name, filename, exc)
             continue
 
         dst = output_dir / filename
         changed = _write_if_changed(dst, body)
         logger.info(
-            "fetch-osmb: %s — %d features, %s",
+            "%s: %s — %d features, %s",
+            command_name,
             filename,
             feature_count,
             "updated" if changed else "unchanged",
@@ -82,7 +114,7 @@ def fetch_osmb(args: argparse.Namespace) -> None:
         successes += 1
 
     if successes == 0:
-        raise SystemExit("fetch-osmb: every configured layer failed; see logs")
+        raise SystemExit(f"{command_name}: every configured layer failed; see logs")
 
 
 def _fetch_all_pages(base_url: str, out_fields: tuple[str, ...], bbox: BBox) -> tuple[bytes, int]:
