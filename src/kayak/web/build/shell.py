@@ -320,9 +320,9 @@ def _build_map_page(
     Defaulted for back-compat with the prior 4-arg signature.
 
     ``site_config_url`` is the generated ``site-config.json`` URL (S3d): the map's
-    default extent + OSMB-style overlay layer defs. static/map.js fetches it and
-    builds its layers + view from it (the layer GeoJSON URLs live inside that JSON,
-    so the per-layer ``data-osmb-*-url`` attributes are gone).
+    default extent + map overlay layer defs. static/map.js fetches it and builds
+    its layers + view from it (the layer GeoJSON URLs live inside that JSON, so
+    the legacy per-layer ``data-osmb-*-url`` attributes are gone).
     """
     nav_html = _build_nav(states, active_page="map", state_abbrevs=state_abbrevs)
 

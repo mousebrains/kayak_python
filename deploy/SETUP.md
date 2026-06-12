@@ -497,7 +497,7 @@ Expected schedule (14 timers; most jittered via `RandomizedDelaySec=`):
 - **kayak-decimate.timer** — daily at 02:32 (thins old observations, VACUUM)
 - **kayak-editor-retention.timer** — daily at 03:45 (prunes expired editor sessions + magic links)
 - **kayak-status.timer** — daily at 03:30 (renders the `/_internal/status` operator dashboard to `/home/pat/var/status.html`)
-- **kayak-fetch-osmb.timer** — daily at 03:30 (fetches Oregon State Marine Board hazard/access GeoJSON overlays)
+- **kayak-fetch-osmb.timer** — daily at 03:30 (fetches configured map overlay GeoJSON; legacy service name)
 - **kayak-cert-expiry.timer** — daily at 06:30 (Let's Encrypt cert health probe; pages on <21 days remaining)
 - **kayak-cert-renewal-test.timer** — weekly Monday at 04:15 (`certbot renew --dry-run`)
 - **kayak-recap.timer** — weekly Monday at 07:00 (pipeline-activity recap email; reads structured events from journald)

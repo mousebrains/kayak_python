@@ -80,13 +80,13 @@
   //   5. reaches       (overlayPane, SVG — bottom)
   // markerPane is a built-in pane stacked above overlayPane, so dams +
   // obstructions clear everything else regardless of add order.
-  const OSMB_HIT_RADIUS = 14;
+  const MAP_OVERLAY_HIT_RADIUS = 14;
   // Overlay layer defs come from the generated site-config.json (S3d) — no longer
   // hardcoded here. applyConfig() fills this in (key/label/color/shape/size/zIndex/
   // defaultOn/url + the resolved popup builder + its link) before renderMap runs.
   // Empty until then, and stays empty if the config fetch fails (no overlays —
   // graceful; they're default-OFF anyway).
-  let OSMB_LAYER_DEFS = [];
+  let MAP_OVERLAY_LAYER_DEFS = [];
   // Popup template key → engine-owned builder (the HTML stays engine-side, escaped).
   // Forward refs to the hoisted function declarations later in this IIFE.
   const POPUP_BUILDERS = {
@@ -96,14 +96,15 @@
   };
 
   // Translate a parsed site-config.json into the module's DEFAULT_VIEW / DEFAULT_ZOOM
-  // and OSMB_LAYER_DEFS. A null/garbage config leaves the seeded view and no overlays.
+  // and MAP_OVERLAY_LAYER_DEFS. A null/garbage config leaves the seeded view and
+  // no overlays.
   function applyConfig(cfg) {
     if (cfg?.map && Array.isArray(cfg.map.center)) {
       DEFAULT_VIEW = cfg.map.center;
       if (typeof cfg.map.zoom === 'number') DEFAULT_ZOOM = cfg.map.zoom;
     }
     const layers = cfg && Array.isArray(cfg.layers) ? cfg.layers : [];
-    OSMB_LAYER_DEFS = layers
+    MAP_OVERLAY_LAYER_DEFS = layers
       .filter(function (l) {
         return POPUP_BUILDERS[l.popup];
       })
@@ -168,11 +169,11 @@
   function parseHash() {
     // gauges defaults to true (Decision §2 — gauges visible by default).
     // Only ?gauges=off persists in the hash; toggling back on clears it
-    // so the common-case URL stays short. OSMB overlays follow the same
-    // rule, with each layer's default coming from OSMB_LAYER_DEFS.
-    const out = { s: null, c: null, gauges: true, osmb: {} };
-    OSMB_LAYER_DEFS.forEach(function (d) {
-      out.osmb[d.key] = d.defaultOn;
+    // so the common-case URL stays short. Map overlays follow the same
+    // rule, with each layer's default coming from MAP_OVERLAY_LAYER_DEFS.
+    const out = { s: null, c: null, gauges: true, mapOverlay: {} };
+    MAP_OVERLAY_LAYER_DEFS.forEach(function (d) {
+      out.mapOverlay[d.key] = d.defaultOn;
     });
     const h = (location.hash || '').replace(/^#/, '');
     if (!h) return out;
@@ -186,23 +187,23 @@
           v === '' ? [] : decodeURIComponent(v).split(',').filter(Boolean);
       } else if (k === 'gauges' && v === 'off') {
         out.gauges = false;
-      } else if (k in out.osmb) {
-        out.osmb[k] = v === 'on';
+      } else if (k in out.mapOverlay) {
+        out.mapOverlay[k] = v === 'on';
       }
     });
     return out;
   }
 
-  function writeHash(sSet, cSet, showGauges, osmbVisible) {
+  function writeHash(sSet, cSet, showGauges, mapOverlayVisible) {
     const parts = [];
     if (sSet.size !== STATUSES.length)
       parts.push('s=' + Array.from(sSet).join(','));
     if (cSet.size !== CLASS_TIERS.length)
       parts.push('c=' + Array.from(cSet).join(','));
     if (showGauges === false) parts.push('gauges=off');
-    if (osmbVisible) {
-      OSMB_LAYER_DEFS.forEach(function (d) {
-        const on = osmbVisible[d.key];
+    if (mapOverlayVisible) {
+      MAP_OVERLAY_LAYER_DEFS.forEach(function (d) {
+        const on = mapOverlayVisible[d.key];
         if (on !== d.defaultOn) parts.push(d.key + '=' + (on ? 'on' : 'off'));
       });
     }
@@ -224,7 +225,7 @@
   // either is missing, renderMap skips the gauge layer wholesale.
   const gaugesGeomUrl = mapEl.dataset.gaugesGeomUrl || '';
   const gaugesStateUrl = mapEl.dataset.gaugesStateUrl || '';
-  // Map config (default extent + OSMB overlay defs) — fetched, then applyConfig'd
+  // Map config (default extent + map overlay defs) — fetched, then applyConfig'd
   // before renderMap. Empty attr / failed fetch → seeded view, no overlays.
   const siteConfigUrl = mapEl.dataset.siteConfigUrl || '';
 
@@ -243,7 +244,7 @@
   );
   street.addTo(map);
   L.control.scale({ imperial: true, metric: false }).addTo(map);
-  // Base tiles are constant; overlay layers (gauges + OSMB) are built
+  // Base tiles are constant; overlay layers (gauges + map overlays) are built
   // inside renderMap once their JSON loads, so the combined layer
   // control is constructed there too. BASE_LAYERS gets passed in.
   const BASE_LAYERS = { Topo: topo, Street: street, Satellite: sat };
@@ -285,11 +286,11 @@
   // Split the config from the heavy overlay data so first paint is gated ONLY on
   // the required reach data (+ best-effort gauges):
   //   - site-config.json is tiny (~1KB), same-origin, and fail-safe — fetched and
-  //     applied (DEFAULT_VIEW/ZOOM + OSMB_LAYER_DEFS) BEFORE render so the view, the
-  //     layer control, and the URL hash are correct in one pass. A failed/slow-to-
-  //     -fail fetch resolves null → seeded view + no overlays; render still proceeds.
-  //   - the (potentially large) OSMB overlay GeoJSON is NOT fetched here — each
-  //     layer lazy-loads its data on first toggle (see loadOsmb), so a slow/large
+  //     applied (DEFAULT_VIEW/ZOOM + MAP_OVERLAY_LAYER_DEFS) BEFORE render so the
+  //     view, layer control, and URL hash are correct in one pass. A failed/slow-
+  //     to-fail fetch resolves null → seeded view + no overlays; render proceeds.
+  //   - the (potentially large) map overlay GeoJSON is NOT fetched here — each
+  //     layer lazy-loads its data on first toggle (see loadMapOverlay), so a slow/large
   //     overlay never blanks the reach map. Mirrors feature-map.js.
   const cfgApplied = fetchOptional(siteConfigUrl, 'site-config').then(
     applyConfig,
@@ -324,38 +325,38 @@
     // hasGaugeLayer gates the filter checkbox AND the fitBounds union.
     const hasGaugeLayer = !!(gaugesGeom && gaugesState);
     let showGauges = hasGaugeLayer && initial.gauges;
-    const osmbLayers = {};
-    const osmbVisible = {};
-    const osmbLoaded = {};
-    const osmbDefByKey = {};
-    OSMB_LAYER_DEFS.forEach(function (d) {
-      osmbDefByKey[d.key] = d;
+    const mapOverlayLayers = {};
+    const mapOverlayVisible = {};
+    const mapOverlayLoaded = {};
+    const mapOverlayDefByKey = {};
+    MAP_OVERLAY_LAYER_DEFS.forEach(function (d) {
+      mapOverlayDefByKey[d.key] = d;
     });
 
-    // Lazy-load + populate one OSMB overlay's GeoJSON, once. Keeps the (large)
+    // Lazy-load + populate one map overlay's GeoJSON, once. Keeps the (large)
     // overlay data off the first-paint path — it streams into the already-added
     // empty layer group. A failed fetch resets the flag so a re-toggle retries.
-    function loadOsmb(key) {
-      if (osmbLoaded[key]) return;
-      const d = osmbDefByKey[key];
+    function loadMapOverlay(key) {
+      if (mapOverlayLoaded[key]) return;
+      const d = mapOverlayDefByKey[key];
       if (!d?.url) return;
-      osmbLoaded[key] = true;
-      fetchOptional(d.url, 'osmb-' + key).then(function (data) {
-        if (data) populateOsmbLayer(osmbLayers[key], data, d);
-        else osmbLoaded[key] = false;
+      mapOverlayLoaded[key] = true;
+      fetchOptional(d.url, 'map-overlay-' + key).then(function (data) {
+        if (data) populateMapOverlayLayer(mapOverlayLayers[key], data, d);
+        else mapOverlayLoaded[key] = false;
       });
     }
 
     // Overlay groups start EMPTY; a layer with no GeoJSON URL (the nightly fetch
     // hasn't landed it) gets no group → no checkbox. A layer toggled on by the URL
     // hash loads its data now (into the on-map empty group).
-    OSMB_LAYER_DEFS.forEach(function (d) {
+    MAP_OVERLAY_LAYER_DEFS.forEach(function (d) {
       if (!d.url) return;
-      osmbLayers[d.key] = L.layerGroup();
-      osmbVisible[d.key] = initial.osmb[d.key];
-      if (osmbVisible[d.key]) {
-        loadOsmb(d.key);
-        osmbLayers[d.key].addTo(map);
+      mapOverlayLayers[d.key] = L.layerGroup();
+      mapOverlayVisible[d.key] = initial.mapOverlay[d.key];
+      if (mapOverlayVisible[d.key]) {
+        loadMapOverlay(d.key);
+        mapOverlayLayers[d.key].addTo(map);
       }
     });
 
@@ -621,7 +622,7 @@
         const f = features[i];
         const gid = f.id;
         const coords = f.geometry?.coordinates;
-        if (!coords || coords.length !== 2) continue;
+        if (coords?.length !== 2) continue;
         const ll = L.latLng(coords[1], coords[0]);
         const entry = state[gid] || { s: 'unknown' };
         const status = entry.s || 'unknown';
@@ -813,7 +814,7 @@
       for (let i = 0; i < visible.length; i++)
         if (visible[i]._mfHit) visible[i]._mfHit.bringToFront();
       applyZOrder();
-      writeHash(sSet, cSet, showGauges, osmbVisible);
+      writeHash(sSet, cSet, showGauges, mapOverlayVisible);
     }
 
     // Enforce within-SVG stacking: gauges above reaches. Reach paths get
@@ -835,7 +836,7 @@
 
     // Base map + overlay toggles live in the unified filter panel (built by
     // addFilterControl). The panel owns its own state via these callbacks —
-    // we mutate outer-scope showGauges / osmbVisible and feed writeHash so
+    // we mutate outer-scope showGauges / mapOverlayVisible and feed writeHash so
     // the URL hash stays in sync.
     function onBaseChange(name) {
       for (const k in BASE_LAYERS) {
@@ -850,18 +851,18 @@
         if (on) gaugeLayer.addTo(map);
         else map.removeLayer(gaugeLayer);
       } else {
-        osmbVisible[key] = on;
-        const lyr = osmbLayers[key];
+        mapOverlayVisible[key] = on;
+        const lyr = mapOverlayLayers[key];
         if (!lyr) return;
         if (on) {
-          loadOsmb(key); // lazy-load the GeoJSON on first toggle-on
+          loadMapOverlay(key); // lazy-load the GeoJSON on first toggle-on
           lyr.addTo(map);
         } else {
           map.removeLayer(lyr);
         }
       }
       applyZOrder();
-      writeHash(sSet, cSet, showGauges, osmbVisible);
+      writeHash(sSet, cSet, showGauges, mapOverlayVisible);
     }
 
     countEl = addFilterControl(sSet, cSet, refilter, {
@@ -870,8 +871,8 @@
       onBaseChange: onBaseChange,
       hasGaugeLayer: hasGaugeLayer,
       showGauges: showGauges,
-      osmbLayers: osmbLayers,
-      osmbVisible: osmbVisible,
+      mapOverlayLayers: mapOverlayLayers,
+      mapOverlayVisible: mapOverlayVisible,
       onOverlayToggle: onOverlayToggle,
     });
     refilter();
@@ -882,9 +883,9 @@
   // (194 + 163) use L.marker + L.divIcon SVG: low enough counts that SVG
   // perf is fine, and L.marker auto-places them in markerPane (above
   // overlayPane) for the z-order the user requested.
-  const OSMB_CANVAS_RENDERER = L.canvas();
+  const MAP_OVERLAY_CANVAS_RENDERER = L.canvas();
 
-  function populateOsmbLayer(group, data, def) {
+  function populateMapOverlayLayer(group, data, def) {
     const features = data?.features || [];
     for (let i = 0; i < features.length; i++) {
       const f = features[i];
@@ -894,7 +895,7 @@
       const props = f.properties || {};
       if (def.shape === 'circle') {
         L.circleMarker(ll, {
-          renderer: OSMB_CANVAS_RENDERER,
+          renderer: MAP_OVERLAY_CANVAS_RENDERER,
           radius: def.size,
           fillColor: def.color,
           color: '#222',
@@ -903,8 +904,8 @@
           interactive: false,
         }).addTo(group);
         const hit = L.circleMarker(ll, {
-          renderer: OSMB_CANVAS_RENDERER,
-          radius: OSMB_HIT_RADIUS,
+          renderer: MAP_OVERLAY_CANVAS_RENDERER,
+          radius: MAP_OVERLAY_HIT_RADIUS,
           opacity: 0,
           fillOpacity: 0,
           interactive: true,
@@ -921,7 +922,7 @@
     }
   }
 
-  // Build an L.divIcon with inline SVG for the non-circle OSMB markers.
+  // Build an L.divIcon with inline SVG for the non-circle map overlay markers.
   // The visible shape sits inside a 28×28 hit box — matches the access
   // layer's hit-circle diameter so tap targets are uniform across shapes.
   // No external CSS needed: fill + stroke are SVG attrs (CSP-safe).
@@ -980,7 +981,7 @@
       '" stroke="#222" stroke-width="1" stroke-linejoin="round"/>' +
       '</svg>';
     return L.divIcon({
-      className: 'osmb-icon osmb-icon--' + shape,
+      className: 'map-overlay-icon map-overlay-icon--' + shape,
       html: svg,
       iconSize: [box, box],
       iconAnchor: [c, c],
@@ -1112,12 +1113,12 @@
         sw.style.background = COLORS.unknown;
         lab.appendChild(document.createTextNode('Gauges'));
       }
-      OSMB_LAYER_DEFS.forEach(function (d) {
-        if (!opts.osmbLayers[d.key]) return;
+      MAP_OVERLAY_LAYER_DEFS.forEach(function (d) {
+        if (!opts.mapOverlayLayers[d.key]) return;
         const lab = L.DomUtil.create('label', '', ovFs);
         const cb = L.DomUtil.create('input', '', lab);
         cb.type = 'checkbox';
-        cb.checked = !!opts.osmbVisible[d.key];
+        cb.checked = !!opts.mapOverlayVisible[d.key];
         cb.addEventListener('change', function () {
           opts.onOverlayToggle(d.key, cb.checked);
         });

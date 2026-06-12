@@ -1,5 +1,5 @@
 [Unit]
-Description=Fetch Oregon SMB overlays once a day
+Description=Fetch configured map overlays once a day
 
 [Timer]
 # 03:30 local with up to 30 min of jitter — staggers off the audit-gauges

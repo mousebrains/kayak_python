@@ -10,7 +10,7 @@
 //                     gauge page; omitted on reach pages.
 //   data-site-config-url
 //                     — generated site-config.json URL (map default extent +
-//                     OSMB-style overlay layer defs). Fetched after first paint;
+//                     map overlay layer defs). Fetched after first paint;
 //                     each layer's GeoJSON URL lives inside it. Layers default OFF
 //                     and lazy-fetch their GeoJSON on first toggle, so an untoggled
 //                     page incurs zero overlay bandwidth. Empty/failed fetch → no
@@ -20,7 +20,7 @@
 // site-config.json (S3d), so it is no longer duplicated here. The popup HTML
 // builders (shapes, escaping) are still duplicated from static/map.js — both
 // consumers are small enough that extracting them isn't worth the plumbing yet;
-// if a third consumer appears, extract to static/osmb-layers.js.
+// if a third consumer appears, extract to static/map-overlay-layers.js.
 (function () {
   'use strict';
   function esc(s) {
@@ -66,24 +66,24 @@
   );
   topo.addTo(map);
 
-  // OSMB overlays — see header comment. Layer presentation + popup links come
+  // Map overlays — see header comment. Layer presentation + popup links come
   // from the generated site-config.json (S3d, data-site-config-url), no longer
   // hardcoded here. Layers default OFF and lazy-fetch their GeoJSON on first
   // toggle, so an untoggled page incurs zero overlay bandwidth. bounds[] below is
-  // intentionally NOT updated with OSMB markers — toggling on must not pan/zoom
-  // the map.
-  const OSMB_CANVAS_RENDERER = L.canvas();
-  const OSMB_HIT_RADIUS = 14;
+  // intentionally NOT updated with map overlay markers — toggling on must not
+  // pan/zoom the map.
+  const MAP_OVERLAY_CANVAS_RENDERER = L.canvas();
+  const MAP_OVERLAY_HIT_RADIUS = 14;
   // Popup template key → engine-owned builder (HTML stays engine-side, escaped).
   const POPUP_BUILDERS = {
     obstructions: obstructionPopup,
     dams: damPopup,
     access: accessPopup,
   };
-  let OSMB_LAYER_DEFS = [];
-  const osmbLayers = {};
-  const osmbUrls = {};
-  const osmbLoaded = {};
+  let MAP_OVERLAY_LAYER_DEFS = [];
+  const mapOverlayLayers = {};
+  const mapOverlayUrls = {};
+  const mapOverlayLoaded = {};
 
   // Base map control built immediately (overlays added once the config resolves —
   // first paint never waits on it). Keep the control ref so addOverlay can append.
@@ -107,7 +107,7 @@
       })
       .then(function (cfg) {
         const layers = cfg && Array.isArray(cfg.layers) ? cfg.layers : [];
-        OSMB_LAYER_DEFS = layers
+        MAP_OVERLAY_LAYER_DEFS = layers
           .filter(function (l) {
             return POPUP_BUILDERS[l.popup] && l.url;
           })
@@ -124,14 +124,14 @@
               popupLink: l.popupLink || '',
             };
           });
-        OSMB_LAYER_DEFS.forEach(function (d) {
-          osmbUrls[d.key] = d.url;
-          osmbLayers[d.key] = L.layerGroup();
+        MAP_OVERLAY_LAYER_DEFS.forEach(function (d) {
+          mapOverlayUrls[d.key] = d.url;
+          mapOverlayLayers[d.key] = L.layerGroup();
           const swatch =
             '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:' +
             d.color +
             ';border:1px solid rgba(0,0,0,.15);margin-right:6px;vertical-align:middle"></span>';
-          layersControl.addOverlay(osmbLayers[d.key], swatch + d.label);
+          layersControl.addOverlay(mapOverlayLayers[d.key], swatch + d.label);
         });
       })
       .catch(function (err) {
@@ -141,33 +141,33 @@
 
   // Lazy-fetch on first toggle. Markers stream in after the layer is
   // already on the map; the brief "empty layer for a second" gap is
-  // fine on a typical connection. A failed fetch resets osmbLoaded so
+  // fine on a typical connection. A failed fetch resets mapOverlayLoaded so
   // a re-toggle retries instead of permanently 404'ing.
   map.on('overlayadd', function (e) {
-    for (const key in osmbLayers) {
-      if (e.layer === osmbLayers[key] && !osmbLoaded[key]) {
-        osmbLoaded[key] = true;
-        const def = OSMB_LAYER_DEFS.filter(function (d) {
+    for (const key in mapOverlayLayers) {
+      if (e.layer === mapOverlayLayers[key] && !mapOverlayLoaded[key]) {
+        mapOverlayLoaded[key] = true;
+        const def = MAP_OVERLAY_LAYER_DEFS.filter(function (d) {
           return d.key === key;
         })[0];
-        fetch(osmbUrls[key])
+        fetch(mapOverlayUrls[key])
           .then(function (r) {
-            if (!r.ok) throw new Error('osmb ' + key + ' ' + r.status);
+            if (!r.ok) throw new Error('map-overlay ' + key + ' ' + r.status);
             return r.json();
           })
           .then(function (data) {
-            populateOsmbLayer(osmbLayers[key], data, def);
+            populateMapOverlayLayer(mapOverlayLayers[key], data, def);
           })
           .catch(function (err) {
-            console.warn('osmb ' + key + ' fetch failed:', err);
-            osmbLoaded[key] = false;
+            console.warn('map-overlay ' + key + ' fetch failed:', err);
+            mapOverlayLoaded[key] = false;
           });
         break;
       }
     }
   });
 
-  function populateOsmbLayer(lg, data, def) {
+  function populateMapOverlayLayer(lg, data, def) {
     const features = data?.features || [];
     for (let i = 0; i < features.length; i++) {
       const f = features[i];
@@ -177,7 +177,7 @@
       const props = f.properties || {};
       if (def.shape === 'circle') {
         L.circleMarker(ll, {
-          renderer: OSMB_CANVAS_RENDERER,
+          renderer: MAP_OVERLAY_CANVAS_RENDERER,
           radius: def.size,
           fillColor: def.color,
           color: '#222',
@@ -186,8 +186,8 @@
           interactive: false,
         }).addTo(lg);
         const hit = L.circleMarker(ll, {
-          renderer: OSMB_CANVAS_RENDERER,
-          radius: OSMB_HIT_RADIUS,
+          renderer: MAP_OVERLAY_CANVAS_RENDERER,
+          radius: MAP_OVERLAY_HIT_RADIUS,
           opacity: 0,
           fillOpacity: 0,
           interactive: true,
@@ -258,7 +258,7 @@
       '" stroke="#222" stroke-width="1" stroke-linejoin="round"/>' +
       '</svg>';
     return L.divIcon({
-      className: 'osmb-icon osmb-icon--' + shape,
+      className: 'map-overlay-icon map-overlay-icon--' + shape,
       html: svg,
       iconSize: [box, box],
       iconAnchor: [c, c],
@@ -537,7 +537,7 @@
     btn.textContent = 'Copy';
     btn.style.cursor = 'pointer';
     btn.addEventListener('click', function () {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
+      if (navigator.clipboard?.writeText) {
         navigator.clipboard.writeText(coords).then(
           function () {
             btn.textContent = 'Copied';

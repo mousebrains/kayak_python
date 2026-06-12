@@ -34,8 +34,8 @@ logger = logging.getLogger(__name__)
 
 BBox = tuple[float, float, float, float]
 
-# Defensive cap on pagination — bigger than any layer we expect from
-# OSMB so we never tail-spin if the server keeps returning full pages.
+# Defensive cap on pagination — bigger than any configured layer we expect, so
+# we never tail-spin if the server keeps returning full pages.
 _MAX_PAGES = 50
 
 

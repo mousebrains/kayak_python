@@ -160,7 +160,7 @@ Key systemd timers:
 - **kayak-cert-expiry** — daily at 06:30 (Let's Encrypt cert health probe; pages on <21 days remaining)
 - **kayak-editor-retention** — daily at 03:45 (prune expired editor sessions + magic links)
 - **kayak-status** — daily at 03:30 (renders the `/_internal/status` operator dashboard to `var/status.html`)
-- **kayak-fetch-osmb** — daily at 03:30 (fetches Oregon State Marine Board hazard/access GeoJSON overlays)
+- **kayak-fetch-osmb** — daily at 03:30 (fetches configured map overlay GeoJSON; legacy service name)
 - **kayak-cert-renewal-test** — weekly Monday 04:15 (`certbot renew --dry-run`)
 - **kayak-backup-weekly** — weekly Sunday 03:15 (4-copy retention; chains to off-site upload via `OnSuccess=`)
 - **kayak-audit-gauges** — weekly Sunday 03:29 (orphan-gauge + reach-mapping audit, emails on drift)
