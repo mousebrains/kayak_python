@@ -861,8 +861,11 @@ dataset PR -> merge -> pull -> deploy on the live host).
   retired this is now a silent-revert trap: `sync-metadata` updates any
   row that differs from the CSVs, so an editor-approved change is
   un-done at the next deploy unless someone hand-ports it to
-  `kayak_data` first. Acceptance criteria 6 and 7 are open solely
-  because of this path.
+  `kayak_data` first. The SA decomposition deferred the bridge with the
+  recorded rationale that the editor write path is not live on WKCC
+  prod; verify that on the host (are editor routes enabled, and are
+  there non-test `change_request` rows?) when weighing D1's priority.
+  Acceptance criteria 6 and 7 are open solely because of this path.
 - **S2 — done** (#152–#154, kd#15–#17). Regression content serves from
   `DATASET_DIR/regression` through the nh3/defusedxml sanitizers.
 - **S3 — done except g/h and residue.** S3a identity, S3b region, S3c
