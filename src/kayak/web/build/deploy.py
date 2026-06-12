@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session, selectinload
 from kayak.config import (
     BASE_DIR,
     DATASET_DIR,
-    OSMB_DIR,
+    MAP_LAYERS_DIR,
     SITE_URL,
     require_explicit_site_url_for_publishable_dataset,
 )
@@ -107,8 +107,8 @@ def _osmb_url(static_dir: Path, filename: str) -> str:
 
     Source-of-truth for mtime is the staged copy under ``static_dir``;
     ``shutil.copy2`` (called from ``_deploy_static_assets``) preserves
-    the upstream mtime from the OSMB staging dir (``OSMB_DIR``, where
-    ``levels fetch-osmb`` wrote the file), and the per-file rename in
+    the upstream mtime from the map-layer staging dir (``MAP_LAYERS_DIR``, where
+    ``levels fetch-map-layers`` wrote the file), and the per-file rename in
     ``_deploy_staging_to_live`` skips identical content, so the live
     file's mtime stays put across no-op nightly fetches.
     """
@@ -179,8 +179,8 @@ def _deploy_static_assets(output_dir: Path, *, provenance_slug_count: int = 0) -
       wheel install finds them (S4a-2 slice B1). The build-processed trio
       (``style.css``/``levels.js``/``filters.js``) is skipped here — it is
       emitted as hashed/versioned variants by ``_build_to_dir``.
-    * the OSMB staging dir (``config.osmb_dir``) — GeoJSON files written by
-      ``levels fetch-osmb`` on its own cadence. Only files declared by the
+    * the map-layer staging dir (``config.map_layers_dir``) — GeoJSON files
+      written by ``levels fetch-map-layers`` on its own cadence. Only files declared by the
       resolved dataset map config are copied; stale staged files from removed or
       renamed layers are intentionally left out so ``_sweep_orphans`` removes the
       old public artifacts.
@@ -217,13 +217,13 @@ def _deploy_static_assets(output_dir: Path, *, provenance_slug_count: int = 0) -
         elif path.is_dir():
             shutil.copytree(path, static_dir / path.name, dirs_exist_ok=True)
     _deploy_dataset_site_assets(static_dir)
-    # Generated map overlays staged outside the package by `levels fetch-osmb`.
+    # Generated map overlays staged outside the package by `levels fetch-map-layers`.
     overlay_filenames = {
         filename for filename, _endpoint, _fields in get_map_config().fetch_layers()
     }
-    if OSMB_DIR.is_dir():
+    if MAP_LAYERS_DIR.is_dir():
         for filename in sorted(overlay_filenames):
-            path = OSMB_DIR / filename
+            path = MAP_LAYERS_DIR / filename
             if not path.is_file():
                 continue
             shutil.copy2(path, static_dir / path.name)
@@ -573,7 +573,7 @@ def _build_to_dir(output_dir: Path, args: argparse.Namespace) -> None:
         state_url = "/static/reaches-state.json"
         gauges_geom_url = f"/static/gauges-geom.json?v={gauges_geom_hash}"
         gauges_state_url = "/static/gauges-state.json"
-        # Map config (default extent + OSMB-style overlay layer defs) → one
+        # Map config (default extent + overlay layer defs) → one
         # non-executable JSON the map JS fetches (S3d). The per-layer GeoJSON URL
         # is still resolved here via _osmb_url (empty until the nightly fetch lands
         # the file); the build owns file naming + cache-busting.

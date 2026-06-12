@@ -606,7 +606,7 @@ def test_deploy_source_files_threads_slug_count_to_warning(tmp_path, monkeypatch
     # hops, so the warning fires when the count is set but DATASET_DIR/regression/ is
     # absent. Closes the gap between the leaf-level warn test and _build_to_dir.
     monkeypatch.setattr(build_mod, "DATASET_DIR", tmp_path)  # no regression/ under it
-    monkeypatch.setattr(build_mod, "OSMB_DIR", tmp_path / "no-osmb")
+    monkeypatch.setattr(build_mod, "MAP_LAYERS_DIR", tmp_path / "no-osmb")
     output_dir = tmp_path / "out"
     with caplog.at_level("WARNING"):
         build_mod._deploy_source_files(output_dir, provenance_slug_count=7)
@@ -669,7 +669,7 @@ def _deploy_static_no_externals_output(
     monkeypatch, tmp_path, site_config: SiteConfig | None = None
 ):
     """Run _deploy_static_assets with OSMB + regression dirs absent."""
-    monkeypatch.setattr(build_mod, "OSMB_DIR", tmp_path / "no-osmb")
+    monkeypatch.setattr(build_mod, "MAP_LAYERS_DIR", tmp_path / "no-osmb")
     monkeypatch.setattr(build_mod, "DATASET_DIR", tmp_path / "no-ds")
     monkeypatch.setattr(build_mod, "get_site_config", lambda: site_config or SiteConfig())
     output = tmp_path / "out"
@@ -738,7 +738,7 @@ def test_deploy_static_assets_prefers_dataset_site_assets(monkeypatch, tmp_path)
     (asset_dir / "og-image.png").write_bytes(override)
 
     output = tmp_path / "out"
-    monkeypatch.setattr(build_mod, "OSMB_DIR", tmp_path / "no-osmb")
+    monkeypatch.setattr(build_mod, "MAP_LAYERS_DIR", tmp_path / "no-osmb")
     monkeypatch.setattr(build_mod, "DATASET_DIR", ds)
     monkeypatch.setattr(build_mod, "get_site_config", lambda: SiteConfig())
     build_mod._deploy_static_assets(output)
@@ -753,7 +753,7 @@ def test_deploy_static_assets_rejects_invalid_dataset_site_assets(monkeypatch, t
     (asset_dir / "og-image.png").write_bytes(_png_bytes(1200, 600))
 
     output = tmp_path / "out"
-    monkeypatch.setattr(build_mod, "OSMB_DIR", tmp_path / "no-osmb")
+    monkeypatch.setattr(build_mod, "MAP_LAYERS_DIR", tmp_path / "no-osmb")
     monkeypatch.setattr(build_mod, "DATASET_DIR", ds)
     monkeypatch.setattr(build_mod, "get_site_config", lambda: SiteConfig())
 

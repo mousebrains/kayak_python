@@ -1,16 +1,17 @@
 """Dataset-owned map config (``map.yaml``) — S3d.
 
-The interactive map's default extent + the OSMB-style overlay layers (presentation
-+ ArcGIS fetch params). A club supplies its own via an opt-in ``map.yaml`` at the
-dataset root (``DATASET_DIR``); resolution is *engine defaults < dataset
-``map.yaml``* (a present file fully defines the config — replace, not merge). The
-map analogue of :mod:`kayak.dataset.site` / :mod:`kayak.dataset.region`.
+The interactive map's default extent + overlay layers (presentation + ArcGIS
+fetch params). A club supplies its own via an opt-in ``map.yaml`` at the dataset
+root (``DATASET_DIR``); resolution is *engine defaults < dataset ``map.yaml``* (a
+present file fully defines the config — replace, not merge). The map analogue of
+:mod:`kayak.dataset.site` / :mod:`kayak.dataset.region`.
 
 S3d consumers read this config:
   - :mod:`kayak.web.build.site_config` renders the presentation half into the
     generated ``static/site-config.json`` the map JS fetches
     (:meth:`MapConfig.presentation_layers`).
-  - :mod:`kayak.cli.fetch_osmb` reads the ArcGIS fetch half
+  - :mod:`kayak.cli.fetch_osmb` reads the ArcGIS fetch half for
+    ``levels fetch-map-layers`` (and the legacy ``fetch-osmb`` alias)
     (:meth:`MapConfig.fetch_layers`): endpoint + out_fields + output filename,
     filtered to :attr:`MapConfig.bbox`.
   - :mod:`kayak.cli.validate_dataset` applies the same fail-closed validation when
@@ -63,7 +64,7 @@ def _hex_color(v: str) -> str:
 
 
 class MapLayer(BaseModel):
-    """One OSMB-style overlay: presentation + popup template + ArcGIS fetch params."""
+    """One map overlay: presentation + popup template + ArcGIS fetch params."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -204,7 +205,7 @@ class MapConfig(BaseModel):
         ]
 
     def fetch_layers(self) -> list[tuple[str, str, tuple[str, ...]]]:
-        """ArcGIS fetch half for ``fetch-osmb``: ``(output_filename, endpoint, out_fields)``."""
+        """ArcGIS fetch half: ``(output_filename, endpoint, out_fields)``."""
         return [
             (layer.output_filename, layer.endpoint, tuple(layer.out_fields))
             for layer in self.layers

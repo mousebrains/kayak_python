@@ -1,4 +1,4 @@
-"""Tests for the dataset-driven ``levels fetch-osmb`` overlay fetcher."""
+"""Tests for the dataset-driven ``levels fetch-map-layers`` overlay fetcher."""
 
 from __future__ import annotations
 
@@ -33,6 +33,20 @@ def _feature(lon: float, lat: float, name: str) -> dict[str, object]:
         "geometry": {"type": "Point", "coordinates": [lon, lat]},
         "properties": {"name": name},
     }
+
+
+def test_cli_registers_preferred_and_compat_commands(tmp_path: Path) -> None:
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command")
+
+    fetch_osmb.addArgs(subparsers)
+
+    preferred = parser.parse_args(["fetch-map-layers", "--output-dir", str(tmp_path)])
+    compat = parser.parse_args(["fetch-osmb", "--output-dir", str(tmp_path)])
+    assert preferred.command == "fetch-map-layers"
+    assert preferred.func is fetch_osmb.fetch_map_layers
+    assert compat.command == "fetch-osmb"
+    assert compat.func is fetch_osmb.fetch_osmb
 
 
 def test_fetch_osmb_uses_dataset_map_layers(monkeypatch, tmp_path: Path) -> None:
@@ -91,6 +105,16 @@ def test_fetch_osmb_noops_when_no_layers_configured(monkeypatch, tmp_path: Path)
     fetch_osmb.fetch_osmb(argparse.Namespace(output_dir=str(tmp_path)))
 
     assert called is False
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_fetch_map_layers_uses_configured_default_dir(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(fetch_osmb, "MAP_LAYERS_DIR", tmp_path)
+    monkeypatch.setattr(fetch_osmb, "get_map_config", lambda: MapConfig(layers=[]))
+
+    fetch_osmb.fetch_map_layers(argparse.Namespace(output_dir=None))
+
+    assert tmp_path.is_dir()
     assert list(tmp_path.iterdir()) == []
 
 
