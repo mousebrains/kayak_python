@@ -25,6 +25,7 @@ Run:
 from __future__ import annotations
 
 import concurrent.futures
+import os
 import re
 import sqlite3
 import sys
@@ -180,7 +181,10 @@ def main() -> None:
     db_path = (
         sys.argv[1]
         if len(sys.argv) > 1
-        else str(Path(__file__).resolve().parent.parent / "Gauge-metadata-cache" / "gauges.db")
+        else os.environ.get(
+            "GAUGE_METADATA_CACHE",
+            str(Path(__file__).resolve().parent.parent / "Gauge-metadata-cache" / "gauges.db"),
+        )
     )
 
     session = requests.Session()

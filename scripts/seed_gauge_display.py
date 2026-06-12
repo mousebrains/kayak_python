@@ -28,6 +28,7 @@ changed.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sqlite3
 import sys
@@ -42,7 +43,10 @@ from kayak.web.build.gauges import (
     _parse_station_uppercase,
 )
 
-DEFAULT_CACHE = "/home/pat/kayak/Gauge-metadata-cache/gauges.db"
+DEFAULT_CACHE = os.environ.get(
+    "GAUGE_METADATA_CACHE",
+    str(Path(__file__).resolve().parent.parent / "Gauge-metadata-cache" / "gauges.db"),
+)
 
 _DIRECTIONS = ("North", "South", "East", "West", "Middle")
 _DIRECTION_LETTERS = {

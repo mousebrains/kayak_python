@@ -48,6 +48,7 @@ _CONFIG_PREFIXES = (
     "NTFY_",
     "CSP_",
     "AUDIT_",
+    "GAUGE_",
     "KAYAK_",
     "DATASET_",
     "METADATA_",  # deprecated alias of DATASET_DIR (S6.1) — kept one release

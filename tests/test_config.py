@@ -103,6 +103,23 @@ class TestKayakConfigEnvReads:
         assert "site-packages/kayak" not in str(map_layers)
         assert str(config.DATA_DIR) not in str(map_layers)
 
+    def test_env_override_gauge_metadata_cache(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("GAUGE_METADATA_CACHE", "/srv/gauge-metadata/gauges.db")
+        cfg = KayakConfig()
+        assert str(cfg.gauge_metadata_cache) == "/srv/gauge-metadata/gauges.db"
+
+    def test_gauge_metadata_cache_default_is_outside_the_package(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Generated gauge metadata is runtime/cache state, not an engine package
+        # resource. Keep the historical Gauge-metadata-cache/gauges.db default for
+        # live compatibility, but ensure it does not resolve under packaged data.
+        monkeypatch.delenv("GAUGE_METADATA_CACHE", raising=False)
+        cache = KayakConfig().gauge_metadata_cache
+        assert cache.parts[-2:] == ("Gauge-metadata-cache", "gauges.db")
+        assert "site-packages/kayak" not in str(cache)
+        assert str(config.DATA_DIR) not in str(cache)
+
     def test_env_override_editor_feature_bool(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("EDITOR_FEATURE", "true")
         assert KayakConfig().editor_feature is True
@@ -116,6 +133,7 @@ class TestKayakConfigEnvReads:
             "OUTPUT_DIR",
             "MAP_LAYERS_DIR",
             "OSMB_DIR",
+            "GAUGE_METADATA_CACHE",
             "DATASET_DIR",
             "METADATA_DIR",
             "FETCH_TIMEOUT",

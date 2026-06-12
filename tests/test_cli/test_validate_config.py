@@ -59,6 +59,10 @@ class TestKnownEnvNames:
         assert "MAP_LAYERS_DIR" in names
         assert "OSMB_DIR" in names
 
+    def test_includes_gauge_metadata_cache(self) -> None:
+        names = _known_env_names()
+        assert "GAUGE_METADATA_CACHE" in names
+
     def test_includes_systemd_heartbeat_urls(self) -> None:
         # Every ${HC_*} referenced by a systemd unit must be a declared
         # field — these two were missed when their units were added.
@@ -101,6 +105,15 @@ class TestKnownEnvNames:
             validate_config(_args(known_env=True))
         assert exc.value.code == 0
         assert "MAP_LAYERS_DRI" in capsys.readouterr().err
+
+    def test_known_env_warns_on_gauge_metadata_cache_typo(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("GAUGE_METADATA_CAHCE", "/tmp/gauges.db")
+        with pytest.raises(SystemExit) as exc:
+            validate_config(_args(known_env=True))
+        assert exc.value.code == 0
+        assert "GAUGE_METADATA_CAHCE" in capsys.readouterr().err
 
 
 class TestValidateConfig:

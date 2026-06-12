@@ -16,6 +16,7 @@ import os
 import sqlite3
 import sys
 import time
+from pathlib import Path
 
 import requests
 
@@ -191,10 +192,9 @@ def main():
     db_path = (
         sys.argv[1]
         if len(sys.argv) > 1
-        else str(
-            __import__("pathlib").Path(__file__).resolve().parent.parent
-            / "Gauge-metadata-cache"
-            / "gauges.db"
+        else os.environ.get(
+            "GAUGE_METADATA_CACHE",
+            str(Path(__file__).resolve().parent.parent / "Gauge-metadata-cache" / "gauges.db"),
         )
     )
 
