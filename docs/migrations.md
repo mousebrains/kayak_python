@@ -84,7 +84,7 @@ left active still wastes fetches and noise, so the checklist stands.)
 The fix is a checklist, not a tool — run
 through this before deleting a source's row from `kayak_data`'s
 `source.csv` (plus its `gauge_source.csv` link, and `fetch_url.csv` /
-the code repo's `src/kayak/data/sources.yaml` if it's a fetch source).
+the dataset's `sources.yaml` registry entry if it's a fetch source).
 
 ### 1. List every fetch_url referenced by the deleted sources
 
@@ -269,8 +269,9 @@ The one sibling invariant still worth a follow-on plan is:
 > `scripts/import_metadata.py` applies the reach geom/gradient JSON sidecars.
 > This section is the recovery runbook, not an open problem.
 
-`levels init-db` seeds `state`, `source`, and `fetch_url` from
-`src/kayak/data/sources.yaml` but **does not** create any `gauge_source` links
+`levels init-db` used to seed `state`, `source`, and `fetch_url` from the
+engine's `sources.yaml` (the S1-cleanup made init-db schema-only; everything
+now loads via `sync-metadata`) and never created any `gauge_source` links
 (only migration 0020 ever `INSERT`s into `gauge_source`, and only as a
 fix). So `init-db` + `migrate` *alone* yields a DB where every
 fetch-backed source is an orphan — `levels orphan-check` would flag
@@ -296,7 +297,7 @@ So rebuilding prod from scratch — e.g. after catastrophic corruption
 with no usable backup — **is** possible purely from what's checked in:
 
 ```bash
-levels init-db --no-seed           # empty schema + stamped migrations
+levels init-db                     # empty schema + stamped migrations
 levels sync-metadata               # CSVs (incl. gauge_source), matched by id
 python scripts/import_metadata.py  # reach geom/gradient JSON sidecars
 levels pipeline                    # fetch live data + render
@@ -305,12 +306,10 @@ levels pipeline                    # fetch live data + render
 (`sync-metadata` refuses a `status: scaffold` dataset — add `--allow-scaffold`
 only if rebuilding from a scaffold checkout; the real `kayak_data` is publishable.)
 
-`--no-seed` is required, not just advisable: a plain `levels init-db`
-seeds `state` / `source` / `fetch_url` from `sources.yaml` with fresh
-ids, which then collide with the canonical-id CSV rows on `sync-metadata`
-— a duplicate `source` (its name isn't unique), or, since the sync upserts
-on the primary key, an *aborting* `UNIQUE` conflict on `state.name` /
-`fetch_url.url`. `--no-seed` gives empty tables so the CSV ids load
+`init-db` is schema-only since the S1-cleanup (`--no-seed` survives one
+release as a deprecated no-op), so the old failure mode — engine-seeded
+rows with fresh ids colliding with the canonical-id CSV rows on
+`sync-metadata` — no longer exists; the empty tables load the CSV ids
 cleanly. `sync-metadata` runs with FK enforcement on (and audits
 `integrity_check` + `foreign_key_check`); the `import_metadata.py` sidecar
 apply runs FK-off (the live DB carries intentional orphan rows) and reports

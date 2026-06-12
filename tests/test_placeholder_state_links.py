@@ -120,6 +120,28 @@ def test_nav_bar_includes_reach_state_absent_from_region_config() -> None:
     assert 'href="/Wyoming.html"' in html and ">WY</a>" in html
 
 
+def test_region_urls_with_query_strings_escape_in_rendered_html(tmp_path) -> None:
+    """A legitimate `&` in a region weather/link URL must render as `&amp;` in
+    the emitted href attributes (the carried S3b Dreamflows finding). Guarded at
+    the HTML layer so a renderer refactor can't reintroduce raw ampersands while
+    the region-model tests (which only check the parsed URL) stay green."""
+    (tmp_path / region_mod.REGION_YAML).write_text(
+        "states:\n"
+        "  Oregon:\n"
+        "    weather_url: 'https://wx.example/f?a=1&b=2'\n"
+        "    links:\n"
+        "      - {label: DF, url: 'https://x.example/f?a=1&b=2#frag'}\n",
+        encoding="utf-8",
+    )
+    region_mod.get_region_config.cache_clear()
+    nav = _build_nav(_STATES, active_state="Oregon", state_abbrevs=_TEST_STATE_LABELS)
+    assert 'href="https://wx.example/f?a=1&amp;b=2"' in nav
+    assert 'href="https://wx.example/f?a=1&b=2"' not in nav
+    page = _build_placeholder_page("", _STATES, "Oregon", _TEST_STATE_LABELS)
+    assert 'href="https://x.example/f?a=1&amp;b=2#frag"' in page
+    assert 'href="https://x.example/f?a=1&b=2#frag"' not in page
+
+
 def test_nav_bar_percent_encodes_multiword_state_url() -> None:
     """A multi-word state name is percent-encoded in the nav href path (review)."""
     html = _build_nav(["New Mexico"], state_abbrevs=_TEST_STATE_LABELS)

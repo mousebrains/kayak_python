@@ -167,8 +167,9 @@ def iter_access_events(
 ) -> Iterator[AccessEvent]:
     """All nginx access events from kayak vhosts at or after ``since``.
 
-    Default glob matches all three vhost logs (kayak-, levels-test.,
-    levels-wkcc.); narrow with ``log_glob`` for a single vhost.
+    Default glob matches every access log under the nginx log directory;
+    narrow with ``log_glob`` for a single vhost (vhost log names are host
+    configuration — parameterized by S7).
     """
     for path in _glob_sorted(log_glob):
         for ev in _parse_access_file(path):

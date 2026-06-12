@@ -18,8 +18,8 @@ The CSVs this writes are applied to the live DB by ``levels sync-metadata``;
 ``levels fetch`` then reads the DB, not any YAML (S1-fetch). A URL may carry an
 optional ``unknown_station_policy: ignore`` to opt that feed out of the default
 reject (S1-fetch-2); the column is written only when at least one URL sets it.
-``init-db`` still seeds a fresh dev DB from the engine's
-``src/kayak/data/sources.yaml`` (until the S1-cleanup slice removes that seed).
+``init-db`` is schema-only (the S1-cleanup removed the former engine-side
+``sources.yaml`` seed); a fresh DB gets all metadata via ``levels sync-metadata``.
 """
 
 from __future__ import annotations

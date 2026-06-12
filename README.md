@@ -57,12 +57,13 @@ source .venv/bin/activate
 git clone git@github.com:mousebrains/kayak_data.git ../kayak_data
 export DATASET_DIR="$(cd ../kayak_data && pwd)"   # or persist in ~/.config/kayak/.env
 
-# 3. Create the schema (empty tables + stamped migrations)
-levels init-db --no-seed
+# 3. Create the schema (empty tables + stamped migrations; schema only —
+#    the former sources.yaml seeding is gone, --no-seed is a deprecated no-op)
+levels init-db
 
-# 4. Load gauge/reach/source metadata from the kayak_data repo (DATASET_DIR).
-#    init-db alone seeds only states + sources/fetch_urls from sources.yaml;
-#    with no gauge_source links the pipeline's orphan-check fails and the site
+# 4. Load state/gauge/reach/source metadata from the kayak_data repo (DATASET_DIR).
+#    init-db creates no rows: without this step every source is an orphan, the
+#    pipeline's orphan-check fails and the site
 #    renders empty. sync-metadata applies the CSVs (matched by stable id); the
 #    import_metadata step then applies the reach geom/gradient JSON sidecars
 #    (excluded from reach.csv), so the pipeline produces a populated site.
@@ -99,7 +100,7 @@ shell config makes activation noisy: replace every `levels …` with
 
 | Command | Purpose |
 |---------|---------|
-| `levels init-db` | Create tables, seed states/sources from `src/kayak/data/sources.yaml`, stamp all known migrations |
+| `levels init-db` | Create tables and stamp all known migrations (schema only; metadata loads via `sync-metadata`) |
 | `levels migrate` | Apply pending `src/kayak/data/db/migrations/*.sql` files (tracked in `schema_migrations`) |
 | `levels pipeline` | Run full pipeline: fetch → fetch-usgs-ogc → calc-rating → update-gauge-cache → calculator → build |
 | `levels fetch` | Fetch observations from all active sources (standalone — also runs as pipeline stage 1) |

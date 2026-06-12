@@ -15,11 +15,11 @@ git clone git@github.com:mousebrains/kayak_data.git ../kayak_data
 export DATASET_DIR="$(cd ../kayak_data && pwd)"   # or persist in ~/.config/kayak/.env
 
 # Initialize database: empty schema, then canonical metadata. `sync-metadata`
-# applies the CSVs (gauges/reaches/sources/links, by stable id); import_metadata
-# applies the reach geom/gradient JSON sidecars (excluded from reach.csv). A bare
-# `levels init-db` seeds duplicate sources and leaves every source an orphan —
-# see CLAUDE.md § Quick start.
-levels init-db --no-seed
+# applies the CSVs (states/gauges/reaches/sources/links, by stable id);
+# import_metadata applies the reach geom/gradient JSON sidecars (excluded from
+# reach.csv). init-db is schema-only — without the sync every source is an
+# orphan and the site renders empty; see CLAUDE.md § Quick start.
+levels init-db
 levels sync-metadata
 python scripts/import_metadata.py
 
@@ -98,15 +98,11 @@ can't (see `nwps.parse`, `usace_cda.parse`, `nwrfc_xml.parse` for
 examples — each re-validates the body and emits ERROR before
 delegating to `super().parse(text)`).
 
-2. Add the source URLs to `src/kayak/data/sources.yaml`:
+2. Add the source + URL to the dataset's `sources.yaml` registry (the
+   `kayak_data` repo, `DATASET_DIR`) and run `levels generate-sources <dir>`
+   to regenerate `source.csv` / `fetch_url.csv`.
 
-```yaml
-your_parser:
-  urls:
-    - url: "https://api.example.gov/data?station=XYZ"
-```
-
-3. Run `levels init-db` to register the new fetch URLs.
+3. Run `levels sync-metadata` to apply the new fetch URLs to your DB.
 
 4. Add tests in `tests/test_parsers/`:
    - `test_your_parser_records.py` — session-free unit tests for
@@ -123,8 +119,8 @@ See `scripts/` for helper scripts. The typical workflow:
 1. Find the gauge in USGS/NWPS metadata
 2. Create the gauge and source rows in the database
 3. Link them via `gauge_source`
-4. Add the fetch URL to `src/kayak/data/sources.yaml`
-5. Run `levels init-db` and `levels pipeline`
+4. Add the fetch URL to the dataset's `sources.yaml` + `levels generate-sources`
+5. Run `levels sync-metadata` and `levels pipeline`
 
 ## PHP code style
 

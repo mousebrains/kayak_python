@@ -113,10 +113,10 @@ A "gauge" is a `gauge` row + ≥1 `source` (+ a `gauge_source` link). Assign ids
 `agency='USGS'`, `fetch_url_id` blank, named the digit station id, link it.
 `fetch-usgs-ogc` then auto-fetches params `00060`/`00065`/`00010` (flow / gage /
 **temperature**, °C→°F) for any gauge with `usgs_id`. No `fetch_url.csv` row,
-nothing in `src/kayak/data/sources.yaml`.
+nothing in the dataset's `sources.yaml`.
 
 **Fetch sources** (WA DOE `_WTM_`, USBR, USACE) additionally need the URL in
-`src/kayak/data/sources.yaml`, and USACE temperature would first need `"Temp-Water":
+the dataset's `sources.yaml` (then `levels generate-sources`), and USACE temperature would first need `"Temp-Water":
 DataType.temperature` added to `usace_cda.py::_PARAM_MAP` (its own small PR).
 
 **State + HUC are required for the browser filter.** `gauges.html` emits a row's

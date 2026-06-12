@@ -107,11 +107,15 @@ def test_is_safe_state_name_is_exact() -> None:
     for bad in ("Oregon\n", "Oregon ", " Oregon", "   ", "", "Oregon\t", "../x", "<b>"):
         assert not is_safe_state_name(bad), bad
 
-    def test_ampersand_url_allowed(self, tmp_path: Path) -> None:
-        # Query separators are legitimate in a URL (the WKCC Dreamflows links use them).
-        (tmp_path / region.REGION_YAML).write_text(
-            "states:\n  Oregon:\n    links:\n"
-            "      - {label: DF, url: 'https://x.example/f?a=1&b=2#frag'}\n"
-        )
-        r = region.load_region_config(tmp_path)
-        assert r.links_for("Oregon") == [("DF", "https://x.example/f?a=1&b=2#frag")]
+
+def test_ampersand_url_allowed(tmp_path: Path) -> None:
+    # Query separators are legitimate in a URL (the WKCC Dreamflows links use
+    # them). This was accidentally nested inside the test above (with a stray
+    # `self`) so pytest never collected it — PR #186 review caught it; the
+    # rendered-HTML side is guarded in test_placeholder_state_links.py.
+    (tmp_path / region.REGION_YAML).write_text(
+        "states:\n  Oregon:\n    links:\n"
+        "      - {label: DF, url: 'https://x.example/f?a=1&b=2#frag'}\n"
+    )
+    r = region.load_region_config(tmp_path)
+    assert r.links_for("Oregon") == [("DF", "https://x.example/f?a=1&b=2#frag")]

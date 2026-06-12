@@ -173,8 +173,9 @@ sign in via `/login.php` with an email promoted to `status='maintainer'` (see
 
 ## 4. Initialize the database
 
-`init-db --no-seed` creates the schema and stamps migrations without the
-`sources.yaml` seed; `levels sync-metadata` then loads the gauges, reaches,
+`init-db` creates the schema and stamps migrations (schema only — the
+S1-cleanup removed the former `sources.yaml` seed, and `--no-seed` is a
+deprecated no-op); `levels sync-metadata` then loads the states, gauges, reaches,
 sources, and `gauge_source` links from the `kayak_data` metadata CSVs (matched by
 stable id; `DATASET_DIR`, §2.5), and `import_metadata.py` applies the reach geometry
 sidecars (`reaches.json` / `reaches-gradient.json`) that the CSV sync excludes.
@@ -183,7 +184,7 @@ empty, so this order matters:
 
 ```bash
 cd /home/pat/kayak
-/home/pat/.venv/bin/levels init-db --no-seed
+/home/pat/.venv/bin/levels init-db
 /home/pat/.venv/bin/levels sync-metadata
 /home/pat/.venv/bin/python scripts/import_metadata.py
 /home/pat/.venv/bin/levels pipeline    # first run — fetches data and generates HTML
@@ -792,7 +793,7 @@ setfacl -R -d -m u:www-data:rwX /home/pat/DB              # default for new DB f
 
 # 6. Initialize and run (same sequence as § 4 — plain init-db leaves every
 #    source an orphan and renders an empty site)
-/home/pat/.venv/bin/levels init-db --no-seed                       # schema + stamped migrations
+/home/pat/.venv/bin/levels init-db                                 # schema + stamped migrations
 /home/pat/.venv/bin/levels sync-metadata                          # gauges/reaches/sources/links (CSVs, by id)
 /home/pat/.venv/bin/python /home/pat/kayak/scripts/import_metadata.py  # reach geom/gradient JSON sidecars
 /home/pat/.venv/bin/levels pipeline                               # fetch live data, generate HTML

@@ -191,7 +191,7 @@ jobs:
 
       # JS smoke tests via Playwright (docs/PLAN_js_smoke_tests.md
       # Phase 2). globalSetup spawns its own `php -S` against a
-      # `levels init-db`+`levels build`-seeded tmp DB, so no extra
+      # `levels init-db` (schema) + `levels build` tmp setup, so no extra
       # PHP-server orchestration is needed in this job — Playwright
       # owns the lifecycle.
       - uses: actions/setup-node@v6
@@ -256,8 +256,10 @@ jobs:
     # former kayak_data checkout + paired-branch logic from this job (so code CI no
     # longer needs the kayak_data deploy key, and Dependabot PRs — which can't read
     # that secret — run clean). The real dataset is validated at the deploy
-    # boundary (deploy.sh step 3.08, #132); engine-pinned PRE-MERGE validation in
-    # kayak_data's own CI is the next slice (S4b-2), not yet live.
+    # boundary (deploy.sh step 3.08, #132) and pre-merge by kayak_data's own
+    # required CI (S4b-2: validate.yml installs the engine pinned by the BASE
+    # commit's engine_test_ref and runs validate-dataset + generate-sources
+    # --check + sync/build smoke).
     strategy:
       fail-fast: false
       matrix:

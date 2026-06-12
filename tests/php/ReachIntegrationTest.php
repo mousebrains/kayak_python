@@ -91,7 +91,7 @@ final class ReachIntegrationTest extends IntegrationTestCase
         ]);
 
         // Link both reaches to Oregon via reach_state (so state-filter mode
-        // queries match). Oregon's row id comes from init-db's _seed_states.
+        // queries match). Oregon's row id comes from the harness's seedStateRows.
         $orId = (int)$db->query("SELECT id FROM state WHERE abbreviation = 'OR'")
             ->fetchColumn();
         $db->prepare('INSERT INTO reach_state (reach_id, state_id) VALUES (?, ?)')

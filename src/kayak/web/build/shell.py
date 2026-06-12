@@ -89,7 +89,9 @@ def _build_nav(
         if region.has_state_weather(active_state)
         else "Weather"
     )
-    links.append(f'<a href="{weather_url}">{weather_label}</a>')
+    # region.yaml URLs may legitimately contain `&` (query strings); escape for
+    # the attribute context so the emitted HTML stays valid.
+    links.append(f'<a href="{html_mod.escape(weather_url, quote=True)}">{weather_label}</a>')
     return "\n    ".join(links)
 
 
@@ -267,8 +269,13 @@ def _build_placeholder_page(
     )
 
     links = get_region_config().links_for(state)
+    # Curated region.yaml link URLs may contain `&` (query strings) and labels
+    # are dataset-supplied text: escape both for their HTML contexts (carried
+    # from the S3b review — Dreamflows hrefs emitted raw ampersands).
     link_items = "\n".join(
-        f'<li><a href="{url}" style="display:inline-flex;align-items:center;min-height:44px">{label}</a></li>'
+        f'<li><a href="{html_mod.escape(url, quote=True)}" '
+        f'style="display:inline-flex;align-items:center;min-height:44px">'
+        f"{html_mod.escape(label)}</a></li>"
         for label, url in links
     )
     links_html = f"<ul>\n{link_items}\n</ul>" if links else ""
