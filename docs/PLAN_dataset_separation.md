@@ -307,6 +307,14 @@ editor path; SA then removes the remaining metadata writers and the snapshot.
 
 ### State model
 
+> **D1 accepted 2026-06-12 — SA-lite.** The automated bridge below
+> (queue worker, branch/PR creation, reconciliation) is deferred; see
+> the seventh-pass D1 entry. What ships instead: the apply path stops
+> writing the DB, "Send for data review" freezes the validated field
+> diff, the maintainer lands it as an ordinary dataset PR, and the
+> proposal is marked deployed when the deploy ships it. This section
+> remains on file as the design for a future automated bridge.
+
 - Rename the web action from "Approve" to "Send for data review".
   `pending -> queued -> pr_open -> merged -> deployed` is the success path.
   `rejected`, `pr_closed`, `conflict`, and `worker_error` are explicit
@@ -550,6 +558,20 @@ read from the dataset.
 
 ## S7 -- portable deployment and paired-release activation
 
+> **D2 accepted 2026-06-12 — trimmed.** The operational core below
+> stands (paired releases, single-symlink activation, maintenance mode,
+> stop-all-consumers, backup-before-migrate, rollback, generated
+> units/vhosts/status, wrapper executables). Trimmed for the
+> single-operator deployment: signature verification over the
+> release-input manifest and the orchestrator minimum-deployer-version
+> negotiation are replaced by SHA-256 digest checks of the wheel,
+> dataset snapshot, and host-config fingerprint recorded in
+> `release.json`, anchored on full commit SHAs reachable from the
+> protected branches. The deployer is versioned with a documentation
+> note instead of manifest negotiation. Signatures can be layered on
+> later as an additive check if releases are ever published for other
+> clubs.
+
 Content separation is incomplete if a new club must edit systemd, nginx,
 status, or scripts in the engine checkout.
 
@@ -743,7 +765,11 @@ The separation is complete only when all of these pass:
    dataset-owned metadata rows/columns outside `sync-metadata` or an explicit
    schema migration; operational timestamps and caches live in runtime tables.
 7. A queued proposal can create exactly one validated PR across worker crashes;
-   production changes only after merge and deploy.
+   production changes only after merge and deploy. *(Amended 2026-06-12
+   per D1/SA-lite: PR creation is a manual maintainer action from the
+   frozen proposal diff; the automated-worker half is deferred. The
+   load-bearing property — production changes only after merge and
+   deploy — stands unchanged.)*
 8. Refused metadata deletes begin no write transaction and leave logical table
    checksums/counts unchanged; accepted sync followed by a second sync is a
    no-op.
@@ -1008,7 +1034,8 @@ against the ~31 engine and ~35 dataset PRs that S3 alone consumed.
 
 ### Decisions needed (recommendations inline)
 
-- **D1 — SA scope.** Recommended: SA-lite. Approve stops writing the
+- **D1 — SA scope. ACCEPTED 2026-06-12: SA-lite** (criterion 7 amended;
+  §SA state-model section annotated). Approve stops writing the
   DB; the action becomes "Send for data review", which freezes the
   validated field diff on the proposal page; the maintainer lands it as
   an ordinary `kayak_data` PR (hand edit or `recover-metadata`-assisted)
@@ -1023,13 +1050,14 @@ against the ~31 engine and ~35 dataset PRs that S3 alone consumed.
   (1 rejected, 5 resolved, 0 pending; latest 2026-05-22) — the
   approve-applies-to-DB path has effectively never been the change
   vehicle.
-- **D2 — S7 trim.** Keep: immutable paired releases, single-symlink
+- **D2 — S7 trim. ACCEPTED 2026-06-12: trimmed** (§S7 annotated). Keep:
+  immutable paired releases, single-symlink
   activation, maintenance mode, stop-all-consumers, backup-before-
   migrate, rollback, generated units/vhosts/status, wrapper executables.
   Trim for a single-operator deployment: replace signature verification
   over release-input manifests and the orchestrator minimum-version
   negotiation with SHA-256 digest checks of the wheel + dataset snapshot
-  recorded in `release.json`. Amend §S7 if accepted.
+  recorded in `release.json`.
 - **D3 — `audit_ignore.yaml` ownership. ACCEPTED 2026-06-12:** move it
   to dataset `ops/` in R3 (it is WKCC suppression content, G5; shipping
   it as a packaged engine resource was a deviation from this plan).
