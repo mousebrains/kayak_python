@@ -147,7 +147,7 @@ event handlers.
 PHP tests use two harnesses. **`tests/php/FunctionalTestCase.php`** runs handlers
 **in-process** — pcov counts it, so it's the primary vehicle (it lifted coverage
 to ~60%); prefer it for handler coverage. **`tests/php/IntegrationTestCase.php`**
-spawns `php -S 127.0.0.1:0` against a tmp SQLite DB seeded by `levels init-db`
+spawns `php -S 127.0.0.1:0` against a tmp SQLite DB (schema via `levels init-db`; the harness seeds the state reference rows)
 plus a per-test-class `seedDatabase()` hook (true end-to-end, uncounted by pcov).
 For editor-gated endpoints,
 `seedEditorSession($email, $status = 'full'|'maintainer')` returns

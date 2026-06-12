@@ -297,7 +297,7 @@ So rebuilding prod from scratch — e.g. after catastrophic corruption
 with no usable backup — **is** possible purely from what's checked in:
 
 ```bash
-levels init-db --no-seed           # empty schema + stamped migrations
+levels init-db                     # empty schema + stamped migrations
 levels sync-metadata               # CSVs (incl. gauge_source), matched by id
 python scripts/import_metadata.py  # reach geom/gradient JSON sidecars
 levels pipeline                    # fetch live data + render
@@ -306,12 +306,10 @@ levels pipeline                    # fetch live data + render
 (`sync-metadata` refuses a `status: scaffold` dataset — add `--allow-scaffold`
 only if rebuilding from a scaffold checkout; the real `kayak_data` is publishable.)
 
-`--no-seed` is required, not just advisable: a plain `levels init-db`
-seeds `state` / `source` / `fetch_url` from `sources.yaml` with fresh
-ids, which then collide with the canonical-id CSV rows on `sync-metadata`
-— a duplicate `source` (its name isn't unique), or, since the sync upserts
-on the primary key, an *aborting* `UNIQUE` conflict on `state.name` /
-`fetch_url.url`. `--no-seed` gives empty tables so the CSV ids load
+`init-db` is schema-only since the S1-cleanup (`--no-seed` survives one
+release as a deprecated no-op), so the old failure mode — engine-seeded
+rows with fresh ids colliding with the canonical-id CSV rows on
+`sync-metadata` — no longer exists; the empty tables load the CSV ids
 cleanly. `sync-metadata` runs with FK enforcement on (and audits
 `integrity_check` + `foreign_key_check`); the `import_metadata.py` sidecar
 apply runs FK-off (the live DB carries intentional orphan rows) and reports

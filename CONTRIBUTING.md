@@ -15,11 +15,11 @@ git clone git@github.com:mousebrains/kayak_data.git ../kayak_data
 export DATASET_DIR="$(cd ../kayak_data && pwd)"   # or persist in ~/.config/kayak/.env
 
 # Initialize database: empty schema, then canonical metadata. `sync-metadata`
-# applies the CSVs (gauges/reaches/sources/links, by stable id); import_metadata
-# applies the reach geom/gradient JSON sidecars (excluded from reach.csv). A bare
-# `levels init-db` seeds duplicate sources and leaves every source an orphan —
-# see CLAUDE.md § Quick start.
-levels init-db --no-seed
+# applies the CSVs (states/gauges/reaches/sources/links, by stable id);
+# import_metadata applies the reach geom/gradient JSON sidecars (excluded from
+# reach.csv). init-db is schema-only — without the sync every source is an
+# orphan and the site renders empty; see CLAUDE.md § Quick start.
+levels init-db
 levels sync-metadata
 python scripts/import_metadata.py
 

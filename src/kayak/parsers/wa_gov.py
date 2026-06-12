@@ -37,8 +37,8 @@ class WaGovParser(BaseParser):
         state 0 so multi-station bodies parse end-to-end.
 
         Naive timestamps are localized via ``source_tz_map`` before
-        being emitted (sources.yaml seeds wa.gov stations with
-        ``timezone: Etc/GMT+8`` — PST year-round, no DST).
+        being emitted (the dataset's source registry sets wa.gov stations'
+        ``source.timezone`` to ``Etc/GMT+8`` — PST year-round, no DST).
         """
         state = 0
         station = ""
@@ -110,8 +110,8 @@ class WaGovParser(BaseParser):
         if quality is None or quality <= 0 or quality >= 200:
             return None
 
-        # Timestamps are naive; source_tz_map (seeded from sources.yaml
-        # stations: block, typically "Etc/GMT+8" — PST year-round, no DST)
+        # Timestamps are naive; source_tz_map (from source.timezone, set by
+        # the dataset registry — typically "Etc/GMT+8", PST year-round, no DST)
         # gets applied by self._localize so the record carries tz-aware UTC.
         time_str = parts[0] + " " + parts[1]
         when = parse_datetime(time_str, assume_naive=True)

@@ -56,7 +56,7 @@ pipeline:  ## Run full data pipeline
 build:  ## Generate static HTML/CSV/text
 	$(VENV)/bin/levels build
 
-init-db:  ## Create/update database schema and seed data
+init-db:  ## Create/update database schema (schema only; metadata loads via sync-metadata)
 	$(VENV)/bin/levels init-db
 
 ## Setup

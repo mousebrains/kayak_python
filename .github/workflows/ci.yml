@@ -191,7 +191,7 @@ jobs:
 
       # JS smoke tests via Playwright (docs/PLAN_js_smoke_tests.md
       # Phase 2). globalSetup spawns its own `php -S` against a
-      # `levels init-db`+`levels build`-seeded tmp DB, so no extra
+      # `levels init-db` (schema) + `levels build` tmp setup, so no extra
       # PHP-server orchestration is needed in this job — Playwright
       # owns the lifecycle.
       - uses: actions/setup-node@v6
