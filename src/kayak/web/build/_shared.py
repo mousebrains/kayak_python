@@ -5,6 +5,7 @@ state-name dictionaries) lives in one place so every consumer sees the
 same values.
 """
 
+import html as html_mod
 import logging
 import os
 import tempfile
@@ -98,21 +99,26 @@ def _og_meta(title: str, desc: str, path: str = "") -> str:
     """OpenGraph + Twitter card meta block. `path` is site-relative ("/Oregon.html"); empty omits og:url + canonical."""
     site = SITE_URL.rstrip("/")
     image = f"{site}/static/og-image.png"
-    canonical = f'<link rel="canonical" href="{site}{path}">\n' if path else ""
-    og_url = f'<meta property="og:url" content="{site}{path}">\n' if path else ""
+    title_attr = html_mod.escape(title, quote=True)
+    desc_attr = html_mod.escape(desc, quote=True)
+    site_name_attr = html_mod.escape(_SITE.site_name, quote=True)
+    image_attr = html_mod.escape(image, quote=True)
+    page_url_attr = html_mod.escape(f"{site}{path}", quote=True)
+    canonical = f'<link rel="canonical" href="{page_url_attr}">\n' if path else ""
+    og_url = f'<meta property="og:url" content="{page_url_attr}">\n' if path else ""
     return (
         f"{canonical}"
         f'<meta property="og:type" content="website">\n'
-        f'<meta property="og:site_name" content="{_SITE.site_name}">\n'
-        f'<meta property="og:title" content="{title}">\n'
-        f'<meta property="og:description" content="{desc}">\n'
+        f'<meta property="og:site_name" content="{site_name_attr}">\n'
+        f'<meta property="og:title" content="{title_attr}">\n'
+        f'<meta property="og:description" content="{desc_attr}">\n'
         f"{og_url}"
-        f'<meta property="og:image" content="{image}">\n'
+        f'<meta property="og:image" content="{image_attr}">\n'
         f'<meta property="og:image:width" content="1200">\n'
         f'<meta property="og:image:height" content="630">\n'
         f'<meta name="twitter:card" content="summary_large_image">\n'
-        f'<meta name="twitter:title" content="{title}">\n'
-        f'<meta name="twitter:description" content="{desc}">'
+        f'<meta name="twitter:title" content="{title_attr}">\n'
+        f'<meta name="twitter:description" content="{desc_attr}">'
     )
 
 

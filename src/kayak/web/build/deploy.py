@@ -847,7 +847,8 @@ def _build_and_write(
     label = state or "all"
     if filename is None:
         filename = f"{state}.html" if state else "all.html"
-    title = f"{state} River Levels" if state else "River Levels"
+    site_name = get_site_config().site_name
+    title = f"{state} - {site_name}" if state else site_name
 
     logger.info("Building %s: %d reaches", label, len(reaches))
 

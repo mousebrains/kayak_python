@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from kayak.config import GAUGE_METADATA_CACHE
+from kayak.dataset.site import get_site_config
 from kayak.db.gauges import get_calculated_gauge_ids
 from kayak.db.models import DataType, Gauge, HucName, LatestGaugeObservation, Reach
 from kayak.db.reaches import state_abbreviations_by_name, state_names_by_abbreviation
@@ -552,7 +553,7 @@ def _write_gauges_page(
     rows = _collect_gauge_rows(session, all_latest, metadata, state_names_by_abbrev, calc_ids)
 
     filename = "gauges.html"
-    title = "River Gauges"
+    title = f"River Gauges - {get_site_config().site_name}"
 
     logger.info("Building %s: %d gauges", filename, len(rows))
     print(f"Building {filename}: {len(rows)} gauges")

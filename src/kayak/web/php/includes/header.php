@@ -160,9 +160,10 @@ function include_header(
     $path   = strtok((string)($_SERVER['REQUEST_URI'] ?? '/'), '?');
     $url    = htmlspecialchars($scheme . '://' . $host . $path);
     // Dataset site identity (S3a), with generic engine defaults as fallbacks.
-    // Escaped for the
-    // double-quoted attribute context even though SiteConfig already validated them.
-    $og_site_name = htmlspecialchars(Config::site('site_name', 'River Levels'));
+    // Escaped for HTML text + double-quoted attribute contexts even though
+    // SiteConfig already validated them.
+    $site_name    = htmlspecialchars(Config::site('site_name', 'River Levels'));
+    $og_site_name = $site_name;
     $theme_light  = htmlspecialchars(Config::site('brand_color', '#1b5591'));
     $theme_dark   = htmlspecialchars(Config::site('brand_color_dark', '#0d3057'));
     echo <<<HTML
@@ -197,7 +198,7 @@ $css_block
 <body>
 <a href="#main" class="skip-link">Skip to main content</a>
 <header>
-  <h1><a href="/index.html">River Levels</a></h1>
+  <h1><a href="/index.html">$site_name</a></h1>
   $nav
 </header>
 <main id="main">
