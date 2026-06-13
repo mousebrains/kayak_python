@@ -20,6 +20,7 @@ from kayak.cli import (
     fetch_osmb,
     fetch_usgs_ogc,
     generate_sources,
+    import_metadata,
     init_db,
     migrate,
     orphan_check,
@@ -72,6 +73,7 @@ def main() -> None:
     analyze_logs.addArgs(subparsers)
     status.addArgs(subparsers)
     sync_metadata.addArgs(subparsers)
+    import_metadata.addArgs(subparsers)
     recover_metadata.addArgs(subparsers)
     generate_sources.addArgs(subparsers)
     generate_sources.add_source_args(subparsers)

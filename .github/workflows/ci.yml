@@ -286,6 +286,18 @@ jobs:
       # ``-m ''`` overrides the project default ``-m 'not slow'`` so the
       # integration test still gates merges in CI. Coverage threshold only
       # makes sense once, so attach it to the 3.13 leg.
+      - name: requirements-prod.lock drift check
+        # kayak-deploy installs the release venv from this hash-pinned export
+        # (PR #190: dependency resolution must not happen at deploy time), so
+        # it must stay in lockstep with uv.lock. Regenerate with:
+        #   uv export --no-dev --no-emit-project --format requirements-txt > requirements-prod.lock
+        run: |
+          uv export --no-dev --no-emit-project --format requirements-txt -q > /tmp/req-prod.lock
+          diff -u requirements-prod.lock /tmp/req-prod.lock || {
+            echo "::error::requirements-prod.lock is out of date — regenerate with the uv export command above"
+            exit 1
+          }
+
       - name: Run tests (with slow marker enabled)
         run: uv run pytest -m '' --cov=kayak --cov-report=term-missing --cov-fail-under=75 -q
 

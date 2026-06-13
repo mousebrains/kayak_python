@@ -168,6 +168,10 @@ def test_stage_only_builds_verified_release(tmp_path: Path, engine_repo, dataset
     assert manifest["dataset_sha"] == ds_sha
     assert manifest["deployer_version"] == 1
     assert len(manifest["wheel_sha256"]) == 64
+    # PR #190 review: hash-locked deps + the emitted runtime config are part
+    # of the verified release identity.
+    assert len(manifest["requirements_lock_sha256"]) == 64
+    assert len(manifest["runtime_config_sha256"]) == 64
     assert manifest["release_id"] == release_dir.name
 
     # The staged release is self-contained: venv with the engine, dataset
@@ -179,6 +183,23 @@ def test_stage_only_builds_verified_release(tmp_path: Path, engine_repo, dataset
 
     # No 'current' symlink: stage-only must not activate.
     assert not (root / "current").exists()
+
+    # PR #190 review P1: a non-secret runtime-config input change (e.g.
+    # SITE_URL in /etc/kayak/env) must produce a DIFFERENT release — never
+    # reuse of a stale runtime-config/docroot.
+    proc2 = _run(
+        ["--engine-ref", engine_sha, "--dataset-ref", ds_sha, "--stage-only"],
+        {
+            "KAYAK_DEPLOY_CONF": str(conf),
+            "KAYAK_DEPLOY_ROOT": str(root),
+            "HOME": str(tmp_path),
+            "SUDO_USER": "",
+            "SITE_URL": "https://other.example.org",
+        },
+    )
+    assert proc2.returncode == 0, proc2.stderr
+    release_dir2 = Path(proc2.stdout.strip().splitlines()[-1])
+    assert release_dir2 != release_dir, "config change must mint a new release id"
 
 
 def test_unreachable_ref_rejected(tmp_path: Path, engine_repo, dataset_repo) -> None:

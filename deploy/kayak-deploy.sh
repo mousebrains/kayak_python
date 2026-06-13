@@ -36,8 +36,9 @@
 #   stage     build wheel -> venv, snapshot dataset, validate contract,
 #             emit non-secret runtime config, write release.json (no
 #             system mutation outside the new release dir)
-#   activate  maintenance on -> stop consumers -> DB backup -> migrate ->
-#             all-or-nothing sync -> build docroot -> atomic symlink ->
+#   activate  maintenance on -> quiesce consumers (timers AND services) ->
+#             DB backup -> migrate -> all-or-nothing sync -> geom/gradient
+#             sidecars -> build docroot -> atomic symlink ->
 #             health check -> start consumers -> maintenance off.
 #             Any failure rolls back to the previous release + DB backup.
 #
@@ -163,9 +164,42 @@ git -C "$SCRATCH/engine-src" checkout --quiet "$ENGINE_REF"
 WHEEL="$(ls "$SCRATCH"/dist/*.whl)"
 WHEEL_SHA="$(sha256 "$WHEEL")"
 
+# Dependency lock (PR #190 review P2): the engine commit carries
+# requirements-prod.lock (hash-pinned, exported from uv.lock, drift-checked
+# in CI), so the same engine SHA installs byte-identical dependencies on any
+# day. Its digest participates in the release identity.
+REQ_LOCK="$SCRATCH/engine-src/requirements-prod.lock"
+if [ ! -f "$REQ_LOCK" ]; then
+    echo "Error: engine commit has no requirements-prod.lock (pre-Batch-4B engine?)" >&2
+    exit 1
+fi
+LOCK_SHA="$(sha256 "$REQ_LOCK")"
+
 log "snapshotting dataset at $DATASET_REF"
 git -C "$SCRATCH/dataset.git" archive --format=tar -o "$SCRATCH/dataset.tar" "$DATASET_REF"
 DATASET_TAR_SHA="$(sha256 "$SCRATCH/dataset.tar")"
+mkdir -p "$SCRATCH/dataset"
+tar -xf "$SCRATCH/dataset.tar" -C "$SCRATCH/dataset"
+
+# Staging toolchain: the engine under deploy, in the scratch venv (locked
+# deps + the wheel), used for validation and config emission BEFORE any
+# release dir exists.
+log "installing staged engine into the scratch toolchain (hash-locked deps)"
+"$SCRATCH/buildenv/bin/pip" install --quiet --require-hashes -r "$REQ_LOCK"
+"$SCRATCH/buildenv/bin/pip" install --quiet --no-deps "$WHEEL"
+STAGE_LEVELS="$SCRATCH/buildenv/bin/levels"
+
+log "validating dataset contract with the staged engine"
+"$STAGE_LEVELS" validate-dataset "$SCRATCH/dataset"
+
+# Non-secret runtime config, emitted from THIS host environment with the
+# staged engine + dataset. Its digest participates in the release identity
+# (PR #190 review P1: a /etc/kayak/env change must produce a NEW release,
+# never reuse of a stale runtime-config/docroot).
+log "emitting non-secret runtime config"
+DATASET_DIR="$SCRATCH/dataset" OUTPUT_DIR="$SCRATCH/dataset" \
+    "$STAGE_LEVELS" emit-config --out "$SCRATCH/runtime-config.json"
+CONFIG_SHA="$(sha256 "$SCRATCH/runtime-config.json")"
 
 # Host-config fingerprint: the non-secret host shape participates in the
 # release identity so a host-config-only change is a new release.
@@ -176,7 +210,7 @@ else
     HOST_FP="none"
 fi
 
-RELEASE_ID="$(printf '%s %s %s' "$WHEEL_SHA" "$DATASET_REF" "$HOST_FP" \
+RELEASE_ID="$(printf '%s %s %s %s %s' "$WHEEL_SHA" "$DATASET_REF" "$HOST_FP" "$CONFIG_SHA" "$LOCK_SHA" \
     | { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi; } \
     | cut -c1-12)"
 RELEASE_DIR="$ROOT/releases/$RELEASE_ID"
@@ -188,16 +222,9 @@ else
     mkdir -p "$RELEASE_DIR/dataset" "$RELEASE_DIR/docroot"
     tar -xf "$SCRATCH/dataset.tar" -C "$RELEASE_DIR/dataset"
     "$PYTHON" -m venv "$RELEASE_DIR/venv"
-    "$RELEASE_DIR/venv/bin/pip" install --quiet "$WHEEL"
-    cp "$WHEEL" "$RELEASE_DIR/"
-
-    LEVELS="$RELEASE_DIR/venv/bin/levels"
-    log "validating dataset contract with the staged engine"
-    "$LEVELS" validate-dataset "$RELEASE_DIR/dataset"
-
-    log "emitting non-secret runtime config into the release"
-    DATASET_DIR="$RELEASE_DIR/dataset" OUTPUT_DIR="$RELEASE_DIR/docroot" \
-        "$LEVELS" emit-config --out "$RELEASE_DIR/runtime-config.json"
+    "$RELEASE_DIR/venv/bin/pip" install --quiet --require-hashes -r "$REQ_LOCK"
+    "$RELEASE_DIR/venv/bin/pip" install --quiet --no-deps "$WHEEL"
+    cp "$WHEEL" "$REQ_LOCK" "$SCRATCH/runtime-config.json" "$RELEASE_DIR/"
 
     # release.json — the digest-verified release manifest (D2).
     cat > "$RELEASE_DIR/release.json" <<EOF
@@ -209,6 +236,8 @@ else
   "wheel": "$(basename "$WHEEL")",
   "wheel_sha256": "$WHEEL_SHA",
   "dataset_tar_sha256": "$DATASET_TAR_SHA",
+  "requirements_lock_sha256": "$LOCK_SHA",
+  "runtime_config_sha256": "$CONFIG_SHA",
   "host_config_fingerprint": "$HOST_FP",
   "staged_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
@@ -248,6 +277,7 @@ fi
 PRE_BACKUP="$SCRATCH/pre-activate.db"
 MUTATED=0
 
+SWITCHED=0
 rollback() {
     status=$?
     trap - ERR
@@ -257,6 +287,16 @@ rollback() {
         sqlite3 "$DB_PATH" ".restore '$PRE_BACKUP'" || \
             echo "kayak-deploy: DB RESTORE FAILED — manual recovery from $PRE_BACKUP required" >&2
         CLEAN_SCRATCH=0
+    fi
+    if [ "$SWITCHED" = 1 ] && [ -z "$PREV_TARGET" ]; then
+        # Virgin host: there is no previous release to fall back to. Remove
+        # the failed 'current', KEEP maintenance mode, and do NOT restart
+        # consumers — a half-activated first install must not serve or write
+        # (PR #190 review P2).
+        rm -f "$ROOT/current"
+        echo "kayak-deploy: first activation failed — 'current' removed; host left in" >&2
+        echo "kayak-deploy: maintenance mode with consumers stopped (no prior release)" >&2
+        exit "$status"
     fi
     if [ -n "$PREV_TARGET" ]; then
         ln -s "$PREV_TARGET" "$ROOT/current.new" && mv -f "$ROOT/current.new" "$ROOT/current"
@@ -271,7 +311,33 @@ trap rollback ERR
 log "entering maintenance mode"
 mkdir -p "$ROOT"
 touch "$ROOT/maintenance"
-for u in $KAYAK_UNITS; do systemctl stop "$u" 2>/dev/null || true; done
+# Stop timers AND their services: stopping a timer only prevents future
+# starts — an already-running oneshot keeps reading/writing the DB (PR #190
+# review P1). Then wait for the service set to drain before the backup.
+SERVICES=""
+for u in $KAYAK_UNITS; do
+    systemctl stop "$u" 2>/dev/null || true
+    case "$u" in
+        *.timer)
+            svc="${u%.timer}.service"
+            SERVICES="$SERVICES $svc"
+            systemctl stop "$svc" 2>/dev/null || true
+            ;;
+        *.service) SERVICES="$SERVICES $u" ;;
+    esac
+done
+waited=0
+for svc in $SERVICES; do
+    while systemctl is-active --quiet "$svc" 2>/dev/null; do
+        if [ "$waited" -ge 120 ]; then
+            echo "Error: $svc still active after ${waited}s — refusing to mutate the DB under it" >&2
+            exit 1
+        fi
+        sleep 2
+        waited=$((waited + 2))
+    done
+done
+log "consumers quiesced"
 
 log "backing up DB before mutation"
 sqlite3 "$DB_PATH" ".backup '$PRE_BACKUP'"
@@ -284,6 +350,13 @@ DATABASE_URL="sqlite:///$DB_PATH" "$LEVELS" migrate
 log "applying metadata sync (all-or-nothing)"
 DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset" "$LEVELS" sync-metadata
 
+# Geometry/gradient sidecars are dataset content EXCLUDED from reach.csv —
+# sync-metadata never writes reach.geom/gradient_profile. Without this step
+# a sidecar-only dataset release would activate while serving stale geometry
+# (PR #190 review P1). Rollback is covered by the pre-activation DB backup.
+log "applying geometry/gradient sidecars"
+DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset" "$LEVELS" import-metadata
+
 log "building docroot inside the release"
 DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset" \
     OUTPUT_DIR="$RELEASE_DIR/docroot" "$LEVELS" build
@@ -291,6 +364,7 @@ DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset" \
 log "switching $ROOT/current -> releases/$RELEASE_ID (atomic)"
 ln -s "releases/$RELEASE_ID" "$ROOT/current.new"
 mv -f "$ROOT/current.new" "$ROOT/current"
+SWITCHED=1
 
 if [ -n "$HEALTH_URL" ]; then
     log "health check: $HEALTH_URL"
