@@ -60,25 +60,46 @@ def test_requires_conf_repos(tmp_path: Path) -> None:
 
 @pytest.fixture(scope="module")
 def engine_repo(tmp_path_factory) -> tuple[Path, str]:
-    """A bare clone of THIS repo with branch ``test-main`` at HEAD.
+    """A fresh single-commit repo holding THIS repo's tracked tree, branch
+    ``test-main``.
 
-    CI checks out a detached HEAD, so the working repo has no usable branch
-    name — push HEAD into a scratch bare repo under a known branch instead.
+    CI's checkout is detached AND shallow — `--abbrev-ref HEAD` is unusable
+    and `git push` from a shallow repo is refused — so neither the real
+    branch nor the real history can back the fixture. The staging test
+    exercises the deployer's mechanics (clone, wheel build, snapshot,
+    digests), not provenance, so a tree-identical fresh commit is enough:
+    `git archive HEAD` works regardless of shallow/detached state.
     """
     root = tmp_path_factory.mktemp("enginerepo")
-    bare = root / "engine.git"
-    subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
-    subprocess.run(
-        ["git", "-C", str(_REPO), "push", "-q", str(bare), "HEAD:refs/heads/test-main"],
+    repo = root / "engine"
+    repo.mkdir()
+    archive = subprocess.run(
+        ["git", "-C", str(_REPO), "archive", "--format=tar", "HEAD"],
         check=True,
+        capture_output=True,
+    )
+    subprocess.run(["tar", "-x", "-C", str(repo)], input=archive.stdout, check=True)
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@e",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@e",
+    }
+    subprocess.run(["git", "init", "-q", "-b", "test-main", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, env=env)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-q", "-m", "engine tree at test HEAD"],
+        check=True,
+        env=env,
     )
     sha = subprocess.run(
-        ["git", "-C", str(_REPO), "rev-parse", "HEAD"],
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
         check=True,
         capture_output=True,
         text=True,
     ).stdout.strip()
-    return bare, sha
+    return repo, sha
 
 
 @pytest.fixture(scope="module")
