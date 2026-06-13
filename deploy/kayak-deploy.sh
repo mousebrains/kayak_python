@@ -82,13 +82,37 @@ if [ -r "$CONF" ]; then
     # shellcheck source=/dev/null
     . "$CONF"
 fi
-# The standard host environment (SITE_URL, SQLITE_PATH, …) — the staged
-# runtime config and the activation steps must see the same env every other
-# kayak job runs with.
-if [ -r /etc/kayak/env ]; then
+
+# Resolve the SAME host environment the systemd consumers get, so the staged
+# emit-config and the activation steps see SITE_URL / SQLITE_PATH / DATASET_DIR
+# / OUTPUT_DIR identically (PR #190 live review P1: on the WKCC host these are
+# NOT in /etc/kayak/env — that file holds only KAYAK_HOME — they live in the
+# app user's ~/.config/kayak/.env, which the units load via a second
+# EnvironmentFile=). `set -a` exports them so subprocesses inherit them, the
+# way EnvironmentFile does. The clean paired-release host puts everything in
+# /etc/kayak/env; sourcing both makes the deployer correct either way.
+KAYAK_HOST_ENV="${KAYAK_HOST_ENV:-/etc/kayak/env}"
+if [ -r "$KAYAK_HOST_ENV" ]; then
+    set -a
     # shellcheck source=/dev/null
-    . /etc/kayak/env
+    . "$KAYAK_HOST_ENV"
+    set +a
 fi
+# Second env file: the app user's ~/.config/kayak/.env (KAYAK_APP_ENV overrides;
+# resolved from KAYAK_APP_USER's home when unset). Reading a 0600 app-user file
+# as the root orchestrator is fine.
+APP_ENV="${KAYAK_APP_ENV:-}"
+if [ -z "$APP_ENV" ] && [ -n "${KAYAK_APP_USER:-}" ] && command -v getent >/dev/null 2>&1; then
+    _app_home="$(getent passwd "$KAYAK_APP_USER" | cut -d: -f6)"
+    [ -n "$_app_home" ] && APP_ENV="$_app_home/.config/kayak/.env"
+fi
+if [ -n "$APP_ENV" ] && [ -r "$APP_ENV" ]; then
+    set -a
+    # shellcheck source=/dev/null
+    . "$APP_ENV"
+    set +a
+fi
+
 : "${ENGINE_REPO:?ENGINE_REPO must be set in $CONF (git URL/path of kayak_python)}"
 : "${DATASET_REPO:?DATASET_REPO must be set in $CONF (git URL/path of kayak_data)}"
 : "${ENGINE_BRANCH:=main}"
@@ -197,8 +221,9 @@ fetch_and_verify() { # <repo> <ref> <branch> <clone-dir>
     repo="$1"; ref="$2"; branch="$3"; dir="$4"
     log "fetching $repo (branch $branch)"
     git clone --quiet --bare --branch "$branch" --single-branch "$repo" "$dir"
-    # The ref itself may be older than the branch tip; fetch it explicitly
-    # (works for any reachable commit on a bare clone of the branch).
+    # The --single-branch bare clone already contains every ancestor of the
+    # branch tip, so any reachable ref resolves locally — no extra fetch needed.
+    # Confirm the ref exists, then that it is reachable from the protected branch.
     if ! git -C "$dir" cat-file -e "$ref^{commit}" 2>/dev/null; then
         echo "Error: $ref not found in $repo" >&2
         exit 1
@@ -276,9 +301,13 @@ log "validating dataset contract with the staged engine"
 # URLs) are excluded because the release-retained copy must not widen their
 # lifetime/ownership boundary. The canonical secret-merged config still
 # lives ONLY at /etc/kayak/runtime-config.json via the root wrapper.
+# --exclude-secrets drops every SecretStr field at the source (type-based, so
+# a future secret field can't leak by name); the normalize pass then only
+# strips staging-local PATH fields and operational tokens for digest stability.
+# Belt-and-suspenders: the name filter stays as a second line of defense.
 log "emitting runtime config (normalized digest)"
 DATASET_DIR="$SCRATCH/dataset" OUTPUT_DIR="$SCRATCH/dataset" \
-    "$STAGE_LEVELS" emit-config --out "$SCRATCH/runtime-config-raw.json"
+    "$STAGE_LEVELS" emit-config --exclude-secrets --out "$SCRATCH/runtime-config-raw.json"
 normalize_config() { # <in> <out>: drop path-local + token fields, sort keys
     "$PYTHON" - "$1" "$2" <<'PYNORM'
 import json
@@ -291,9 +320,8 @@ drop = {"dataset_dir", "output_dir", "osmb_dir", "map_layers_dir",
 def keep(k):
     if k in drop or k.startswith("hc_"):
         return False
-    # Root-run staging reads /etc/kayak/secrets.env, and emit-config unwraps
-    # SecretStr values — no credential-shaped field may persist into retained
-    # release dirs (PR #190 third-round P1).
+    # SecretStr fields are already gone (emit-config --exclude-secrets); this
+    # name filter is the second line of defense (PR #190 third + live reviews).
     lowered = k.lower()
     return not any(s in lowered for s in ("secret", "password", "token"))
 
@@ -426,26 +454,33 @@ if [ "${SERVING_CUTOVER:-no}" != "yes" ]; then
     exit 1
 fi
 
-# Verify the consumers actually run from the release (PR #190 4th-round P1):
-# a levels-running unit still pointing at the old checkout/venv would execute
-# old code against the migrated DB + synced dataset after activation. Skip
-# units whose ExecStart doesn't invoke levels (e.g. host backup scripts).
+# Verify the consumers actually run from the release (PR #190 reviews): a
+# consumer still pointing at the old checkout/venv would execute old code
+# against the freshly migrated DB + synced dataset. EVERY consumer service
+# must run from $ROOT/current UNLESS it is an explicit host-level unit
+# (KAYAK_HOST_UNITS — e.g. the backup scripts, which legitimately stay
+# host-level). Keying off $ROOT/current + an exemption list, NOT a `levels`
+# substring (which missed kayak-audit-gauges, a python-run engine consumer).
+: "${KAYAK_HOST_UNITS:=kayak-backup-hourly.service kayak-backup-weekly.service kayak-backup-offsite.service}"
 for u in $KAYAK_UNITS; do
     case "$u" in
         *.timer) svc="${u%.timer}.service" ;;
         *) svc="$u" ;;
     esac
+    case " $KAYAK_HOST_UNITS " in
+        *" $svc "*) continue ;;
+    esac
     es="$("$SYSTEMCTL" show -p ExecStart --value "$svc" 2>/dev/null || true)"
+    # A unit with no ExecStart (not installed / pure timer target) has nothing
+    # to verify; a present ExecStart must reference the release.
+    [ -z "$es" ] && continue
     case "$es" in
-        *levels*)
-            case "$es" in
-                *"$ROOT/current"*) : ;;
-                *)
-                    echo "Error: $svc does not run from $ROOT/current (ExecStart: $es)." >&2
-                    echo "Re-render the units to the paired-release layout (Batch 4C) first." >&2
-                    exit 1
-                    ;;
-            esac
+        *"$ROOT/current"*) : ;;
+        *)
+            echo "Error: $svc does not run from $ROOT/current (ExecStart: $es)." >&2
+            echo "Re-render it to the paired-release layout (Batch 4C), or add it to" >&2
+            echo "KAYAK_HOST_UNITS in $CONF if it is a deliberate host-level unit." >&2
+            exit 1
             ;;
     esac
 done
@@ -459,11 +494,15 @@ if [ -L "$ROOT/current" ]; then
     PREV_TARGET="$(readlink "$ROOT/current")"
 fi
 
+# SQLITE_PATH was resolved into the env by the host-env sourcing above
+# (KAYAK_HOST_ENV + the app user's .config). A clear early failure if the host
+# env model didn't supply it, rather than an obscure abort mid-activation.
 DB_PATH="${SQLITE_PATH:-}"
-if [ -z "$DB_PATH" ] && [ -r /etc/kayak/env ]; then
-    DB_PATH="$(. /etc/kayak/env >/dev/null 2>&1; echo "${SQLITE_PATH:-}")"
+if [ -z "$DB_PATH" ]; then
+    echo "Error: SQLITE_PATH is not set — it must come from the host env" >&2
+    echo "($KAYAK_HOST_ENV or the app user's ~/.config/kayak/.env). Activation needs the DB path." >&2
+    exit 1
 fi
-: "${DB_PATH:?SQLITE_PATH must be set (env or /etc/kayak/env) for activation}"
 
 # The DB backup + restore must run as the app user (own the DB/WAL sidecars),
 # so it lands in an APP-OWNED scratch dir — the orchestrator's mktemp -d is
@@ -609,5 +648,34 @@ log "starting consumers + leaving maintenance mode"
 for u in $KAYAK_UNITS; do "$SYSTEMCTL" start "$u" 2>/dev/null || true; done
 rm -f "$ROOT/maintenance"
 trap - ERR
+
+# Prune old releases — each carries a full venv, so without a retention bound
+# they accumulate unbounded on the VPS (PR #190 live review P2). Keep the
+# KAYAK_KEEP_RELEASES most-recent, but NEVER the active one or the previous
+# (rollback needs PREV_TARGET). Done after activation so a failure above never
+# deletes a release.
+: "${KAYAK_KEEP_RELEASES:=5}"
+prune_releases() {
+    cur="$(basename "$(readlink "$ROOT/current")")"
+    prev="$([ -n "$PREV_TARGET" ] && basename "$PREV_TARGET" || echo "")"
+    # Newest-first by mtime; skip the keep window, current, and previous.
+    # Release ids are 12-hex (no spaces/newlines), so word-splitting ls -t is
+    # safe here and gives the recency order a glob can't.
+    kept=0
+    # shellcheck disable=SC2045
+    for d in $(ls -1dt "$ROOT/releases/"*/ 2>/dev/null); do
+        id="$(basename "$d")"
+        if [ "$id" = "$cur" ] || [ "$id" = "$prev" ]; then
+            continue
+        fi
+        kept=$((kept + 1))
+        if [ "$kept" -le "$KAYAK_KEEP_RELEASES" ]; then
+            continue
+        fi
+        log "pruning old release $id"
+        rm -rf "$d"
+    done
+}
+prune_releases
 
 log "activated release $RELEASE_ID (engine $ENGINE_REF, dataset $DATASET_REF)"

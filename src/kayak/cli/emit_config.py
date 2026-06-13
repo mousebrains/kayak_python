@@ -60,6 +60,12 @@ def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> 
         action="store_true",
         help="Write to stdout instead of the output path",
     )
+    emit.add_argument(
+        "--exclude-secrets",
+        action="store_true",
+        help="Drop every SecretStr field (type-based) — for a non-secret "
+        "config copy/fingerprint that must never carry credentials",
+    )
 
     show = subparsers.add_parser(
         "show-config",
@@ -74,14 +80,19 @@ def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> 
     )
 
 
-def build_config_data(cfg: KayakConfig) -> dict[str, Any]:
-    """Render ``cfg`` as a JSON-serializable dict with secrets unwrapped.
+def build_config_data(cfg: KayakConfig, *, exclude_secrets: bool = False) -> dict[str, Any]:
+    """Render ``cfg`` as a JSON-serializable dict.
 
     ``model_dump(mode="json", exclude_none=True)`` is the base; we then
-    walk the model's fields and overwrite any ``SecretStr`` value with
-    its plaintext form. ``exclude_none`` keeps the JSON tight — fields
-    that are ``None`` (most ``hc_*`` URLs on a dev box) are omitted
-    rather than written as ``null``.
+    walk the model's fields and, for any ``SecretStr`` value, either
+    overwrite it with its plaintext form (the default — the canonical
+    ``/etc/kayak/runtime-config.json`` PHP reads) or, with
+    *exclude_secrets*, drop the field entirely. The drop is **type-based**
+    (every ``SecretStr`` field), not name-based, so a caller that must
+    retain or fingerprint the config without credentials cannot leak a
+    future secret field regardless of its name (PR #190 live review).
+    ``exclude_none`` keeps the JSON tight — fields that are ``None`` (most
+    ``hc_*`` URLs on a dev box) are omitted rather than written as ``null``.
 
     Derived keys for PHP consumers are added at the end:
     - ``database_path``: the SQLite filesystem path, stripped of the
@@ -98,7 +109,10 @@ def build_config_data(cfg: KayakConfig) -> dict[str, Any]:
             continue
         raw = getattr(cfg, name)
         if isinstance(raw, SecretStr):
-            data[name] = raw.get_secret_value()
+            if exclude_secrets:
+                del data[name]
+            else:
+                data[name] = raw.get_secret_value()
 
     db_url = data.get("database_url")
     if isinstance(db_url, str) and db_url.startswith("sqlite:///"):
@@ -150,7 +164,7 @@ def emit_config(args: argparse.Namespace) -> None:
     """Write the resolved KayakConfig JSON snapshot."""
     cfg = KayakConfig()
     try:
-        data = build_config_data(cfg)
+        data = build_config_data(cfg, exclude_secrets=getattr(args, "exclude_secrets", False))
     except RuntimeError as e:
         print(f"ERROR: emit-config failed: {e}", file=sys.stderr)
         sys.exit(1)

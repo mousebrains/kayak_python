@@ -341,6 +341,8 @@ def test_activation_rolls_back_db_symlink_and_config_on_failed_health(
     runuser.chmod(0o755)
     me = subprocess.run(["id", "-un"], capture_output=True, text=True, check=True).stdout.strip()
 
+    host_env = tmp_path / "host.env"
+
     def activate(site_url: str, *, health_url: str | None) -> subprocess.CompletedProcess[str]:
         conf = _write_conf(
             tmp_path,
@@ -350,9 +352,15 @@ def test_activation_rolls_back_db_symlink_and_config_on_failed_health(
             DATASET_BRANCH="main",
             SERVING_CUTOVER="yes",
         )
+        # SITE_URL + SQLITE_PATH come from the host-env FILE, not injected into
+        # the subprocess env — this exercises the real KAYAK_HOST_ENV sourcing
+        # path the live host depends on (PR #190 live review P1), which earlier
+        # tests bypassed by injecting them directly.
+        host_env.write_text(f"SITE_URL={site_url}\nSQLITE_PATH={db}\n")
         env = {
             "KAYAK_DEPLOY_CONF": str(conf),
             "KAYAK_DEPLOY_ROOT": str(root),
+            "KAYAK_HOST_ENV": str(host_env),
             "KAYAK_RUNTIME_CONFIG": str(runtime_config),
             "KAYAK_CONFIG_INSTALLER": str(installer),
             "KAYAK_SYSTEMCTL": str(systemctl),
@@ -362,10 +370,8 @@ def test_activation_rolls_back_db_symlink_and_config_on_failed_health(
             "KAYAK_PRIVILEGED": "yes",
             "KAYAK_APP_USER": me,
             "KAYAK_RUNUSER": str(runuser),
-            "SQLITE_PATH": str(db),
             "HOME": str(tmp_path),
             "SUDO_USER": "",
-            "SITE_URL": site_url,
             "KAYAK_UNITS": "kayak-pipeline.timer",
         }
         if health_url is not None:
@@ -404,3 +410,86 @@ def test_activation_rolls_back_db_symlink_and_config_on_failed_health(
     assert n > 0
     assert not (root / "maintenance").exists()
     assert "start kayak-pipeline.timer" in systemctl_log.read_text()
+
+
+def _activation_stubs(tmp_path: Path, root: Path, runtime_config: Path) -> dict[str, str]:
+    """Recording systemctl + config-installer + same-user runuser stubs."""
+    installer = tmp_path / "install-config.sh"
+    installer.write_text(f'#!/bin/sh\ncat > "{runtime_config}"\n')
+    installer.chmod(0o755)
+    systemctl = tmp_path / "systemctl.sh"
+    systemctl.write_text(
+        "#!/bin/sh\n"
+        'case "$1" in\n'
+        "  is-active) exit 1 ;;\n"
+        f'  show) echo "{{ path={root}/current/venv/bin/levels }}" ;;\n'
+        "  *) exit 0 ;;\n"
+        "esac\n"
+    )
+    systemctl.chmod(0o755)
+    runuser = tmp_path / "runuser.sh"
+    runuser.write_text('#!/bin/sh\nshift 3\nexec "$@"\n')
+    runuser.chmod(0o755)
+    me = subprocess.run(["id", "-un"], capture_output=True, text=True, check=True).stdout.strip()
+    return {
+        "installer": str(installer),
+        "systemctl": str(systemctl),
+        "runuser": str(runuser),
+        "me": me,
+    }
+
+
+@pytest.mark.slow
+def test_activation_prunes_old_releases(tmp_path: Path, engine_repo, dataset_repo) -> None:
+    """Old releases are pruned after a successful activation, but current and
+    previous are always kept (PR #190 live review P2 — unbounded venv growth)."""
+    ds_repo, ds_sha = dataset_repo
+    eng_repo, engine_sha = engine_repo
+    fixture_ds = _REPO / "tests" / "fixtures" / "dataset"
+    db = tmp_path / "kayak.db"
+    _init_db(db, fixture_ds)
+    root = tmp_path / "opt"
+    runtime_config = tmp_path / "runtime-config.json"
+    host_env = tmp_path / "host.env"
+    stubs = _activation_stubs(tmp_path, root, runtime_config)
+    conf = _write_conf(
+        tmp_path,
+        str(eng_repo),
+        str(ds_repo),
+        ENGINE_BRANCH="test-main",
+        DATASET_BRANCH="main",
+        SERVING_CUTOVER="yes",
+    )
+
+    def activate(site_url: str) -> Path:
+        host_env.write_text(f"SITE_URL={site_url}\nSQLITE_PATH={db}\n")
+        env = {
+            "KAYAK_DEPLOY_CONF": str(conf),
+            "KAYAK_DEPLOY_ROOT": str(root),
+            "KAYAK_HOST_ENV": str(host_env),
+            "KAYAK_RUNTIME_CONFIG": str(runtime_config),
+            "KAYAK_CONFIG_INSTALLER": stubs["installer"],
+            "KAYAK_SYSTEMCTL": stubs["systemctl"],
+            "KAYAK_PRIVILEGED": "yes",
+            "KAYAK_APP_USER": stubs["me"],
+            "KAYAK_RUNUSER": stubs["runuser"],
+            "HOME": str(tmp_path),
+            "SUDO_USER": "",
+            "KAYAK_UNITS": "kayak-pipeline.timer",
+            # Keep ONLY current + previous, so the 3rd activation prunes the 1st.
+            "KAYAK_KEEP_RELEASES": "0",
+        }
+        p = _run(["--engine-ref", engine_sha, "--dataset-ref", ds_sha], env, timeout=900)
+        assert p.returncode == 0, p.stderr
+        return (root / "current").resolve()
+
+    r1 = activate("https://one.example.org")
+    r2 = activate("https://two.example.org")
+    r3 = activate("https://three.example.org")
+    assert r1 != r2 != r3
+
+    remaining = {d.name for d in (root / "releases").iterdir()}
+    # current (r3) + previous (r2) kept; the oldest (r1) pruned.
+    assert r3.name in remaining
+    assert r2.name in remaining
+    assert r1.name not in remaining, "oldest release should be pruned with KEEP=0"
