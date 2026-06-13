@@ -24,8 +24,16 @@
 #   KAYAK_UNITS                    space-separated units to stop/start around
 #                                  activation (default: the kayak-* timers)
 #   HEALTH_URL                     URL curl'd after activation (optional)
+#   KAYAK_APP_USER                 service account owning the DB/docroot;
+#                                  REQUIRED for a root-run activation (DB/build
+#                                  steps run as this user via runuser)
+#   SERVING_CUTOVER                must be "yes" to activate (set by the 4C
+#                                  runbook once nginx/FPM point at current)
 # Path overrides (mainly for tests / the clean-VM rehearsal):
 #   KAYAK_DEPLOY_ROOT              release root (default /opt/kayak)
+#   KAYAK_RUNTIME_CONFIG           PHP config path (default /etc/kayak/runtime-config.json)
+#   KAYAK_CONFIG_INSTALLER         root config wrapper path
+#   KAYAK_SYSTEMCTL                systemctl path
 #
 # Requires on the host: git, sqlite3, curl, and a python3 whose stdlib
 # venv/ensurepip work (Debian: apt install python3-venv) — no system pip
@@ -88,6 +96,36 @@ fi
 : "${KAYAK_UNITS:=kayak-pipeline.timer kayak-backup-hourly.timer kayak-backup-weekly.timer kayak-decimate.timer kayak-status.timer kayak-fetch-osmb.timer kayak-editor-retention.timer kayak-audit-gauges.timer}"
 : "${HEALTH_URL:=}"
 ROOT="${KAYAK_DEPLOY_ROOT:-/opt/kayak}"
+RUNTIME_CONFIG="${KAYAK_RUNTIME_CONFIG:-/etc/kayak/runtime-config.json}"
+CONFIG_INSTALLER="${KAYAK_CONFIG_INSTALLER:-/usr/local/sbin/kayak-install-runtime-config}"
+# Parameterized so the activation path is testable without root/systemd
+# (tests point this at a recording stub).
+SYSTEMCTL="${KAYAK_SYSTEMCTL:-systemctl}"
+
+# Privilege model (PR #190 third-round review): ONE orchestrator mode. The
+# orchestrator itself is root on a real host (systemctl + the root config
+# installer); the steps that WRITE PERSISTENT APP STATE the rest of the
+# system owns — the DB and its WAL sidecars, the built docroot — run as
+# KAYAK_APP_USER via runuser so root never creates app-owned-resource
+# sidecars (the WAL footgun). Read-only/scratch staging (wheel build, dataset
+# validate, the normalized-digest emit) runs as the orchestrator: it only
+# writes the root-owned scratch dir and never touches the live DB, and the
+# secret filter below — not the uid — is what keeps credentials out of the
+# retained release copy. Run unprivileged (--stage-only, tests), run_app is a
+# pass-through. The root/runuser env propagation is validated end-to-end in
+# the Batch 4C clean-VM rehearsal (it needs real root + systemd).
+: "${KAYAK_APP_USER:=}"
+run_app() {
+    if [ "$(id -u)" -eq 0 ]; then
+        if [ -z "$KAYAK_APP_USER" ]; then
+            echo "Error: running as root requires KAYAK_APP_USER in $CONF (the service user that owns the DB/docroot)" >&2
+            exit 1
+        fi
+        runuser -u "$KAYAK_APP_USER" -- "$@"
+    else
+        "$@"
+    fi
+}
 
 # Full 40-hex commit SHAs only — never a branch or tag (plan §S7; and the
 # pin-gate incident: short/hand-typed refs are exactly how SHAs go wrong).
@@ -226,8 +264,20 @@ import sys
 
 drop = {"dataset_dir", "output_dir", "osmb_dir", "map_layers_dir",
         "gauge_metadata_cache", "database_path", "database_url", "ntfy_topic"}
+
+
+def keep(k):
+    if k in drop or k.startswith("hc_"):
+        return False
+    # Root-run staging reads /etc/kayak/secrets.env, and emit-config unwraps
+    # SecretStr values — no credential-shaped field may persist into retained
+    # release dirs (PR #190 third-round P1).
+    lowered = k.lower()
+    return not any(s in lowered for s in ("secret", "password", "token"))
+
+
 data = json.load(open(sys.argv[1]))
-data = {k: v for k, v in data.items() if k not in drop and not k.startswith("hc_")}
+data = {k: v for k, v in data.items() if keep(k)}
 json.dump(data, open(sys.argv[2], "w"), indent=2, sort_keys=True)
 PYNORM
 }
@@ -325,10 +375,18 @@ PRE_BACKUP="$SCRATCH/pre-activate.db"
 MUTATED=0
 
 SWITCHED=0
+CONFIG_INSTALLED=0
 rollback() {
     status=$?
     trap - ERR
     echo "kayak-deploy: FAILURE (exit $status) — rolling back" >&2
+    if [ "$CONFIG_INSTALLED" = 1 ] && [ -f "$SCRATCH/runtime-config.prev" ]; then
+        echo "kayak-deploy: restoring previous runtime config" >&2
+        if ! cp -p "$SCRATCH/runtime-config.prev" "$RUNTIME_CONFIG"; then
+            echo "kayak-deploy: CONFIG RESTORE FAILED — recover from $SCRATCH/runtime-config.prev" >&2
+            CLEAN_SCRATCH=0
+        fi
+    fi
     if [ "$MUTATED" = 1 ] && [ -f "$PRE_BACKUP" ]; then
         echo "kayak-deploy: restoring pre-activation DB backup" >&2
         sqlite3 "$DB_PATH" ".restore '$PRE_BACKUP'" || \
@@ -350,7 +408,7 @@ rollback() {
         ln -s "$PREV_TARGET" "$ROOT/current.new" && mv -f "$ROOT/current.new" "$ROOT/current"
         echo "kayak-deploy: current -> $PREV_TARGET (previous release)" >&2
     fi
-    for u in $KAYAK_UNITS; do systemctl start "$u" 2>/dev/null || true; done
+    for u in $KAYAK_UNITS; do "$SYSTEMCTL" start "$u" 2>/dev/null || true; done
     rm -f "$ROOT/maintenance"
     exit "$status"
 }
@@ -364,19 +422,19 @@ touch "$ROOT/maintenance"
 # review P1). Then wait for the service set to drain before the backup.
 SERVICES=""
 for u in $KAYAK_UNITS; do
-    systemctl stop "$u" 2>/dev/null || true
+    "$SYSTEMCTL" stop "$u" 2>/dev/null || true
     case "$u" in
         *.timer)
             svc="${u%.timer}.service"
             SERVICES="$SERVICES $svc"
-            systemctl stop "$svc" 2>/dev/null || true
+            "$SYSTEMCTL" stop "$svc" 2>/dev/null || true
             ;;
         *.service) SERVICES="$SERVICES $u" ;;
     esac
 done
 waited=0
 for svc in $SERVICES; do
-    while systemctl is-active --quiet "$svc" 2>/dev/null; do
+    while "$SYSTEMCTL" is-active --quiet "$svc" 2>/dev/null; do
         if [ "$waited" -ge 120 ]; then
             echo "Error: $svc still active after ${waited}s — refusing to mutate the DB under it" >&2
             exit 1
@@ -388,25 +446,32 @@ done
 log "consumers quiesced"
 
 log "backing up DB before mutation"
-sqlite3 "$DB_PATH" ".backup '$PRE_BACKUP'"
+if [ "$(id -u)" -eq 0 ] && [ -n "$KAYAK_APP_USER" ]; then
+    # The backup (and any WAL sidecars sqlite may touch) must be app-user
+    # work, not root's.
+    install -d -o "$KAYAK_APP_USER" "$SCRATCH/app"
+    PRE_BACKUP="$SCRATCH/app/pre-activate.db"
+    chown "$KAYAK_APP_USER" "$RELEASE_DIR/docroot"
+fi
+run_app sqlite3 "$DB_PATH" ".backup '$PRE_BACKUP'"
 
 LEVELS="$RELEASE_DIR/venv/bin/levels"
 MUTATED=1
 log "applying schema migrations"
-DATABASE_URL="sqlite:///$DB_PATH" "$LEVELS" migrate
+run_app env DATABASE_URL="sqlite:///$DB_PATH" "$LEVELS" migrate
 
 log "applying metadata sync (all-or-nothing)"
-DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset" "$LEVELS" sync-metadata
+run_app env DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset" "$LEVELS" sync-metadata
 
 # Geometry/gradient sidecars are dataset content EXCLUDED from reach.csv —
 # sync-metadata never writes reach.geom/gradient_profile. Without this step
 # a sidecar-only dataset release would activate while serving stale geometry
 # (PR #190 review P1). Rollback is covered by the pre-activation DB backup.
 log "applying geometry/gradient sidecars"
-DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset" "$LEVELS" import-metadata
+run_app env DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset" "$LEVELS" import-metadata
 
 log "building docroot inside the release"
-DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset" \
+run_app env DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset" \
     OUTPUT_DIR="$RELEASE_DIR/docroot" "$LEVELS" build
 
 # Canonical runtime config for PHP: same path, same root wrapper, same
@@ -415,9 +480,16 @@ DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset" \
 # root-only secrets and installs 0640 root:www-data). Emitted with FINAL
 # release paths, not scratch paths.
 log "installing canonical runtime config via the root wrapper"
-DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset" \
+if [ -f "$RUNTIME_CONFIG" ]; then
+    # Snapshot for rollback: a failed switch/health check must restore the
+    # config PHP serves, not leave the old release running with the failed
+    # release's config (PR #190 third-round P1).
+    cp -p "$RUNTIME_CONFIG" "$SCRATCH/runtime-config.prev"
+fi
+run_app env DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset" \
     OUTPUT_DIR="$RELEASE_DIR/docroot" "$LEVELS" emit-config --dry-run \
-    | /usr/local/sbin/kayak-install-runtime-config
+    | "$CONFIG_INSTALLER"
+CONFIG_INSTALLED=1
 
 log "switching $ROOT/current -> releases/$RELEASE_ID (atomic)"
 ln -s "releases/$RELEASE_ID" "$ROOT/current.new"
@@ -430,7 +502,7 @@ if [ -n "$HEALTH_URL" ]; then
 fi
 
 log "starting consumers + leaving maintenance mode"
-for u in $KAYAK_UNITS; do systemctl start "$u" 2>/dev/null || true; done
+for u in $KAYAK_UNITS; do "$SYSTEMCTL" start "$u" 2>/dev/null || true; done
 rm -f "$ROOT/maintenance"
 trap - ERR
 

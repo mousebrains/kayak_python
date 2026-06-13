@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -159,6 +160,10 @@ def test_stage_only_builds_verified_release(tmp_path: Path, engine_repo, dataset
             "SITE_URL": "https://levels.example.org",
             # Operational token — must NOT survive into the release copy.
             "NTFY_TOPIC": "kayak-test-secret-topic",
+            # Credential (SecretStr, unwrapped by emit-config when readable) —
+            # a root-run staging emit must never persist it into the retained
+            # normalized config (PR #190 third-round P1).
+            "TURNSTILE_SECRET": "kayak-test-turnstile-secret",
         },
     )
     assert proc.returncode == 0, proc.stderr
@@ -214,6 +219,9 @@ def test_stage_only_builds_verified_release(tmp_path: Path, engine_repo, dataset
     assert "kayak-test-secret-topic" not in flat
     assert not any(k.startswith("hc_") for k in stored)
     assert "dataset_dir" not in stored  # path-local fields excluded
+    # No credential-shaped field nor its value (secret/password/token filter).
+    assert "turnstile_secret" not in stored
+    assert "kayak-test-turnstile-secret" not in flat
 
     # PR #190 review P1: a non-secret runtime-config input change (e.g.
     # SITE_URL in /etc/kayak/env) must produce a DIFFERENT release — never
@@ -247,3 +255,108 @@ def test_unreachable_ref_rejected(tmp_path: Path, engine_repo, dataset_repo) -> 
     )
     assert proc.returncode == 1
     assert "not found" in proc.stderr or "not reachable" in proc.stderr
+
+
+def _init_db(db: Path, dataset_dir: Path) -> None:
+    """Create + populate a DB the activation path can migrate/sync/build."""
+    env = {
+        **os.environ,
+        "PYTHONPATH": str(_REPO / "src"),
+        "DATABASE_URL": f"sqlite:///{db}",
+        "DATASET_DIR": str(dataset_dir),
+        "HOME": str(db.parent),
+        "SUDO_USER": "",
+    }
+    for cmd in (["init-db"], ["sync-metadata"]):
+        subprocess.run(
+            [sys.executable, "-m", "kayak.cli.main", *cmd],
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+
+@pytest.mark.slow
+def test_activation_rolls_back_db_symlink_and_config_on_failed_health(
+    tmp_path: Path, engine_repo, dataset_repo
+) -> None:
+    """Full activation path with stubbed systemctl + config installer: a first
+    release activates; a second release with a failing health check must roll
+    back the symlink, the DB, AND the runtime config to the first release
+    (PR #190 third-round P1 — config rollback)."""
+    ds_repo, ds_sha = dataset_repo
+    eng_repo, engine_sha = engine_repo
+    fixture_ds = _REPO / "tests" / "fixtures" / "dataset"
+
+    db = tmp_path / "kayak.db"
+    _init_db(db, fixture_ds)
+
+    root = tmp_path / "opt"
+    runtime_config = tmp_path / "runtime-config.json"
+    systemctl_log = tmp_path / "systemctl.log"
+
+    # Config installer stub: the real one merges root-only secrets + installs
+    # 0640 root:www-data; here it just records the emitted (dry-run) config so
+    # we can assert what PHP would read.
+    installer = tmp_path / "install-config.sh"
+    installer.write_text(f'#!/bin/sh\ncat > "{runtime_config}"\n')
+    installer.chmod(0o755)
+    systemctl = tmp_path / "systemctl.sh"
+    # Record every call; `is-active` reports inactive (exit 1) so the quiesce
+    # loop sees a drained service set immediately.
+    systemctl.write_text(
+        f'#!/bin/sh\necho "$@" >> "{systemctl_log}"\n'
+        'case "$1" in is-active) exit 1 ;; *) exit 0 ;; esac\n'
+    )
+    systemctl.chmod(0o755)
+
+    def activate(site_url: str, *, health_url: str | None) -> subprocess.CompletedProcess[str]:
+        conf = _write_conf(
+            tmp_path,
+            str(eng_repo),
+            str(ds_repo),
+            ENGINE_BRANCH="test-main",
+            DATASET_BRANCH="main",
+            SERVING_CUTOVER="yes",
+        )
+        env = {
+            "KAYAK_DEPLOY_CONF": str(conf),
+            "KAYAK_DEPLOY_ROOT": str(root),
+            "KAYAK_RUNTIME_CONFIG": str(runtime_config),
+            "KAYAK_CONFIG_INSTALLER": str(installer),
+            "KAYAK_SYSTEMCTL": str(systemctl),
+            "SQLITE_PATH": str(db),
+            "HOME": str(tmp_path),
+            "SUDO_USER": "",
+            "SITE_URL": site_url,
+            "KAYAK_UNITS": "kayak-pipeline.timer",
+        }
+        if health_url is not None:
+            env["HEALTH_URL"] = health_url
+        return _run(["--engine-ref", engine_sha, "--dataset-ref", ds_sha], env, timeout=900)
+
+    # First activation succeeds (no health probe).
+    first = activate("https://first.example.org", health_url=None)
+    assert first.returncode == 0, first.stderr
+    assert (root / "current").is_symlink()
+    release1 = (root / "current").resolve()
+    assert "first.example.org" in runtime_config.read_text()
+    assert not (root / "maintenance").exists()
+
+    # Second activation: a different SITE_URL mints a new release, but the
+    # health probe fails (port 1 → connection refused) → rollback.
+    second = activate("https://second.example.org", health_url="http://127.0.0.1:1/")
+    assert second.returncode != 0
+    # Symlink, config, and DB are all back to release 1.
+    assert (root / "current").resolve() == release1
+    cfg = runtime_config.read_text()
+    assert "first.example.org" in cfg
+    assert "second.example.org" not in cfg
+    # DB still queryable and consumers restarted, maintenance cleared.
+    import sqlite3
+
+    n = sqlite3.connect(db).execute("SELECT COUNT(*) FROM reach").fetchone()[0]
+    assert n > 0
+    assert not (root / "maintenance").exists()
+    assert "start kayak-pipeline.timer" in systemctl_log.read_text()
