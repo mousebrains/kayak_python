@@ -126,6 +126,27 @@ class TestBuildConfigData:
         assert data["turnstile_secret"] == "real-secret-not-masked"
         assert "*" not in data["turnstile_secret"]
 
+    def test_exclude_secrets_drops_every_secretstr_field(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Type-based, not name-based (PR #190 live review): every SecretStr
+        # field is dropped from the non-secret copy regardless of its name, so
+        # a future secret field can't leak into a retained release config.
+        from pydantic import SecretStr
+
+        monkeypatch.setenv("TURNSTILE_SECRET", "real-secret-not-masked")
+        cfg = KayakConfig()
+        # Detect secret fields the same way build_config_data does — by the
+        # populated instance value's type, not the (Optional-wrapped) annotation.
+        secret_fields = [
+            n for n in KayakConfig.model_fields if isinstance(getattr(cfg, n), SecretStr)
+        ]
+        assert "turnstile_secret" in secret_fields, "guard: turnstile_secret must be a SecretStr"
+        data = build_config_data(cfg, exclude_secrets=True)
+        for name in secret_fields:
+            assert name not in data, name
+        assert "real-secret-not-masked" not in json.dumps(data)
+
     def test_database_path_derived_from_sqlite_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # SQLAlchemy SQLite URLs use 3 slashes for relative paths and 4
         # for absolute (``sqlite:////home/...``). Strip exactly the 3-slash

@@ -286,6 +286,33 @@ jobs:
       # ``-m ''`` overrides the project default ``-m 'not slow'`` so the
       # integration test still gates merges in CI. Coverage threshold only
       # makes sense once, so attach it to the 3.13 leg.
+      - name: requirements-prod.lock drift check
+        # kayak-deploy installs the release venv from this hash-pinned export
+        # (PR #190: dependency resolution must not happen at deploy time), so
+        # it must stay in lockstep with uv.lock. Regenerate with:
+        #   uv export --no-dev --no-emit-project --format requirements-txt > requirements-prod.lock
+        run: |
+          uv export --no-dev --no-emit-project --format requirements-txt -q > /tmp/req-prod.lock
+          diff -u requirements-prod.lock /tmp/req-prod.lock || {
+            echo "::error::requirements-prod.lock is out of date — regenerate with the uv export command above"
+            exit 1
+          }
+
+      - name: requirements-build.lock drift check
+        # kayak-deploy builds the wheel with --no-build-isolation from this
+        # hash-pinned PEP 517 backend (PR #190: the build backend must not be
+        # network-resolved or unpinned at deploy time), so it must track
+        # pyproject.toml's [build-system].requires. Regenerate with:
+        #   python3 -c "import tomllib; print(chr(10).join(tomllib.load(open('pyproject.toml','rb'))['build-system']['requires']))" \
+        #     | uv pip compile --generate-hashes - > requirements-build.lock
+        run: |
+          python3 -c "import tomllib; print(chr(10).join(tomllib.load(open('pyproject.toml','rb'))['build-system']['requires']))" \
+            | uv pip compile --generate-hashes -q - > /tmp/req-build.lock
+          diff -u requirements-build.lock /tmp/req-build.lock || {
+            echo "::error::requirements-build.lock is out of date vs pyproject.toml [build-system].requires — regenerate with the command above"
+            exit 1
+          }
+
       - name: Run tests (with slow marker enabled)
         run: uv run pytest -m '' --cov=kayak --cov-report=term-missing --cov-fail-under=75 -q
 

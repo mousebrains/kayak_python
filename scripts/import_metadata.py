@@ -28,7 +28,6 @@ Fresh-DB load:
 """
 
 import argparse
-import json
 import sqlite3
 import sys
 from pathlib import Path
@@ -70,64 +69,40 @@ def _default_db_path() -> Path:
 
 
 def _apply_geom(conn: sqlite3.Connection, in_dir: Path) -> int:
-    """Apply reach.geom from reaches.json (excluded from reach.csv).
+    """Apply reach.geom from reaches.json — delegates to the packaged
+    kayak.db.sidecars (the single implementation; `levels import-metadata`
+    and kayak-deploy use the same one). Returns the unmatched count."""
+    from kayak.db import sidecars
 
-    Reports the rows actually updated (``cur.rowcount``), not the snapshot
-    size, so a mis-resolved or empty DB shows 0 rather than a falsely-full
-    count. Returns the number of snapshot reaches that matched NO row in this
-    DB (0 = clean) so the caller can fail loud on the most likely operator
-    mistake — applying the sidecars before ``levels sync-metadata`` (or to the
-    wrong/empty DB).
-    """
-    reaches_json = in_dir / "reaches.json"
-    if not reaches_json.exists():
-        return 0
-    with reaches_json.open(encoding="utf-8") as f:
-        # Fail cleanly (and roll back the enclosing transaction) on a corrupt
-        # snapshot rather than dumping a raw traceback — reaches.json is
-        # machine-generated, so a malformed one is a real problem to surface.
-        try:
-            geoms = json.load(f)
-            pairs = [(geom, int(rid)) for rid, geom in geoms.items()]
-        except (json.JSONDecodeError, ValueError, AttributeError) as exc:
-            print(f"Error: {reaches_json} is malformed ({exc})", file=sys.stderr)
-            raise SystemExit(1) from exc
-    cur = conn.executemany("UPDATE reach SET geom = ? WHERE id = ?", pairs)
-    applied = cur.rowcount
+    try:
+        applied, unmatched = sidecars.apply_geom(conn, in_dir)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
     print(f"{'reaches.json (geom)':<22} {applied:>10}")
-    unmatched = len(geoms) - applied
     if unmatched:
         print(
-            f"Warning: {len(geoms)} reaches in reaches.json but only {applied} matched a "
-            "reach row (the rest have no row in this DB).",
+            f"Warning: {unmatched} reaches in reaches.json matched no reach row in this DB.",
             file=sys.stderr,
         )
     return unmatched
 
 
 def _apply_gradient(conn: sqlite3.Connection, in_dir: Path) -> int:
-    """Apply reach.gradient_profile from reaches-gradient.json (excluded from
-    reach.csv). Mirrors _apply_geom: reports rows actually updated and returns the
-    number of snapshot reaches that matched no row in this DB. review-3 R6.1.
-    """
-    grad_json = in_dir / "reaches-gradient.json"
-    if not grad_json.exists():
-        return 0
-    with grad_json.open(encoding="utf-8") as f:
-        try:
-            grads = json.load(f)
-            pairs = [(gp, int(rid)) for rid, gp in grads.items()]
-        except (json.JSONDecodeError, ValueError, AttributeError) as exc:
-            print(f"Error: {grad_json} is malformed ({exc})", file=sys.stderr)
-            raise SystemExit(1) from exc
-    cur = conn.executemany("UPDATE reach SET gradient_profile = ? WHERE id = ?", pairs)
-    applied = cur.rowcount
+    """Apply reach.gradient_profile from reaches-gradient.json — delegates to
+    kayak.db.sidecars (see _apply_geom)."""
+    from kayak.db import sidecars
+
+    try:
+        applied, unmatched = sidecars.apply_gradient(conn, in_dir)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
     print(f"{'reaches-gradient.json':<22} {applied:>10}")
-    unmatched = len(grads) - applied
     if unmatched:
         print(
-            f"Warning: {len(grads)} reaches in reaches-gradient.json but only {applied} matched a "
-            "reach row (the rest have no row in this DB).",
+            f"Warning: {unmatched} reaches in reaches-gradient.json matched no reach row "
+            "in this DB.",
             file=sys.stderr,
         )
     return unmatched

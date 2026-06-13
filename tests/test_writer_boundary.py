@@ -58,6 +58,9 @@ _SRC = Path(__file__).resolve().parents[1] / "src" / "kayak"
 # split the writer out) rather than growing a second mutation into an allowlisted one.
 ALLOWLIST: dict[str, str] = {
     "cli/validate_dataset.py": "applies reach geom/gradient to a TEMP validation DB",
+    "db/sidecars.py": "the sanctioned geom/gradient sidecar apply — dataset-authoritative "
+    "JSON projected to reach.geom/gradient_profile at deploy time (sync-metadata excludes "
+    "them; PR #190: kayak-deploy needs this packaged)",
     "huc/assign.py": "assign-huc maintenance tool — refuses the configured prod DB (SA-3)",
     "db/reaches.py": "set_reach_huc, called only by the assign-huc maintenance tool",
     "db/observations.py": "put_rating_table — dormant rating-authoring helper (test-only)",
