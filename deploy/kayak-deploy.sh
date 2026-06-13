@@ -159,21 +159,30 @@ log "refs verified against protected branches"
 log "building engine wheel at $ENGINE_REF"
 git clone --quiet --no-checkout "$SCRATCH/engine.git" "$SCRATCH/engine-src"
 git -C "$SCRATCH/engine-src" checkout --quiet "$ENGINE_REF"
+# Dependency + build-backend locks (PR #190 review): the engine commit
+# carries requirements-prod.lock (runtime deps, exported from uv.lock,
+# drift-checked in CI) and requirements-build.lock (the PEP 517 backend) —
+# both hash-pinned, so neither runtime deps nor the code that BUILDS the
+# wheel can drift from the reviewed engine SHA. Both digests participate in
+# the release identity, and the wheel builds with --no-build-isolation from
+# the preinstalled locked backend (no network resolution at build time).
+REQ_LOCK="$SCRATCH/engine-src/requirements-prod.lock"
+BUILD_LOCK="$SCRATCH/engine-src/requirements-build.lock"
+for lock in "$REQ_LOCK" "$BUILD_LOCK"; do
+    if [ ! -f "$lock" ]; then
+        echo "Error: engine commit lacks $(basename "$lock") (pre-Batch-4B engine?)" >&2
+        exit 1
+    fi
+done
+LOCK_SHA="$(sha256 "$REQ_LOCK")"
+BUILD_LOCK_SHA="$(sha256 "$BUILD_LOCK")"
+
 "$PYTHON" -m venv "$SCRATCH/buildenv"
-"$SCRATCH/buildenv/bin/pip" wheel --quiet --no-deps -w "$SCRATCH/dist" "$SCRATCH/engine-src"
+"$SCRATCH/buildenv/bin/pip" install --quiet --require-hashes -r "$BUILD_LOCK"
+"$SCRATCH/buildenv/bin/pip" wheel --quiet --no-deps --no-build-isolation \
+    -w "$SCRATCH/dist" "$SCRATCH/engine-src"
 WHEEL="$(ls "$SCRATCH"/dist/*.whl)"
 WHEEL_SHA="$(sha256 "$WHEEL")"
-
-# Dependency lock (PR #190 review P2): the engine commit carries
-# requirements-prod.lock (hash-pinned, exported from uv.lock, drift-checked
-# in CI), so the same engine SHA installs byte-identical dependencies on any
-# day. Its digest participates in the release identity.
-REQ_LOCK="$SCRATCH/engine-src/requirements-prod.lock"
-if [ ! -f "$REQ_LOCK" ]; then
-    echo "Error: engine commit has no requirements-prod.lock (pre-Batch-4B engine?)" >&2
-    exit 1
-fi
-LOCK_SHA="$(sha256 "$REQ_LOCK")"
 
 log "snapshotting dataset at $DATASET_REF"
 git -C "$SCRATCH/dataset.git" archive --format=tar -o "$SCRATCH/dataset.tar" "$DATASET_REF"
@@ -192,13 +201,31 @@ STAGE_LEVELS="$SCRATCH/buildenv/bin/levels"
 log "validating dataset contract with the staged engine"
 "$STAGE_LEVELS" validate-dataset "$SCRATCH/dataset"
 
-# Non-secret runtime config, emitted from THIS host environment with the
-# staged engine + dataset. Its digest participates in the release identity
-# (PR #190 review P1: a /etc/kayak/env change must produce a NEW release,
-# never reuse of a stale runtime-config/docroot).
-log "emitting non-secret runtime config"
+# Runtime config, emitted from THIS host environment with the staged engine
+# + dataset. Its digest participates in the release identity (PR #190: a
+# /etc/kayak/env change must mint a NEW release) — but computed over a
+# NORMALIZED view: staging-local path fields are excluded so identical
+# inputs give an identical release id (the raw emit necessarily contains
+# scratch paths at this point), and operational tokens (ntfy/healthcheck
+# URLs) are excluded because the release-retained copy must not widen their
+# lifetime/ownership boundary. The canonical secret-merged config still
+# lives ONLY at /etc/kayak/runtime-config.json via the root wrapper.
+log "emitting runtime config (normalized digest)"
 DATASET_DIR="$SCRATCH/dataset" OUTPUT_DIR="$SCRATCH/dataset" \
-    "$STAGE_LEVELS" emit-config --out "$SCRATCH/runtime-config.json"
+    "$STAGE_LEVELS" emit-config --out "$SCRATCH/runtime-config-raw.json"
+normalize_config() { # <in> <out>: drop path-local + token fields, sort keys
+    "$PYTHON" - "$1" "$2" <<'PYNORM'
+import json
+import sys
+
+drop = {"dataset_dir", "output_dir", "osmb_dir", "map_layers_dir",
+        "gauge_metadata_cache", "database_path", "ntfy_topic"}
+data = json.load(open(sys.argv[1]))
+data = {k: v for k, v in data.items() if k not in drop and not k.startswith("hc_")}
+json.dump(data, open(sys.argv[2], "w"), indent=2, sort_keys=True)
+PYNORM
+}
+normalize_config "$SCRATCH/runtime-config-raw.json" "$SCRATCH/runtime-config.json"
 CONFIG_SHA="$(sha256 "$SCRATCH/runtime-config.json")"
 
 # Host-config fingerprint: the non-secret host shape participates in the
@@ -210,7 +237,7 @@ else
     HOST_FP="none"
 fi
 
-RELEASE_ID="$(printf '%s %s %s %s %s' "$WHEEL_SHA" "$DATASET_REF" "$HOST_FP" "$CONFIG_SHA" "$LOCK_SHA" \
+RELEASE_ID="$(printf '%s %s %s %s %s %s' "$WHEEL_SHA" "$DATASET_REF" "$HOST_FP" "$CONFIG_SHA" "$LOCK_SHA" "$BUILD_LOCK_SHA" \
     | { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi; } \
     | cut -c1-12)"
 RELEASE_DIR="$ROOT/releases/$RELEASE_ID"
@@ -237,6 +264,7 @@ else
   "wheel_sha256": "$WHEEL_SHA",
   "dataset_tar_sha256": "$DATASET_TAR_SHA",
   "requirements_lock_sha256": "$LOCK_SHA",
+  "build_lock_sha256": "$BUILD_LOCK_SHA",
   "runtime_config_sha256": "$CONFIG_SHA",
   "host_config_fingerprint": "$HOST_FP",
   "staged_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -257,6 +285,19 @@ if [ "$STAGE_ONLY" = 1 ]; then
     log "stage-only requested — stopping before activation"
     echo "$RELEASE_DIR"
     exit 0
+fi
+
+# Activation gate (PR #190 review P1): switching $ROOT/current is only
+# meaningful once the host's SERVING config (nginx root, FPM open_basedir/
+# KAYAK_CONFIG_PATH) points at it — that re-pointing is the Batch 4C
+# cutover, recorded by the installer in deploy.env. Refusing here keeps
+# this deployer from reporting success while users are still served the
+# legacy docroot.
+if [ "${SERVING_CUTOVER:-no}" != "yes" ]; then
+    echo "Error: this host's serving config has not been cut over to $ROOT/current" >&2
+    echo "(SERVING_CUTOVER=yes not set in $CONF — done by the Batch 4C install/migration" >&2
+    echo "runbook). Use --stage-only, or deploy with scripts/deploy.sh until then." >&2
+    exit 1
 fi
 
 # ---------------------------------------------------------------------------
@@ -288,14 +329,15 @@ rollback() {
             echo "kayak-deploy: DB RESTORE FAILED — manual recovery from $PRE_BACKUP required" >&2
         CLEAN_SCRATCH=0
     fi
-    if [ "$SWITCHED" = 1 ] && [ -z "$PREV_TARGET" ]; then
-        # Virgin host: there is no previous release to fall back to. Remove
-        # the failed 'current', KEEP maintenance mode, and do NOT restart
-        # consumers — a half-activated first install must not serve or write
-        # (PR #190 review P2).
-        rm -f "$ROOT/current"
-        echo "kayak-deploy: first activation failed — 'current' removed; host left in" >&2
-        echo "kayak-deploy: maintenance mode with consumers stopped (no prior release)" >&2
+    if [ -z "$PREV_TARGET" ]; then
+        # Virgin host: there is no previous release to fall back to, so ANY
+        # activation failure — before or after the symlink switch — leaves
+        # the host in maintenance mode with consumers stopped; a half-
+        # activated first install must not serve or write (PR #190 review
+        # P2, both rounds). Remove 'current' only if the switch happened.
+        [ "$SWITCHED" = 1 ] && rm -f "$ROOT/current"
+        echo "kayak-deploy: first activation failed — host left in maintenance mode" >&2
+        echo "kayak-deploy: with consumers stopped (no prior release to fall back to)" >&2
         exit "$status"
     fi
     if [ -n "$PREV_TARGET" ]; then
@@ -360,6 +402,16 @@ DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset" "$LEVELS" i
 log "building docroot inside the release"
 DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset" \
     OUTPUT_DIR="$RELEASE_DIR/docroot" "$LEVELS" build
+
+# Canonical runtime config for PHP: same path, same root wrapper, same
+# secret-merge boundary as scripts/deploy.sh (PR #190 review P1 — config
+# changes must actually reach PHP, and ONLY through the wrapper that merges
+# root-only secrets and installs 0640 root:www-data). Emitted with FINAL
+# release paths, not scratch paths.
+log "installing canonical runtime config via the root wrapper"
+DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset" \
+    OUTPUT_DIR="$RELEASE_DIR/docroot" "$LEVELS" emit-config --dry-run \
+    | /usr/local/sbin/kayak-install-runtime-config
 
 log "switching $ROOT/current -> releases/$RELEASE_ID (atomic)"
 ln -s "releases/$RELEASE_ID" "$ROOT/current.new"

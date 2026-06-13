@@ -157,6 +157,8 @@ def test_stage_only_builds_verified_release(tmp_path: Path, engine_repo, dataset
             # On a real host /etc/kayak/env supplies this; the fixture dataset
             # is publishable, so emit-config requires it.
             "SITE_URL": "https://levels.example.org",
+            # Operational token — must NOT survive into the release copy.
+            "NTFY_TOPIC": "kayak-test-secret-topic",
         },
     )
     assert proc.returncode == 0, proc.stderr
@@ -183,6 +185,35 @@ def test_stage_only_builds_verified_release(tmp_path: Path, engine_repo, dataset
 
     # No 'current' symlink: stage-only must not activate.
     assert not (root / "current").exists()
+
+    # Identity stability (PR #190 re-review P1): identical inputs must mint
+    # the SAME release id — the config digest is computed over a normalized
+    # view excluding staging-local paths.
+    proc_same = _run(
+        ["--engine-ref", engine_sha, "--dataset-ref", ds_sha, "--stage-only"],
+        {
+            "KAYAK_DEPLOY_CONF": str(conf),
+            "KAYAK_DEPLOY_ROOT": str(root),
+            "HOME": str(tmp_path),
+            "SUDO_USER": "",
+            "SITE_URL": "https://levels.example.org",
+            "NTFY_TOPIC": "kayak-test-secret-topic",
+        },
+    )
+    assert proc_same.returncode == 0, proc_same.stderr
+    assert Path(proc_same.stdout.strip().splitlines()[-1]) == release_dir
+    assert "already staged" in proc_same.stdout
+
+    # The release-retained config carries no staging-scratch paths and no
+    # operational tokens (PR #190 re-review: ntfy/hc URLs must not widen
+    # their lifetime into retained release dirs).
+    stored = json.loads((release_dir / "runtime-config.json").read_text())
+    flat = json.dumps(stored)
+    assert "/tmp" not in flat.replace(str(release_dir), "")
+    assert "ntfy_topic" not in stored
+    assert "kayak-test-secret-topic" not in flat
+    assert not any(k.startswith("hc_") for k in stored)
+    assert "dataset_dir" not in stored  # path-local fields excluded
 
     # PR #190 review P1: a non-secret runtime-config input change (e.g.
     # SITE_URL in /etc/kayak/env) must produce a DIFFERENT release — never
