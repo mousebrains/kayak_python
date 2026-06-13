@@ -31,6 +31,9 @@
 #                                  runbook once nginx/FPM point at current)
 # Path overrides (mainly for tests / the clean-VM rehearsal):
 #   KAYAK_DEPLOY_ROOT              release root (default /opt/kayak)
+#   KAYAK_DEPLOY_TMPDIR            scratch base — MUST be real disk, not a
+#                                  tmpfs (default $KAYAK_DEPLOY_ROOT/.staging;
+#                                  /tmp is a ~1 GB tmpfs on prod and overflows)
 #   KAYAK_RUNTIME_CONFIG           PHP config path (default /etc/kayak/runtime-config.json)
 #   KAYAK_CONFIG_INSTALLER         root config wrapper path
 #   KAYAK_SYSTEMCTL                systemctl path
@@ -177,7 +180,19 @@ if [ "${#ENGINE_REF}" -ne 40 ] || [ "${#DATASET_REF}" -ne 40 ]; then
     exit 2
 fi
 
-SCRATCH="$(mktemp -d)"
+# Scratch lives on REAL DISK, not /tmp. On the production host /tmp is a
+# ~1 GB tmpfs; staging (wheel + two venvs, a few hundred MB) plus the
+# pre-activation DB backup (the live DB is ~650 MB) overflow it and the deploy
+# fails mid-stage with ENOSPC (caught in the Batch 4C clean-VM rehearsal — no
+# unit test could surface it). Default the scratch base under $ROOT (the deploy
+# root, always real disk); override with KAYAK_DEPLOY_TMPDIR. The
+# `mktemp -d <dir>/<tmpl>.XXXXXXXX` template form is portable (GNU + BSD); `-p`
+# is GNU-only. 0755 on the base so the app user can traverse into the
+# app-owned scratch carved out of it below (root umask may be 077).
+KAYAK_DEPLOY_TMPDIR="${KAYAK_DEPLOY_TMPDIR:-$ROOT/.staging}"
+mkdir -p "$KAYAK_DEPLOY_TMPDIR"
+chmod 0755 "$KAYAK_DEPLOY_TMPDIR"
+SCRATCH="$(mktemp -d "$KAYAK_DEPLOY_TMPDIR/stage.XXXXXXXX")"
 APP_SCRATCH=""
 CLEAN_SCRATCH=1
 cleanup() {
@@ -525,11 +540,14 @@ if [ -z "$DB_PATH" ]; then
 fi
 
 # The DB backup + restore must run as the app user (own the DB/WAL sidecars),
-# so it lands in an APP-OWNED scratch dir — the orchestrator's mktemp -d is
-# 0700 root, untraversable by the app user (PR #190 4th-round P1). Only the DB
-# backup goes here; no secrets ever do.
+# so it lands in an APP-OWNED scratch dir (PR #190 4th-round P1). It must ALSO
+# be on real disk — the backup is the whole ~650 MB DB, which would overflow a
+# /tmp tmpfs. Root carves a subdir out of the real-disk staging base and hands
+# it to the app user (base is 0755, so the app user can traverse in). Only the
+# DB backup goes here; no secrets ever do.
 if is_privileged && [ -n "$KAYAK_APP_USER" ]; then
-    APP_SCRATCH="$("$RUNUSER" -u "$KAYAK_APP_USER" -- mktemp -d)"
+    APP_SCRATCH="$(mktemp -d "$KAYAK_DEPLOY_TMPDIR/app.XXXXXXXX")"
+    chown "$KAYAK_APP_USER" "$APP_SCRATCH"
 else
     APP_SCRATCH="$SCRATCH"
 fi
