@@ -115,13 +115,26 @@ SYSTEMCTL="${KAYAK_SYSTEMCTL:-systemctl}"
 # pass-through. The root/runuser env propagation is validated end-to-end in
 # the Batch 4C clean-VM rehearsal (it needs real root + systemd).
 : "${KAYAK_APP_USER:=}"
+# The privilege decision and the privilege-drop command are overridable so the
+# root branch is testable without real root: KAYAK_PRIVILEGED=yes forces it,
+# KAYAK_RUNUSER points at a same-user shim. Default: privileged iff uid 0,
+# dropping via runuser.
+: "${KAYAK_PRIVILEGED:=auto}"
+RUNUSER="${KAYAK_RUNUSER:-runuser}"
+is_privileged() {
+    case "$KAYAK_PRIVILEGED" in
+        yes) return 0 ;;
+        no) return 1 ;;
+        *) [ "$(id -u)" -eq 0 ] ;;
+    esac
+}
 run_app() {
-    if [ "$(id -u)" -eq 0 ]; then
+    if is_privileged; then
         if [ -z "$KAYAK_APP_USER" ]; then
-            echo "Error: running as root requires KAYAK_APP_USER in $CONF (the service user that owns the DB/docroot)" >&2
+            echo "Error: privileged activation requires KAYAK_APP_USER in $CONF (the service user that owns the DB/docroot)" >&2
             exit 1
         fi
-        runuser -u "$KAYAK_APP_USER" -- "$@"
+        "$RUNUSER" -u "$KAYAK_APP_USER" -- "$@"
     else
         "$@"
     fi
@@ -141,9 +154,18 @@ if [ "${#ENGINE_REF}" -ne 40 ] || [ "${#DATASET_REF}" -ne 40 ]; then
 fi
 
 SCRATCH="$(mktemp -d)"
+APP_SCRATCH=""
 CLEAN_SCRATCH=1
 cleanup() {
-    [ "$CLEAN_SCRATCH" = 1 ] && rm -rf "$SCRATCH"
+    # Must always end with a zero status: this is the EXIT trap, and a failing
+    # final command here would override the script's real exit code.
+    if [ "$CLEAN_SCRATCH" = 1 ]; then
+        rm -rf "$SCRATCH"
+        if [ -n "$APP_SCRATCH" ] && [ "$APP_SCRATCH" != "$SCRATCH" ]; then
+            rm -rf "$APP_SCRATCH"
+        fi
+    fi
+    return 0
 }
 trap cleanup EXIT
 
@@ -299,7 +321,15 @@ RELEASE_ID="$(printf '%s %s %s %s %s %s' "$WHEEL_SHA" "$DATASET_REF" "$HOST_FP" 
 RELEASE_DIR="$ROOT/releases/$RELEASE_ID"
 
 if [ -e "$RELEASE_DIR/release.json" ]; then
-    log "release $RELEASE_ID already staged at $RELEASE_DIR"
+    log "release $RELEASE_ID already staged — re-verifying retained artifacts"
+    # Reuse must FAIL CLOSED (PR #190 4th-round P2): a stale/corrupted release
+    # dir could otherwise mutate the live DB from unverified dataset/config.
+    # verify_release (below) checks every digestable artifact against the
+    # manifest AND the recomputed inputs; re-extract the dataset from the
+    # freshly-verified tar so the on-disk snapshot can't have drifted.
+    rm -rf "$RELEASE_DIR/dataset"
+    mkdir -p "$RELEASE_DIR/dataset"
+    tar -xf "$SCRATCH/dataset.tar" -C "$RELEASE_DIR/dataset"
 else
     log "staging release $RELEASE_ID"
     mkdir -p "$RELEASE_DIR/dataset" "$RELEASE_DIR/docroot"
@@ -328,13 +358,51 @@ else
 EOF
 fi
 
-# Verify the staged wheel digest before any activation step touches the
-# system: the release dir may predate this invocation.
-STAGED_WHEEL="$RELEASE_DIR/$(basename "$WHEEL")"
-if [ "$(sha256 "$STAGED_WHEEL")" != "$WHEEL_SHA" ]; then
-    echo "Error: staged wheel digest mismatch in $RELEASE_DIR — refusing to activate" >&2
-    exit 1
-fi
+# Full-manifest verification (fresh stage self-checks; reuse fails closed) —
+# every digestable retained artifact vs both the manifest and the recomputed
+# inputs, plus a live check that the release venv runs. The dataset tar digest
+# is compared to the manifest; the on-disk dataset was just (re-)extracted
+# from that verified tar.
+"$PYTHON" - "$RELEASE_DIR" "$WHEEL_SHA" "$LOCK_SHA" "$CONFIG_SHA" "$DATASET_TAR_SHA" <<'PYVERIFY'
+import hashlib
+import json
+import pathlib
+import sys
+
+rel = pathlib.Path(sys.argv[1])
+wheel_sha, lock_sha, cfg_sha, tar_sha = sys.argv[2:6]
+m = json.load((rel / "release.json").open())
+
+
+def digest(p: pathlib.Path) -> str:
+    return hashlib.sha256(p.read_bytes()).hexdigest()
+
+
+bad = []
+# (file, manifest-key, recomputed-this-run)
+for fname, key, recomputed in (
+    (m["wheel"], "wheel_sha256", wheel_sha),
+    ("requirements-prod.lock", "requirements_lock_sha256", lock_sha),
+    ("runtime-config.json", "runtime_config_sha256", cfg_sha),
+):
+    p = rel / fname
+    if not p.exists():
+        bad.append(f"missing retained artifact: {fname}")
+        continue
+    on_disk = digest(p)
+    if on_disk != m[key]:
+        bad.append(f"{fname}: on-disk {on_disk[:12]} != manifest {m[key][:12]}")
+    if m[key] != recomputed:
+        bad.append(f"{fname}: manifest {m[key][:12]} != recomputed input {recomputed[:12]}")
+if m.get("dataset_tar_sha256") != tar_sha:
+    bad.append("dataset: manifest tar digest != recomputed dataset archive")
+if not (rel / "venv" / "bin" / "levels").exists():
+    bad.append("release venv missing venv/bin/levels")
+if bad:
+    sys.stderr.write("RELEASE VERIFY FAILED (remove the dir to force a clean restage):\n  ")
+    sys.stderr.write("\n  ".join(bad) + "\n")
+    sys.exit(1)
+PYVERIFY
 
 log "staged: $RELEASE_DIR"
 if [ "$STAGE_ONLY" = 1 ]; then
@@ -344,17 +412,43 @@ if [ "$STAGE_ONLY" = 1 ]; then
 fi
 
 # Activation gate (PR #190 review P1): switching $ROOT/current is only
-# meaningful once the host's SERVING config (nginx root, FPM open_basedir/
-# KAYAK_CONFIG_PATH) points at it — that re-pointing is the Batch 4C
-# cutover, recorded by the installer in deploy.env. Refusing here keeps
-# this deployer from reporting success while users are still served the
-# legacy docroot.
+# meaningful once the host is fully cut over to the paired-release layout —
+# BOTH the web serving config (nginx root, FPM open_basedir/KAYAK_CONFIG_PATH)
+# AND the systemd consumers must run from $ROOT/current. That re-pointing is
+# the Batch 4C cutover, recorded by the installer as SERVING_CUTOVER in
+# deploy.env. Refusing here keeps this deployer from reporting success while
+# users are served the legacy docroot or the next pipeline run executes the
+# old checkout against the freshly migrated DB.
 if [ "${SERVING_CUTOVER:-no}" != "yes" ]; then
-    echo "Error: this host's serving config has not been cut over to $ROOT/current" >&2
+    echo "Error: this host is not cut over to the $ROOT/current paired-release layout" >&2
     echo "(SERVING_CUTOVER=yes not set in $CONF — done by the Batch 4C install/migration" >&2
     echo "runbook). Use --stage-only, or deploy with scripts/deploy.sh until then." >&2
     exit 1
 fi
+
+# Verify the consumers actually run from the release (PR #190 4th-round P1):
+# a levels-running unit still pointing at the old checkout/venv would execute
+# old code against the migrated DB + synced dataset after activation. Skip
+# units whose ExecStart doesn't invoke levels (e.g. host backup scripts).
+for u in $KAYAK_UNITS; do
+    case "$u" in
+        *.timer) svc="${u%.timer}.service" ;;
+        *) svc="$u" ;;
+    esac
+    es="$("$SYSTEMCTL" show -p ExecStart --value "$svc" 2>/dev/null || true)"
+    case "$es" in
+        *levels*)
+            case "$es" in
+                *"$ROOT/current"*) : ;;
+                *)
+                    echo "Error: $svc does not run from $ROOT/current (ExecStart: $es)." >&2
+                    echo "Re-render the units to the paired-release layout (Batch 4C) first." >&2
+                    exit 1
+                    ;;
+            esac
+            ;;
+    esac
+done
 
 # ---------------------------------------------------------------------------
 # Phase 3 — activate (system mutation; everything before the symlink switch
@@ -371,7 +465,16 @@ if [ -z "$DB_PATH" ] && [ -r /etc/kayak/env ]; then
 fi
 : "${DB_PATH:?SQLITE_PATH must be set (env or /etc/kayak/env) for activation}"
 
-PRE_BACKUP="$SCRATCH/pre-activate.db"
+# The DB backup + restore must run as the app user (own the DB/WAL sidecars),
+# so it lands in an APP-OWNED scratch dir — the orchestrator's mktemp -d is
+# 0700 root, untraversable by the app user (PR #190 4th-round P1). Only the DB
+# backup goes here; no secrets ever do.
+if is_privileged && [ -n "$KAYAK_APP_USER" ]; then
+    APP_SCRATCH="$("$RUNUSER" -u "$KAYAK_APP_USER" -- mktemp -d)"
+else
+    APP_SCRATCH="$SCRATCH"
+fi
+PRE_BACKUP="$APP_SCRATCH/pre-activate.db"
 MUTATED=0
 
 SWITCHED=0
@@ -389,7 +492,9 @@ rollback() {
     fi
     if [ "$MUTATED" = 1 ] && [ -f "$PRE_BACKUP" ]; then
         echo "kayak-deploy: restoring pre-activation DB backup" >&2
-        sqlite3 "$DB_PATH" ".restore '$PRE_BACKUP'" || \
+        # Restore as the app user too — a root .restore would recreate the
+        # root-owned WAL/SHM footgun the run_app model exists to avoid.
+        run_app sqlite3 "$DB_PATH" ".restore '$PRE_BACKUP'" || \
             echo "kayak-deploy: DB RESTORE FAILED — manual recovery from $PRE_BACKUP required" >&2
         CLEAN_SCRATCH=0
     fi
@@ -446,11 +551,10 @@ done
 log "consumers quiesced"
 
 log "backing up DB before mutation"
-if [ "$(id -u)" -eq 0 ] && [ -n "$KAYAK_APP_USER" ]; then
-    # The backup (and any WAL sidecars sqlite may touch) must be app-user
-    # work, not root's.
-    install -d -o "$KAYAK_APP_USER" "$SCRATCH/app"
-    PRE_BACKUP="$SCRATCH/app/pre-activate.db"
+# The build writes the docroot inside the release; chown it so the app-user
+# build can write there (the release tree itself was created by the
+# orchestrator). PRE_BACKUP already lives in the app-owned scratch.
+if is_privileged && [ -n "$KAYAK_APP_USER" ]; then
     chown "$KAYAK_APP_USER" "$RELEASE_DIR/docroot"
 fi
 run_app sqlite3 "$DB_PATH" ".backup '$PRE_BACKUP'"

@@ -240,6 +240,22 @@ def test_stage_only_builds_verified_release(tmp_path: Path, engine_repo, dataset
     release_dir2 = Path(proc2.stdout.strip().splitlines()[-1])
     assert release_dir2 != release_dir, "config change must mint a new release id"
 
+    # A corrupted retained artifact in an existing release must fail closed on
+    # reuse (PR #190 4th-round P2) — not silently re-activate from it.
+    (release_dir / "requirements-prod.lock").write_text("tampered\n")
+    proc3 = _run(
+        ["--engine-ref", engine_sha, "--dataset-ref", ds_sha, "--stage-only"],
+        {
+            "KAYAK_DEPLOY_CONF": str(conf),
+            "KAYAK_DEPLOY_ROOT": str(root),
+            "HOME": str(tmp_path),
+            "SUDO_USER": "",
+            "SITE_URL": "https://levels.example.org",
+        },
+    )
+    assert proc3.returncode != 0
+    assert "VERIFY FAILED" in proc3.stderr
+
 
 def test_unreachable_ref_rejected(tmp_path: Path, engine_repo, dataset_repo) -> None:
     """A SHA not on the protected branch fails validation (the trust anchor)."""
@@ -295,6 +311,7 @@ def test_activation_rolls_back_db_symlink_and_config_on_failed_health(
     root = tmp_path / "opt"
     runtime_config = tmp_path / "runtime-config.json"
     systemctl_log = tmp_path / "systemctl.log"
+    runuser_log = tmp_path / "runuser.log"
 
     # Config installer stub: the real one merges root-only secrets + installs
     # 0640 root:www-data; here it just records the emitted (dry-run) config so
@@ -304,12 +321,25 @@ def test_activation_rolls_back_db_symlink_and_config_on_failed_health(
     installer.chmod(0o755)
     systemctl = tmp_path / "systemctl.sh"
     # Record every call; `is-active` reports inactive (exit 1) so the quiesce
-    # loop sees a drained service set immediately.
+    # loop drains immediately; `show -p ExecStart` reports the consumer running
+    # from $ROOT/current so the cutover-verification gate passes.
     systemctl.write_text(
         f'#!/bin/sh\necho "$@" >> "{systemctl_log}"\n'
-        'case "$1" in is-active) exit 1 ;; *) exit 0 ;; esac\n'
+        'case "$1" in\n'
+        "  is-active) exit 1 ;;\n"
+        f'  show) echo "{{ path={root}/current/venv/bin/levels }}" ;;\n'
+        "  *) exit 0 ;;\n"
+        "esac\n"
     )
     systemctl.chmod(0o755)
+    # runuser shim: exercises the PRIVILEGED branch of run_app without real
+    # root (PR #190 4th-round P1). Invoked `shim -u USER -- cmd...`; records the
+    # command and runs it as the current user (KAYAK_APP_USER is set to us).
+    runuser = tmp_path / "runuser.sh"
+    # Drop the leading `-u USER --`, record the command, run it as us.
+    runuser.write_text(f'#!/bin/sh\nshift 3\necho "$@" >> "{runuser_log}"\nexec "$@"\n')
+    runuser.chmod(0o755)
+    me = subprocess.run(["id", "-un"], capture_output=True, text=True, check=True).stdout.strip()
 
     def activate(site_url: str, *, health_url: str | None) -> subprocess.CompletedProcess[str]:
         conf = _write_conf(
@@ -326,6 +356,12 @@ def test_activation_rolls_back_db_symlink_and_config_on_failed_health(
             "KAYAK_RUNTIME_CONFIG": str(runtime_config),
             "KAYAK_CONFIG_INSTALLER": str(installer),
             "KAYAK_SYSTEMCTL": str(systemctl),
+            # Force the privileged branch with a same-user runuser shim so the
+            # app-user DB boundary (backup/restore/build via run_app) is
+            # actually exercised — it is a pass-through otherwise.
+            "KAYAK_PRIVILEGED": "yes",
+            "KAYAK_APP_USER": me,
+            "KAYAK_RUNUSER": str(runuser),
             "SQLITE_PATH": str(db),
             "HOME": str(tmp_path),
             "SUDO_USER": "",
@@ -343,6 +379,12 @@ def test_activation_rolls_back_db_symlink_and_config_on_failed_health(
     release1 = (root / "current").resolve()
     assert "first.example.org" in runtime_config.read_text()
     assert not (root / "maintenance").exists()
+    # The DB backup, migrate, sync, import, and build all crossed the app-user
+    # boundary (routed through the runuser shim).
+    rlog = runuser_log.read_text()
+    assert ".backup" in rlog
+    for cmd in ("migrate", "sync-metadata", "import-metadata", "build"):
+        assert cmd in rlog, cmd
 
     # Second activation: a different SITE_URL mints a new release, but the
     # health probe fails (port 1 → connection refused) → rollback.
@@ -353,6 +395,8 @@ def test_activation_rolls_back_db_symlink_and_config_on_failed_health(
     cfg = runtime_config.read_text()
     assert "first.example.org" in cfg
     assert "second.example.org" not in cfg
+    # The rollback DB restore also crossed the app-user boundary.
+    assert ".restore" in runuser_log.read_text()
     # DB still queryable and consumers restarted, maintenance cleared.
     import sqlite3
 
