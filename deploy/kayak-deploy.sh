@@ -27,6 +27,10 @@
 # Path overrides (mainly for tests / the clean-VM rehearsal):
 #   KAYAK_DEPLOY_ROOT              release root (default /opt/kayak)
 #
+# Requires on the host: git, sqlite3, curl, and a python3 whose stdlib
+# venv/ensurepip work (Debian: apt install python3-venv) — no system pip
+# needed; scratch and release venvs bootstrap their own.
+#
 # Phases:
 #   validate  ref shape + protected-branch reachability (no mutation)
 #   stage     build wheel -> venv, snapshot dataset, validate contract,
@@ -114,6 +118,17 @@ sha256() { # portable: sha256sum (Linux) or shasum -a 256 (macOS)
 
 log() { echo "kayak-deploy: $*"; }
 
+# Python for venv creation + wheel building. Only the stdlib `venv` module
+# (with its bundled ensurepip) is required — the host python needs NO pip of
+# its own: a scratch venv supplies pip for the wheel build, and the release
+# venv bootstraps its own. Override with KAYAK_DEPLOY_PYTHON if the default
+# python3 lacks ensurepip (some minimal/venv-of-venv environments).
+PYTHON="${KAYAK_DEPLOY_PYTHON:-python3}"
+if ! "$PYTHON" -c 'import ensurepip, venv' >/dev/null 2>&1; then
+    echo "Error: $PYTHON lacks the stdlib venv/ensurepip modules; install python3-venv or set KAYAK_DEPLOY_PYTHON" >&2
+    exit 1
+fi
+
 # ---------------------------------------------------------------------------
 # Phase 1 — validate: each ref must be reachable from its protected branch
 # ---------------------------------------------------------------------------
@@ -143,7 +158,8 @@ log "refs verified against protected branches"
 log "building engine wheel at $ENGINE_REF"
 git clone --quiet --no-checkout "$SCRATCH/engine.git" "$SCRATCH/engine-src"
 git -C "$SCRATCH/engine-src" checkout --quiet "$ENGINE_REF"
-python3 -m pip wheel --quiet --no-deps -w "$SCRATCH/dist" "$SCRATCH/engine-src"
+"$PYTHON" -m venv "$SCRATCH/buildenv"
+"$SCRATCH/buildenv/bin/pip" wheel --quiet --no-deps -w "$SCRATCH/dist" "$SCRATCH/engine-src"
 WHEEL="$(ls "$SCRATCH"/dist/*.whl)"
 WHEEL_SHA="$(sha256 "$WHEEL")"
 
@@ -171,7 +187,7 @@ else
     log "staging release $RELEASE_ID"
     mkdir -p "$RELEASE_DIR/dataset" "$RELEASE_DIR/docroot"
     tar -xf "$SCRATCH/dataset.tar" -C "$RELEASE_DIR/dataset"
-    python3 -m venv "$RELEASE_DIR/venv"
+    "$PYTHON" -m venv "$RELEASE_DIR/venv"
     "$RELEASE_DIR/venv/bin/pip" install --quiet "$WHEEL"
     cp "$WHEEL" "$RELEASE_DIR/"
 
