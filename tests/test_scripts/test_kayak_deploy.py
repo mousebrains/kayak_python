@@ -11,8 +11,11 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -21,8 +24,27 @@ _REPO = Path(__file__).resolve().parents[2]
 _SCRIPT = _REPO / "deploy" / "kayak-deploy.sh"
 
 
-def _run(args: list[str], env_overrides: dict[str, str], timeout: int = 600):
-    env = {**os.environ, **env_overrides}
+@pytest.fixture
+def deploy_root() -> Iterator[Path]:
+    """KAYAK_DEPLOY_ROOT on REAL DISK. The activation tests stage release venvs +
+    the pre-activation DB backup, which overflow a tmpfs ``/tmp`` — the default
+    pytest basetemp on the prod host (a 964 MB tmpfs). /var/tmp is real disk by
+    FHS; override the base with ``KAYAK_TEST_DEPLOY_TMPDIR``. (The deployer's own
+    scratch already defaults to real disk; this keeps the *test's* release tree
+    off tmpfs so the slow suite is runnable on a prod-shaped host — codex live
+    review.)"""
+    base = os.environ.get("KAYAK_TEST_DEPLOY_TMPDIR", "/var/tmp")
+    d = Path(tempfile.mkdtemp(prefix="kayak-deploy-test-", dir=base))
+    try:
+        yield d / "opt"
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def _run(args: list[str], env_overrides: dict[str, str | None], timeout: int = 600):
+    # A None override REMOVES the key from the inherited environment (vs ""
+    # which is still "set"). Needed e.g. to drop a dev box's leaked METADATA_DIR.
+    env = {k: v for k, v in {**os.environ, **env_overrides}.items() if v is not None}
     return subprocess.run(
         ["bash", str(_SCRIPT), *args], env=env, capture_output=True, text=True, timeout=timeout
     )
@@ -208,6 +230,10 @@ def test_stage_only_builds_verified_release(tmp_path: Path, engine_repo, dataset
     assert proc_same.returncode == 0, proc_same.stderr
     assert Path(proc_same.stdout.strip().splitlines()[-1]) == release_dir
     assert "already staged" in proc_same.stdout
+    # Reuse is READ-ONLY (codex live review P2): the same-refs stage re-verified
+    # the existing release's dataset (diff vs the tar) instead of rm-ing +
+    # re-extracting it, so the (possibly live) release's dataset is untouched.
+    assert (release_dir / "dataset/dataset.yaml").is_file()
 
     # The release-retained config carries no staging-scratch paths and no
     # operational tokens (PR #190 re-review: ntfy/hc URLs must not widen
@@ -257,6 +283,52 @@ def test_stage_only_builds_verified_release(tmp_path: Path, engine_repo, dataset
     assert "VERIFY FAILED" in proc3.stderr
 
 
+def test_app_env_keys_read_as_data_not_sourced(tmp_path: Path, engine_repo, dataset_repo) -> None:
+    """The app user's ``~/.config/kayak/.env`` is read as DATA, never shell-
+    ``source``d by the root orchestrator (codex/claude live review P1/F3): a line
+    that would run a command if sourced must NOT execute, only the allowlisted
+    data keys are picked up, and a non-allowlisted key can't override a deploy
+    control."""
+    ds_repo, ds_sha = dataset_repo
+    eng_repo, engine_sha = engine_repo
+    conf = _write_conf(
+        tmp_path, str(eng_repo), str(ds_repo), ENGINE_BRANCH="test-main", DATASET_BRANCH="main"
+    )
+    marker = tmp_path / "PWNED"
+    app_env = tmp_path / "app.env"
+    # SITE_URL only here (NOT in the process env); a line that would touch the
+    # marker if the file were sourced; and a deploy control the app user must not
+    # be able to override.
+    app_env.write_text(
+        "SITE_URL=https://fromapp.example.org\n"
+        f"EVIL=$(touch {marker})\n"
+        "ENGINE_REPO=/should/not/override\n"
+    )
+    proc = _run(
+        ["--engine-ref", engine_sha, "--dataset-ref", ds_sha, "--stage-only"],
+        {
+            "KAYAK_DEPLOY_CONF": str(conf),
+            "KAYAK_DEPLOY_ROOT": str(tmp_path / "opt"),
+            "HOME": str(tmp_path),
+            "SUDO_USER": "",
+            "KAYAK_APP_ENV": str(app_env),  # set directly (no getent on macOS/CI)
+            # SITE_URL deliberately absent from the env — must come from app_env.
+            # Hermetic: a dev box's ~/.config/kayak/.env leaks METADATA_DIR into
+            # os.environ (config.py's import-time load_dotenv), which would clash
+            # with the deployer's DATASET_DIR override. Remove it entirely.
+            "METADATA_DIR": None,
+        },
+    )
+    # Stage succeeded → ENGINE_REPO was NOT overridden (else the clone would
+    # fail), and the app-owned line did NOT execute.
+    assert proc.returncode == 0, proc.stderr
+    assert not marker.exists(), "a line in the app-owned .env executed as the orchestrator"
+    # SITE_URL was read as data → it reached the staged (normalized) config.
+    release_dir = Path(proc.stdout.strip().splitlines()[-1])
+    stored = json.loads((release_dir / "runtime-config.json").read_text())
+    assert "fromapp.example.org" in json.dumps(stored)
+
+
 def test_unreachable_ref_rejected(tmp_path: Path, engine_repo, dataset_repo) -> None:
     """A SHA not on the protected branch fails validation (the trust anchor)."""
     ds_repo, _ds_sha = dataset_repo
@@ -295,7 +367,7 @@ def _init_db(db: Path, dataset_dir: Path) -> None:
 
 @pytest.mark.slow
 def test_activation_rolls_back_db_symlink_and_config_on_failed_health(
-    tmp_path: Path, engine_repo, dataset_repo
+    tmp_path: Path, deploy_root: Path, engine_repo, dataset_repo
 ) -> None:
     """Full activation path with stubbed systemctl + config installer: a first
     release activates; a second release with a failing health check must roll
@@ -308,7 +380,7 @@ def test_activation_rolls_back_db_symlink_and_config_on_failed_health(
     db = tmp_path / "kayak.db"
     _init_db(db, fixture_ds)
 
-    root = tmp_path / "opt"
+    root = deploy_root  # real disk: the DB backup + venvs overflow a tmpfs /tmp
     runtime_config = tmp_path / "runtime-config.json"
     systemctl_log = tmp_path / "systemctl.log"
     runuser_log = tmp_path / "runuser.log"
@@ -440,7 +512,9 @@ def _activation_stubs(tmp_path: Path, root: Path, runtime_config: Path) -> dict[
 
 
 @pytest.mark.slow
-def test_activation_prunes_old_releases(tmp_path: Path, engine_repo, dataset_repo) -> None:
+def test_activation_prunes_old_releases(
+    tmp_path: Path, deploy_root: Path, engine_repo, dataset_repo
+) -> None:
     """Old releases are pruned after a successful activation, but current and
     previous are always kept (PR #190 live review P2 — unbounded venv growth)."""
     ds_repo, ds_sha = dataset_repo
@@ -448,7 +522,7 @@ def test_activation_prunes_old_releases(tmp_path: Path, engine_repo, dataset_rep
     fixture_ds = _REPO / "tests" / "fixtures" / "dataset"
     db = tmp_path / "kayak.db"
     _init_db(db, fixture_ds)
-    root = tmp_path / "opt"
+    root = deploy_root  # real disk: 3 release venvs + backups overflow a tmpfs /tmp
     runtime_config = tmp_path / "runtime-config.json"
     host_env = tmp_path / "host.env"
     stubs = _activation_stubs(tmp_path, root, runtime_config)

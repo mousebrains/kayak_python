@@ -61,6 +61,13 @@
 KAYAK_DEPLOY_VERSION=1
 
 set -euo pipefail
+# Deterministic perms for the dirs we create: $ROOT/releases/<id> and the
+# scratch base must be traversable by the app user (it writes docroot + the DB
+# backup). A root umask of 077 would make them 0700 and break every run_app
+# step (claude live review F2 — the .staging chmod alone was an inconsistent
+# defense). 022 makes $ROOT/releases/<id> 0755; the release content the app
+# user owns is created by run_app under the app user's own umask.
+umask 022
 
 # ---------------------------------------------------------------------------
 # Arguments + configuration
@@ -92,8 +99,8 @@ fi
 # NOT in /etc/kayak/env — that file holds only KAYAK_HOME — they live in the
 # app user's ~/.config/kayak/.env, which the units load via a second
 # EnvironmentFile=). `set -a` exports them so subprocesses inherit them, the
-# way EnvironmentFile does. The clean paired-release host puts everything in
-# /etc/kayak/env; sourcing both makes the deployer correct either way.
+# way EnvironmentFile does. /etc/kayak/env is root-owned (safe to source); the
+# app user's file below is read as DATA, not sourced (see there).
 KAYAK_HOST_ENV="${KAYAK_HOST_ENV:-/etc/kayak/env}"
 if [ -r "$KAYAK_HOST_ENV" ]; then
     set -a
@@ -102,25 +109,40 @@ if [ -r "$KAYAK_HOST_ENV" ]; then
     set +a
 fi
 # Second env file: the app user's ~/.config/kayak/.env (KAYAK_APP_ENV overrides;
-# resolved from KAYAK_APP_USER's home when unset). Reading a 0600 app-user file
-# as the root orchestrator is fine.
+# resolved from KAYAK_APP_USER's home when unset). This file is APP-USER-OWNED,
+# so the root orchestrator must NOT shell-`source` it (codex/claude live review):
+# `. "$APP_ENV"` executes it as root — a privilege-escalation surface on a host
+# whose service user has no sudo, and it would let that user override deploy
+# controls (ENGINE_REPO, KAYAK_SYSTEMCTL, KAYAK_CONFIG_INSTALLER, …). Read ONLY
+# the data keys the deployer needs, as DATA (no shell evaluation of the value),
+# and only when the root-owned env above hasn't already set them (it wins).
 APP_ENV="${KAYAK_APP_ENV:-}"
 if [ -z "$APP_ENV" ] && [ -n "${KAYAK_APP_USER:-}" ] && command -v getent >/dev/null 2>&1; then
     _app_home="$(getent passwd "$KAYAK_APP_USER" | cut -d: -f6)"
     [ -n "$_app_home" ] && APP_ENV="$_app_home/.config/kayak/.env"
 fi
 if [ -n "$APP_ENV" ] && [ -r "$APP_ENV" ]; then
-    set -a
-    # shellcheck source=/dev/null
-    . "$APP_ENV"
-    set +a
+    for _k in SITE_URL SQLITE_PATH DATASET_DIR OUTPUT_DIR; do
+        eval "_cur=\${${_k}:-}"
+        [ -n "$_cur" ] && continue          # root-owned env / deploy.env already set it
+        # Last KEY= assignment wins (dotenv semantics); strip optional surrounding
+        # quotes. The value is exported literally — never evaluated as shell.
+        _v="$(sed -n "s/^[[:space:]]*${_k}=//p" "$APP_ENV" | tail -1)"
+        _v="${_v%\"}"; _v="${_v#\"}"; _v="${_v%\'}"; _v="${_v#\'}"
+        [ -n "$_v" ] && export "${_k}=${_v}"
+    done
 fi
 
 : "${ENGINE_REPO:?ENGINE_REPO must be set in $CONF (git URL/path of kayak_python)}"
 : "${DATASET_REPO:?DATASET_REPO must be set in $CONF (git URL/path of kayak_data)}"
 : "${ENGINE_BRANCH:=main}"
 : "${DATASET_BRANCH:=main}"
-: "${KAYAK_UNITS:=kayak-pipeline.timer kayak-backup-hourly.timer kayak-backup-weekly.timer kayak-decimate.timer kayak-status.timer kayak-fetch-osmb.timer kayak-editor-retention.timer kayak-audit-gauges.timer}"
+# Every DB/release-touching consumer must be stopped/started + gated. kayak-
+# healthcheck.timer reads the DB (scripts/health-check.sh) and is active on the
+# live host (codex/claude live review) — include it. The 4C runbook owns the
+# COMPLETE enumeration (recap/heartbeat/config-drift run the old checkout too);
+# the robust fix — deriving the set from installed kayak-* timers — is a 4C item.
+: "${KAYAK_UNITS:=kayak-pipeline.timer kayak-backup-hourly.timer kayak-backup-weekly.timer kayak-decimate.timer kayak-status.timer kayak-fetch-osmb.timer kayak-editor-retention.timer kayak-audit-gauges.timer kayak-healthcheck.timer}"
 : "${HEALTH_URL:=}"
 ROOT="${KAYAK_DEPLOY_ROOT:-/opt/kayak}"
 RUNTIME_CONFIG="${KAYAK_RUNTIME_CONFIG:-/etc/kayak/runtime-config.json}"
@@ -385,14 +407,21 @@ RELEASE_DIR="$ROOT/releases/$RELEASE_ID"
 
 if [ -e "$RELEASE_DIR/release.json" ]; then
     log "release $RELEASE_ID already staged — re-verifying retained artifacts"
-    # Reuse must FAIL CLOSED (PR #190 4th-round P2): a stale/corrupted release
-    # dir could otherwise mutate the live DB from unverified dataset/config.
-    # verify_release (below) checks every digestable artifact against the
-    # manifest AND the recomputed inputs; re-extract the dataset from the
-    # freshly-verified tar so the on-disk snapshot can't have drifted.
-    rm -rf "$RELEASE_DIR/dataset"
-    mkdir -p "$RELEASE_DIR/dataset"
-    tar -xf "$SCRATCH/dataset.tar" -C "$RELEASE_DIR/dataset"
+    # Reuse must FAIL CLOSED (PR #190 4th-round P2) AND stay READ-ONLY: the
+    # reused dir may be the CURRENTLY-ACTIVE release with consumers running, and
+    # --stage-only promises no system mutation — the old `rm -rf $RELEASE_DIR/
+    # dataset` + re-extract ran here, before the stage-only exit and before
+    # quiesce, so a same-refs rehearsal could yank the live dataset (codex live
+    # review P2). Verify the on-disk dataset against the freshly-verified tar via
+    # a SCRATCH extract + diff instead; a mismatch fails closed (operator removes
+    # the dir to force a clean restage). The release dir is never written here.
+    mkdir -p "$SCRATCH/dataset-verify"
+    tar -xf "$SCRATCH/dataset.tar" -C "$SCRATCH/dataset-verify"
+    if ! diff -r "$SCRATCH/dataset-verify" "$RELEASE_DIR/dataset" >/dev/null 2>&1; then
+        echo "Error: reused release $RELEASE_ID dataset differs from its verified tar" >&2
+        echo "(remove $RELEASE_DIR to force a clean restage)" >&2
+        exit 1
+    fi
 else
     log "staging release $RELEASE_ID"
     mkdir -p "$RELEASE_DIR/dataset" "$RELEASE_DIR/docroot"
@@ -424,8 +453,8 @@ fi
 # Full-manifest verification (fresh stage self-checks; reuse fails closed) —
 # every digestable retained artifact vs both the manifest and the recomputed
 # inputs, plus a live check that the release venv runs. The dataset tar digest
-# is compared to the manifest; the on-disk dataset was just (re-)extracted
-# from that verified tar.
+# is compared to the manifest; the on-disk dataset was freshly extracted (fresh
+# stage) or diff-verified against that tar above (reuse).
 "$PYTHON" - "$RELEASE_DIR" "$WHEEL_SHA" "$LOCK_SHA" "$CONFIG_SHA" "$DATASET_TAR_SHA" <<'PYVERIFY'
 import hashlib
 import json
