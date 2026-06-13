@@ -225,7 +225,7 @@ import json
 import sys
 
 drop = {"dataset_dir", "output_dir", "osmb_dir", "map_layers_dir",
-        "gauge_metadata_cache", "database_path", "ntfy_topic"}
+        "gauge_metadata_cache", "database_path", "database_url", "ntfy_topic"}
 data = json.load(open(sys.argv[1]))
 data = {k: v for k, v in data.items() if k not in drop and not k.startswith("hc_")}
 json.dump(data, open(sys.argv[2], "w"), indent=2, sort_keys=True)
