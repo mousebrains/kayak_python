@@ -203,6 +203,26 @@ sha256() { # portable: sha256sum (Linux) or shasum -a 256 (macOS)
 
 log() { echo "kayak-deploy: $*"; }
 
+# Atomically repoint the symlink $2 at a new target $1, replacing an existing
+# symlink WITHOUT dereferencing it. The naive `ln -s tgt x.new && mv -f x.new
+# link` is a footgun: when `link` already exists as a symlink TO A DIRECTORY,
+# both GNU and BSD `mv` follow it and move `x.new` INTO that directory, leaving
+# `link` pointing at the OLD release. (The first cutover works — no prior
+# `current` — but every subsequent one silently no-ops, and prune then GCs the
+# unreferenced new release.) The portable cure is the "don't treat the target
+# as a directory" flag: GNU mv spells it -T/--no-target-directory, BSD/macOS mv
+# spells it -h. Try GNU first, then BSD; both perform an atomic rename(2). Only
+# an mv that supports neither falls back to a (non-atomic) remove-then-move.
+atomic_relink() {
+    _tgt="$1"; _link="$2"; _tmp="$2.swap.$$"
+    rm -f "$_tmp"
+    ln -s "$_tgt" "$_tmp"
+    if mv -fT "$_tmp" "$_link" 2>/dev/null; then return 0; fi
+    if mv -fh "$_tmp" "$_link" 2>/dev/null; then return 0; fi
+    rm -f "$_link"
+    mv -f "$_tmp" "$_link"
+}
+
 # Python for venv creation + wheel building. Only the stdlib `venv` module
 # (with its bundled ensurepip) is required — the host python needs NO pip of
 # its own: a scratch venv supplies pip for the wheel build, and the release
@@ -549,7 +569,8 @@ rollback() {
         exit "$status"
     fi
     if [ -n "$PREV_TARGET" ]; then
-        ln -s "$PREV_TARGET" "$ROOT/current.new" && mv -f "$ROOT/current.new" "$ROOT/current"
+        atomic_relink "$PREV_TARGET" "$ROOT/current" || \
+            echo "kayak-deploy: WARNING: could not restore current -> $PREV_TARGET" >&2
         echo "kayak-deploy: current -> $PREV_TARGET (previous release)" >&2
     fi
     for u in $KAYAK_UNITS; do "$SYSTEMCTL" start "$u" 2>/dev/null || true; done
@@ -635,8 +656,7 @@ run_app env DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset"
 CONFIG_INSTALLED=1
 
 log "switching $ROOT/current -> releases/$RELEASE_ID (atomic)"
-ln -s "releases/$RELEASE_ID" "$ROOT/current.new"
-mv -f "$ROOT/current.new" "$ROOT/current"
+atomic_relink "releases/$RELEASE_ID" "$ROOT/current"
 SWITCHED=1
 
 if [ -n "$HEALTH_URL" ]; then
