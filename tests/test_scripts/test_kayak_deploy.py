@@ -59,6 +59,29 @@ def test_requires_conf_repos(tmp_path: Path) -> None:
 
 
 @pytest.fixture(scope="module")
+def engine_repo(tmp_path_factory) -> tuple[Path, str]:
+    """A bare clone of THIS repo with branch ``test-main`` at HEAD.
+
+    CI checks out a detached HEAD, so the working repo has no usable branch
+    name — push HEAD into a scratch bare repo under a known branch instead.
+    """
+    root = tmp_path_factory.mktemp("enginerepo")
+    bare = root / "engine.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
+    subprocess.run(
+        ["git", "-C", str(_REPO), "push", "-q", str(bare), "HEAD:refs/heads/test-main"],
+        check=True,
+    )
+    sha = subprocess.run(
+        ["git", "-C", str(_REPO), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    return bare, sha
+
+
+@pytest.fixture(scope="module")
 def dataset_repo(tmp_path_factory) -> tuple[Path, str]:
     """A local git repo holding the committed fixture dataset."""
     root = tmp_path_factory.mktemp("dsrepo")
@@ -89,27 +112,16 @@ def dataset_repo(tmp_path_factory) -> tuple[Path, str]:
 
 
 @pytest.mark.slow
-def test_stage_only_builds_verified_release(tmp_path: Path, dataset_repo) -> None:
+def test_stage_only_builds_verified_release(tmp_path: Path, engine_repo, dataset_repo) -> None:
     """End-to-end staging: wheel from THIS engine repo's HEAD + the fixture
     dataset -> venv, contract validation, runtime config, digest manifest."""
     ds_repo, ds_sha = dataset_repo
-    engine_sha = subprocess.run(
-        ["git", "-C", str(_REPO), "rev-parse", "HEAD"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    branch = subprocess.run(
-        ["git", "-C", str(_REPO), "rev-parse", "--abbrev-ref", "HEAD"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
+    eng_repo, engine_sha = engine_repo
     conf = _write_conf(
         tmp_path,
-        str(_REPO),
+        str(eng_repo),
         str(ds_repo),
-        ENGINE_BRANCH=branch,
+        ENGINE_BRANCH="test-main",
         DATASET_BRANCH="main",
     )
     root = tmp_path / "opt"
@@ -148,18 +160,13 @@ def test_stage_only_builds_verified_release(tmp_path: Path, dataset_repo) -> Non
     assert not (root / "current").exists()
 
 
-def test_unreachable_ref_rejected(tmp_path: Path, dataset_repo) -> None:
+def test_unreachable_ref_rejected(tmp_path: Path, engine_repo, dataset_repo) -> None:
     """A SHA not on the protected branch fails validation (the trust anchor)."""
     ds_repo, _ds_sha = dataset_repo
+    eng_repo, _engine_sha = engine_repo
     bogus = "0123456789abcdef0123456789abcdef01234567"
-    branch = subprocess.run(
-        ["git", "-C", str(_REPO), "rev-parse", "--abbrev-ref", "HEAD"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
     conf = _write_conf(
-        tmp_path, str(_REPO), str(ds_repo), ENGINE_BRANCH=branch, DATASET_BRANCH="main"
+        tmp_path, str(eng_repo), str(ds_repo), ENGINE_BRANCH="test-main", DATASET_BRANCH="main"
     )
     proc = _run(
         ["--engine-ref", bogus, "--dataset-ref", bogus, "--stage-only"],
