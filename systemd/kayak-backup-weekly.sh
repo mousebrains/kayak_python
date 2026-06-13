@@ -22,7 +22,12 @@ set -euo pipefail
 [ -r /etc/kayak/env ] && . /etc/kayak/env
 
 DB="${SQLITE_PATH:-${KAYAK_HOME}/DB/kayak.db}"
-BACKUP_DIR="${KAYAK_HOME}/backups"  # out of the repo (review-4 R5.6); see kayak-backup-hourly.sh
+# S8: host-configurable via /etc/kayak/env (schema: kayak.host.HostConfig).
+BACKUP_DIR="${KAYAK_BACKUP_DIR:-${KAYAK_HOME}/backups}"
+if [[ "$BACKUP_DIR" != /* ]]; then
+    echo "Error: KAYAK_BACKUP_DIR must be an absolute path (got '${BACKUP_DIR}')" >&2
+    exit 1
+fi  # out of the repo (review-4 R5.6)
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 DEST="$BACKUP_DIR/backup-$STAMP.db"
 

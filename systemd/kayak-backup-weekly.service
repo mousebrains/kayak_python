@@ -32,6 +32,9 @@ PrivateTmp=yes
 PrivateDevices=yes
 ProtectSystem=strict
 ProtectHome=read-only
+# KAYAK_BACKUP_DIR lockstep (PR #189 review P2): if /etc/kayak/env moves the
+# backup dir, this sandbox allowlist must move WITH it or systemd denies the
+# write. The Batch 4C unit renderer generates both from one host config.
 ReadWritePaths=/home/pat/DB /home/pat/backups
 ProtectKernelTunables=yes
 ProtectKernelModules=yes

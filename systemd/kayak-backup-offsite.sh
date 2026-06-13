@@ -14,9 +14,31 @@ set -euo pipefail
 : "${KAYAK_HOME:=/home/pat}"
 [ -r /etc/kayak/env ] && . /etc/kayak/env
 
-BACKUP_DIR="${KAYAK_HOME}/backups"  # out of the repo (review-4 R5.6); see kayak-backup-hourly.sh
-REMOTE="gdrive-crypt"
-KEEP=26
+# S8 (Batch 4): backup policy is host configuration. These knobs come from
+# /etc/kayak/env (KAYAK_BACKUP_DIR / KAYAK_OFFSITE_REMOTE / KAYAK_OFFSITE_KEEP,
+# schema of record: kayak.host.HostConfig); the fallbacks mirror HostConfig's
+# defaults so an env-less host behaves exactly as before.
+BACKUP_DIR="${KAYAK_BACKUP_DIR:-${KAYAK_HOME}/backups}"  # out of the repo (review-4 R5.6)
+REMOTE="${KAYAK_OFFSITE_REMOTE:-gdrive-crypt}"
+KEEP="${KAYAK_OFFSITE_KEEP:-26}"
+
+# Fail-closed knob validation BEFORE any rclone copy/delete (PR #189 review
+# P1): KEEP=0 (or garbage) would otherwise start the prune loop at index 0
+# and delete EVERY offsite backup, including the one just uploaded. The
+# deploy gate (validate-config) checks the same invariants, but a timer run
+# must not trust that the env was deployed through the gate.
+if ! [[ "$KEEP" =~ ^[1-9][0-9]*$ ]]; then
+    echo "Error: KAYAK_OFFSITE_KEEP must be a positive integer (got '${KEEP}')" >&2
+    exit 1
+fi
+if [[ "$REMOTE" == *:* || -z "$REMOTE" ]]; then
+    echo "Error: KAYAK_OFFSITE_REMOTE must be a bare rclone remote name, no colon (got '${REMOTE}')" >&2
+    exit 1
+fi
+if [[ "$BACKUP_DIR" != /* ]]; then
+    echo "Error: KAYAK_BACKUP_DIR must be an absolute path (got '${BACKUP_DIR}')" >&2
+    exit 1
+fi
 
 mapfile -t backups < <(ls -1r "$BACKUP_DIR"/backup-[0-9]*T[0-9]*Z.db.gz 2>/dev/null)
 

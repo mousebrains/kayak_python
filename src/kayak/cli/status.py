@@ -25,6 +25,7 @@ import html
 import os
 import socket
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -32,15 +33,15 @@ from zoneinfo import ZoneInfo
 import markdown
 
 from kayak.analytics import humans
+from kayak.host import get_host_config
 
-_DEFAULT_TZ = "America/Los_Angeles"
-# Narrower than the analyze-logs default (which uses ``*access.log*``) — the
-# nginx default vhost's blocked-access.log catches port scanners sending raw
-# TLS/SOCKS/RDP/MongoDB bytes, which produce unparseable "request lines" and
-# show up here as an empty path. Those aren't requests to levels.wkcc.org so
-# they don't belong in the operator status page.
-_DEFAULT_LOG_GLOB = "/var/log/nginx/levels-*.access.log*"
-_DEFAULT_OUTPUT = "/home/pat/var/status.html"
+# Host-shape knobs (timezone, log glob, output path, docroot, cert host,
+# backup locations) come from the typed host config (kayak.host — S7/S8):
+# /etc/kayak/host.yaml when present, engine defaults otherwise. The log glob
+# is deliberately narrower than the analyze-logs default (``*access.log*``) —
+# the nginx default vhost's blocked-access.log catches port scanners sending
+# raw TLS/SOCKS/RDP/MongoDB bytes, which produce unparseable "request lines";
+# those aren't requests to the site so they don't belong in the status page.
 
 # Mirror of scripts/health-check.sh defaults (the user's "aggressive" set).
 DISK_WARN_PCT = 70
@@ -410,15 +411,16 @@ def _render_backups_cert(now: dt.datetime) -> str:
             f"<td>{_fmt_age(age)} ago — {when}</td></tr>"
         )
 
-    hourly = _newest_mtime("/home/pat/backups/hourly-*.db.gz")
-    weekly = _newest_mtime("/home/pat/backups/backup-*.db.gz")
+    host = get_host_config()
+    hourly = _newest_mtime(f"{host.backup_dir}/hourly-*.db.gz")
+    weekly = _newest_mtime(f"{host.backup_dir}/backup-*.db.gz")
 
     offsite_props = _show_unit("kayak-backup-offsite.service", ["ExecMainStartTimestamp", "Result"])
     offsite_dt = _parse_systemd_timestamp(offsite_props.get("ExecMainStartTimestamp", ""))
     offsite_result = offsite_props.get("Result", "?")
     if offsite_dt is None:
         offsite_row = (
-            '<tr class="warn"><th>Offsite backup (rclone → gdrive-crypt:)</th>'
+            f'<tr class="warn"><th>Offsite backup ({html.escape(host.offsite_label)})</th>'
             f"<td>no recent run recorded in journald (last result={html.escape(offsite_result)})"
             "</td></tr>"
         )
@@ -430,17 +432,18 @@ def _render_backups_cert(now: dt.datetime) -> str:
             OFFSITE_WARN_S,
         )
 
-    cert_dt = _cert_not_after("levels.wkcc.org")
+    cert_dt = _cert_not_after(host.cert_host)
+    cert_host_esc = html.escape(host.cert_host)
     if cert_dt is None:
         cert_row = (
-            '<tr class="fail"><th>TLS cert (levels.wkcc.org)</th>'
+            f'<tr class="fail"><th>TLS cert ({cert_host_esc})</th>'
             "<td>could not fetch via s_client</td></tr>"
         )
     else:
         days_left = (cert_dt - now.astimezone(dt.UTC)).total_seconds() / 86400
         klass = "fail" if days_left < 7 else ("warn" if days_left < CERT_WARN_DAYS else "ok")
         cert_row = (
-            f'<tr class="{klass}"><th>TLS cert (levels.wkcc.org)</th>'
+            f'<tr class="{klass}"><th>TLS cert ({cert_host_esc})</th>'
             f"<td>{days_left:.1f} days remaining — expires "
             f"{cert_dt.strftime('%Y-%m-%d %H:%M UTC')}</td></tr>"
         )
@@ -448,9 +451,9 @@ def _render_backups_cert(now: dt.datetime) -> str:
     return (
         "<h2>Backups &amp; cert</h2>\n"
         "<table>\n"
-        + _age_row("Hourly backup (~/backups/hourly-*.db.gz)", hourly, HOURLY_WARN_S)
+        + _age_row(f"Hourly backup ({host.backup_dir}/hourly-*.db.gz)", hourly, HOURLY_WARN_S)
         + "\n"
-        + _age_row("Weekly backup (~/backups/backup-*.db.gz)", weekly, WEEKLY_WARN_S)
+        + _age_row(f"Weekly backup ({host.backup_dir}/backup-*.db.gz)", weekly, WEEKLY_WARN_S)
         + "\n"
         + offsite_row
         + "\n"
@@ -475,7 +478,7 @@ def _render_page(
     # without a ?v= the browser pins the first download forever and silently
     # keeps a stale selector after we ship a fix. mtime is monotonic across
     # deploys so it does the job without a content-hash pipeline.
-    js_path = Path("/home/pat/public_html/static/internal-sort.js")
+    js_path = Path(get_host_config().docroot) / "static/internal-sort.js"
     js_v = int(js_path.stat().st_mtime) if js_path.exists() else 0
     return (
         "<!doctype html>\n"
@@ -508,28 +511,44 @@ def _atomic_write(path: Path, content: str) -> None:
 
 
 def run(args: argparse.Namespace) -> int:
-    tz = ZoneInfo(args.tz)
+    # Host-config resolution happens HERE, not at parser construction:
+    # main.py registers every subcommand's addArgs on each CLI invocation,
+    # so loading host.yaml there would make a malformed file crash every
+    # unrelated command with a traceback (PR #189 review P2). A bad file is
+    # a clean per-command failure instead, and validate-config reports it
+    # as a deploy-gate error.
+    try:
+        host = get_host_config()
+    except ValueError as e:
+        print(f"ERROR: host config invalid: {e}", file=sys.stderr)
+        return 1
+    output = args.output or host.status_output
+    tz = ZoneInfo(args.tz or host.timezone)
+    log_glob = args.log_glob or host.nginx_log_glob
     now = dt.datetime.now(tz)
     page = _render_page(
         now=now,
         hours=args.hours,
         bucket_hours=args.bucket_hours,
         tz=tz,
-        log_glob=args.log_glob,
+        log_glob=log_glob,
     )
-    _atomic_write(Path(args.output), page)
+    _atomic_write(Path(output), page)
     return 0
 
 
 def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    # Defaults are None sentinels resolved in run() from the typed host
+    # config (kayak.host) — see the note there for why addArgs must not
+    # load host.yaml.
     parser = subparsers.add_parser(
         "status",
         help="Render the operator status page to HTML (nightly via kayak-status.timer)",
     )
     parser.add_argument(
         "--output",
-        default=_DEFAULT_OUTPUT,
-        help=f"Output path (default {_DEFAULT_OUTPUT})",
+        default=None,
+        help="Output path (default: host config status_output)",
     )
     parser.add_argument(
         "--hours", type=int, default=24, help="Traffic window in hours (default 24)"
@@ -537,10 +556,10 @@ def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> 
     parser.add_argument(
         "--bucket-hours", type=int, default=4, help="Traffic bucket size in hours (default 4)"
     )
-    parser.add_argument("--tz", default=_DEFAULT_TZ, help=f"IANA timezone (default {_DEFAULT_TZ})")
+    parser.add_argument("--tz", default=None, help="IANA timezone (default: host config timezone)")
     parser.add_argument(
         "--log-glob",
-        default=_DEFAULT_LOG_GLOB,
-        help=f"Nginx access-log glob (default {_DEFAULT_LOG_GLOB})",
+        default=None,
+        help="Nginx access-log glob (default: host config nginx_log_glob)",
     )
     parser.set_defaults(func=run)
