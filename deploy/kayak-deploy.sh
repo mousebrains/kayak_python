@@ -179,6 +179,12 @@ BUILD_LOCK_SHA="$(sha256 "$BUILD_LOCK")"
 
 "$PYTHON" -m venv "$SCRATCH/buildenv"
 "$SCRATCH/buildenv/bin/pip" install --quiet --require-hashes -r "$BUILD_LOCK"
+# Reproducible wheel bytes: zip entries otherwise carry checkout mtimes, so
+# the same engine SHA would hash differently per clone and break the
+# same-inputs => same-release-id property. hatchling honors
+# SOURCE_DATE_EPOCH; pin it to the commit's own timestamp.
+SOURCE_DATE_EPOCH="$(git -C "$SCRATCH/engine-src" log -1 --format=%ct "$ENGINE_REF")"
+export SOURCE_DATE_EPOCH
 "$SCRATCH/buildenv/bin/pip" wheel --quiet --no-deps --no-build-isolation \
     -w "$SCRATCH/dist" "$SCRATCH/engine-src"
 WHEEL="$(ls "$SCRATCH"/dist/*.whl)"
