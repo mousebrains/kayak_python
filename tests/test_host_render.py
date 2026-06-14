@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 
 from kayak.host import HostConfig
-from kayak.host_render import render_cutover_dropins
+from kayak.host_render import engine_unit_names, render_cutover_dropins
 
 
 def _cutover_host() -> HostConfig:
@@ -110,11 +110,54 @@ class TestRenderCutoverDropins:
         assert "ReadWritePaths=/srv/kayak/DB" in t
 
 
+class TestEngineUnitNames:
+    def test_matches_the_rendered_dropins_exactly(self) -> None:
+        # The deployer's cutover gate sources its must-run-from-current set from
+        # this; it must equal the units render-units actually re-points, with no
+        # drift (D-CONSUMER).
+        assert engine_unit_names() == [d.unit for d in render_cutover_dropins(HostConfig())]
+        assert engine_unit_names() == [
+            "kayak-pipeline.service",
+            "kayak-decimate.service",
+            "kayak-editor-retention.service",
+            "kayak-fetch-osmb.service",
+            "kayak-status.service",
+            "kayak-audit-gauges.service",
+        ]
+
+    def test_includes_the_promoted_audit_gauges(self) -> None:
+        # audit-gauges joined the engine set when #191 made it a `levels`
+        # subcommand — the gate must verify it runs from current too.
+        assert "kayak-audit-gauges.service" in engine_unit_names()
+
+
+class TestRenderUnitsListUnits:
+    def test_list_units_prints_engine_services(self, capsys) -> None:
+        from kayak.cli import render_units as cli
+
+        rc = cli.render_units(argparse.Namespace(list_units=True, out_dir=None, host_config=None))
+        assert rc == 0
+        out = capsys.readouterr().out.splitlines()
+        assert out == engine_unit_names()
+
+    def test_list_units_ignores_a_bad_host_config(self, tmp_path: Path, capsys) -> None:
+        # --list-units must not load host.yaml (deployer calls it pre-config).
+        from kayak.cli import render_units as cli
+
+        bad = tmp_path / "host.yaml"
+        bad.write_text("release_root: not-absolute\n")
+        rc = cli.render_units(argparse.Namespace(list_units=True, out_dir=None, host_config=bad))
+        assert rc == 0
+        assert capsys.readouterr().out.splitlines() == engine_unit_names()
+
+
 class TestRenderUnitsCli:
     def test_writes_dropin_files(self, tmp_path: Path) -> None:
         from kayak.cli import render_units as cli
 
-        rc = cli.render_units(argparse.Namespace(out_dir=tmp_path, host_config=None))
+        rc = cli.render_units(
+            argparse.Namespace(out_dir=tmp_path, host_config=None, list_units=False)
+        )
         assert rc == 0
         written = {p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob("*") if p.is_file()}
         assert "kayak-pipeline.service.d/cutover.conf" in written
@@ -125,7 +168,7 @@ class TestRenderUnitsCli:
     def test_manifest_to_stdout_when_no_out_dir(self, capsys) -> None:
         from kayak.cli import render_units as cli
 
-        rc = cli.render_units(argparse.Namespace(out_dir=None, host_config=None))
+        rc = cli.render_units(argparse.Namespace(out_dir=None, host_config=None, list_units=False))
         assert rc == 0
         out = capsys.readouterr().out
         assert "# ==> kayak-pipeline.service.d/cutover.conf" in out
@@ -135,7 +178,7 @@ class TestRenderUnitsCli:
 
         bad = tmp_path / "host.yaml"
         bad.write_text("release_root: not-absolute\n")
-        rc = cli.render_units(argparse.Namespace(out_dir=None, host_config=bad))
+        rc = cli.render_units(argparse.Namespace(out_dir=None, host_config=bad, list_units=False))
         assert rc == 1
         assert "host config invalid" in capsys.readouterr().err
 
@@ -144,7 +187,9 @@ class TestRenderUnitsCli:
 
         hy = tmp_path / "host.yaml"
         hy.write_text(f"release_root: {tmp_path}/opt\n")  # no opt/current
-        rc = cli.render_units(argparse.Namespace(out_dir=tmp_path / "out", host_config=hy))
+        rc = cli.render_units(
+            argparse.Namespace(out_dir=tmp_path / "out", host_config=hy, list_units=False)
+        )
         assert rc == 0
         assert "does not exist yet" in capsys.readouterr().err
 
@@ -154,6 +199,8 @@ class TestRenderUnitsCli:
         (tmp_path / "opt" / "current").mkdir(parents=True)
         hy = tmp_path / "host.yaml"
         hy.write_text(f"release_root: {tmp_path}/opt\n")
-        rc = cli.render_units(argparse.Namespace(out_dir=tmp_path / "out", host_config=hy))
+        rc = cli.render_units(
+            argparse.Namespace(out_dir=tmp_path / "out", host_config=hy, list_units=False)
+        )
         assert rc == 0
         assert "does not exist yet" not in capsys.readouterr().err

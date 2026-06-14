@@ -53,21 +53,20 @@ the live scripts — PR #193 review #1):
 > doesn't reach it. The D-CONSUMER derivation keys re-pointing off "ExecStart runs
 > `…/levels`", which correctly excludes recap.
 
-**C. Pure host-level — exempt via `KAYAK_HOST_UNITS`:** `kayak-backup-{hourly,
-weekly,offsite}` (shell), `kayak-notify-failure@` (template), `kayak-fail-test`.
+**C. Pure host-level — not engine units:** `kayak-backup-{hourly,weekly,offsite}`
+(shell), `kayak-notify-failure@` (template), `kayak-fail-test`.
 
-> **Open decision D-CONSUMER:** the deployer's activation gate verifies every
-> `KAYAK_UNITS` member's `ExecStart` references `$ROOT/current` *unless* it's in
-> `KAYAK_HOST_UNITS`. The repo-shell-script consumers (B) reference neither `current`
-> nor the venv — they reference `/home/<svc>/kayak`. So they must be listed in
-> `KAYAK_HOST_UNITS` to pass the gate, **even though some read the DB** (so they
-> must ALSO be quiesced). Today `KAYAK_UNITS` (quiesce) and `KAYAK_HOST_UNITS`
-> (gate-exempt) are independent lists, which already supports "quiesce but don't
-> verify". The renderer/runbook must emit a `KAYAK_HOST_UNITS` that includes the
-> class-B units, and `KAYAK_UNITS` that includes the DB-touching ones. Plan: derive
-> both lists from the installed `kayak-*.timer` set + this classification table,
-> rather than hand-maintaining them (closes the "complete consumer enumeration"
-> 4C item).
+> **D-CONSUMER — RESOLVED (increment 5, merged below).** The deployer's gate no
+> longer keys off a hand-maintained exempt list (`KAYAK_HOST_UNITS`, now removed).
+> It sources the set of units that MUST run from `$ROOT/current` directly from the
+> engine: `levels render-units --list-units` lists exactly the class-A engine
+> consumers (the units that get cutover drop-ins), and the gate verifies each of
+> *those* runs from `current` + pins the right `OUTPUT_DIR`. Everything else
+> (classes B + C) is implicitly host-level — no enumeration to keep in sync, and a
+> new engine consumer is covered the moment it's added to `render_cutover_dropins`.
+> `KAYAK_UNITS` stays the (independent) quiesce set; a non-DB unit left in it is
+> harmless, and a DB-toucher omitted no longer silently skips gate verification
+> (the gate doesn't read that list). Closes the "complete consumer enumeration" item.
 
 ## `HostConfig` additions (increment 1)
 
@@ -155,8 +154,11 @@ must carry the per-unit write-path set, not a blanket one.
    fire the ERR trap even under `-E`) — the [[deploy_quiesce_timeout_followup]]
    fix. Drain bound parameterized (`KAYAK_DRAIN_TIMEOUT`/`_INTERVAL`) so the
    backout is slow-testable without a 120 s wait.
-5. **Derive `KAYAK_UNITS`/`KAYAK_HOST_UNITS` from installed timers** (closes the
-   complete-consumer-enumeration item; resolves D-CONSUMER).
+5. **Gate sources the engine set from `render-units --list-units`** (this PR;
+   resolves D-CONSUMER): adds `levels render-units --list-units` (the engine
+   `.service` names, derived from `render_cutover_dropins`, host.yaml-independent)
+   and rewrites the deployer gate to verify exactly those run from `current`,
+   removing the hand-maintained `KAYAK_HOST_UNITS` exempt list.
 6. **Runbook §5 rewrite** (`deploy/INSTALL-paired-release.md` on `b4c-paired-install`):
    replace hand-crafted step 5 with the `render-*` calls; update for the #3 docroot
    and the audit-gauges promotion. Rebase onto merged #192.

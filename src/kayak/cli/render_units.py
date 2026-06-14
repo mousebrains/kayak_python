@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 from kayak.host import load_host_config
-from kayak.host_render import render_cutover_dropins
+from kayak.host_render import engine_unit_names, render_cutover_dropins
 
 
 def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -30,6 +30,12 @@ def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> 
         "(e.g. /etc/systemd/system); default: print a manifest to stdout",
     )
     p.add_argument(
+        "--list-units",
+        action="store_true",
+        help="Print just the engine .service names (one per line) — the units the "
+        "cutover re-points; consumed by the deployer's serving-path gate",
+    )
+    p.add_argument(
         "--host-config",
         type=Path,
         help="host.yaml path (default: $KAYAK_HOST_CONFIG or /etc/kayak/host.yaml)",
@@ -37,6 +43,14 @@ def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> 
 
 
 def render_units(args: argparse.Namespace) -> int:
+    # --list-units is HostConfig-independent (the unit names are fixed), so it must
+    # work even when host.yaml is absent/unreadable — the deployer calls it before
+    # the host is fully configured.
+    if args.list_units:
+        for name in engine_unit_names():
+            print(name)
+        return 0
+
     try:
         host = load_host_config(args.host_config)
     except ValueError as e:

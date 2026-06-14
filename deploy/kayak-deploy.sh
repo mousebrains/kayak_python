@@ -48,10 +48,18 @@
 #   KAYAK_RUNTIME_CONFIG           PHP config path (default /etc/kayak/runtime-config.json)
 #   KAYAK_CONFIG_INSTALLER         root config wrapper path
 #   KAYAK_SYSTEMCTL                systemctl path
+#   KAYAK_ENGINE_BIN               release `levels` the gate asks for the engine
+#                                  unit list (default $RELEASE_DIR/venv/bin/levels)
 #
 # Requires on the host: git, sqlite3, curl, and a python3 whose stdlib
 # venv/ensurepip work (Debian: apt install python3-venv) — no system pip
 # needed; scratch and release venvs bootstrap their own.
+#
+# Engine-version floor (cutover only): when SERVING_CUTOVER=yes, the gate asks the
+# RELEASE engine for the units to verify (`levels render-units --list-units`), so
+# the engine ref being activated must support that subcommand. An older pinned ref
+# fails closed at the gate (forward-only); rollback is unaffected (it doesn't
+# re-run the gate).
 #
 # Phases:
 #   validate  ref shape + protected-branch reachability (no mutation)
@@ -548,41 +556,51 @@ if [ "${SERVING_CUTOVER:-no}" != "yes" ]; then
     exit 1
 fi
 
-# Verify the consumers actually run from the release (PR #190 reviews): a
-# consumer still pointing at the old checkout/venv would execute old code
-# against the freshly migrated DB + synced dataset. EVERY consumer service
-# must run from $ROOT/current UNLESS it is an explicit host-level unit
-# (KAYAK_HOST_UNITS — e.g. the backup scripts, which legitimately stay
-# host-level). Keying off $ROOT/current + an exemption list, NOT a `levels`
-# substring (which missed kayak-audit-gauges, a python-run engine consumer).
-: "${KAYAK_HOST_UNITS:=kayak-backup-hourly.service kayak-backup-weekly.service kayak-backup-offsite.service}"
-for u in $KAYAK_UNITS; do
-    case "$u" in
-        *.timer) svc="${u%.timer}.service" ;;
-        *) svc="$u" ;;
-    esac
-    case " $KAYAK_HOST_UNITS " in
-        *" $svc "*) continue ;;
-    esac
+# Verify the ENGINE consumers run from the release (PR #190 reviews + D-CONSUMER,
+# PR #195 review). A consumer still pointing at the old checkout/venv would
+# execute old code against the freshly migrated DB. The set of units that MUST run
+# from $ROOT/current is sourced from the engine ITSELF — `render-units
+# --list-units` lists exactly the units the cutover re-points — NOT a
+# hand-maintained exempt list. The old exempt list was incomplete: the
+# checkout-script consumers (healthcheck/config-drift/recap/heartbeat) run from the
+# repo, not the venv, and an exempt-by-omission gate would false-fail on them.
+# Everything not in this list is implicitly host-level (not verified).
+# KAYAK_ENGINE_BIN: the release's levels (overridable for tests). Because the gate
+# asks the RELEASE engine for the list, the engine being activated must support
+# `render-units --list-units` (>= the PR that added it) — an older pinned engine
+# ref fails closed here. Keep its stderr (a `2>/dev/null` would turn an import
+# error or an unrecognized-arg from an old engine into a bare "produced nothing" —
+# PR #196 review #1).
+KAYAK_ENGINE_BIN="${KAYAK_ENGINE_BIN:-$RELEASE_DIR/venv/bin/levels}"
+ENGINE_SVCS="$("$KAYAK_ENGINE_BIN" render-units --list-units 2>"$SCRATCH/list-units.err" || true)"
+if [ -z "$ENGINE_SVCS" ]; then
+    echo "Error: could not enumerate the engine units to verify" >&2
+    echo "  (\`$KAYAK_ENGINE_BIN render-units --list-units\` produced no output)" >&2
+    if [ -s "$SCRATCH/list-units.err" ]; then
+        echo "  engine stderr:" >&2
+        sed 's/^/    /' "$SCRATCH/list-units.err" >&2
+    fi
+    echo "  — refusing to activate without the cutover-verification list (an engine" >&2
+    echo "  ref older than \`render-units --list-units\` support cannot be cut over)." >&2
+    exit 1
+fi
+for svc in $ENGINE_SVCS; do
     es="$("$SYSTEMCTL" show -p ExecStart --value "$svc" 2>/dev/null || true)"
-    # A unit with no ExecStart (not installed / pure timer target) has nothing
-    # to verify; a present ExecStart must reference the release.
+    # A unit with no ExecStart (not installed) has nothing to verify; a present one
+    # must reference the release.
     [ -z "$es" ] && continue
     case "$es" in
         *"$ROOT/current"*) : ;;
         *)
             echo "Error: $svc does not run from $ROOT/current (ExecStart: $es)." >&2
-            echo "Re-render it to the paired-release layout (Batch 4C), or add it to" >&2
-            echo "KAYAK_HOST_UNITS in $CONF if it is a deliberate host-level unit." >&2
+            echo "  Re-render its cutover drop-in (\`levels render-units\`) (Batch 4C)." >&2
             exit 1
             ;;
     esac
-    # If this unit pins OUTPUT_DIR (the render-units cutover drop-in sets it on the
-    # pipeline, the only consumer that builds), it must be the docroot the deployer
-    # builds and nginx serves — else the hourly pipeline writes a tree nobody
-    # serves, a silent half-cutover the symlink switch can't catch. `show -p
-    # Environment` reflects Environment= directives (the drop-in), not the
-    # EnvironmentFile, so pre-cutover units (no drop-in) simply have none and skip.
+    # OUTPUT_DIR pin (the render-units drop-in sets it on the pipeline) must be the
+    # docroot the deployer builds + nginx serves, else the hourly pipeline writes a
+    # tree nobody serves. `show -p Environment` reflects Environment= (the drop-in),
+    # not the EnvironmentFile, so a unit that doesn't pin it simply skips.
     env_out="$("$SYSTEMCTL" show -p Environment --value "$svc" 2>/dev/null || true)"
     case " $env_out " in
         *" OUTPUT_DIR=$KAYAK_DOCROOT "*) : ;;

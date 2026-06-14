@@ -795,16 +795,18 @@ def test_serving_path_gate_refuses_half_cutover(
     runuser.write_text(f'#!/bin/sh\nshift 3\necho "$@" >> "{runuser_log}"\nexec "$@"\n')
     runuser.chmod(0o755)
 
-    # systemctl stub: ExecStart → the release binary (passes the run-from-current
-    # check); Environment → the contents of envfile (the OUTPUT_DIR under test);
+    # systemctl stub: ExecStart → contents of execfile (the run-from path under
+    # test); Environment → contents of envfile (the OUTPUT_DIR under test);
     # is-active → inactive so the drain loop exits at once.
+    execfile = tmp_path / "stub-exec.txt"
+    execfile.write_text(f"{root}/current/venv/bin/levels pipeline")
     envfile = tmp_path / "stub-env.txt"
     envfile.write_text(f"OUTPUT_DIR={docroot} DATASET_DIR={root}/current/dataset")
     systemctl = tmp_path / "systemctl.sh"
     systemctl.write_text(
         "#!/bin/sh\n"
         'if [ "$1" = show ]; then\n'
-        f'  if [ "$3" = ExecStart ]; then echo "{root}/current/venv/bin/levels pipeline";\n'
+        f'  if [ "$3" = ExecStart ]; then cat "{execfile}";\n'
         f'  elif [ "$3" = Environment ]; then cat "{envfile}"; fi\n'
         "  exit 0\n"
         "fi\n"
@@ -834,7 +836,15 @@ def test_serving_path_gate_refuses_half_cutover(
     host_env = tmp_path / "host.env"
     host_env.write_text(f"SITE_URL=https://x.example.org\nSQLITE_PATH={db}\n")
 
-    def activate(*, with_knobs: bool = True) -> subprocess.CompletedProcess[str]:
+    # A stub the gate can be pointed at via KAYAK_ENGINE_BIN to make
+    # `render-units --list-units` produce nothing (the fail-closed path).
+    engine_noop = tmp_path / "engine-noop.sh"
+    engine_noop.write_text("#!/bin/sh\nexit 0\n")
+    engine_noop.chmod(0o755)
+
+    def activate(
+        *, with_knobs: bool = True, engine_bin: str | None = None
+    ) -> subprocess.CompletedProcess[str]:
         env = {
             "KAYAK_DEPLOY_CONF": str(conf),
             "KAYAK_DEPLOY_ROOT": str(root),
@@ -853,6 +863,8 @@ def test_serving_path_gate_refuses_half_cutover(
         if with_knobs:
             env["KAYAK_NGINX_DOCROOT_CONF"] = str(nginx_conf)
             env["KAYAK_FPM_POOL"] = str(fpm_pool)
+        if engine_bin is not None:
+            env["KAYAK_ENGINE_BIN"] = engine_bin
         return _run(["--engine-ref", engine_sha, "--dataset-ref", ds_sha], env, timeout=900)
 
     # 1) Everything points at the docroot → activation succeeds (and stages the
@@ -866,6 +878,21 @@ def test_serving_path_gate_refuses_half_cutover(
     assert bad.returncode != 0
     assert "OUTPUT_DIR != KAYAK_DOCROOT" in bad.stderr
     envfile.write_text(f"OUTPUT_DIR={docroot} DATASET_DIR={root}/current/dataset")
+
+    # 2b) An engine unit still running from the OLD checkout (not $ROOT/current) →
+    #     refuse. The verified set is sourced from `render-units --list-units`, so
+    #     this exercises that enumeration too (an empty list would skip everything).
+    execfile.write_text("/home/pat/.venv/bin/levels pipeline")
+    bad = activate()
+    assert bad.returncode != 0
+    assert "does not run from" in bad.stderr
+    execfile.write_text(f"{root}/current/venv/bin/levels pipeline")
+
+    # 2c) `render-units --list-units` produces nothing (e.g. an engine ref too old
+    #     to support it) → fail-closed refuse, not a fail-open skip (PR #196 review #2).
+    bad = activate(engine_bin=str(engine_noop))
+    assert bad.returncode != 0
+    assert "could not enumerate the engine units" in bad.stderr
 
     # 3) nginx still rooting the legacy docroot → refuse.
     nginx_conf.write_text("    root /home/pat/public_html;\n    root /var/www/certbot;\n")
