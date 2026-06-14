@@ -118,6 +118,19 @@ def render_cutover_dropins(h: HostConfig) -> list[CutoverDropIn]:
     return dropins
 
 
+def engine_unit_names() -> list[str]:
+    """The systemd ``.service`` names ``render-units`` re-points — i.e. the engine
+    consumers that MUST run from ``/opt/kayak/current`` after a cutover.
+
+    Derived from ``render_cutover_dropins`` (the unit names are HostConfig-
+    independent), so it can never drift from the set that actually gets drop-ins.
+    The deployer's cutover gate sources its "must run from current" list from here
+    (``levels render-units --list-units``) instead of a hand-maintained exempt
+    list — see docs/PLAN_4c_renderers.md (D-CONSUMER).
+    """
+    return [d.unit for d in render_cutover_dropins(HostConfig())]
+
+
 # --- serving config (nginx root + PHP-FPM open_basedir) ----------------------
 # The cutover's only host-specific serving delta is the docroot path: nginx's
 # `root` and the FPM `open_basedir` both move from the live `public_html` to the

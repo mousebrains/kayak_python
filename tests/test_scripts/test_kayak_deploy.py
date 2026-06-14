@@ -795,16 +795,18 @@ def test_serving_path_gate_refuses_half_cutover(
     runuser.write_text(f'#!/bin/sh\nshift 3\necho "$@" >> "{runuser_log}"\nexec "$@"\n')
     runuser.chmod(0o755)
 
-    # systemctl stub: ExecStart → the release binary (passes the run-from-current
-    # check); Environment → the contents of envfile (the OUTPUT_DIR under test);
+    # systemctl stub: ExecStart → contents of execfile (the run-from path under
+    # test); Environment → contents of envfile (the OUTPUT_DIR under test);
     # is-active → inactive so the drain loop exits at once.
+    execfile = tmp_path / "stub-exec.txt"
+    execfile.write_text(f"{root}/current/venv/bin/levels pipeline")
     envfile = tmp_path / "stub-env.txt"
     envfile.write_text(f"OUTPUT_DIR={docroot} DATASET_DIR={root}/current/dataset")
     systemctl = tmp_path / "systemctl.sh"
     systemctl.write_text(
         "#!/bin/sh\n"
         'if [ "$1" = show ]; then\n'
-        f'  if [ "$3" = ExecStart ]; then echo "{root}/current/venv/bin/levels pipeline";\n'
+        f'  if [ "$3" = ExecStart ]; then cat "{execfile}";\n'
         f'  elif [ "$3" = Environment ]; then cat "{envfile}"; fi\n'
         "  exit 0\n"
         "fi\n"
@@ -866,6 +868,15 @@ def test_serving_path_gate_refuses_half_cutover(
     assert bad.returncode != 0
     assert "OUTPUT_DIR != KAYAK_DOCROOT" in bad.stderr
     envfile.write_text(f"OUTPUT_DIR={docroot} DATASET_DIR={root}/current/dataset")
+
+    # 2b) An engine unit still running from the OLD checkout (not $ROOT/current) →
+    #     refuse. The verified set is sourced from `render-units --list-units`, so
+    #     this exercises that enumeration too (an empty list would skip everything).
+    execfile.write_text("/home/pat/.venv/bin/levels pipeline")
+    bad = activate()
+    assert bad.returncode != 0
+    assert "does not run from" in bad.stderr
+    execfile.write_text(f"{root}/current/venv/bin/levels pipeline")
 
     # 3) nginx still rooting the legacy docroot → refuse.
     nginx_conf.write_text("    root /home/pat/public_html;\n    root /var/www/certbot;\n")
