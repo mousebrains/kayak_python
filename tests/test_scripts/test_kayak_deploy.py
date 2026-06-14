@@ -438,6 +438,7 @@ def test_activation_rolls_back_db_symlink_and_config_on_failed_health(
             "KAYAK_RUNTIME_CONFIG": str(runtime_config),
             "KAYAK_CONFIG_INSTALLER": str(installer),
             "KAYAK_SYSTEMCTL": str(systemctl),
+            **_serving_knobs(tmp_path, docroot),
             # Force the privileged branch with a same-user runuser shim so the
             # app-user DB boundary (backup/restore/build via run_app) is
             # actually exercised — it is a pass-through otherwise.
@@ -530,6 +531,17 @@ def _activation_stubs(tmp_path: Path, root: Path, runtime_config: Path) -> dict[
     }
 
 
+def _serving_knobs(tmp_path: Path, docroot: Path) -> dict[str, str]:
+    """Good nginx/FPM serving fixtures + the knobs the gate now REQUIRES under
+    SERVING_CUTOVER=yes (fail-closed, PR #195 review #1). nginx roots only the
+    docroot + the ACME root; the FPM open_basedir leads with the docroot."""
+    nginx = tmp_path / "levels-common.conf"
+    nginx.write_text(f"    root {docroot};\n    root /var/www/certbot;\n")
+    fpm = tmp_path / "kayak-pool.conf"
+    fpm.write_text(f"php_admin_value[open_basedir] = {docroot}:{tmp_path}/var:{tmp_path}/DB\n")
+    return {"KAYAK_NGINX_DOCROOT_CONF": str(nginx), "KAYAK_FPM_POOL": str(fpm)}
+
+
 @pytest.mark.slow
 def test_activation_prunes_old_releases(
     tmp_path: Path, deploy_root: Path, engine_repo, dataset_repo
@@ -570,6 +582,7 @@ def test_activation_prunes_old_releases(
             "HOME": str(tmp_path),
             "SUDO_USER": "",
             "KAYAK_UNITS": "kayak-pipeline.timer",
+            **_serving_knobs(tmp_path, tmp_path / "docroot"),
             # Keep ONLY current + previous, so the 3rd activation prunes the 1st.
             "KAYAK_KEEP_RELEASES": "0",
         }
@@ -658,6 +671,7 @@ def test_rollback_rebuilds_docroot_when_build_fails_midway(
             "HOME": str(tmp_path),
             "SUDO_USER": "",
             "KAYAK_UNITS": "kayak-pipeline.timer",
+            **_serving_knobs(tmp_path, docroot),
         }
         return _run(["--engine-ref", engine_sha, "--dataset-ref", ds_sha], env, timeout=900)
 
@@ -727,6 +741,7 @@ def test_rollback_rebuilds_docroot_with_absolute_current_symlink(
             "HOME": str(tmp_path),
             "SUDO_USER": "",
             "KAYAK_UNITS": "kayak-pipeline.timer",
+            **_serving_knobs(tmp_path, docroot),
         }
         if health_url is not None:
             env["HEALTH_URL"] = health_url
@@ -752,3 +767,219 @@ def test_rollback_rebuilds_docroot_with_absolute_current_symlink(
     dt = "".join(p.read_text(errors="ignore") for p in docroot.rglob("*") if p.is_file())
     assert "first.example.org" in dt
     assert "second.example.org" not in dt
+
+
+@pytest.mark.slow
+def test_serving_path_gate_refuses_half_cutover(
+    tmp_path: Path, deploy_root: Path, engine_repo, dataset_repo
+) -> None:
+    """The SERVING_CUTOVER gate refuses a half-cutover before any mutation: a
+    consumer OUTPUT_DIR that isn't KAYAK_DOCROOT, nginx not rooting at it, a
+    clobbered certbot ACME root, or an FPM open_basedir missing it (the gate
+    deferred from PR #190/#192, + PR #194 review #2 certbot check)."""
+    ds_repo, ds_sha = dataset_repo
+    eng_repo, engine_sha = engine_repo
+    fixture_ds = _REPO / "tests" / "fixtures" / "dataset"
+    db = tmp_path / "kayak.db"
+    _init_db(db, fixture_ds)
+    root = deploy_root
+    docroot = tmp_path / "docroot"
+    runtime_config = tmp_path / "runtime-config.json"
+    runuser_log = tmp_path / "runuser.log"
+    me = subprocess.run(["id", "-un"], capture_output=True, text=True, check=True).stdout.strip()
+
+    installer = tmp_path / "install-config.sh"
+    installer.write_text(f'#!/bin/sh\ncat > "{runtime_config}"\n')
+    installer.chmod(0o755)
+    runuser = tmp_path / "runuser.sh"
+    runuser.write_text(f'#!/bin/sh\nshift 3\necho "$@" >> "{runuser_log}"\nexec "$@"\n')
+    runuser.chmod(0o755)
+
+    # systemctl stub: ExecStart → the release binary (passes the run-from-current
+    # check); Environment → the contents of envfile (the OUTPUT_DIR under test);
+    # is-active → inactive so the drain loop exits at once.
+    envfile = tmp_path / "stub-env.txt"
+    envfile.write_text(f"OUTPUT_DIR={docroot} DATASET_DIR={root}/current/dataset")
+    systemctl = tmp_path / "systemctl.sh"
+    systemctl.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = show ]; then\n'
+        f'  if [ "$3" = ExecStart ]; then echo "{root}/current/venv/bin/levels pipeline";\n'
+        f'  elif [ "$3" = Environment ]; then cat "{envfile}"; fi\n'
+        "  exit 0\n"
+        "fi\n"
+        'case "$1" in is-active) exit 1 ;; *) exit 0 ;; esac\n'
+    )
+    systemctl.chmod(0o755)
+
+    nginx_conf = tmp_path / "levels-common.conf"
+    fpm_pool = tmp_path / "kayak.conf"
+
+    def good_nginx() -> None:
+        nginx_conf.write_text(f"    root {docroot};\n    root /var/www/certbot;\n")
+
+    def good_fpm() -> None:
+        fpm_pool.write_text(f"php_admin_value[open_basedir] = {docroot}:/home/x/var:/home/x/DB\n")
+
+    good_nginx()
+    good_fpm()
+    conf = _write_conf(
+        tmp_path,
+        str(eng_repo),
+        str(ds_repo),
+        ENGINE_BRANCH="test-main",
+        DATASET_BRANCH="main",
+        SERVING_CUTOVER="yes",
+    )
+    host_env = tmp_path / "host.env"
+    host_env.write_text(f"SITE_URL=https://x.example.org\nSQLITE_PATH={db}\n")
+
+    def activate(*, with_knobs: bool = True) -> subprocess.CompletedProcess[str]:
+        env = {
+            "KAYAK_DEPLOY_CONF": str(conf),
+            "KAYAK_DEPLOY_ROOT": str(root),
+            "KAYAK_DOCROOT": str(docroot),
+            "KAYAK_HOST_ENV": str(host_env),
+            "KAYAK_RUNTIME_CONFIG": str(runtime_config),
+            "KAYAK_CONFIG_INSTALLER": str(installer),
+            "KAYAK_SYSTEMCTL": str(systemctl),
+            "KAYAK_PRIVILEGED": "yes",
+            "KAYAK_APP_USER": me,
+            "KAYAK_RUNUSER": str(runuser),
+            "HOME": str(tmp_path),
+            "SUDO_USER": "",
+            "KAYAK_UNITS": "kayak-pipeline.timer",
+        }
+        if with_knobs:
+            env["KAYAK_NGINX_DOCROOT_CONF"] = str(nginx_conf)
+            env["KAYAK_FPM_POOL"] = str(fpm_pool)
+        return _run(["--engine-ref", engine_sha, "--dataset-ref", ds_sha], env, timeout=900)
+
+    # 1) Everything points at the docroot → activation succeeds (and stages the
+    #    release, which the gate-refusal cases below reuse — fast).
+    ok = activate()
+    assert ok.returncode == 0, ok.stderr
+
+    # 2) A consumer building into the wrong tree → refuse.
+    envfile.write_text(f"OUTPUT_DIR=/wrong/tree DATASET_DIR={root}/current/dataset")
+    bad = activate()
+    assert bad.returncode != 0
+    assert "OUTPUT_DIR != KAYAK_DOCROOT" in bad.stderr
+    envfile.write_text(f"OUTPUT_DIR={docroot} DATASET_DIR={root}/current/dataset")
+
+    # 3) nginx still rooting the legacy docroot → refuse.
+    nginx_conf.write_text("    root /home/pat/public_html;\n    root /var/www/certbot;\n")
+    bad = activate()
+    assert bad.returncode != 0 and "nginx does not root at" in bad.stderr
+    good_nginx()
+
+    # 4) certbot ACME root clobbered by a blanket root-substitution → refuse.
+    nginx_conf.write_text(f"    root {docroot};\n")
+    bad = activate()
+    assert bad.returncode != 0 and "certbot ACME root is missing" in bad.stderr
+    good_nginx()
+
+    # 5) FPM open_basedir not leading with the docroot → refuse.
+    fpm_pool.write_text("php_admin_value[open_basedir] = /home/pat/public_html:/home/x/DB\n")
+    bad = activate()
+    assert bad.returncode != 0 and "open_basedir does not lead with" in bad.stderr
+    good_fpm()
+
+    # 6) A leftover legacy root alongside the docroot + certbot → refuse: presence
+    #    isn't enough, every root must be the docroot or the ACME root, else nginx
+    #    serves the LAST one (PR #195 review #2).
+    nginx_conf.write_text(
+        f"    root {docroot};\n    root /home/pat/public_html;\n    root /var/www/certbot;\n"
+    )
+    bad = activate()
+    assert bad.returncode != 0 and "unexpected nginx root" in bad.stderr
+    good_nginx()
+
+    # 7) SERVING_CUTOVER=yes but the serving knobs unset → fail-closed, not skipped
+    #    (PR #195 review #1 — warn-skip would let an nginx half-cutover through).
+    bad = activate(with_knobs=False)
+    assert bad.returncode != 0
+    assert "KAYAK_NGINX_DOCROOT_CONF" in bad.stderr
+
+    # 8) A `;`-commented open_basedir must not satisfy the anchored check → refuse
+    #    (PR #195 review #3).
+    fpm_pool.write_text(f"; php_admin_value[open_basedir] = {docroot}:/home/x/DB\n")
+    bad = activate()
+    assert bad.returncode != 0 and "open_basedir does not lead with" in bad.stderr
+    good_fpm()
+
+    # None of the refusals mutated the DB (the gate is pre-backup).
+    assert ".backup" not in runuser_log.read_text() or runuser_log.read_text().count(".backup") == 1
+
+
+@pytest.mark.slow
+def test_quiesce_timeout_backs_out_maintenance(
+    tmp_path: Path, deploy_root: Path, engine_repo, dataset_repo
+) -> None:
+    """A consumer that won't drain leaves NOTHING mutated, so the timeout must
+    back out maintenance + restart consumers rather than `exit 1` into a stuck
+    down state (PR #192 review — the quiesce-timeout sibling of the errtrace gap)."""
+    ds_repo, ds_sha = dataset_repo
+    eng_repo, engine_sha = engine_repo
+    fixture_ds = _REPO / "tests" / "fixtures" / "dataset"
+    db = tmp_path / "kayak.db"
+    _init_db(db, fixture_ds)
+    root = deploy_root
+    runtime_config = tmp_path / "runtime-config.json"
+    runuser_log = tmp_path / "runuser.log"
+    systemctl_log = tmp_path / "systemctl.log"
+    me = subprocess.run(["id", "-un"], capture_output=True, text=True, check=True).stdout.strip()
+
+    installer = tmp_path / "install-config.sh"
+    installer.write_text(f'#!/bin/sh\ncat > "{runtime_config}"\n')
+    installer.chmod(0o755)
+    runuser = tmp_path / "runuser.sh"
+    runuser.write_text(f'#!/bin/sh\nshift 3\necho "$@" >> "{runuser_log}"\nexec "$@"\n')
+    runuser.chmod(0o755)
+    # is-active reports ACTIVE (exit 0) forever → the drain loop never converges.
+    systemctl = tmp_path / "systemctl.sh"
+    systemctl.write_text(
+        f'#!/bin/sh\necho "$@" >> "{systemctl_log}"\n'
+        'if [ "$1" = show ]; then\n'
+        f'  if [ "$3" = ExecStart ]; then echo "{root}/current/venv/bin/levels pipeline"; fi\n'
+        "  exit 0\n"
+        "fi\n"
+        'case "$1" in is-active) exit 0 ;; *) exit 0 ;; esac\n'
+    )
+    systemctl.chmod(0o755)
+    conf = _write_conf(
+        tmp_path,
+        str(eng_repo),
+        str(ds_repo),
+        ENGINE_BRANCH="test-main",
+        DATASET_BRANCH="main",
+        SERVING_CUTOVER="yes",
+    )
+    host_env = tmp_path / "host.env"
+    host_env.write_text(f"SITE_URL=https://x.example.org\nSQLITE_PATH={db}\n")
+    env = {
+        "KAYAK_DEPLOY_CONF": str(conf),
+        "KAYAK_DEPLOY_ROOT": str(root),
+        "KAYAK_DOCROOT": str(tmp_path / "docroot"),
+        "KAYAK_HOST_ENV": str(host_env),
+        "KAYAK_RUNTIME_CONFIG": str(runtime_config),
+        "KAYAK_CONFIG_INSTALLER": str(installer),
+        "KAYAK_SYSTEMCTL": str(systemctl),
+        "KAYAK_PRIVILEGED": "yes",
+        "KAYAK_APP_USER": me,
+        "KAYAK_RUNUSER": str(runuser),
+        "HOME": str(tmp_path),
+        "SUDO_USER": "",
+        "KAYAK_UNITS": "kayak-pipeline.timer",
+        **_serving_knobs(tmp_path, tmp_path / "docroot"),
+        # Tiny drain bound so the loop times out in ~2 s, not 120 s.
+        "KAYAK_DRAIN_TIMEOUT": "2",
+        "KAYAK_DRAIN_INTERVAL": "1",
+    }
+    p = _run(["--engine-ref", engine_sha, "--dataset-ref", ds_sha], env, timeout=900)
+    assert p.returncode != 0
+    assert "still active after" in p.stderr
+    # Backed out: maintenance cleared, consumers restarted, DB never touched.
+    assert not (root / "maintenance").exists()
+    assert "start kayak-pipeline.timer" in systemctl_log.read_text()
+    assert not runuser_log.exists() or ".backup" not in runuser_log.read_text()

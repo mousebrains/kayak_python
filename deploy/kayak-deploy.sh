@@ -29,6 +29,13 @@
 #                                  steps run as this user via runuser)
 #   SERVING_CUTOVER                must be "yes" to activate (set by the 4C
 #                                  runbook once nginx/FPM point at current)
+#   KAYAK_NGINX_DOCROOT_CONF       nginx snippet whose `root` is the docroot;
+#                                  REQUIRED when SERVING_CUTOVER=yes — the gate
+#                                  verifies it roots ONLY at $KAYAK_DOCROOT (+ the
+#                                  surviving certbot ACME root). 4C runbook sets it.
+#   KAYAK_FPM_POOL                 PHP-FPM pool file; REQUIRED when
+#                                  SERVING_CUTOVER=yes — the gate verifies its
+#                                  open_basedir leads with $KAYAK_DOCROOT
 # Path overrides (mainly for tests / the clean-VM rehearsal):
 #   KAYAK_DEPLOY_ROOT              release root (default /opt/kayak)
 #   KAYAK_DEPLOY_TMPDIR            scratch base — MUST be real disk, not a
@@ -570,7 +577,87 @@ for u in $KAYAK_UNITS; do
             exit 1
             ;;
     esac
+    # If this unit pins OUTPUT_DIR (the render-units cutover drop-in sets it on the
+    # pipeline, the only consumer that builds), it must be the docroot the deployer
+    # builds and nginx serves — else the hourly pipeline writes a tree nobody
+    # serves, a silent half-cutover the symlink switch can't catch. `show -p
+    # Environment` reflects Environment= directives (the drop-in), not the
+    # EnvironmentFile, so pre-cutover units (no drop-in) simply have none and skip.
+    env_out="$("$SYSTEMCTL" show -p Environment --value "$svc" 2>/dev/null || true)"
+    case " $env_out " in
+        *" OUTPUT_DIR=$KAYAK_DOCROOT "*) : ;;
+        *" OUTPUT_DIR="*)
+            echo "Error: $svc OUTPUT_DIR != KAYAK_DOCROOT ($KAYAK_DOCROOT)." >&2
+            echo "  (Environment: $env_out) — re-render the cutover drop-in (4C)." >&2
+            exit 1
+            ;;
+    esac
 done
+
+# The serving layer must point at the docroot too (the gate deferred from PR #190/
+# #192 to here). FAIL-CLOSED: SERVING_CUTOVER=yes is itself set only by the same 4C
+# runbook that sets these knobs, so when cutover is on, an UNSET knob is a misconfig
+# — warn-skip would let exactly the nginx-side half-cutover (consumers re-pointed,
+# web layer still on the old docroot) sail through, which is the gate's whole
+# reason to exist (PR #195 review #1). --stage-only exits before this gate, so it
+# is unaffected. $KAYAK_DOCROOT is an operator env value, so escape its ERE
+# metachars before interpolating it into the grep patterns (PR #195 review #4).
+# Escape every char that isn't a safe path char (alnum / _ / - /), so any ERE
+# metachar in the docroot becomes literal. Negated-class form (not a metachar
+# list) — portable across GNU + BSD sed (the bracket-list form trips BSD).
+_docroot_re="$(printf '%s' "$KAYAK_DOCROOT" | sed 's#[^[:alnum:]_/-]#\\&#g')"
+# Explicit `exit 1`, NOT `: "${VAR:?}"`: the EXIT-trap (cleanup) runs on a `:?`
+# expansion-error exit and bash then exits with the TRAP's status (0), masking the
+# failure — explicit `exit 1` is preserved across the trap (verified).
+if [ -z "${KAYAK_NGINX_DOCROOT_CONF:-}" ]; then
+    echo "Error: KAYAK_NGINX_DOCROOT_CONF must be set when SERVING_CUTOVER=yes" >&2
+    echo "  (the nginx snippet whose root is the docroot; the 4C runbook sets it)." >&2
+    exit 1
+fi
+if [ ! -r "$KAYAK_NGINX_DOCROOT_CONF" ]; then
+    echo "Error: KAYAK_NGINX_DOCROOT_CONF=$KAYAK_NGINX_DOCROOT_CONF not readable" >&2
+    exit 1
+fi
+# nginx roots the docroot in ONE shared snippet (the vhosts carry none).
+if ! grep -qE "^[[:space:]]*root[[:space:]]+${_docroot_re};" "$KAYAK_NGINX_DOCROOT_CONF"; then
+    echo "Error: nginx does not root at $KAYAK_DOCROOT ($KAYAK_NGINX_DOCROOT_CONF)." >&2
+    echo "  Run \`levels render-serving\` and apply it (Batch 4C)." >&2
+    exit 1
+fi
+# The ACME challenge root must survive a cutover root-substitution (PR #194 review
+# #2). /var/www/certbot is hardcoded (WKCC); genericization (4C step 7) knobs it.
+if ! grep -qE "^[[:space:]]*root[[:space:]]+/var/www/certbot;" "$KAYAK_NGINX_DOCROOT_CONF"; then
+    echo "Error: the certbot ACME root is missing from $KAYAK_NGINX_DOCROOT_CONF" >&2
+    echo "  (a global root-substitution clobbered it — renewal would break)." >&2
+    exit 1
+fi
+# EXCLUSIVE, not just present: every `root` must be the docroot or the ACME root.
+# A leftover legacy `root /home/pat/public_html;` (an apply that APPENDED instead
+# of replacing) passes the presence checks, but nginx serves the LAST root —
+# silently the legacy tree (PR #195 review #2).
+_stray_root="$(grep -nE "^[[:space:]]*root[[:space:]]" "$KAYAK_NGINX_DOCROOT_CONF" \
+    | grep -vE "[[:space:]](${_docroot_re}|/var/www/certbot);[[:space:]]*\$" || true)"
+if [ -n "$_stray_root" ]; then
+    echo "Error: unexpected nginx root in $KAYAK_NGINX_DOCROOT_CONF — every root must" >&2
+    echo "  be $KAYAK_DOCROOT or /var/www/certbot: $_stray_root" >&2
+    exit 1
+fi
+if [ -z "${KAYAK_FPM_POOL:-}" ]; then
+    echo "Error: KAYAK_FPM_POOL must be set when SERVING_CUTOVER=yes" >&2
+    echo "  (the PHP-FPM pool file; the 4C runbook sets it)." >&2
+    exit 1
+fi
+if [ ! -r "$KAYAK_FPM_POOL" ]; then
+    echo "Error: KAYAK_FPM_POOL=$KAYAK_FPM_POOL not readable" >&2
+    exit 1
+fi
+# Anchored at line start (PR #195 review #3) so a `;`-commented open_basedir can't
+# satisfy it; render-serving leads the list with the docroot.
+if ! grep -qE "^[[:space:]]*php_admin_value\[open_basedir\][[:space:]]*=[[:space:]]*${_docroot_re}:" "$KAYAK_FPM_POOL"; then
+    echo "Error: PHP-FPM open_basedir does not lead with $KAYAK_DOCROOT ($KAYAK_FPM_POOL)." >&2
+    echo "  Run \`levels render-serving\` and apply it (Batch 4C)." >&2
+    exit 1
+fi
 
 # ---------------------------------------------------------------------------
 # Phase 3 — activate (system mutation; everything before the symlink switch
@@ -709,15 +796,28 @@ for u in $KAYAK_UNITS; do
         *.service) SERVICES="$SERVICES $u" ;;
     esac
 done
+# Drain bound: how long to wait for a still-running consumer, and the poll
+# interval. Parameterized so the timeout-backout path is testable without a real
+# 120 s wait (defaults are the production values).
+: "${KAYAK_DRAIN_TIMEOUT:=120}"
+: "${KAYAK_DRAIN_INTERVAL:=2}"
 waited=0
 for svc in $SERVICES; do
     while "$SYSTEMCTL" is-active --quiet "$svc" 2>/dev/null; do
-        if [ "$waited" -ge 120 ]; then
+        if [ "$waited" -ge "$KAYAK_DRAIN_TIMEOUT" ]; then
             echo "Error: $svc still active after ${waited}s — refusing to mutate the DB under it" >&2
+            # Nothing has mutated yet (this is before the DB backup; MUTATED=0),
+            # but maintenance is ON and the consumers are STOPPED. An explicit
+            # `exit` does NOT fire the ERR trap (even under -E), so back the
+            # no-mutation state out by hand — otherwise a drain timeout leaves the
+            # site down with consumers stopped until an operator clears it
+            # (PR #192 review — the quiesce-timeout sibling of the errtrace gap).
+            for s in $KAYAK_UNITS; do "$SYSTEMCTL" start "$s" 2>/dev/null || true; done
+            rm -f "$ROOT/maintenance"
             exit 1
         fi
-        sleep 2
-        waited=$((waited + 2))
+        sleep "$KAYAK_DRAIN_INTERVAL"
+        waited=$((waited + KAYAK_DRAIN_INTERVAL))
     done
 done
 log "consumers quiesced"

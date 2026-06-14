@@ -140,18 +140,21 @@ must carry the per-unit write-path set, not a blanket one.
    `docroot`). *(merged, PR #193)*
 3. **`levels render-serving` + tests.** The nginx `root` + FPM `open_basedir`
    directives from `host.docroot`/`service_home`. *(this PR)*
-4. **Deployer serving-path gate + quiesce-timeout fix** (`deploy/kayak-deploy.sh`):
-   when `SERVING_CUTOVER=yes`, verify nginx root / FPM `open_basedir` / unit
-   `OUTPUT_DIR`+`ReadWritePaths` resolve to `$KAYAK_DOCROOT`; back out maintenance
-   on a drain timeout (the [[deploy_quiesce_timeout_followup]] fix). Branch off
-   #192. Slow-test the gate.
-   - **Apply-step caveat (PR #194 review #2):** `conf/snippets/levels-common.conf`
-     has TWO `root` directives — the docroot (~line 30) and the ACME
-     `root /var/www/certbot;` (~line 305). The cutover apply must target the
-     docroot line specifically (a blanket `sed 's/^\s*root .*/…/'` would clobber
-     the certbot root and break renewal), and this gate should verify the certbot
-     root survived. (`test_host_render_serving.py` already asserts there's exactly
-     one non-certbot `root`, so a structural change trips CI.)
+4. **Deployer serving-path gate + quiesce-timeout fix** (`deploy/kayak-deploy.sh`).
+   *(this PR)* When `SERVING_CUTOVER=yes` the gate now verifies, before any
+   mutation: every re-pointed unit that pins `OUTPUT_DIR` matches `$KAYAK_DOCROOT`
+   (via `systemctl show -p Environment`); and — `KAYAK_NGINX_DOCROOT_CONF` /
+   `KAYAK_FPM_POOL` are REQUIRED under `SERVING_CUTOVER=yes` (fail-closed, PR #195
+   review #1 — the same runbook sets both, and warn-skip would let an nginx
+   half-cutover through) — that nginx roots ONLY at `$KAYAK_DOCROOT` (exclusive: a
+   leftover legacy `root` is refused, since nginx serves the last; PR #195 review
+   #2), the ACME `root /var/www/certbot;` survives (PR #194 review #2 — a blanket
+   root-sed would break renewal), and the FPM `open_basedir` (anchored grep) leads
+   with `$KAYAK_DOCROOT`. The quiesce drain-timeout now backs
+   out maintenance + restarts consumers before its explicit `exit` (which doesn't
+   fire the ERR trap even under `-E`) — the [[deploy_quiesce_timeout_followup]]
+   fix. Drain bound parameterized (`KAYAK_DRAIN_TIMEOUT`/`_INTERVAL`) so the
+   backout is slow-testable without a 120 s wait.
 5. **Derive `KAYAK_UNITS`/`KAYAK_HOST_UNITS` from installed timers** (closes the
    complete-consumer-enumeration item; resolves D-CONSUMER).
 6. **Runbook §5 rewrite** (`deploy/INSTALL-paired-release.md` on `b4c-paired-install`):
