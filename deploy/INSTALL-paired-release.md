@@ -370,9 +370,10 @@ sudo systemctl reload php8.4-fpm      # graceful — applies the new open_basedi
 Verify: homepage + `description.php?h=1` 200 from the new docroot
 (`nginx -T | grep 'root /var/cache'`); `kayak-audit-gauges`'s ExecStart is now
 `levels audit-gauges` (the #191 fix lands *via the cutover*, since
-`scripts/deploy.sh` never reinstalled the unit). The old `public_html` + `.venv`
-are now unused — leave them as a fallback or clean up later. Future deploys go
-through `kayak-deploy.sh`, not `scripts/deploy.sh`.
+`scripts/deploy.sh` never reinstalled the unit). The old `public_html` is now
+unused — leave it as a fallback for the soak, then prune it per **Post-cutover
+cleanup** below (note `.venv` is *not* unused — the shell consumers still need it).
+Future deploys go through `kayak-deploy.sh`, not `scripts/deploy.sh`.
 
 > **If the activation FAILS** (bad `HEALTH_URL`, build error, …) — validated by a
 > rollback rehearsal: the deployer restores the DB backup + config and aborts the
@@ -385,6 +386,57 @@ through `kayak-deploy.sh`, not `scripts/deploy.sh`.
 > Phase-3 flip serves the new docroot (confirmed on the VM, DB intact). To abort
 > entirely instead: revert the nginx-`root` / FPM-`open_basedir` seds + reload, `rm`
 > the drop-ins + `daemon-reload`, and restart the timers.
+
+### Post-cutover cleanup (one-time, after a few days' soak)
+
+The cutover deliberately leaves the old single-tree artifacts in place as a
+fallback. Once the paired release has served cleanly for a few days (homepage +
+DB-backed PHP 200 from the cache docroot, the hourly pipeline rebuilding it, a
+deploy + a rollback both exercised), the **superseded** artifacts can be removed.
+These are the items whose disposition was "retired" / "relocated" in the mapping
+table above — never the mutable state or the still-live consumers:
+
+```bash
+# 1. the old served docroot — nginx now roots /var/cache/kayak/docroot
+rm -rf /home/<svc>/public_html
+
+# 2. the two in-tree caches that relocated to /var/cache/kayak/{map-layers,gauge-metadata}
+#    (stale after the first post-cutover fetch-osmb / audit-gauges run writes the new dirs)
+rm -rf /home/<svc>/kayak/var/osmb /home/<svc>/kayak/Gauge-metadata-cache
+
+# 3. the legacy deploy path — confirm nothing still triggers it, then it's inert
+#    (the pre-flight already disabled any cron/timer that git-pulls main or runs
+#    scripts/deploy.sh; scripts/deploy.sh stays in the tree, just unused)
+```
+
+**Do NOT remove yet — these are still live, not leftovers:**
+- `~/kayak` (the checkout) and `~/.venv` — the cutover re-points only the *engine*
+  units (`pipeline`, `decimate`, `editor-retention`, `status`, `fetch-osmb`,
+  `audit-gauges`). The shell-script units (`kayak-recap`, `-heartbeat`,
+  `-config-drift`, `-healthcheck`, `-cert-expiry`, `-backup-*`) still `ExecStart`
+  from `~/kayak/{scripts,systemd}/`, and `kayak-recap.sh` still runs
+  `~/.venv/bin/python3`. Retiring `~/kayak`/`~/.venv` is the deferred
+  genericization (move those consumers into the release), **not** a soak-cleanup.
+- `~/DB`, `~/var`, `~/logs`, `~/backups`, `~/.config/kayak`, `~/kayak_data` —
+  mutable state / unchanged-by-design (and `~/kayak_data` is the deployer's
+  snapshot source). Leave them.
+
+### Ongoing disk hygiene (what accumulates per release)
+
+Each `kayak-deploy.sh` stages a fresh immutable release (a full venv + a dataset
+snapshot + the wheel/locks), so disk grows with deploy churn. Most of it is
+self-bounding; the one manual case is a *failed* deploy:
+
+| What grows | Bound | Action |
+|---|---|---|
+| `/opt/kayak/releases/<id>/` | **automatic** — the deployer prunes to `KAYAK_KEEP_RELEASES` (default **5**) newest, *never* deleting `current` or the previous (rollback needs it), after each successful activation | none normally; lower `KAYAK_KEEP_RELEASES` if the 40 GB VPS gets tight (each release ≈ one venv + dataset snapshot), or `ls -1dt /opt/kayak/releases/*/` to inspect |
+| `/opt/kayak/.staging/` | **automatic on success** — the EXIT-trap `rm -rf`s the scratch (incl. the ~650 MB pre-activate DB backup) when the deploy succeeds | **manual after a FAILED/rolled-back deploy**: the deployer keeps the scratch on purpose (`CLEAN_SCRATCH=0`) so the `pre-activate.db` backup survives for recovery. Once recovered/verified, `sudo rm -rf /opt/kayak/.staging/<leftover>` |
+| `/opt/kayak/maintenance` | removed at the end of a successful activation | only lingers after an aborted deploy — `sudo rm -f` it as part of the retry/recover step (already in the rollback note) |
+| `~/backups/` | governed by the existing `kayak-backup-{hourly,weekly,offsite}` units — **unchanged by the cutover** | their own retention applies; out of scope here beyond noting they keep running from `~/kayak/systemd/` |
+
+So under steady state nothing needs hand-pruning: releases self-bound at 5+2 and
+the scratch self-cleans. The only recurring manual task is sweeping a failed
+deploy's `.staging` leftover *after* you've confirmed the DB restored from it.
 
 ## Resolved findings (were open items)
 
