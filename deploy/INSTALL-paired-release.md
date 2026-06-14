@@ -302,6 +302,25 @@ docroot**, then flip with a graceful reload. Differs from the virgin path: NO
 runs the deployed engine), NO base prep / repo clone (present), and the serving
 config is edited in place but not reloaded until the end.
 
+### Where the old single-tree layout maps to
+
+The pre-cutover host kept everything under `/home/<svc>`. The cutover moves only
+what must become immutable (the engine + dataset) or regenerable (the docroot);
+the mutable state and the un-re-pointed shell consumers stay put. The table is the
+authoritative "what moved / what didn't" for the live WKCC dirs:
+
+| Old (`/home/<svc>/…`) | New location | Disposition |
+|---|---|---|
+| `~/kayak` | engine → `/opt/kayak/current/venv`; **checkout stays** | The running *engine* moves into the immutable release. The `~/kayak` checkout **stays**: `kayak-deploy.sh` + the committed `conf/`/`deploy/` config run from it, and the shell-script consumers the cutover does **not** re-point live here — `kayak-recap`, `kayak-heartbeat`, `kayak-config-drift`, `kayak-healthcheck`, `kayak-cert-expiry`, `kayak-backup-*` all `ExecStart` from `~/kayak/{scripts,systemd}/`. Keep it on `main`. (Its two in-tree caches `var/osmb` + `Gauge-metadata-cache/` relocate to `/var/cache/kayak/{map-layers,gauge-metadata}` — see `host.yaml`.) |
+| `~/.venv` | engine → `/opt/kayak/current/venv`; **stays** | The cutover re-points the 3 engine units (`kayak-status`, `kayak-fetch-osmb`, `kayak-audit-gauges`) at the release venv. `~/.venv` **stays** only because `kayak-recap.sh` still calls `~/.venv/bin/python3 ~/kayak/scripts/recap.py`; retire when the last shell consumer moves. |
+| `~/kayak_data` | release snapshot → `/opt/kayak/current/dataset` (read-only); **clone stays** | Each release snapshots the dataset at its pinned commit; consumers read `DATASET_DIR=/opt/kayak/current/dataset`. The `~/kayak_data` clone **stays** as the working checkout the deployer snapshots from. |
+| `~/public_html` | `/var/cache/kayak/docroot` (#3); **old one retired** | Moved OUT of the home to a regenerable shared cache: nginx roots here, FPM `open_basedir` leads with it, rebuilt by both the deploy and the hourly pipeline. Old `~/public_html` becomes unused — leave as a fallback, clean up later. |
+| `~/DB/kayak.db` | **unchanged** | Mutable SQLite DB, OUTSIDE every release by design — survives cutover and rollback (the deployer backs it up pre-migrate). |
+| `~/var/status.html` | **unchanged** | Operator status page (`HostConfig.status_output`); `kayak-status` writes it from the release venv but the path is unchanged; in FPM `open_basedir`. |
+| `~/logs` | **unchanged** | CSP-report + app logs; in FPM `open_basedir`. |
+| `~/.config/kayak/.env` | **unchanged** (one edit) | App-user env stays; the cutover only repoints `OUTPUT_DIR` → `/var/cache/kayak/docroot`. The new root-owned *host*/*deploy* config lives at `/etc/kayak/{host.yaml,deploy.env}`. |
+| `~/backups` | **unchanged** | Host backup target (`HostConfig.backup_dir`); `kayak-backup-*` units write here from `~/kayak/systemd/`. |
+
 ```bash
 cd /home/<svc>/kayak
 
