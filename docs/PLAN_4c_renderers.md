@@ -143,11 +143,14 @@ must carry the per-unit write-path set, not a blanket one.
 4. **Deployer serving-path gate + quiesce-timeout fix** (`deploy/kayak-deploy.sh`).
    *(this PR)* When `SERVING_CUTOVER=yes` the gate now verifies, before any
    mutation: every re-pointed unit that pins `OUTPUT_DIR` matches `$KAYAK_DOCROOT`
-   (via `systemctl show -p Environment`); and — when `KAYAK_NGINX_DOCROOT_CONF` /
-   `KAYAK_FPM_POOL` are set (the 4C runbook sets them; unset = warn+skip) — that
-   nginx roots at `$KAYAK_DOCROOT`, the ACME `root /var/www/certbot;` survives (PR
-   #194 review #2 — a blanket root-sed would break renewal), and the FPM
-   `open_basedir` leads with `$KAYAK_DOCROOT`. The quiesce drain-timeout now backs
+   (via `systemctl show -p Environment`); and — `KAYAK_NGINX_DOCROOT_CONF` /
+   `KAYAK_FPM_POOL` are REQUIRED under `SERVING_CUTOVER=yes` (fail-closed, PR #195
+   review #1 — the same runbook sets both, and warn-skip would let an nginx
+   half-cutover through) — that nginx roots ONLY at `$KAYAK_DOCROOT` (exclusive: a
+   leftover legacy `root` is refused, since nginx serves the last; PR #195 review
+   #2), the ACME `root /var/www/certbot;` survives (PR #194 review #2 — a blanket
+   root-sed would break renewal), and the FPM `open_basedir` (anchored grep) leads
+   with `$KAYAK_DOCROOT`. The quiesce drain-timeout now backs
    out maintenance + restarts consumers before its explicit `exit` (which doesn't
    fire the ERR trap even under `-E`) — the [[deploy_quiesce_timeout_followup]]
    fix. Drain bound parameterized (`KAYAK_DRAIN_TIMEOUT`/`_INTERVAL`) so the

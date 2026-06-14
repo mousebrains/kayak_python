@@ -438,6 +438,7 @@ def test_activation_rolls_back_db_symlink_and_config_on_failed_health(
             "KAYAK_RUNTIME_CONFIG": str(runtime_config),
             "KAYAK_CONFIG_INSTALLER": str(installer),
             "KAYAK_SYSTEMCTL": str(systemctl),
+            **_serving_knobs(tmp_path, docroot),
             # Force the privileged branch with a same-user runuser shim so the
             # app-user DB boundary (backup/restore/build via run_app) is
             # actually exercised — it is a pass-through otherwise.
@@ -530,6 +531,17 @@ def _activation_stubs(tmp_path: Path, root: Path, runtime_config: Path) -> dict[
     }
 
 
+def _serving_knobs(tmp_path: Path, docroot: Path) -> dict[str, str]:
+    """Good nginx/FPM serving fixtures + the knobs the gate now REQUIRES under
+    SERVING_CUTOVER=yes (fail-closed, PR #195 review #1). nginx roots only the
+    docroot + the ACME root; the FPM open_basedir leads with the docroot."""
+    nginx = tmp_path / "levels-common.conf"
+    nginx.write_text(f"    root {docroot};\n    root /var/www/certbot;\n")
+    fpm = tmp_path / "kayak-pool.conf"
+    fpm.write_text(f"php_admin_value[open_basedir] = {docroot}:{tmp_path}/var:{tmp_path}/DB\n")
+    return {"KAYAK_NGINX_DOCROOT_CONF": str(nginx), "KAYAK_FPM_POOL": str(fpm)}
+
+
 @pytest.mark.slow
 def test_activation_prunes_old_releases(
     tmp_path: Path, deploy_root: Path, engine_repo, dataset_repo
@@ -570,6 +582,7 @@ def test_activation_prunes_old_releases(
             "HOME": str(tmp_path),
             "SUDO_USER": "",
             "KAYAK_UNITS": "kayak-pipeline.timer",
+            **_serving_knobs(tmp_path, tmp_path / "docroot"),
             # Keep ONLY current + previous, so the 3rd activation prunes the 1st.
             "KAYAK_KEEP_RELEASES": "0",
         }
@@ -658,6 +671,7 @@ def test_rollback_rebuilds_docroot_when_build_fails_midway(
             "HOME": str(tmp_path),
             "SUDO_USER": "",
             "KAYAK_UNITS": "kayak-pipeline.timer",
+            **_serving_knobs(tmp_path, docroot),
         }
         return _run(["--engine-ref", engine_sha, "--dataset-ref", ds_sha], env, timeout=900)
 
@@ -727,6 +741,7 @@ def test_rollback_rebuilds_docroot_with_absolute_current_symlink(
             "HOME": str(tmp_path),
             "SUDO_USER": "",
             "KAYAK_UNITS": "kayak-pipeline.timer",
+            **_serving_knobs(tmp_path, docroot),
         }
         if health_url is not None:
             env["HEALTH_URL"] = health_url
@@ -819,7 +834,7 @@ def test_serving_path_gate_refuses_half_cutover(
     host_env = tmp_path / "host.env"
     host_env.write_text(f"SITE_URL=https://x.example.org\nSQLITE_PATH={db}\n")
 
-    def activate() -> subprocess.CompletedProcess[str]:
+    def activate(*, with_knobs: bool = True) -> subprocess.CompletedProcess[str]:
         env = {
             "KAYAK_DEPLOY_CONF": str(conf),
             "KAYAK_DEPLOY_ROOT": str(root),
@@ -834,9 +849,10 @@ def test_serving_path_gate_refuses_half_cutover(
             "HOME": str(tmp_path),
             "SUDO_USER": "",
             "KAYAK_UNITS": "kayak-pipeline.timer",
-            "KAYAK_NGINX_DOCROOT_CONF": str(nginx_conf),
-            "KAYAK_FPM_POOL": str(fpm_pool),
         }
+        if with_knobs:
+            env["KAYAK_NGINX_DOCROOT_CONF"] = str(nginx_conf)
+            env["KAYAK_FPM_POOL"] = str(fpm_pool)
         return _run(["--engine-ref", engine_sha, "--dataset-ref", ds_sha], env, timeout=900)
 
     # 1) Everything points at the docroot → activation succeeds (and stages the
@@ -867,6 +883,30 @@ def test_serving_path_gate_refuses_half_cutover(
     fpm_pool.write_text("php_admin_value[open_basedir] = /home/pat/public_html:/home/x/DB\n")
     bad = activate()
     assert bad.returncode != 0 and "open_basedir does not lead with" in bad.stderr
+    good_fpm()
+
+    # 6) A leftover legacy root alongside the docroot + certbot → refuse: presence
+    #    isn't enough, every root must be the docroot or the ACME root, else nginx
+    #    serves the LAST one (PR #195 review #2).
+    nginx_conf.write_text(
+        f"    root {docroot};\n    root /home/pat/public_html;\n    root /var/www/certbot;\n"
+    )
+    bad = activate()
+    assert bad.returncode != 0 and "unexpected nginx root" in bad.stderr
+    good_nginx()
+
+    # 7) SERVING_CUTOVER=yes but the serving knobs unset → fail-closed, not skipped
+    #    (PR #195 review #1 — warn-skip would let an nginx half-cutover through).
+    bad = activate(with_knobs=False)
+    assert bad.returncode != 0
+    assert "KAYAK_NGINX_DOCROOT_CONF" in bad.stderr
+
+    # 8) A `;`-commented open_basedir must not satisfy the anchored check → refuse
+    #    (PR #195 review #3).
+    fpm_pool.write_text(f"; php_admin_value[open_basedir] = {docroot}:/home/x/DB\n")
+    bad = activate()
+    assert bad.returncode != 0 and "open_basedir does not lead with" in bad.stderr
+    good_fpm()
 
     # None of the refusals mutated the DB (the gate is pre-backup).
     assert ".backup" not in runuser_log.read_text() or runuser_log.read_text().count(".backup") == 1
@@ -931,6 +971,7 @@ def test_quiesce_timeout_backs_out_maintenance(
         "HOME": str(tmp_path),
         "SUDO_USER": "",
         "KAYAK_UNITS": "kayak-pipeline.timer",
+        **_serving_knobs(tmp_path, tmp_path / "docroot"),
         # Tiny drain bound so the loop times out in ~2 s, not 120 s.
         "KAYAK_DRAIN_TIMEOUT": "2",
         "KAYAK_DRAIN_INTERVAL": "1",
