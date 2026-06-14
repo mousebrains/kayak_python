@@ -145,6 +145,13 @@ must carry the per-unit write-path set, not a blanket one.
    `OUTPUT_DIR`+`ReadWritePaths` resolve to `$KAYAK_DOCROOT`; back out maintenance
    on a drain timeout (the [[deploy_quiesce_timeout_followup]] fix). Branch off
    #192. Slow-test the gate.
+   - **Apply-step caveat (PR #194 review #2):** `conf/snippets/levels-common.conf`
+     has TWO `root` directives — the docroot (~line 30) and the ACME
+     `root /var/www/certbot;` (~line 305). The cutover apply must target the
+     docroot line specifically (a blanket `sed 's/^\s*root .*/…/'` would clobber
+     the certbot root and break renewal), and this gate should verify the certbot
+     root survived. (`test_host_render_serving.py` already asserts there's exactly
+     one non-certbot `root`, so a structural change trips CI.)
 5. **Derive `KAYAK_UNITS`/`KAYAK_HOST_UNITS` from installed timers** (closes the
    complete-consumer-enumeration item; resolves D-CONSUMER).
 6. **Runbook §5 rewrite** (`deploy/INSTALL-paired-release.md` on `b4c-paired-install`):

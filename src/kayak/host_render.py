@@ -29,8 +29,11 @@ from pathlib import PurePosixPath
 from kayak.host import HostConfig
 
 # The root config wrapper installs the secret-merged PHP config here; the
-# deployer's KAYAK_RUNTIME_CONFIG defaults to the same path. PHP reads it (it's
-# in open_basedir), so it's a fixed system location, not a per-host knob.
+# deployer's KAYAK_RUNTIME_CONFIG defaults to the same path. PHP reads it (it's in
+# open_basedir), so it's a fixed system location, not a per-host knob. MUST stay
+# in lockstep with the deployer's KAYAK_RUNTIME_CONFIG: overriding one without the
+# other points open_basedir at the wrong file and 500s PHP ([CONFIG-FATAL]) — if
+# that path ever becomes configurable, both must read the same source (review #4).
 RUNTIME_CONFIG_PATH = "/etc/kayak/runtime-config.json"
 
 

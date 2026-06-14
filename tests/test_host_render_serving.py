@@ -8,9 +8,43 @@ from pathlib import Path
 from kayak.host import HostConfig
 from kayak.host_render import render_fpm_open_basedir, render_nginx_root
 
+_REPO = Path(__file__).resolve().parents[1]
+
 
 def _cutover() -> HostConfig:
     return HostConfig(service_home="/home/pat", docroot="/var/cache/kayak/docroot")
+
+
+class TestRendererPinnedToCommittedConfig:
+    """The renderer is a second source of truth for open_basedir/root; pin it to
+    the committed pool/snippet so the sandbox can't silently diverge from what the
+    renderer will emit at cutover (PR #194 review #1 — open_basedir REPLACES, so a
+    dropped path means PHP silently loses access)."""
+
+    def test_default_open_basedir_matches_committed_pool_byte_for_byte(self) -> None:
+        pool = _REPO / "deploy" / "kayak-fpm-pool.conf"
+        committed = [
+            ln.rstrip("\n")
+            for ln in pool.read_text().splitlines()
+            if ln.startswith("php_admin_value[open_basedir]")
+        ]
+        assert len(committed) == 1, "expected exactly one open_basedir in the pool"
+        # The default HostConfig is the live WKCC shape, so the renderer must
+        # reproduce the committed line exactly — entries, order, ` = ` spacing.
+        assert render_fpm_open_basedir(HostConfig()).rstrip("\n") == committed[0]
+
+    def test_default_root_matches_committed_snippet_and_only_the_docroot_one(self) -> None:
+        snippet = _REPO / "conf" / "snippets" / "levels-common.conf"
+        roots = [
+            ln.strip() for ln in snippet.read_text().splitlines() if ln.strip().startswith("root ")
+        ]
+        # Two root directives exist — the docroot (line ~30) and the ACME
+        # `root /var/www/certbot;` (line ~305). The renderer covers only the
+        # docroot one; the apply step (increment 4) must not clobber the certbot
+        # root (PR #194 review #2). This asserts exactly one non-certbot root.
+        docroot_roots = [r for r in roots if "certbot" not in r]
+        assert len(docroot_roots) == 1, f"expected one docroot root, got {docroot_roots}"
+        assert render_nginx_root(HostConfig()).strip() == docroot_roots[0]
 
 
 class TestRenderNginxRoot:

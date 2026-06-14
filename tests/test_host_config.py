@@ -145,10 +145,18 @@ class TestLoadHostConfig:
     def test_path_with_whitespace_rejected(self) -> None:
         # Path fields are f-string-interpolated into systemd directives; a space
         # splits a ReadWritePaths= entry, a newline injects a directive.
-        with pytest.raises(ValueError, match="whitespace or control"):
+        with pytest.raises(ValueError, match="whitespace, control"):
             host.HostConfig(docroot="/var/cache/kayak/docroot\nExecStartPre=/bin/x")
-        with pytest.raises(ValueError, match="whitespace or control"):
+        with pytest.raises(ValueError, match="whitespace, control"):
             host.HostConfig(release_root="/opt/kayak extra")
+
+    def test_path_with_config_delimiter_rejected(self) -> None:
+        # ':' would silently widen PHP's colon-delimited open_basedir; ';' ends an
+        # nginx directive early (PR #194 review #3).
+        with pytest.raises(ValueError, match="delimiters"):
+            host.HostConfig(docroot="/var/cache/kayak/docroot:/etc")
+        with pytest.raises(ValueError, match="delimiters"):
+            host.HostConfig(status_output="/home/pat/var/status.html;root /evil")
 
     def test_malformed_yaml_fails_closed(self, tmp_path: Path) -> None:
         f = tmp_path / "host.yaml"
