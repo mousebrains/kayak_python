@@ -836,7 +836,15 @@ def test_serving_path_gate_refuses_half_cutover(
     host_env = tmp_path / "host.env"
     host_env.write_text(f"SITE_URL=https://x.example.org\nSQLITE_PATH={db}\n")
 
-    def activate(*, with_knobs: bool = True) -> subprocess.CompletedProcess[str]:
+    # A stub the gate can be pointed at via KAYAK_ENGINE_BIN to make
+    # `render-units --list-units` produce nothing (the fail-closed path).
+    engine_noop = tmp_path / "engine-noop.sh"
+    engine_noop.write_text("#!/bin/sh\nexit 0\n")
+    engine_noop.chmod(0o755)
+
+    def activate(
+        *, with_knobs: bool = True, engine_bin: str | None = None
+    ) -> subprocess.CompletedProcess[str]:
         env = {
             "KAYAK_DEPLOY_CONF": str(conf),
             "KAYAK_DEPLOY_ROOT": str(root),
@@ -855,6 +863,8 @@ def test_serving_path_gate_refuses_half_cutover(
         if with_knobs:
             env["KAYAK_NGINX_DOCROOT_CONF"] = str(nginx_conf)
             env["KAYAK_FPM_POOL"] = str(fpm_pool)
+        if engine_bin is not None:
+            env["KAYAK_ENGINE_BIN"] = engine_bin
         return _run(["--engine-ref", engine_sha, "--dataset-ref", ds_sha], env, timeout=900)
 
     # 1) Everything points at the docroot → activation succeeds (and stages the
@@ -877,6 +887,12 @@ def test_serving_path_gate_refuses_half_cutover(
     assert bad.returncode != 0
     assert "does not run from" in bad.stderr
     execfile.write_text(f"{root}/current/venv/bin/levels pipeline")
+
+    # 2c) `render-units --list-units` produces nothing (e.g. an engine ref too old
+    #     to support it) → fail-closed refuse, not a fail-open skip (PR #196 review #2).
+    bad = activate(engine_bin=str(engine_noop))
+    assert bad.returncode != 0
+    assert "could not enumerate the engine units" in bad.stderr
 
     # 3) nginx still rooting the legacy docroot → refuse.
     nginx_conf.write_text("    root /home/pat/public_html;\n    root /var/www/certbot;\n")

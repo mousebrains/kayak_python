@@ -48,10 +48,18 @@
 #   KAYAK_RUNTIME_CONFIG           PHP config path (default /etc/kayak/runtime-config.json)
 #   KAYAK_CONFIG_INSTALLER         root config wrapper path
 #   KAYAK_SYSTEMCTL                systemctl path
+#   KAYAK_ENGINE_BIN               release `levels` the gate asks for the engine
+#                                  unit list (default $RELEASE_DIR/venv/bin/levels)
 #
 # Requires on the host: git, sqlite3, curl, and a python3 whose stdlib
 # venv/ensurepip work (Debian: apt install python3-venv) — no system pip
 # needed; scratch and release venvs bootstrap their own.
+#
+# Engine-version floor (cutover only): when SERVING_CUTOVER=yes, the gate asks the
+# RELEASE engine for the units to verify (`levels render-units --list-units`), so
+# the engine ref being activated must support that subcommand. An older pinned ref
+# fails closed at the gate (forward-only); rollback is unaffected (it doesn't
+# re-run the gate).
 #
 # Phases:
 #   validate  ref shape + protected-branch reachability (no mutation)
@@ -557,11 +565,23 @@ fi
 # checkout-script consumers (healthcheck/config-drift/recap/heartbeat) run from the
 # repo, not the venv, and an exempt-by-omission gate would false-fail on them.
 # Everything not in this list is implicitly host-level (not verified).
-ENGINE_SVCS="$("$RELEASE_DIR/venv/bin/levels" render-units --list-units 2>/dev/null || true)"
+# KAYAK_ENGINE_BIN: the release's levels (overridable for tests). Because the gate
+# asks the RELEASE engine for the list, the engine being activated must support
+# `render-units --list-units` (>= the PR that added it) — an older pinned engine
+# ref fails closed here. Keep its stderr (a `2>/dev/null` would turn an import
+# error or an unrecognized-arg from an old engine into a bare "produced nothing" —
+# PR #196 review #1).
+KAYAK_ENGINE_BIN="${KAYAK_ENGINE_BIN:-$RELEASE_DIR/venv/bin/levels}"
+ENGINE_SVCS="$("$KAYAK_ENGINE_BIN" render-units --list-units 2>"$SCRATCH/list-units.err" || true)"
 if [ -z "$ENGINE_SVCS" ]; then
     echo "Error: could not enumerate the engine units to verify" >&2
-    echo "  (\`$RELEASE_DIR/venv/bin/levels render-units --list-units\` produced nothing)" >&2
-    echo "  — refusing to activate without the cutover-verification list." >&2
+    echo "  (\`$KAYAK_ENGINE_BIN render-units --list-units\` produced no output)" >&2
+    if [ -s "$SCRATCH/list-units.err" ]; then
+        echo "  engine stderr:" >&2
+        sed 's/^/    /' "$SCRATCH/list-units.err" >&2
+    fi
+    echo "  — refusing to activate without the cutover-verification list (an engine" >&2
+    echo "  ref older than \`render-units --list-units\` support cannot be cut over)." >&2
     exit 1
 fi
 for svc in $ENGINE_SVCS; do
