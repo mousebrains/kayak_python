@@ -28,6 +28,14 @@ from pathlib import PurePosixPath
 
 from kayak.host import HostConfig
 
+# The root config wrapper installs the secret-merged PHP config here; the
+# deployer's KAYAK_RUNTIME_CONFIG defaults to the same path. PHP reads it (it's in
+# open_basedir), so it's a fixed system location, not a per-host knob. MUST stay
+# in lockstep with the deployer's KAYAK_RUNTIME_CONFIG: overriding one without the
+# other points open_basedir at the wrong file and 500s PHP ([CONFIG-FATAL]) — if
+# that path ever becomes configurable, both must read the same source (review #4).
+RUNTIME_CONFIG_PATH = "/etc/kayak/runtime-config.json"
+
 
 @dataclass(frozen=True)
 class CutoverDropIn:
@@ -108,3 +116,39 @@ def render_cutover_dropins(h: HostConfig) -> list[CutoverDropIn]:
         lines.append(f"ReadWritePaths={' '.join(write_paths)}")
         dropins.append(CutoverDropIn(unit=f"{name}.service", text="\n".join(lines) + "\n"))
     return dropins
+
+
+# --- serving config (nginx root + PHP-FPM open_basedir) ----------------------
+# The cutover's only host-specific serving delta is the docroot path: nginx's
+# `root` and the FPM `open_basedir` both move from the live `public_html` to the
+# shared cache (`host.docroot` = the deployer's KAYAK_DOCROOT). Everything else
+# (vhost server_names, the shared cert, the FPM socket/user) is static, committed
+# config. Note the #3 docroot move dropped the `/opt/kayak/releases` open_basedir
+# entry the pre-#3 design needed: the docroot is no longer inside the release, and
+# `build` copies a self-contained PHP tree into it, so PHP never reads the release.
+
+
+def render_nginx_root(h: HostConfig) -> str:
+    """The nginx ``root`` directive for the served docroot.
+
+    Replaces the hand-typed `root …;` in ``conf/snippets/levels-common.conf`` at
+    cutover; the value is now derived from ``host.yaml`` deterministically.
+    """
+    return f"root {h.docroot};\n"
+
+
+def render_fpm_open_basedir(h: HostConfig) -> str:
+    """The PHP-FPM pool ``open_basedir`` directive — PHP's literal-path sandbox.
+
+    The served docroot + the runtime data PHP reads (status cache, DB, logs) +
+    the runtime-config file. ``open_basedir`` REPLACES (not extends) php.ini, so
+    the list must be complete.
+    """
+    paths = [
+        h.docroot,
+        f"{h.service_home}/var",
+        f"{h.service_home}/DB",
+        f"{h.service_home}/logs",
+        RUNTIME_CONFIG_PATH,
+    ]
+    return f"php_admin_value[open_basedir] = {':'.join(paths)}\n"

@@ -49,12 +49,18 @@ _USERNAME_RE = re.compile(r"\A[a-z_][a-z0-9_-]*\Z")
 # PHP-FPM pool version as it appears in the /etc/php/<v>/fpm path (major.minor).
 # [0-9] not \d — \d also matches Unicode digits, which the path can't contain.
 _PHP_VERSION_RE = re.compile(r"\A[0-9]+\.[0-9]+\Z")
-# Whitespace / control chars in a path field. The renderers interpolate paths
-# into systemd directives by plain f-string (Environment=, ReadWritePaths=,
-# WorkingDirectory=, ExecStart=); a newline injects a directive and a space
-# splits a ReadWritePaths= entry, so reject both even though host.yaml is trusted
-# (defense-in-depth, the same reasoning that hardened service_user — review #2).
-_PATH_BAD_CHAR_RE = re.compile(r"[\s\x00-\x1f\x7f]")
+# Characters a path field must not contain, because the renderers drop these
+# paths verbatim into structured config contexts:
+#   - whitespace / control: a space splits a `ReadWritePaths=` entry, a newline
+#     injects a whole new systemd/nginx directive;
+#   - ':' : `open_basedir` is colon-delimited, so a ':' would SILENTLY widen PHP's
+#     sandbox with a spurious entry (the dangerous one — no loud failure);
+#   - ';' '{' '}' '#': nginx statement terminator / block / comment — a ';' ends
+#     the `root` directive early, the others malform the block (`nginx -t` catches
+#     these loudly, but reject them here so the renderer output is well-formed by
+#     construction). host.yaml is root-owned/trusted, so this is defense-in-depth
+#     (PR #193 review #2 + PR #194 review #3).
+_PATH_BAD_CHAR_RE = re.compile(r"[\s\x00-\x1f\x7f:;{}#]")
 
 
 class HostConfig(BaseModel):
@@ -137,7 +143,10 @@ class HostConfig(BaseModel):
         if not v.startswith("/"):
             raise ValueError(f"must be an absolute path (got {v!r})")
         if _PATH_BAD_CHAR_RE.search(v):
-            raise ValueError(f"must not contain whitespace or control characters (got {v!r})")
+            raise ValueError(
+                "must not contain whitespace, control characters, or the config "
+                f"delimiters :;{{}}# (got {v!r})"
+            )
         return v
 
     @field_validator("service_user")
