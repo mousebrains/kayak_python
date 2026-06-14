@@ -289,6 +289,67 @@ Verify:
 TLS (real certbot), fail2ban, firewall, mail, swap, unattended-upgrades — same as
 SETUP.md §5/§10–§17; point status/backup/cert checks at this host's values.
 
+## Migrating a RUNNING host (the live WKCC cutover) — validated 2026-06-14
+
+The steps above install a *virgin* host. The live host is a **running** system on
+`scripts/deploy.sh` + `/home/<svc>/public_html` + the editable `.venv` install +
+the live DB. Cutting it over **without dropping serving** rehearsed cleanly on a
+live-equivalent VM clone (full live DB — 4.46 M obs, 77 migrations, served the
+whole time). The trick: build the paired-release ALONGSIDE the live one and
+**defer the nginx reload / FPM restart until AFTER the activation builds the new
+docroot**, then flip with a graceful reload. Differs from the virgin path: NO
+`init-db` (reuse the live DB — `migrate` reports "No pending" when the host already
+runs the deployed engine), NO base prep / repo clone (present), and the serving
+config is edited in place but not reloaded until the end.
+
+```bash
+cd /home/<svc>/kayak
+
+# Phase 0 — pre-stage ALONGSIDE the running site (no disruption: still serving public_html)
+sudo install -d -o <svc> -g <svc> /var/cache/kayak/docroot /var/cache/kayak/map-layers /var/cache/kayak/gauge-metadata
+printf 'docroot: /var/cache/kayak/docroot\nmap_layers_dir: /var/cache/kayak/map-layers\ngauge_metadata_cache: /var/cache/kayak/gauge-metadata/gauges.db\n' | sudo tee /etc/kayak/host.yaml >/dev/null
+sudo install -m 0644 deploy/deploy.env.example /etc/kayak/deploy.env
+sudo sed -i -e 's#^ENGINE_REPO=.*#ENGINE_REPO=https://github.com/mousebrains/kayak_python.git#' \
+            -e 's#^DATASET_REPO=.*#DATASET_REPO=https://github.com/mousebrains/kayak_data.git#' \
+            -e 's/^#\?ENGINE_BRANCH=.*/ENGINE_BRANCH=main/' /etc/kayak/deploy.env
+sudo env KAYAK_DEPLOY_CONF=/etc/kayak/deploy.env deploy/kayak-deploy.sh \
+  --engine-ref <40hex> --dataset-ref <40hex> --stage-only        # prints the release dir → R
+R=/opt/kayak/releases/<id>
+
+# Phase 1 — apply the cutover config to the FILES only; DO NOT reload nginx/FPM yet
+sudo install -d /run/kayak-serving
+sudo $R/venv/bin/levels render-serving --out-dir /run/kayak-serving
+sudo sed -i "s#^[[:space:]]*root .*/public_html;#$(cat /run/kayak-serving/nginx-levels-docroot.conf)#" /etc/nginx/snippets/levels-common.conf
+sudo nginx -t                                          # validates the FILE; running nginx unchanged
+sudo sed -i "s#^[[:space:]]*php_admin_value\[open_basedir\].*#$(cat /run/kayak-serving/fpm-open-basedir.conf)#" /etc/php/8.4/fpm/pool.d/kayak.conf
+sudo systemctl stop 'kayak-*.timer'                    # BEFORE re-pointing — a re-pointed unit must not fire pre-activation
+sudo $R/venv/bin/levels render-units --out-dir /etc/systemd/system    # WARNs "current doesn't exist yet" — expected
+sudo systemctl daemon-reload
+sudo -u <svc> sed -i 's#^OUTPUT_DIR=.*#OUTPUT_DIR=/var/cache/kayak/docroot#' /home/<svc>/.config/kayak/.env
+sudo setfacl -R -m u:www-data:rX /var/cache/kayak/docroot; sudo setfacl -R -d -m u:www-data:rX /var/cache/kayak/docroot
+sudo sed -i -e 's/^#\?SERVING_CUTOVER=.*/SERVING_CUTOVER=yes/' \
+  -e 's,^#\?KAYAK_NGINX_DOCROOT_CONF=.*,KAYAK_NGINX_DOCROOT_CONF=/etc/nginx/snippets/levels-common.conf,' \
+  -e 's,^#\?KAYAK_FPM_POOL=.*,KAYAK_FPM_POOL=/etc/php/8.4/fpm/pool.d/kayak.conf,' /etc/kayak/deploy.env
+# the install-config.sh FPM/nginx-reload step is SKIPPED here — the pool + runtime-config
+# already exist on a running host, and a reload now would serve the empty new docroot.
+
+# Phase 2 — activate (gate passes on the FILES; migrate runs on the live DB; builds the new docroot)
+sudo env KAYAK_DEPLOY_CONF=/etc/kayak/deploy.env deploy/kayak-deploy.sh \
+  --engine-ref <40hex> --dataset-ref <40hex>
+# (still serving public_html — the activation built /var/cache/kayak/docroot but didn't touch nginx/FPM)
+
+# Phase 3 — the graceful flip to the new docroot
+sudo systemctl reload nginx          # now roots /var/cache/kayak/docroot (built)
+sudo systemctl restart php8.4-fpm    # picks up the new open_basedir
+```
+
+Verify: homepage + `description.php?h=1` 200 from the new docroot
+(`nginx -T | grep 'root /var/cache'`); `kayak-audit-gauges`'s ExecStart is now
+`levels audit-gauges` (the #191 fix lands *via the cutover*, since
+`scripts/deploy.sh` never reinstalled the unit). The old `public_html` + `.venv`
+are now unused — leave them as a fallback or clean up later. Future deploys go
+through `kayak-deploy.sh`, not `scripts/deploy.sh`.
+
 ## Resolved findings (were open items)
 
 - **DB bootstrap:** `init-db` + `sync-metadata` + `import-metadata` via the staged
@@ -304,15 +365,13 @@ SETUP.md §5/§10–§17; point status/backup/cert checks at this host's values.
 - **Docroot is the #3 shared cache** `/var/cache/kayak/docroot`, not inside the
   release.
 
-## Still open (4C increment 7 — the live cutover)
+## Still open
 
-- **The live WKCC *migration*.** This runbook is the virgin-install path (validated
-  above). The live host is a *running* system on `scripts/deploy.sh` +
-  `/home/pat/public_html` + the editable install + the live DB — so the cutover
-  there needs extra ordering this runbook doesn't yet cover: keep the old serving
-  up until the new docroot is built, reuse the existing DB (no `init-db`/bootstrap),
-  re-point nginx/FPM/units off the old layout, and retire `scripts/deploy.sh`. That
-  transition gets rehearsed on a live-equivalent VM clone before the real host.
+- **Execute the live WKCC cutover.** Both the virgin install and the running-host
+  migration (above) are VM-validated end-to-end; what's left is running the
+  migration on the real host. Snapshot/backup first; the rollback path (a failed
+  activation restores the DB + leaves the host in maintenance) is the safety net,
+  and the old `public_html`/`.venv` stay as a manual fallback.
 - **Genericization (deferred):** the vhost `server_names` type and the hardcoded
   `/var/www/certbot` ACME root become `host.yaml` knobs only for a truly non-WKCC
   install (keep-current-then-flip leaves them at WKCC values today).
