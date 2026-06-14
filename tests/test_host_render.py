@@ -138,3 +138,22 @@ class TestRenderUnitsCli:
         rc = cli.render_units(argparse.Namespace(out_dir=None, host_config=bad))
         assert rc == 1
         assert "host config invalid" in capsys.readouterr().err
+
+    def test_warns_when_release_current_missing(self, tmp_path: Path, capsys) -> None:
+        from kayak.cli import render_units as cli
+
+        hy = tmp_path / "host.yaml"
+        hy.write_text(f"release_root: {tmp_path}/opt\n")  # no opt/current
+        rc = cli.render_units(argparse.Namespace(out_dir=tmp_path / "out", host_config=hy))
+        assert rc == 0
+        assert "does not exist yet" in capsys.readouterr().err
+
+    def test_no_warning_when_release_current_exists(self, tmp_path: Path, capsys) -> None:
+        from kayak.cli import render_units as cli
+
+        (tmp_path / "opt" / "current").mkdir(parents=True)
+        hy = tmp_path / "host.yaml"
+        hy.write_text(f"release_root: {tmp_path}/opt\n")
+        rc = cli.render_units(argparse.Namespace(out_dir=tmp_path / "out", host_config=hy))
+        assert rc == 0
+        assert "does not exist yet" not in capsys.readouterr().err

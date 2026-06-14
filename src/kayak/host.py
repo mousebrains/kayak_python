@@ -36,15 +36,25 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 HOST_YAML = "/etc/kayak/host.yaml"
 
-_HOSTNAME_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$")
+# All anchored with \A…\Z, NOT ^…$: Python's `$` also matches just before a
+# trailing newline, so `^…$` would accept e.g. "pat\n" and let a newline smuggle
+# a second directive into a rendered unit / shell command (PR #193 review #2).
+_HOSTNAME_RE = re.compile(r"\A[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+\Z")
 # rclone remote names: word characters and hyphens (no ':' — the colon is
 # syntax, appended by consumers).
-_RCLONE_REMOTE_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+_RCLONE_REMOTE_RE = re.compile(r"\A[A-Za-z0-9_-]+\Z")
 # POSIX-portable service account name (useradd's NAME_REGEX): start with a
 # lower-case letter or underscore, then lower/digit/underscore/hyphen.
-_USERNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]*$")
+_USERNAME_RE = re.compile(r"\A[a-z_][a-z0-9_-]*\Z")
 # PHP-FPM pool version as it appears in the /etc/php/<v>/fpm path (major.minor).
-_PHP_VERSION_RE = re.compile(r"^\d+\.\d+$")
+# [0-9] not \d — \d also matches Unicode digits, which the path can't contain.
+_PHP_VERSION_RE = re.compile(r"\A[0-9]+\.[0-9]+\Z")
+# Whitespace / control chars in a path field. The renderers interpolate paths
+# into systemd directives by plain f-string (Environment=, ReadWritePaths=,
+# WorkingDirectory=, ExecStart=); a newline injects a directive and a space
+# splits a ReadWritePaths= entry, so reject both even though host.yaml is trusted
+# (defense-in-depth, the same reasoning that hardened service_user — review #2).
+_PATH_BAD_CHAR_RE = re.compile(r"[\s\x00-\x1f\x7f]")
 
 
 class HostConfig(BaseModel):
@@ -126,6 +136,8 @@ class HostConfig(BaseModel):
     def _abs_path(cls, v: str) -> str:
         if not v.startswith("/"):
             raise ValueError(f"must be an absolute path (got {v!r})")
+        if _PATH_BAD_CHAR_RE.search(v):
+            raise ValueError(f"must not contain whitespace or control characters (got {v!r})")
         return v
 
     @field_validator("service_user")

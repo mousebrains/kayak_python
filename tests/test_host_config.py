@@ -131,6 +131,25 @@ class TestLoadHostConfig:
         with pytest.raises(ValueError, match=r"major\.minor"):
             host.load_host_config(f)
 
+    def test_service_user_trailing_newline_rejected(self) -> None:
+        # `\Z` not `$`: a trailing newline would otherwise smuggle a second
+        # directive into a rendered unit / ACL command (PR #193 review #2).
+        with pytest.raises(ValueError, match="POSIX username"):
+            host.HostConfig(service_user="pat\n")
+
+    def test_fpm_version_unicode_digit_rejected(self) -> None:
+        # `[0-9]` not `\d` — \d matches Unicode digits the path can't contain.
+        with pytest.raises(ValueError, match=r"major\.minor"):
+            host.HostConfig(fpm_pool_php="8.٤")  # Arabic-Indic 4
+
+    def test_path_with_whitespace_rejected(self) -> None:
+        # Path fields are f-string-interpolated into systemd directives; a space
+        # splits a ReadWritePaths= entry, a newline injects a directive.
+        with pytest.raises(ValueError, match="whitespace or control"):
+            host.HostConfig(docroot="/var/cache/kayak/docroot\nExecStartPre=/bin/x")
+        with pytest.raises(ValueError, match="whitespace or control"):
+            host.HostConfig(release_root="/opt/kayak extra")
+
     def test_malformed_yaml_fails_closed(self, tmp_path: Path) -> None:
         f = tmp_path / "host.yaml"
         f.write_text("timezone: [unclosed\n")

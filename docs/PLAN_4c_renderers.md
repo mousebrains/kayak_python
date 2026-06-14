@@ -29,17 +29,29 @@ fix `DATASET_DIR`/`OUTPUT_DIR`/`WorkingDirectory`/`ReadWritePaths`:**
 `kayak-pipeline`, `kayak-decimate`, `kayak-editor-retention`, `kayak-fetch-osmb`,
 `kayak-status`, **`kayak-audit-gauges`** (new, via #191).
 
-**B. Repo-shell-script consumers — run `/home/<svc>/kayak/{scripts,systemd}/*.sh`,
-NOT the venv.** They keep running from the repo checkout (which still exists on
-the live host), so the cutover does **not** re-point them. But two of them touch
-the DB and so must still be in the deployer's quiesce set (`KAYAK_UNITS`) even
-though they're not re-pointed:
-- `kayak-healthcheck` (`scripts/health-check.sh`) — reads the DB.
-- `kayak-config-drift` (`scripts/check-config-drift.sh`) — compares repo↔/etc.
-- `kayak-recap` (`systemd/kayak-recap.sh`) — reads journald, not the DB.
-- `kayak-heartbeat` (`systemd/kayak-heartbeat.sh`) — curl heartbeat, not the DB.
+**B. Checkout-script consumers — run `/home/<svc>/kayak/{scripts,systemd}/*.sh`,
+none of which invoke `levels`.** They keep running from the repo checkout (which
+still exists on the live host), so the cutover does **not** re-point them. Two of
+them touch the DB and so must still be in the deployer's quiesce set
+(`KAYAK_UNITS`) even though they're not re-pointed (descriptions verified against
+the live scripts — PR #193 review #1):
+- `kayak-healthcheck` (`scripts/health-check.sh`) — reads the DB → **quiesce**.
+- `kayak-config-drift` (`scripts/check-config-drift.sh`) — compares repo↔/etc, no
+  DB content read.
+- `kayak-recap` (`systemd/kayak-recap.sh`) — runs `${KAYAK_HOME}/.venv/bin/python3
+  scripts/recap.py` (the **editable-install venv**, NOT a `levels` subcommand);
+  journald only, no DB/dataset. Stays on the checkout — re-pointing buys nothing
+  (running old code to render a journald email is harmless); no quiesce.
+- `kayak-heartbeat` (`systemd/kayak-heartbeat.sh`) — `mail`/msmtp heartbeat (no
+  curl); `stat()`s the DB file mtime (no content read, no lock) → no quiesce.
 - `kayak-cert-expiry` (`scripts/check-cert-expiry.sh`), `kayak-cert-renewal-test`
   (`certbot`) — no DB.
+
+> Note: recap uses the venv but isn't a class-A unit — it runs `python3
+> scripts/recap.py`, not `levels`, and touches neither the migrated DB nor the
+> release dataset, so §Goal's "every `levels`-running consumer points at current"
+> doesn't reach it. The D-CONSUMER derivation keys re-pointing off "ExecStart runs
+> `…/levels`", which correctly excludes recap.
 
 **C. Pure host-level — exempt via `KAYAK_HOST_UNITS`:** `kayak-backup-{hourly,
 weekly,offsite}` (shell), `kayak-notify-failure@` (template), `kayak-fail-test`.

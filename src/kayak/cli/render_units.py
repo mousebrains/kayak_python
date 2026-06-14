@@ -51,6 +51,22 @@ def render_units(args: argparse.Namespace) -> int:
             print(d.text)
         return 0
 
+    # Every drop-in references {release_root}/current (DATASET_DIR, WorkingDirectory,
+    # the ExecStart venv), which exists only AFTER the first paired-release
+    # activation. Installing them onto a host whose release isn't live yet would
+    # point all six consumers at a non-existent dir and break them, so warn — the
+    # cutover runbook installs these only once `current` resolves (PR #193 review #3).
+    current = Path(host.release_root) / "current"
+    if not current.exists():
+        print(
+            f"render-units: WARNING: {current} does not exist yet — these drop-ins "
+            "reference it and will break the consumers if applied before the first "
+            "paired-release activation (cutover order: stage+activate, THEN install).",
+            file=sys.stderr,
+        )
+
+    # NOTE: this writes cutover.conf for the current 6-unit set but does not sweep a
+    # stale drop-in if that set ever shrinks; revisit if a consumer is retired.
     out_dir: Path = args.out_dir
     for d in dropins:
         dest = out_dir / d.path
