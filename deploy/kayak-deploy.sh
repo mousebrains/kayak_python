@@ -34,6 +34,10 @@
 #   KAYAK_DEPLOY_TMPDIR            scratch base — MUST be real disk, not a
 #                                  tmpfs (default $KAYAK_DEPLOY_ROOT/.staging;
 #                                  /tmp is a ~1 GB tmpfs on prod and overflows)
+#   KAYAK_DOCROOT                  served docroot — a regenerable CACHE outside
+#                                  the release, rebuilt in place by the deploy
+#                                  AND the hourly pipeline (default
+#                                  /var/cache/kayak/docroot). nginx serves this.
 #   KAYAK_RUNTIME_CONFIG           PHP config path (default /etc/kayak/runtime-config.json)
 #   KAYAK_CONFIG_INSTALLER         root config wrapper path
 #   KAYAK_SYSTEMCTL                systemctl path
@@ -49,9 +53,10 @@
 #             system mutation outside the new release dir)
 #   activate  maintenance on -> quiesce consumers (timers AND services) ->
 #             DB backup -> migrate -> all-or-nothing sync -> geom/gradient
-#             sidecars -> build docroot -> atomic symlink ->
-#             health check -> start consumers -> maintenance off.
-#             Any failure rolls back to the previous release + DB backup.
+#             sidecars -> build docroot (shared cache) -> atomic symlink
+#             (venv+dataset) -> health check -> start consumers -> maintenance
+#             off. Any failure rolls back the previous release + DB backup, and
+#             rebuilds the shared docroot from the previous release's venv.
 #
 # --stage-only ends after `stage` and prints the release path: this is the
 # test/rehearsal mode, and the recommended first run on any new host.
@@ -145,6 +150,13 @@ fi
 : "${KAYAK_UNITS:=kayak-pipeline.timer kayak-backup-hourly.timer kayak-backup-weekly.timer kayak-decimate.timer kayak-status.timer kayak-fetch-osmb.timer kayak-editor-retention.timer kayak-audit-gauges.timer kayak-healthcheck.timer}"
 : "${HEALTH_URL:=}"
 ROOT="${KAYAK_DEPLOY_ROOT:-/opt/kayak}"
+# The served docroot is a regenerable CACHE OUTSIDE the immutable release: the
+# hourly pipeline rebuilds it with fresh data, so it can't live in /opt/kayak/
+# releases/<id>/ (which the symlink cuts over atomically and the pipeline must
+# never write). nginx serves this path directly; the deploy + the pipeline both
+# `build` into it in place (per-file-atomic via os.replace, same as the legacy
+# public_html). Default to the S7 cache dir; must be real disk + app-writable.
+KAYAK_DOCROOT="${KAYAK_DOCROOT:-/var/cache/kayak/docroot}"
 RUNTIME_CONFIG="${KAYAK_RUNTIME_CONFIG:-/etc/kayak/runtime-config.json}"
 CONFIG_INSTALLER="${KAYAK_CONFIG_INSTALLER:-/usr/local/sbin/kayak-install-runtime-config}"
 # Parameterized so the activation path is testable without root/systemd
@@ -424,7 +436,7 @@ if [ -e "$RELEASE_DIR/release.json" ]; then
     fi
 else
     log "staging release $RELEASE_ID"
-    mkdir -p "$RELEASE_DIR/dataset" "$RELEASE_DIR/docroot"
+    mkdir -p "$RELEASE_DIR/dataset"  # no docroot in the release — it's the shared cache
     tar -xf "$SCRATCH/dataset.tar" -C "$RELEASE_DIR/dataset"
     "$PYTHON" -m venv "$RELEASE_DIR/venv"
     "$RELEASE_DIR/venv/bin/pip" install --quiet --require-hashes -r "$REQ_LOCK"
@@ -585,6 +597,7 @@ MUTATED=0
 
 SWITCHED=0
 CONFIG_INSTALLED=0
+DOCROOT_BUILT=0
 rollback() {
     status=$?
     trap - ERR
@@ -619,6 +632,30 @@ rollback() {
         atomic_relink "$PREV_TARGET" "$ROOT/current" || \
             echo "kayak-deploy: WARNING: could not restore current -> $PREV_TARGET" >&2
         echo "kayak-deploy: current -> $PREV_TARGET (previous release)" >&2
+        # The docroot is a shared cache OUTSIDE the release, so the symlink swap
+        # above doesn't restore it. If we already rebuilt it with the failed
+        # release's output, rebuild it from the previous release's venv + the
+        # just-restored DB so the served content matches the rolled-back release.
+        if [ "$DOCROOT_BUILT" = 1 ]; then
+            echo "kayak-deploy: rebuilding $KAYAK_DOCROOT from $PREV_TARGET" >&2
+            # `build` bakes SITE_URL into the static pages. The deployer's
+            # inherited SITE_URL is the FAILED release's (a SITE_URL change is
+            # precisely a reason a deploy would differ), so a naive rebuild would
+            # serve the NEW url while PHP reads the just-restored OLD config —
+            # static pages and PHP disagreeing. Pin the PREVIOUS release's
+            # site_url, read from its own stored runtime-config.json (untouched by
+            # this deploy and always app-readable), so the rebuilt docroot matches
+            # the rolled-back release. Empty/absent → fall back to the inherited
+            # value (legacy behavior) and let build's own warning surface.
+            _prev_site_url="$("$ROOT/$PREV_TARGET/venv/bin/python" -c \
+                'import json,sys; print(json.load(open(sys.argv[1])).get("site_url") or "")' \
+                "$ROOT/$PREV_TARGET/runtime-config.json" 2>/dev/null || true)"
+            run_app env DATABASE_URL="sqlite:///$DB_PATH" \
+                ${_prev_site_url:+SITE_URL="$_prev_site_url"} \
+                DATASET_DIR="$ROOT/$PREV_TARGET/dataset" OUTPUT_DIR="$KAYAK_DOCROOT" \
+                "$ROOT/$PREV_TARGET/venv/bin/levels" build >/dev/null 2>&1 || \
+                echo "kayak-deploy: WARNING: docroot rebuild from $PREV_TARGET failed — recover with a redeploy" >&2
+        fi
     fi
     for u in $KAYAK_UNITS; do "$SYSTEMCTL" start "$u" 2>/dev/null || true; done
     rm -f "$ROOT/maintenance"
@@ -658,11 +695,12 @@ done
 log "consumers quiesced"
 
 log "backing up DB before mutation"
-# The build writes the docroot inside the release; chown it so the app-user
-# build can write there (the release tree itself was created by the
-# orchestrator). PRE_BACKUP already lives in the app-owned scratch.
+# The app-user `build` writes the shared docroot cache; ensure it exists +
+# is app-owned (root creates it on a fresh host). PRE_BACKUP already lives in
+# the app-owned scratch.
+mkdir -p "$KAYAK_DOCROOT"
 if is_privileged && [ -n "$KAYAK_APP_USER" ]; then
-    chown "$KAYAK_APP_USER" "$RELEASE_DIR/docroot"
+    chown "$KAYAK_APP_USER" "$KAYAK_DOCROOT"
 fi
 run_app sqlite3 "$DB_PATH" ".backup '$PRE_BACKUP'"
 
@@ -681,9 +719,10 @@ run_app env DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset"
 log "applying geometry/gradient sidecars"
 run_app env DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset" "$LEVELS" import-metadata
 
-log "building docroot inside the release"
+log "building docroot into the shared cache ($KAYAK_DOCROOT)"
 run_app env DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset" \
-    OUTPUT_DIR="$RELEASE_DIR/docroot" "$LEVELS" build
+    OUTPUT_DIR="$KAYAK_DOCROOT" "$LEVELS" build
+DOCROOT_BUILT=1
 
 # Canonical runtime config for PHP: same path, same root wrapper, same
 # secret-merge boundary as scripts/deploy.sh (PR #190 review P1 — config
@@ -698,7 +737,7 @@ if [ -f "$RUNTIME_CONFIG" ]; then
     cp -p "$RUNTIME_CONFIG" "$SCRATCH/runtime-config.prev"
 fi
 run_app env DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset" \
-    OUTPUT_DIR="$RELEASE_DIR/docroot" "$LEVELS" emit-config --dry-run \
+    OUTPUT_DIR="$KAYAK_DOCROOT" "$LEVELS" emit-config --dry-run \
     | "$CONFIG_INSTALLER"
 CONFIG_INSTALLED=1
 

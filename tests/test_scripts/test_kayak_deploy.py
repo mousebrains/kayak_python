@@ -381,6 +381,7 @@ def test_activation_rolls_back_db_symlink_and_config_on_failed_health(
     _init_db(db, fixture_ds)
 
     root = deploy_root  # real disk: the DB backup + venvs overflow a tmpfs /tmp
+    docroot = tmp_path / "docroot"  # the shared docroot cache (KAYAK_DOCROOT)
     runtime_config = tmp_path / "runtime-config.json"
     systemctl_log = tmp_path / "systemctl.log"
     runuser_log = tmp_path / "runuser.log"
@@ -432,6 +433,7 @@ def test_activation_rolls_back_db_symlink_and_config_on_failed_health(
         env = {
             "KAYAK_DEPLOY_CONF": str(conf),
             "KAYAK_DEPLOY_ROOT": str(root),
+            "KAYAK_DOCROOT": str(docroot),
             "KAYAK_HOST_ENV": str(host_env),
             "KAYAK_RUNTIME_CONFIG": str(runtime_config),
             "KAYAK_CONFIG_INSTALLER": str(installer),
@@ -464,6 +466,16 @@ def test_activation_rolls_back_db_symlink_and_config_on_failed_health(
     for cmd in ("migrate", "sync-metadata", "import-metadata", "build"):
         assert cmd in rlog, cmd
 
+    # #3: the docroot is the shared cache (KAYAK_DOCROOT), NOT inside the
+    # release — the release tree holds venv+dataset only.
+    assert any(docroot.rglob("*")), "build wrote the shared docroot cache"
+    assert not (release1 / "docroot").exists(), "release must not carry a docroot"
+
+    def _docroot_text() -> str:
+        return "".join(p.read_text(errors="ignore") for p in docroot.rglob("*") if p.is_file())
+
+    assert "first.example.org" in _docroot_text()
+
     # Second activation: a different SITE_URL mints a new release, but the
     # health probe fails (port 1 → connection refused) → rollback.
     second = activate("https://second.example.org", health_url="http://127.0.0.1:1/")
@@ -475,6 +487,13 @@ def test_activation_rolls_back_db_symlink_and_config_on_failed_health(
     assert "second.example.org" not in cfg
     # The rollback DB restore also crossed the app-user boundary.
     assert ".restore" in runuser_log.read_text()
+    # #3: the shared docroot is OUTSIDE the release, so the symlink swap doesn't
+    # restore it — rollback rebuilds it from the previous release's venv. The
+    # failed release's content is gone; release 1's content is back.
+    assert "rebuilding" in second.stderr
+    dt = _docroot_text()
+    assert "second.example.org" not in dt
+    assert "first.example.org" in dt
     # DB still queryable and consumers restarted, maintenance cleared.
     import sqlite3
 
@@ -540,6 +559,7 @@ def test_activation_prunes_old_releases(
         env = {
             "KAYAK_DEPLOY_CONF": str(conf),
             "KAYAK_DEPLOY_ROOT": str(root),
+            "KAYAK_DOCROOT": str(tmp_path / "docroot"),
             "KAYAK_HOST_ENV": str(host_env),
             "KAYAK_RUNTIME_CONFIG": str(runtime_config),
             "KAYAK_CONFIG_INSTALLER": stubs["installer"],
