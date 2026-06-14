@@ -88,25 +88,27 @@ cutover `host.yaml` sets it to `/var/cache/kayak/docroot` (matching the deployer
 release dataset = `{release_root}/current/dataset`, FPM pool =
 `/etc/php/{fpm_pool_php}/fpm/pool.d/kayak.conf`.
 
-The vhost `server_names` need a small structured type (a list of
-`{server_name, cert_host, enabled}`) for the three sites (`levels.wkcc.org`,
-`levels.mousebrains.com`, `levels-test`). That type lands with the **nginx
-renderer (increment 3)** that consumes it, not here — adding it before its
-consumer risks the wrong shape. Increment 1 is the scalar fields only.
+**Vhost `server_names` are NOT needed for the cutover** and are deferred. The
+cutover's only host-specific *serving* delta is the docroot path (nginx `root` +
+FPM `open_basedir` both move `public_html` → `host.docroot`); the three vhosts'
+`server_name`/cert/log lines are static, committed config, correct for the WKCC
+host. A `server_names` type is only for full from-scratch genericization (the
+generic-default flip, increment 7) — added then, with its consumer, not now.
 
 ## Renderer mechanism
 
 A `levels` subcommand per the `emit-config` precedent (emits text; the installer/
-runbook redirects it). Proposed:
+runbook redirects it). Implemented:
 - `levels render-units [--out-dir DIR]` → the class-A drop-in files
-  (`<unit>.service.d/cutover.conf`) from `HostConfig`. Default: print a manifest;
-  `--out-dir` writes the files.
-- `levels render-nginx [--site NAME]` / `levels render-fpm` → vhost root +
-  `open_basedir` substitutions (or a sed-spec the runbook applies). Increment 3.
+  (`<unit>.service.d/cutover.conf`) from `HostConfig`. *(PR #193, merged)*
+- `levels render-serving [--out-dir DIR]` → the nginx `root` directive + the FPM
+  `open_basedir` directive, both derived from `host.docroot`/`service_home`
+  (replacing the runbook's hand-typed `sed`). *(increment 3, this PR)*
 
-Each renderer is **pure** (HostConfig + templates → text), unit-tested by asserting
-the rendered text matches the runbook §5 spec. Real `systemd-analyze verify` /
-`nginx -t` validation happens on the VM (Pat-driven; see handoff).
+Each renderer is **pure** (HostConfig → text; the config is generated, not read
+from the repo `conf/` templates, which aren't in the wheel a release runs from),
+unit-tested by asserting the rendered text matches the runbook §5 spec. Real
+`systemd-analyze verify` / `nginx -t` validation happens on the VM (Pat-driven).
 
 ## The class-A drop-in spec (`<unit>.service.d/cutover.conf`)
 
@@ -129,15 +131,15 @@ must carry the per-unit write-path set, not a blanket one.
 ## Increment sequence (each a reviewable PR; VM-validated where noted)
 
 1. **`HostConfig` renderer fields + tests.** Pure schema (scalar fields); no
-   behavior change (defaults = current). Foundational. *(merged in PR #193's branch)*
+   behavior change (defaults = current). Foundational. *(merged, PR #193)*
 2. **`levels render-units` + tests** asserting the 6 class-A drop-ins match the
    spec. Also adds the two relocatable-cache fields (`map_layers_dir`,
-   `gauge_metadata_cache`) — surfaced here because `fetch-osmb`/`audit-gauges`
-   default those dirs *relative to the install root*, which is read-only under
-   `/opt/kayak/current`, so the drop-ins must point them at `/var/cache/kayak/*`
-   (keep-current-then-flip, like `docroot`). Wires nothing into the host. *(this PR)*
-3. **`levels render-nginx` / `render-fpm` + tests.** The root/`open_basedir`
-   substitutions.
+   `gauge_metadata_cache`) — surfaced because `fetch-osmb`/`audit-gauges` default
+   those dirs *relative to the install root*, read-only under `/opt/kayak/current`,
+   so the drop-ins point them at `/var/cache/kayak/*` (keep-current-then-flip, like
+   `docroot`). *(merged, PR #193)*
+3. **`levels render-serving` + tests.** The nginx `root` + FPM `open_basedir`
+   directives from `host.docroot`/`service_home`. *(this PR)*
 4. **Deployer serving-path gate + quiesce-timeout fix** (`deploy/kayak-deploy.sh`):
    when `SERVING_CUTOVER=yes`, verify nginx root / FPM `open_basedir` / unit
    `OUTPUT_DIR`+`ReadWritePaths` resolve to `$KAYAK_DOCROOT`; back out maintenance
