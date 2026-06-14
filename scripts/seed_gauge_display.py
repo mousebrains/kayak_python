@@ -36,8 +36,7 @@ from pathlib import Path
 # Reuse the build pipeline's station-name parsers so we stay in lockstep with
 # current behavior.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-from _gauge_metadata_cache import DEFAULT_GAUGE_METADATA_CACHE
-
+from kayak.config import GAUGE_METADATA_CACHE
 from kayak.db.safety import (
     ProductionWriteRefused,
     maintenance_target_db,
@@ -48,7 +47,7 @@ from kayak.web.build.gauges import (
     _parse_station_uppercase,
 )
 
-DEFAULT_CACHE = str(DEFAULT_GAUGE_METADATA_CACHE)
+DEFAULT_CACHE = str(GAUGE_METADATA_CACHE)
 
 _DIRECTIONS = ("North", "South", "East", "West", "Middle")
 _DIRECTION_LETTERS = {

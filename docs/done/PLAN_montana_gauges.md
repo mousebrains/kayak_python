@@ -139,7 +139,8 @@ Switch it to read `docs/one-offs/mt.list` directly and pull metadata from
   drain_area_sq_mi, altitude_ft FROM usgs_site WHERE site_no = ?` on
   the gauges.db cache. Error out if any site_no is missing (curated
   list should match the cache; missing rows mean the cache is stale —
-  re-run `scripts/fetch_usgs_sites.py`).
+  re-run `levels audit-gauges` to refresh, or the
+  `kayak.gauge_audit.usgs_sites` fetcher directly).
 - Emit SQL in the order they appear in mt.list (stable diff if the
   list is reordered).
 - Drop the `_REVIEW_HINTS` heuristic and "REVIEW:" comments — the
@@ -182,7 +183,8 @@ sqlite3 Gauge-metadata-cache/gauges.db \
    ('06090500','06025500','06025250','12340000','12354500',
     '06073500','12359800','06036650','06038800','06066500',
     '06077200','06077500','06085800');"
-# Expected: 13. If less, refresh: python3 scripts/fetch_usgs_sites.py
+# Expected: 13. If less, refresh: levels audit-gauges (or
+#   python3 -m kayak.gauge_audit.usgs_sites)
 
 # Regenerate the migration from mt.list
 python3 docs/one-offs/generate_mt_migration.py
@@ -232,7 +234,8 @@ excludes (`src/kayak/db/sources.py:105`).
 
 ### Phase 1 retirement
 
-The Phase 1 discovery work (extending `fetch_usgs_sites.py` to cover MT)
+The Phase 1 discovery work (extending the USGS site fetcher,
+now `kayak.gauge_audit.usgs_sites`, to cover MT)
 stays merged. The cache it builds remains useful: the Phase 2 generator
 reads it for metadata, and a future "extend MT coverage" PR can pull
 from the same cache without re-running the USGS site service. The
@@ -383,7 +386,7 @@ goes 150 → 163. Still in the 2-batch range for `fetch-usgs-ogc`
 effectively unchanged.
 
 Audit noise on first run is now 13 newly-data-providing gauges instead
-of 62 (still trips `scripts/audit_gauges.py`'s "started providing data
+of 62 (still trips `levels audit-gauges`'s "started providing data
 in the last week" detector once per run). Mention in the PR description.
 
 ## Files touched (final list, revised)
@@ -423,7 +426,7 @@ in the last week" detector once per run). Mention in the PR description.
 | `data/discover/montana_candidates.csv` | `rm` — superseded by `docs/one-offs/mt.list`. Gitignored. |
 
 Untouched by this revision (kept from earlier commits):
-`scripts/fetch_usgs_sites.py` (Montana coverage stays merged),
+the USGS site fetcher (`kayak.gauge_audit.usgs_sites`, Montana coverage stays merged),
 `src/kayak/web/static/filters.js` (already handles `#st=` correctly),
 `php/gauge_picker.php` (its `?state=` parser stays intact —
 `picker.php` is the only one needing the new parser).

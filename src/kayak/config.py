@@ -204,11 +204,14 @@ class KayakConfig(BaseSettings):
     mail_reply_to: EmailStr | None = None
     mail_dump_dir: Path | None = None
 
-    # Operator email-digest destination. Read by scripts/audit_gauges.py
+    # Operator email-digest destination. Read by ``levels audit-gauges``
     # (the weekly gauge-metadata audit timer) and emitted into the JSON
     # so future PHP / Python consumers don't have to re-implement the env
-    # read. Currently consumed only by the script, but living in the
-    # typed model keeps it within validate-config's allowlist.
+    # read. An empty / whitespace-only value coerces to ``None`` (see
+    # ``_blank_email_to_none``): the systemd unit passes ``${AUDIT_EMAIL}``,
+    # which expands to an empty string when the var is unset, and that
+    # must mean "no digest", not a config-load failure that breaks every
+    # ``levels`` subcommand at import time.
     audit_email: EmailStr | None = None
 
     # Where the CSP-violation reporter writes JSON lines. Hardcoded
@@ -244,6 +247,16 @@ class KayakConfig(BaseSettings):
     def _split_csv(cls, v: object) -> object:
         if isinstance(v, str):
             return [s.strip() for s in v.split(",") if s.strip()]
+        return v
+
+    @field_validator("audit_email", mode="before")
+    @classmethod
+    def _blank_email_to_none(cls, v: object) -> object:
+        # An unset ``${AUDIT_EMAIL}`` in the systemd unit expands to "" — treat
+        # that (and any whitespace-only value) as "no digest configured" rather
+        # than an EmailStr validation error that would fail the whole CLI load.
+        if isinstance(v, str) and not v.strip():
+            return None
         return v
 
     @property

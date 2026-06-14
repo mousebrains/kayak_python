@@ -112,6 +112,16 @@ disallow_untyped_defs = false
 check_untyped_defs = false
 
 [[tool.mypy.overrides]]
+# gauge_audit is a wholesale move of the former scripts/audit_gauges.py closure
+# (audit logic + two site-cache fetchers) that pre-dates the strict-typing
+# regime; typing it gradually rather than front-loading the annotations in the
+# move commit (same precedent as kayak.tracing.trace above). The thin CLI
+# wrapper kayak.cli.audit_gauges stays under the strict gate.
+module = ["kayak.gauge_audit.audit", "kayak.gauge_audit.usgs_sites", "kayak.gauge_audit.nwps_sites"]
+disallow_untyped_defs = false
+check_untyped_defs = false
+
+[[tool.mypy.overrides]]
 # Third-party geospatial/plotting libs ship no stubs.
 module = ["osgeo.*", "matplotlib.*", "contextily.*", "geopandas.*", "shapely.*", "pyogrio.*"]
 ignore_missing_imports = true

@@ -6,11 +6,12 @@ cover CNRFC/MBRFC/CBRFC etc. alongside the main PNW set.
 """
 
 import sqlite3
-import sys
 import time
+from pathlib import Path
 
 import requests
-from _gauge_metadata_cache import DEFAULT_GAUGE_METADATA_CACHE
+
+from kayak.config import GAUGE_METADATA_CACHE
 
 NWPS_URL = "https://api.water.noaa.gov/nwps/v1/gauges"
 
@@ -35,8 +36,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 
-def main():
-    db_path = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_GAUGE_METADATA_CACHE
+def fetch_nwps_sites(cache_db: Path | str = GAUGE_METADATA_CACHE) -> None:
+    db_path = cache_db
 
     # NWPS returns the same full gauge list regardless of state= parameter, and the
     # endpoint throttles under repeated calls (504). Fetch once with retries.
@@ -90,5 +91,7 @@ def main():
     conn.close()
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__":  # pragma: no cover
+    import sys
+
+    fetch_nwps_sites(sys.argv[1] if len(sys.argv) > 1 else GAUGE_METADATA_CACHE)
