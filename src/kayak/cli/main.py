@@ -27,6 +27,7 @@ from kayak.cli import (
     orphan_check,
     pipeline,
     recover_metadata,
+    render_units,
     seed_maintainer,
     status,
     sync_metadata,
@@ -75,6 +76,7 @@ def main() -> None:
     analyze_logs.addArgs(subparsers)
     status.addArgs(subparsers)
     sync_metadata.addArgs(subparsers)
+    render_units.addArgs(subparsers)
     import_metadata.addArgs(subparsers)
     recover_metadata.addArgs(subparsers)
     generate_sources.addArgs(subparsers)
