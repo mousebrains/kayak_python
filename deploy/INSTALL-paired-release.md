@@ -355,6 +355,18 @@ Verify: homepage + `description.php?h=1` 200 from the new docroot
 are now unused — leave them as a fallback or clean up later. Future deploys go
 through `kayak-deploy.sh`, not `scripts/deploy.sh`.
 
+> **If the activation FAILS** (bad `HEALTH_URL`, build error, …) — validated by a
+> rollback rehearsal: the deployer restores the DB backup + config and aborts the
+> release (removes `current`, leaves `/opt/kayak/maintenance`, consumers stopped),
+> and **the old `public_html` keeps serving** because Phase 1–2 never reloaded
+> nginx/FPM — a failed cutover does NOT take the site down. The config *files*
+> already point at the new docroot, so a stray nginx reload would switch to it.
+> **Recover by fixing the cause and retrying:** `sudo rm -f /opt/kayak/maintenance`
+> then re-run the Phase-2 `kayak-deploy.sh` — the retry re-activates cleanly and the
+> Phase-3 flip serves the new docroot (confirmed on the VM, DB intact). To abort
+> entirely instead: revert the nginx-`root` / FPM-`open_basedir` seds + reload, `rm`
+> the drop-ins + `daemon-reload`, and restart the timers.
+
 ## Resolved findings (were open items)
 
 - **DB bootstrap:** `init-db` + `sync-metadata` + `import-metadata` via the staged
