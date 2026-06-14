@@ -79,6 +79,17 @@ class HostConfig(BaseModel):
     service_home: str = "/home/pat"
     release_root: str = "/opt/kayak"
     fpm_pool_php: str = "8.4"
+    # Generated-runtime-data dirs that the engine defaults resolve RELATIVE to the
+    # install root (config.py BASE_DIR): fetch-osmb's map-layer staging and the
+    # gauge-audit metadata cache. In the editable install they land under the repo
+    # checkout; under an immutable /opt/kayak/current release that root is
+    # read-only, so the cutover unit drop-ins must point these at stable writable
+    # cache paths. Keep-current defaults (the live repo-relative locations); the
+    # cutover host.yaml flips them to /var/cache/kayak/* (regenerable cache,
+    # alongside the #3 docroot). map_layers_dir is a dir; gauge_metadata_cache is
+    # the sqlite FILE.
+    map_layers_dir: str = "/home/pat/kayak/var/osmb"
+    gauge_metadata_cache: str = "/home/pat/kayak/Gauge-metadata-cache/gauges.db"
 
     # --- backup policy (S8) ---
     backup_dir: str = "/home/pat/backups"
@@ -102,7 +113,14 @@ class HostConfig(BaseModel):
         return v
 
     @field_validator(
-        "nginx_log_glob", "status_output", "docroot", "backup_dir", "service_home", "release_root"
+        "nginx_log_glob",
+        "status_output",
+        "docroot",
+        "backup_dir",
+        "service_home",
+        "release_root",
+        "map_layers_dir",
+        "gauge_metadata_cache",
     )
     @classmethod
     def _abs_path(cls, v: str) -> str:

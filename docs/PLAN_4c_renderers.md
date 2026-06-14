@@ -116,10 +116,14 @@ must carry the per-unit write-path set, not a blanket one.
 
 ## Increment sequence (each a reviewable PR; VM-validated where noted)
 
-1. **`HostConfig` renderer fields + tests.** Pure schema (scalar fields only); no
-   behavior change (defaults = current). Foundational. *(this PR)*
+1. **`HostConfig` renderer fields + tests.** Pure schema (scalar fields); no
+   behavior change (defaults = current). Foundational. *(merged in PR #193's branch)*
 2. **`levels render-units` + tests** asserting the 6 class-A drop-ins match the
-   spec. Wire nothing yet.
+   spec. Also adds the two relocatable-cache fields (`map_layers_dir`,
+   `gauge_metadata_cache`) — surfaced here because `fetch-osmb`/`audit-gauges`
+   default those dirs *relative to the install root*, which is read-only under
+   `/opt/kayak/current`, so the drop-ins must point them at `/var/cache/kayak/*`
+   (keep-current-then-flip, like `docroot`). Wires nothing into the host. *(this PR)*
 3. **`levels render-nginx` / `render-fpm` + tests.** The root/`open_basedir`
    substitutions.
 4. **Deployer serving-path gate + quiesce-timeout fix** (`deploy/kayak-deploy.sh`):

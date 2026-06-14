@@ -29,6 +29,8 @@ class TestLoadHostConfig:
         assert c.service_home == "/home/pat"
         assert c.release_root == "/opt/kayak"
         assert c.fpm_pool_php == "8.4"
+        assert c.map_layers_dir == "/home/pat/kayak/var/osmb"
+        assert c.gauge_metadata_cache == "/home/pat/kayak/Gauge-metadata-cache/gauges.db"
 
     def test_overrides_applied_partially(self, tmp_path: Path) -> None:
         f = tmp_path / "host.yaml"
@@ -98,6 +100,8 @@ class TestLoadHostConfig:
             "release_root: /srv/kayak/releases\n"
             "fpm_pool_php: '8.3'\n"
             "docroot: /var/cache/kayak/docroot\n"
+            "map_layers_dir: /var/cache/kayak/map-layers\n"
+            "gauge_metadata_cache: /var/cache/kayak/gauge-metadata/gauges.db\n"
         )
         c = host.load_host_config(f)
         assert c.service_user == "kayak"
@@ -105,6 +109,8 @@ class TestLoadHostConfig:
         assert c.release_root == "/srv/kayak/releases"
         assert c.fpm_pool_php == "8.3"
         assert c.docroot == "/var/cache/kayak/docroot"
+        assert c.map_layers_dir == "/var/cache/kayak/map-layers"
+        assert c.gauge_metadata_cache == "/var/cache/kayak/gauge-metadata/gauges.db"
 
     def test_bad_service_user_rejected(self, tmp_path: Path) -> None:
         # Renderers interpolate it into unit User= and shell ACL commands.
