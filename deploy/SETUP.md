@@ -244,6 +244,29 @@ sudo setfacl -R -m u:www-data:rwX /home/pat/DB                # WAL needs write 
 sudo setfacl -R -d -m u:www-data:rwX /home/pat/DB
 ```
 
+**Paired-release cutover (Batch 4C) — the shared docroot ACL.** Once the host
+moves to the `kayak-deploy.sh` paired-release layout, the served docroot is no
+longer `public_html` but the **shared cache** `KAYAK_DOCROOT`
+(default `/var/cache/kayak/docroot`) — a regenerable tree OUTSIDE the immutable
+`/opt/kayak/releases/<id>/`, rebuilt in place by both the deploy and the hourly
+pipeline. The deployer only `mkdir`s + `chown`s it to the app user (write
+access); it does **not** grant web access. So the same recursive **and default**
+`www-data` ACL the live `public_html` carries must be applied to the new docroot
+*before* setting `SERVING_CUTOVER=yes` — the `-d` default ACL is load-bearing
+because `build` mints fresh files/subdirs every run, and without it each newly
+built page 403s:
+
+```bash
+sudo install -d -o pat -g pat /var/cache/kayak/docroot        # app-writable; deploy also creates it
+sudo setfacl -R -m  u:www-data:rX  /var/cache/kayak/docroot   # read the built site
+sudo setfacl -R -d -m u:www-data:rX /var/cache/kayak/docroot  # inherit for files each build writes
+```
+
+This rides with the rest of the 4C cutover (nginx `root`, FPM `open_basedir`,
+and the consumer units' `OUTPUT_DIR`/`ReadWritePaths` all re-pointed to
+`$KAYAK_DOCROOT`); the deployer's activation gate refuses until
+`SERVING_CUTOVER=yes`, so the intended order is ACL-and-re-point *then* cutover.
+
 ## 5. SSL certificates
 
 Temporarily allow HTTP for the ACME challenge:
