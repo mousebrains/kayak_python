@@ -338,9 +338,14 @@ sudo env KAYAK_DEPLOY_CONF=/etc/kayak/deploy.env deploy/kayak-deploy.sh \
   --engine-ref <40hex> --dataset-ref <40hex>
 # (still serving public_html — the activation built /var/cache/kayak/docroot but didn't touch nginx/FPM)
 
-# Phase 3 — the graceful flip to the new docroot
+# Phase 3 — the graceful flip to the new docroot. RELOAD both, not restart: a
+# `systemctl restart php8.4-fpm` drops all workers and has a brief not-ready window
+# that 404/502s live PHP requests; `reload` is graceful (in-flight requests finish)
+# AND re-reads the pool config, so it applies the new open_basedir with no outage
+# (verified on the VM — reload picks up the open_basedir change, restart raced a 404).
 sudo systemctl reload nginx          # now roots /var/cache/kayak/docroot (built)
-sudo systemctl restart php8.4-fpm    # picks up the new open_basedir
+sudo php-fpm8.4 -t                    # validate the pool config before reloading
+sudo systemctl reload php8.4-fpm      # graceful — applies the new open_basedir, no outage
 ```
 
 Verify: homepage + `description.php?h=1` 200 from the new docroot
