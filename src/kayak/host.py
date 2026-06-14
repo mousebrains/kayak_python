@@ -40,6 +40,11 @@ _HOSTNAME_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*
 # rclone remote names: word characters and hyphens (no ':' — the colon is
 # syntax, appended by consumers).
 _RCLONE_REMOTE_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+# POSIX-portable service account name (useradd's NAME_REGEX): start with a
+# lower-case letter or underscore, then lower/digit/underscore/hyphen.
+_USERNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]*$")
+# PHP-FPM pool version as it appears in the /etc/php/<v>/fpm path (major.minor).
+_PHP_VERSION_RE = re.compile(r"^\d+\.\d+$")
 
 
 class HostConfig(BaseModel):
@@ -57,6 +62,23 @@ class HostConfig(BaseModel):
     status_output: str = "/home/pat/var/status.html"
     docroot: str = "/home/pat/public_html"
     cert_host: str = "levels.wkcc.org"
+
+    # --- paired-release cutover / renderers (4C) ---
+    # The service account + its home, the paired-release root, and the PHP-FPM
+    # pool version the systemd-unit / nginx-vhost / FPM renderers need. Defaults
+    # are the current WKCC values (keep-current-then-flip): a host with no
+    # host.yaml renders the live shape, and the cutover host.yaml flips them.
+    # ``docroot`` (above) is reused — it stays ``public_html`` until the cutover
+    # host.yaml sets it to ``/var/cache/kayak/docroot`` (= the deployer's
+    # ``KAYAK_DOCROOT``). Paths the renderers derive, NOT stored: the release venv
+    # (``{release_root}/current/venv``), the release dataset
+    # (``{release_root}/current/dataset``), and the FPM pool
+    # (``/etc/php/{fpm_pool_php}/fpm/pool.d/kayak.conf``). See
+    # docs/PLAN_4c_renderers.md.
+    service_user: str = "pat"
+    service_home: str = "/home/pat"
+    release_root: str = "/opt/kayak"
+    fpm_pool_php: str = "8.4"
 
     # --- backup policy (S8) ---
     backup_dir: str = "/home/pat/backups"
@@ -79,11 +101,32 @@ class HostConfig(BaseModel):
             raise ValueError(f"must be an IANA timezone name (got {v!r})") from e
         return v
 
-    @field_validator("nginx_log_glob", "status_output", "docroot", "backup_dir")
+    @field_validator(
+        "nginx_log_glob", "status_output", "docroot", "backup_dir", "service_home", "release_root"
+    )
     @classmethod
     def _abs_path(cls, v: str) -> str:
         if not v.startswith("/"):
             raise ValueError(f"must be an absolute path (got {v!r})")
+        return v
+
+    @field_validator("service_user")
+    @classmethod
+    def _username(cls, v: str) -> str:
+        # POSIX-portable service account name: lower/digit/underscore/hyphen,
+        # not starting with a hyphen. Renderers interpolate it into unit User=
+        # and shell ACL commands, so reject anything that isn't a bare name.
+        if not _USERNAME_RE.match(v):
+            raise ValueError(f"must be a bare POSIX username (got {v!r})")
+        return v
+
+    @field_validator("fpm_pool_php")
+    @classmethod
+    def _php_version(cls, v: str) -> str:
+        # PHP-FPM pool version as it appears in /etc/php/<v>/fpm — major.minor
+        # only (Debian packages php8.4, never a patch level in the path).
+        if not _PHP_VERSION_RE.match(v):
+            raise ValueError(f"must be a major.minor PHP version like '8.4' (got {v!r})")
         return v
 
     @field_validator("cert_host")
