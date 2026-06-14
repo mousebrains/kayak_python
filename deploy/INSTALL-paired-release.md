@@ -1,13 +1,15 @@
 # Paired-release install / cutover runbook (S7 / Batch 4C)
 
-> **STATUS.** The base install sequence (steps 1–4, 6–8) was validated end-to-end
-> on a clean Debian 13 VM (2026-06-13). The serving + consumer config (**step 5**)
-> is now **rendered from `host.yaml`** by `levels render-units` / `render-serving`
-> (PRs #193–#196) instead of hand-crafted — the renderers are unit-tested, but the
-> step-5 *flow below* (rendering + applying on a real host, `nginx -t` /
-> `systemd-analyze verify` of the output) is **pending VM re-validation** in the
-> cutover rehearsal (4C increment 7). The legacy single-tree install (`/home/pat`,
-> in-place `git pull`) stays in [`SETUP.md`](SETUP.md) until the WKCC host migrates.
+> **STATUS — VALIDATED end-to-end on a clean Debian 13 VM, 2026-06-14.** The whole
+> sequence below — INCLUDING the rendered step 5 — ran from a virgin net-install to
+> a serving paired-release host: homepage + DB-backed `description.php` both **200**,
+> bare-IP **444**, and the activation gate passing on `render-units --list-units`
+> (the 6 engine units verified from `/opt/kayak/current`), the nginx docroot root
+> (ACME root surviving), and the FPM `open_basedir`. The serving + consumer config
+> (**step 5**) is **rendered from `host.yaml`** by `levels render-units` /
+> `render-serving` (PRs #193–#196), not hand-crafted. The legacy single-tree install
+> (`/home/pat`, in-place `git pull`) stays in [`SETUP.md`](SETUP.md) until the WKCC
+> host migrates (that live *migration* — vs. this virgin install — is increment 7).
 >
 > The validation used `/home/pat` + user `pat` to mirror WKCC; a clean non-WKCC
 > install swaps the user/home/hostname/domains — those are `host.yaml` parameters
@@ -118,9 +120,10 @@ sudo sed -i \
   -e 's#^ENGINE_REPO=.*#ENGINE_REPO=https://github.com/mousebrains/kayak_python.git#' \
   -e 's#^DATASET_REPO=.*#DATASET_REPO=https://github.com/mousebrains/kayak_data.git#' \
   /etc/kayak/deploy.env
-echo 'ENGINE_BRANCH=main' | sudo tee -a /etc/kayak/deploy.env
+sudo sed -i 's/^#\?ENGINE_BRANCH=.*/ENGINE_BRANCH=main/' /etc/kayak/deploy.env
 # KAYAK_APP_USER is in the example (verify it = <svc>). Any value with spaces (e.g.
-# KAYAK_UNITS) MUST be quoted — deploy.env is sourced by the shell.
+# KAYAK_UNITS) MUST be quoted — deploy.env is sourced by the shell. (sed UNCOMMENTS
+# the example line rather than appending, so there's no commented+active duplicate.)
 ```
 
 ### 3. Stage-only dry run
@@ -199,6 +202,12 @@ printf '%s\n' 'ssl_session_cache shared:le_nginx_SSL:10m;' 'ssl_session_timeout 
   'ssl_session_tickets off;' 'ssl_protocols TLSv1.2 TLSv1.3;' 'ssl_prefer_server_ciphers off;' \
   | sudo tee /etc/letsencrypt/options-ssl-nginx.conf
 sudo openssl dhparam -out /etc/letsencrypt/ssl-dhparams.pem 2048
+# The default-server block (deploy/nginx-default-server — 444 on bare-IP/SNI-less
+# requests) needs a self-signed dummy cert, or `nginx -t` fails on the missing
+# file. (Required on EVERY install — also a gap in SETUP.md's legacy path.)
+sudo install -d /etc/nginx/ssl
+sudo openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+  -keyout /etc/nginx/ssl/dummy.key -out /etc/nginx/ssl/dummy.crt -subj "/CN=invalid"
 sudo nginx -t
 
 # 5b. FPM pool, then set open_basedir from the renderer (leads with the docroot;
@@ -217,20 +226,21 @@ sudo systemctl restart php8.4-fpm
 #     are NOT engine units and the gate treats them as host-level automatically.
 sudo /home/<svc>/kayak/systemd/install.service.sh
 sudo $R/venv/bin/levels render-units --out-dir /etc/systemd/system
-# (render-units WARNs that /opt/kayak/current doesn't exist yet — expected at
-# cutover: the drop-ins reference it, the timers are stopped just below, and the
-# first activation (step 7) creates `current` and then starts the consumers, so
-# none ever runs against the not-yet-existing path.)
+# (render-units WARNs that /opt/kayak/current doesn't exist yet, and
+# `systemd-analyze verify` reports the ExecStart binary "not executable" for the
+# same reason — both EXPECTED pre-cutover: the drop-ins reference `current`, the
+# timers are stopped just below, and step 7 creates `current` then starts the
+# consumers. The merged unit STRUCTURE is valid; re-verify after step 7.)
 sudo systemctl daemon-reload && sudo systemctl stop 'kayak-*.timer'
 
 # 5d. ONLY after nginx + FPM + units all point at the docroot/current: flip the
 #     cutover flag + the serving-path knobs the gate verifies (fail-closed when
 #     SERVING_CUTOVER=yes, so both are required).
-sudo tee -a /etc/kayak/deploy.env <<'EOF'
-SERVING_CUTOVER=yes
-KAYAK_NGINX_DOCROOT_CONF=/etc/nginx/snippets/levels-common.conf
-KAYAK_FPM_POOL=/etc/php/8.4/fpm/pool.d/kayak.conf
-EOF
+sudo sed -i \
+  -e 's/^#\?SERVING_CUTOVER=.*/SERVING_CUTOVER=yes/' \
+  -e 's,^#\?KAYAK_NGINX_DOCROOT_CONF=.*,KAYAK_NGINX_DOCROOT_CONF=/etc/nginx/snippets/levels-common.conf,' \
+  -e 's,^#\?KAYAK_FPM_POOL=.*,KAYAK_FPM_POOL=/etc/php/8.4/fpm/pool.d/kayak.conf,' \
+  /etc/kayak/deploy.env   # uncomment the example lines (no commented+active duplicate)
 ```
 
 ### 6. ACLs (REQUIRED — else DB-backed PHP 503 / docroot 403)
@@ -294,10 +304,15 @@ SETUP.md §5/§10–§17; point status/backup/cert checks at this host's values.
 - **Docroot is the #3 shared cache** `/var/cache/kayak/docroot`, not inside the
   release.
 
-## Still open (4C increment 7 — the cutover)
+## Still open (4C increment 7 — the live cutover)
 
-- **VM re-validation of step 5's rendered flow** (`nginx -t` + `systemd-analyze
-  verify` on the rendered output) on the arm64 test VM, then the live WKCC cutover.
+- **The live WKCC *migration*.** This runbook is the virgin-install path (validated
+  above). The live host is a *running* system on `scripts/deploy.sh` +
+  `/home/pat/public_html` + the editable install + the live DB — so the cutover
+  there needs extra ordering this runbook doesn't yet cover: keep the old serving
+  up until the new docroot is built, reuse the existing DB (no `init-db`/bootstrap),
+  re-point nginx/FPM/units off the old layout, and retire `scripts/deploy.sh`. That
+  transition gets rehearsed on a live-equivalent VM clone before the real host.
 - **Genericization (deferred):** the vhost `server_names` type and the hardcoded
   `/var/www/certbot` ACME root become `host.yaml` knobs only for a truly non-WKCC
   install (keep-current-then-flip leaves them at WKCC values today).
