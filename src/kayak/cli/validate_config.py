@@ -74,7 +74,7 @@ _EXTRA_KNOWN = frozenset(
         "KAYAK_BACKUP_DIR",
         "KAYAK_OFFSITE_REMOTE",
         "KAYAK_OFFSITE_KEEP",
-        # Read via os.environ by fetch_usgs_ogc.py / fetch_usgs_sites.py.
+        # Read via os.environ by cli/fetch_usgs_ogc.py / gauge_audit/usgs_sites.py.
         # Deliberately NOT a KayakConfig field: emit-config would write it
         # into the www-data-readable runtime-config.json, and PHP has no
         # use for it.

@@ -124,7 +124,7 @@ at a time; the table below tracks what is now packaged vs. still repo-root:
 | committed `static/` assets (map.js, leaflet, images, manifest, sw.js, …) | **packaged** under `src/kayak/web/static/` | `web/build/deploy.py`, `_shared.py` via the packaged dir | ✅ resolved by S4a-2 slice B1 |
 | generated map-layer GeoJSON (`*.geojson`) | map-layer staging dir (`MAP_LAYERS_DIR`; legacy alias `OSMB_DIR`; default `BASE_DIR/var/osmb`) | `levels fetch-map-layers` writes; `deploy.py` copies into `OUTPUT_DIR/static` | ✅ not a blocker — env-located generated runtime data, like `output_dir` |
 | regression reports (`*.{md,svg,json}`) | external `kayak_data` clone (`DATASET_DIR/regression/`) | `web/build/deploy.py` via `DATASET_DIR` (env), not `BASE_DIR` | ✅ not a blocker — env-located dataset content (S2-E2 moved the read off `BASE_DIR/docs/regression`) |
-| gauge metadata cache (`gauges.db`) | cache path (`GAUGE_METADATA_CACHE`; default `BASE_DIR/Gauge-metadata-cache/gauges.db`) | `scripts/audit_gauges.py`/fetchers write; gauges build reads | ✅ not a blocker — env-located generated runtime cache, current default kept for live compatibility |
+| gauge metadata cache (`gauges.db`) | cache path (`GAUGE_METADATA_CACHE`; default `BASE_DIR/Gauge-metadata-cache/gauges.db`) | `levels audit-gauges` (`kayak.gauge_audit`) / fetchers write; gauges build reads | ✅ not a blocker — env-located generated runtime cache, current default kept for live compatibility |
 
 `src/kayak/web/static/style.css` was already package-relative. With slices A + B1
 + B2 done, the engine's Python-side defaults, schema migrations, committed web

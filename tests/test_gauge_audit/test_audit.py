@@ -1,8 +1,7 @@
-"""Unit tests for scripts/audit_gauges.py noise-reduction filters.
+"""Unit tests for kayak.gauge_audit.audit noise-reduction filters.
 
-The script lives outside src/ so we import it via importlib path. These tests
-build a tiny in-memory SQLite DB with just the columns the audit queries touch
-and exercise the two false-positive sources we tightened:
+These tests build a tiny in-memory SQLite DB with just the columns the audit
+queries touch and exercise the two false-positive sources we tightened:
 
   * ``check_data_status`` STARTED FEEDS — a newly-added gauge (no history
     before the window) must NOT be reported as a "started feed"; only an
@@ -13,22 +12,10 @@ and exercise the two false-positive sources we tightened:
 
 from __future__ import annotations
 
-import importlib.util
 import sqlite3
-import sys
-import types
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
-_AUDIT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "audit_gauges.py"
-
-
-def _load_audit():
-    spec = importlib.util.spec_from_file_location("audit_gauges", _AUDIT_PATH)
-    assert spec and spec.loader
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+from kayak.gauge_audit import audit
 
 
 def _make_db() -> sqlite3.Connection:
@@ -74,7 +61,6 @@ def _obs(db, source_id, when, data_type="flow"):
 
 def test_started_excludes_brand_new_gauge():
     """A gauge whose entire history begins inside the window is NOT 'started'."""
-    audit = _load_audit()
     db = _make_db()
     now = datetime.now(UTC)
     sid = _add_gauge(db, 1, "06090500", "06090500")
@@ -89,7 +75,6 @@ def test_started_excludes_brand_new_gauge():
 
 def test_started_includes_restarted_feed():
     """A gauge with pre-window history, a quiet gap, then recent obs IS 'started'."""
-    audit = _load_audit()
     db = _make_db()
     now = datetime.now(UTC)
     sid = _add_gauge(db, 2, "RESTART1", "12345678")
@@ -121,7 +106,6 @@ def _reach(db, rid, display_name, river, gauge_id, lat, lon):
 
 
 def test_candidate_skips_already_gauged_reach_by_default():
-    audit = _load_audit()
     db = _make_db()
     # Reach already has a linked gauge (gauge_id=99), same river name as candidate.
     _reach(db, 1, "Rock Creek", "Rock Creek", 99, 44.0, -122.0)
@@ -137,7 +121,6 @@ def test_candidate_skips_already_gauged_reach_by_default():
 
 
 def test_candidate_requires_shared_river_name_beyond_half_mile():
-    audit = _load_audit()
     db = _make_db()
     # Ungauged reach; candidate ~1 mi away on a DIFFERENT stream.
     _reach(db, 1, "Canal Creek", "Canal Creek", None, 44.0, -122.0)
@@ -154,7 +137,6 @@ def test_candidate_requires_shared_river_name_beyond_half_mile():
 
 
 def test_candidate_distance_threshold():
-    audit = _load_audit()
     db = _make_db()
     _reach(db, 1, "Rock Creek", "Rock Creek", None, 44.0, -122.0)
     db.commit()
@@ -166,7 +148,6 @@ def test_candidate_distance_threshold():
 
 def test_candidate_name_override_within_half_mile():
     """A gauge essentially on the run surfaces even with a non-matching name."""
-    audit = _load_audit()
     db = _make_db()
     _reach(db, 1, "Steamboat Creek", "Steamboat Creek", None, 44.0, -122.0)
     db.commit()
@@ -188,7 +169,6 @@ def test_audit_ignore_default_resolves_dataset_ops_file(monkeypatch, tmp_path):
     (ops / "audit_ignore.yaml").write_text(
         "ignored_candidates:\n  - {kind: USGS, gauge_id: '14000000', reach_id: 1}\n"
     )
-    audit = _load_audit()
     monkeypatch.setattr("kayak.config.DATASET_DIR", tmp_path)
     default = audit.load_audit_ignore()
     assert default == {("USGS", "14000000", 1)}
@@ -201,32 +181,27 @@ def test_audit_ignore_missing_dataset_file_is_empty_but_loud(monkeypatch, tmp_pa
     fresh region isn't forced to create suppressions — but it must say so on
     stderr, so a half-rolled-out dataset can't silently become "ignore
     nothing" (PR #187 live review)."""
-    audit = _load_audit()
     monkeypatch.setattr("kayak.config.DATASET_DIR", tmp_path)
     assert audit.load_audit_ignore() == set()
     assert "empty suppression set" in capsys.readouterr().err
 
 
 def test_refresh_caches_uses_requested_cache_path(monkeypatch, tmp_path):
-    """``--cache-db`` must drive both refresh writers and subsequent reads."""
-    audit = _load_audit()
+    """``--cache-db`` must drive both refresh writers (passed straight through)."""
     cache = tmp_path / "configured-cache.db"
-    calls: list[tuple[str, list[str]]] = []
+    calls: list[tuple[str, object]] = []
 
-    def fake_usgs_main() -> None:
-        calls.append(("usgs", list(sys.argv)))
+    def fake_usgs(cache_db) -> None:
+        calls.append(("usgs", cache_db))
 
-    def fake_nwps_main() -> None:
-        calls.append(("nwps", list(sys.argv)))
+    def fake_nwps(cache_db) -> None:
+        calls.append(("nwps", cache_db))
 
-    monkeypatch.setitem(sys.modules, "fetch_usgs_sites", types.SimpleNamespace(main=fake_usgs_main))
-    monkeypatch.setitem(sys.modules, "fetch_nwps_sites", types.SimpleNamespace(main=fake_nwps_main))
+    # refresh_caches imports the fetchers from their own modules, so patch
+    # them there.
+    monkeypatch.setattr("kayak.gauge_audit.usgs_sites.fetch_usgs_sites", fake_usgs)
+    monkeypatch.setattr("kayak.gauge_audit.nwps_sites.fetch_nwps_sites", fake_nwps)
 
-    original_argv = list(sys.argv)
     audit.refresh_caches(cache)
 
-    assert calls == [
-        ("usgs", [original_argv[0], str(cache)]),
-        ("nwps", [original_argv[0], str(cache)]),
-    ]
-    assert sys.argv == original_argv
+    assert calls == [("usgs", cache), ("nwps", cache)]

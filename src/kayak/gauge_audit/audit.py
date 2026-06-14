@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Audit gauge metadata: refresh caches, find candidates, detect data changes.
 
 Refreshes the USGS and NWPS gauge metadata caches, then compares against the
@@ -8,21 +7,19 @@ kayak database to find:
   - Gauges that stopped providing data in the last week
   - Gauges that started providing data in the last week
 
-Advisory only — this script never deletes gauges. Gauges without a linked
+Advisory only — this never deletes gauges. Gauges without a linked
 reach are first-class (a few feed calc expressions, others are kept for
 historical/manual-merge use) and are never recommended for removal on that
 basis. Any cleanup tool that wants to delete a gauge must use
 ``kayak.db.gauges.delete_gauge``, which enforces the safety chokepoint.
 
-Usage:
-    python3 scripts/audit_gauges.py [--no-refresh] [--days 7]
+The CLI entry point (``levels audit-gauges``) lives in
+:mod:`kayak.cli.audit_gauges`; this module holds the audit logic.
 """
 
 from __future__ import annotations
 
-import argparse
 import math
-import os
 import re
 import shutil
 import sqlite3
@@ -31,14 +28,9 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-# Reuse the existing fetch scripts
-SCRIPT_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(SCRIPT_DIR))
+from kayak.config import GAUGE_METADATA_CACHE
 
-from _gauge_metadata_cache import DEFAULT_GAUGE_METADATA_CACHE  # noqa: E402
-
-CACHE_DB = DEFAULT_GAUGE_METADATA_CACHE
-KAYAK_DB = Path.home() / "DB" / "kayak.db"
+CACHE_DB = GAUGE_METADATA_CACHE
 
 
 def haversine_miles(lat1, lon1, lat2, lon2):
@@ -112,23 +104,18 @@ def _shares_river_identity(gauge_name: str | None, *reach_names: str | None) -> 
 
 
 def refresh_caches(cache_db: str | Path = CACHE_DB):
-    """Re-run the USGS and NWPS site fetch scripts."""
+    """Re-run the USGS and NWPS site fetchers against ``cache_db``."""
     print("=" * 60)
     print("Refreshing gauge metadata caches")
     print("=" * 60)
 
-    from fetch_nwps_sites import main as fetch_nwps
-    from fetch_usgs_sites import main as fetch_usgs
+    from kayak.gauge_audit.nwps_sites import fetch_nwps_sites
+    from kayak.gauge_audit.usgs_sites import fetch_usgs_sites
 
-    saved_argv = sys.argv
-    try:
-        sys.argv = [sys.argv[0], str(cache_db)]
-        print("\n--- USGS sites ---")
-        fetch_usgs()
-        print("\n--- NWPS sites ---")
-        fetch_nwps()
-    finally:
-        sys.argv = saved_argv
+    print("\n--- USGS sites ---")
+    fetch_usgs_sites(cache_db)
+    print("\n--- NWPS sites ---")
+    fetch_nwps_sites(cache_db)
 
 
 def find_new_usgs_gauges(cache, kayak, active_only=True):
@@ -557,51 +544,14 @@ def _send_email_digest(  # noqa: C901 — pre-existing complexity; tracked in ta
         print(f"WARNING: failed to send audit email: {e}", file=sys.stderr)
 
 
-def main():  # noqa: C901 — pre-existing complexity; tracked in task #45 refactor
-    parser = argparse.ArgumentParser(description="Audit gauge metadata")
-    parser.add_argument(
-        "--no-refresh",
-        action="store_true",
-        help="Skip refreshing the metadata caches",
-    )
-    parser.add_argument(
-        "--days",
-        type=int,
-        default=7,
-        help="Window in days for data status checks (default: 7)",
-    )
-    parser.add_argument(
-        "--cache-db",
-        type=str,
-        default=str(CACHE_DB),
-        help=f"Path to gauge metadata cache (default: {CACHE_DB})",
-    )
-    parser.add_argument(
-        "--kayak-db",
-        type=str,
-        default=str(KAYAK_DB),
-        help=f"Path to kayak database (default: {KAYAK_DB})",
-    )
-    parser.add_argument(
-        "--email",
-        type=str,
-        default=os.environ.get("AUDIT_EMAIL"),
-        help="Email digest to this address (or set AUDIT_EMAIL). Always sends if set.",
-    )
-    parser.add_argument(
-        "--candidate-miles",
-        type=float,
-        default=3.0,
-        help="Max distance (mi) from a reach midpoint for a candidate gauge (default: 3)",
-    )
-    parser.add_argument(
-        "--include-gauged",
-        action="store_true",
-        help="Also list candidates for reaches that already have a linked gauge "
-        "(off by default — these are rarely actionable)",
-    )
-    args = parser.parse_args()
+def run_audit(args):  # noqa: C901 — pre-existing complexity; tracked in task #45 refactor
+    """Run the gauge audit against the configured caches + DB.
 
+    ``args`` is the parsed :mod:`argparse` namespace from
+    :func:`kayak.cli.audit_gauges.addArgs` (attributes: ``no_refresh``,
+    ``days``, ``cache_db``, ``kayak_db``, ``email``, ``candidate_miles``,
+    ``include_gauged``).
+    """
     cache_db = Path(args.cache_db)
 
     if not args.no_refresh:
@@ -718,7 +668,3 @@ def main():  # noqa: C901 — pre-existing complexity; tracked in task #45 refac
     print("\n" + "=" * 60)
     print("Audit complete")
     print("=" * 60)
-
-
-if __name__ == "__main__":
-    main()

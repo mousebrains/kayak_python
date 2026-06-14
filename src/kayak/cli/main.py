@@ -7,6 +7,7 @@ from kayak import __version__
 from kayak.cli import (
     analyze_logs,
     assign_huc,
+    audit_gauges,
     build,
     calc_rating,
     calculator,
@@ -60,6 +61,7 @@ def main() -> None:
     decimate.addArgs(subparsers)
     orphan_check.addArgs(subparsers)
     check_reaches.addArgs(subparsers)
+    audit_gauges.addArgs(subparsers)
     pipeline.addArgs(subparsers)
     seed_maintainer.addArgs(subparsers)
     delete_editor.addArgs(subparsers)

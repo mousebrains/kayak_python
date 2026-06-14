@@ -108,18 +108,17 @@ class TestKayakConfigEnvReads:
         cfg = KayakConfig()
         assert str(cfg.gauge_metadata_cache) == "/srv/gauge-metadata/gauges.db"
 
-    def test_script_helper_reads_gauge_metadata_cache_env(self, tmp_path: Path) -> None:
+    def test_gauge_metadata_cache_env_drives_audit_default(self, tmp_path: Path) -> None:
+        # The gauge-audit fetchers default to ``GAUGE_METADATA_CACHE`` (formerly
+        # the scripts/_gauge_metadata_cache helper, now folded into kayak.config).
+        # Prove the env var still drives the value they consume.
         cache = tmp_path / "gauges.db"
-        scripts_dir = Path(__file__).resolve().parents[1] / "scripts"
         env = os.environ.copy()
         env["HOME"] = str(tmp_path)
         env.pop("SUDO_USER", None)
         env["GAUGE_METADATA_CACHE"] = str(cache)
-        env["PYTHONPATH"] = os.pathsep.join([str(scripts_dir), _SRC, env.get("PYTHONPATH", "")])
-        code = (
-            "from _gauge_metadata_cache import DEFAULT_GAUGE_METADATA_CACHE; "
-            "print(DEFAULT_GAUGE_METADATA_CACHE)"
-        )
+        env["PYTHONPATH"] = os.pathsep.join([_SRC, env.get("PYTHONPATH", "")])
+        code = "from kayak.config import GAUGE_METADATA_CACHE; print(GAUGE_METADATA_CACHE)"
         result = subprocess.run(
             [sys.executable, "-c", code],
             env=env,
@@ -135,9 +134,8 @@ class TestKayakConfigEnvReads:
         env.pop("SUDO_USER", None)
         env["AUDIT_EMAIL"] = ""
         env["PYTHONPATH"] = _SRC
-        script = Path(__file__).resolve().parents[1] / "scripts" / "audit_gauges.py"
         result = subprocess.run(
-            [sys.executable, str(script), "--help"],
+            [sys.executable, "-m", "kayak.cli.main", "audit-gauges", "--help"],
             env=env,
             text=True,
             capture_output=True,

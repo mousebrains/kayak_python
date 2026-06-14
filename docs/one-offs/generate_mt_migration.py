@@ -164,7 +164,8 @@ def emit_sql() -> str:
             if row is None:
                 raise SystemExit(
                     f"USGS {site_no} not in {CACHE_DB_PATH}. "
-                    f"Refresh the cache: python3 scripts/fetch_usgs_sites.py"
+                    "Refresh the cache: levels audit-gauges "
+                    "(or python3 -m kayak.gauge_audit.usgs_sites)"
                 )
             station_nm = row["station_nm"]
             lat = row["latitude"]

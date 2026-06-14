@@ -14,11 +14,12 @@ each site (flow, gage height, or temperature).
 import contextlib
 import os
 import sqlite3
-import sys
 import time
+from pathlib import Path
 
-import requests
-from _gauge_metadata_cache import DEFAULT_GAUGE_METADATA_CACHE
+import requests  # type: ignore[import-untyped]  # match fetch_usgs_ogc.py: works with or without the types-requests stub
+
+from kayak.config import GAUGE_METADATA_CACHE
 
 STATES = ["Oregon", "Washington", "Idaho", "Nevada", "California", "Montana"]
 OGC_BASE = "https://api.waterdata.usgs.gov/ogcapi/v0"
@@ -188,8 +189,8 @@ def fetch_last_dates(site_nos, api_key=None):
     return results
 
 
-def main():
-    db_path = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_GAUGE_METADATA_CACHE
+def fetch_usgs_sites(cache_db: Path | str = GAUGE_METADATA_CACHE) -> None:
+    db_path = cache_db
 
     api_key = os.environ.get("USGS_API_KEY")
 
@@ -252,5 +253,7 @@ def main():
     conn.close()
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__":  # pragma: no cover
+    import sys
+
+    fetch_usgs_sites(sys.argv[1] if len(sys.argv) > 1 else GAUGE_METADATA_CACHE)
