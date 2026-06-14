@@ -65,7 +65,18 @@
 # release-layout changes and note the migration in deploy/SETUP.md.
 KAYAK_DEPLOY_VERSION=1
 
-set -euo pipefail
+# -E (errtrace): the ERR trap MUST be inherited by shell functions, or the
+# rollback never fires for the activation steps that matter. Every DB/build
+# mutation runs through run_app() (a function), and without errtrace a failure
+# INSIDE a function aborts under `set -e` WITHOUT triggering the ERR trap — so a
+# failed `run_app … migrate/sync/import/build` would exit with the DB already
+# mutated, consumers stopped, and maintenance still on, and NO rollback (only the
+# EXIT-cleanup of scratch). errtrace makes those failures hit `trap rollback ERR`
+# (armed for the activation phase only; staging has no ERR trap, so -E is inert
+# there). The `mv` attempts in atomic_relink sit in `if` conditions, which stay
+# exempt even under -E. (PR #192 review #1 — surfaced writing the build-fails
+# rollback test: the rebuild fix is moot if rollback doesn't run at all.)
+set -Eeuo pipefail
 # Deterministic perms for the dirs we create: $ROOT/releases/<id> and the
 # scratch base must be traversable by the app user (it writes docroot + the DB
 # backup). A root umask of 077 would make them 0700 and break every run_app
@@ -566,8 +577,19 @@ done
 # is undone by the rollback path)
 # ---------------------------------------------------------------------------
 PREV_TARGET=""
+PREV_DIR=""
 if [ -L "$ROOT/current" ]; then
     PREV_TARGET="$(readlink "$ROOT/current")"
+    # The deployer always writes a RELATIVE target (`releases/<id>`), but a
+    # manual recovery or a runbook step could leave an absolute one
+    # (`/opt/kayak/releases/<id>`). Normalize to an absolute dir for the rollback
+    # docroot rebuild so `$ROOT/$PREV_TARGET` never becomes `/opt/kayak//opt/...`
+    # (PR #192 review #3). atomic_relink restores the symlink target verbatim, so
+    # the restore itself is correct for either form.
+    case "$PREV_TARGET" in
+        /*) PREV_DIR="$PREV_TARGET" ;;
+        *)  PREV_DIR="$ROOT/$PREV_TARGET" ;;
+    esac
 fi
 
 # SQLITE_PATH was resolved into the env by the host-env sourcing above
@@ -647,14 +669,20 @@ rollback() {
             # this deploy and always app-readable), so the rebuilt docroot matches
             # the rolled-back release. Empty/absent → fall back to the inherited
             # value (legacy behavior) and let build's own warning surface.
-            _prev_site_url="$("$ROOT/$PREV_TARGET/venv/bin/python" -c \
+            _prev_site_url="$("$PREV_DIR/venv/bin/python" -c \
                 'import json,sys; print(json.load(open(sys.argv[1])).get("site_url") or "")' \
-                "$ROOT/$PREV_TARGET/runtime-config.json" 2>/dev/null || true)"
-            run_app env DATABASE_URL="sqlite:///$DB_PATH" \
+                "$PREV_DIR/runtime-config.json" 2>/dev/null || true)"
+            # Keep the rebuild's stderr (the recovery path is exactly where the
+            # failure reason matters); retain $SCRATCH so the operator can read it
+            # (PR #192 review nit #4).
+            if ! run_app env DATABASE_URL="sqlite:///$DB_PATH" \
                 ${_prev_site_url:+SITE_URL="$_prev_site_url"} \
-                DATASET_DIR="$ROOT/$PREV_TARGET/dataset" OUTPUT_DIR="$KAYAK_DOCROOT" \
-                "$ROOT/$PREV_TARGET/venv/bin/levels" build >/dev/null 2>&1 || \
-                echo "kayak-deploy: WARNING: docroot rebuild from $PREV_TARGET failed — recover with a redeploy" >&2
+                DATASET_DIR="$PREV_DIR/dataset" OUTPUT_DIR="$KAYAK_DOCROOT" \
+                "$PREV_DIR/venv/bin/levels" build >/dev/null 2>"$SCRATCH/docroot-rebuild.err"
+            then
+                echo "kayak-deploy: WARNING: docroot rebuild from $PREV_TARGET failed — see $SCRATCH/docroot-rebuild.err; recover with a redeploy" >&2
+                CLEAN_SCRATCH=0
+            fi
         fi
     fi
     for u in $KAYAK_UNITS; do "$SYSTEMCTL" start "$u" 2>/dev/null || true; done
@@ -720,9 +748,17 @@ log "applying geometry/gradient sidecars"
 run_app env DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset" "$LEVELS" import-metadata
 
 log "building docroot into the shared cache ($KAYAK_DOCROOT)"
+# Set the flag BEFORE the build, not after. `build` writes the live docroot in
+# place (stage to .staging, per-file rename(2), then an orphan sweep), so a
+# failure DURING that phase — ENOSPC, a permission/xattr error, an unlink fail —
+# leaves $KAYAK_DOCROOT a mix of old+new yet exits non-zero. The flag must mean
+# "build was STARTED" (the docroot may have changed), not "build SUCCEEDED":
+# rollback then rebuilds from the previous release. A rebuild when the docroot
+# was in fact untouched (build died during staging) is harmless — idempotent
+# regeneration from the prior venv (PR #192 review #1).
+DOCROOT_BUILT=1
 run_app env DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset" \
     OUTPUT_DIR="$KAYAK_DOCROOT" "$LEVELS" build
-DOCROOT_BUILT=1
 
 # Canonical runtime config for PHP: same path, same root wrapper, same
 # secret-merge boundary as scripts/deploy.sh (PR #190 review P1 — config

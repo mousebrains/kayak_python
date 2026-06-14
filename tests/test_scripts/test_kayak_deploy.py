@@ -587,3 +587,168 @@ def test_activation_prunes_old_releases(
     assert r3.name in remaining
     assert r2.name in remaining
     assert r1.name not in remaining, "oldest release should be pruned with KEEP=0"
+
+
+@pytest.mark.slow
+def test_rollback_rebuilds_docroot_when_build_fails_midway(
+    tmp_path: Path, deploy_root: Path, engine_repo, dataset_repo
+) -> None:
+    """PR #192 review #1: ``DOCROOT_BUILT`` is armed BEFORE the build, so a build
+    that mutates the shared docroot in place and THEN exits non-zero still drives
+    the rollback rebuild. Otherwise the failed release's partial docroot is what
+    nginx serves (the flag-after-build bug)."""
+    ds_repo, ds_sha = dataset_repo
+    eng_repo, engine_sha = engine_repo
+    fixture_ds = _REPO / "tests" / "fixtures" / "dataset"
+    db = tmp_path / "kayak.db"
+    _init_db(db, fixture_ds)
+    root = deploy_root
+    docroot = tmp_path / "docroot"
+    runtime_config = tmp_path / "runtime-config.json"
+    # Reuse the installer + systemctl stubs; swap in a runuser shim that fails the
+    # FORWARD build exactly once, after a partial in-place write, so we exercise
+    # the "build started then failed" rollback path. The once-guard lets the
+    # rollback rebuild (the second build) run for real.
+    base = _activation_stubs(tmp_path, root, runtime_config)
+    fail_sentinel = tmp_path / "FAIL_BUILD"
+    once_guard = tmp_path / "BUILD_FAILED_ONCE"
+    runuser = tmp_path / "runuser-failbuild.sh"
+    runuser.write_text(
+        "#!/bin/sh\n"
+        "shift 3\n"
+        'case "$*" in\n'
+        "  *' build')\n"
+        f'    if [ -f "{fail_sentinel}" ] && [ ! -f "{once_guard}" ]; then\n'
+        f'      touch "{once_guard}"\n'
+        '      for a in "$@"; do\n'
+        '        case "$a" in OUTPUT_DIR=*) out="${a#OUTPUT_DIR=}" ;; esac\n'
+        "      done\n"
+        '      mkdir -p "$out"\n'
+        "      printf 'https://second.example.org/partial\\n' > \"$out/partial-FAIL.html\"\n"
+        "      exit 1\n"
+        "    fi\n"
+        "    ;;\n"
+        "esac\n"
+        'exec "$@"\n'
+    )
+    runuser.chmod(0o755)
+    host_env = tmp_path / "host.env"
+    conf = _write_conf(
+        tmp_path,
+        str(eng_repo),
+        str(ds_repo),
+        ENGINE_BRANCH="test-main",
+        DATASET_BRANCH="main",
+        SERVING_CUTOVER="yes",
+    )
+
+    def activate(site_url: str) -> subprocess.CompletedProcess[str]:
+        host_env.write_text(f"SITE_URL={site_url}\nSQLITE_PATH={db}\n")
+        env = {
+            "KAYAK_DEPLOY_CONF": str(conf),
+            "KAYAK_DEPLOY_ROOT": str(root),
+            "KAYAK_DOCROOT": str(docroot),
+            "KAYAK_HOST_ENV": str(host_env),
+            "KAYAK_RUNTIME_CONFIG": str(runtime_config),
+            "KAYAK_CONFIG_INSTALLER": base["installer"],
+            "KAYAK_SYSTEMCTL": base["systemctl"],
+            "KAYAK_PRIVILEGED": "yes",
+            "KAYAK_APP_USER": base["me"],
+            "KAYAK_RUNUSER": str(runuser),
+            "HOME": str(tmp_path),
+            "SUDO_USER": "",
+            "KAYAK_UNITS": "kayak-pipeline.timer",
+        }
+        return _run(["--engine-ref", engine_sha, "--dataset-ref", ds_sha], env, timeout=900)
+
+    def _docroot_text() -> str:
+        return "".join(p.read_text(errors="ignore") for p in docroot.rglob("*") if p.is_file())
+
+    # First activation succeeds (sentinel not yet armed) and seeds the docroot.
+    first = activate("https://first.example.org")
+    assert first.returncode == 0, first.stderr
+    assert "first.example.org" in _docroot_text()
+
+    # Arm the next build to mutate the docroot then fail.
+    fail_sentinel.write_text("x")
+    second = activate("https://second.example.org")
+    _ctx = f"\n--- STDOUT ---\n{second.stdout}\n--- STDERR ---\n{second.stderr}"
+    assert second.returncode != 0, _ctx
+    # The build failed mid-way, but the rebuild still ran → DOCROOT_BUILT was 1
+    # (the fix); the bug would skip it.
+    assert "rebuilding" in second.stderr, _ctx
+    dt = _docroot_text()
+    assert "first.example.org" in dt
+    assert not (docroot / "partial-FAIL.html").exists(), (
+        "the rollback rebuild's orphan sweep must remove the failed build's partial file"
+    )
+    assert "second.example.org" not in dt
+
+
+@pytest.mark.slow
+def test_rollback_rebuilds_docroot_with_absolute_current_symlink(
+    tmp_path: Path, deploy_root: Path, engine_repo, dataset_repo
+) -> None:
+    """PR #192 review #3: rollback normalizes an ABSOLUTE ``current`` symlink
+    target (a manual-recovery shape) so the docroot rebuild reads the previous
+    release from its real path, not ``$ROOT//opt/...``."""
+    ds_repo, ds_sha = dataset_repo
+    eng_repo, engine_sha = engine_repo
+    fixture_ds = _REPO / "tests" / "fixtures" / "dataset"
+    db = tmp_path / "kayak.db"
+    _init_db(db, fixture_ds)
+    root = deploy_root
+    docroot = tmp_path / "docroot"
+    runtime_config = tmp_path / "runtime-config.json"
+    base = _activation_stubs(tmp_path, root, runtime_config)
+    host_env = tmp_path / "host.env"
+    conf = _write_conf(
+        tmp_path,
+        str(eng_repo),
+        str(ds_repo),
+        ENGINE_BRANCH="test-main",
+        DATASET_BRANCH="main",
+        SERVING_CUTOVER="yes",
+    )
+
+    def activate(site_url: str, *, health_url: str | None) -> subprocess.CompletedProcess[str]:
+        host_env.write_text(f"SITE_URL={site_url}\nSQLITE_PATH={db}\n")
+        env = {
+            "KAYAK_DEPLOY_CONF": str(conf),
+            "KAYAK_DEPLOY_ROOT": str(root),
+            "KAYAK_DOCROOT": str(docroot),
+            "KAYAK_HOST_ENV": str(host_env),
+            "KAYAK_RUNTIME_CONFIG": str(runtime_config),
+            "KAYAK_CONFIG_INSTALLER": base["installer"],
+            "KAYAK_SYSTEMCTL": base["systemctl"],
+            "KAYAK_PRIVILEGED": "yes",
+            "KAYAK_APP_USER": base["me"],
+            "KAYAK_RUNUSER": base["runuser"],
+            "HOME": str(tmp_path),
+            "SUDO_USER": "",
+            "KAYAK_UNITS": "kayak-pipeline.timer",
+        }
+        if health_url is not None:
+            env["HEALTH_URL"] = health_url
+        return _run(["--engine-ref", engine_sha, "--dataset-ref", ds_sha], env, timeout=900)
+
+    first = activate("https://first.example.org", health_url=None)
+    assert first.returncode == 0, first.stderr
+    release1 = (root / "current").resolve()
+
+    # Simulate a manual recovery that left `current` pointing at an ABSOLUTE path
+    # (the deployer itself always writes a relative `releases/<id>`).
+    (root / "current").unlink()
+    (root / "current").symlink_to(release1)
+    assert os.path.isabs(os.readlink(root / "current"))
+
+    second = activate("https://second.example.org", health_url="http://127.0.0.1:1/")
+    assert second.returncode != 0
+    assert (root / "current").resolve() == release1
+    assert "rebuilding" in second.stderr
+    # The rebuild must SUCCEED — the failure warning ("docroot rebuild from …
+    # failed") would mean PREV_DIR doubled the root prefix (the bug).
+    assert "docroot rebuild from" not in second.stderr
+    dt = "".join(p.read_text(errors="ignore") for p in docroot.rglob("*") if p.is_file())
+    assert "first.example.org" in dt
+    assert "second.example.org" not in dt
