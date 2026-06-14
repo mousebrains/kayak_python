@@ -14,6 +14,12 @@ WorkingDirectory=/home/pat/kayak
 # DO expand ${KAYAK_HOME} (set by /etc/kayak/env with the in-unit
 # fallback default below).
 Environment=KAYAK_HOME=/home/pat
+# Pin the metadata-cache path explicitly rather than leaning on config.py's
+# BASE_DIR-relative default (which only resolves to this path because the
+# editable install lives at /home/pat/kayak). Keeping it literal here means
+# the cache stays where ReadWritePaths= grants write access even if the
+# install location moves (e.g. a future frozen/paired-release layout).
+Environment=GAUGE_METADATA_CACHE=/home/pat/kayak/Gauge-metadata-cache/gauges.db
 EnvironmentFile=-/etc/kayak/env
 EnvironmentFile=/home/pat/.config/kayak/.env
 ExecStart=/home/pat/.venv/bin/levels audit-gauges --days 16 --email ${AUDIT_EMAIL}

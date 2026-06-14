@@ -17,7 +17,7 @@ import sqlite3
 import time
 from pathlib import Path
 
-import requests
+import requests  # type: ignore[import-untyped]  # match fetch_usgs_ogc.py: works with or without the types-requests stub
 
 from kayak.config import GAUGE_METADATA_CACHE
 

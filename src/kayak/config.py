@@ -205,7 +205,7 @@ class KayakConfig(BaseSettings):
     mail_dump_dir: Path | None = None
 
     # Operator email-digest destination. Read by ``levels audit-gauges``
-    # (the weekly gauge-metadata audit timer) and emitted into the JSON
+    # (the twice-monthly gauge-metadata audit timer — 2nd + 17th) and emitted into the JSON
     # so future PHP / Python consumers don't have to re-implement the env
     # read. An empty / whitespace-only value coerces to ``None`` (see
     # ``_blank_email_to_none``): the systemd unit passes ``${AUDIT_EMAIL}``,
