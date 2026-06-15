@@ -27,6 +27,7 @@ dependencies = [
 dev = [
     "pytest>=9.0.3",     # CVE-2025-71176 fixed in 9.0.3
     "pytest-cov>=4.1",
+    "pytest-xdist>=3.6",  # parallelize the slow wheel-building deploy tests in CI (-n auto)
     "ruff>=0.5",
     "mypy>=1.10",
     "types-PyYAML>=6.0",

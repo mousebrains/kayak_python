@@ -272,6 +272,16 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
+          # Cache ~/.cache/pip across runs: the slow deploy tests run
+          # kayak-deploy.sh, which builds its OWN venvs and `pip install
+          # --require-hashes` the 30-package prod lock + 5-package build lock.
+          # Those plain-pip installs use ~/.cache/pip (NOT uv's cache), so without
+          # this every CI run re-downloads them cold (~90 s). Keyed on the locks,
+          # so it invalidates when deps change; --require-hashes keeps it safe.
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements-prod.lock
+            requirements-build.lock
       - name: Verify uv.lock matches pyproject.toml
         run: uv lock --check
       - run: uv sync --locked --all-extras
@@ -313,8 +323,26 @@ jobs:
             exit 1
           }
 
-      - name: Run tests (with slow marker enabled)
-        run: uv run pytest -m '' --cov=kayak --cov-report=term-missing --cov-fail-under=75 -q
+      # Two -n auto passes in SEPARATE processes. The slow deploy tests must not
+      # share an xdist worker with the light suite, and they run UNINSTRUMENTED:
+      #  - each builds a wheel + installs the 30-package prod lock via
+      #    kayak-deploy.sh (~135 s, serial ~10 min); independent, so -n auto helps.
+      #  - they exercise the deployer by running `levels` in a SEPARATELY-BUILT
+      #    staged venv subprocess, which `--cov=kayak` can't instrument anyway, so
+      #    they add ~0 to the number — and pytest-cov's subprocess hooks under -n
+      #    actively break the activation tests (which spawn the staged engine
+      #    repeatedly). So the light suite carries the coverage gate; the slow pass
+      #    runs for pass/fail only.
+      - name: Tests — light suite (parallel, coverage gate)
+        run: uv run pytest -m 'not slow' -n auto --cov=kayak --cov-report=term-missing --cov-fail-under=75 -q
+      - name: Tests — slow deploy suite (parallel, no coverage)
+        # Path-SCOPED to the deploy file: collecting the whole suite imports other
+        # test modules whose import-time os.environ side effects leak into the
+        # staged-engine subprocess these tests build (a `pytest -m slow` without the
+        # path fails the activation tests; with it they pass). All slow tests live
+        # here — tests/test_slow_tests_colocated.py guards that so a slow test added
+        # elsewhere fails loudly instead of silently skipping CI.
+        run: uv run pytest tests/test_scripts/test_kayak_deploy.py -m slow -n auto -q
 
   secret-scan:
     name: gitleaks
