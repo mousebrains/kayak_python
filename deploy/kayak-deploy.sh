@@ -326,7 +326,12 @@ fi
 fetch_and_verify() { # <repo> <ref> <branch> <clone-dir>
     repo="$1"; ref="$2"; branch="$3"; dir="$4"
     log "fetching $repo (branch $branch)"
-    git clone --quiet --bare --branch "$branch" --single-branch "$repo" "$dir"
+    # --no-local: clone via the normal object-transfer path even when $repo is a
+    # local path. Git's default local-clone optimization hardlinks/copies the
+    # source object store, which races on ephemeral CI scratch FS ("fatal:
+    # hardlink different from source"); correctness over clone speed here. It is
+    # a no-op for a remote-URL $repo (the clone is already non-local).
+    git clone --quiet --bare --no-local --branch "$branch" --single-branch "$repo" "$dir"
     # The --single-branch bare clone already contains every ancestor of the
     # branch tip, so any reachable ref resolves locally — no extra fetch needed.
     # Confirm the ref exists, then that it is reachable from the protected branch.
@@ -348,7 +353,9 @@ log "refs verified against protected branches"
 # Phase 2 — stage the release (no system mutation outside the release dir)
 # ---------------------------------------------------------------------------
 log "building engine wheel at $ENGINE_REF"
-git clone --quiet --no-checkout "$SCRATCH/engine.git" "$SCRATCH/engine-src"
+# --no-local for the same reason as the bare clone above: engine.git is a local
+# path, so skip the fragile hardlink/copy optimization and transfer objects.
+git clone --quiet --no-local --no-checkout "$SCRATCH/engine.git" "$SCRATCH/engine-src"
 git -C "$SCRATCH/engine-src" checkout --quiet "$ENGINE_REF"
 # Dependency + build-backend locks (PR #190 review): the engine commit
 # carries requirements-prod.lock (runtime deps, exported from uv.lock,
