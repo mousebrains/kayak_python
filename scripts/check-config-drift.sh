@@ -97,6 +97,21 @@ SYSTEMD_MANIFEST=$(
 # (security headers, FPM socket/user/limits, …) is still byte-compared and a
 # real regression is still caught. A pre-cutover host (no host.yaml render)
 # matches byte-for-byte too — the mask is a no-op when the lines already agree.
+#
+# KNOWN LIMITATION (PR #198 review #1): masking the WHOLE line means this weekly
+# check no longer verifies the *content* of `root` / `open_basedir` — only that
+# everything else matches. A manual tamper of just those two lines (e.g. widening
+# `open_basedir` with `/tmp:`) would NOT be flagged here. They are still verified,
+# but only at DEPLOY time, by the deployer's serving-path gate (kayak-deploy.sh,
+# SERVING_CUTOVER) — not weekly. The follow-up that closes the continuous-
+# monitoring gap is to compare the live lines against `levels render-serving`
+# output (drift = "live line ≠ what host.yaml renders") instead of blanking them;
+# deferred because it couples this check to the renderer + host.yaml + a `levels`
+# binary.
+#
+# Path duplication (PR #198 review #2): the FPM pool path below ALSO appears in
+# MANIFEST above. A PHP-version bump (php8.4 → php8.5) must update BOTH lines;
+# changing only MANIFEST silently re-introduces the false `open_basedir` drift.
 RENDER_NORMALIZED="/etc/nginx/snippets/levels-common.conf /etc/php/8.4/fpm/pool.d/kayak.conf"
 normalize_rendered() {
     sed -E \
@@ -147,6 +162,14 @@ check_one() {
     diff -u "$repo_abs" "$install" || true
     drift=$((drift + 1))
 }
+
+# When SOURCED for unit tests (KAYAK_DRIFT_LIB=1), stop here: the functions above
+# (normalize_rendered, check_one) are the unit under test, and the manifest walk
+# below reads this host's live /etc. A normal `check-config-drift.sh` run leaves
+# KAYAK_DRIFT_LIB unset and proceeds. See tests/test_scripts/test_config_drift.py.
+if [ "${KAYAK_DRIFT_LIB:-}" = "1" ]; then
+    return 0
+fi
 
 # Walk the explicit manifest, skipping blank lines and # comments.
 while IFS=$'\t' read -r repo_rel install; do
