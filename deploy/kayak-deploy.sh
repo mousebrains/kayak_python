@@ -15,7 +15,16 @@
 # reachable from the protected branch IS the trust anchor.
 #
 # Usage:
-#   kayak-deploy --engine-ref <40-hex> --dataset-ref <40-hex> [--stage-only]
+#   kayak-deploy --engine-ref <40-hex> --dataset-ref <40-hex> [--stage-only] [--allow-deletes]
+#
+# --allow-deletes lets the metadata sync apply a diff that REMOVES rows. The
+# sync refuses deletes by default (all-or-nothing), so a destructive diff —
+# e.g. a reach_guidebook re-point, which is structurally delete+insert on the
+# composite PK — otherwise exits non-zero and the deploy rolls back. This is a
+# per-invocation, conscious opt-in (NOT a deploy.env setting) so a human reviews
+# the drop counts each run; an automated deploy of a delete-containing dataset
+# still fails closed until someone passes this. Run sync-metadata --dry-run
+# first to see the per-source observation-drop plan.
 #
 # Configuration: /etc/kayak/deploy.env (override: $KAYAK_DEPLOY_CONF), vars:
 #   ENGINE_REPO / DATASET_REPO     git URLs (or local paths) of the two repos
@@ -106,13 +115,15 @@ umask 022
 ENGINE_REF=""
 DATASET_REF=""
 STAGE_ONLY=0
+ALLOW_DELETES=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --engine-ref)  ENGINE_REF="${2:?--engine-ref needs a value}"; shift 2 ;;
         --dataset-ref) DATASET_REF="${2:?--dataset-ref needs a value}"; shift 2 ;;
         --stage-only)  STAGE_ONLY=1; shift ;;
+        --allow-deletes) ALLOW_DELETES=1; shift ;;
         -h|--help)
-            sed -n '2,45p' "$0" | sed 's/^# \{0,1\}//'
+            sed -n '2,54p' "$0" | sed 's/^# \{0,1\}//'
             exit 0 ;;
         *) echo "Error: unknown argument '$1' (see --help)" >&2; exit 2 ;;
     esac
@@ -855,8 +866,13 @@ MUTATED=1
 log "applying schema migrations"
 run_app env DATABASE_URL="sqlite:///$DB_PATH" "$LEVELS" migrate
 
-log "applying metadata sync (all-or-nothing)"
-run_app env DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset" "$LEVELS" sync-metadata
+if [ "$ALLOW_DELETES" = "1" ]; then
+    log "applying metadata sync (--allow-deletes: row removals permitted this run)"
+    run_app env DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset" "$LEVELS" sync-metadata --allow-deletes
+else
+    log "applying metadata sync (all-or-nothing; deletes refused — re-run kayak-deploy with --allow-deletes to permit)"
+    run_app env DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset" "$LEVELS" sync-metadata
+fi
 
 # Geometry/gradient sidecars are dataset content EXCLUDED from reach.csv —
 # sync-metadata never writes reach.geom/gradient_profile. Without this step
