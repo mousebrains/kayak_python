@@ -493,6 +493,10 @@ def test_activation_rolls_back_db_symlink_and_config_on_failed_health(
     assert ".backup" in rlog
     for cmd in ("migrate", "sync-metadata", "import-metadata", "build"):
         assert cmd in rlog, cmd
+    # Fail-closed default: a deploy WITHOUT --allow-deletes must not pass the
+    # flag to sync-metadata, so the sync refuses any delete-containing diff.
+    sync_lines = [ln for ln in rlog.splitlines() if "sync-metadata" in ln]
+    assert sync_lines and all("--allow-deletes" not in ln for ln in sync_lines), sync_lines
 
     # #3: the docroot is the shared cache (KAYAK_DOCROOT), NOT inside the
     # release — the release tree holds venv+dataset only.
@@ -529,6 +533,85 @@ def test_activation_rolls_back_db_symlink_and_config_on_failed_health(
     assert n > 0
     assert not (root / "maintenance").exists()
     assert "start kayak-pipeline.timer" in systemctl_log.read_text()
+
+
+@pytest.mark.slow
+def test_allow_deletes_flag_reaches_sync_metadata(
+    tmp_path: Path, deploy_root: Path, engine_repo, dataset_repo
+) -> None:
+    """``--allow-deletes`` is plumbed through to the single ``sync-metadata``
+    invocation. Paired with the fail-closed assertion in the activation test
+    above (a default run carries NO ``--allow-deletes``), this pins both
+    directions of the gate so a refactor can't silently drop or invert it — the
+    catastrophic-on-prod case, since the deployer's whole job here is this
+    passthrough. The fixture diff is a no-op vs the just-synced DB, so the flag
+    is inert; we assert plumbing, not an actual deletion."""
+    ds_repo, ds_sha = dataset_repo
+    eng_repo, engine_sha = engine_repo
+    fixture_ds = _REPO / "tests" / "fixtures" / "dataset"
+
+    db = tmp_path / "kayak.db"
+    _init_db(db, fixture_ds)
+
+    root = deploy_root
+    docroot = tmp_path / "docroot"
+    runtime_config = tmp_path / "runtime-config.json"
+    runuser_log = tmp_path / "runuser.log"
+
+    installer = tmp_path / "install-config.sh"
+    installer.write_text(f'#!/bin/sh\ncat > "{runtime_config}"\n')
+    installer.chmod(0o755)
+    systemctl = tmp_path / "systemctl.sh"
+    systemctl.write_text(
+        "#!/bin/sh\n"
+        'case "$1" in\n'
+        "  is-active) exit 1 ;;\n"
+        f'  show) echo "{{ path={root}/current/venv/bin/levels }}" ;;\n'
+        "  *) exit 0 ;;\n"
+        "esac\n"
+    )
+    systemctl.chmod(0o755)
+    # Logging runuser shim (records full argv) so the sync call is readable back.
+    runuser = tmp_path / "runuser.sh"
+    runuser.write_text(f'#!/bin/sh\nshift 3\necho "$@" >> "{runuser_log}"\nexec "$@"\n')
+    runuser.chmod(0o755)
+    me = subprocess.run(["id", "-un"], capture_output=True, text=True, check=True).stdout.strip()
+
+    host_env = tmp_path / "host.env"
+    host_env.write_text(f"SITE_URL=https://deletes.example.org\nSQLITE_PATH={db}\n")
+    conf = _write_conf(
+        tmp_path,
+        str(eng_repo),
+        str(ds_repo),
+        ENGINE_BRANCH="test-main",
+        DATASET_BRANCH="main",
+        SERVING_CUTOVER="yes",
+    )
+    env = {
+        "KAYAK_DEPLOY_CONF": str(conf),
+        "KAYAK_DEPLOY_ROOT": str(root),
+        "KAYAK_DOCROOT": str(docroot),
+        "KAYAK_HOST_ENV": str(host_env),
+        "KAYAK_RUNTIME_CONFIG": str(runtime_config),
+        "KAYAK_CONFIG_INSTALLER": str(installer),
+        "KAYAK_SYSTEMCTL": str(systemctl),
+        **_serving_knobs(tmp_path, docroot),
+        "KAYAK_PRIVILEGED": "yes",
+        "KAYAK_APP_USER": me,
+        "KAYAK_RUNUSER": str(runuser),
+        "HOME": str(tmp_path),
+        "SUDO_USER": "",
+        "KAYAK_UNITS": "kayak-pipeline.timer",
+    }
+    proc = _run(
+        ["--engine-ref", engine_sha, "--dataset-ref", ds_sha, "--allow-deletes"],
+        env,
+        timeout=900,
+    )
+    assert proc.returncode == 0, proc.stderr
+    sync_lines = [ln for ln in runuser_log.read_text().splitlines() if "sync-metadata" in ln]
+    assert len(sync_lines) == 1, sync_lines
+    assert "--allow-deletes" in sync_lines[0], sync_lines[0]
 
 
 def _activation_stubs(tmp_path: Path, root: Path, runtime_config: Path) -> dict[str, str]:

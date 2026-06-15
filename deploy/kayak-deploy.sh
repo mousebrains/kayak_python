@@ -866,11 +866,11 @@ MUTATED=1
 log "applying schema migrations"
 run_app env DATABASE_URL="sqlite:///$DB_PATH" "$LEVELS" migrate
 
-if [ "$ALLOW_DELETES" = "1" ]; then
+if [ "$ALLOW_DELETES" = 1 ]; then
     log "applying metadata sync (--allow-deletes: row removals permitted this run)"
     run_app env DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset" "$LEVELS" sync-metadata --allow-deletes
 else
-    log "applying metadata sync (all-or-nothing; deletes refused — re-run kayak-deploy with --allow-deletes to permit)"
+    log "applying metadata sync (all-or-nothing; any deletes will be refused — re-run with --allow-deletes to permit)"
     run_app env DATABASE_URL="sqlite:///$DB_PATH" DATASET_DIR="$RELEASE_DIR/dataset" "$LEVELS" sync-metadata
 fi
 
