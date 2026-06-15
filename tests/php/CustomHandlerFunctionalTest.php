@@ -152,10 +152,11 @@ final class CustomHandlerFunctionalTest extends FunctionalTestCase
         // Unknown reach (gauge+flow but no class range) → 'unknown'.
         $this->assertStringContainsString('data-status="unknown"', $html);
 
-        // Flow-delta words: rising (+5), falling (-3), stable (0.1).
-        $this->assertStringContainsString('class="rising"', $html);
-        $this->assertStringContainsString('class="falling"', $html);
-        $this->assertStringContainsString('class="stable"', $html);
+        // Status cell shows the runnable level (low/okay/high), matching the
+        // main levels page — the trend is conveyed by the sparkline instead.
+        $this->assertStringContainsString('class="level-low"', $html);
+        $this->assertStringContainsString('class="level-okay"', $html);
+        $this->assertStringContainsString('class="level-high"', $html);
 
         // "4 reaches" count line (plural).
         $this->assertStringContainsString('4 reach', $html);

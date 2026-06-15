@@ -491,17 +491,15 @@ function _render_custom_table(
 <?php foreach ($reaches as $s):
     $id = $s['id'];
 
-    // Status from flow delta.
+    // Status = runnable level (low/okay/high) from the reach_class flow range
+    // vs current flow, matching the main levels page (build/levels.py). The
+    // trend (rising/falling) is already conveyed by the sparkline, so this
+    // column shows the level instead.
     $status = '';
-    if ($s['flow_delta'] !== null) {
-        $dph = $s['flow_delta'];
-        if (abs($dph) < 0.5) {
-            $status = '<span class="stable">stable</span>';
-        } elseif ($dph > 0) {
-            $status = '<span class="rising">rising</span>';
-        } else {
-            $status = '<span class="falling">falling</span>';
-        }
+    $st = $s['status'] ?? null;
+    if ($st !== null && $st !== '') {
+        $esc = htmlspecialchars($st);
+        $status = '<span class="level-' . $esc . '">' . $esc . '</span>';
     }
 
     // Best available timestamp — render as <time> for client-side
