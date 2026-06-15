@@ -34,6 +34,9 @@ REPO="${REPO:-${KAYAK_HOME}/kayak}"
 #     install-secrets.sh in T3.3 Phase 5.2.)
 #   - systemd/*.sh — helper scripts run in-tree from /home/pat/kayak/systemd/,
 #     not copied to /etc/.
+# RENDER-NORMALIZED files (see $RENDER_NORMALIZED below): levels-common.conf and
+# kayak-fpm-pool.conf carry two lines rendered from host.yaml by the 4C cutover,
+# so they're compared with only those lines masked — NOT dropped from tracking.
 read -r -d '' MANIFEST <<'EOF' || true
 # nginx
 conf/security-headers.conf	/etc/nginx/snippets/security-headers.conf
@@ -85,6 +88,38 @@ SYSTEMD_MANIFEST=$(
     done
 )
 
+# Files whose LIVE copy legitimately diverges from the generic repo template
+# because the 4C paired-release cutover (deploy/INSTALL-paired-release.md)
+# RENDERS two lines from /etc/kayak/host.yaml via `levels render-serving`:
+#   - the served-docroot nginx `root` (NOT the ACME `root /var/www/certbot;`)
+#   - the PHP-FPM pool `open_basedir`
+# For these, mask ONLY those lines before comparing, so the rest of each file
+# (security headers, FPM socket/user/limits, …) is still byte-compared and a
+# real regression is still caught. A pre-cutover host (no host.yaml render)
+# matches byte-for-byte too — the mask is a no-op when the lines already agree.
+#
+# KNOWN LIMITATION (PR #198 review #1): masking the WHOLE line means this weekly
+# check no longer verifies the *content* of `root` / `open_basedir` — only that
+# everything else matches. A manual tamper of just those two lines (e.g. widening
+# `open_basedir` with `/tmp:`) would NOT be flagged here. They are still verified,
+# but only at DEPLOY time, by the deployer's serving-path gate (kayak-deploy.sh,
+# SERVING_CUTOVER) — not weekly. The follow-up that closes the continuous-
+# monitoring gap is to compare the live lines against `levels render-serving`
+# output (drift = "live line ≠ what host.yaml renders") instead of blanking them;
+# deferred because it couples this check to the renderer + host.yaml + a `levels`
+# binary.
+#
+# Path duplication (PR #198 review #2): the FPM pool path below ALSO appears in
+# MANIFEST above. A PHP-version bump (php8.4 → php8.5) must update BOTH lines;
+# changing only MANIFEST silently re-introduces the false `open_basedir` drift.
+RENDER_NORMALIZED="/etc/nginx/snippets/levels-common.conf /etc/php/8.4/fpm/pool.d/kayak.conf"
+normalize_rendered() {
+    sed -E \
+        -e '\%^[[:space:]]*root[[:space:]]+/var/www/certbot;%! s%^([[:space:]]*)root[[:space:]]+[^;]*;%\1root @@RENDERED@@;%' \
+        -e 's%^([[:space:]]*)php_admin_value\[open_basedir\][[:space:]]*=.*%\1php_admin_value[open_basedir] = @@RENDERED@@%' \
+        "$1"
+}
+
 log()  { printf '[drift-check] %s\n' "$*"; }
 warn() { printf '[drift-check] DRIFT: %s\n' "$*"; }
 
@@ -106,6 +141,19 @@ check_one() {
         missing=$((missing + 1))
         return
     fi
+    # Render-normalized files: compare with the host-rendered lines masked.
+    case " $RENDER_NORMALIZED " in
+        *" $install "*)
+            if diff -q <(normalize_rendered "$repo_abs") <(normalize_rendered "$install") >/dev/null 2>&1; then
+                ok=$((ok + 1))
+                return
+            fi
+            warn "DIFFERS (host-rendered lines excluded): $install vs $repo_rel"
+            diff -u <(normalize_rendered "$repo_abs") <(normalize_rendered "$install") || true
+            drift=$((drift + 1))
+            return
+            ;;
+    esac
     if cmp -s "$repo_abs" "$install"; then
         ok=$((ok + 1))
         return
@@ -114,6 +162,14 @@ check_one() {
     diff -u "$repo_abs" "$install" || true
     drift=$((drift + 1))
 }
+
+# When SOURCED for unit tests (KAYAK_DRIFT_LIB=1), stop here: the functions above
+# (normalize_rendered, check_one) are the unit under test, and the manifest walk
+# below reads this host's live /etc. A normal `check-config-drift.sh` run leaves
+# KAYAK_DRIFT_LIB unset and proceeds. See tests/test_scripts/test_config_drift.py.
+if [ "${KAYAK_DRIFT_LIB:-}" = "1" ]; then
+    return 0
+fi
 
 # Walk the explicit manifest, skipping blank lines and # comments.
 while IFS=$'\t' read -r repo_rel install; do
