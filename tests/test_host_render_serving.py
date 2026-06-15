@@ -46,6 +46,20 @@ class TestRendererPinnedToCommittedConfig:
         assert len(docroot_roots) == 1, f"expected one docroot root, got {docroot_roots}"
         assert render_nginx_root(HostConfig()).strip() == docroot_roots[0]
 
+    def test_no_absolute_public_html_static_aliases(self) -> None:
+        # favicon / security.txt serve docroot-relative via `try_files /static/...`
+        # (cutover follow-up #2), so they follow the rendered root and stay generic.
+        # Pin it: no `alias ...public_html...` may creep back — it would 404 once
+        # public_html is removed AND diverge from the live file (config-drift does
+        # not mask alias lines). PR #199 review #2.
+        snippet = _REPO / "conf" / "snippets" / "levels-common.conf"
+        offenders = [
+            ln.strip()
+            for ln in snippet.read_text().splitlines()
+            if ln.strip().startswith("alias ") and "public_html" in ln
+        ]
+        assert not offenders, f"absolute public_html alias(es) reintroduced: {offenders}"
+
 
 class TestRenderNginxRoot:
     def test_root_is_the_configured_docroot(self) -> None:
