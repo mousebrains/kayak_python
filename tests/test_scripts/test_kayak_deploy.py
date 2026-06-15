@@ -41,10 +41,37 @@ def deploy_root() -> Iterator[Path]:
         shutil.rmtree(d, ignore_errors=True)
 
 
+# kayak.config (BaseSettings, case-insensitive) reads these env vars at import.
+# Each test here builds and imports a STAGED engine in a subprocess, so any of
+# these inherited from THIS pytest process would leak into that engine's config —
+# and under ``pytest -n`` a concurrent test's value poisons it (a
+# ``DATASET_DIR``/``METADATA_DIR`` mismatch even raises ``ValueError`` at import,
+# crashing every deploy test). The deployer resolves the config the staged engine
+# needs from its own files, so scrub the lot for a hermetic subprocess. Mirrors
+# kayak.config's env inputs (field names + the explicit aliases).
+_KAYAK_CONFIG_ENV = frozenset(
+    {
+        "DATABASE_URL",
+        "OUTPUT_DIR",
+        "DATASET_DIR",
+        "METADATA_DIR",
+        "MAP_LAYERS_DIR",
+        "OSMB_DIR",
+        "GAUGE_METADATA_CACHE",
+        "SITE_URL",
+        "MAINTAINER_EMAIL",
+        "SQLITE_PATH",
+        "KAYAK_CONFIG_PATH",
+    }
+)
+
+
 def _run(args: list[str], env_overrides: dict[str, str | None], timeout: int = 600):
-    # A None override REMOVES the key from the inherited environment (vs ""
-    # which is still "set"). Needed e.g. to drop a dev box's leaked METADATA_DIR.
-    env = {k: v for k, v in {**os.environ, **env_overrides}.items() if v is not None}
+    # Start from a hermetic base: the inherited env MINUS kayak's config vars
+    # (see _KAYAK_CONFIG_ENV) so a concurrent test can't poison the staged
+    # engine. A None override still REMOVES a key (vs "" which stays "set").
+    base = {k: v for k, v in os.environ.items() if k.upper() not in _KAYAK_CONFIG_ENV}
+    env = {k: v for k, v in {**base, **env_overrides}.items() if v is not None}
     return subprocess.run(
         ["bash", str(_SCRIPT), *args], env=env, capture_output=True, text=True, timeout=timeout
     )
