@@ -137,7 +137,16 @@ sudo env KAYAK_DEPLOY_CONF=/etc/kayak/deploy.env \
 Inspect `/opt/kayak/releases/<id>/`: `venv/`, `dataset/`, `release.json` digests,
 normalized `runtime-config.json` (no secrets, no scratch paths), and **no
 `docroot/`** (it's the shared cache now). No system mutation; scratch lands in
-`/opt/kayak/.staging` (real disk) — `df /tmp` should not move.
+`/opt/kayak/.staging` (real disk) — `df /tmp` should not move. The `.staging`
+scratch auto-cleans on exit, but the staged `releases/<id>/` is **retained** for
+this inspection — `sudo rm -rf /opt/kayak/releases/<id>` when done (the real
+activation re-stages from scratch).
+
+> **The dry-run release-id is not the activation's id** unless `host.yaml` and the
+> real `deploy.env` are already in place. The id folds in the host-config
+> fingerprint and the normalized runtime-config, so a no-`host.yaml` probe
+> (fingerprint `none`) computes a *different* `<id>`. Expected — stage-only
+> validates the build mechanics (wheel, dataset, digest), not the final id.
 
 ### 4. Bootstrap the DB — first install only (REQUIRED)
 
@@ -320,6 +329,24 @@ authoritative "what moved / what didn't" for the live WKCC dirs:
 | `~/logs` | **unchanged** | CSP-report + app logs; in FPM `open_basedir`. |
 | `~/.config/kayak/.env` | **unchanged** (one edit) | App-user env stays; the cutover only repoints `OUTPUT_DIR` → `/var/cache/kayak/docroot`. The new root-owned *host*/*deploy* config lives at `/etc/kayak/{host.yaml,deploy.env}`. |
 | `~/backups` | **unchanged** | Host backup target (`HostConfig.backup_dir`); `kayak-backup-*` units write here from `~/kayak/systemd/`. |
+
+> **Pre-flight smoke check (validated on the live amd64 host 2026-06-14): prove
+> the build before any setup.** Stage-only needs only `ENGINE_REPO`/`DATASET_REPO`;
+> pass them inline and it builds the wheel, snapshots + `validate-dataset`s the
+> dataset, and computes the digest with **zero config files and zero mutation**
+> (the site keeps serving). Run this first to de-risk the flip — it's the
+> definitive check that prod's amd64 Python builds the locked wheel:
+>
+> ```bash
+> ER=$(git ls-remote https://github.com/mousebrains/kayak_python.git refs/heads/main | cut -f1)
+> DR=$(git ls-remote https://github.com/mousebrains/kayak_data.git  refs/heads/main | cut -f1)
+> sudo env ENGINE_REPO=https://github.com/mousebrains/kayak_python.git \
+>          DATASET_REPO=https://github.com/mousebrains/kayak_data.git \
+>   /home/<svc>/kayak/deploy/kayak-deploy.sh --engine-ref "$ER" --dataset-ref "$DR" --stage-only
+> ```
+>
+> A clean run ends `staged: /opt/kayak/releases/<id>`; `sudo rm -rf` it (step 3).
+> The id differs from the activation's — no `host.yaml` yet (step 3 caveat).
 
 ```bash
 cd /home/<svc>/kayak
