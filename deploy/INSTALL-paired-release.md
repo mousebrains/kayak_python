@@ -307,9 +307,11 @@ live-equivalent VM clone (full live DB — 4.46 M obs, 77 migrations, served the
 whole time). The trick: build the paired-release ALONGSIDE the live one and
 **defer the nginx reload / FPM restart until AFTER the activation builds the new
 docroot**, then flip with a graceful reload. Differs from the virgin path: NO
-`init-db` (reuse the live DB — `migrate` reports "No pending" when the host already
-runs the deployed engine), NO base prep / repo clone (present), and the serving
-config is edited in place but not reloaded until the end.
+`init-db` (reuse the live DB — `migrate` reports "No pending" if the DB already
+matches the deployed engine, or **applies** the pending migrations — the deployer
+backs the DB up first — if the DB lags; both outcomes are normal), NO base prep /
+repo clone (present), and the serving config is edited in place but not reloaded
+until the end.
 
 ### Where the old single-tree layout maps to
 
@@ -321,7 +323,7 @@ authoritative "what moved / what didn't" for the live WKCC dirs:
 | Old (`/home/<svc>/…`) | New location | Disposition |
 |---|---|---|
 | `~/kayak` | engine → `/opt/kayak/current/venv`; **checkout stays** | The running *engine* moves into the immutable release. The `~/kayak` checkout **stays**: `kayak-deploy.sh` + the committed `conf/`/`deploy/` config run from it, and the shell-script consumers the cutover does **not** re-point live here — `kayak-recap`, `kayak-heartbeat`, `kayak-config-drift`, `kayak-healthcheck`, `kayak-cert-expiry`, `kayak-backup-*` all `ExecStart` from `~/kayak/{scripts,systemd}/`. Keep it on `main`. (Its two in-tree caches `var/osmb` + `Gauge-metadata-cache/` relocate to `/var/cache/kayak/{map-layers,gauge-metadata}` — see `host.yaml`.) |
-| `~/.venv` | engine → `/opt/kayak/current/venv`; **stays** | The cutover re-points the 3 engine units (`kayak-status`, `kayak-fetch-osmb`, `kayak-audit-gauges`) at the release venv. `~/.venv` **stays** only because `kayak-recap.sh` still calls `~/.venv/bin/python3 ~/kayak/scripts/recap.py`; retire when the last shell consumer moves. |
+| `~/.venv` | engine → `/opt/kayak/current/venv`; **stays** | The cutover re-points all **6** engine units (`kayak-pipeline`, `kayak-decimate`, `kayak-editor-retention`, `kayak-status`, `kayak-fetch-osmb`, `kayak-audit-gauges` — all currently `ExecStart=~/.venv/bin/levels`, = `render-units --list-units`) at the release venv. `~/.venv` **stays** only because `kayak-recap.sh` still calls `~/.venv/bin/python3 ~/kayak/scripts/recap.py`; retire when the last shell consumer moves. |
 | `~/kayak_data` | release snapshot → `/opt/kayak/current/dataset` (read-only); **clone stays** | Each release snapshots the dataset at its pinned commit; consumers read `DATASET_DIR=/opt/kayak/current/dataset`. The `~/kayak_data` clone **stays** as the working checkout the deployer snapshots from. |
 | `~/public_html` | `/var/cache/kayak/docroot` (#3); **old one retired** | Moved OUT of the home to a regenerable shared cache: nginx roots here, FPM `open_basedir` leads with it, rebuilt by both the deploy and the hourly pipeline. Old `~/public_html` becomes unused — leave as a fallback, clean up later. |
 | `~/DB/kayak.db` | **unchanged** | Mutable SQLite DB, OUTSIDE every release by design — survives cutover and rollback (the deployer backs it up pre-migrate). |
@@ -348,6 +350,22 @@ authoritative "what moved / what didn't" for the live WKCC dirs:
 > A clean run ends `staged: /opt/kayak/releases/<id>`; `sudo rm -rf` it (step 3).
 > The id differs from the activation's — no `host.yaml` yet (step 3 caveat).
 
+### Pre-flight (read-only checks, before Phase 0)
+
+- **Nothing auto-deploys.** Confirm no scheduler pulls `main` or runs
+  `scripts/deploy.sh` mid-cutover: `sudo crontab -l`; `crontab -l`;
+  `systemctl list-timers --all | grep -iE 'snapshot|deploy|pull'`. On the WKCC host
+  there is **none** (root + `<svc>` crontabs empty; `scripts/deploy.sh` is manual) —
+  **disable any you do find** and restore after Phase 3.
+- **Disk headroom.** `df -h /opt /home` — `/opt/kayak/.staging` holds the wheel
+  build **and** the ~650 MB pre-activate DB backup at the same time.
+- **The Phase-1 seds will match.** Exactly one line each:
+  `grep -n 'root .*/public_html;' /etc/nginx/snippets/levels-common.conf` and
+  `grep -n open_basedir /etc/php/8.4/fpm/pool.d/kayak.conf`.
+- **`~/kayak` is clean + on `main`** (`git -C /home/<svc>/kayak status -sb`) — the
+  cutover doesn't touch it, but a dirty/feature tree means the un-re-pointed shell
+  consumers run unexpected code.
+
 ```bash
 cd /home/<svc>/kayak
 
@@ -363,6 +381,17 @@ sudo env KAYAK_DEPLOY_CONF=/etc/kayak/deploy.env deploy/kayak-deploy.sh \
 R=/opt/kayak/releases/<id>
 
 # Phase 1 — apply the cutover config to the FILES only; DO NOT reload nginx/FPM yet
+# GUARD the empty-docroot window: from here until the Phase-2 build populates the
+# docroot, the nginx FILE roots an EMPTY dir — any nginx reload (a certbot renewal,
+# a manual / config-mgmt reload) would 404 live serving. Pause the known auto-reloader
+# now; Phase 3 restarts it. (Stronger alternative if you prefer never-empty over
+# pausing: pre-build the docroot from the staged release first —
+#   sudo -u <svc> env DATABASE_URL=sqlite:////home/<svc>/DB/kayak.db \
+#     DATASET_DIR=$R/dataset OUTPUT_DIR=/var/cache/kayak/docroot $R/venv/bin/levels build
+# then the ACL below — so a stray reload serves a valid, slightly-stale site. Safe
+# when the live DB already runs the staged engine's schema; if migrations are
+# pending it can mismatch, so pause-the-reloader is the simpler default.)
+sudo systemctl stop certbot.timer                      # active on this host; a renewal reloads nginx
 sudo install -d /run/kayak-serving
 sudo $R/venv/bin/levels render-serving --out-dir /run/kayak-serving
 sudo sed -i "s#^[[:space:]]*root .*/public_html;#$(cat /run/kayak-serving/nginx-levels-docroot.conf)#" /etc/nginx/snippets/levels-common.conf
@@ -392,6 +421,7 @@ sudo env KAYAK_DEPLOY_CONF=/etc/kayak/deploy.env deploy/kayak-deploy.sh \
 sudo systemctl reload nginx          # now roots /var/cache/kayak/docroot (built)
 sudo php-fpm8.4 -t                    # validate the pool config before reloading
 sudo systemctl reload php8.4-fpm      # graceful — applies the new open_basedir, no outage
+sudo systemctl start certbot.timer   # restore the renewal timer paused in Phase 1
 ```
 
 Verify: homepage + `description.php?h=1` 200 from the new docroot
@@ -431,9 +461,9 @@ rm -rf /home/<svc>/public_html
 #    (stale after the first post-cutover fetch-osmb / audit-gauges run writes the new dirs)
 rm -rf /home/<svc>/kayak/var/osmb /home/<svc>/kayak/Gauge-metadata-cache
 
-# 3. the legacy deploy path — confirm nothing still triggers it, then it's inert
-#    (the pre-flight already disabled any cron/timer that git-pulls main or runs
-#    scripts/deploy.sh; scripts/deploy.sh stays in the tree, just unused)
+# 3. the legacy deploy path — inert once pre-flight confirmed no scheduler
+#    git-pulls main or runs scripts/deploy.sh (and disabled any it found);
+#    scripts/deploy.sh stays in the tree, just unused
 ```
 
 **Do NOT remove yet — these are still live, not leftovers:**
