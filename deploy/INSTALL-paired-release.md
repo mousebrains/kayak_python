@@ -394,7 +394,10 @@ R=/opt/kayak/releases/<id>
 sudo systemctl stop certbot.timer                      # active on this host; a renewal reloads nginx
 sudo install -d /run/kayak-serving
 sudo $R/venv/bin/levels render-serving --out-dir /run/kayak-serving
-sudo sed -i "s#^[[:space:]]*root .*/docroot;#$(cat /run/kayak-serving/nginx-levels-docroot.conf)#" /etc/nginx/snippets/levels-common.conf
+# NB: this seds the LIVE pre-cutover file (root /home/pat/public_html;) — hence the
+# /public_html; pattern, unlike the §5a sed which runs on a freshly-cp'd conf that
+# already ships root /var/cache/kayak/docroot;.
+sudo sed -i "s#^[[:space:]]*root .*/public_html;#$(cat /run/kayak-serving/nginx-levels-docroot.conf)#" /etc/nginx/snippets/levels-common.conf
 sudo nginx -t                                          # validates the FILE; running nginx unchanged
 sudo sed -i "s#^[[:space:]]*php_admin_value\[open_basedir\].*#$(cat /run/kayak-serving/fpm-open-basedir.conf)#" /etc/php/8.4/fpm/pool.d/kayak.conf
 sudo systemctl stop 'kayak-*.timer'                    # BEFORE re-pointing — a re-pointed unit must not fire pre-activation
