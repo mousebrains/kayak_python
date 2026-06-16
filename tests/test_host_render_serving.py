@@ -65,9 +65,9 @@ class TestRenderNginxRoot:
     def test_root_is_the_configured_docroot(self) -> None:
         assert render_nginx_root(_cutover()) == "root /var/cache/kayak/docroot;\n"
 
-    def test_default_is_the_live_public_html(self) -> None:
-        # keep-current: no host.yaml → the live root, byte-for-byte unchanged.
-        assert render_nginx_root(HostConfig()) == "root /home/pat/public_html;\n"
+    def test_default_is_the_live_docroot(self) -> None:
+        # keep-current: no host.yaml → the live (post-cutover) shared docroot.
+        assert render_nginx_root(HostConfig()) == "root /var/cache/kayak/docroot;\n"
 
 
 class TestRenderFpmOpenBasedir:
@@ -85,9 +85,9 @@ class TestRenderFpmOpenBasedir:
         # the pre-#3 open_basedir's release entry is gone.
         assert "/opt/kayak" not in render_fpm_open_basedir(_cutover())
 
-    def test_default_keeps_the_live_public_html_sandbox(self) -> None:
+    def test_default_keeps_the_live_docroot_sandbox(self) -> None:
         out = render_fpm_open_basedir(HostConfig())
-        assert out.startswith("php_admin_value[open_basedir] = /home/pat/public_html:")
+        assert out.startswith("php_admin_value[open_basedir] = /var/cache/kayak/docroot:")
 
     def test_service_home_flows_through(self) -> None:
         out = render_fpm_open_basedir(HostConfig(service_home="/srv/kayak"))
@@ -114,7 +114,7 @@ class TestRenderServingCli:
         assert rc == 0
         out = capsys.readouterr().out
         assert "# ==> nginx:" in out and "# ==> php-fpm:" in out
-        assert "root /home/pat/public_html;" in out
+        assert "root /var/cache/kayak/docroot;" in out
 
     def test_malformed_host_config_is_clean_error(self, tmp_path: Path, capsys) -> None:
         from kayak.cli import render_serving as cli

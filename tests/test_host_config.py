@@ -18,7 +18,7 @@ class TestLoadHostConfig:
         assert c.timezone == "America/Los_Angeles"
         assert c.nginx_log_glob == "/var/log/nginx/levels-*.access.log*"
         assert c.status_output == "/home/pat/var/status.html"
-        assert c.docroot == "/home/pat/public_html"
+        assert c.docroot == "/var/cache/kayak/docroot"
         assert c.cert_host == "levels.wkcc.org"
         assert c.backup_dir == "/home/pat/backups"
         assert c.offsite_remote == "gdrive-crypt"
@@ -46,7 +46,7 @@ class TestLoadHostConfig:
         assert c.cert_host == "levels.example.org"
         assert c.backup_dir == "/var/lib/kayak/backups"
         assert c.offsite_label == "rclone → b2-crypt:"
-        assert c.docroot == "/home/pat/public_html"  # untouched default
+        assert c.docroot == "/var/cache/kayak/docroot"  # untouched default
 
     def test_env_var_names_the_file(self, tmp_path: Path, monkeypatch) -> None:
         f = tmp_path / "elsewhere.yaml"

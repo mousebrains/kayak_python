@@ -76,17 +76,18 @@ class HostConfig(BaseModel):
     timezone: str = "America/Los_Angeles"
     nginx_log_glob: str = "/var/log/nginx/levels-*.access.log*"
     status_output: str = "/home/pat/var/status.html"
-    docroot: str = "/home/pat/public_html"
+    docroot: str = "/var/cache/kayak/docroot"
     cert_host: str = "levels.wkcc.org"
 
     # --- paired-release cutover / renderers (4C) ---
     # The service account + its home, the paired-release root, and the PHP-FPM
-    # pool version the systemd-unit / nginx-vhost / FPM renderers need. Defaults
-    # are the current WKCC values (keep-current-then-flip): a host with no
-    # host.yaml renders the live shape, and the cutover host.yaml flips them.
-    # ``docroot`` (above) is reused — it stays ``public_html`` until the cutover
-    # host.yaml sets it to ``/var/cache/kayak/docroot`` (= the deployer's
-    # ``KAYAK_DOCROOT``). Paths the renderers derive, NOT stored: the release venv
+    # pool version the systemd-unit / nginx-vhost / FPM renderers need; their
+    # defaults are the current WKCC values. ``docroot`` (above) is reused by the
+    # renderers — post-cutover it defaults to the shared cache
+    # ``/var/cache/kayak/docroot`` (= the deployer's ``KAYAK_DOCROOT``); a
+    # per-host override still goes in host.yaml. (The generated-runtime-data dirs
+    # below still default to their pre-cutover repo-relative paths — see their
+    # note.) Paths the renderers derive, NOT stored: the release venv
     # (``{release_root}/current/venv``), the release dataset
     # (``{release_root}/current/dataset``), and the FPM pool
     # (``/etc/php/{fpm_pool_php}/fpm/pool.d/kayak.conf``). See
