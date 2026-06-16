@@ -71,8 +71,20 @@ def render_cutover_dropins(h: HostConfig) -> list[CutoverDropIn]:
     # kayak_data clone) so a consumer always reads the dataset that shipped with
     # the running code; harmless on the units that don't read it.
     specs: list[tuple[str, list[str], dict[str, str], list[str]]] = [
-        # pipeline builds the docroot → OUTPUT_DIR + the shared docroot RWP.
-        ("kayak-pipeline", ["pipeline"], {"OUTPUT_DIR": h.docroot}, [h.docroot, db]),
+        # pipeline builds the docroot → OUTPUT_DIR + the shared docroot RWP. Its
+        # build step ALSO copies the fetched map-overlay GeoJSON out of the
+        # map-layer staging dir into OUTPUT_DIR/static, so it must see the SAME
+        # relocated MAP_LAYERS_DIR as kayak-fetch-osmb (below) — otherwise build
+        # reads the install-root default (empty under the release) and emits empty
+        # overlay URLs, dropping the map's Obstructions/Dams/Access layers. Read
+        # only — the staging dir needs no ReadWritePaths grant (readable under
+        # ProtectSystem=strict; only fetch-osmb writes it).
+        (
+            "kayak-pipeline",
+            ["pipeline"],
+            {"OUTPUT_DIR": h.docroot, "MAP_LAYERS_DIR": h.map_layers_dir},
+            [h.docroot, db],
+        ),
         ("kayak-decimate", ["decimate"], {}, [db]),
         ("kayak-editor-retention", ["editor-retention"], {}, [db]),
         # fetch-osmb stages map layers into a dir the engine default resolves
