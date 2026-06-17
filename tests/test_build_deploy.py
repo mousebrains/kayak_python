@@ -18,6 +18,7 @@ import pytest
 
 import kayak.web.build._shared as shared_mod
 import kayak.web.build.deploy as build_mod
+from kayak.dataset.map import MapConfig, MapLayer
 from kayak.dataset.site import SiteConfig
 from kayak.web.build.deploy import (
     _deploy_staging_to_live,
@@ -788,6 +789,68 @@ def test_deploy_static_assets_rejects_invalid_dataset_site_assets(monkeypatch, t
 
     with pytest.raises(RuntimeError, match="invalid dataset site/assets"):
         build_mod._deploy_static_assets(output)
+
+
+def _one_overlay_map_config() -> MapConfig:
+    """A map config with a single overlay layer staged as ``osmb-test.geojson``."""
+    layer = MapLayer(
+        key="testlayer",
+        label="Test Layer",
+        color="#123456",
+        shape="circle",
+        size=5,
+        popup="access",
+        popup_link="https://example.com/info",
+        output_filename="osmb-test.geojson",
+        endpoint="https://example.com/arcgis/FeatureServer/0",
+    )
+    return MapConfig(
+        center=[44.0, -120.5], zoom=7, bbox=[-124.7, 41.9, -116.4, 46.3], layers=[layer]
+    )
+
+
+def test_deploy_static_copies_staged_overlay_and_emits_url(monkeypatch, tmp_path):
+    # Consumer-half regression guard for the MAP_LAYERS_DIR split (PR #204):
+    # host_render wires the env onto the pipeline; THIS asserts what build does with
+    # it — when the staging dir holds a configured overlay GeoJSON, build copies it
+    # into static/ and _map_layer_url emits a non-empty cache-busted URL (so map.js
+    # renders the layer's checkbox).
+    monkeypatch.setattr(build_mod, "get_map_config", _one_overlay_map_config)
+    staging = tmp_path / "map-layers"
+    staging.mkdir()
+    (staging / "osmb-test.geojson").write_text('{"type":"FeatureCollection","features":[]}')
+    monkeypatch.setattr(build_mod, "MAP_LAYERS_DIR", staging)
+    monkeypatch.setattr(build_mod, "DATASET_DIR", tmp_path / "no-ds")
+    monkeypatch.setattr(build_mod, "get_site_config", lambda: SiteConfig())
+
+    output = tmp_path / "out"
+    build_mod._deploy_static_assets(output)
+
+    static_dir = output / "static"
+    assert (static_dir / "osmb-test.geojson").is_file()
+    assert build_mod._map_layer_url(static_dir, "osmb-test.geojson").startswith(
+        "/static/osmb-test.geojson?v="
+    )
+
+
+def test_deploy_static_skips_unstaged_overlay_and_url_is_empty(monkeypatch, tmp_path):
+    # The flip side and the actual failure mode: a configured layer whose GeoJSON is
+    # NOT in the staging dir (the nightly fetch hasn't landed it, or — the bug —
+    # MAP_LAYERS_DIR resolved to the wrong/empty dir) is not copied, and
+    # _map_layer_url returns "" → map.js renders no checkbox.
+    monkeypatch.setattr(build_mod, "get_map_config", _one_overlay_map_config)
+    staging = tmp_path / "empty-map-layers"
+    staging.mkdir()  # present but missing the overlay file
+    monkeypatch.setattr(build_mod, "MAP_LAYERS_DIR", staging)
+    monkeypatch.setattr(build_mod, "DATASET_DIR", tmp_path / "no-ds")
+    monkeypatch.setattr(build_mod, "get_site_config", lambda: SiteConfig())
+
+    output = tmp_path / "out"
+    build_mod._deploy_static_assets(output)
+
+    static_dir = output / "static"
+    assert not (static_dir / "osmb-test.geojson").exists()
+    assert build_mod._map_layer_url(static_dir, "osmb-test.geojson") == ""
 
 
 def test_packaged_og_image_fallback_is_generic():
