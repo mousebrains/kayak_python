@@ -63,6 +63,23 @@ class TestRenderCutoverDropins:
         assert "Environment=OUTPUT_DIR=/var/cache/kayak/docroot" in t
         assert "ReadWritePaths=/var/cache/kayak/docroot /home/pat/DB" in t
 
+    def test_pipeline_sees_the_relocated_map_layers_dir(self) -> None:
+        # The build step copies fetched overlay GeoJSON out of MAP_LAYERS_DIR into
+        # OUTPUT_DIR/static; without this env it reads the install-root default
+        # (empty under the release) and the map's overlay layers vanish. Read only,
+        # so the dir must NOT appear in ReadWritePaths (only fetch-osmb writes it).
+        t = _by_unit(_cutover_host())["kayak-pipeline.service"]
+        assert "Environment=MAP_LAYERS_DIR=/var/cache/kayak/map-layers" in t
+        assert "ReadWritePaths=/var/cache/kayak/map-layers" not in t
+
+    def test_pipeline_and_fetch_osmb_agree_on_map_layers_dir(self) -> None:
+        # Producer (fetch-osmb) and consumer (pipeline build) must stage/read the
+        # same dir — a split is exactly the bug that dropped the overlay layers.
+        units = _by_unit(_cutover_host())
+        line = "Environment=MAP_LAYERS_DIR=/var/cache/kayak/map-layers"
+        assert line in units["kayak-pipeline.service"]
+        assert line in units["kayak-fetch-osmb.service"]
+
     def test_fetch_osmb_relocates_map_layers_off_the_release(self) -> None:
         t = _by_unit(_cutover_host())["kayak-fetch-osmb.service"]
         assert "Environment=MAP_LAYERS_DIR=/var/cache/kayak/map-layers" in t
