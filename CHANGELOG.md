@@ -61,6 +61,18 @@ All notable changes to this project will be documented in this file.
   (with a deprecation warning) and is removed thereafter; setting both to
   different paths is a hard error. Rename it in `~/.config/kayak/.env`.
 
+### Fixed
+- **`levels analyze-logs release` infers the release time from the paired-release
+  pointer**: it read the mtime of `/home/pat/public_html/index.html`, which the
+  2026-06 `/opt/kayak` cutover orphaned — that file still exists but froze at the
+  cutover time, so without `--release` the post-mortem silently compared the wrong
+  windows against a stale timestamp (it never errored, it lied). It now reads the
+  `/opt/kayak/current` symlink's own mtime (the atomic-relink activation instant,
+  correct even after a rollback), via `lstat` so a momentarily-broken pointer still
+  yields a time and an absent one cleanly falls back to `--release`. The "deploy
+  paths" footer now lists `/opt/kayak/*` (the live release layout) instead of the
+  retired docroot.
+
 ## [1.2.0] - 2026-05-27
 
 ### Added

@@ -7,7 +7,8 @@ Three reading interfaces:
   (the tool now runs on the live host and reads /var/log + journalctl
   directly).
 - ``_release_context`` — snapshot helpers that capture the syncit
-  ``release/*`` outputs (index.html mtime, git log, DB health).
+  ``release/*`` outputs (the /opt/kayak/current release-pointer mtime,
+  git log, DB health).
 - ``release_postmortem`` + ``humans`` — the actual analyses.
 
 The CLI dispatcher lives at ``kayak.cli.analyze_logs``. See

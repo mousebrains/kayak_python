@@ -2,9 +2,9 @@
 
 Captures the same three signals syncit harvested into
 ``release/deploy-paths.txt``, ``release/git.log``, and
-``release/db-health.txt``: the build's last-deploy time (index.html
-mtime), the git commits in the analysis window, and a few sanity-
-check counts from kayak.db.
+``release/db-health.txt``: the last-deploy time (the
+``/opt/kayak/current`` release-pointer mtime), the git commits in the
+analysis window, and a few sanity-check counts from kayak.db.
 
 Each helper is a thin wrapper — they could be inlined but live in
 this module so the release-postmortem code reads as a sequence of
@@ -20,24 +20,52 @@ import sqlite3
 import subprocess
 from pathlib import Path
 
-_DEFAULT_INDEX_HTML = Path("/home/pat/public_html/index.html")
+from kayak.host import get_host_config
+
+# The release root is owned by typed host config (``HostConfig.release_root``,
+# default ``/opt/kayak``), so the activation pointer and the layout listing
+# derive from it rather than re-hardcoding the root — a host that relocates the
+# release root in ``host.yaml`` is then followed automatically, like every other
+# cutover consumer. (The DB / repo defaults below have no host-config field and
+# did not move in the cutover, so they stay literal.)
 _DEFAULT_KAYAK_DB = Path("/home/pat/DB/kayak.db")
 _DEFAULT_REPO_ROOT = Path("/home/pat/kayak")
 
 
+def current_release_link() -> Path:
+    """The ``current`` release pointer, ``{release_root}/current``.
+
+    ``kayak-deploy.sh`` performs the cutover by atomically relinking this
+    symlink (and restores it on rollback), so the symlink's OWN mtime is set at
+    the relink = the instant the release went live. This replaced the old
+    ``/home/pat/public_html/index.html`` mtime, which the 2026-06 cutover
+    orphaned — that file still exists but froze at the cutover mtime, so
+    ``infer_release_time`` silently returned a stale timestamp forever.
+    """
+    return Path(get_host_config().release_root) / "current"
+
+
 def infer_release_time(
-    index_html: Path = _DEFAULT_INDEX_HTML,
+    current_link: Path | None = None,
     tz: dt.tzinfo | None = None,
 ) -> dt.datetime | None:
-    """mtime of ``index.html`` — the build writes it last, so its mtime
-    tracks "last successful build deployed."
+    """mtime of the ``current`` release pointer (``{release_root}/current``) —
+    the deploy's atomic relink of this symlink IS the activation cutover, so
+    its mtime is the instant the release went live.
 
-    Returns None if the file is missing (fresh install / wrong path).
-    Caller is expected to fall back to a CLI flag in that case.
+    Uses ``lstat`` so it reads the *symlink's* own mtime (when it was
+    relinked = when this release went live), not the target release dir's
+    mtime, and so a momentarily-broken ``current`` still yields a time
+    rather than vanishing.
+
+    Returns None if the pointer is absent or unreadable (fresh install /
+    pre-cutover host / dev box). Caller is expected to fall back to a CLI
+    flag in that case.
     """
+    link = current_release_link() if current_link is None else current_link
     try:
-        ts = index_html.stat().st_mtime
-    except FileNotFoundError:
+        ts = link.lstat().st_mtime
+    except OSError:
         return None
     tz = tz or dt.UTC
     return dt.datetime.fromtimestamp(ts, tz=tz)
@@ -111,20 +139,27 @@ def db_health_snapshot(
 
 
 def deploy_paths_listing(
-    docroot_pattern: str = "/home/pat/public_html*",
+    layout_pattern: str | None = None,
 ) -> list[str]:
-    """``ls -la /home/pat/public_html*`` equivalent — for release-postmortem
-    "what's at /home/pat/public_html(/.staging/...) right now?" footer.
+    """``ls -la {release_root}/*`` equivalent — for release-postmortem
+    "which release is live right now?" footer: shows ``current`` (with the
+    release it points at), ``releases``, and ``maintenance`` if present.
 
-    Returns ``[]`` if the path doesn't exist.
+    The 2026-06 cutover moved the served tree into the paired-release layout,
+    so this lists the release pointer rather than the retired
+    ``/home/pat/public_html``. ``lstat`` keeps the ``current`` symlink showing
+    its own activation mtime and surviving a broken target.
+
+    Returns ``[]`` if nothing matches the pattern.
     """
+    pattern = f"{get_host_config().release_root}/*" if layout_pattern is None else layout_pattern
     out: list[str] = []
-    for path in sorted(Path("/").glob(docroot_pattern.lstrip("/"))):
+    for path in sorted(Path("/").glob(pattern.lstrip("/"))):
         try:
-            st = path.stat()
+            st = path.lstat()
         except OSError:
             continue
-        kind = "d" if path.is_dir() else ("l" if path.is_symlink() else "f")
+        kind = "l" if path.is_symlink() else ("d" if path.is_dir() else "f")
         size = st.st_size if kind == "f" else 0
         mtime = dt.datetime.fromtimestamp(st.st_mtime, tz=dt.UTC).isoformat()
         link = ""

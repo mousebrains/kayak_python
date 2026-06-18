@@ -116,7 +116,7 @@ def render_header(
         lines.extend(deploy_listing)
         lines.append("```")
     else:
-        lines.append("_(no public_html* listings)_")
+        lines.append("_(no /opt/kayak/* listings)_")
     lines.append("")
     lines.append("## DB health snapshot")
     lines.append("")
