@@ -3,10 +3,11 @@
 #
 # Builds the kayak wheel, installs it into a fresh venv OUTSIDE the repo
 # checkout, and exercises the packaged engine end-to-end: every runtime
-# resource (data YAMLs, schema migrations, web static assets, the PHP layer,
-# install templates, LICENSE) must resolve via importlib.resources from
-# site-packages — NOT the source tree — and `levels init-db` + `levels build`
-# must produce a deployed site from them.
+# resource (data YAMLs, the packaged example dataset, schema migrations, web
+# static assets, the PHP layer, install templates, LICENSE) must resolve via
+# importlib.resources from site-packages — NOT the source tree — and `levels
+# init-dataset --example` + `validate-dataset` + `init-db` + `build` must produce
+# a deployed site from them.
 #
 # This is the automated form of the by-hand "install the wheel somewhere else
 # and run it" check done during each S4a-2 slice; it turns a future packaging
@@ -60,6 +61,7 @@ assert "site-packages" in root, f"kayak not imported from site-packages: {root}"
 # source registry is dataset content.)
 checks = [
     (("data",), "builder.yaml"),
+    (("data", "example_dataset"), "dataset.yaml"),
     (("data", "db", "migrations"), "0001_baseline.sql"),
     (("data", "db", "migrations"), "manifest.csv"),
     (("web", "static"), "map.js"),
@@ -110,16 +112,28 @@ DATABASE_URL="sqlite:///$DB" "$LEVELS" init-db >/dev/null
 test -f "$DB"
 echo "    OK — schema created"
 
+echo "==> levels init-dataset --example + validate-dataset (acceptance criterion 1)"
+# Materialize the packaged example dataset from the WHEEL (we run from $RUNDIR,
+# so --example must resolve it from site-packages, not the source tree) and prove
+# it validates. The build below renders from this materialized copy — the new
+# command, not a repo-tree path, is what supplies the dataset.
+EXAMPLE_DS="$WORK/example-dataset"
+HOME="$WORK" SUDO_USER="" "$LEVELS" init-dataset --example "$EXAMPLE_DS" >/dev/null
+HOME="$WORK" SUDO_USER="" "$LEVELS" validate-dataset "$EXAMPLE_DS" >/dev/null
+test -f "$EXAMPLE_DS/dataset.yaml"
+echo "    OK — example dataset materialized from the wheel + validates"
+
 echo "==> levels build (packaged data + web layer) → $DOCROOT"
-# DATASET_DIR points at the committed fixture so build renders its regression
-# report (fixture_calc_from_usgs.*) from DATASET_DIR/regression/ — the S2-E2 path.
-# HOME → $WORK (and SUDO_USER cleared, to disable config's ~SUDO_USER/.env fallback)
-# so config doesn't read a developer's ~/.config/kayak/.env — which may set the
-# deprecated METADATA_DIR and clash with this DATASET_DIR. CI's HOME has no such file,
-# so this is a no-op there; it keeps the smoke hermetic.
+# DATASET_DIR is the example dataset materialized above (from the wheel) so build
+# renders its regression report (fixture_calc_from_usgs.*) from DATASET_DIR/
+# regression/ — the S2-E2 path. HOME → $WORK (and SUDO_USER cleared, to disable
+# config's ~SUDO_USER/.env fallback) so config doesn't read a developer's
+# ~/.config/kayak/.env — which may set the deprecated METADATA_DIR and clash with
+# this DATASET_DIR. CI's HOME has no such file, so this is a no-op there; it keeps
+# the smoke hermetic.
 HOME="$WORK" SUDO_USER="" DATABASE_URL="sqlite:///$DB" OUTPUT_DIR="$DOCROOT" \
     SITE_URL="https://levels.example.org" \
-    DATASET_DIR="$REPO_ROOT/src/kayak/data/example_dataset" "$LEVELS" build >/dev/null
+    DATASET_DIR="$EXAMPLE_DS" "$LEVELS" build >/dev/null
 # The deployed site must carry assets sourced from every packaged tree.
 missing=0
 for rel in \
