@@ -228,4 +228,36 @@ Result: the plan is sound; the corrections below are folded into the deliverable
   `addArgs(subparsers)` → `add_parser("init-dataset", …)` + args +
   `set_defaults(func=_main)`. (validate_dataset is the closest sibling to mirror.)
 - **D3 note.** The `kayak_data` `validate.yml` is in the *other* repo, not here — the
-  `--ci` template is authored from its known shape, not copied from this tree.
+  `--ci` template was **fetched** from `mousebrains/kayak_data` and modeled faithfully
+  (engine-coupled core verbatim; `history/` step dropped; engine repo/secret/SITE_URL
+  parameterized; `init-db --no-seed` → `init-db`), not reconstructed from memory.
+
+## Acceptance run (D8) — criteria 1–12 (recorded 2026-06-18)
+
+Run against the engine on this branch. **Verified** = exercised end-to-end here;
+**Referenced** = the mechanism exists + is documented, but full execution needs a
+clean VM (criterion 4) or a live offsite remote (criterion 10) per the S7/S8
+runbooks. The evidence command for the package-install criteria is
+`scripts/wheel-smoke.sh` (PASSED locally; runs in CI's "Wheel smoke" job).
+
+| # | Criterion (abbrev.) | Result | Evidence |
+|---|---|---|---|
+| 1 | Wheel outside the checkout runs `--help`/`init-dataset`/`validate-dataset`/`init-db`/`sync-metadata`/build/PHP without source-tree paths | **Verified** (1 nuance) | wheel-smoke materializes `init-dataset --example` from site-packages, validates it, builds + deploys PHP/static. Nuance (R-a): a *networked* fixture fetch is **not** run — the SSRF guard blocks loopback/private hosts by design; offline fetch→parse→store is covered at the pytest level, no production bypass added. |
+| 2 | Code CI: no dataset checkout/secret/sibling-path/env-reading test | **Verified** | CI runs against the in-package `src/kayak/data/example_dataset` (D1); no `kayak_data` clone or deploy key. |
+| 3 | Dataset required CI uses trusted base-branch engine pin; data PRs can't edit their own validator | **Verified** | `--ci` emits the trusted-base-pin read + pin-only-bump enforcement verbatim from `kayak_data`'s live workflow; test asserts the emitted YAML parses + substitutes. |
+| 4 | Clean non-WKCC install: different user/home/host/tz/backup/state, no tracked engine edits | **Referenced** | `init-dataset` scaffolds a non-WKCC dataset with zero engine edits; `HostConfig` parameterizes user/home/cert-host/tz/backup/docroot/release_root. Full clean-VM run: `deploy/INSTALL-paired-release.md` + `docs/new-region-runbook.md`. |
+| 5 | Fresh install applies no historical WKCC migration | **Verified** | Migrations are manifest-driven engine-schema only; wheel-smoke asserts the frozen mixed migration does **not** ship in the wheel. Metadata loads from dataset CSVs. |
+| 6 | Engine never mutates dataset-owned rows outside `sync-metadata`/migration | **Verified** | `tests/test_writer_boundary.py`; `init-dataset` writes a *new directory*, never the live DB. |
+| 7 | Production changes only after merge + deploy (SA-lite amended) | **Verified** | SA-lite (Batch 3, engine #188); unchanged by B5. |
+| 8 | Refused deletes start no write txn; second sync is a no-op | **Verified** | Pre-existing `sync-metadata` behavior + tests; the `--ci` workflow runs `sync` twice as the idempotence check. |
+| 9 | No WKCC/Oregon assumptions in site output except dataset-supplied | **Verified** | wheel-smoke "regional neutrality" check: a fixture-dataset build carries no `wkcc`/`willamette` tokens (`status.php` CORS excluded — an open S7 loose end). |
+| 10 | Backup upload/prune + restore with a non-Google test remote | **Referenced** | Owned by `docs/offsite-backup.md` (S8); `init-dataset` touches no backup path. Not executed on this host. |
+| 11 | Each failure mode fails with a focused error (scaffold, missing legal, absent/incompatible contract, dangling provenance, undeclared stations, generated-file drift, unsafe Markdown, active-content SVG) | **Verified** | Owned by `validate-dataset` + `tests/test_scripts/test_validate_dataset.py` (each break has a test); `init-dataset` self-validates and `gate_for_use` refuses a scaffold for production commands. |
+| 12 | Docs describe one standard path (schema migration, dataset validation/sync, paired-release activation, host-owned runtime config) | **Substantially advanced** | `docs/new-region-runbook.md` (D4) is the single spine, linking the four owning docs. The residual criterion-12 doc sweep rides Batch 6 (R9). |
+
+**Net:** 1, 2, 3, 5, 6, 7, 8, 9, 11 verified end-to-end; 4 and 10 verified-by-
+reference (mechanism + runbook present, full run is VM/live-host work); 12
+substantially advanced (runbook landed, doc sweep with R9). The plan's
+"criteria 1, 4, 9, 10, 12 close on B5" holds with criteria 4 and 10 closed at
+the *mechanism + documented-runbook* level, which is the most this host can
+attest — flagged here rather than overclaimed.
