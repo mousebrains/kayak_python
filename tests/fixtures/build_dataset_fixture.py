@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Generate the redistribution-safe fixture dataset under tests/fixtures/dataset/.
+"""Generate the redistribution-safe example dataset under src/kayak/data/example_dataset/.
 
-This is the provenance record for the fixture (S4a-1 of the dataset-separation
-plan). The committed fixture is the artifact tests read; this script documents
-exactly how it was produced and lets it be regenerated.
+This is the provenance record for the example dataset (S4a-1 of the
+dataset-separation plan). The committed dataset is both the packaged
+``init-dataset --example`` payload and the artifact the engine's own tests read;
+this script documents exactly how it was produced and lets it be regenerated.
 
 Provenance / licensing:
   - Reach GEOMETRY (reach.geom, reaches.json) and the gradient profiles are
@@ -38,8 +39,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from kayak.cli.generate_sources import reverse_engineer
 from kayak.dataset import layout
+from kayak.resources import resource_dir
 
-OUT = Path(__file__).resolve().parent / "dataset"
+OUT = resource_dir("data", "example_dataset")
 
 # Deterministic timestamp — a fixture must not churn.
 TS = "2026-01-01 00:00:00"
@@ -342,7 +344,7 @@ ID_COUNTERS = {
 # Dataset contract manifest (S6.2) — a fixed literal so the committed fixture is
 # deterministic across rebuilds (engine_test_ref is a format-only placeholder,
 # NOT `git rev-parse HEAD`, which would churn). A test pins the committed
-# tests/fixtures/dataset/dataset.yaml to this exact text so the two can't drift.
+# src/kayak/data/example_dataset/dataset.yaml to this exact text so the two can't drift.
 DATASET_YAML_TEXT = (
     "# Dataset contract manifest (S6.2). See kayak.dataset.contract.\n"
     "contract_version: 1\n"

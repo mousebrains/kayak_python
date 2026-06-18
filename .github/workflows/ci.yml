@@ -249,7 +249,7 @@ jobs:
 
   test:
     runs-on: ubuntu-24.04
-    # Code CI runs entirely against the committed fixture (tests/fixtures/dataset):
+    # Code CI runs entirely against the committed example dataset (src/kayak/data/example_dataset):
     # no code test reads the dataset root (DATASET_DIR) since the
     # dataset-separation test-repointing (#124), and dataset-integrity checks live
     # in `levels validate-dataset`, run here on the fixture. S4b-1 removed the

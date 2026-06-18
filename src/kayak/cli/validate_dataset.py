@@ -5,8 +5,9 @@ standalone tests reading the real dataset — ``test_id_counters.py``,
 ``test_reach_names.py``, ``test_committed_reach_geom.py``, and the USGS
 station-id check from ``test_fetch_usgs_ogc.py`` (all removed in #124) — plus
 the data repo's stdlib ``validate.py``, into a single command the engine owns.
-The code repo runs it against the fixture (``tests/fixtures/dataset``); the
-data repo's CI runs it against the real dataset (S4b). Both get the same
+The code repo runs it against the packaged example dataset
+(``src/kayak/data/example_dataset``); the data repo's CI runs it against the
+real dataset (S4b). Both get the same
 authoritative gate, so the two repos can never drift on what "a valid dataset"
 means.
 

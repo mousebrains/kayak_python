@@ -86,7 +86,7 @@ sudo -u pat git -C /home/pat/kayak_data config core.sshCommand \
 ```
 
 The code repo's CI does **not** read `kayak_data` — it runs against the committed
-fixture (`tests/fixtures/dataset`), so no code-CI deploy key is needed (S4b-1).
+example dataset (`src/kayak/data/example_dataset`), so no code-CI deploy key is needed (S4b-1).
 The former `KAYAK_DATA_DEPLOY_KEY` Actions/Dependabot secrets on `kayak_python`
 and their orphaned read-only deploy key (`kayak_python-ci-read`) on `kayak_data`
 were removed in the S4b-1 cleanup. The real dataset is validated at deploy time
