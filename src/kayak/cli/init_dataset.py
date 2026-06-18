@@ -66,8 +66,12 @@ def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> 
 
 
 def _slug(text: str) -> str:
-    """A lowercase ``[a-z0-9_]`` slug for a default ``dataset_id`` from a dir name."""
-    out = "".join(c if c.isalnum() else "_" for c in text.strip().lower())
+    """A lowercase ASCII ``[a-z0-9_]`` slug for a default ``dataset_id``.
+
+    ``str.isalnum()`` is true for Unicode letters too, so guard with ``isascii``
+    — otherwise a dir named ``café`` would seed a non-ASCII ``dataset_id``.
+    """
+    out = "".join(c if (c.isascii() and c.isalnum()) else "_" for c in text.strip().lower())
     out = "_".join(part for part in out.split("_") if part)
     return out or "dataset"
 
@@ -187,20 +191,48 @@ def _copy_example(dest: Path) -> None:
     shutil.copytree(resource_dir("data", "example_dataset"), dest, dirs_exist_ok=True)
 
 
-def _cleanup(dest: Path, created_root: bool) -> None:
-    """Undo a failed init — remove the tree we created (or just its contents)."""
-    if created_root:
-        shutil.rmtree(dest, ignore_errors=True)
+def _topmost_created(dest: Path) -> Path | None:
+    """The highest ancestor ``mkdir(parents=True)`` would newly create for *dest*
+    (possibly *dest* itself) — what cleanup must remove to fully undo the init.
+
+    ``None`` when *dest* already exists (then only its *contents* were written,
+    so cleanup must keep the operator's directory and remove just what we put in
+    it). Computed BEFORE the mkdir.
+    """
+    if dest.exists():
+        return None
+    top = dest
+    while not top.parent.exists():
+        top = top.parent
+    return top
+
+
+def _cleanup(dest: Path, created_top: Path | None) -> None:
+    """Undo a failed init: remove the whole tree we created (the topmost dir
+    ``mkdir`` made, so auto-created parents don't leak), or — when *dest*
+    pre-existed — only its contents."""
+    if created_top is not None:
+        shutil.rmtree(created_top, ignore_errors=True)
         return
     for child in dest.iterdir():
-        if child.is_dir():
+        # rmtree refuses a symlink (NotADirectoryError, which ignore_errors would
+        # silently swallow, leaving the link behind) — treat a symlink-to-dir as a
+        # file and unlink it.
+        if child.is_dir() and not child.is_symlink():
             shutil.rmtree(child, ignore_errors=True)
         else:
             child.unlink(missing_ok=True)
 
 
-def _main(args: argparse.Namespace) -> int:
-    dest = Path(args.dir)
+def _preflight(args: argparse.Namespace, dest: Path, name: str, dataset_id: str) -> int | None:
+    """Refuse a bad destination or scaffold identity BEFORE creating anything.
+
+    Returns an exit code to return immediately, or ``None`` to proceed. A
+    non-empty / non-directory destination and an invalid ``--name``/``--id``/
+    ``--license`` are argument errors (rc 2) — not the post-write "BUG" the
+    self-validation guard reports. (``--example`` copies verbatim, so the
+    identity flags don't apply to it.)
+    """
     if dest.exists():
         if not dest.is_dir():
             print(f"init-dataset: not a directory: {dest}", file=sys.stderr)
@@ -208,21 +240,44 @@ def _main(args: argparse.Namespace) -> int:
         if any(dest.iterdir()):
             print(f"init-dataset: destination is not empty: {dest}", file=sys.stderr)
             return 2
-    created_root = not dest.exists()
+    if not args.example:
+        bad = contract.validate_dataset_meta(
+            {
+                "contract_version": contract.CONTRACT_VERSION,
+                "dataset_id": dataset_id,
+                "name": name,
+                "status": "scaffold",
+                "license": args.license,
+                "engine_test_ref": _ZERO_REF,
+            }
+        )
+        if bad:
+            print("init-dataset: invalid argument(s):", file=sys.stderr)
+            for e in bad:
+                print(f"  - {e}", file=sys.stderr)
+            return 2
+    return None
+
+
+def _main(args: argparse.Namespace) -> int:
+    dest = Path(args.dir)
+    name = args.name or dest.resolve().name
+    dataset_id = args.dataset_id or _slug(dest.resolve().name)
+
+    rc = _preflight(args, dest, name, dataset_id)
+    if rc is not None:
+        return rc
+
+    created_top = _topmost_created(dest)
     dest.mkdir(parents=True, exist_ok=True)
 
     try:
         if args.example:
             _copy_example(dest)
         else:
-            _scaffold(
-                dest,
-                name=args.name or dest.resolve().name,
-                dataset_id=args.dataset_id or _slug(dest.resolve().name),
-                license_id=args.license,
-            )
+            _scaffold(dest, name=name, dataset_id=dataset_id, license_id=args.license)
     except OSError as e:
-        _cleanup(dest, created_root)
+        _cleanup(dest, created_top)
         print(f"init-dataset: failed to write {dest}: {e}", file=sys.stderr)
         return 1
 
@@ -232,7 +287,7 @@ def _main(args: argparse.Namespace) -> int:
 
     problems = validate_dataset(dest)
     if problems:
-        _cleanup(dest, created_root)
+        _cleanup(dest, created_top)
         print(
             "init-dataset: BUG — generated dataset failed validation (nothing left "
             "behind). Please report:",

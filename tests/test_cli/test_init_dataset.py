@@ -129,3 +129,48 @@ def test_self_validation_guard_preserves_preexisting_empty_dir(
     assert _run(dest) == 1
     assert dest.is_dir()
     assert list(dest.iterdir()) == []
+
+
+def test_cleanup_removes_auto_created_parents(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # mkdir(parents=True) on a/b/c creates all three; a failure must remove the
+    # whole a/ subtree, not just the leaf c/.
+    monkeypatch.setattr(
+        "kayak.cli.validate_dataset.validate_dataset", lambda d: ["forced invalid"]
+    )
+    top = tmp_path / "a"
+    assert _run(top / "b" / "c") == 1
+    assert not top.exists()
+
+
+def test_write_failure_cleans_up_and_reports(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _boom(_dest: Path) -> None:
+        raise OSError("simulated disk-full mid-write")
+
+    monkeypatch.setattr(init_dataset, "_write_id_counters", _boom)
+    dest = tmp_path / "halfwritten"
+    assert _run(dest) == 1  # OSError path, not the self-validation BUG path
+    assert not dest.exists()
+
+
+def test_rejects_invalid_license(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    dest = tmp_path / "ds"
+    assert _run(dest, license="") == 2  # argument error, not a post-write "BUG"
+    assert not dest.exists()  # rejected before anything was created
+    err = capsys.readouterr().err
+    assert "invalid argument" in err and "license" in err
+
+
+def test_rejects_blank_id(tmp_path: Path) -> None:
+    dest = tmp_path / "ds"
+    assert _run(dest, dataset_id="   ") == 2
+    assert not dest.exists()
+
+
+def test_slug_is_ascii_only() -> None:
+    assert init_dataset._slug("Smoky Mountains!") == "smoky_mountains"
+    assert init_dataset._slug("café") == "caf"  # non-ASCII letters dropped
+    assert init_dataset._slug("日本語") == "dataset"  # all non-ASCII → fallback
