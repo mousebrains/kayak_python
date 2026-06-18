@@ -698,11 +698,13 @@ and deployment surfaces.
 
 - `levels init-dataset <dir>` refuses a non-empty destination, writes through
   the shared contract manifest, and creates `dataset.yaml` with
-  `status: scaffold`, complete empty CSVs, ID counters, a complete source
-  registry stub, an empty `retired_ids.yaml`, required prose TODOs,
-  site/assets/layers directories,
-  regression directory, dataset-specific license/provenance templates, README,
-  and optional GitHub CI workflow.
+  `status: scaffold`, complete empty CSVs, ID counters, a source registry stub,
+  an empty `retired_ids.yaml`, the required `site/{privacy,disclaimer,contact}.md`
+  prose TODOs, a license/provenance template, a README, and an optional GitHub
+  CI workflow. (As implemented in B5 it deliberately omits `assets/`, `layers/`,
+  and a `regression/` directory — these are optional with an engine fallback, so
+  a scaffold validates clean without them; a publishable dataset adds them as
+  needed.)
 - The generated CI workflow pins the installed engine full commit; it does not
   hardcode `mousebrains/kayak` or assume a secret name without explaining how
   to configure it. `--engine-repo`/`--ci` options make this explicit.
