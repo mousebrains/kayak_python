@@ -44,6 +44,15 @@ def _release_root() -> str:
     raising config load would crash the report even when ``--release`` is given).
     ``get_host_config`` is fail-closed (raises ``ValueError`` on a malformed
     file, ``OSError`` on an unreadable one); both mean "use the default root".
+
+    NOTE: this is a deliberate, narrowly-scoped divergence from
+    ``load_host_config``'s fail-closed contract ("a malformed host config must
+    not let a consumer silently fall back to another host's defaults"). It is
+    safe *only* because this consumer is a read-only diagnostic and the fallback
+    is benign — it degrades to ``None`` → ``--release`` (never a wrong write) —
+    and a malformed ``host.yaml`` is already a loud failure in every
+    write/serving consumer an operator would notice first. Do NOT "fix" this
+    back into a raise; that reintroduces the traceback this guard removes.
     """
     try:
         return get_host_config().release_root
