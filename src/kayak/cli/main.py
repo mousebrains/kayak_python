@@ -22,6 +22,7 @@ from kayak.cli import (
     fetch_usgs_ogc,
     generate_sources,
     import_metadata,
+    init_dataset,
     init_db,
     migrate,
     orphan_check,
@@ -53,6 +54,7 @@ def main() -> None:
     subparsers = parser.add_subparsers(dest="command")
 
     init_db.addArgs(subparsers)
+    init_dataset.addArgs(subparsers)
     migrate.addArgs(subparsers)
     fetch.addArgs(subparsers)
     fetch_osmb.addArgs(subparsers)
