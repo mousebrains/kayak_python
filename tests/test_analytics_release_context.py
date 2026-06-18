@@ -61,6 +61,20 @@ def test_infer_release_time_survives_broken_target(tmp_path: Path) -> None:
     assert infer_release_time(current_link=current, tz=UTC) == activated
 
 
+def test_infer_release_time_rejects_non_symlink(tmp_path: Path) -> None:
+    # A non-symlink at `current` (stale dir / regular file from a botched layout)
+    # must NOT be trusted — its own mtime would re-seed a bogus window, the exact
+    # present-but-wrong failure this signal replaced.
+    real_dir = tmp_path / "current"
+    real_dir.mkdir()
+    os.utime(real_dir, (dt.datetime(2026, 6, 1, tzinfo=UTC).timestamp(),) * 2)
+    assert infer_release_time(current_link=real_dir, tz=UTC) is None
+
+    real_file = tmp_path / "current_file"
+    real_file.write_text("x")
+    assert infer_release_time(current_link=real_file, tz=UTC) is None
+
+
 def test_infer_release_time_default_derives_from_release_root(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -79,6 +93,24 @@ def test_infer_release_time_default_derives_from_release_root(
     assert rc.infer_release_time(tz=UTC) == activated
 
 
+def test_helpers_degrade_when_host_config_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A malformed host.yaml makes get_host_config() fail-closed (ValueError).
+    # analyze-logs is a read-only diagnostic, so the helpers must degrade to the
+    # default release root instead of tracebacking — otherwise the friendly
+    # "pass --release" path raises, and the report footer crashes even when
+    # --release is supplied.
+    from kayak.analytics import _release_context as rc
+    from kayak.host import HostConfig
+
+    def boom() -> HostConfig:
+        raise ValueError("malformed host.yaml")
+
+    monkeypatch.setattr(rc, "get_host_config", boom)
+    assert rc._release_root() == HostConfig().release_root
+    assert isinstance(rc.deploy_paths_listing(), list)  # no raise
+    rc.infer_release_time()  # no raise
+
+
 def test_deploy_paths_listing_shows_current_symlink(tmp_path: Path) -> None:
     target = tmp_path / "releases" / "r1"
     target.mkdir(parents=True)
@@ -94,6 +126,16 @@ def test_deploy_paths_listing_shows_current_symlink(tmp_path: Path) -> None:
     assert any(ln.startswith("d ") and ln.endswith("/releases") for ln in lines)
     assert any(ln.startswith("f ") and ln.endswith("/maintenance") for ln in lines)
     assert "public_html" not in joined
+
+
+def test_deploy_paths_listing_omits_hidden_scratch(tmp_path: Path) -> None:
+    # Path.glob('*') matches dotfiles; the deploy scratch (.staging, .swap.NNN)
+    # is noise for a "which release is live" footer and must be skipped.
+    (tmp_path / "releases").mkdir()
+    (tmp_path / ".staging").mkdir()
+    joined = "\n".join(deploy_paths_listing(layout_pattern=f"{tmp_path}/*"))
+    assert "/releases" in joined
+    assert ".staging" not in joined
 
 
 def test_deploy_paths_listing_empty_when_nothing_matches(tmp_path: Path) -> None:

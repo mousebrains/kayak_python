@@ -20,7 +20,7 @@ import sqlite3
 import subprocess
 from pathlib import Path
 
-from kayak.host import get_host_config
+from kayak.host import HostConfig, get_host_config
 
 # The release root is owned by typed host config (``HostConfig.release_root``,
 # default ``/opt/kayak``), so the activation pointer and the layout listing
@@ -30,6 +30,25 @@ from kayak.host import get_host_config
 # did not move in the cutover, so they stay literal.)
 _DEFAULT_KAYAK_DB = Path("/home/pat/DB/kayak.db")
 _DEFAULT_REPO_ROOT = Path("/home/pat/kayak")
+
+
+def _release_root() -> str:
+    """``release_root`` from host config, degrading to the engine default
+    (``/opt/kayak``) if ``host.yaml`` is unreadable or malformed.
+
+    ``analyze-logs`` is a read-only operator diagnostic — often run *because* a
+    host is unhealthy — so a broken ``host.yaml`` must not turn it into a
+    traceback. Falling back keeps inference degrading to ``None`` and the footer
+    to ``[]`` the way a missing pointer does, and keeps an explicit ``--release``
+    a reliable escape hatch (``run_postmortem`` still loads the footer, so a
+    raising config load would crash the report even when ``--release`` is given).
+    ``get_host_config`` is fail-closed (raises ``ValueError`` on a malformed
+    file, ``OSError`` on an unreadable one); both mean "use the default root".
+    """
+    try:
+        return get_host_config().release_root
+    except (OSError, ValueError):
+        return HostConfig().release_root
 
 
 def current_release_link() -> Path:
@@ -42,7 +61,7 @@ def current_release_link() -> Path:
     orphaned — that file still exists but froze at the cutover mtime, so
     ``infer_release_time`` silently returned a stale timestamp forever.
     """
-    return Path(get_host_config().release_root) / "current"
+    return Path(_release_root()) / "current"
 
 
 def infer_release_time(
@@ -53,17 +72,22 @@ def infer_release_time(
     the deploy's atomic relink of this symlink IS the activation cutover, so
     its mtime is the instant the release went live.
 
-    Uses ``lstat`` so it reads the *symlink's* own mtime (when it was
-    relinked = when this release went live), not the target release dir's
-    mtime, and so a momentarily-broken ``current`` still yields a time
-    rather than vanishing.
+    The pointer MUST be a symlink: only the deploy's ``ln -s`` gives it an mtime
+    that means "activation instant". A non-symlink at ``current`` (a stale
+    directory or regular file from a botched layout) is rejected with ``None``
+    rather than trusted — otherwise its own mtime would silently seed a bogus
+    window, the exact present-but-wrong failure this signal replaced. ``lstat``
+    then reads the *symlink's* own mtime (not the target dir's), so a
+    momentarily-broken ``current`` still yields a time rather than vanishing.
 
-    Returns None if the pointer is absent or unreadable (fresh install /
-    pre-cutover host / dev box). Caller is expected to fall back to a CLI
-    flag in that case.
+    Returns None if the pointer is absent, not a symlink, or unreadable (fresh
+    install / pre-cutover host / dev box). Caller is expected to fall back to a
+    CLI flag in that case.
     """
     link = current_release_link() if current_link is None else current_link
     try:
+        if not link.is_symlink():
+            return None
         ts = link.lstat().st_mtime
     except OSError:
         return None
@@ -148,13 +172,18 @@ def deploy_paths_listing(
     The 2026-06 cutover moved the served tree into the paired-release layout,
     so this lists the release pointer rather than the retired
     ``/home/pat/public_html``. ``lstat`` keeps the ``current`` symlink showing
-    its own activation mtime and surviving a broken target.
+    its own activation mtime and surviving a broken target. Hidden entries are
+    skipped (``ls`` without ``-a``) — ``Path.glob('*')`` matches dotfiles, but
+    the deploy scratch (``.staging``, transient ``.swap.NNN``) is noise for a
+    "which release is live" footer.
 
     Returns ``[]`` if nothing matches the pattern.
     """
-    pattern = f"{get_host_config().release_root}/*" if layout_pattern is None else layout_pattern
+    pattern = f"{_release_root()}/*" if layout_pattern is None else layout_pattern
     out: list[str] = []
     for path in sorted(Path("/").glob(pattern.lstrip("/"))):
+        if path.name.startswith("."):
+            continue
         try:
             st = path.lstat()
         except OSError:
