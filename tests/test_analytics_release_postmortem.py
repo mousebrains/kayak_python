@@ -217,10 +217,10 @@ def test_render_header_includes_release_and_db_health() -> None:
         post=post,
         git_commits=["abc123 2026-05-15 12:00:00 +0000 Pat fix something"],
         db_health={"observation_count": "12345", "schema_head": "42"},
-        deploy_listing=["d 0 2026-05-15T12:00:00 /home/pat/public_html"],
+        deploy_listing=["l 0 2026-05-15T12:00:00 /opt/kayak/current -> releases/abc123"],
     )
     assert "Post-release log analysis" in out
     assert "Release:" in out
     assert "abc123" in out
     assert "observation_count" in out
-    assert "/home/pat/public_html" in out
+    assert "/opt/kayak/current" in out

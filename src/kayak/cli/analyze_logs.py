@@ -19,7 +19,7 @@ import sys
 from zoneinfo import ZoneInfo
 
 from kayak.analytics import humans, release_postmortem
-from kayak.analytics._release_context import infer_release_time
+from kayak.analytics._release_context import current_release_link, infer_release_time
 
 _DEFAULT_TZ = "America/Los_Angeles"
 _DEFAULT_LOG_GLOB = "/var/log/nginx/*access.log*"
@@ -44,8 +44,8 @@ def _cmd_release(args: argparse.Namespace) -> int:
         release = infer_release_time(tz=tz)
     if release is None:
         print(
-            "ERROR: could not infer release time from /home/pat/public_html/index.html; "
-            "pass --release explicitly",
+            f"ERROR: could not infer release time from the {current_release_link()} "
+            "release pointer; pass --release explicitly",
             file=sys.stderr,
         )
         return 2
@@ -129,7 +129,7 @@ def addArgs(
     p_rel.add_argument(
         "--release",
         default=None,
-        help=("Release timestamp ISO8601 (default: mtime of /home/pat/public_html/index.html)"),
+        help=("Release timestamp ISO8601 (default: mtime of the /opt/kayak/current pointer)"),
     )
     p_rel.add_argument(
         "--baseline-hours",
