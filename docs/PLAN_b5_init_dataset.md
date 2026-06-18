@@ -182,3 +182,50 @@ and its output is documented as a starting point to review, not a turnkey gate.
 and the criterion-4 (clean-VM) / criterion-10 (live offsite restore) checks that
 can only be *referenced* to the S7/S8 runbooks from here, not executed on this host.
 Both are recorded as such in D8 rather than claimed as fully automated.
+
+## Plan review verification (2026-06-18, three parallel readers vs the code)
+
+Re-verified every load-bearing claim above against the actual modules before coding.
+Result: the plan is sound; the corrections below are folded into the deliverables.
+
+- **API to write through is confirmed and named.** A writer must use, verbatim:
+  `layout.CONTRACT_CSVS` (the 15 names), `layout.ordered_columns(table) -> list[str]`,
+  `layout.id_bearing_tables() -> set[str]` (PK==`["id"]`; the fixture has 9:
+  state, fetch_url, calc_expression, source, gauge, reach, reach_class, rating,
+  guidebook), `layout.ID_COUNTERS_CSV` (`id_counters.csv`, columns `table,next_id`),
+  `layout.GEOM_JSON`/`GRADIENT_JSON` (`reaches.json`/`reaches-gradient.json`),
+  `contract.DATASET_YAML`, `contract.RETIRED_IDS_YAML`, `contract.CONTRACT_VERSION`.
+  `dataset.yaml` required fields are the 6 named (status ∈ {scaffold, publishable};
+  `provenance` is a 7th *optional* known key); `engine_test_ref` is a **40-lowercase-
+  hex format** check only.
+- **CORRECTION to D2 — `sources.yaml` is NOT validated and is optional.** validate-dataset
+  requires the three *generated* CSVs `source.csv`/`fetch_url.csv`/`gauge_source.csv`
+  (header-only OK), which `init-dataset` writes **directly** like the other 12. The
+  `sources.yaml` stub is a human-convenience/round-trip aid only (consumed by
+  `levels generate-sources`), not a validation requirement — write it, but do not
+  imply the trio depends on it.
+- **CORRECTION to R-b — the relocation is 7 functional references, and the payload is
+  a whole tree.** Beyond the six listed, `tests/fixtures/build_dataset_fixture.py:345`
+  is a functional drift assertion. The fixture dir is not just CSVs: it also carries
+  `regression/` (6 files), `PROVENANCE.json`, `sources.yaml`, `retired_ids.yaml`, the
+  two sidecars, and `site/{privacy,disclaimer,contact}.md` — **all** move to
+  `src/kayak/data/example_dataset/`. `build_dataset_fixture.py` stays under `tests/`
+  (dev/provenance script, not a packaged resource) but its `OUT` repoints to
+  `resource_dir("data","example_dataset")`; `test_validate_dataset.py`'s `FIXTURE`
+  repoints there too (it imports the builder only for hashing helpers, not to
+  regenerate). wheel-smoke's `DATASET_DIR=tests/fixtures/dataset` (line 122) is
+  replaced by the D5 `init-dataset --example` flow.
+- **Relocation safety CONFIRMED (R-b's open "verify nothing globs src/kayak/data").**
+  `config_data.py` loads only three hardcoded filenames (builder/descriptions/
+  http_concurrency.yaml) — no glob/iterdir; migration discovery is `manifest.csv`-driven,
+  not filesystem-globbed. A new `src/kayak/data/example_dataset/` sits cleanly beside
+  `db/` and is never mistaken for engine config. Hatchling ships all git-tracked files
+  under `src/kayak/` (`packages = ["src/kayak"]`, no MANIFEST/exclude), so the subtree
+  ships in the wheel with **no** `pyproject` change. `resource_dir` resolves identically
+  editable+wheel.
+- **CLI wiring (D2 mechanics).** New subcommands register in `src/kayak/cli/main.py`:
+  import the module, call `init_dataset.addArgs(subparsers)`; the module defines
+  `addArgs(subparsers)` → `add_parser("init-dataset", …)` + args +
+  `set_defaults(func=_main)`. (validate_dataset is the closest sibling to mirror.)
+- **D3 note.** The `kayak_data` `validate.yml` is in the *other* repo, not here — the
+  `--ci` template is authored from its known shape, not copied from this tree.
