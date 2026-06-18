@@ -27,9 +27,21 @@ def _run(
     name: str | None = None,
     dataset_id: str | None = None,
     license: str = init_dataset._DEFAULT_LICENSE,
+    ci: bool = False,
+    engine_repo: str = init_dataset._CI_ENGINE_REPO_PLACEHOLDER,
+    engine_secret: str = init_dataset._CI_ENGINE_SECRET_DEFAULT,
+    site_url: str = init_dataset._CI_SITE_URL_PLACEHOLDER,
 ) -> int:
     args = argparse.Namespace(
-        dir=str(dest), example=example, name=name, dataset_id=dataset_id, license=license
+        dir=str(dest),
+        example=example,
+        name=name,
+        dataset_id=dataset_id,
+        license=license,
+        ci=ci,
+        engine_repo=engine_repo,
+        engine_secret=engine_secret,
+        site_url=site_url,
     )
     return init_dataset._main(args)
 
@@ -136,9 +148,7 @@ def test_cleanup_removes_auto_created_parents(
 ) -> None:
     # mkdir(parents=True) on a/b/c creates all three; a failure must remove the
     # whole a/ subtree, not just the leaf c/.
-    monkeypatch.setattr(
-        "kayak.cli.validate_dataset.validate_dataset", lambda d: ["forced invalid"]
-    )
+    monkeypatch.setattr("kayak.cli.validate_dataset.validate_dataset", lambda d: ["forced invalid"])
     top = tmp_path / "a"
     assert _run(top / "b" / "c") == 1
     assert not top.exists()
@@ -174,3 +184,49 @@ def test_slug_is_ascii_only() -> None:
     assert init_dataset._slug("Smoky Mountains!") == "smoky_mountains"
     assert init_dataset._slug("café") == "caf"  # non-ASCII letters dropped
     assert init_dataset._slug("日本語") == "dataset"  # all non-ASCII → fallback
+
+
+def test_ci_emits_parseable_substituted_workflow(tmp_path: Path) -> None:
+    dest = tmp_path / "ds"
+    assert (
+        _run(
+            dest,
+            ci=True,
+            engine_repo="myclub/kayak_python",
+            engine_secret="MY_ENGINE_KEY",
+            site_url="https://levels.myclub.org",
+        )
+        == 0
+    )
+    assert validate_dataset(dest) == []  # .github/ doesn't break validation
+    wf = dest / ".github" / "workflows" / "validate.yml"
+    doc = yaml.safe_load(wf.read_text())
+    assert doc["name"] == "validate"
+    text = wf.read_text()
+    assert "@@" not in text  # no leftover sentinels
+    assert "repository: myclub/kayak_python" in text
+    assert "secrets.MY_ENGINE_KEY" in text
+    assert "SITE_URL: https://levels.myclub.org" in text
+
+
+def test_ci_default_carries_no_real_owner(tmp_path: Path) -> None:
+    # An unedited workflow must not silently target a real org.
+    dest = tmp_path / "ds"
+    assert _run(dest, ci=True) == 0
+    text = (dest / ".github" / "workflows" / "validate.yml").read_text()
+    assert "mousebrains" not in text
+    assert init_dataset._CI_ENGINE_REPO_PLACEHOLDER in text
+
+
+def test_no_ci_no_workflow(tmp_path: Path) -> None:
+    dest = tmp_path / "ds"
+    assert _run(dest) == 0
+    assert not (dest / ".github").exists()
+
+
+def test_ci_rejects_malformed_params(tmp_path: Path) -> None:
+    dest = tmp_path / "ds"
+    assert (
+        _run(dest, ci=True, engine_repo="not a repo", engine_secret="1bad", site_url="ftp://x") == 2
+    )
+    assert not dest.exists()  # rejected before anything was created
