@@ -9,6 +9,7 @@ from unittest import mock
 import pytest
 
 from kayak.cli.main import main
+from kayak.resources import resource_dir
 
 
 def test_version_flag(capsys):
@@ -105,7 +106,7 @@ def test_module_invocation_runs_cli():
     a footgun. Uses sys.executable + PYTHONPATH=src so it's robust to whether
     the package is installed.
     """
-    fixture = Path(__file__).resolve().parents[1] / "fixtures" / "dataset"
+    fixture = resource_dir("data", "example_dataset")
     src = Path(__file__).resolve().parents[2] / "src"
     env = {**os.environ, "PYTHONPATH": str(src)}
     result = subprocess.run(

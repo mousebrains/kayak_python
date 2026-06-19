@@ -20,6 +20,8 @@ from pathlib import Path
 
 import pytest
 
+from kayak.resources import resource_dir
+
 _REPO = Path(__file__).resolve().parents[2]
 _SCRIPT = _REPO / "deploy" / "kayak-deploy.sh"
 
@@ -160,7 +162,7 @@ def dataset_repo(tmp_path_factory) -> tuple[Path, str]:
     repo.mkdir()
     subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
     # Copy the fixture dataset content as the repo's working tree.
-    fixture = _REPO / "tests" / "fixtures" / "dataset"
+    fixture = resource_dir("data", "example_dataset")
     subprocess.run(["cp", "-R", f"{fixture}/.", str(repo)], check=True)
     env = {
         **os.environ,
@@ -402,7 +404,7 @@ def test_activation_rolls_back_db_symlink_and_config_on_failed_health(
     (PR #190 third-round P1 — config rollback)."""
     ds_repo, ds_sha = dataset_repo
     eng_repo, engine_sha = engine_repo
-    fixture_ds = _REPO / "tests" / "fixtures" / "dataset"
+    fixture_ds = resource_dir("data", "example_dataset")
 
     db = tmp_path / "kayak.db"
     _init_db(db, fixture_ds)
@@ -548,7 +550,7 @@ def test_allow_deletes_flag_reaches_sync_metadata(
     is inert; we assert plumbing, not an actual deletion."""
     ds_repo, ds_sha = dataset_repo
     eng_repo, engine_sha = engine_repo
-    fixture_ds = _REPO / "tests" / "fixtures" / "dataset"
+    fixture_ds = resource_dir("data", "example_dataset")
 
     db = tmp_path / "kayak.db"
     _init_db(db, fixture_ds)
@@ -660,7 +662,7 @@ def test_activation_prunes_old_releases(
     previous are always kept (PR #190 live review P2 — unbounded venv growth)."""
     ds_repo, ds_sha = dataset_repo
     eng_repo, engine_sha = engine_repo
-    fixture_ds = _REPO / "tests" / "fixtures" / "dataset"
+    fixture_ds = resource_dir("data", "example_dataset")
     db = tmp_path / "kayak.db"
     _init_db(db, fixture_ds)
     root = deploy_root  # real disk: 3 release venvs + backups overflow a tmpfs /tmp
@@ -722,7 +724,7 @@ def test_rollback_rebuilds_docroot_when_build_fails_midway(
     nginx serves (the flag-after-build bug)."""
     ds_repo, ds_sha = dataset_repo
     eng_repo, engine_sha = engine_repo
-    fixture_ds = _REPO / "tests" / "fixtures" / "dataset"
+    fixture_ds = resource_dir("data", "example_dataset")
     db = tmp_path / "kayak.db"
     _init_db(db, fixture_ds)
     root = deploy_root
@@ -818,7 +820,7 @@ def test_rollback_rebuilds_docroot_with_absolute_current_symlink(
     release from its real path, not ``$ROOT//opt/...``."""
     ds_repo, ds_sha = dataset_repo
     eng_repo, engine_sha = engine_repo
-    fixture_ds = _REPO / "tests" / "fixtures" / "dataset"
+    fixture_ds = resource_dir("data", "example_dataset")
     db = tmp_path / "kayak.db"
     _init_db(db, fixture_ds)
     root = deploy_root
@@ -889,7 +891,7 @@ def test_serving_path_gate_refuses_half_cutover(
     deferred from PR #190/#192, + PR #194 review #2 certbot check)."""
     ds_repo, ds_sha = dataset_repo
     eng_repo, engine_sha = engine_repo
-    fixture_ds = _REPO / "tests" / "fixtures" / "dataset"
+    fixture_ds = resource_dir("data", "example_dataset")
     db = tmp_path / "kayak.db"
     _init_db(db, fixture_ds)
     root = deploy_root
@@ -1058,7 +1060,7 @@ def test_quiesce_timeout_backs_out_maintenance(
     down state (PR #192 review — the quiesce-timeout sibling of the errtrace gap)."""
     ds_repo, ds_sha = dataset_repo
     eng_repo, engine_sha = engine_repo
-    fixture_ds = _REPO / "tests" / "fixtures" / "dataset"
+    fixture_ds = resource_dir("data", "example_dataset")
     db = tmp_path / "kayak.db"
     _init_db(db, fixture_ds)
     root = deploy_root

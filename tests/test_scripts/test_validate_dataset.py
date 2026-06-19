@@ -1,9 +1,10 @@
 """Tests for ``levels validate-dataset`` against the committed fixture dataset.
 
-The fixture (``tests/fixtures/dataset``) is the redistribution-safe dataset the
+The example dataset (``src/kayak/data/example_dataset``, the packaged
+``init-dataset --example`` payload) is the redistribution-safe dataset the
 engine's own CI validates without any kayak_data checkout (S4a of the
-dataset-separation plan). These tests prove the validator passes the fixture
-and catches each class of break it is responsible for.
+dataset-separation plan). These tests prove the validator passes it and catches
+each class of break it is responsible for.
 """
 
 from __future__ import annotations
@@ -23,8 +24,9 @@ from kayak.cli.validate_dataset import (
     _strip_code_fences,
     validate_dataset,
 )
+from kayak.resources import resource_dir
 
-FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "dataset"
+FIXTURE = resource_dir("data", "example_dataset")
 BUILDER = Path(__file__).resolve().parents[1] / "fixtures" / "build_dataset_fixture.py"
 
 
@@ -1103,7 +1105,7 @@ def test_fixture_retired_ids_matches_builder() -> None:
 # --------------------------------------------------------------------------- #
 # Regression report content (S2): provenance_slug ↔ report + sidecar integrity.
 # The fixture ships a declared slug (`fixture_calc_from_usgs`) + its triple plus a
-# link-reachable lead/lag companion under tests/fixtures/dataset/regression/.
+# link-reachable lead/lag companion under src/kayak/data/example_dataset/regression/.
 # --------------------------------------------------------------------------- #
 
 

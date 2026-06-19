@@ -22,8 +22,9 @@ import pytest
 
 from kayak.cli import generate_sources as gs
 from kayak.dataset import layout
+from kayak.resources import resource_dir
 
-FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "dataset"
+FIXTURE = resource_dir("data", "example_dataset")
 
 
 @pytest.fixture
