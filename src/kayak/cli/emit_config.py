@@ -32,6 +32,7 @@ from pydantic import SecretStr
 from kayak.config import KayakConfig, require_explicit_site_url_for_publishable_dataset
 from kayak.dataset.license import load_data_license
 from kayak.dataset.site import load_site_config
+from kayak.host import get_host_config
 
 DEFAULT_OUTPUT_PATH = "/etc/kayak/runtime-config.json"
 """Where the JSON snapshot lives on a production host."""
@@ -126,6 +127,14 @@ def build_config_data(cfg: KayakConfig, *, exclude_secrets: bool = False) -> dic
         # Resolved dataset data license (S3). PHP renders its public footer from the
         # same dataset.yaml value the static build and JSON metadata use.
         data["data_license"] = load_data_license(cfg.dataset_dir).as_config()
+        # Host-owned CORS allow-list for status.php (S7 follow-up): which origins
+        # may read /status.json cross-origin. Bridged from typed host config so the
+        # PHP layer reads it from runtime-config.json like the rest of its config,
+        # instead of hardcoding the domains. get_host_config() returns engine
+        # defaults when /etc/kayak/host.yaml is absent (dev/CI), so it's always
+        # populated; a malformed host.yaml raises ValueError, caught here so
+        # emit-config reports a clean error rather than a traceback.
+        data["allowed_origins"] = list(get_host_config().allowed_origins)
     except ValueError as e:
         raise RuntimeError(str(e)) from e
 

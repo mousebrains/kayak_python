@@ -45,6 +45,41 @@ class TestBuildConfigData:
         assert data["fetch_timeout"] == 111
         assert data["fetch_user_agent"] == "kayak/1.0"
 
+    def test_includes_allowed_origins_from_host_config(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The status.php CORS allow-list is bridged from HostConfig into the JSON
+        # PHP reads. With no host.yaml, it's the engine default list. Pin
+        # KAYAK_HOST_CONFIG at an ABSENT path (not just delenv, which falls through
+        # to the runner's real /etc/kayak/host.yaml) so this is hermetic.
+        from kayak import host
+
+        monkeypatch.setenv("KAYAK_HOST_CONFIG", str(tmp_path / "absent-host.yaml"))
+        host.get_host_config.cache_clear()
+        try:
+            data = build_config_data(KayakConfig())
+            assert data["allowed_origins"] == list(host.HostConfig().allowed_origins)
+        finally:
+            host.get_host_config.cache_clear()
+
+    def test_malformed_host_config_is_clean_runtime_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A bad host.yaml must surface as RuntimeError (which emit_config maps to a
+        # clean exit-1), not a raw ValueError traceback — the host-config load is
+        # inside build_config_data's try/except.
+        from kayak import host
+
+        bad = tmp_path / "host.yaml"
+        bad.write_text("allowed_origins:\n  - not-a-valid-origin\n")
+        monkeypatch.setenv("KAYAK_HOST_CONFIG", str(bad))
+        host.get_host_config.cache_clear()
+        try:
+            with pytest.raises(RuntimeError):
+                build_config_data(KayakConfig())
+        finally:
+            host.get_host_config.cache_clear()
+
     def test_includes_site_identity_defaults(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

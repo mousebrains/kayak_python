@@ -166,11 +166,20 @@ PHP Web Layer").
 ## 10. Host configuration
 
 Per-host, non-secret deployment shape (timezone, docroot, release root, service
-user, log globs, certificate host, backup destination) lives in
-`/etc/kayak/host.yaml` — typed by `kayak.host.HostConfig`, with engine defaults
-when absent. PHP reads the JSON snapshot `levels emit-config` writes. The setup,
-ACLs, dataset clone + read deploy key, and `DATASET_DIR` wiring are in
+user, log globs, certificate host, backup destination, **CORS `allowed_origins`**)
+lives in `/etc/kayak/host.yaml` — typed by `kayak.host.HostConfig`, with engine
+defaults when absent. PHP reads the JSON snapshot `levels emit-config` writes. The
+setup, ACLs, dataset clone + read deploy key, and `DATASET_DIR` wiring are in
 [`SETUP.md`](../deploy/SETUP.md).
+
+**Set `allowed_origins`** to your own status-page and site origins — it is the CORS
+allow-list `status.php` uses for `/status.json`, and its keep-current default is
+the WKCC origins. Leaving it unset would allow the WKCC domains cross-origin and
+deny yours, so treat it as a required per-host value (like `cert_host`):
+
+```yaml
+allowed_origins: [https://status.example.org, https://levels.example.org]
+```
 
 ## 11. Deploy
 

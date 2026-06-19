@@ -61,6 +61,10 @@ _KAYAK_CONFIG_ENV = frozenset(
         "MAINTAINER_EMAIL",
         "SQLITE_PATH",
         "KAYAK_CONFIG_PATH",
+        # emit-config (run during activation) reads host config for the status.php
+        # CORS allow-list; scrub an inherited pointer so the staged engine uses
+        # engine defaults, not a dev box's host.yaml.
+        "KAYAK_HOST_CONFIG",
     }
 )
 

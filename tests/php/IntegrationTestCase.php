@@ -120,6 +120,11 @@ abstract class IntegrationTestCase extends TestCase
             'SITE_URL' => 'http://127.0.0.1',
             'TURNSTILE_SITE_KEY' => 'TEST_SITE_KEY',
             'TURNSTILE_SECRET' => 'TEST_SECRET',
+            // Point host config at a path that doesn't exist so emit-config uses
+            // the engine HostConfig defaults (e.g. allowed_origins) regardless of
+            // whatever /etc/kayak/host.yaml the runner happens to have — keeps the
+            // emitted runtime-config.json deterministic.
+            'KAYAK_HOST_CONFIG' => sys_get_temp_dir() . '/kayak-test-absent-host-config.yaml',
         ];
         $emit_cmd = escapeshellarg($venvLevels) . ' emit-config --out=' . escapeshellarg($configJson) . ' 2>&1';
         $emit_proc = proc_open($emit_cmd, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $emit_pipes, null, $emit_env);
@@ -216,6 +221,7 @@ abstract class IntegrationTestCase extends TestCase
      * @param array<string, scalar> $query    URL query params.
      * @param array<string, string> $cookies  Cookie name → value.
      * @param array<string, scalar> $post     Form fields (URL-encoded).
+     * @param array<string, string> $headers  Request header name → value.
      * @return array{status:int, headers:array<string,string>, body:string}
      */
     protected function request(
@@ -224,6 +230,7 @@ abstract class IntegrationTestCase extends TestCase
         array $cookies = [],
         string $method = 'GET',
         array $post = [],
+        array $headers = [],
     ): array {
         $url = 'http://127.0.0.1:' . self::$serverPort . $path;
         if (!empty($query)) {
@@ -248,6 +255,13 @@ abstract class IntegrationTestCase extends TestCase
         }
         if ($method === 'POST' && !empty($post)) {
             curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post));
+        }
+        if (!empty($headers)) {
+            $hdr = [];
+            foreach ($headers as $name => $value) {
+                $hdr[] = $name . ': ' . $value;
+            }
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $hdr);
         }
 
         $raw = curl_exec($ch);
