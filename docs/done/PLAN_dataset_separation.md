@@ -166,9 +166,10 @@ engine without access to WKCC data.
 - Tests use the fixture by default. Tests that need a custom edge case
   construct a temporary minimal dataset; no test reads a sibling clone or
   a developer's dataset root.
-- The fixture flow runs `levels init-db --no-seed` followed by
-  `sync-metadata`, using the existing supported flag; do not add a test-only
-  bypass. This keeps the fixture DB independent of code-side states/sources.
+- The fixture flow runs `levels init-db` followed by `sync-metadata`; do not add
+  a test-only bypass. This keeps the fixture DB independent of code-side
+  states/sources. (The historical `--no-seed` flag this once used was removed in
+  R9 — `init-db` is schema-only.)
   S1 later removes seeding engine-wide and makes schema-only initialization
   the default.
 - Move/package every runtime engine resource -- YAML defaults, PHP, JS/CSS,

@@ -257,10 +257,10 @@ class TestDatasetDirRoot:
 
     def test_metadata_dir_no_longer_honored(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # The removed alias must NOT resolve the value: with only METADATA_DIR
-        # set, dataset_dir falls back to its default (not the METADATA_DIR path).
+        # set, dataset_dir falls back to its packaged default (not the legacy path).
         monkeypatch.delenv("DATASET_DIR", raising=False)
         monkeypatch.setenv("METADATA_DIR", "/srv/legacy")
-        assert str(KayakConfig().dataset_dir) != "/srv/legacy"
+        assert KayakConfig().dataset_dir == config.BASE_DIR / "data" / "db"
 
 
 class TestKayakConfigValidation:
