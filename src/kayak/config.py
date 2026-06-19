@@ -15,7 +15,6 @@ constants.
 from __future__ import annotations
 
 import os
-import warnings
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
@@ -161,19 +160,19 @@ class KayakConfig(BaseSettings):
 
     # Dataset root — the directory holding the club-specific dataset (the
     # ``*.csv`` + ``reaches*.json`` the metadata-single-source flow treats as the
-    # source of truth; S6 gives it a versioned contract). Read from ``DATASET_DIR``
-    # (preferred) or the legacy ``METADATA_DIR`` (deprecated alias, honored for one
-    # release; see ``_check_dataset_dir_env``). The default *value* stays
-    # ``data/db`` (repo-root) and is deliberately NOT the packaged ``DATA_DIR``:
-    # the dataset is club-specific external data, not an engine resource, so it
-    # ships in a separate repo (clone ``kayak_data`` and set ``DATASET_DIR`` to it,
-    # e.g. ``/home/pat/kayak_data``; deploy/SETUP.md § 2.5), not inside the wheel.
-    # The schema migrations, by contrast, *are* an engine resource and ship inside
-    # the package at ``src/kayak/data/db/migrations`` (resolved via ``DATA_DIR``),
-    # so they are NOT under this root.
+    # source of truth; S6 gives it a versioned contract). Read from ``DATASET_DIR``.
+    # (The legacy ``METADATA_DIR`` alias was removed in the dataset-separation R9
+    # cleanup — it had been honored for one release with a deprecation warning.)
+    # The default *value* stays ``data/db`` (repo-root) and is deliberately NOT the
+    # packaged ``DATA_DIR``: the dataset is club-specific external data, not an
+    # engine resource, so it ships in a separate repo (clone ``kayak_data`` and set
+    # ``DATASET_DIR`` to it, e.g. ``/home/pat/kayak_data``; deploy/SETUP.md § 2.5),
+    # not inside the wheel. The schema migrations, by contrast, *are* an engine
+    # resource and ship inside the package at ``src/kayak/data/db/migrations``
+    # (resolved via ``DATA_DIR``), so they are NOT under this root.
     dataset_dir: Path = Field(
         default_factory=lambda: BASE_DIR / "data" / "db",
-        validation_alias=AliasChoices("DATASET_DIR", "METADATA_DIR"),
+        validation_alias="DATASET_DIR",
     )
 
     # Fetch pipeline
@@ -275,37 +274,7 @@ def get_config() -> KayakConfig:
     return KayakConfig()
 
 
-def _check_dataset_dir_env() -> None:
-    """Deprecation policy for the dataset-root env var (S6.1).
-
-    Value resolution is handled by the ``dataset_dir`` field's ``AliasChoices``
-    (``DATASET_DIR`` preferred, then the legacy ``METADATA_DIR``). This adds the
-    policy on top: **warn** when only the legacy ``METADATA_DIR`` is set, and
-    **fail fast** when both are set to *different* directories (a likely
-    misconfiguration). It reads ``os.environ`` directly — case-insensitively, to
-    match the model's ``case_sensitive=False`` — so it reflects the deployment
-    env, not a test's direct-kwarg ``KayakConfig(...)`` construction. Exposed as
-    a function so tests can drive it explicitly.
-    """
-    env = {k.upper(): v for k, v in os.environ.items()}
-    ds = env.get("DATASET_DIR")
-    md = env.get("METADATA_DIR")
-    if ds is not None and md is not None and Path(ds).resolve() != Path(md).resolve():
-        raise ValueError(
-            "Both DATASET_DIR and METADATA_DIR are set to different paths "
-            f"(DATASET_DIR={ds!r}, METADATA_DIR={md!r}). Set only DATASET_DIR."
-        )
-    if ds is None and md is not None:
-        warnings.warn(
-            "METADATA_DIR is deprecated; rename it to DATASET_DIR "
-            "(METADATA_DIR is honored for one release, then removed).",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-
-
 _config = get_config()
-_check_dataset_dir_env()
 
 # Module-level constants derived from the model — preserved for source-
 # compat with existing ``from kayak.config import X`` callers. Phase 4
@@ -315,9 +284,6 @@ DATABASE_URL: str = _config.database_url
 OUTPUT_DIR: str = str(_config.output_dir)
 # The dataset root (data/db by default; the kayak_data clone in real deployments).
 DATASET_DIR: Path = _config.dataset_dir
-# Deprecated alias of DATASET_DIR, kept for one release so existing
-# ``from kayak.config import METADATA_DIR`` callers keep working.
-METADATA_DIR: Path = _config.dataset_dir
 # Staging dir for build-external generated static inputs (map overlay GeoJSON).
 MAP_LAYERS_DIR: Path = _config.map_layers_dir
 # Compatibility alias for existing deploy env/scripts and imports.

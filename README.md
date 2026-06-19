@@ -63,7 +63,7 @@ export DATASET_DIR="$(cd ../kayak_data && pwd)"   # or persist in ~/.config/kaya
 export OUTPUT_DIR=~/public_html_dev               # or persist in ~/.config/kayak/.env
 
 # 3. Create the schema (empty tables + stamped migrations; schema only —
-#    the former sources.yaml seeding is gone, --no-seed is a deprecated no-op)
+#    the former sources.yaml seeding is gone)
 levels init-db
 
 # 4. Load state/gauge/reach/source metadata from the kayak_data repo (DATASET_DIR).

@@ -306,8 +306,8 @@ levels pipeline                    # fetch live data + render
 (`sync-metadata` refuses a `status: scaffold` dataset — add `--allow-scaffold`
 only if rebuilding from a scaffold checkout; the real `kayak_data` is publishable.)
 
-`init-db` is schema-only since the S1-cleanup (`--no-seed` survives one
-release as a deprecated no-op), so the old failure mode — engine-seeded
+`init-db` is schema-only since the S1-cleanup (the deprecated `--no-seed`
+no-op flag was removed in R9), so the old failure mode — engine-seeded
 rows with fresh ids colliding with the canonical-id CSV rows on
 `sync-metadata` — no longer exists; the empty tables load the CSV ids
 cleanly. `sync-metadata` runs with FK enforcement on (and audits

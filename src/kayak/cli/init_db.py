@@ -23,24 +23,11 @@ def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -
     parser = subparsers.add_parser("init-db", help="Create database tables and stamp migrations")
     parser.set_defaults(func=init_db)
     parser.add_argument("--drop", action="store_true", help="Drop and recreate all tables")
-    parser.add_argument(
-        "--no-seed",
-        action="store_true",
-        help="Deprecated no-op: init-db is always schema-only now (seeding was "
-        "removed by the dataset-separation S1-cleanup; metadata loads via "
-        "`levels sync-metadata`)",
-    )
 
 
 def init_db(args: argparse.Namespace) -> None:
     """Create database tables and stamp migrations (schema only)."""
     engine = get_engine()
-
-    if getattr(args, "no_seed", False):
-        print(
-            "Note: --no-seed is deprecated and has no effect — init-db is always "
-            "schema-only; load metadata with `levels sync-metadata`."
-        )
 
     if args.drop:
         print("Dropping all tables...")

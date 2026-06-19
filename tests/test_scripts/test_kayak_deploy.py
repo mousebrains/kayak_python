@@ -46,17 +46,14 @@ def deploy_root() -> Iterator[Path]:
 # kayak.config (BaseSettings, case-insensitive) reads these env vars at import.
 # Each test here builds and imports a STAGED engine in a subprocess, so any of
 # these inherited from THIS pytest process would leak into that engine's config —
-# and under ``pytest -n`` a concurrent test's value poisons it (a
-# ``DATASET_DIR``/``METADATA_DIR`` mismatch even raises ``ValueError`` at import,
-# crashing every deploy test). The deployer resolves the config the staged engine
-# needs from its own files, so scrub the lot for a hermetic subprocess. Mirrors
-# kayak.config's env inputs (field names + the explicit aliases).
+# and under ``pytest -n`` a concurrent test's value poisons it. The deployer
+# resolves the config the staged engine needs from its own files, so scrub the
+# lot for a hermetic subprocess. Mirrors kayak.config's env inputs.
 _KAYAK_CONFIG_ENV = frozenset(
     {
         "DATABASE_URL",
         "OUTPUT_DIR",
         "DATASET_DIR",
-        "METADATA_DIR",
         "MAP_LAYERS_DIR",
         "OSMB_DIR",
         "GAUGE_METADATA_CACHE",

@@ -181,8 +181,8 @@ sign in via `/login.php` with an email promoted to `status='maintainer'` (see
 ## 4. Initialize the database
 
 `init-db` creates the schema and stamps migrations (schema only — the
-S1-cleanup removed the former `sources.yaml` seed, and `--no-seed` is a
-deprecated no-op); `levels sync-metadata` then loads the states, gauges, reaches,
+S1-cleanup removed the former `sources.yaml` seed); `levels sync-metadata` then
+loads the states, gauges, reaches,
 sources, and `gauge_source` links from the `kayak_data` metadata CSVs (matched by
 stable id; `DATASET_DIR`, §2.5), and `import_metadata.py` applies the reach geometry
 sidecars (`reaches.json` / `reaches-gradient.json`) that the CSV sync excludes.
@@ -502,9 +502,10 @@ This copies the service/timer units to `/etc/systemd/system/`, enables and start
 > ```
 >
 > Then drop the now-inert `HC_METADATA_SNAPSHOT=` line from
-> `~/.config/kayak/.env` (and `/etc/kayak/env` if present). It is allowlisted for
-> one release so a stale line can't fail `deploy.sh`'s `validate-config
-> --known-env --strict` gate, but should be removed. Separately, **pause or remove
+> `~/.config/kayak/.env` (and `/etc/kayak/env` if present). The R9 cleanup removed
+> its one-release allowlist entry, so a stale line now **fails** `deploy.sh`'s
+> `validate-config --known-env --strict` gate — remove it before the next deploy.
+> Separately, **pause or remove
 > the metadata-snapshot check on healthchecks.io** — the retired service pinged
 > `${HC_METADATA_SNAPSHOT}` on success, so its check otherwise stops receiving
 > pings and fires a false "down" alert once its grace period lapses (operator-only;

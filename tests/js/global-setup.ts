@@ -56,7 +56,7 @@ export default async function globalSetup(): Promise<void> {
   );
   const baseEnv = { ...process.env };
   for (const key of Object.keys(baseEnv)) {
-    if (['DATASET_DIR', 'METADATA_DIR'].includes(key.toUpperCase())) {
+    if (key.toUpperCase() === 'DATASET_DIR') {
       delete baseEnv[key];
     }
   }

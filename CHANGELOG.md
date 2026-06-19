@@ -31,7 +31,7 @@ All notable changes to this project will be documented in this file.
   the script's full-CSV upsert path was removed (it duplicated `sync-metadata` and
   skipped its delete-safety). It now applies *only* the reach geometry sidecars
   (`reaches.json` / `reaches-gradient.json`); a fresh/recovery load is `init-db
-  --no-seed → levels sync-metadata → python scripts/import_metadata.py → pipeline`.
+  → levels sync-metadata → python scripts/import_metadata.py → pipeline`.
   It also **fails loud** (rolls back, exit non-zero) if a sidecar reach id has no
   reach row — the "ran before `sync-metadata`" / wrong-DB mistake — with
   `--allow-missing-reaches` to opt into a partial apply (dataset-separation
@@ -54,12 +54,21 @@ All notable changes to this project will be documented in this file.
   monitors) and each is fetched and aggregated by the gauge cache, and a merged
   gauge with a NULL `usgs_id` still fetches its linked USGS sources.
 
-### Deprecated
-- **`METADATA_DIR` → `DATASET_DIR`**: the env var pointing at the club-specific
-  dataset clone (`kayak_data`) is now `DATASET_DIR` (dataset-separation S6.1, the
-  "dataset root"). `METADATA_DIR` keeps working as an alias for one release
-  (with a deprecation warning) and is removed thereafter; setting both to
-  different paths is a hard error. Rename it in `~/.config/kayak/.env`.
+### Removed
+- **Dataset-separation R9 deprecation removals** (the one-release deprecation
+  window has elapsed; the 2026-06 cutover release carried them):
+  - **`METADATA_DIR` env var** — the legacy alias of `DATASET_DIR` (the dataset
+    root, `kayak_data`) is gone, along with its both-set conflict check and
+    deprecation warning. Set `DATASET_DIR` in `~/.config/kayak/.env`. The
+    `METADATA_*` prefix stays scanned by `validate-config`, so a stale
+    `METADATA_DIR=` line is now flagged for cleanup rather than silently ignored.
+  - **`init-db --no-seed`** — the deprecated no-op flag (seeding was removed by
+    the S1-cleanup) is gone; use plain `levels init-db`.
+  - **`HC_METADATA_SNAPSHOT` allowlist entry** — the retired
+    healthcheck-URL env var (kayak-metadata-snapshot unit, SA-teardown-B) is no
+    longer allowlisted; drop any stale `HC_METADATA_SNAPSHOT=` line from prod
+    `.env` / `/etc/kayak/env` before deploying, or `validate-config --strict`
+    fails the deploy gate.
 
 ### Fixed
 - **`levels analyze-logs release` infers the release time from the paired-release
