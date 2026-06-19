@@ -8,6 +8,7 @@ material rather than a deletable graveyard. For work *in flight*, see the
 
 | Plan | What it covered |
 |---|---|
+| `PLAN_dataset_separation.md` | The full code/data separation — engine ↔ `kayak_data` split, dataset contract, paired-release cutover (S1–S9, batches 1–6); COMPLETE 2026-06-19 |
 | `DNS.CHANGEOVER.md` | DNS cutover bringing `levels.wkcc.org` onto the host |
 | `PLAN_assoc_reaches_card.md` | Card-ify the Associated Reaches list on phone portrait |
 | `PLAN_c901_cleanup.md` | C901 complexity-lint cleanup for the grandfathered scripts |

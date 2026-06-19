@@ -4,7 +4,7 @@ This is the end-to-end path for a **new club or region** to run the kayak engine
 against **its own dataset**, without editing a tracked engine file. The engine is
 a package; a *dataset* (the river-levels metadata) is separate, club-owned data —
 see the architecture split in [`../CLAUDE.md`](../CLAUDE.md) and
-[`PLAN_dataset_separation.md`](PLAN_dataset_separation.md).
+[`PLAN_dataset_separation.md`](done/PLAN_dataset_separation.md).
 
 Each step links the **one doc that owns** its detail; this page is the spine, not
 a copy of them. **Tennessee** appears as a running *example* (HUC4 0601–0604, the
@@ -46,7 +46,7 @@ replace the fixture's editorial content) before treating it as your own dataset.
 Put the dataset under version control in its **own repository** (the WKCC dataset
 is `kayak_data`); humans change metadata by PR to that repo, never by writing the
 live DB. Contract files (`dataset.yaml`, `retired_ids.yaml`, the id-counter rules)
-are owned by [`PLAN_dataset_separation.md`](PLAN_dataset_separation.md) §S6.
+are owned by [`PLAN_dataset_separation.md`](done/PLAN_dataset_separation.md) §S6.
 
 ## 2. Discover sources and pick parsers
 
@@ -104,7 +104,7 @@ expected shape and the redistribution-safety rules.
 Replace the scaffold placeholders in `site/` with real prose: `privacy.md`,
 `disclaimer.md`, `contact.md` (required for `publishable`), plus optional
 `about.md`. Regional presentation (`region.yaml` / `site.yaml` / `map.yaml`) is
-optional with engine fallbacks — see [`PLAN_dataset_separation.md`](PLAN_dataset_separation.md)
+optional with engine fallbacks — see [`PLAN_dataset_separation.md`](done/PLAN_dataset_separation.md)
 §S3. Site prose is sanitized by `validate-dataset` (no scripts, no inline
 handlers — the same CSP rules the build enforces).
 
@@ -200,7 +200,7 @@ levels seed-maintainer --email you@example.org
 Editor accounts, sessions, and the change-request review queue are engine
 features (the `editor`/`editor_session`/`change_request` tables). Approval
 *endorses* a change; the diff still lands via a dataset-repo PR + deploy (there is
-no PHP path that writes metadata) — see [`PLAN_dataset_separation.md`](PLAN_dataset_separation.md)
+no PHP path that writes metadata) — see [`PLAN_dataset_separation.md`](done/PLAN_dataset_separation.md)
 §SA.
 
 ---

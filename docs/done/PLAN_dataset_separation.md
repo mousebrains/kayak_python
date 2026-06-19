@@ -14,16 +14,16 @@ and sync the dataset, run one offline fixture fetch, build the site, and
 exercise the public PHP smoke tests without a checkout of `kayak_data`
 or any WKCC-specific file.
 
-> **STATUS 2026-06-16 (eighth pass).** The structural separation is essentially
-> done and live. **Batches 1–4 and Checkpoints 0–2 are COMPLETE** — the S7
-> paired-release cutover went live **2026-06-14/15** (`/opt/kayak` immutable
-> releases, served from `/var/cache/kayak/docroot`), and the post-cutover
-> `public_html` cleanup landed **2026-06-16** (engine #203 + kayak_data #62).
-> **Remaining: Batch 5 (S5 bootstrap, item R8) and Batch 6 (deprecation
-> removals, item R9)**, plus a few minor loose ends. The authoritative
-> current state is the [Eighth pass](#eighth-pass--status-and-remaining-2026-06-16)
-> section at the end of this doc. This doc was consolidated onto `main` on
-> 2026-06-16 from the now-retired `plan-dataset-separation` branch.
+> **STATUS 2026-06-19 — COMPLETE.** The full code/data separation is done.
+> Batches 1–6 and Checkpoints 0–2 all landed: the S7 paired-release cutover went
+> live **2026-06-14/15** (`/opt/kayak` immutable releases, served from
+> `/var/cache/kayak/docroot`); **Batch 5** (S5 `levels init-dataset` + new-region
+> runbook + acceptance run, item R8) merged in **PR #206**; and **Batch 6** (item
+> R9 — removing the `METADATA_DIR` alias, the `--no-seed` no-op, and the
+> `HC_METADATA_SNAPSHOT` allowlist entry) is the change that carries this archival.
+> Acceptance criteria 1–12 are recorded (see `PLAN_b5_init_dataset.md` §D8). The
+> only open items are the **non-blocking loose ends** below (the `status.php` CORS
+> allow-list), tracked separately. Archived to `docs/done/` on completion.
 
 ## Decisions
 
@@ -65,10 +65,10 @@ from earlier passes:
 - `levels init-dataset <dir>` scaffolds datasets; there is no separately
   maintained template repository.
 
-Status: eighth pass (2026-06-16) — batches 1–4 and checkpoints 0–2 have
-landed (the S7 paired-release cutover is live; see `PLAN_4c_renderers.md`);
-batches 5–6 remain. See "Eighth pass — status and remaining (2026-06-16)"
-at the end of this document for the authoritative current state.
+Status: COMPLETE (2026-06-19) — all batches (1–6) and checkpoints landed; the
+S7 paired-release cutover is live (see `PLAN_4c_renderers.md`). Archived to
+`docs/done/`. See "Eighth pass — status and remaining" below for the per-batch
+log and the remaining non-blocking loose ends.
 
 Implementation sequence: S4a -> S6 -> S4b -> S9 -> S1 -> SA -> S2 ->
 S3 -> S7 -> S8 -> S5. S4 establishes the test boundary, S6 establishes
@@ -1165,14 +1165,21 @@ stale `plan-dataset-separation` branch can then be retired.
   `PLAN_b5_init_dataset.md` §"Acceptance run (D8)" — criteria 1 and 9 verified
   end-to-end here, 4/10/12 referenced to the S7/S8 runbooks. Criteria 1, 4, 9,
   10, 12 close on merge.
-- **Batch 6 — deprecation removals (R9).** 1 engine PR + 1 kayak_data pin
-  PR; rides a routine deploy. All three still present on `main`:
-  - `METADATA_DIR` → `DATASET_DIR` alias (`config.py`);
+- **Batch 6 — deprecation removals (R9) — DONE.** The one-release window
+  elapsed (the 2026-06 cutover release carried all three). Removed:
+  - `METADATA_DIR` alias (`config.py`) — `validation_alias="DATASET_DIR"`;
+    `_check_dataset_dir_env` + the module alias deleted. `validate-config` keeps
+    the `METADATA_*` scan prefix, so a stale `METADATA_DIR=` is flagged.
   - the `--no-seed` no-op (`cli/init_db.py`);
-  - the `HC_METADATA_SNAPSHOT` allowlist entry (`cli/validate_config.py`);
-  - plus the criterion-12 documentation sweep. Deprecation window: the
-    cutover release plausibly satisfies "one release" — confirm before
-    removing.
+  - the `HC_METADATA_SNAPSHOT` allowlist entry (`cli/validate_config.py`).
+  - plus the criterion-12 documentation sweep.
+
+  Shipped as **1 engine PR + 2 kayak_data PRs** (not 1): kayak_data's
+  `validate.yml`/`canary.yml` call `init-db --no-seed` and the canary runs vs
+  engine `main`, so a kayak_data PR drops `--no-seed` **first**; a pin-bump PR
+  follows after the engine merges (the pin-only-bump rule forbids combining the
+  two). Prod `.env` must drop stale `METADATA_DIR=` / `HC_METADATA_SNAPSHOT=`
+  lines before the ride-along deploy (else `validate-config --strict` fails).
 
 ### Minor loose ends (non-blocking)
 
