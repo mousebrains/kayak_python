@@ -128,9 +128,9 @@ echo "==> levels build (packaged data + web layer) → $DOCROOT"
 # renders its regression report (fixture_calc_from_usgs.*) from DATASET_DIR/
 # regression/ — the S2-E2 path. HOME → $WORK (and SUDO_USER cleared, to disable
 # config's ~SUDO_USER/.env fallback) so config doesn't read a developer's
-# ~/.config/kayak/.env — which may set the deprecated METADATA_DIR and clash with
-# this DATASET_DIR. CI's HOME has no such file, so this is a no-op there; it keeps
-# the smoke hermetic.
+# ~/.config/kayak/.env — which may set its own DATASET_DIR and clash with this
+# one. CI's HOME has no such file, so this is a no-op there; it keeps the smoke
+# hermetic.
 HOME="$WORK" SUDO_USER="" DATABASE_URL="sqlite:///$DB" OUTPUT_DIR="$DOCROOT" \
     SITE_URL="https://levels.example.org" \
     DATASET_DIR="$EXAMPLE_DS" "$LEVELS" build >/dev/null

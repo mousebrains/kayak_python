@@ -12,26 +12,6 @@ from unittest.mock import patch
 from sqlalchemy import text
 
 
-def test_no_seed_flag_is_accepted_noop(engine, capsys):
-    """--no-seed survives as a deprecated no-op so existing scripts/docs don't
-    break; it must not change behavior and should say so."""
-    from kayak.cli.init_db import init_db
-
-    with (
-        patch("kayak.cli.init_db.get_engine", return_value=engine),
-        patch("kayak.cli.migrate.get_engine", return_value=engine),
-    ):
-        init_db(Namespace(drop=False, no_seed=True))
-
-    out = capsys.readouterr().out
-    assert "deprecated" in out
-    with engine.connect() as conn:
-        states = conn.execute(text("SELECT COUNT(*) FROM state")).scalar()
-        fetch_urls = conn.execute(text("SELECT COUNT(*) FROM fetch_url")).scalar()
-    assert states == 0, "init-db must not seed state rows"
-    assert fetch_urls == 0, "init-db must not seed fetch_url rows"
-
-
 def test_init_db_is_schema_only(engine):
     """Plain init-db (no flags) creates empty tables — no seeded metadata."""
     from kayak.cli.init_db import init_db
@@ -40,7 +20,7 @@ def test_init_db_is_schema_only(engine):
         patch("kayak.cli.init_db.get_engine", return_value=engine),
         patch("kayak.cli.migrate.get_engine", return_value=engine),
     ):
-        init_db(Namespace(drop=False, no_seed=False))
+        init_db(Namespace(drop=False))
 
     with engine.connect() as conn:
         for table in ("state", "source", "fetch_url"):
@@ -60,7 +40,7 @@ def test_init_db_skips_stamping_on_existing_db(engine, capsys):
         _ensure_tracking_table()
         stamp("0001")
 
-    args = Namespace(drop=False, no_seed=True)
+    args = Namespace(drop=False)
     with (
         patch("kayak.cli.init_db.get_engine", return_value=engine),
         patch("kayak.cli.migrate.get_engine", return_value=engine),
@@ -90,7 +70,7 @@ def test_init_db_drop_resets_schema_migrations(engine):
         migrate_mod.stamp("9999")  # bogus version, not a committed migration
         assert "9999" in migrate_mod.applied_versions()
 
-        init_db(Namespace(drop=True, no_seed=True))
+        init_db(Namespace(drop=True))
 
         applied = migrate_mod.applied_versions()
         assert "9999" not in applied, "--drop must clear the stale tracking table"

@@ -20,7 +20,7 @@ The development environment uses these paths (configured in `~/.config/kayak/.en
 
 `config.py` checks `~/.config/kayak/.env` before falling back to the default `load_dotenv()` search. PHP reads `/etc/kayak/runtime-config.json` (or `$KAYAK_CONFIG_PATH`), the JSON snapshot written by `levels emit-config` — a missing/unreadable file is a hard HTTP 500 (`[CONFIG-FATAL]`). The `SQLITE_PATH` env var is only a fallback when the JSON lacks `database_path`.
 
-**Metadata repo (data-repo split):** the metadata CSVs + `reaches*.json` live in a **separate** repo, `kayak_data`, cloned alongside the code repo and located via the `DATASET_DIR` env var (the former `METADATA_DIR` is a deprecated alias, honored for one release with a warning; S6.1). The default *value* stays `data/db` (repo-root; path resolution unchanged — metadata is club-specific external data, not a packaged engine resource), but the CSVs no longer live in the code repo — clone `kayak_data` and point `DATASET_DIR` at it. Only the schema migrations stay in the code repo, and they ship *inside* the package at `src/kayak/data/db/migrations/`. `levels sync-metadata` (apply the CSV diff) and `import_metadata` (apply the geom/gradient sidecars) read `DATASET_DIR`; `levels recover-metadata` reconstructs the dataset from a DB into a scratch dir for recovery. Humans edit metadata via a PR to `kayak_data` (the single authority for metadata) — there is no reverse sync from the live DB back to the dataset. See [`deploy/SETUP.md`](deploy/SETUP.md).
+**Metadata repo (data-repo split):** the metadata CSVs + `reaches*.json` live in a **separate** repo, `kayak_data`, cloned alongside the code repo and located via the `DATASET_DIR` env var (the former `METADATA_DIR` alias was removed in the R9 cleanup; S6.1). The default *value* stays `data/db` (repo-root; path resolution unchanged — metadata is club-specific external data, not a packaged engine resource), but the CSVs no longer live in the code repo — clone `kayak_data` and point `DATASET_DIR` at it. Only the schema migrations stay in the code repo, and they ship *inside* the package at `src/kayak/data/db/migrations/`. `levels sync-metadata` (apply the CSV diff) and `import_metadata` (apply the geom/gradient sidecars) read `DATASET_DIR`; `levels recover-metadata` reconstructs the dataset from a DB into a scratch dir for recovery. Humans edit metadata via a PR to `kayak_data` (the single authority for metadata) — there is no reverse sync from the live DB back to the dataset. See [`deploy/SETUP.md`](deploy/SETUP.md).
 
 **`OUTPUT_DIR` convention:** `OUTPUT_DIR` is **required** — `levels build` has no default and refuses the engine or dataset trees as output (S3h; the tracked `public_html/` dev-symlink farm is gone). The live host sets `OUTPUT_DIR=/home/pat/public_html` (outside the repo), so `levels build` writes to the nginx docroot and never touches the repo tree. On a dev machine, set `OUTPUT_DIR=/home/<user>/public_html_dev` (or similar non-repo path) in `~/.config/kayak/.env` and serve with `KAYAK_CONFIG_PATH=… php -S localhost:8000 -t "$OUTPUT_DIR"` (see § Running the PHP Web Layer for the config step). See `.env.example` for the full rationale.
 
@@ -41,8 +41,8 @@ echo 'OUTPUT_DIR=/home/pat/public_html' >> ~/.config/kayak/.env          # requi
 ```
 
 `init-db` creates the schema and stamps migrations — schema only (the S1-cleanup
-removed the former `sources.yaml` state/source seed; `--no-seed` survives one
-release as a deprecated no-op). All metadata — states, sources, gauges, reaches —
+removed the former `sources.yaml` state/source seed; the deprecated `--no-seed`
+no-op flag was removed in R9). All metadata — states, sources, gauges, reaches —
 loads from the dataset CSVs via `levels sync-metadata` (matched by stable id).
 `import_metadata.py` then applies the reach geometry
 sidecars (`reaches.json` / `reaches-gradient.json`), which `sync-metadata` excludes.

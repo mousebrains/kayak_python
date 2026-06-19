@@ -51,7 +51,10 @@ _CONFIG_PREFIXES = (
     "GAUGE_",
     "KAYAK_",
     "DATASET_",
-    "METADATA_",  # deprecated alias of DATASET_DIR (S6.1) — kept one release
+    # The METADATA_DIR alias was removed (R9), but the prefix stays scanned so a
+    # stale `METADATA_DIR=` left in a prod .env (or a typo) is flagged for cleanup
+    # rather than silently ignored.
+    "METADATA_",
     "MAP_LAYERS_",
     "USGS_",
     "SQLITE_",
@@ -81,16 +84,8 @@ _EXTRA_KNOWN = frozenset(
         "USGS_API_KEY",
         # PHP's db.php fallback + health-check.sh's DB override; the
         # python side uses DATABASE_URL, so this is intentionally not a
-        # model field (PR #119 review — same typo class as METADATA_DIR).
+        # model field (PR #119 review).
         "SQLITE_PATH",
-        # Retired in SA-teardown-B (the kayak-metadata-snapshot unit and its
-        # hc_metadata_snapshot field are gone). Tolerated for ONE release so a
-        # stale `HC_METADATA_SNAPSHOT=` line left in a prod `.env` /
-        # `/etc/kayak/env` can't fail `deploy.sh`'s `validate-config --known-env
-        # --strict` gate (it exits 1 on any unknown `HC_*` name) and brick an
-        # otherwise-safe deploy. Remove this entry — and the `.env` line — once
-        # the deploy carrying SA-teardown-B has landed.
-        "HC_METADATA_SNAPSHOT",
     }
 )
 
@@ -122,7 +117,7 @@ def _known_env_names() -> set[str]:
         if isinstance(alias, str):
             names.add(alias.upper())
         elif isinstance(alias, AliasChoices):
-            # e.g. dataset_dir reads DATASET_DIR or the legacy METADATA_DIR.
+            # e.g. map_layers_dir reads MAP_LAYERS_DIR or the legacy OSMB_DIR.
             names.update(c.upper() for c in alias.choices if isinstance(c, str))
     return names | _EXTRA_KNOWN
 

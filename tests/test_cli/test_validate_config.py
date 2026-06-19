@@ -42,15 +42,15 @@ class TestKnownEnvNames:
         assert "KAYAK_HOME" in names
 
     def test_includes_dataset_dir_and_deploy_extras(self) -> None:
-        # DATASET_DIR (and its deprecated alias METADATA_DIR) is the data-repo
-        # pointer, read from the dataset_dir field's AliasChoices; KAYAK_DATA is
-        # the deploy.sh export it's derived from; KAYAK_VENV is the
+        # DATASET_DIR is the data-repo pointer (the dataset_dir field's alias);
+        # KAYAK_DATA is the deploy.sh export it's derived from; KAYAK_VENV is the
         # regenerate_schema_svg.sh dev override. All must be known or
-        # `deploy.sh`'s --known-env --strict run would fail the deploy. This also
-        # guards the _known_env_names() AliasChoices extraction (S6.1).
+        # `deploy.sh`'s --known-env --strict run would fail the deploy.
         names = _known_env_names()
         assert "DATASET_DIR" in names
-        assert "METADATA_DIR" in names  # deprecated alias, honored one release
+        # The legacy METADATA_DIR alias was removed (R9) — it is no longer a
+        # known name, so a stale `METADATA_DIR=` in a prod .env is now flagged.
+        assert "METADATA_DIR" not in names
         assert "KAYAK_DATA" in names
         assert "KAYAK_VENV" in names
 
@@ -70,11 +70,11 @@ class TestKnownEnvNames:
         assert "HC_FETCH_OSMB" in names
         assert "HC_STATUS" in names
 
-    def test_includes_retired_metadata_snapshot_hc(self) -> None:
-        # HC_METADATA_SNAPSHOT was retired with the kayak-metadata-snapshot unit
-        # (SA-teardown-B); it stays allowlisted for one release so a stale `.env`
-        # line can't fail deploy.sh's `--known-env --strict` gate.
-        assert "HC_METADATA_SNAPSHOT" in _known_env_names()
+    def test_retired_metadata_snapshot_hc_no_longer_allowlisted(self) -> None:
+        # HC_METADATA_SNAPSHOT (retired in SA-teardown-B) was allowlisted for one
+        # release; R9 removed that entry, so it is no longer a known name (a stale
+        # prod `.env` line is now flagged — drop it before the Batch-6 deploy).
+        assert "HC_METADATA_SNAPSHOT" not in _known_env_names()
 
     def test_includes_usgs_api_key(self) -> None:
         # Read via os.environ by the OGC fetch (not a model field — the
@@ -248,24 +248,24 @@ class TestValidateConfig:
             validate_config(_args(known_env=True, strict=True))
         assert exc.value.code == 1
 
-    def test_known_env_strict_tolerates_retired_metadata_snapshot_hc(
+    def test_known_env_strict_flags_retired_metadata_snapshot_hc(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        # A stale HC_METADATA_SNAPSHOT left in a prod .env (the unit was retired
-        # in SA-teardown-B) must NOT fail the strict deploy gate — it's
-        # allowlisted for one release so it can't brick an otherwise-safe deploy.
+        # R9 removed the one-release HC_METADATA_SNAPSHOT allowlist entry, so a
+        # stale prod `.env` line is now an unknown HC_* name and FAILS the strict
+        # deploy gate — the prod .env line must be dropped before the deploy.
         monkeypatch.setenv("HC_METADATA_SNAPSHOT", "https://hc-ping.com/example")
         with pytest.raises(SystemExit) as exc:
             validate_config(_args(known_env=True, strict=True))
-        assert exc.value.code == 0
-        assert "HC_METADATA_SNAPSHOT" not in capsys.readouterr().err
+        assert exc.value.code == 1
+        assert "HC_METADATA_SNAPSHOT" in capsys.readouterr().err
 
     def test_known_env_warns_on_metadata_typo(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        # The METADATA_ prefix is still scanned during the DATASET_DIR
-        # deprecation window (gpt-5.5 review): a same-prefix typo of the
-        # (now-deprecated) METADATA_DIR alias must still be flagged.
+        # The METADATA_ prefix stays scanned after the R9 alias removal so a
+        # same-prefix typo (or a stale METADATA_DIR) is flagged for cleanup
+        # rather than silently ignored.
         monkeypatch.setenv("METADATA_DRI", "/tmp/kayak_data")
         with pytest.raises(SystemExit) as exc:
             validate_config(_args(known_env=True))

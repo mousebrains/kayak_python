@@ -19,8 +19,8 @@ the content checks run. The file/column/type/id-bearing contract comes from
 projection**: every contract CSV, both JSON sidecars, and ``retired_ids.yaml``
 must be present (header-only / ``{}`` when empty), so a missing file is reported
 as corruption rather than silently accepted as "not applicable". The command
-takes a REQUIRED explicit directory and never consults
-``METADATA_DIR``/``DATASET_DIR``, so S6's root rename causes no validator churn.
+takes a REQUIRED explicit directory and never consults ``DATASET_DIR`` or any
+deployment setting, so S6's root rename causes no validator churn.
 
 Checks are crash-safe: a malformed header, a non-integer id, a wrong-typed
 value, or unparseable JSON yields a focused error and skips the dependent
@@ -92,8 +92,8 @@ def addArgs(subparsers: argparse._SubParsersAction) -> None:
         help="Validate a dataset directory (CSV/JSON integrity + check-reaches)",
     )
     # Required explicit directory. The validator deliberately does NOT consult
-    # METADATA_DIR / DATASET_DIR or any deployment setting, so S6's root rename
-    # creates no validator-path churn (plan S4a).
+    # DATASET_DIR or any deployment setting, so S6's root rename creates no
+    # validator-path churn (plan S4a).
     p.add_argument("dir", help="Dataset directory to validate")
     p.set_defaults(func=_main)
 

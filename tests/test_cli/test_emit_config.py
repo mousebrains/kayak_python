@@ -31,7 +31,6 @@ def _args(out: Path, *, dry_run: bool = False) -> Namespace:
 @pytest.fixture(autouse=True)
 def _clean_dataset_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DATASET_DIR", str(tmp_path / "dataset"))
-    monkeypatch.delenv("METADATA_DIR", raising=False)
     monkeypatch.delenv("SITE_URL", raising=False)
 
 
