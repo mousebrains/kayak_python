@@ -45,6 +45,21 @@ class TestBuildConfigData:
         assert data["fetch_timeout"] == 111
         assert data["fetch_user_agent"] == "kayak/1.0"
 
+    def test_includes_allowed_origins_from_host_config(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The status.php CORS allow-list is bridged from HostConfig into the JSON
+        # PHP reads. With no host.yaml, it's the engine default list.
+        from kayak import host
+
+        monkeypatch.delenv("KAYAK_HOST_CONFIG", raising=False)
+        host.get_host_config.cache_clear()
+        try:
+            data = build_config_data(KayakConfig())
+            assert data["allowed_origins"] == list(host.HostConfig().allowed_origins)
+        finally:
+            host.get_host_config.cache_clear()
+
     def test_includes_site_identity_defaults(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

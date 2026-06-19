@@ -49,6 +49,12 @@ _USERNAME_RE = re.compile(r"\A[a-z_][a-z0-9_-]*\Z")
 # PHP-FPM pool version as it appears in the /etc/php/<v>/fpm path (major.minor).
 # [0-9] not \d — \d also matches Unicode digits, which the path can't contain.
 _PHP_VERSION_RE = re.compile(r"\A[0-9]+\.[0-9]+\Z")
+# A CORS Origin: bare ``scheme://host[:port]`` only — no path/query/fragment,
+# no whitespace, no wildcard. status.php echoes a matching Origin into an
+# Access-Control-Allow-Origin header, so anything looser is a header-injection /
+# over-permissive footgun. \A…\Z (not ^…$) so a trailing newline can't smuggle a
+# second value past the check (same rule as the hostname/path validators above).
+_ORIGIN_RE = re.compile(r"\Ahttps?://[A-Za-z0-9.-]+(?::[0-9]+)?\Z")
 # Characters a path field must not contain, because the renderers drop these
 # paths verbatim into structured config contexts:
 #   - whitespace / control: a space splits a `ReadWritePaths=` entry, a newline
@@ -78,6 +84,18 @@ class HostConfig(BaseModel):
     status_output: str = "/home/pat/var/status.html"
     docroot: str = "/var/cache/kayak/docroot"
     cert_host: str = "levels.wkcc.org"
+    # Origins (``scheme://host[:port]``) allowed to read ``/status.json``
+    # cross-origin — the CORS allow-list ``status.php`` echoes. Deployment-specific
+    # (which domains front this install), so it lives here, not in the engine;
+    # ``levels emit-config`` bridges it into ``runtime-config.json`` for the PHP
+    # layer. Keep-current defaults are the WKCC origins (the hosted status page,
+    # the canonical site, the historical alias); a per-host override goes in
+    # host.yaml. A ``tuple`` (not list) so the frozen model stays hashable.
+    allowed_origins: tuple[str, ...] = (
+        "https://status.mousebrains.com",
+        "https://levels.wkcc.org",
+        "https://levels.mousebrains.com",
+    )
 
     # --- paired-release cutover / renderers (4C) ---
     # The service account + its home, the paired-release root, and the PHP-FPM
@@ -174,6 +192,17 @@ class HostConfig(BaseModel):
     def _hostname(cls, v: str) -> str:
         if not _HOSTNAME_RE.match(v):
             raise ValueError(f"must be a bare DNS hostname (got {v!r})")
+        return v
+
+    @field_validator("allowed_origins")
+    @classmethod
+    def _origins(cls, v: tuple[str, ...]) -> tuple[str, ...]:
+        for origin in v:
+            if not _ORIGIN_RE.match(origin):
+                raise ValueError(
+                    "allowed_origins entries must be a bare scheme://host[:port] "
+                    f"origin — no path, query, trailing slash, or wildcard (got {origin!r})"
+                )
         return v
 
     @field_validator("offsite_remote")

@@ -142,6 +142,42 @@ class TestLoadHostConfig:
         with pytest.raises(ValueError, match=r"major\.minor"):
             host.HostConfig(fpm_pool_php="8.٤")  # Arabic-Indic 4
 
+    def test_allowed_origins_default(self) -> None:
+        assert host.HostConfig().allowed_origins == (
+            "https://status.mousebrains.com",
+            "https://levels.wkcc.org",
+            "https://levels.mousebrains.com",
+        )
+
+    def test_allowed_origins_override(self, tmp_path: Path) -> None:
+        f = tmp_path / "host.yaml"
+        f.write_text(
+            "allowed_origins:\n  - https://levels.example.org\n  - http://localhost:8000\n"
+        )
+        c = host.load_host_config(f)
+        # A YAML list coerces to the field's tuple (frozen model stays hashable).
+        assert c.allowed_origins == ("https://levels.example.org", "http://localhost:8000")
+
+    def test_allowed_origins_reject_path(self) -> None:
+        with pytest.raises(ValueError, match="scheme://host"):
+            host.HostConfig(allowed_origins=("https://levels.example.org/status",))
+
+    def test_allowed_origins_reject_wildcard(self) -> None:
+        # `*` would be over-permissive; status.php echoes a matched origin, so an
+        # allow-list entry must be an exact origin, never a wildcard.
+        with pytest.raises(ValueError, match="scheme://host"):
+            host.HostConfig(allowed_origins=("*",))
+
+    def test_allowed_origins_reject_no_scheme(self) -> None:
+        with pytest.raises(ValueError, match="scheme://host"):
+            host.HostConfig(allowed_origins=("levels.example.org",))
+
+    def test_allowed_origins_reject_trailing_newline(self) -> None:
+        # `\Z` not `$`: a trailing newline must not smuggle a second
+        # Access-Control-Allow-Origin value past the check.
+        with pytest.raises(ValueError, match="scheme://host"):
+            host.HostConfig(allowed_origins=("https://levels.example.org\n",))
+
     def test_path_with_whitespace_rejected(self) -> None:
         # Path fields are f-string-interpolated into systemd directives; a space
         # splits a ReadWritePaths= entry, a newline injects a directive.

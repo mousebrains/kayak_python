@@ -30,14 +30,12 @@ require_once __DIR__ . '/includes/db.php';
 header('Content-Type: application/json');
 header('Cache-Control: no-cache, max-age=10');
 
-// CORS allow-list (status.mousebrains.com is the hosted status page;
-// levels.wkcc.org is the canonical site and hosts the internal
-// dashboard; levels.mousebrains.com is the historical alias).
-$allowed_origins = [
-    'https://status.mousebrains.com',
-    'https://levels.wkcc.org',
-    'https://levels.mousebrains.com',
-];
+// CORS allow-list — which origins may read /status.json cross-origin. Sourced
+// from host config (HostConfig.allowed_origins, bridged into runtime-config.json
+// by `levels emit-config`) rather than hardcoded, so a new deployment sets its
+// own domains in host.yaml. An empty list means no cross-origin reads are allowed
+// (same-origin requests, which send no Origin header, are unaffected).
+$allowed_origins = Config::list('allowed_origins');
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 if (in_array($origin, $allowed_origins, true)) {
     header('Access-Control-Allow-Origin: ' . $origin);
