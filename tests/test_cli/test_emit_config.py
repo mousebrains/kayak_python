@@ -46,13 +46,15 @@ class TestBuildConfigData:
         assert data["fetch_user_agent"] == "kayak/1.0"
 
     def test_includes_allowed_origins_from_host_config(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # The status.php CORS allow-list is bridged from HostConfig into the JSON
-        # PHP reads. With no host.yaml, it's the engine default list.
+        # PHP reads. With no host.yaml, it's the engine default list. Pin
+        # KAYAK_HOST_CONFIG at an ABSENT path (not just delenv, which falls through
+        # to the runner's real /etc/kayak/host.yaml) so this is hermetic.
         from kayak import host
 
-        monkeypatch.delenv("KAYAK_HOST_CONFIG", raising=False)
+        monkeypatch.setenv("KAYAK_HOST_CONFIG", str(tmp_path / "absent-host.yaml"))
         host.get_host_config.cache_clear()
         try:
             data = build_config_data(KayakConfig())

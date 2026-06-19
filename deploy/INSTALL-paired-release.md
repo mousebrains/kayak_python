@@ -100,11 +100,15 @@ sudo -e /etc/kayak/secrets.env           # set TURNSTILE_SITE_KEY / TURNSTILE_SE
 # host.yaml — the non-secret host shape the renderers read (step 5). Defaults are
 # the current WKCC values; the cutover FLIPS the generated-cache paths off the
 # now-read-only release. A non-WKCC host also sets service_user/service_home/
-# cert_host/server_names here.
+# cert_host/server_names AND allowed_origins (the status.php CORS list) here.
 cat <<EOF | sudo tee /etc/kayak/host.yaml
 docroot: /var/cache/kayak/docroot
 map_layers_dir: /var/cache/kayak/map-layers
 gauge_metadata_cache: /var/cache/kayak/gauge-metadata/gauges.db
+# allowed_origins (status.php CORS allow-list for /status.json) defaults to the
+# WKCC origins. A non-WKCC host MUST set its own — otherwise it allows the WKCC
+# domains and denies its own status page / site, e.g.:
+#   allowed_origins: [https://status.example.org, https://levels.example.org]
 EOF
 
 # The root config wrapper (installs runtime-config.json with the secret merge)
