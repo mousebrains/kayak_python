@@ -71,5 +71,8 @@ class StatusIntegrationTest extends IntegrationTestCase
         $this->assertSame(200, $resp['status']);
         // No Access-Control-Allow-Origin header for an origin not in the list.
         $this->assertArrayNotHasKey('access-control-allow-origin', $resp['headers']);
+        // But Vary: Origin is still set (even on deny) so a shared cache can't
+        // serve this no-CORS response to a later allowed origin.
+        $this->assertStringContainsString('Origin', $resp['headers']['vary'] ?? '');
     }
 }

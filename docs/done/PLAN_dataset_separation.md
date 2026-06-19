@@ -22,8 +22,9 @@ or any WKCC-specific file.
 > R9 — removing the `METADATA_DIR` alias, the `--no-seed` no-op, and the
 > `HC_METADATA_SNAPSHOT` allowlist entry) is the change that carries this archival.
 > Acceptance criteria 1–12 are recorded (see `PLAN_b5_init_dataset.md` §D8). The
-> only open items are the **non-blocking loose ends** below (the `status.php` CORS
-> allow-list), tracked separately. Archived to `docs/done/` on completion.
+> last non-blocking loose end (the `status.php` CORS allow-list) was since
+> resolved — it reads `HostConfig.allowed_origins` (see below). Archived to
+> `docs/done/` on completion.
 
 ## Decisions
 
@@ -1184,11 +1185,11 @@ stale `plan-dataset-separation` branch can then be retired.
 
 ### Minor loose ends (non-blocking)
 
-- **`status.php` CORS allow-list** still hardcodes the WKCC/mousebrains
-  origins (`web/php/status.php:37–39`). R2 deferred this to S7's typed
-  host config, but `host.py` shipped no allowed-origins knob, so it was
-  not absorbed — small follow-up (add an `allowed_origins` host-config
-  field).
+- **`status.php` CORS allow-list — RESOLVED.** It no longer hardcodes the
+  WKCC/mousebrains origins: `HostConfig.allowed_origins` is the knob (R2's
+  deferral to S7's typed host config), bridged into `runtime-config.json` by
+  `levels emit-config`, and `status.php` reads `Config::list('allowed_origins')`.
+  The wheel-smoke neutrality check no longer excludes `status.php`.
 - **`analyze-logs` release-time default — FIXED (#205, merged 2026-06-18).**
   It pointed at the cutover-orphaned `/home/pat/public_html/index.html` (frozen
   mtime → a silently stale analysis window). Now infers from the

@@ -60,6 +60,24 @@ class TestBuildConfigData:
         finally:
             host.get_host_config.cache_clear()
 
+    def test_malformed_host_config_is_clean_runtime_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A bad host.yaml must surface as RuntimeError (which emit_config maps to a
+        # clean exit-1), not a raw ValueError traceback — the host-config load is
+        # inside build_config_data's try/except.
+        from kayak import host
+
+        bad = tmp_path / "host.yaml"
+        bad.write_text("allowed_origins:\n  - not-a-valid-origin\n")
+        monkeypatch.setenv("KAYAK_HOST_CONFIG", str(bad))
+        host.get_host_config.cache_clear()
+        try:
+            with pytest.raises(RuntimeError):
+                build_config_data(KayakConfig())
+        finally:
+            host.get_host_config.cache_clear()
+
     def test_includes_site_identity_defaults(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

@@ -37,9 +37,11 @@ header('Cache-Control: no-cache, max-age=10');
 // (same-origin requests, which send no Origin header, are unaffected).
 $allowed_origins = Config::list('allowed_origins');
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+// Always Vary on Origin (even when denying) so a shared cache can't key a
+// no-CORS response by URL alone and serve it to a later allowed origin.
+header('Vary: Origin');
 if (in_array($origin, $allowed_origins, true)) {
     header('Access-Control-Allow-Origin: ' . $origin);
-    header('Vary: Origin');
 }
 
 // Mirrors src/kayak/web/build/_shared.py:20 (DATA_STALE_THRESHOLD).

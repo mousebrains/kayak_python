@@ -120,6 +120,11 @@ abstract class IntegrationTestCase extends TestCase
             'SITE_URL' => 'http://127.0.0.1',
             'TURNSTILE_SITE_KEY' => 'TEST_SITE_KEY',
             'TURNSTILE_SECRET' => 'TEST_SECRET',
+            // Point host config at a path that doesn't exist so emit-config uses
+            // the engine HostConfig defaults (e.g. allowed_origins) regardless of
+            // whatever /etc/kayak/host.yaml the runner happens to have — keeps the
+            // emitted runtime-config.json deterministic.
+            'KAYAK_HOST_CONFIG' => sys_get_temp_dir() . '/kayak-test-absent-host-config.yaml',
         ];
         $emit_cmd = escapeshellarg($venvLevels) . ' emit-config --out=' . escapeshellarg($configJson) . ' 2>&1';
         $emit_proc = proc_open($emit_cmd, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $emit_pipes, null, $emit_env);
