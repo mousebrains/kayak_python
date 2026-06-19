@@ -9,11 +9,13 @@ be born invalid.
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
 
 import pytest
 import yaml
 
+from kayak.cli import generate_sources as gs
 from kayak.cli import init_dataset
 from kayak.cli.validate_dataset import validate_dataset
 from kayak.dataset import contract
@@ -230,3 +232,49 @@ def test_ci_rejects_malformed_params(tmp_path: Path) -> None:
         _run(dest, ci=True, engine_repo="not a repo", engine_secret="1bad", site_url="ftp://x") == 2
     )
     assert not dest.exists()  # rejected before anything was created
+
+
+def test_scaffold_passes_generate_sources_check(tmp_path: Path) -> None:
+    # The emitted --ci workflow runs `generate-sources --check`; a fresh scaffold
+    # must be byte-identical to its own generator (the 3 generator-owned CSVs are
+    # written THROUGH generate-sources, so the unused optional columns it drops
+    # don't cause drift).
+    dest = tmp_path / "ds"
+    assert _run(dest) == 0
+    rc = gs._main(argparse.Namespace(dir=str(dest), check=True, from_csv=False))
+    assert rc == 0
+
+
+def test_ci_pin_read_handles_scaffold_quoting(tmp_path: Path) -> None:
+    # The scaffold writes a single-quoted engine_test_ref (PyYAML safe_dump); the
+    # emitted workflow's pin-read must extract it (and any real SHA, quoted either
+    # way). Regression for the double-quote-only sed.
+    dest = tmp_path / "ds"
+    assert _run(dest, ci=True) == 0
+    wf = (dest / ".github" / "workflows" / "validate.yml").read_text()
+    assert "[^0-9a-f]*([0-9a-f]{40})" in wf  # quote-agnostic extractor present
+    # That extractor actually reads the scaffold's own (single-quoted) ref:
+    line = next(
+        ln
+        for ln in (dest / "dataset.yaml").read_text().splitlines()
+        if ln.startswith("engine_test_ref:")
+    )
+    m = re.match(r"engine_test_ref:[^0-9a-f]*([0-9a-f]{40})", line)
+    assert m is not None and m.group(1) == "0" * 40
+
+
+def test_ci_smoke_allows_scaffold(tmp_path: Path) -> None:
+    # The emitted smoke must pass while the dataset is still status: scaffold.
+    dest = tmp_path / "ds"
+    assert _run(dest, ci=True) == 0
+    wf = (dest / ".github" / "workflows" / "validate.yml").read_text()
+    assert "sync-metadata --allow-scaffold" in wf
+
+
+def test_example_warns_on_ignored_identity_flags(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    dest = tmp_path / "ds"
+    assert _run(dest, example=True, name="Ignored", dataset_id="ignored") == 0
+    err = capsys.readouterr().err
+    assert "ignored with --example" in err

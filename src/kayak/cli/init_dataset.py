@@ -180,8 +180,7 @@ def _scaffold(dest: Path, *, name: str, dataset_id: str, license_id: str) -> Non
         "{}\n",
     )
     # The source registry: generate-sources (re)writes source/fetch_url/
-    # gauge_source.csv from this. A fresh scaffold has none yet; the three CSVs
-    # above are already written header-only, so validation passes without it.
+    # gauge_source.csv from this. A fresh scaffold has no sources yet.
     _write(
         dest / "sources.yaml",
         "# Authoritative source registry (dataset-separation S1). Edit this, then run\n"
@@ -190,6 +189,14 @@ def _scaffold(dest: Path, *, name: str, dataset_id: str, license_id: str) -> Non
         "fetch_urls: []\n"
         "sources: []\n",
     )
+    # Rewrite the three generator-owned CSVs THROUGH the generator so the scaffold
+    # is byte-identical to its own `generate-sources` output (the emitted --ci
+    # workflow runs `generate-sources --check`). The generic header-only path above
+    # keeps optional columns the generator drops for an empty registry (e.g.
+    # fetch_url.unknown_station_policy), which would otherwise fail that gate.
+    from kayak.cli import generate_sources
+
+    generate_sources.generate(dest)
     # Publishable-required prose, as clean-markdown placeholders, so flipping
     # status to publishable later just works.
     for page in _SITE_PAGES:
@@ -213,10 +220,12 @@ def _scaffold(dest: Path, *, name: str, dataset_id: str, license_id: str) -> Non
         "```\n"
         "levels validate-dataset .          # checks every contract invariant\n"
         "levels generate-sources .          # (re)writes source/fetch_url/gauge_source.csv\n"
-        "DATASET_DIR=. levels init-db && DATASET_DIR=. levels sync-metadata\n"
+        "# smoke the load on a throwaway DB — a scaffold needs --allow-scaffold:\n"
+        "DATASET_DIR=. levels init-db && DATASET_DIR=. levels sync-metadata --allow-scaffold\n"
         "```\n\n"
         "Flip `status: scaffold` to `publishable` once `site/{privacy,disclaimer,contact}.md`\n"
-        "carry real content. See the engine's `docs/new-region-runbook.md`.\n",
+        "carry real content (then production sync/build no longer needs `--allow-scaffold`).\n"
+        "See the engine's `docs/new-region-runbook.md`.\n",
     )
 
 
@@ -262,12 +271,12 @@ jobs:
         run: |
           BASE_SHA="${{ github.event.pull_request.base.sha || github.sha }}"
           REF=$(git show "$BASE_SHA:dataset.yaml" \\
-            | sed -nE 's/^engine_test_ref:[[:space:]]*"?([0-9a-f]{40})"?.*/\\1/p')
+            | sed -nE 's/^engine_test_ref:[^0-9a-f]*([0-9a-f]{40}).*/\\1/p')
           if [ -z "$REF" ]; then
             echo "::error::could not read a 40-hex engine_test_ref from $BASE_SHA:dataset.yaml"
             exit 1
           fi
-          CANDIDATE=$(sed -nE 's/^engine_test_ref:[[:space:]]*"?([0-9a-f]{40})"?.*/\\1/p' dataset.yaml)
+          CANDIDATE=$(sed -nE 's/^engine_test_ref:[^0-9a-f]*([0-9a-f]{40}).*/\\1/p' dataset.yaml)
           if [ -z "$CANDIDATE" ]; then
             echo "::error::could not read a 40-hex engine_test_ref from the PR dataset.yaml"
             exit 1
@@ -386,10 +395,13 @@ jobs:
           OUTPUT_DIR: ${{ runner.temp }}/out
           SITE_URL: @@SITE_URL@@
         run: |
+          # --allow-scaffold so the smoke passes while the dataset is still
+          # status: scaffold (a throwaway CI DB — the documented escape hatch);
+          # it is a no-op once the dataset is publishable.
           L=engine/.venv/bin/levels
           "$L" init-db
-          "$L" sync-metadata
-          "$L" sync-metadata
+          "$L" sync-metadata --allow-scaffold
+          "$L" sync-metadata --allow-scaffold
           "$L" build
 """
 
@@ -493,6 +505,13 @@ def _main(args: argparse.Namespace) -> int:
     dest = Path(args.dir)
     name = args.name or dest.resolve().name
     dataset_id = args.dataset_id or _slug(dest.resolve().name)
+
+    if args.example and (args.name is not None or args.dataset_id is not None):
+        print(
+            "init-dataset: note: --name/--id are ignored with --example "
+            "(the example dataset is copied verbatim)",
+            file=sys.stderr,
+        )
 
     rc = _preflight(args, dest, name, dataset_id)
     if rc is not None:

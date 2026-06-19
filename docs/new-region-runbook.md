@@ -38,6 +38,11 @@ test dataset — two states, three gauges, three traced reaches), copy it verbat
 levels init-dataset /tmp/example --example
 ```
 
+The example ships `status: publishable` with an **all-zero `engine_test_ref`
+placeholder** (it exists for the engine's own tests; the pin is format-checked
+only). If you build on it, set a real 40-hex engine commit in `dataset.yaml` (and
+replace the fixture's editorial content) before treating it as your own dataset.
+
 Put the dataset under version control in its **own repository** (the WKCC dataset
 is `kayak_data`); humans change metadata by PR to that repo, never by writing the
 live DB. Contract files (`dataset.yaml`, `retired_ids.yaml`, the id-counter rules)
