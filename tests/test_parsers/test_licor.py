@@ -76,6 +76,13 @@ def test_channel_map_missing_param_omitted():
     assert channel_map(url) == {_FLOW_UUID: DataType.flow}
 
 
+def test_channel_map_duplicate_uuid_excluded_not_mistyped():
+    """A UUID claimed by two params is dropped, not silently assigned one type."""
+    url = f"https://www.licor.cloud/api/v2/timeseriesdata?flow={_FLOW_UUID}&gauge={_FLOW_UUID}&temperature={_TEMP_UUID}"
+    # _FLOW_UUID is ambiguous (flow vs gauge) → omitted entirely; temp survives.
+    assert channel_map(url) == {_TEMP_UUID: DataType.temperature}
+
+
 # ---------------------------------------------------------------------------
 # parse_records — pure contract
 # ---------------------------------------------------------------------------
@@ -161,6 +168,12 @@ def test_null_and_malformed_values_skipped_without_poisoning():
 
 def test_nonfinite_value_skipped():
     payload = _payload([_record(_FLOW_UUID, "Water Flow", "cfs", [[_TS1_MS, float("nan")]])])
+    assert _new_parser().parse_records(payload, now=_PINNED_NOW) == []
+
+
+def test_bool_value_skipped():
+    """JSON booleans must not store as 1.0/0.0 (float(True) is finite)."""
+    payload = _payload([_record(_FLOW_UUID, "Water Flow", "cfs", [[_TS1_MS, True]])])
     assert _new_parser().parse_records(payload, now=_PINNED_NOW) == []
 
 

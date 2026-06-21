@@ -55,10 +55,21 @@ def channel_map(url: str) -> dict[str, DataType]:
     """
     params = parse_qs(urlparse(url).query)
     mapping: dict[str, DataType] = {}
+    ambiguous: set[str] = set()
     for param, dtype in CHANNEL_PARAMS.items():
         values = params.get(param)
-        if values:
-            mapping[values[0]] = dtype
+        if not values:
+            continue
+        uuid = values[0]
+        # A UUID claimed by >1 param is an ambiguous config: refuse to map it
+        # (drop its records rather than silently mis-type them — water level into
+        # the flow series). `build_request` rejects such a config before any fetch,
+        # so this only guards a parser called on a hand-crafted URL.
+        if uuid in mapping or uuid in ambiguous:
+            ambiguous.add(uuid)
+            mapping.pop(uuid, None)
+            continue
+        mapping[uuid] = dtype
     return mapping
 
 
@@ -76,6 +87,10 @@ def _valid_points(valid: object, now: datetime) -> list[tuple[datetime, float]]:
         if not (isinstance(pair, (list, tuple)) and len(pair) == 2):
             continue
         ts_ms, raw = pair
+        # Reject JSON booleans explicitly: float(True) is 1.0 and passes the
+        # finite check, which would store a bogus 0.0/1.0 reading.
+        if isinstance(raw, bool):
+            continue
         try:
             when = datetime.fromtimestamp(float(ts_ms) / 1000.0, tz=UTC)
             val = float(raw)

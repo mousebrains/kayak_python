@@ -47,9 +47,11 @@ _CHANNEL_LIMIT = 10000  # LI-COR max points per channel per request
 
 @dataclass
 class _LicorWork:
-    """One LI-COR fetch unit prepared before network I/O."""
+    """One LI-COR fetch unit prepared (config validated) before network I/O."""
 
     url: str
+    endpoint: str
+    body: dict
     source_map: dict[str, int] = field(default_factory=dict)
     source_id: int | None = None
     fetch_url_id: int | None = None
@@ -81,8 +83,8 @@ def _parse_window(params: dict[str, list[str]]) -> tuple[int, str, int, str]:
         raise ValueError(f"LI-COR url has non-integer last/interval: {params}") from exc
     if not 1 <= last <= 7:
         raise ValueError(f"LI-COR url 'last' must be 1-7: {last}")
-    if interval < 1:
-        raise ValueError(f"LI-COR url 'interval' must be >= 1: {interval}")
+    if not 1 <= interval <= 1440:
+        raise ValueError(f"LI-COR url 'interval' must be 1-1440: {interval}")
     unit = _one(params, "unit") or "days"
     if unit not in ("days", "hours"):
         raise ValueError(f"LI-COR url 'unit' must be days/hours: {unit!r}")
@@ -95,10 +97,18 @@ def _parse_window(params: dict[str, list[str]]) -> tuple[int, str, int, str]:
 def _build_channels(params: dict[str, list[str]], interval: int, interval_unit: str) -> list[dict]:
     """One POST channel spec per configured channel UUID. Raises ValueError if any is missing."""
     channels: list[dict] = []
+    seen: dict[str, str] = {}
     for param, dtype in CHANNEL_PARAMS.items():
         uuid = _one(params, param)
         if not uuid:
             raise ValueError(f"LI-COR url missing '{param}' channel UUID")
+        # Reject a UUID reused across params — it would map two data types to one
+        # channel and silently mis-type one of them. Fail closed before any fetch.
+        if uuid in seen:
+            raise ValueError(
+                f"LI-COR url reuses channel UUID {uuid!r} for '{seen[uuid]}' and '{param}'"
+            )
+        seen[uuid] = param
         channels.append(
             {
                 "channelUUID": uuid,
@@ -148,8 +158,16 @@ def _post(endpoint: str, body: dict, timeout: int) -> str | None:
     """POST the timeseries request, retrying on 429. Returns text or None."""
     for attempt in range(_MAX_RETRIES):
         try:
+            # allow_redirects=False: a 3xx to an internal host (169.254.169.254,
+            # loopback, RFC1918) would otherwise be followed automatically,
+            # bypassing the host-pin + _validate_url SSRF checks, which only
+            # validate the initial endpoint. Mirrors http_client.py's GET path.
             resp = requests.post(
-                endpoint, json=body, headers={"Accept": "application/json"}, timeout=timeout
+                endpoint,
+                json=body,
+                headers={"Accept": "application/json"},
+                timeout=timeout,
+                allow_redirects=False,
             )
         except requests.RequestException as exc:
             logger.error("LI-COR request failed for %s: %s", endpoint, exc)
@@ -160,8 +178,14 @@ def _post(endpoint: str, body: dict, timeout: int) -> str | None:
             logger.warning("LI-COR rate limited (429), waiting %ds", wait)
             time.sleep(wait)
             continue
-        if resp.status_code >= 400:
+        # >= 300, not >= 400: with redirects disabled a 3xx is a failure (and a
+        # possible SSRF attempt), not something to follow.
+        if resp.status_code >= 300:
             logger.error("HTTP %d from LI-COR %s", resp.status_code, endpoint)
+            return None
+        content_length = resp.headers.get("Content-Length")
+        if content_length and content_length.isdigit() and int(content_length) > _MAX_BODY_BYTES:
+            logger.error("LI-COR Content-Length %s exceeds cap for %s", content_length, endpoint)
             return None
         if len(resp.content) > _MAX_BODY_BYTES:
             logger.error("LI-COR response exceeded %d-byte cap for %s", _MAX_BODY_BYTES, endpoint)
@@ -172,42 +196,65 @@ def _post(endpoint: str, body: dict, timeout: int) -> str | None:
     return None
 
 
-def _prepare(session: Session) -> list[_LicorWork]:
-    """Build the work list: active fetch_url rows whose parser POSTs. Borrows session."""
+def _prepare(session: Session) -> tuple[list[_LicorWork], int]:
+    """Build + validate the work list. Borrows session.
+
+    Returns ``(work_items, config_error_count)``. Each POST-parser ``fetch_url``
+    is validated up front (``build_request`` + the single-source requirement);
+    a row that fails is logged at ERROR, skipped, and counted — a config error is
+    a *permanent* misconfiguration that must surface in the exit code (alert),
+    unlike a transient POST failure later. Config validation runs before any
+    network I/O.
+    """
     work: list[_LicorWork] = []
+    config_errors = 0
     for fu in get_active_fetch_urls(session):
         parser_cls = get_parser_class(fu.parser) if fu.parser else None
         if parser_cls is None or getattr(parser_cls, "transport", "GET") != "POST":
             continue
         sources = list(fu.sources)
+        if len(sources) != 1:
+            # A LI-COR dashboard is one physical station → exactly one source.
+            # >1 would leave source_id None and silently drop every obs; 0 is an
+            # orphan. Refuse loudly rather than mis-handle.
+            logger.error(
+                "LI-COR fetch_url %s must have exactly one source (has %d) — skipping",
+                fu.url,
+                len(sources),
+            )
+            config_errors += 1
+            continue
+        try:
+            endpoint, body = build_request(fu.url)
+        except ValueError as exc:
+            logger.error("Bad LI-COR config url, skipping (no fetch): %s", exc)
+            config_errors += 1
+            continue
         work.append(
             _LicorWork(
                 url=fu.url,
+                endpoint=endpoint,
+                body=body,
                 source_map={s.name: s.id for s in sources},
-                source_id=sources[0].id if len(sources) == 1 else None,
+                source_id=sources[0].id,
                 fetch_url_id=fu.id,
             )
         )
-    return work
+    return work, config_errors
 
 
-def _fetch_one(url: str) -> str | None:
-    """Build, validate, and POST one LI-COR request. Returns text or None.
+def _fetch_one(work: _LicorWork) -> str | None:
+    """Validate (SSRF) and POST one prepared request. Returns text or None.
 
-    A bad config URL or SSRF-blocked endpoint fails closed (logged, no network
-    call) so one misconfigured row never fetches the wrong host or crashes the run.
+    ``build_request`` already ran in ``_prepare`` (fail-closed config check); this
+    re-runs the ``_validate_url`` SSRF guard the GET client uses before the POST.
     """
     try:
-        endpoint, body = build_request(url)
-    except ValueError as exc:
-        logger.error("Bad LI-COR config url, skipping (no fetch): %s", exc)
-        return None
-    try:
-        _validate_url(endpoint)  # SSRF defense-in-depth (host is already pinned)
+        _validate_url(work.endpoint)  # SSRF defense-in-depth (host is already pinned)
     except ValueError as exc:
         logger.error("LI-COR endpoint failed SSRF validation: %s", exc)
         return None
-    return _post(endpoint, body, FETCH_TIMEOUT)
+    return _post(work.endpoint, work.body, FETCH_TIMEOUT)
 
 
 def _store(session: Session, work: _LicorWork, text: str, dry_run: bool) -> None:
@@ -253,9 +300,11 @@ def _store(session: Session, work: _LicorWork, text: str, dry_run: bool) -> None
 def fetch_licor(args: argparse.Namespace) -> int:
     """Fetch LI-COR timeseries data and store observations.
 
-    Soft pipeline step (a LI-COR outage logs + leaves the gauge stale but never
-    fails the run). Always returns 0; a transient endpoint failure is logged, not
-    alerted, matching the GET fetch path's handling of fetch errors.
+    Soft pipeline step: a LI-COR outage (transient POST failure) logs + leaves
+    the gauge stale but never fails the run (returns 0) — and, with no pipeline
+    step requiring it, never cascade-skips build. Returns 1 only on a *config*
+    error (a malformed dataset ``fetch_url`` or a non-single-source row), which is
+    permanent and must alert via the soft-step non-zero exit.
     """
     ensure_all_loaded()
     dry_run = getattr(args, "dry_run", False)
@@ -263,23 +312,24 @@ def fetch_licor(args: argparse.Namespace) -> int:
     if dry_run:
         print("Dry run mode — no data will be stored")
 
-    # --- Phase 1: prepare work items (short read-only session) ---
+    # --- Phase 1: prepare + validate work items (short read-only session) ---
     session = get_session()
     try:
-        work = _prepare(session)
+        work, config_errors = _prepare(session)
     finally:
         session.close()
 
+    exit_code = 1 if config_errors else 0
     print(f"Found {len(work)} LI-COR source(s) to fetch")
     if not work:
-        return 0
+        return exit_code
 
     # --- Phase 2: POST each request (no DB session held) ---
     content: dict[str, str | None] = {}
     for w in work:
         if show_name:
             print(f"Fetching {w.url}")
-        content[w.url] = _fetch_one(w.url)
+        content[w.url] = _fetch_one(w)
 
     # --- Phase 3: parse + store (short write session, commit-per-URL) ---
     session = get_session()
@@ -295,4 +345,4 @@ def fetch_licor(args: argparse.Namespace) -> int:
             print("Committed to database")
     finally:
         session.close()
-    return 0
+    return exit_code

@@ -198,6 +198,49 @@ def test_pipeline_soft_fail_fetch_still_builds_but_exits_nonzero(
 @patch("kayak.cli.pipeline.calculator.calculator")
 @patch("kayak.cli.pipeline._update_gauge_cache")
 @patch("kayak.cli.pipeline.calc_rating.calc_rating")
+@patch("kayak.cli.pipeline.fetch_licor.fetch_licor")
+@patch("kayak.cli.pipeline.fetch_usgs_ogc.fetch_usgs_ogc")
+@patch("kayak.cli.pipeline.fetch.fetch")
+def test_pipeline_licor_soft_fail_still_builds(
+    mock_fetch,
+    mock_ogc,
+    mock_licor,
+    mock_calc_rating,
+    mock_gauge_cache,
+    mock_calculator,
+    mock_build,
+    mock_engine,
+    mock_orphan_check,
+    mock_check_reaches,
+):
+    """fetch-licor soft-failing (config error → rc=1) alerts via non-zero exit but
+    must NOT cascade-skip build — nothing lists it in `requires`, so a LI-COR
+    problem never freezes the rest of the site.
+    """
+    conn = MagicMock()
+    mock_engine.return_value.connect.return_value.__enter__ = MagicMock(return_value=conn)
+    mock_engine.return_value.connect.return_value.__exit__ = MagicMock(return_value=False)
+
+    mock_licor.return_value = 1  # soft fail (config error)
+
+    args = _make_args()
+    with pytest.raises(SystemExit) as exc_info:
+        pipeline(args)
+    assert exc_info.value.code == 1
+
+    # The invariant: licor soft-fail did not block the rest of the pipeline.
+    mock_licor.assert_called_once()
+    mock_calc_rating.assert_called_once()
+    mock_build.assert_called_once()
+
+
+@patch("kayak.cli.pipeline._check_reaches")
+@patch("kayak.cli.pipeline._orphan_check")
+@patch("kayak.cli.pipeline.get_engine")
+@patch("kayak.cli.pipeline.build.build")
+@patch("kayak.cli.pipeline.calculator.calculator")
+@patch("kayak.cli.pipeline._update_gauge_cache")
+@patch("kayak.cli.pipeline.calc_rating.calc_rating")
 @patch("kayak.cli.pipeline.fetch_usgs_ogc.fetch_usgs_ogc")
 @patch("kayak.cli.pipeline.fetch.fetch")
 def test_pipeline_continue_on_error_suppresses_exit(
