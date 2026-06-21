@@ -18,6 +18,7 @@ from kayak.cli import (
     emit_config,
     export_editor,
     fetch,
+    fetch_licor,
     fetch_osmb,
     fetch_usgs_ogc,
     generate_sources,
@@ -57,6 +58,7 @@ def main() -> None:
     init_dataset.addArgs(subparsers)
     migrate.addArgs(subparsers)
     fetch.addArgs(subparsers)
+    fetch_licor.addArgs(subparsers)
     fetch_osmb.addArgs(subparsers)
     fetch_usgs_ogc.addArgs(subparsers)
     calc_rating.addArgs(subparsers)

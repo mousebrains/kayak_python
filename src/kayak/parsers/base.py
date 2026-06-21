@@ -57,6 +57,11 @@ class BaseParser(ABC):
     """
 
     name: str = "base"  # Override in subclass
+    # Which fetch driver pulls this parser's URLs. "GET" parsers ride the default
+    # async GET path in ``levels fetch``. A non-GET transport (e.g. "POST") is
+    # skipped by ``levels fetch`` and handled by a dedicated step (the shared
+    # async client is GET-only) — see ``levels fetch-licor``.
+    transport: str = "GET"
 
     def __init__(
         self,

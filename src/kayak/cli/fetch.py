@@ -247,6 +247,21 @@ def _prepare_work_items(
         url = args.url_prefix + fu.url
         parser_name = args.parser_type or fu.parser
 
+        # Non-GET parsers (e.g. licor, transport="POST") ride a dedicated step,
+        # not the shared async GET client — skip them here so `levels fetch`
+        # doesn't GET a POST-only endpoint every run. An unknown parser_name
+        # (parser_cls is None) is left to the existing error path below.
+        parser_cls = get_parser_class(parser_name) if parser_name else None
+        transport = getattr(parser_cls, "transport", "GET")
+        if parser_cls is not None and transport != "GET":
+            logger.debug(
+                "Skipping %s (parser %r transport=%s, handled by its own step)",
+                fu.url,
+                parser_name,
+                transport,
+            )
+            continue
+
         if args.show_name:
             print(f"Processing {url} parser={parser_name}")
         else:

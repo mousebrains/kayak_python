@@ -81,7 +81,7 @@ pip install -e ".[dev]"              # Install in editable mode with dev deps (p
 levels --help                        # CLI entry point (registered in pyproject.toml)
 levels init-db                       # Create tables and stamp migrations (schema only)
 levels migrate                       # Apply any pending src/kayak/data/db/migrations/*.sql files
-levels pipeline                      # fetch → fetch-usgs-ogc → calc-rating → update-gauge-cache → calculator → build → orphan-check → check-reaches
+levels pipeline                      # fetch → fetch-usgs-ogc → fetch-licor → calc-rating → update-gauge-cache → calculator → build → orphan-check → check-reaches
 levels build                         # Generate static HTML/CSV/text to $OUTPUT_DIR (required)
 
 # Less-common subcommands (see `levels <cmd> --help` for details)
@@ -180,6 +180,7 @@ Runs these steps in order:
 
 1. **fetch** — reads the active `fetch_url` rows from the DB (synced from the dataset CSVs by `levels sync-metadata`; no longer the engine `sources.yaml` — S1), fetches URLs, dispatches to registered parsers, stores `Observation` rows. A station a feed emits with no `source` row is dropped (known siblings still saved) and flagged per the URL's `unknown_station_policy` (default `reject` → non-zero fetch exit)
 2. **fetch-usgs-ogc** — fetches USGS data via the OGC API for gauges linked to a USGS source
+2a. **fetch-licor** — POSTs the LI-COR public-dashboard timeseries API for `fetch_url` rows whose parser declares a POST transport (`licor`), storing flow/gauge/temperature; soft step (a LI-COR outage logs + leaves the gauge stale, never blocks the run). The default GET `fetch` skips these rows.
 3. **calc-rating** — interpolates missing flow from gage height (or vice versa) using `Rating`/`RatingData` tables
 4. **update-gauge-cache** — recomputes gauge-level latest observation values
 5. **calculator** — evaluates `CalcExpression` formulas referencing `LatestObservation` values

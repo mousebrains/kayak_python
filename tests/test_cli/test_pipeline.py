@@ -49,6 +49,7 @@ def test_pipeline_step_order():
     assert names == [
         "fetch",
         "fetch-usgs-ogc",
+        "fetch-licor",
         "calc-rating",
         "update-gauge-cache",
         "calculator",
@@ -63,6 +64,7 @@ def test_pipeline_skip_fetch_drops_fetch_step():
     names = [step.name for step in _build_steps(skip_fetch=True)]
     assert names == [
         "fetch-usgs-ogc",
+        "fetch-licor",
         "calc-rating",
         "update-gauge-cache",
         "calculator",
@@ -84,6 +86,9 @@ def test_pipeline_dag_dependencies():
     assert deps == {
         "fetch": (),
         "fetch-usgs-ogc": (),
+        # fetch-licor has no requires AND nothing requires it: a LI-COR outage
+        # neither blocks nor is blocked by the rest of the pipeline (soft step).
+        "fetch-licor": (),
         "calc-rating": ("fetch", "fetch-usgs-ogc"),
         "update-gauge-cache": ("calc-rating",),
         "calculator": ("update-gauge-cache",),
