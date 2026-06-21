@@ -49,6 +49,7 @@ def test_pipeline_step_order():
     assert names == [
         "fetch",
         "fetch-usgs-ogc",
+        "fetch-licor",
         "calc-rating",
         "update-gauge-cache",
         "calculator",
@@ -63,6 +64,7 @@ def test_pipeline_skip_fetch_drops_fetch_step():
     names = [step.name for step in _build_steps(skip_fetch=True)]
     assert names == [
         "fetch-usgs-ogc",
+        "fetch-licor",
         "calc-rating",
         "update-gauge-cache",
         "calculator",
@@ -84,8 +86,14 @@ def test_pipeline_dag_dependencies():
     assert deps == {
         "fetch": (),
         "fetch-usgs-ogc": (),
+        # fetch-licor has no prerequisites (requires=()); update-gauge-cache
+        # requires it for freshness ordering, but a LI-COR outage is soft_failed
+        # and _should_skip only cascades on failed/skipped — so it never freezes
+        # the rebuild (see test_pipeline_licor_soft_fail_still_builds).
+        "fetch-licor": (),
         "calc-rating": ("fetch", "fetch-usgs-ogc"),
-        "update-gauge-cache": ("calc-rating",),
+        # fetch-licor edge encodes freshness ordering; soft-fail can't skip it.
+        "update-gauge-cache": ("calc-rating", "fetch-licor"),
         "calculator": ("update-gauge-cache",),
         "build": ("update-gauge-cache", "calculator"),
         "orphan-check": ("build",),
@@ -100,11 +108,13 @@ def test_pipeline_dag_dependencies():
 @patch("kayak.cli.pipeline.calculator.calculator")
 @patch("kayak.cli.pipeline._update_gauge_cache")
 @patch("kayak.cli.pipeline.calc_rating.calc_rating")
+@patch("kayak.cli.pipeline.fetch_licor.fetch_licor")
 @patch("kayak.cli.pipeline.fetch_usgs_ogc.fetch_usgs_ogc")
 @patch("kayak.cli.pipeline.fetch.fetch")
 def test_pipeline_exits_nonzero_on_failure(
     mock_fetch,
     mock_ogc,
+    mock_licor,
     mock_calc_rating,
     mock_gauge_cache,
     mock_calculator,
@@ -149,11 +159,13 @@ def test_pipeline_exits_nonzero_on_failure(
 @patch("kayak.cli.pipeline.calculator.calculator")
 @patch("kayak.cli.pipeline._update_gauge_cache")
 @patch("kayak.cli.pipeline.calc_rating.calc_rating")
+@patch("kayak.cli.pipeline.fetch_licor.fetch_licor")
 @patch("kayak.cli.pipeline.fetch_usgs_ogc.fetch_usgs_ogc")
 @patch("kayak.cli.pipeline.fetch.fetch")
 def test_pipeline_soft_fail_fetch_still_builds_but_exits_nonzero(
     mock_fetch,
     mock_ogc,
+    mock_licor,
     mock_calc_rating,
     mock_gauge_cache,
     mock_calculator,
@@ -193,11 +205,104 @@ def test_pipeline_soft_fail_fetch_still_builds_but_exits_nonzero(
 @patch("kayak.cli.pipeline.calculator.calculator")
 @patch("kayak.cli.pipeline._update_gauge_cache")
 @patch("kayak.cli.pipeline.calc_rating.calc_rating")
+@patch("kayak.cli.pipeline.fetch_licor.fetch_licor")
+@patch("kayak.cli.pipeline.fetch_usgs_ogc.fetch_usgs_ogc")
+@patch("kayak.cli.pipeline.fetch.fetch")
+def test_pipeline_licor_soft_fail_still_builds(
+    mock_fetch,
+    mock_ogc,
+    mock_licor,
+    mock_calc_rating,
+    mock_gauge_cache,
+    mock_calculator,
+    mock_build,
+    mock_engine,
+    mock_orphan_check,
+    mock_check_reaches,
+):
+    """fetch-licor soft-failing (config error → rc=1) alerts via non-zero exit but
+    must NOT cascade-skip build. Even though update-gauge-cache now requires
+    fetch-licor, a soft_failed outcome isn't failed/skipped, so _should_skip
+    doesn't cascade — the rebuild proceeds. This is the load-bearing guard that
+    the freshness edge can't freeze the site on a LI-COR outage.
+    """
+    conn = MagicMock()
+    mock_engine.return_value.connect.return_value.__enter__ = MagicMock(return_value=conn)
+    mock_engine.return_value.connect.return_value.__exit__ = MagicMock(return_value=False)
+
+    mock_licor.return_value = 1  # soft fail (config error)
+
+    args = _make_args()
+    with pytest.raises(SystemExit) as exc_info:
+        pipeline(args)
+    assert exc_info.value.code == 1
+
+    # The invariant: licor soft-fail did not block the rest of the pipeline.
+    mock_licor.assert_called_once()
+    mock_calc_rating.assert_called_once()
+    mock_gauge_cache.assert_called_once()
+    mock_build.assert_called_once()
+
+
+@patch("kayak.cli.pipeline._check_reaches")
+@patch("kayak.cli.pipeline._orphan_check")
+@patch("kayak.cli.pipeline.get_engine")
+@patch("kayak.cli.pipeline.build.build")
+@patch("kayak.cli.pipeline.calculator.calculator")
+@patch("kayak.cli.pipeline._update_gauge_cache")
+@patch("kayak.cli.pipeline.calc_rating.calc_rating")
+@patch("kayak.cli.pipeline.fetch_licor.fetch_licor")
+@patch("kayak.cli.pipeline.fetch_usgs_ogc.fetch_usgs_ogc")
+@patch("kayak.cli.pipeline.fetch.fetch")
+def test_pipeline_licor_hard_failure_cascade_skips_cache(
+    mock_fetch,
+    mock_ogc,
+    mock_licor,
+    mock_calc_rating,
+    mock_gauge_cache,
+    mock_calculator,
+    mock_build,
+    mock_engine,
+    mock_orphan_check,
+    mock_check_reaches,
+):
+    """The behavioral consequence of the new edge: a fetch-licor *raise* (hard
+    failure, not the soft rc=1 path) IS classified `failed` and cascade-skips
+    update-gauge-cache → calculator → build. fetch_licor is engineered never to
+    raise in practice, so this only fires on a bug-class event; pinning it locks
+    the edge's contract.
+    """
+    conn = MagicMock()
+    mock_engine.return_value.connect.return_value.__enter__ = MagicMock(return_value=conn)
+    mock_engine.return_value.connect.return_value.__exit__ = MagicMock(return_value=False)
+
+    mock_licor.side_effect = RuntimeError("unexpected licor crash")
+
+    args = _make_args()
+    with pytest.raises(SystemExit) as exc_info:
+        pipeline(args)
+    assert exc_info.value.code == 1
+
+    # calc-rating is independent of licor and still runs; the cache + build skip.
+    mock_calc_rating.assert_called_once()
+    mock_gauge_cache.assert_not_called()
+    mock_build.assert_not_called()
+
+
+@patch("kayak.cli.pipeline._check_reaches")
+@patch("kayak.cli.pipeline._orphan_check")
+@patch("kayak.cli.pipeline.get_engine")
+@patch("kayak.cli.pipeline.build.build")
+@patch("kayak.cli.pipeline.calculator.calculator")
+@patch("kayak.cli.pipeline._update_gauge_cache")
+@patch("kayak.cli.pipeline.calc_rating.calc_rating")
+@patch("kayak.cli.pipeline.fetch_licor.fetch_licor")
 @patch("kayak.cli.pipeline.fetch_usgs_ogc.fetch_usgs_ogc")
 @patch("kayak.cli.pipeline.fetch.fetch")
 def test_pipeline_continue_on_error_suppresses_exit(
     mock_fetch,
     mock_ogc,
+    mock_licor,
     mock_calc_rating,
     mock_gauge_cache,
     mock_calculator,
@@ -237,11 +342,13 @@ def test_pipeline_continue_on_error_suppresses_exit(
 @patch("kayak.cli.pipeline.calculator.calculator")
 @patch("kayak.cli.pipeline._update_gauge_cache")
 @patch("kayak.cli.pipeline.calc_rating.calc_rating")
+@patch("kayak.cli.pipeline.fetch_licor.fetch_licor")
 @patch("kayak.cli.pipeline.fetch_usgs_ogc.fetch_usgs_ogc")
 @patch("kayak.cli.pipeline.fetch.fetch")
 def test_pipeline_runs_downstream_when_only_usgs_ogc_fails(
     mock_fetch,
     mock_ogc,
+    mock_licor,
     mock_calc_rating,
     mock_gauge_cache,
     mock_calculator,
@@ -276,11 +383,13 @@ def test_pipeline_runs_downstream_when_only_usgs_ogc_fails(
 @patch("kayak.cli.pipeline.calculator.calculator")
 @patch("kayak.cli.pipeline._update_gauge_cache")
 @patch("kayak.cli.pipeline.calc_rating.calc_rating")
+@patch("kayak.cli.pipeline.fetch_licor.fetch_licor")
 @patch("kayak.cli.pipeline.fetch_usgs_ogc.fetch_usgs_ogc")
 @patch("kayak.cli.pipeline.fetch.fetch")
 def test_orphan_check_soft_fail(
     mock_fetch,
     mock_ogc,
+    mock_licor,
     mock_calc_rating,
     mock_gauge_cache,
     mock_calculator,
@@ -338,11 +447,13 @@ def test_orphan_check_soft_fail(
 @patch("kayak.cli.pipeline.calculator.calculator")
 @patch("kayak.cli.pipeline._update_gauge_cache")
 @patch("kayak.cli.pipeline.calc_rating.calc_rating")
+@patch("kayak.cli.pipeline.fetch_licor.fetch_licor")
 @patch("kayak.cli.pipeline.fetch_usgs_ogc.fetch_usgs_ogc")
 @patch("kayak.cli.pipeline.fetch.fetch")
 def test_orphan_check_clean_run_exits_zero(
     mock_fetch,
     mock_ogc,
+    mock_licor,
     mock_calc_rating,
     mock_gauge_cache,
     mock_calculator,

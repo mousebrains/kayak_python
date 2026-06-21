@@ -12,6 +12,7 @@ Default DAG:
 
   fetch ─────────┐
   fetch-usgs-ogc ┤
+  fetch-licor ───┤
                  ├──> calc-rating ──> update-gauge-cache ──> calculator ──> build ──> orphan-check ──> check-reaches
 """
 
@@ -25,7 +26,15 @@ from enum import Enum
 
 from sqlalchemy import text
 
-from kayak.cli import build, calc_rating, calculator, check_reaches, fetch, fetch_usgs_ogc
+from kayak.cli import (
+    build,
+    calc_rating,
+    calculator,
+    check_reaches,
+    fetch,
+    fetch_licor,
+    fetch_usgs_ogc,
+)
 from kayak.db.engine import get_engine
 from kayak.db.sources import find_orphan_sources
 from kayak.utils.struct_log import emit as struct_emit
@@ -179,6 +188,11 @@ def _build_steps(skip_fetch: bool) -> list[_Step]:
         # WITHOUT cascade-skipping build, or one new station would freeze the site.
         steps.append(_Step("fetch", fetch.fetch, soft=True))
     steps.append(_Step("fetch-usgs-ogc", fetch_usgs_ogc.fetch_usgs_ogc))
+    # fetch-licor is "soft" like fetch: a LI-COR outage logs + leaves the gauge
+    # stale but must not cascade-skip build (nothing lists it in `requires`, so a
+    # failure also can't block downstream). It runs before the cache/build steps
+    # so its observations land in the same run.
+    steps.append(_Step("fetch-licor", fetch_licor.fetch_licor, soft=True))
     steps.extend(
         [
             _Step(
@@ -186,7 +200,16 @@ def _build_steps(skip_fetch: bool) -> list[_Step]:
                 calc_rating.calc_rating,
                 requires=("fetch", "fetch-usgs-ogc"),
             ),
-            _Step("update-gauge-cache", _update_gauge_cache, requires=("calc-rating",)),
+            # Also require fetch-licor so its readings are cached the same run
+            # once the executor honors `requires` for ordering (today's strict
+            # list-order already does). Safe for the "licor never blocks build"
+            # goal: a LI-COR outage is soft_failed (rc=1), and _should_skip only
+            # cascades on failed/skipped — so this edge can't skip the cache.
+            _Step(
+                "update-gauge-cache",
+                _update_gauge_cache,
+                requires=("calc-rating", "fetch-licor"),
+            ),
             _Step("calculator", calculator.calculator, requires=("update-gauge-cache",)),
             _Step("build", build.build, requires=("update-gauge-cache", "calculator")),
             _Step("orphan-check", _orphan_check, requires=("build",)),
