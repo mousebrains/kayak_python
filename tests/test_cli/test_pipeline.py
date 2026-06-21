@@ -105,11 +105,13 @@ def test_pipeline_dag_dependencies():
 @patch("kayak.cli.pipeline.calculator.calculator")
 @patch("kayak.cli.pipeline._update_gauge_cache")
 @patch("kayak.cli.pipeline.calc_rating.calc_rating")
+@patch("kayak.cli.pipeline.fetch_licor.fetch_licor")
 @patch("kayak.cli.pipeline.fetch_usgs_ogc.fetch_usgs_ogc")
 @patch("kayak.cli.pipeline.fetch.fetch")
 def test_pipeline_exits_nonzero_on_failure(
     mock_fetch,
     mock_ogc,
+    mock_licor,
     mock_calc_rating,
     mock_gauge_cache,
     mock_calculator,
@@ -154,11 +156,13 @@ def test_pipeline_exits_nonzero_on_failure(
 @patch("kayak.cli.pipeline.calculator.calculator")
 @patch("kayak.cli.pipeline._update_gauge_cache")
 @patch("kayak.cli.pipeline.calc_rating.calc_rating")
+@patch("kayak.cli.pipeline.fetch_licor.fetch_licor")
 @patch("kayak.cli.pipeline.fetch_usgs_ogc.fetch_usgs_ogc")
 @patch("kayak.cli.pipeline.fetch.fetch")
 def test_pipeline_soft_fail_fetch_still_builds_but_exits_nonzero(
     mock_fetch,
     mock_ogc,
+    mock_licor,
     mock_calc_rating,
     mock_gauge_cache,
     mock_calculator,
@@ -241,11 +245,13 @@ def test_pipeline_licor_soft_fail_still_builds(
 @patch("kayak.cli.pipeline.calculator.calculator")
 @patch("kayak.cli.pipeline._update_gauge_cache")
 @patch("kayak.cli.pipeline.calc_rating.calc_rating")
+@patch("kayak.cli.pipeline.fetch_licor.fetch_licor")
 @patch("kayak.cli.pipeline.fetch_usgs_ogc.fetch_usgs_ogc")
 @patch("kayak.cli.pipeline.fetch.fetch")
 def test_pipeline_continue_on_error_suppresses_exit(
     mock_fetch,
     mock_ogc,
+    mock_licor,
     mock_calc_rating,
     mock_gauge_cache,
     mock_calculator,
@@ -285,11 +291,13 @@ def test_pipeline_continue_on_error_suppresses_exit(
 @patch("kayak.cli.pipeline.calculator.calculator")
 @patch("kayak.cli.pipeline._update_gauge_cache")
 @patch("kayak.cli.pipeline.calc_rating.calc_rating")
+@patch("kayak.cli.pipeline.fetch_licor.fetch_licor")
 @patch("kayak.cli.pipeline.fetch_usgs_ogc.fetch_usgs_ogc")
 @patch("kayak.cli.pipeline.fetch.fetch")
 def test_pipeline_runs_downstream_when_only_usgs_ogc_fails(
     mock_fetch,
     mock_ogc,
+    mock_licor,
     mock_calc_rating,
     mock_gauge_cache,
     mock_calculator,
@@ -324,11 +332,13 @@ def test_pipeline_runs_downstream_when_only_usgs_ogc_fails(
 @patch("kayak.cli.pipeline.calculator.calculator")
 @patch("kayak.cli.pipeline._update_gauge_cache")
 @patch("kayak.cli.pipeline.calc_rating.calc_rating")
+@patch("kayak.cli.pipeline.fetch_licor.fetch_licor")
 @patch("kayak.cli.pipeline.fetch_usgs_ogc.fetch_usgs_ogc")
 @patch("kayak.cli.pipeline.fetch.fetch")
 def test_orphan_check_soft_fail(
     mock_fetch,
     mock_ogc,
+    mock_licor,
     mock_calc_rating,
     mock_gauge_cache,
     mock_calculator,
@@ -386,11 +396,13 @@ def test_orphan_check_soft_fail(
 @patch("kayak.cli.pipeline.calculator.calculator")
 @patch("kayak.cli.pipeline._update_gauge_cache")
 @patch("kayak.cli.pipeline.calc_rating.calc_rating")
+@patch("kayak.cli.pipeline.fetch_licor.fetch_licor")
 @patch("kayak.cli.pipeline.fetch_usgs_ogc.fetch_usgs_ogc")
 @patch("kayak.cli.pipeline.fetch.fetch")
 def test_orphan_check_clean_run_exits_zero(
     mock_fetch,
     mock_ogc,
+    mock_licor,
     mock_calc_rating,
     mock_gauge_cache,
     mock_calculator,
