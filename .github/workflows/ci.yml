@@ -36,7 +36,7 @@ jobs:
           cache-dependency-path: pyproject.toml
       # Pin to the version in uv.lock / .pre-commit-config.yaml so the format
       # gate can't drift when ruff ships a release (the churn behind df6e422).
-      - run: pip install ruff==0.15.17
+      - run: pip install ruff==0.15.18
       - run: ruff check src/ tests/ scripts/ docs/one-offs/
       - run: ruff format --check src/ tests/ scripts/ docs/one-offs/
 
@@ -389,6 +389,12 @@ jobs:
       #      it, and 3.10.2 is the current PyPI release.
       # Revisit when the OSV record is amended or 3.10.x ships a patch.
       - run: pip-audit --strict --ignore-vuln PYSEC-2026-89 .
+      # Also audit the hash-pinned PRODUCTION lockfile directly. The project-mode
+      # audit above resolves deps fresh (latest satisfying pyproject bounds), so it
+      # can stay green while requirements-prod.lock — what kayak-deploy actually
+      # installs (PR #190) — keeps shipping a vulnerable pinned version. Audit the
+      # exact artifact that reaches prod. Same PYSEC-2026-89 suppression rationale.
+      - run: pip-audit -r requirements-prod.lock --require-hashes --disable-pip --strict --ignore-vuln PYSEC-2026-89
 
   wheel-smoke:
     name: Wheel smoke (packaged-resource install)
