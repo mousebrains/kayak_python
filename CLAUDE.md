@@ -198,7 +198,7 @@ Multi-source gauges aggregate across all linked sources directly: `update-gauge-
 
 ### Database
 
-Single normalized SQLite database (`kayak.db`). Schema defined in `src/kayak/db/models.py` (SQLAlchemy 2.x ORM, 25 tables; live DB adds `schema_migrations` for 26 total). Key tables:
+Single normalized SQLite database (`kayak.db`). Schema defined in `src/kayak/db/models.py` (SQLAlchemy 2.x ORM, 26 tables; live DB adds `schema_migrations` for 27 total). Key tables:
 
 - `source` / `gauge` / `gauge_source` — data sources and physical gauge stations. `source.timezone` is an IANA TZ name (carried by the dataset's `sources.yaml` registry → `source.csv` via `levels generate-sources`) used by `BaseParser.dump_to_db` to localize naive timestamps from feeds that publish local time (USBR's per-station local TZ; wa.gov PST year-round). NULL = treat naive as UTC.
 - `observation` — time-series data (source_id, observed_at, data_type, value)
@@ -208,6 +208,7 @@ Single normalized SQLite database (`kayak.db`). Schema defined in `src/kayak/db/
 - `rating` / `rating_data` — gage height ↔ flow conversion tables (dormant — reserved for per-gauge rating curves)
 - `editor` / `editor_session` / `editor_magic_link` — Phase 1 editor accounts + session cookies
 - `change_request` / `change_request_attachment` / `edit_history` — proposal queue (SA-lite/D1: approval *endorses* — the diff freezes in `applied_json` and lands via a `kayak_data` PR + deploy; no PHP path writes metadata) + the pre-SA-lite audit trail
+- `change_request_bridge` — runtime worker-state turning an endorsed `change_request` into a `kayak_data` PR (Tier 1 of `docs/PLAN_editor_pr_bridge.md`); engine runtime only, CASCADE-deleted with its request
 - `huc_name` — WBD HUC6/HUC8 name lookup populated by `levels assign-huc` (10/12 trimmed, R6.2)
 - `schema_migrations` — tracks applied `src/kayak/data/db/migrations/*.sql` versions
 

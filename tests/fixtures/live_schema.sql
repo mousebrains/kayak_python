@@ -45,6 +45,31 @@ CREATE TABLE change_request_attachment (
 	CONSTRAINT uq_attachment_request_sha UNIQUE (change_request_id, sha256),
 	FOREIGN KEY(change_request_id) REFERENCES change_request (id) ON DELETE CASCADE
 );
+CREATE TABLE change_request_bridge (
+	id INTEGER NOT NULL,
+	change_request_id INTEGER NOT NULL,
+	state VARCHAR(12) DEFAULT 'queued' NOT NULL,
+	attempt INTEGER DEFAULT '1' NOT NULL,
+	base_dataset_sha VARCHAR(40),
+	reviewed_base_json TEXT,
+	applied_json_sha256 VARCHAR(64),
+	branch_name VARCHAR(255),
+	pr_number INTEGER,
+	pr_url TEXT,
+	pr_head_sha VARCHAR(40),
+	pr_merge_sha VARCHAR(40),
+	queued_by INTEGER,
+	queued_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	last_error TEXT,
+	conflict_json TEXT,
+	lease_owner VARCHAR(128),
+	lease_expires_at DATETIME,
+	heartbeat_at DATETIME,
+	PRIMARY KEY (id),
+	UNIQUE (change_request_id),
+	FOREIGN KEY(change_request_id) REFERENCES change_request (id) ON DELETE CASCADE,
+	FOREIGN KEY(queued_by) REFERENCES editor (id) ON DELETE SET NULL
+);
 CREATE TABLE class_description (
 	name VARCHAR(32) NOT NULL,
 	description TEXT NOT NULL,
@@ -296,6 +321,8 @@ CREATE TABLE state (
 	UNIQUE (name)
 );
 CREATE INDEX ix_attachment_change_request_id ON change_request_attachment (change_request_id);
+CREATE INDEX ix_change_request_bridge_queued_by ON change_request_bridge (queued_by);
+CREATE INDEX ix_change_request_bridge_state ON change_request_bridge (state);
 CREATE INDEX ix_change_request_editor_id ON change_request (editor_id);
 CREATE INDEX ix_change_request_reviewed_by  ON change_request(reviewed_by);
 CREATE INDEX ix_change_request_status ON change_request (status);
