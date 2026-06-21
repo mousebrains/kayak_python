@@ -28,6 +28,7 @@ from urllib.parse import parse_qs, urlparse
 import requests  # type: ignore[import-untyped]  # match http_client.py: optional types-requests stub
 from sqlalchemy.orm import Session
 
+from kayak.cli.fetch import _hour_allowed
 from kayak.config import FETCH_TIMEOUT
 from kayak.db.engine import get_session
 from kayak.db.models import FetchState
@@ -66,6 +67,9 @@ def addArgs(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -
     parser.set_defaults(func=fetch_licor)
     parser.add_argument("-d", "--dry-run", action="store_true", help="Do not write to DB")
     parser.add_argument("-n", "--show-name", action="store_true", help="Show URLs being fetched")
+    parser.add_argument(
+        "-i", "--ignore-constraints", action="store_true", help="Ignore fetch_url hour constraints"
+    )
 
 
 def _one(params: dict[str, list[str]], key: str) -> str | None:
@@ -130,8 +134,13 @@ def build_request(url: str) -> tuple[str, dict]:
     channel UUID, or an out-of-range window/interval.
     """
     parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        raise ValueError(f"LI-COR url scheme not allowed: {url!r}")
+    # https only: the endpoint is a fixed HTTPS host. Allowing http would let a
+    # typo'd row fail silently (redirects are disabled, so the http→https 3xx is
+    # treated as a fetch failure that — being transient, not a config error —
+    # leaves the gauge stale with no alert), and plaintext would expose the
+    # request to in-path tampering.
+    if parsed.scheme != "https":
+        raise ValueError(f"LI-COR url scheme must be https: {url!r}")
     if parsed.hostname != LICOR_HOST:
         raise ValueError(f"LI-COR url host must be {LICOR_HOST}: {url!r}")
     if parsed.path != LICOR_PATH:
@@ -183,6 +192,10 @@ def _post(endpoint: str, body: dict, timeout: int) -> str | None:
         if resp.status_code >= 300:
             logger.error("HTTP %d from LI-COR %s", resp.status_code, endpoint)
             return None
+        # Bounds what we hand the parser, not transfer: `requests` has already
+        # buffered the body by here (no stream=True). Fine for a few-KB API on a
+        # pinned, redirect-free host; the Content-Length check just rejects an
+        # over-cap body a hair earlier.
         content_length = resp.headers.get("Content-Length")
         if content_length and content_length.isdigit() and int(content_length) > _MAX_BODY_BYTES:
             logger.error("LI-COR Content-Length %s exceeds cap for %s", content_length, endpoint)
@@ -196,7 +209,7 @@ def _post(endpoint: str, body: dict, timeout: int) -> str | None:
     return None
 
 
-def _prepare(session: Session) -> tuple[list[_LicorWork], int]:
+def _prepare(session: Session, ignore_constraints: bool) -> tuple[list[_LicorWork], int]:
     """Build + validate the work list. Borrows session.
 
     Returns ``(work_items, config_error_count)``. Each POST-parser ``fetch_url``
@@ -205,12 +218,20 @@ def _prepare(session: Session) -> tuple[list[_LicorWork], int]:
     a *permanent* misconfiguration that must surface in the exit code (alert),
     unlike a transient POST failure later. Config validation runs before any
     network I/O.
+
+    ``fetch_url.hours`` is honored (unless ``ignore_constraints``), matching the
+    GET fetch path — so a row throttled to e.g. ``hours: "6,12,18"`` POSTs only in
+    those UTC hours instead of every pipeline run. An hour-skipped row is not
+    fetched and not config-checked (it'll alert in its own window if misconfigured).
     """
     work: list[_LicorWork] = []
     config_errors = 0
     for fu in get_active_fetch_urls(session):
         parser_cls = get_parser_class(fu.parser) if fu.parser else None
         if parser_cls is None or getattr(parser_cls, "transport", "GET") != "POST":
+            continue
+        if not ignore_constraints and not _hour_allowed(fu.hours or ""):
+            logger.debug("Skipping %s (hour constraint)", fu.url)
             continue
         sources = list(fu.sources)
         if len(sources) != 1:
@@ -309,13 +330,14 @@ def fetch_licor(args: argparse.Namespace) -> int:
     ensure_all_loaded()
     dry_run = getattr(args, "dry_run", False)
     show_name = getattr(args, "show_name", False)
+    ignore_constraints = getattr(args, "ignore_constraints", False)
     if dry_run:
         print("Dry run mode — no data will be stored")
 
     # --- Phase 1: prepare + validate work items (short read-only session) ---
     session = get_session()
     try:
-        work, config_errors = _prepare(session)
+        work, config_errors = _prepare(session, ignore_constraints)
     finally:
         session.close()
 

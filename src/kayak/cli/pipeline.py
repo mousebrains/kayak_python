@@ -200,7 +200,16 @@ def _build_steps(skip_fetch: bool) -> list[_Step]:
                 calc_rating.calc_rating,
                 requires=("fetch", "fetch-usgs-ogc"),
             ),
-            _Step("update-gauge-cache", _update_gauge_cache, requires=("calc-rating",)),
+            # Also require fetch-licor so its readings are cached the same run
+            # once the executor honors `requires` for ordering (today's strict
+            # list-order already does). Safe for the "licor never blocks build"
+            # goal: a LI-COR outage is soft_failed (rc=1), and _should_skip only
+            # cascades on failed/skipped — so this edge can't skip the cache.
+            _Step(
+                "update-gauge-cache",
+                _update_gauge_cache,
+                requires=("calc-rating", "fetch-licor"),
+            ),
             _Step("calculator", calculator.calculator, requires=("update-gauge-cache",)),
             _Step("build", build.build, requires=("update-gauge-cache", "calculator")),
             _Step("orphan-check", _orphan_check, requires=("build",)),

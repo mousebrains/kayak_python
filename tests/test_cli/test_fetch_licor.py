@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import create_engine, event, select
@@ -136,6 +137,7 @@ def test_build_request_rebuilds_clean_endpoint(host_url):
         "https://www.licor.cloud./api/v2/timeseriesdata?dashboardUUID=x&flow=a&gauge=b&temperature=c",  # trailing dot
         "https://www.licor.cloud/api/v2/OTHER?dashboardUUID=x&flow=a&gauge=b&temperature=c",
         "ftp://www.licor.cloud/api/v2/timeseriesdata?dashboardUUID=x&flow=a&gauge=b&temperature=c",
+        "http://www.licor.cloud/api/v2/timeseriesdata?dashboardUUID=x&flow=a&gauge=b&temperature=c",  # http rejected (https only)
         "https://www.licor.cloud/api/v2/timeseriesdata?flow=a&gauge=b&temperature=c",  # no dashboard
         "https://www.licor.cloud/api/v2/timeseriesdata?dashboardUUID=x&gauge=b&temperature=c",  # no flow
         # duplicate channel UUID across params (would mis-type one series)
@@ -167,7 +169,7 @@ def test_prepare_selects_only_post_parsers(session):
     session.add(Source(name="get_source", agency="USGS", fetch_url_id=get_fu.id))
     session.flush()
 
-    work, config_errors = _prepare(session)
+    work, config_errors = _prepare(session, ignore_constraints=False)
     assert config_errors == 0
     assert len(work) == 1
     assert work[0].url == _CONFIG_URL
@@ -181,7 +183,7 @@ def test_prepare_counts_bad_config_url(session):
         "https://www.licor.cloud/api/v2/timeseriesdata?flow=a&gauge=b&temperature=c"  # no dashboard
     )
     _make_licor_source(session, url=bad)
-    work, config_errors = _prepare(session)
+    work, config_errors = _prepare(session, ignore_constraints=False)
     assert work == []
     assert config_errors == 1
 
@@ -189,9 +191,25 @@ def test_prepare_counts_bad_config_url(session):
 def test_prepare_rejects_multi_source_row(session):
     ensure_all_loaded()
     _make_licor_source(session, n_sources=2)
-    work, config_errors = _prepare(session)
+    work, config_errors = _prepare(session, ignore_constraints=False)
     assert work == []  # not silently dropped at parse time — refused up front
     assert config_errors == 1
+
+
+def test_prepare_honors_hour_constraint(session):
+    """A row throttled to other hours is skipped (not POSTed every run); the
+    --ignore-constraints override bypasses the gate."""
+    ensure_all_loaded()
+    now_hour = datetime.now(UTC).hour
+    excluded = ",".join(str(h) for h in range(24) if h != now_hour)
+    _src, fu = _make_licor_source(session)
+    fu.hours = excluded
+    session.flush()
+
+    assert _prepare(session, ignore_constraints=False) == ([], 0)  # skipped, no fetch
+    work, config_errors = _prepare(session, ignore_constraints=True)  # override
+    assert len(work) == 1
+    assert config_errors == 0
 
 
 # ---------------------------------------------------------------------------

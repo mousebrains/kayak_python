@@ -90,7 +90,8 @@ def test_pipeline_dag_dependencies():
         # neither blocks nor is blocked by the rest of the pipeline (soft step).
         "fetch-licor": (),
         "calc-rating": ("fetch", "fetch-usgs-ogc"),
-        "update-gauge-cache": ("calc-rating",),
+        # fetch-licor edge encodes freshness ordering; soft-fail can't skip it.
+        "update-gauge-cache": ("calc-rating", "fetch-licor"),
         "calculator": ("update-gauge-cache",),
         "build": ("update-gauge-cache", "calculator"),
         "orphan-check": ("build",),
