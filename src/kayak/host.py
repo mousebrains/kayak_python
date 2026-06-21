@@ -109,7 +109,7 @@ class HostConfig(BaseModel):
     # (``{release_root}/current/venv``), the release dataset
     # (``{release_root}/current/dataset``), and the FPM pool
     # (``/etc/php/{fpm_pool_php}/fpm/pool.d/kayak.conf``). See
-    # docs/PLAN_4c_renderers.md.
+    # docs/done/PLAN_4c_renderers.md.
     service_user: str = "pat"
     service_home: str = "/home/pat"
     release_root: str = "/opt/kayak"
