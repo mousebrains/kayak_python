@@ -86,8 +86,10 @@ def test_pipeline_dag_dependencies():
     assert deps == {
         "fetch": (),
         "fetch-usgs-ogc": (),
-        # fetch-licor has no requires AND nothing requires it: a LI-COR outage
-        # neither blocks nor is blocked by the rest of the pipeline (soft step).
+        # fetch-licor has no prerequisites (requires=()); update-gauge-cache
+        # requires it for freshness ordering, but a LI-COR outage is soft_failed
+        # and _should_skip only cascades on failed/skipped — so it never freezes
+        # the rebuild (see test_pipeline_licor_soft_fail_still_builds).
         "fetch-licor": (),
         "calc-rating": ("fetch", "fetch-usgs-ogc"),
         # fetch-licor edge encodes freshness ordering; soft-fail can't skip it.
@@ -219,8 +221,10 @@ def test_pipeline_licor_soft_fail_still_builds(
     mock_check_reaches,
 ):
     """fetch-licor soft-failing (config error → rc=1) alerts via non-zero exit but
-    must NOT cascade-skip build — nothing lists it in `requires`, so a LI-COR
-    problem never freezes the rest of the site.
+    must NOT cascade-skip build. Even though update-gauge-cache now requires
+    fetch-licor, a soft_failed outcome isn't failed/skipped, so _should_skip
+    doesn't cascade — the rebuild proceeds. This is the load-bearing guard that
+    the freshness edge can't freeze the site on a LI-COR outage.
     """
     conn = MagicMock()
     mock_engine.return_value.connect.return_value.__enter__ = MagicMock(return_value=conn)
@@ -236,7 +240,53 @@ def test_pipeline_licor_soft_fail_still_builds(
     # The invariant: licor soft-fail did not block the rest of the pipeline.
     mock_licor.assert_called_once()
     mock_calc_rating.assert_called_once()
+    mock_gauge_cache.assert_called_once()
     mock_build.assert_called_once()
+
+
+@patch("kayak.cli.pipeline._check_reaches")
+@patch("kayak.cli.pipeline._orphan_check")
+@patch("kayak.cli.pipeline.get_engine")
+@patch("kayak.cli.pipeline.build.build")
+@patch("kayak.cli.pipeline.calculator.calculator")
+@patch("kayak.cli.pipeline._update_gauge_cache")
+@patch("kayak.cli.pipeline.calc_rating.calc_rating")
+@patch("kayak.cli.pipeline.fetch_licor.fetch_licor")
+@patch("kayak.cli.pipeline.fetch_usgs_ogc.fetch_usgs_ogc")
+@patch("kayak.cli.pipeline.fetch.fetch")
+def test_pipeline_licor_hard_failure_cascade_skips_cache(
+    mock_fetch,
+    mock_ogc,
+    mock_licor,
+    mock_calc_rating,
+    mock_gauge_cache,
+    mock_calculator,
+    mock_build,
+    mock_engine,
+    mock_orphan_check,
+    mock_check_reaches,
+):
+    """The behavioral consequence of the new edge: a fetch-licor *raise* (hard
+    failure, not the soft rc=1 path) IS classified `failed` and cascade-skips
+    update-gauge-cache → calculator → build. fetch_licor is engineered never to
+    raise in practice, so this only fires on a bug-class event; pinning it locks
+    the edge's contract.
+    """
+    conn = MagicMock()
+    mock_engine.return_value.connect.return_value.__enter__ = MagicMock(return_value=conn)
+    mock_engine.return_value.connect.return_value.__exit__ = MagicMock(return_value=False)
+
+    mock_licor.side_effect = RuntimeError("unexpected licor crash")
+
+    args = _make_args()
+    with pytest.raises(SystemExit) as exc_info:
+        pipeline(args)
+    assert exc_info.value.code == 1
+
+    # calc-rating is independent of licor and still runs; the cache + build skip.
+    mock_calc_rating.assert_called_once()
+    mock_gauge_cache.assert_not_called()
+    mock_build.assert_not_called()
 
 
 @patch("kayak.cli.pipeline._check_reaches")

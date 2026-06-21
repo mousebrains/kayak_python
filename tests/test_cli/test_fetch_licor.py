@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import create_engine, event, select
@@ -196,18 +195,21 @@ def test_prepare_rejects_multi_source_row(session):
     assert config_errors == 1
 
 
-def test_prepare_honors_hour_constraint(session):
+def test_prepare_honors_hour_constraint(session, monkeypatch):
     """A row throttled to other hours is skipped (not POSTed every run); the
-    --ignore-constraints override bypasses the gate."""
+    --ignore-constraints override bypasses the gate.
+
+    `_hour_allowed` is monkeypatched (not driven by the wall clock) so the test
+    is deterministic across a UTC hour rollover.
+    """
     ensure_all_loaded()
-    now_hour = datetime.now(UTC).hour
-    excluded = ",".join(str(h) for h in range(24) if h != now_hour)
     _src, fu = _make_licor_source(session)
-    fu.hours = excluded
+    fu.hours = "3"  # value is irrelevant; the gate result is stubbed below
     session.flush()
 
+    monkeypatch.setattr(licor_mod, "_hour_allowed", lambda spec: False)  # outside window
     assert _prepare(session, ignore_constraints=False) == ([], 0)  # skipped, no fetch
-    work, config_errors = _prepare(session, ignore_constraints=True)  # override
+    work, config_errors = _prepare(session, ignore_constraints=True)  # override bypasses the gate
     assert len(work) == 1
     assert config_errors == 0
 
@@ -276,6 +278,7 @@ def test_fetch_one_posts_with_redirects_disabled(monkeypatch):
     def fake_post(endpoint, json=None, headers=None, timeout=None, allow_redirects=None):
         captured["endpoint"] = endpoint
         captured["body"] = json
+        captured["headers"] = headers
         captured["allow_redirects"] = allow_redirects
         return _FakeResp(_sample_json())
 
@@ -287,6 +290,8 @@ def test_fetch_one_posts_with_redirects_disabled(monkeypatch):
     assert captured["endpoint"] == _ENDPOINT
     assert captured["body"]["dashboardUUID"] == _DASH
     assert captured["allow_redirects"] is False  # SSRF: redirects must not be followed
+    # Identify as the configured pipeline UA, not python-requests.
+    assert captured["headers"]["User-Agent"] == licor_mod.FETCH_USER_AGENT
 
 
 # ---------------------------------------------------------------------------

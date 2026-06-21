@@ -29,7 +29,7 @@ import requests  # type: ignore[import-untyped]  # match http_client.py: optiona
 from sqlalchemy.orm import Session
 
 from kayak.cli.fetch import _hour_allowed
-from kayak.config import FETCH_TIMEOUT
+from kayak.config import FETCH_TIMEOUT, FETCH_USER_AGENT
 from kayak.db.engine import get_session
 from kayak.db.models import FetchState
 from kayak.db.sources import get_active_fetch_urls
@@ -174,7 +174,10 @@ def _post(endpoint: str, body: dict, timeout: int) -> str | None:
             resp = requests.post(
                 endpoint,
                 json=body,
-                headers={"Accept": "application/json"},
+                # Identify as the configured pipeline UA, not python-requests —
+                # courteous + identifiable for an undocumented third-party endpoint
+                # we want to keep access to (mirrors the shared GET client).
+                headers={"Accept": "application/json", "User-Agent": FETCH_USER_AGENT},
                 timeout=timeout,
                 allow_redirects=False,
             )
@@ -269,6 +272,11 @@ def _fetch_one(work: _LicorWork) -> str | None:
 
     ``build_request`` already ran in ``_prepare`` (fail-closed config check); this
     re-runs the ``_validate_url`` SSRF guard the GET client uses before the POST.
+
+    A hung endpoint is bounded by the per-request ``FETCH_TIMEOUT`` only — there's
+    no batch wall-clock budget (the ``--budget``/``async_fetch_many`` machinery is
+    GET-batch-specific). This matches the sibling ``fetch-usgs-ogc`` step, and with
+    one LI-COR row the per-request timeout is already the effective cap.
     """
     try:
         _validate_url(work.endpoint)  # SSRF defense-in-depth (host is already pinned)
