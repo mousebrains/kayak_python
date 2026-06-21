@@ -31,6 +31,16 @@ def rdns_state(tmp_path, monkeypatch):
     humans._rdns_attempted.clear()
     monkeypatch.setattr(humans, "_rdns_cache_loaded", False)
     yield
+    # Quiesce any lingering rdns-* daemon workers before the next test. warm_rdns
+    # abandons workers black-holed past its budget (by design); test_saturated_pool
+    # then releases its gate, reviving them — and a revived worker would drain its
+    # queue into the NEXT test's monkeypatched _rdns_lookup (the 9.9.9.x IPs that
+    # flaked test_repeated_calls under CI's xdist scheduling). The monkeypatch is
+    # still active during this teardown (set up before rdns_state → torn down
+    # after), so the joined workers call THIS test's lookup and exit cleanly.
+    for t in threading.enumerate():
+        if t.name.startswith("rdns-"):
+            t.join(timeout=5.0)
     for d in (
         humans._rdns_cache,
         humans._rdns_last_seen,
