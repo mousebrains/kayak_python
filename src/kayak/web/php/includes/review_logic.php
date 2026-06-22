@@ -96,9 +96,18 @@ function merge_reviewer_note(string $prev, string $new): string {
 /**
  * @param array{id: int, target_type: string, target_id: int|null, editor_id: int, submitted_at: string, subject: string|null, payload_json: string, notes_to_maint: string|null, status: string, reviewed_at: string|null, reviewed_by: int|null, reviewer_note: string|null, applied_json: string|null, source_url: string|null} $cr  change_request row.
  * @param array<string, mixed> $applied   payload-shaped overlay (reach + reach_class).
+ * @param array<string, string>|null $carried_base  reviewed reach values by field (form base_reach_*), verified
+ *                                                   against the live row inside the freeze transaction (TOCTOU).
  * @return array{ok: bool, err?: string}
  */
-function review_approve(PDO $db, array $cr, array $applied, int $maint_id, string $new_note): array {
+function review_approve(
+    PDO $db,
+    array $cr,
+    array $applied,
+    int $maint_id,
+    string $new_note,
+    ?array $carried_base = null,
+): array {
     $type = $cr['target_type'];
     $tid  = (int)$cr['target_id'];
     $cur = review_load_target_state($db, $type, $tid);
@@ -155,9 +164,22 @@ function review_approve(PDO $db, array $cr, array $applied, int $maint_id, strin
         }
         // reach-only path (review.php only offers approve for reach); $tid is the
         // existing reach id ($cur loaded above). bridge_enqueue no-ops unless the
-        // frozen diff is bridgeable (reach text/coord, no reach_class).
-        bridge_enqueue($db, $cr['id'], $type, $tid, $applied, $applied_json, $maint_id);
+        // frozen diff is bridgeable (reach text/coord, no reach_class). The
+        // carried base is verified against the live row inside this transaction:
+        // a row that drifted since render throws BridgeBaseDriftException and the
+        // whole endorse rolls back (TOCTOU — the worker never gets a base the
+        // maintainer didn't review).
+        bridge_enqueue($db, $cr['id'], $type, $tid, $applied, $applied_json, $maint_id, $carried_base);
         $db->commit();
+    } catch (BridgeBaseDriftException $e) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        error_log('review_approve: base drift — ' . $e->getMessage());
+        return [
+            'ok' => false,
+            'err' => 'The reach changed since you opened this page — reopen and re-review.',
+        ];
     } catch (Throwable $e) {
         // Log the full message server-side; never echo it to the response
         // (raw PDOException text leaks schema details and paths).

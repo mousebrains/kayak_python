@@ -621,6 +621,7 @@ installation token already minted from it dies within the hour on its own.
 ```bash
 levels editor-bridge status        # queue counts by state
 levels editor-bridge run-once      # endorsed → open/update one kayak_data PR each
+levels editor-bridge queue --cr N  # requeue a worker_error / pr_closed row as a new attempt
 levels editor-bridge reconcile     # pr_open → merged / pr_closed (reads PR state)
 levels editor-bridge mark-deployed --dataset-ref <sha>   # merged → deployed (+ resolve the request)
 ```
@@ -641,10 +642,65 @@ is `DATASET_DIR`, which works for a manual run when that's a clone (e.g.
 ancestry there silently resolves nothing (the command fails safe: rows stay
 `merged`, it never marks a request resolved that wasn't deployed, and it now
 prints `N merged row(s) but none resolvable in <repo>` so the misconfig is
-visible). The `kayak-deploy` post-activation hook + the `run-once`/`reconcile`
-systemd timer (and proposer email-on-deploy) land at enablement time — the hook
-must point `--dataset-repo` at a git source (a retained/fetched clone), not the
-release snapshot.
+visible). The `kayak-deploy` post-activation hook now wires this automatically:
+after a successful activation it `git fetch`es `DATASET_DIR` (the app-owned
+`/home/pat/kayak_data` clone — so its object DB holds the merge commits +
+`--dataset-ref`) and runs `mark-deployed` against it, fully fail-soft (the deploy
+is already committed; a miss is caught by the reconcile timer / a manual run).
+
+### Enablement (dormant → live)
+
+Everything above ships **dormant**: a routine `kayak-deploy` of `main` installs
+the code + migration `0079` (the worker's retry cap) but starts no bridge timer,
+so nothing drains the queue until you deliberately turn it on. To go live:
+
+```bash
+# 0. Preconditions (one-time, already done on prod): the GitHub App + key (above),
+#    the kayak_data approval ruleset with your admin bypass, and EDITOR_BRIDGE_*
+#    in the worker's ~/.config/kayak/.env (EDITOR_BRIDGE_ENABLED=true).
+levels editor-bridge status                     # sanity: table present, queue visible
+
+# 1. Install/refresh the unit files (copies the bridge units; does NOT start them —
+#    install.service.sh deliberately omits the bridge timers from its auto-start set).
+sudo ./systemd/install.service.sh
+
+# 2. GO LIVE — start the timers. With EDITOR_BRIDGE_ENABLED already true, THIS is
+#    the activation: run-once begins draining the queue every 15 min, reconcile
+#    polls PR state hourly.
+sudo systemctl enable --now kayak-editor-bridge-run.timer kayak-editor-bridge-reconcile.timer
+
+# 3. Smoke: endorse a small reach edit in /review.php, then force one run:
+sudo systemctl start kayak-editor-bridge-run.service
+levels editor-bridge status                     # → pr_open; check the kayak_data PR
+```
+
+The `mark-deployed` deploy hook needs no enabling — it's already in
+`kayak-deploy.sh` and self-no-ops until there are merged rows.
+
+**Pause / disable** without redeploying: `sudo systemctl disable --now
+kayak-editor-bridge-run.timer kayak-editor-bridge-reconcile.timer` (stops
+scheduling), or set `EDITOR_BRIDGE_ENABLED=false` in the worker `.env` (each run
+then prints "disabled" and exits 0 — a softer kill that leaves the timers armed).
+
+### Recovering a stuck row
+
+```bash
+levels editor-bridge status        # find the state
+```
+
+- **`worker_error`** — the worker hit the infra-retry cap (5 consecutive
+  clone/push/REST/auth failures, with backoff) or an unexpected error. Fix the
+  cause (network, App key, branch protection), then `levels editor-bridge queue
+  --cr N` to reset it to `queued` as a fresh attempt.
+- **`pr_closed`** — the PR was closed unmerged. After deciding it should proceed,
+  `queue --cr N` reopens it on a new branch/attempt.
+- **`conflict`** — `kayak_data` main moved under the reviewed base; `queue`
+  deliberately refuses these (it would reuse a now-stale base). Re-review instead:
+  re-open the edit in `/review.php` / `/edit.php` so a *current* base is captured.
+- **A lease that outlived a crash** — a row stuck `queued` with a `lease_owner`
+  set clears itself: the lease (`lease_expires_at`, 15 min) expires and the next
+  run reclaims it. No manual action needed; only requeue if it lands in
+  `worker_error`.
 
 ## Rollback (revert code to a previous SHA)
 

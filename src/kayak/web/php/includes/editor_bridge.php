@@ -28,6 +28,19 @@ declare(strict_types=1);
 const BRIDGE_TARGET_TYPES = ['reach', 'gauge'];
 
 /**
+ * Thrown when the value captured as the worker's drift base (inside the freeze
+ * transaction) no longer equals the value the maintainer reviewed (carried in
+ * the form's hidden base fields). Closes the residual TOCTOU window between the
+ * pre-transaction drift check and the in-transaction base capture (PR #219
+ * review): a metadata write committing in that gap can no longer be silently
+ * recorded as the reviewed base. The caller catches this and rolls the endorse
+ * back with a "reopen and re-review" message — never a partial freeze.
+ */
+final class BridgeBaseDriftException extends RuntimeException
+{
+}
+
+/**
  * Can the Tier 3 adapter turn this endorsed payload into a kayak_data PR?
  *
  *   - reach: a non-empty `reach` field diff AND no `reach_class` key. The
@@ -67,11 +80,26 @@ function bridge_is_bridgeable(string $target_type, array $applied): bool
  * Returns null if the target row is gone (caller then skips queueing — a
  * vanished target is handled manually, never queued blind).
  *
- * @param array<string, mixed> $applied  decoded applied_json (must be bridgeable)
+ * When $carried_base is non-null (the endorse paths pass the form's hidden
+ * base values), each captured field is verified against it *inside this read* —
+ * the same transaction snapshot that will store the base — and a mismatch or a
+ * missing carried value throws BridgeBaseDriftException (fail-closed). That
+ * closes the TOCTOU window: the stored reviewed_base provably equals what the
+ * maintainer reviewed, or the endorse rolls back. A null $carried_base skips
+ * the check and captures a fresh base — used only by the deliberate
+ * maintainer-driven requeue, which re-affirms against the current value.
+ *
+ * @param array<string, mixed>        $applied       decoded applied_json (must be bridgeable)
+ * @param array<string, string>|null  $carried_base  reviewed values by field (no table key), or null
  * @return array<string, array<string, mixed>>|null
  */
-function bridge_capture_base(PDO $db, string $target_type, int $target_id, array $applied): ?array
-{
+function bridge_capture_base(
+    PDO $db,
+    string $target_type,
+    int $target_id,
+    array $applied,
+    ?array $carried_base = null,
+): ?array {
     if (!in_array($target_type, BRIDGE_TARGET_TYPES, true)) {
         // Defense in depth: the table name is interpolated below, so refuse
         // anything outside the fixed allowlist (callers gate on
@@ -94,7 +122,21 @@ function bridge_capture_base(PDO $db, string $target_type, int $target_id, array
     $base = [];
     foreach (array_keys($diff) as $field) {
         $f = (string)$field;
-        $base[$f] = array_key_exists($f, $row) ? $row[$f] : null;
+        $current = array_key_exists($f, $row) ? $row[$f] : null;
+        if ($carried_base !== null) {
+            // Fail-closed: a field with no carried base, or one whose live value
+            // differs from what was reviewed, means the row drifted since render
+            // — roll back. is_scalar narrows the mixed PDO cell so the cast is
+            // PHPStan-clean at level 9 (no (string)-of-mixed baseline entry);
+            // a NULL column renders '' to match the form-render cast.
+            $cur_str = is_scalar($current) ? (string)$current : '';
+            if (!array_key_exists($f, $carried_base) || $cur_str !== $carried_base[$f]) {
+                throw new BridgeBaseDriftException(
+                    'reviewed base drifted for ' . $target_type . '.' . $f
+                );
+            }
+        }
+        $base[$f] = $current;
     }
     return [$target_type => $base];
 }
@@ -113,8 +155,15 @@ function bridge_capture_base(PDO $db, string $target_type, int $target_id, array
  * repo's current main SHA (it holds no checkout), so the worker fills it when
  * it runs.
  *
- * @param array<string, mixed> $applied           decoded applied_json (the frozen diff)
- * @param string               $applied_json_str  the exact frozen-diff JSON string written to change_request.applied_json
+ * When $carried_base is non-null it is the form's reviewed (render-time) values
+ * by field; bridge_capture_base verifies the live row still matches it inside
+ * this transaction and throws BridgeBaseDriftException on drift (closing the
+ * TOCTOU window — the endorse then rolls back). The maintainer-driven requeue
+ * passes null to re-affirm against the current value.
+ *
+ * @param array<string, mixed>       $applied           decoded applied_json (the frozen diff)
+ * @param string                     $applied_json_str  the exact frozen-diff JSON string written to change_request.applied_json
+ * @param array<string, string>|null $carried_base      reviewed values by field, or null to capture fresh
  */
 function bridge_enqueue(
     PDO $db,
@@ -124,6 +173,7 @@ function bridge_enqueue(
     array $applied,
     string $applied_json_str,
     ?int $queued_by,
+    ?array $carried_base = null,
 ): bool {
     if ($target_id === null) {
         return false;
@@ -132,7 +182,7 @@ function bridge_enqueue(
         return false;
     }
 
-    $base = bridge_capture_base($db, $target_type, $target_id, $applied);
+    $base = bridge_capture_base($db, $target_type, $target_id, $applied, $carried_base);
     if ($base === null) {
         return false;
     }

@@ -942,6 +942,11 @@ class ChangeRequestBridge(Base):
     )
     # Bumped on each maintainer requeue; part of the deterministic branch name.
     attempt: Mapped[int] = mapped_column(nullable=False, default=1, server_default="1")
+    # Consecutive infrastructure-error retries (clone/push/REST/auth) for the
+    # current attempt; reset on success or requeue. The worker backs off between
+    # retries (via lease_expires_at) and parks the row worker_error once this hits
+    # the cap, so a persistent outage stops re-alerting every tick.
+    retry_count: Mapped[int] = mapped_column(nullable=False, default=0, server_default="0")
     # Drift detection: the dataset SHA + per-field reviewed base values captured at
     # queue time; the worker refuses (conflict) if dataset main moved them.
     base_dataset_sha: Mapped[str | None] = mapped_column(String(40))

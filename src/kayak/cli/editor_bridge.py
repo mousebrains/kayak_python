@@ -3,14 +3,15 @@
 Subcommands (docs/PLAN_editor_pr_bridge.md):
   * ``status``        — show the bridge queue counts by state (read-only).
   * ``run-once``      — turn queued endorsements into kayak_data PRs (the worker).
+  * ``queue``         — requeue a worker_error / pr_closed row as a new attempt.
   * ``reconcile``     — advance pr_open rows to merged / pr_closed (reads PR state).
   * ``mark-deployed`` — merged → deployed + resolve the parent request, once the
                         merge commit is in the deployed ``--dataset-ref``.
 
 ``run-once`` / ``reconcile`` are gated on ``editor_bridge_enabled`` + App
 credentials (a host without the GitHub App provisioned is a clean no-op);
-``mark-deployed`` needs no token, so a post-deploy hook can call it anywhere. The
-``queue`` (manual requeue) subcommand lands in a follow-up.
+``queue`` / ``mark-deployed`` need no token (DB-only), so an operator / post-deploy
+hook can call them anywhere.
 """
 
 from __future__ import annotations
@@ -45,6 +46,12 @@ def addArgs(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> 
         "--limit", type=int, default=10, help="Max queued rows to process this run (default 10)"
     )
     p_run.set_defaults(func=cmd_run_once)
+
+    p_queue = sub.add_parser(
+        "queue", help="Requeue a worker_error / pr_closed bridge row as a new attempt"
+    )
+    p_queue.add_argument("--cr", type=int, required=True, help="change_request id to requeue")
+    p_queue.set_defaults(func=cmd_queue)
 
     p_rec = sub.add_parser(
         "reconcile", help="Advance pr_open rows by reading PR state (merged / closed)"
@@ -156,6 +163,23 @@ def cmd_reconcile(args: argparse.Namespace) -> int:
         print("editor-bridge: a PR read failed (infra) — see logs")
         return 1
     return 0
+
+
+def cmd_queue(args: argparse.Namespace) -> int:
+    """Requeue a recoverable bridge row (worker_error / pr_closed) as a new attempt.
+
+    Not gated on ``editor_bridge_enabled`` (a DB-only state reset, no token): an
+    operator can requeue a stuck row even on a host that isn't actively bridging.
+    Exits non-zero only when no bridge row exists for the id (an operator typo);
+    a refusal (wrong state / parent not approved) is informational, exit 0.
+    """
+    session = get_session()
+    try:
+        status, detail = worker.requeue(session, args.cr)
+    finally:
+        session.close()
+    print(f"editor-bridge: {detail}")
+    return 1 if status == "not_found" else 0
 
 
 def cmd_mark_deployed(args: argparse.Namespace) -> int:

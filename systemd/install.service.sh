@@ -6,7 +6,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEST=/etc/systemd/system
-UNITS=(kayak-pipeline.service kayak-pipeline.timer kayak-decimate.service kayak-decimate.timer kayak-editor-retention.service kayak-editor-retention.timer kayak-backup-weekly.service kayak-backup-weekly.timer kayak-backup-hourly.service kayak-backup-hourly.timer kayak-backup-offsite.service kayak-notify-failure@.service kayak-heartbeat.service kayak-heartbeat.timer kayak-healthcheck.service kayak-healthcheck.timer kayak-audit-gauges.service kayak-audit-gauges.timer kayak-cert-expiry.service kayak-cert-expiry.timer kayak-cert-renewal-test.service kayak-cert-renewal-test.timer kayak-config-drift.service kayak-config-drift.timer kayak-recap.service kayak-recap.timer kayak-fetch-osmb.service kayak-fetch-osmb.timer kayak-status.service kayak-status.timer kayak-fail-test.service)
+UNITS=(kayak-pipeline.service kayak-pipeline.timer kayak-decimate.service kayak-decimate.timer kayak-editor-retention.service kayak-editor-retention.timer kayak-backup-weekly.service kayak-backup-weekly.timer kayak-backup-hourly.service kayak-backup-hourly.timer kayak-backup-offsite.service kayak-notify-failure@.service kayak-heartbeat.service kayak-heartbeat.timer kayak-healthcheck.service kayak-healthcheck.timer kayak-audit-gauges.service kayak-audit-gauges.timer kayak-cert-expiry.service kayak-cert-expiry.timer kayak-cert-renewal-test.service kayak-cert-renewal-test.timer kayak-config-drift.service kayak-config-drift.timer kayak-recap.service kayak-recap.timer kayak-fetch-osmb.service kayak-fetch-osmb.timer kayak-status.service kayak-status.timer kayak-fail-test.service kayak-editor-bridge-run.service kayak-editor-bridge-run.timer kayak-editor-bridge-reconcile.service kayak-editor-bridge-reconcile.timer)
+# NOTE: the kayak-editor-bridge-*.timer units are deliberately ABSENT from TIMERS
+# below — installing/updating units must never auto-activate the bridge. They are
+# copied to $DEST (available) but stay stopped until the operator deliberately runs
+# `systemctl enable --now kayak-editor-bridge-run.timer kayak-editor-bridge-reconcile.timer`
+# (the go-live step in docs/operations.md). EDITOR_BRIDGE_ENABLED is already true in
+# prod's .env, so starting the timers IS the activation.
 TIMERS=(kayak-pipeline.timer kayak-decimate.timer kayak-editor-retention.timer kayak-backup-weekly.timer kayak-backup-hourly.timer kayak-heartbeat.timer kayak-healthcheck.timer kayak-audit-gauges.timer kayak-cert-expiry.timer kayak-cert-renewal-test.timer kayak-config-drift.timer kayak-recap.timer kayak-fetch-osmb.timer kayak-status.timer)
 
 if [[ $EUID -ne 0 ]]; then

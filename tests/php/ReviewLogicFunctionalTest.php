@@ -135,6 +135,33 @@ final class ReviewLogicFunctionalTest extends FunctionalTestCase
         $this->assertSame(0, $this->historyCount($cr['id']));
     }
 
+    public function testApproveRollsBackOnInTransactionBaseDrift(): void
+    {
+        // In-transaction TOCTOU guard (PR #219): if the carried (render-time) base
+        // no longer matches the live reach when the freeze transaction captures
+        // it, review_approve rolls the WHOLE endorse back — CR stays pending, no
+        // bridge row — and returns the re-review message. This is the backstop the
+        // pre-check (_review_check_base_drift) can't give once inside the txn.
+        $db = $this->pdo();
+        $maint = Fixtures::editor($db, ['status' => 'maintainer']);
+        $editor = Fixtures::editor($db);
+        $reach = Fixtures::reach($db, ['description' => 'the live value', 'river' => 'R']);
+        $cr = $this->seedCr($editor, $reach, ['reach' => ['description' => 'new']]);
+
+        // Carried base claims a value the live reach no longer has -> drift.
+        $res = review_approve(
+            $db, $cr, ['reach' => ['description' => 'new']], $maint, '', ['description' => 'stale value'],
+        );
+
+        $this->assertFalse($res['ok'], 'a drifted base must fail the endorse');
+        $this->assertStringContainsString('changed since you opened', (string)($res['err'] ?? ''));
+        $this->assertSame('pending', $this->fetchCr($cr['id'])['status'], 'endorse rolled back');
+        $n = (int)$db->query(
+            'SELECT COUNT(*) FROM change_request_bridge WHERE change_request_id = ' . (int)$cr['id']
+        )->fetchColumn();
+        $this->assertSame(0, $n, 'a drifted endorse queues no bridge row');
+    }
+
     public function testApproveFreezesBlankOverlayAndLeavesColumn(): void
     {
         $db = $this->pdo();

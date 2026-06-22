@@ -961,4 +961,25 @@ prune_releases() {
 }
 prune_releases
 
+# Best-effort: close the editor→kayak_data bridge loop for this deploy. Any
+# 'merged' bridge row whose PR merge commit is an ancestor of the just-deployed
+# dataset ref advances to 'deployed' (resolving the parent change_request +
+# emailing the proposer). This is FULLY fail-soft and runs AFTER `trap - ERR`:
+# the deploy is already committed, so a bridge bookkeeping hiccup must never fail
+# it — the reconcile timer / a manual `levels editor-bridge mark-deployed` catches
+# any miss. Runs as the app user (owns the DB + WAL sidecars), against the
+# app-owned dataset clone — fetched first so its object DB holds the merge commits
+# + $DATASET_REF (git merge-base --is-ancestor reads objects, not the worktree;
+# NOT the release's tar snapshot, which has no .git). mark-deployed is DB-only
+# (no GitHub token), self-degrades to a clean no-op on an empty queue or an
+# unresolvable repo, so it's safe even before the bridge is enabled.
+if [ -n "${DATASET_DIR:-}" ] && [ -d "$DATASET_DIR/.git" ]; then
+    log "editor-bridge: marking deployed rows (best-effort)"
+    run_app git -C "$DATASET_DIR" fetch --quiet origin "$DATASET_BRANCH" 2>/dev/null \
+        || log "editor-bridge: dataset fetch failed (best-effort; mark-deployed may not resolve newest merges)"
+    run_app env DATABASE_URL="sqlite:///$DB_PATH" "$LEVELS" editor-bridge mark-deployed \
+        --dataset-ref "$DATASET_REF" --dataset-repo "$DATASET_DIR" \
+        || log "editor-bridge: mark-deployed failed (best-effort; reconcile/manual will catch it)"
+fi
+
 log "activated release $RELEASE_ID (engine $ENGINE_REF, dataset $DATASET_REF)"

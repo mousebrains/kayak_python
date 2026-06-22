@@ -1,0 +1,14 @@
+[Unit]
+Description=Reconcile kayak editor-bridge PR state hourly (merged / closed)
+
+[Timer]
+# Hourly at :07 (offset from the :00/15 run timer). A merged/closed dataset PR is
+# picked up within the hour; the deploy hook (mark-deployed) advances merged →
+# deployed sooner on a real deploy, and this is the catch-all for missed marks.
+# Not auto-enabled by install.service.sh — start it explicitly at go-live.
+OnCalendar=*:07
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target

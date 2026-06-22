@@ -1,0 +1,14 @@
+[Unit]
+Description=Run the kayak editor→kayak_data bridge worker every 15 minutes
+
+[Timer]
+# Every 15 minutes: a fresh endorsement becomes a kayak_data PR within ~15 min.
+# RandomizedDelaySec spreads load; the per-row lease keeps overlapping runs from
+# double-acting a row. Not auto-enabled by install.service.sh — start it
+# explicitly (systemctl enable --now) as the deliberate bridge go-live.
+OnCalendar=*:0/15
+RandomizedDelaySec=120
+Persistent=true
+
+[Install]
+WantedBy=timers.target
