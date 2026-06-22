@@ -573,8 +573,13 @@ bridge settings live in `KayakConfig`/env, deliberately not in
    ```bash
    sudo install -o <worker-user> -g <worker-user> -m 0400 \
        /path/to/downloaded.pem /etc/kayak/editor-bridge-app.pem
+   # Confirm PHP-FPM cannot read it (must FAIL):
+   sudo -u www-data cat /etc/kayak/editor-bridge-app.pem && echo "LEAK — fix perms" || echo "ok: www-data denied"
    ```
-   It must be outside the repo and unreadable by `www-data`/PHP-FPM.
+   It must be outside the repo (not under `DATASET_DIR`/`OUTPUT_DIR`) and
+   unreadable by `www-data`/PHP-FPM. The worker enforces this too:
+   `load_private_key` refuses a group/other-accessible key (`mode & 0o077 != 0`),
+   so a misdeploy as `0644` fails closed rather than signing with a leaky key.
 5. **Configure** in the worker's `~/.config/kayak/.env` (Python-only; never in the
    runtime-config JSON):
    ```

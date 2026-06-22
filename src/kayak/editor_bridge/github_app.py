@@ -22,6 +22,7 @@ deterministically. No git, no DB, no PR logic.
 from __future__ import annotations
 
 import datetime as _dt
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -50,8 +51,23 @@ class InstallationToken:
 
 
 def load_private_key(path: str | Path) -> str:
-    """Read the App private-key PEM from *path* (a 0400 worker-only file)."""
-    text = Path(path).read_text(encoding="utf-8")
+    """Read the App private-key PEM from *path* (a 0400 worker-only file).
+
+    Enforce the documented operator boundary in code: the App key is the
+    long-lived credential the whole design keeps away from PHP-FPM and other
+    local users, so refuse to read it if it is group/other-accessible
+    (``mode & 0o077``). A misdeploy as ``0644`` must fail closed rather than mint
+    ``contents``/``pull_requests`` write tokens from a world-readable key.
+    """
+    p = Path(path)
+    if os.name == "posix":
+        mode = p.stat().st_mode
+        if mode & 0o077:
+            raise GitHubAuthError(
+                f"{path}: private key is group/other-accessible (mode "
+                f"{oct(mode & 0o777)}); chmod 0400 and restrict to the worker user"
+            )
+    text = p.read_text(encoding="utf-8")
     if "PRIVATE KEY" not in text:
         # Fail loud on an obviously-wrong file rather than handing PyJWT garbage
         # that surfaces as an opaque signing error later.
@@ -120,6 +136,9 @@ def mint_installation_token(
                 "X-GitHub-Api-Version": "2022-11-28",
             },
             timeout=_TOKEN_TIMEOUT,
+            # This call carries the App JWT; refuse to follow a redirect to an
+            # unexpected host (the endpoint is the pinned public api.github.com).
+            allow_redirects=False,
         )
     except requests.RequestException as exc:
         raise GitHubAuthError(f"installation-token request failed: {exc}") from exc

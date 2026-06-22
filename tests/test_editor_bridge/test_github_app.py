@@ -92,13 +92,26 @@ def test_load_private_key_reads_pem(tmp_path, keypair):
     pem, _ = keypair
     p = tmp_path / "app.pem"
     p.write_text(pem, encoding="utf-8")
+    p.chmod(0o400)
     assert load_private_key(p) == pem
 
 
 def test_load_private_key_rejects_non_pem(tmp_path):
     p = tmp_path / "junk.pem"
     p.write_text("ghp_not_a_key", encoding="utf-8")
+    p.chmod(0o400)
     with pytest.raises(GitHubAuthError, match="PEM"):
+        load_private_key(p)
+
+
+def test_load_private_key_rejects_group_or_other_readable(tmp_path, keypair):
+    # The App key is the long-lived credential; a misdeploy as 0644 must fail
+    # closed (the design depends on PHP-FPM / local users not reading it).
+    pem, _ = keypair
+    p = tmp_path / "app.pem"
+    p.write_text(pem, encoding="utf-8")
+    p.chmod(0o644)
+    with pytest.raises(GitHubAuthError, match="group/other-accessible"):
         load_private_key(p)
 
 

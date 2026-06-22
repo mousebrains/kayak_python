@@ -153,6 +153,9 @@ class RestGitHubClient:
                 json=json,
                 headers=self._headers,
                 timeout=_TIMEOUT,
+                # Bearer-token call against the pinned public api.github.com — don't
+                # follow a redirect to an unexpected host (SSRF posture).
+                allow_redirects=False,
             )
         except requests.RequestException as exc:
             raise GitHubApiError(f"{method} {path} failed: {exc}") from exc

@@ -88,6 +88,7 @@ def clone(
     if depth is not None:
         args += ["--depth", str(depth)]
     if branch is not None:
+        _reject_option_like(branch=branch)
         args += ["--branch", branch, "--single-branch"]
     args += ["--", remote_url, str(dest)]
     _run(args, token=token)
