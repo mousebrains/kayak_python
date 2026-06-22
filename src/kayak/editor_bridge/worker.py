@@ -85,6 +85,7 @@ def _retry_backoff(retry_count: int) -> _dt.timedelta:
     secs = _RETRY_BACKOFF_BASE.total_seconds() * (2 ** max(0, retry_count - 1))
     return min(_dt.timedelta(seconds=secs), _RETRY_BACKOFF_CAP)
 
+
 # The dataset's updated_at CSV format (e.g. "2026-04-22 23:33:10") — match it so
 # the reach stamp the adapter writes diffs cleanly against the existing column.
 _STAMP_FMT = "%Y-%m-%d %H:%M:%S"
@@ -638,7 +639,9 @@ def _process_row(
         # row isn't hammered every tick. Quiet (no escalate): a transient blip that
         # self-heals on a later run shouldn't page; only the give-up above does.
         backoff = _retry_backoff(bridge.retry_count)
-        bridge.last_error = f"infrastructure error (retry {bridge.retry_count}, backoff {backoff}): {exc}"
+        bridge.last_error = (
+            f"infrastructure error (retry {bridge.retry_count}, backoff {backoff}): {exc}"
+        )
         bridge.lease_owner = None
         bridge.lease_expires_at = clock() + backoff
         session.commit()
