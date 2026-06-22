@@ -391,6 +391,26 @@ def test_editing_the_embedded_newline_row_itself_round_trips(tmp_path):
     assert _row(tmp_path / "reach.csv", "1")["description"] == "single"
 
 
+def test_unicode_line_separator_in_cell_does_not_desync_spans(tmp_path):
+    # A cell carrying U+2028 LINE SEPARATOR (pasted from a PDF/word processor) is
+    # NOT a CSV record boundary — csv.reader keeps it in one logical row. str
+    # .splitlines() WOULD split on it, desyncing the physical-line map and splicing
+    # the wrong row; the \n-only segmentation keeps lines and spans aligned, so a
+    # sibling edit must leave the U+2028 row byte-identical.
+    csv_text = (
+        "id,updated_at,description\n"
+        "1,2026-01-01,line\u2028break\n"  # one logical row, U+2028 inside the cell
+        "2,2026-01-01,target\n"
+    )
+    (tmp_path / "reach.csv").write_text(csv_text, encoding="utf-8")
+    apply_change(tmp_path, "reach", 2, {"reach": {"description": "new"}}, updated_at="2026-06-21")
+
+    text = (tmp_path / "reach.csv").read_text(encoding="utf-8")
+    assert "1,2026-01-01,line\u2028break\n" in text  # U+2028 row untouched, intact
+    assert text.endswith("2,2026-06-21,new\n")
+    assert _row(tmp_path / "reach.csv", "1")["description"] == "line\u2028break"
+
+
 # ---------------------------------------------------------------------------
 # drift: reviewed-base normalization + fail-closed on a missing base
 # ---------------------------------------------------------------------------

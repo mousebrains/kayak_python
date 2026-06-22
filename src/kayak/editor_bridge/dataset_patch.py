@@ -273,16 +273,34 @@ def _patch_row(
     return PatchResult(csv_path.name, target_id, changed)
 
 
+def _physical_lines(text: str) -> list[str]:
+    """Split *text* into physical lines on ``\\n`` only, keeping the terminator.
+
+    Deliberately NOT ``str.splitlines()``: that also breaks on ``\\v \\f \\x1c-\\x1e
+    \\x85 \\u2028 \\u2029``, which ``csv.reader.line_num`` does **not** count (it
+    iterates the file object, which yields ``\\n``-delimited lines over the
+    read_text LF-normalised text). Splitting on those would desync ``lines`` from
+    the span map and splice the wrong row when a cell carries such a character
+    (e.g. a ``\\u2028`` pasted into a description) — the same line-counting bug
+    class the span map fixes.
+    """
+    parts = text.split("\n")
+    lines = [p + "\n" for p in parts[:-1]]
+    if parts[-1]:  # a final line with no trailing newline
+        lines.append(parts[-1])
+    return lines
+
+
 def _parse_with_spans(text: str) -> tuple[list[str], list[list[str]], list[tuple[int, int]]]:
     """Parse *text* into (physical lines, logical rows, per-row physical-line spans).
 
-    ``lines`` is ``text.splitlines(keepends=True)`` (LF, post read_text normalisation).
+    ``lines`` is the ``\\n``-split physical lines (see :func:`_physical_lines`).
     ``rows[j]`` is the j-th logical CSV record; ``spans[j] == (start, end)`` is its
     half-open slice into ``lines`` — ``end - start > 1`` exactly when that row has an
     embedded-newline cell. Built from ``csv.reader.line_num`` (cumulative physical
     lines consumed), so the mapping is robust to quoted multi-line fields.
     """
-    lines = text.splitlines(keepends=True)
+    lines = _physical_lines(text)
     reader = csv.reader(io.StringIO(text))
     rows: list[list[str]] = []
     spans: list[tuple[int, int]] = []
