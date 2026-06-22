@@ -1,10 +1,12 @@
 # Plan: Kalama LI-COR gauge integration
 
-Status: COMPLETE (2026-06-21) — engine merged (kayak_python #210 parser + `fetch-licor`
-step, #211 flake-fix) and dataset merged (kayak_data #67 engine pin, #69 source 363 LI-COR
-replacing the calc source 354 + calc 21). Only the routine prod deploy remains
-(`kayak-deploy --engine-ref 22bfac3 --dataset-ref <#69 merge>` + a hand-run
-`sync-metadata --allow-deletes`). Archived to docs/done.
+Status: COMPLETE + DEPLOYED (2026-06-21). Engine merged (kayak_python #210 parser +
+`fetch-licor` step, #211 flake-fix) and dataset merged (kayak_data #67 engine pin,
+#69 source 363 LI-COR replacing the calc source 354 + calc 21). Deployed to prod in
+paired-release `24ee70c` (engine `22bfac3`, dataset `496a577`); the `sync-metadata
+--allow-deletes` cutover dropped 391 rows (388 calc obs + calc 21 + source 354 + the
+gauge_source re-point) and gauge 231 is now fed by the real LI-COR sensor. No operator
+task remains. Archived to docs/done.
 
 Investigation inputs:
 
