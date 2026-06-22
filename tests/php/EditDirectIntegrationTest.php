@@ -47,6 +47,9 @@ final class EditDirectIntegrationTest extends IntegrationTestCase
             'target_type' => 'reach',
             'reach_id' => (string)self::REACH_ID,
             'description' => 'Directly edited description.',
+            // The form carries the load-time value as base_<field> (TOCTOU guard);
+            // it matches the seeded current, so the edit is accepted.
+            'base_description' => 'Original direct description.',
         ];
 
         $resp = $this->request('/edit.php', [], $cookies, 'POST', $post);
@@ -126,5 +129,57 @@ final class EditDirectIntegrationTest extends IntegrationTestCase
              AND editor_id = (SELECT id FROM editor WHERE email = 'direct-noop-maint@example.com')"
         )->fetchColumn();
         $this->assertSame(0, $count, 'a no-op save must not create a change_request');
+    }
+
+    public function testDirectEditRejectsStaleBase(): void
+    {
+        // TOCTOU guard: the field changed since the form loaded (base_description
+        // != current) → 409, no change_request frozen.
+        $maint = self::seedEditorSession('stale-edit-maint@example.com', 'maintainer');
+        $cookies = [
+            'ed_sess' => $maint['session_token'],
+            'ed_csrf' => $maint['csrf_token'],
+        ];
+        $post = [
+            'csrf_token' => $maint['csrf_token'],
+            'target_type' => 'reach',
+            'reach_id' => (string)self::REACH_ID,
+            'description' => 'My edit',
+            'base_description' => 'what I saw earlier',  // != the seeded current
+        ];
+
+        $resp = $this->request('/edit.php', [], $cookies, 'POST', $post);
+
+        $this->assertSame(409, $resp['status']);
+        $this->assertStringContainsString('changed since you opened', $resp['body']);
+        $db = self::testDb();
+        $n = (int)$db->query(
+            "SELECT COUNT(*) FROM change_request WHERE target_type = 'reach'
+             AND target_id = " . self::REACH_ID . " AND subject LIKE 'Direct edit:%'
+             AND editor_id = (SELECT id FROM editor WHERE email = 'stale-edit-maint@example.com')"
+        )->fetchColumn();
+        $this->assertSame(0, $n, 'a stale edit must freeze nothing');
+    }
+
+    public function testEditFormRendersTocTouBase(): void
+    {
+        // Regression: the GET form must carry each field's load-time value as a
+        // hidden base_<field>, or the POST drift guard (which compares base_<field>
+        // to the current row) finds no base and fail-closes every save. The POST
+        // tests above inject base_* directly, so this pins the render side.
+        $maint = self::seedEditorSession('render-edit-maint@example.com', 'maintainer');
+        $cookies = [
+            'ed_sess' => $maint['session_token'],
+            'ed_csrf' => $maint['csrf_token'],
+        ];
+
+        $resp = $this->request('/edit.php', ['id' => (string)self::REACH_ID], $cookies, 'GET');
+
+        $this->assertSame(200, $resp['status']);
+        $this->assertStringContainsString(
+            '<input type="hidden" name="base_description" value="Original direct description.">',
+            $resp['body'],
+            'GET form must carry each field value as a TOCTOU drift base',
+        );
     }
 }

@@ -105,9 +105,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $old = $row[$field] ?? null;
-        if ((string)$old === (string)$val) continue;
+        $old_str = (string)$old;
+        if ($old_str === (string)$val) continue;
 
-        $changes[$field] = ['old' => $old, 'new' => $val];
+        // old_str is the current (T2) value as a string; the TOCTOU guard below
+        // compares it to the form's load-time base without re-casting the PDO row.
+        $changes[$field] = ['old' => $old, 'new' => $val, 'old_str' => $old_str];
+    }
+
+    // TOCTOU guard: each field carries the value shown when the form loaded
+    // (base_<field>). If the dataset changed a field being submitted since then
+    // (a deploy's sync-metadata, or another bridge merge), the maintainer's view
+    // is stale — endorsing would let the worker overwrite a change they never saw
+    // (the drift base is captured here at submit time). Reject a stale view; fail
+    // closed if a base is missing (e.g. a stale form).
+    foreach ($changes as $field => $pair) {
+        $rendered = $_POST['base_' . $field] ?? null;
+        if (!is_string($rendered) || $rendered !== $pair['old_str']) {
+            http_response_code(409);
+            exit("The $type changed since you opened this form — reload and redo your edit.");
+        }
     }
 
     // SA-lite (dataset-separation D1): a direct edit no longer writes the
@@ -124,7 +141,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $frozen[$field] = $pair['new'];
         }
         $applied = [$type => $frozen];
-        $payload = json_encode($applied, JSON_UNESCAPED_SLASHES);
+        // JSON_PRESERVE_ZERO_FRACTION: numeric fields are floats, so a whole-number
+        // value keeps its ".0" — the worker writes str(float), matching the
+        // dataset's canonical numeric form (consistent with the review path, M3).
+        $payload = json_encode($applied, JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION);
         $payload_str = $payload !== false ? $payload : '{}';
         // Freeze the self-endorsed diff and queue its bridge row in ONE
         // transaction (Tier 2, docs/PLAN_editor_pr_bridge.md): a direct edit is
@@ -202,6 +222,9 @@ foreach ($editable_fields as $field) {
     $label = ucwords(str_replace('_', ' ', $field));
     echo "<label>$label</label>";
 
+    // Carry the load-time value so POST can reject if the dataset changed this
+    // field since the form opened (TOCTOU guard).
+    echo "<input type=\"hidden\" name=\"base_$field\" value=\"$val\">";
     if (in_array($field, $textarea_fields, true)) {
         echo "<textarea name=\"$field\">$val</textarea>";
     } else {

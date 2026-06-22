@@ -192,6 +192,9 @@ final class ReviewIntegrationTest extends IntegrationTestCase
         $maint = self::seedEditorSession('approve-maint@example.com', 'maintainer');
         $editor = self::seedEditorSession('approve-editor@example.com', 'full');
         $cr_id = self::seedPendingCR($editor['editor_id'], 'APPROVED DESCRIPTION VALUE');
+        // Pin the current description so the TOCTOU base check is deterministic.
+        self::testDb()->prepare('UPDATE reach SET description = ? WHERE id = ?')
+            ->execute(['Original description.', self::REACH_ID]);
         $cookies = [
             'ed_sess' => $maint['session_token'],
             'ed_csrf' => $maint['csrf_token'],
@@ -200,8 +203,10 @@ final class ReviewIntegrationTest extends IntegrationTestCase
             'csrf_token' => $maint['csrf_token'],
             'id' => (string)$cr_id,
             'action' => 'approve',
-            // Approve form mirrors payload fields back as reach_<field>.
+            // Approve form mirrors payload fields back as reach_<field>, and carries
+            // the render-time "Current" value as base_reach_<field> (TOCTOU guard).
             'reach_description' => 'APPROVED DESCRIPTION VALUE',
+            'base_reach_description' => 'Original description.',
             'reviewer_note' => 'Looks good — endorsing.',
         ];
 
@@ -249,6 +254,38 @@ final class ReviewIntegrationTest extends IntegrationTestCase
         $this->assertSame(200, $resp2['status']);
         $cr2 = $db->query("SELECT status FROM change_request WHERE id = $cr_id")->fetch();
         $this->assertSame('resolved', $cr2['status']);
+    }
+
+    public function testPostApproveRejectsStaleBase(): void
+    {
+        // TOCTOU guard: the reach changed since the maintainer opened the page
+        // (base_reach_description != current) → approve must be refused, the CR
+        // left pending, and no bridge row queued.
+        $maint = self::seedEditorSession('stale-maint@example.com', 'maintainer');
+        $editor = self::seedEditorSession('stale-editor@example.com', 'full');
+        $cr_id = self::seedPendingCR($editor['editor_id'], 'NEW VALUE');
+        self::testDb()->prepare('UPDATE reach SET description = ? WHERE id = ?')
+            ->execute(['the value NOW', self::REACH_ID]);
+        $cookies = ['ed_sess' => $maint['session_token'], 'ed_csrf' => $maint['csrf_token']];
+        $post = [
+            'csrf_token' => $maint['csrf_token'],
+            'id' => (string)$cr_id,
+            'action' => 'approve',
+            'reach_description' => 'NEW VALUE',
+            'base_reach_description' => 'what I saw earlier',  // != 'the value NOW'
+        ];
+
+        $resp = $this->request('/review.php', [], $cookies, 'POST', $post);
+
+        $this->assertSame(200, $resp['status']);
+        $this->assertStringContainsString('changed since you opened', $resp['body']);
+        $db = self::testDb();
+        $cr = $db->query("SELECT status FROM change_request WHERE id = $cr_id")->fetch();
+        $this->assertSame('pending', $cr['status'], 'a stale approve must not endorse');
+        $n = (int)$db->query(
+            "SELECT COUNT(*) FROM change_request_bridge WHERE change_request_id = $cr_id"
+        )->fetchColumn();
+        $this->assertSame(0, $n, 'no bridge row for a refused approve');
     }
 
     public function testPostRejectMarksRejected(): void

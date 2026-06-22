@@ -37,6 +37,17 @@ require_once __DIR__ . '/footer.php';
 const REVIEW_LIST_STATUSES = ['pending', 'approved', 'rejected', 'resolved', 'all'];
 
 /**
+ * Proposable reach fields that are numeric (the coordinates) — frozen as floats
+ * so the bridge writes a deterministic, dataset-canonical decimal cell (M3).
+ * These are the only numeric reach fields reachable on the review path; the
+ * numeric subset of the editor-proposable REACH_FULL_FIELDS. (length/gradient/
+ * elevation_lost/optimal_flow are edit.php-only and cast there.)
+ */
+const REVIEW_NUMERIC_REACH_FIELDS = [
+    'latitude_start', 'longitude_start', 'latitude_end', 'longitude_end',
+];
+
+/**
  * Dispatch and write the full HTTP response.
  *
  * @param array<string, mixed> $maint  The current_editor() row for the maintainer.
@@ -100,6 +111,15 @@ function _review_handle_post(PDO $db, ?int $cr_id, ?string $action, int $maint_i
     switch ($action) {
         case 'approve':
             $applied = _review_build_approve_payload($cr);
+            // TOCTOU guard: the maintainer must be endorsing against the value
+            // they saw at page render (carried in base_reach_*), not one the
+            // dataset changed to since. Reject a stale view so the worker's drift
+            // base reflects what was actually reviewed and it never silently
+            // overwrites an unseen change.
+            $drift = _review_check_base_drift($db, $cr, $applied);
+            if ($drift !== null) {
+                return [null, $drift];
+            }
             $approve_note = trim((string)($_POST['reviewer_note'] ?? ''));
             $result = review_approve($db, $cr, $applied, $maint_id, $approve_note);
             if ($result['ok']) {
@@ -171,6 +191,18 @@ function _review_build_approve_payload(array $cr): array
                 ? trim((string)$_POST[$key])
                 : $reach[$f];
         }
+        // M3: freeze the coordinate reach fields as floats, applying the same
+        // numeric→float freezing convention edit.php uses for its numerics. The
+        // coords are the only numeric fields reachable here, and with
+        // JSON_PRESERVE_ZERO_FRACTION on the encode a whole-number coord keeps
+        // its ".0" — so the frozen JSON number round-trips through the worker's
+        // str(float) to the dataset's canonical decimal cell. Only cast
+        // genuinely-numeric values (a blank stays "" verbatim).
+        foreach (REVIEW_NUMERIC_REACH_FIELDS as $nf) {
+            if (isset($applied['reach'][$nf]) && is_numeric($applied['reach'][$nf])) {
+                $applied['reach'][$nf] = (float)$applied['reach'][$nf];
+            }
+        }
     }
     if (isset($payload['reach_class']) && isset($_POST['classes_present'])) {
         $raw = trim((string)($_POST['classes'] ?? ''));
@@ -190,6 +222,56 @@ function _review_build_approve_payload(array $cr): array
         unset($applied['reach_class']);
     }
     return $applied;
+}
+
+/**
+ * One reach field's current value as a display string — the review form's
+ * "Current" column and the TOCTOU drift base both read through here so the
+ * single cast of the (mixed-typed) PDO reach cell lives in one place.
+ *
+ * @param array{reach: array<string, mixed>}|null $cur  loaded target state (null → '')
+ */
+function _review_reach_field_str(?array $cur, string $f): string
+{
+    return $cur !== null ? (string)($cur['reach'][$f] ?? '') : '';
+}
+
+/**
+ * TOCTOU guard: ensure the maintainer is endorsing against the value they saw.
+ *
+ * The review form renders each reach field's "Current" value and carries it as a
+ * hidden `base_reach_<field>`. If the dataset changed that value between page
+ * render and this submit (a deploy's sync-metadata, or another bridge merge),
+ * the maintainer's view is stale — endorsing would let the worker overwrite a
+ * change they never saw (the worker's drift base is captured at endorse time, so
+ * it wouldn't catch a render→approve-window change). Compare each changed field's
+ * carried base to the current DB value; return an error string (fail closed: a
+ * missing base, e.g. a stale form, also rejects) or null if the view is current.
+ *
+ * @param array{target_type: string, target_id: int|null} $cr
+ * @param array<string, mixed> $applied  the assembled approve payload
+ */
+function _review_check_base_drift(PDO $db, array $cr, array $applied): ?string
+{
+    if ($cr['target_type'] !== 'reach' || $cr['target_id'] === null) {
+        return null;  // only reach carries a drift base today
+    }
+    $reach = $applied['reach'] ?? [];
+    if (!is_array($reach) || $reach === []) {
+        return null;  // nothing bridgeable to check (e.g. a class-only change)
+    }
+    $cur = review_load_target_state($db, 'reach', $cr['target_id']);
+    if ($cur === null) {
+        return null;  // target gone — let review_approve report it ('Target missing')
+    }
+    foreach (array_keys($reach) as $f) {
+        $rendered = $_POST['base_reach_' . $f] ?? null;       // value shown at render
+        $current = _review_reach_field_str($cur, $f);         // value now
+        if (!is_string($rendered) || $rendered !== $current) {
+            return 'The reach changed since you opened this page — reopen and re-review.';
+        }
+    }
+    return null;
 }
 
 /**
@@ -392,7 +474,12 @@ function _render_review_reach_fields(array $reach_fields, ?array $cur): void
     echo '<table class="desc-table">';
     echo '<tr><th>Field</th><th>Current</th><th>Proposed (editable)</th></tr>';
     foreach ($reach_fields as $f => $v) {
-        $cur_val = $cur !== null ? (string)($cur['reach'][$f] ?? '') : '';
+        $cur_val = _review_reach_field_str($cur, $f);
+        // TOCTOU drift base: carry the value shown in "Current" so the POST
+        // handler (_review_check_base_drift) can reject an endorse made against
+        // a stale view (the dataset changed between render and submit).
+        echo '<input type="hidden" name="base_reach_' . htmlspecialchars($f)
+           . '" value="' . htmlspecialchars($cur_val) . '">';
         $is_long = in_array($f, ['description', 'features'], true);
         echo '<tr><td>' . htmlspecialchars($f) . '</td>';
         echo '<td><pre style="white-space:pre-wrap;margin:0;max-width:30em">'
