@@ -194,7 +194,9 @@ final class ReviewHandlerFunctionalTest extends FunctionalTestCase
     {
         [$crId, $reachId] = $this->seedScenario(['reach' => ['description' => 'approved via handler']]);
         $maint = $this->maint();
-        $this->withCsrfPost(['reviewer_note' => 'ok']);
+        // base_reach_* carries the render-time "Current" value (= the seeded 'old')
+        // for the TOCTOU guard; it matches, so approve proceeds.
+        $this->withCsrfPost(['reviewer_note' => 'ok', 'base_reach_description' => 'old']);
 
         [$flash, $err] = _review_handle_post($this->pdo(), $crId, 'approve', $maint['id']);
         $this->assertNull($err);
@@ -216,7 +218,11 @@ final class ReviewHandlerFunctionalTest extends FunctionalTestCase
         [$crId, $reachId] = $this->seedScenario(['reach' => ['description' => 'editor wording']]);
         $maint = $this->maint();
         // Maintainer edits the proposed value via the reach_<field> overlay.
-        $this->withCsrfPost(['reach_description' => 'maintainer wording', 'reviewer_note' => '']);
+        $this->withCsrfPost([
+            'reach_description' => 'maintainer wording',
+            'reviewer_note' => '',
+            'base_reach_description' => 'old',  // matches the seeded current (TOCTOU guard)
+        ]);
 
         [$flash] = _review_handle_post($this->pdo(), $crId, 'approve', $maint['id']);
         $this->assertSame('Endorsed — the diff is frozen below. Land it as a kayak_data PR, then Mark resolved once the deploy ships it.', $flash);
@@ -226,6 +232,34 @@ final class ReviewHandlerFunctionalTest extends FunctionalTestCase
         $st = $this->pdo()->prepare('SELECT description FROM reach WHERE id = ?');
         $st->execute([$reachId]);
         $this->assertNotSame('maintainer wording', $st->fetchColumn(), 'endorse must not write');
+    }
+
+    public function testPostApproveRejectsStaleBase(): void
+    {
+        // TOCTOU guard: the carried base_reach_description ('stale') no longer
+        // matches the current reach value ('old'), so approve is refused and the
+        // CR stays pending (no endorse against a stale view).
+        [$crId] = $this->seedScenario(['reach' => ['description' => 'proposed']]);
+        $this->withCsrfPost(['reach_description' => 'proposed', 'base_reach_description' => 'stale']);
+
+        [$flash, $err] = _review_handle_post($this->pdo(), $crId, 'approve', $this->maint()['id']);
+        $this->assertNull($flash);
+        $this->assertStringContainsString('changed since you opened', (string)$err);
+        $this->assertSame('pending', $this->fetchCr($crId)['status']);
+    }
+
+    public function testPostApproveRejectsMissingBase(): void
+    {
+        // Fail-closed contract: an approve POST that carries NO base_reach_* at all
+        // (e.g. a stale form predating this guard, or a hand-crafted request) must
+        // be refused, not endorsed — a missing base is treated as drift.
+        [$crId] = $this->seedScenario(['reach' => ['description' => 'proposed']]);
+        $this->withCsrfPost(['reach_description' => 'proposed']);  // no base_reach_description
+
+        [$flash, $err] = _review_handle_post($this->pdo(), $crId, 'approve', $this->maint()['id']);
+        $this->assertNull($flash);
+        $this->assertStringContainsString('changed since you opened', (string)$err);
+        $this->assertSame('pending', $this->fetchCr($crId)['status']);
     }
 
     public function testPostApproveWithClassBlockOverlay(): void
@@ -422,6 +456,23 @@ final class ReviewHandlerFunctionalTest extends FunctionalTestCase
         $this->assertStringContainsString('value="approve"', $html);
         $this->assertStringContainsString('value="reject"', $html);
         $this->assertStringContainsString(self::CSRF, $html);
+    }
+
+    public function testRenderDetailEmitsTocTouBaseForReachFields(): void
+    {
+        // Regression: the pending form must emit a hidden base_reach_<field>
+        // carrying the rendered "Current" value for every proposed reach field.
+        // Without it the POST drift guard (_review_check_base_drift) finds no base
+        // and fail-closes every endorse. The earlier POST tests injected
+        // base_reach_* directly, so they never exercised the render side — this
+        // pins it. seedScenario seeds the reach with description 'old'.
+        [$crId] = $this->seedScenario(['reach' => ['description' => 'a proposed change']]);
+        $html = $this->capture(fn() => _render_review_detail($this->pdo(), $crId, null, null, self::CSRF));
+        $this->assertStringContainsString(
+            '<input type="hidden" name="base_reach_description" value="old">',
+            $html,
+            'each proposed reach field must carry its current value as a TOCTOU drift base',
+        );
     }
 
     public function testRenderDetailTerminalShowsAppliedPayloadNoForm(): void

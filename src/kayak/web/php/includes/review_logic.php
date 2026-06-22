@@ -135,7 +135,10 @@ function review_approve(PDO $db, array $cr, array $applied, int $maint_id, strin
     // (Tier 2) so an endorsed diff is never left un-queued and a rolled-back
     // freeze leaves no orphan queue row. See docs/PLAN_editor_pr_bridge.md.
     $merged_note = merge_reviewer_note($cr['reviewer_note'] ?? '', $new_note);
-    $applied_json = json_encode($applied, JSON_UNESCAPED_SLASHES);
+    // JSON_PRESERVE_ZERO_FRACTION: the numeric reach fields are floats (M3), so a
+    // whole-number coordinate keeps its ".0" — the worker writes str(float), so the
+    // frozen value round-trips to the dataset's canonical numeric form.
+    $applied_json = json_encode($applied, JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION);
     $applied_json = $applied_json !== false ? $applied_json : '{}';
     $db->beginTransaction();
     try {
