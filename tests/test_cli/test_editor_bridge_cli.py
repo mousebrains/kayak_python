@@ -83,3 +83,38 @@ def test_mark_deployed_reports_outcomes(monkeypatch, session, capsys):
     rc = cli.cmd_mark_deployed(Namespace(dataset_ref="abc", dataset_repo=None))
     assert rc == 0
     assert "deployed" in capsys.readouterr().out
+
+
+def test_cmd_mark_deployed_reports_unresolvable_merged(
+    monkeypatch, session, editor, tmp_path, capsys
+):
+    # A merged row + a non-git --dataset-repo → 0 deployed but N still merged →
+    # the misconfig must be visible (not the bare "no merged rows" message).
+    cr = ChangeRequest(
+        target_type=ChangeTarget.reach,
+        target_id=1,
+        editor_id=editor.id,
+        payload_json="{}",
+        status="approved",
+        applied_json="{}",
+    )
+    session.add(cr)
+    session.flush()
+    session.add(
+        ChangeRequestBridge(
+            change_request_id=cr.id, state=BridgeState.merged, pr_merge_sha="a" * 40
+        )
+    )
+    session.flush()
+
+    monkeypatch.setattr(cli, "get_config", lambda: KayakConfig(editor_bridge_enabled=True))
+    monkeypatch.setattr(cli, "get_session", lambda: session)
+    monkeypatch.setattr(session, "close", lambda: None)
+    notgit = tmp_path / "notgit"
+    notgit.mkdir()
+
+    rc = cli.cmd_mark_deployed(Namespace(dataset_ref="b" * 40, dataset_repo=str(notgit)))
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "none resolvable" in out
+    assert "1 merged row" in out

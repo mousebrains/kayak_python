@@ -282,6 +282,10 @@ def _resolve_parent(session: Session, bridge: ChangeRequestBridge, dataset_ref: 
     Idempotent: a missing or already-``resolved`` parent is a no-op, so a second
     pass (or two overlapping mark-deployed runs, until a lease lands) can't append
     the deploy note twice.
+
+    NOTE: unlike the manual review.php close (which emails the proposer via
+    review_notify_editor), this records status + a machine note only — proposer
+    email-on-deploy is deferred to the enablement PR (the bridge ships dormant).
     """
     cr = session.get(ChangeRequest, bridge.change_request_id)
     if cr is None or cr.status == ChangeStatus.resolved:

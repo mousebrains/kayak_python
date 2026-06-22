@@ -630,11 +630,21 @@ frozen-diff integrity anomaly) so the systemd `OnFailure` chain alerts; a routin
 per-proposal outcome (conflict / superseded / no-op) exits 0 and is visible via
 `status`. `mark-deployed` closes the SA-lite loop: it advances a merged bridge
 row to `deployed` and its parent `change_request` to `resolved` once the PR's
-merge commit is in the deployed `--dataset-ref` (resolves several PRs from one
-deploy via ancestry against `DATASET_DIR`). It needs no GitHub token, so it can
-be wired as a best-effort post-activation step in `kayak-deploy` (the periodic
-`reconcile`/`mark-deployed` run catches any miss). A systemd timer for
-`run-once`/`reconcile` is added at enablement time.
+merge commit is an ancestor of the deployed `--dataset-ref` (resolves several PRs
+from one deploy). It needs no GitHub token.
+
+**`--dataset-repo` must be a real git checkout** containing both the PR merge
+commits and `--dataset-ref` (it runs `git merge-base --is-ancestor`). The default
+is `DATASET_DIR`, which works for a manual run when that's a clone (e.g.
+`/home/pat/kayak_data`, after a `git fetch`). It is **not** the paired-release
+`$RELEASE_DIR/dataset` — that's a `git archive`/`tar` snapshot with no `.git`, so
+ancestry there silently resolves nothing (the command fails safe: rows stay
+`merged`, it never marks a request resolved that wasn't deployed, and it now
+prints `N merged row(s) but none resolvable in <repo>` so the misconfig is
+visible). The `kayak-deploy` post-activation hook + the `run-once`/`reconcile`
+systemd timer (and proposer email-on-deploy) land at enablement time — the hook
+must point `--dataset-repo` at a git source (a retained/fetched clone), not the
+release snapshot.
 
 ## Rollback (revert code to a previous SHA)
 

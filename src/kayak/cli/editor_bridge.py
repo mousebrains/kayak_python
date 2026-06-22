@@ -170,11 +170,26 @@ def cmd_mark_deployed(args: argparse.Namespace) -> int:
     session = get_session()
     try:
         outcomes = worker.mark_deployed(session, cfg, dataset_ref=args.dataset_ref, repo=repo)
+        # Distinguish "nothing merged" from "merged rows exist but none resolved"
+        # (e.g. repo isn't a git checkout containing the commits — the common
+        # mistake of pointing at the paired-release tar snapshot, which has no
+        # .git). The latter must be visible without trawling `status`.
+        still_merged = session.scalar(
+            select(func.count())
+            .select_from(ChangeRequestBridge)
+            .where(ChangeRequestBridge.state == BridgeState.merged)
+        )
     finally:
         session.close()
 
     if not outcomes:
-        print("editor-bridge: no merged rows to mark deployed")
+        if still_merged:
+            print(
+                f"editor-bridge: {still_merged} merged row(s) but none resolvable in {repo} — "
+                "point --dataset-repo at a git checkout fetched to the dataset ref"
+            )
+        else:
+            print("editor-bridge: no merged rows to mark deployed")
         return 0
     for o in outcomes:
         print(f"  cr {o.change_request_id}: {o.state} — {o.detail}")
