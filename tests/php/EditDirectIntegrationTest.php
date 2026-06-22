@@ -161,6 +161,36 @@ final class EditDirectIntegrationTest extends IntegrationTestCase
         $this->assertSame(0, $n, 'a stale edit must freeze nothing');
     }
 
+    public function testDirectEditRejectsMissingBase(): void
+    {
+        // Fail-closed contract: a POST that carries a changed field but NO
+        // base_<field> for it (a stale form predating the guard, or a crafted
+        // request) must 409 — a missing base is treated as drift, never frozen.
+        $maint = self::seedEditorSession('nobase-edit-maint@example.com', 'maintainer');
+        $cookies = [
+            'ed_sess' => $maint['session_token'],
+            'ed_csrf' => $maint['csrf_token'],
+        ];
+        $post = [
+            'csrf_token' => $maint['csrf_token'],
+            'target_type' => 'reach',
+            'reach_id' => (string)self::REACH_ID,
+            'description' => 'My edit',  // a real change, but no base_description carried
+        ];
+
+        $resp = $this->request('/edit.php', [], $cookies, 'POST', $post);
+
+        $this->assertSame(409, $resp['status']);
+        $this->assertStringContainsString('changed since you opened', $resp['body']);
+        $db = self::testDb();
+        $n = (int)$db->query(
+            "SELECT COUNT(*) FROM change_request WHERE target_type = 'reach'
+             AND target_id = " . self::REACH_ID . " AND subject LIKE 'Direct edit:%'
+             AND editor_id = (SELECT id FROM editor WHERE email = 'nobase-edit-maint@example.com')"
+        )->fetchColumn();
+        $this->assertSame(0, $n, 'a missing-base edit must freeze nothing');
+    }
+
     public function testEditFormRendersTocTouBase(): void
     {
         // Regression: the GET form must carry each field's load-time value as a

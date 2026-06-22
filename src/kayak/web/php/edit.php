@@ -119,6 +119,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // is stale — endorsing would let the worker overwrite a change they never saw
     // (the drift base is captured here at submit time). Reject a stale view; fail
     // closed if a base is missing (e.g. a stale form).
+    //
+    // Same accepted residual window as the review path: this compares against the
+    // $row loaded above (outside the freeze transaction); bridge_capture_base
+    // re-reads inside it. A sub-millisecond, deploy-only (sync-metadata) gap that
+    // the downstream human-reviewed kayak_data PR also backstops. The original
+    // minutes-long render→submit window is what's closed here.
     foreach ($changes as $field => $pair) {
         $rendered = $_POST['base_' . $field] ?? null;
         if (!is_string($rendered) || $rendered !== $pair['old_str']) {

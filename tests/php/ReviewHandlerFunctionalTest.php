@@ -248,6 +248,20 @@ final class ReviewHandlerFunctionalTest extends FunctionalTestCase
         $this->assertSame('pending', $this->fetchCr($crId)['status']);
     }
 
+    public function testPostApproveRejectsMissingBase(): void
+    {
+        // Fail-closed contract: an approve POST that carries NO base_reach_* at all
+        // (e.g. a stale form predating this guard, or a hand-crafted request) must
+        // be refused, not endorsed — a missing base is treated as drift.
+        [$crId] = $this->seedScenario(['reach' => ['description' => 'proposed']]);
+        $this->withCsrfPost(['reach_description' => 'proposed']);  // no base_reach_description
+
+        [$flash, $err] = _review_handle_post($this->pdo(), $crId, 'approve', $this->maint()['id']);
+        $this->assertNull($flash);
+        $this->assertStringContainsString('changed since you opened', (string)$err);
+        $this->assertSame('pending', $this->fetchCr($crId)['status']);
+    }
+
     public function testPostApproveWithClassBlockOverlay(): void
     {
         $db = $this->pdo();

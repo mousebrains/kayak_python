@@ -248,6 +248,17 @@ function _review_reach_field_str(?array $cur, string $f): string
  * carried base to the current DB value; return an error string (fail closed: a
  * missing base, e.g. a stale form, also rejects) or null if the view is current.
  *
+ * Residual window (accepted): this check is a SELECT outside review_approve's
+ * transaction; bridge_capture_base re-reads the row inside it (after the CAS
+ * UPDATE takes the write lock). A metadata write committing in the gap between
+ * this read and that snapshot would capture a base differing from the one
+ * checked here. The gap is sub-millisecond and the only metadata writer is
+ * sync-metadata (deploy-only); the original render→approve window (minutes) is
+ * what mattered and is closed. Fully closing the residual means verifying the
+ * carried base inside the freeze transaction — deferred to avoid surgery on the
+ * merged Tier-2 path for a window that every bridged change's human-reviewed
+ * kayak_data PR also backstops.
+ *
  * @param array{target_type: string, target_id: int|null} $cr
  * @param array<string, mixed> $applied  the assembled approve payload
  */
