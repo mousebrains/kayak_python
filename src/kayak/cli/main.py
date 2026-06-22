@@ -14,6 +14,7 @@ from kayak.cli import (
     check_reaches,
     decimate,
     delete_editor,
+    editor_bridge,
     editor_retention,
     emit_config,
     export_editor,
@@ -70,6 +71,7 @@ def main() -> None:
     audit_gauges.addArgs(subparsers)
     pipeline.addArgs(subparsers)
     seed_maintainer.addArgs(subparsers)
+    editor_bridge.addArgs(subparsers)
     delete_editor.addArgs(subparsers)
     export_editor.addArgs(subparsers)
     editor_retention.addArgs(subparsers)
