@@ -21,6 +21,7 @@ dependencies = [
     "nh3>=0.2",                       # HTML sanitizer (Rust/ammonia) — allowlists the rendered regression HTML (S2); ships cp313 wheels
     "defusedxml>=0.7",               # XXE-safe XML/SVG parsing — validates regression SVG against a strict allowlist before serving (S2)
     "maxminddb>=2.5",                 # GeoIP country lookup for the status page; reads DB-IP Lite mmdb lazily downloaded to var/geoip/
+    "pyjwt[crypto]>=2.10",            # GitHub App JWT (RS256) for the editor→kayak_data PR bridge worker (Tier 4); [crypto] pulls `cryptography` for RSA signing
 ]
 
 [project.optional-dependencies]

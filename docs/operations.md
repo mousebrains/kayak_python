@@ -539,6 +539,63 @@ side is canonical:
 A clean run prints `Checked N file(s): N match, 0 differ, 0 missing`
 and exits 0.
 
+## Editor → kayak_data PR bridge — GitHub App credential
+
+The Tier 4 bridge worker (`docs/PLAN_editor_pr_bridge.md`) opens one
+`kayak_data` PR per endorsed `change_request`. It authenticates as a **GitHub
+App installation** (not a PAT) so the long-lived secret is a private key that
+stays on the host, each run uses a fresh ~1h installation token, and — because
+the App's PRs are authored by the bot and GitHub forbids self-approval — a
+"require ≥1 approving review" rule on `kayak_data` structurally stops the worker
+from merging its own PR. The worker holds the key; **PHP-FPM never sees it** (the
+bridge settings live in `KayakConfig`/env, deliberately not in
+`emit-config`'s runtime JSON).
+
+### One-time provisioning
+
+1. **Register the App** — github.com → Settings → Developer settings → GitHub
+   Apps → New GitHub App:
+   - Name: `kayak-editor-bridge` (append `-mousebrains` if taken).
+   - Webhook: **uncheck Active** (the worker polls; no webhook).
+   - **Repository permissions** (everything else *No access*): Contents
+     Read+write, Pull requests Read+write, Metadata Read-only. **NOT**
+     Administration (would bypass branch protection), **NOT** Workflows.
+   - "Where can this be installed": Only on this account.
+   - Create → note the **App ID**; **Generate a private key** (downloads a `.pem`).
+2. **Install it** — App settings → Install App → on `mousebrains` → *Only select
+   repositories* → `kayak_data` only. Note the **Installation ID** (in the
+   install URL, or `GET /app/installations`).
+3. **Branch-protection prerequisite** — on `kayak_data` → main, ensure
+   *Require a pull request before merging* **and** *Require ≥1 approving review*
+   are on. That review requirement (not the token's scope) is the actual merge
+   gate; without it a contents-write credential could merge a green PR.
+4. **Place the key on the worker host** (as the worker user):
+   ```bash
+   sudo install -o <worker-user> -g <worker-user> -m 0400 \
+       /path/to/downloaded.pem /etc/kayak/editor-bridge-app.pem
+   ```
+   It must be outside the repo and unreadable by `www-data`/PHP-FPM.
+5. **Configure** in the worker's `~/.config/kayak/.env` (Python-only; never in the
+   runtime-config JSON):
+   ```
+   EDITOR_BRIDGE_ENABLED=true
+   EDITOR_BRIDGE_APP_ID=<app id>
+   EDITOR_BRIDGE_APP_INSTALLATION_ID=<installation id>
+   EDITOR_BRIDGE_APP_KEY_PATH=/etc/kayak/editor-bridge-app.pem
+   EDITOR_BRIDGE_REVIEW_URL=https://levels.wkcc.org   # PR body links to /review.php?id=N
+   # owner/name/base/branch-prefix default to mousebrains / kayak_data / main / editor-proposal/
+   ```
+
+### Rotation
+
+The `.pem` is long-lived; rotate on your own cadence (no forced expiry, unlike a
+fine-grained PAT). To rotate: App settings → Private keys → *Generate a private
+key*, install the new `.pem` over `/etc/kayak/editor-bridge-app.pem` (same
+0400/owner), confirm a worker run succeeds, then **delete the old key** in the
+App settings. Generating the new key before removing the old means zero downtime.
+If the key is ever leaked, delete it in App settings immediately — any
+installation token already minted from it dies within the hour on its own.
+
 ## Rollback (revert code to a previous SHA)
 
 When a deploy ships a regression — broken HTML, a 5xx on PHP pages,

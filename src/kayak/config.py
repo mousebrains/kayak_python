@@ -224,6 +224,31 @@ class KayakConfig(BaseSettings):
     turnstile_site_key: str | None = None
     turnstile_secret: SecretStr | None = None
 
+    # Editor → kayak_data PR bridge worker (Tier 4 of docs/PLAN_editor_pr_bridge.md).
+    # Python-only and runs as the privileged CLI worker — deliberately NOT in
+    # HostConfig / emit-config, so the GitHub App private key never reaches PHP's
+    # runtime-config.json. The worker authenticates as a GitHub App installation
+    # scoped to the dataset repo (contents + pull-requests write only); it mints a
+    # short-lived (~1h) installation token per run from the private key, opens one
+    # PR per endorsed change_request, and can neither merge (branch protection
+    # requires a human approving review) nor push main. Disabled until
+    # ``editor_bridge_enabled`` is set AND the App credentials are present.
+    editor_bridge_enabled: bool = False
+    editor_bridge_dataset_owner: str = "mousebrains"
+    editor_bridge_dataset_name: str = "kayak_data"
+    editor_bridge_base_branch: str = "main"
+    # Proposal branches are namespaced + deterministic (``<prefix><cr_id>-<attempt>``)
+    # so a worker retry discovers and reuses the existing branch instead of spamming.
+    editor_bridge_branch_prefix: str = "editor-proposal/"
+    # Root of the authenticated review page the PR body links back to (no secrets in
+    # the public PR — just ``<base>/review.php?id=N``). None ⇒ omit the link.
+    editor_bridge_review_url: AnyHttpUrl | None = None
+    # GitHub App identity + the PEM private-key file (mode 0400, worker-user-only,
+    # outside the repo and unreadable by PHP-FPM). See docs/operations.md.
+    editor_bridge_app_id: int | None = None
+    editor_bridge_app_installation_id: int | None = None
+    editor_bridge_app_key_path: Path | None = None
+
     # Healthchecks heartbeat URLs (consumed by systemd, not Python).
     hc_pipeline: AnyHttpUrl | None = None
     hc_backup_hourly: AnyHttpUrl | None = None

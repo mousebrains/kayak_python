@@ -45,6 +45,22 @@ class TestBuildConfigData:
         assert data["fetch_timeout"] == 111
         assert data["fetch_user_agent"] == "kayak/1.0"
 
+    def test_excludes_editor_bridge_settings_from_php_json(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The Tier-4 bridge worker is Python-only; its settings — the GitHub App
+        # identity and especially the private-key file PATH — must never reach the
+        # PHP-readable runtime JSON. build_config_data blanket-dumps KayakConfig, so
+        # this guards the explicit name-prefix exclusion against a regression.
+        monkeypatch.setenv("EDITOR_BRIDGE_ENABLED", "true")
+        monkeypatch.setenv("EDITOR_BRIDGE_APP_ID", "424242")
+        monkeypatch.setenv("EDITOR_BRIDGE_APP_INSTALLATION_ID", "999")
+        monkeypatch.setenv("EDITOR_BRIDGE_APP_KEY_PATH", "/etc/kayak/editor-bridge-app.pem")
+        monkeypatch.setenv("EDITOR_BRIDGE_REVIEW_URL", "https://levels.example.org")
+        data = build_config_data(KayakConfig())
+        leaked = [k for k in data if k.startswith("editor_bridge_")]
+        assert leaked == [], f"bridge settings must not reach the PHP JSON: {leaked}"
+
     def test_includes_allowed_origins_from_host_config(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
