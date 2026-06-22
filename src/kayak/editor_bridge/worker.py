@@ -15,13 +15,18 @@ approving review is the merge gate — the App's bot author can't self-approve.
 (``<prefix><change_request_id>-<attempt>``) and the PR is discovered-before-create,
 so a crash after the push but before the DB update simply re-clones, re-applies
 (same diff), re-pushes (force, same content), finds the existing PR, and updates
-it — never a duplicate. A per-row lease keeps two overlapping ``run-once`` calls
-from double-acting a row.
+it — never a duplicate. The reach stamp + commit dates derive from a row-stable
+timestamp, so a retry produces identical *content* and an identical commit *SHA*
+(the SHA is identical as long as the base-branch tip hasn't advanced — it's only
+re-processed while still ``queued``, i.e. before the PR is stably open, so no
+already-open PR head is ever churned). A per-row lease keeps two overlapping
+``run-once`` calls from double-acting a row.
 """
 
 from __future__ import annotations
 
 import datetime as _dt
+import hashlib
 import json
 import logging
 import os
@@ -36,7 +41,12 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
 
 from kayak.config import KayakConfig
-from kayak.db.models import BridgeState, ChangeRequest, ChangeRequestBridge
+from kayak.db.models import (
+    BridgeState,
+    ChangeRequest,
+    ChangeRequestBridge,
+    ChangeStatus,
+)
 from kayak.editor_bridge import dataset_patch, git_ops, github_app, github_client
 
 log = logging.getLogger(__name__)
@@ -203,9 +213,34 @@ def _prepare(session: Session, bridge: ChangeRequestBridge, clock: Clock) -> _Pr
     cr = session.get(ChangeRequest, bridge.change_request_id)
     if cr is None:  # CASCADE should prevent this, but never act blind
         return _terminal(session, bridge, BridgeState.worker_error, "change_request row is gone")
+    if cr.status != ChangeStatus.approved:
+        # The parent is no longer active work — a maintainer may have manually
+        # marked it resolved (or it was rejected) via the documented manual path,
+        # which doesn't touch change_request_bridge. Stale queued rows can exist
+        # because #215 queues while this worker is still disabled. Do NOT open a PR
+        # for already-completed/closed work; retire the row instead.
+        return _terminal(
+            session,
+            bridge,
+            BridgeState.worker_error,
+            f"parent change_request is '{cr.status}', not approved — superseded, not bridging",
+        )
     if cr.target_id is None:
         return _terminal(
             session, bridge, BridgeState.worker_error, "change_request has no target_id"
+        )
+    # Tamper/edit guard: the worker must commit exactly the diff that was queued +
+    # reviewed. If applied_json changed since queue time (so its sha differs from
+    # the pinned applied_json_sha256), the reviewed base could still match the
+    # dataset yet we'd push a DIFFERENT, unreviewed value — fail closed.
+    expected_sha = bridge.applied_json_sha256
+    actual_sha = hashlib.sha256((cr.applied_json or "").encode("utf-8")).hexdigest()
+    if not expected_sha or actual_sha != expected_sha:
+        return _terminal(
+            session,
+            bridge,
+            BridgeState.worker_error,
+            "applied_json sha256 missing or changed since queueing — not bridging",
         )
     tt = str(cr.target_type)
     try:
@@ -339,11 +374,15 @@ def _process_row(
 
 
 def _expected_base(bridge: ChangeRequestBridge, target_type: str) -> dict | None:
-    """The reviewed drift base for *target_type*, or None to skip the drift check.
+    """The reviewed drift base for *target_type*, or None if none is captured.
 
-    Raises ValueError if reviewed_base_json is present but unparseable / not an
-    object — the caller turns that into a ``worker_error`` (fail closed rather
-    than apply with no drift guard).
+    Returns None when ``reviewed_base_json`` is absent or has no entry for this
+    table. NOTE: the worker (``_prepare``) treats that None as **fail-closed**
+    (``worker_error`` — never apply without a drift guard); only the lower-level
+    ``dataset_patch.apply_change`` would interpret a None ``expected_base`` as
+    "skip the drift check," and the worker deliberately never threads None
+    through to it. Raises ValueError if ``reviewed_base_json`` is present but
+    unparseable / not an object.
     """
     if not bridge.reviewed_base_json:
         return None

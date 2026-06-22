@@ -9,6 +9,7 @@ case, and an empty queue.
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import subprocess
 from pathlib import Path
 
@@ -125,6 +126,8 @@ def _seed_request(
     base: str | None,
     target_type: ChangeTarget = ChangeTarget.reach,
     target_id: int = 42,
+    status: str = "approved",
+    with_sha: bool = True,
 ) -> ChangeRequestBridge:
     cr = ChangeRequest(
         target_type=target_type,
@@ -132,7 +135,7 @@ def _seed_request(
         editor_id=editor_id,
         subject="update",
         payload_json=applied,
-        status="approved",
+        status=status,
         applied_json=applied,
         # A fixed endorse time → the worker stamps a row-stable updated_at + commit
         # date (so a retry reproduces the same content + SHA). Naive UTC, as SQLite stores.
@@ -140,8 +143,14 @@ def _seed_request(
     )
     session.add(cr)
     session.flush()
+    # Tier 2 pins sha256(applied_json) at queue time; mirror it so the worker's
+    # tamper guard passes (with_sha=False seeds a row without one).
+    sha = hashlib.sha256(applied.encode("utf-8")).hexdigest() if with_sha else None
     bridge = ChangeRequestBridge(
-        change_request_id=cr.id, state=BridgeState.queued, reviewed_base_json=base
+        change_request_id=cr.id,
+        state=BridgeState.queued,
+        reviewed_base_json=base,
+        applied_json_sha256=sha,
     )
     session.add(bridge)
     session.flush()
@@ -356,6 +365,97 @@ def test_malformed_reviewed_base_is_worker_error(session, editor, origin):
     assert outcome.state == "worker_error"
     session.refresh(bridge)
     assert "not valid JSON" in (bridge.last_error or "")
+
+
+def test_stale_resolved_parent_is_not_bridged(session, editor, origin):
+    # A maintainer manually resolved the request (the documented manual path)
+    # while the worker was disabled. The stale queued row must NOT open a PR.
+    bridge = _seed_request(
+        session,
+        editor.id,
+        applied='{"reach": {"description": "new desc"}}',
+        base='{"reach": {"description": "old desc"}}',
+        status="resolved",
+    )
+    client = FakeGitHubClient()
+    (outcome,) = worker.run_once(
+        session, _cfg(), client=client, clone_url=str(origin), clock=_CLOCK
+    )
+
+    assert outcome.state == "worker_error"
+    session.refresh(bridge)
+    assert "not approved" in (bridge.last_error or "")
+    assert client.created == []  # no PR for already-completed work
+
+
+def test_applied_json_changed_since_queue_fails_closed(session, editor, origin):
+    bridge = _seed_request(
+        session,
+        editor.id,
+        applied='{"reach": {"description": "new desc"}}',
+        base='{"reach": {"description": "old desc"}}',
+    )
+    # Tamper: the frozen diff changes after the sha was pinned at queue time.
+    cr = session.get(ChangeRequest, bridge.change_request_id)
+    cr.applied_json = '{"reach": {"description": "TAMPERED"}}'
+    session.flush()
+
+    client = FakeGitHubClient()
+    (outcome,) = worker.run_once(
+        session, _cfg(), client=client, clone_url=str(origin), clock=_CLOCK
+    )
+
+    assert outcome.state == "worker_error"
+    session.refresh(bridge)
+    assert "sha256" in (bridge.last_error or "")
+    assert client.created == []
+
+
+def test_missing_applied_json_sha_fails_closed(session, editor, origin):
+    bridge = _seed_request(
+        session,
+        editor.id,
+        applied='{"reach": {"description": "new desc"}}',
+        base='{"reach": {"description": "old desc"}}',
+        with_sha=False,
+    )
+    client = FakeGitHubClient()
+    (outcome,) = worker.run_once(
+        session, _cfg(), client=client, clone_url=str(origin), clock=_CLOCK
+    )
+
+    assert outcome.state == "worker_error"
+    session.refresh(bridge)
+    assert "sha256" in (bridge.last_error or "")
+    assert client.created == []
+
+
+def test_retry_produces_identical_commit_sha(session, editor, origin):
+    # The M2 property: re-processing the same row (e.g. a crash before the pr_open
+    # commit) reproduces the identical commit SHA — no PR-head churn / dismissed
+    # approvals — because the stamp + commit date are row-stable and the base tip
+    # hasn't moved.
+    bridge = _seed_request(
+        session,
+        editor.id,
+        applied='{"reach": {"description": "new desc"}}',
+        base='{"reach": {"description": "old desc"}}',
+    )
+    client = FakeGitHubClient()
+    worker.run_once(session, _cfg(), client=client, clone_url=str(origin), clock=_CLOCK)
+    session.refresh(bridge)
+    sha1 = bridge.pr_head_sha
+
+    # Simulate a crash before the pr_open DB commit: row back to queued.
+    bridge.state = BridgeState.queued
+    bridge.lease_owner = None
+    bridge.lease_expires_at = None
+    session.flush()
+
+    worker.run_once(session, _cfg(), client=client, clone_url=str(origin), clock=_CLOCK)
+    session.refresh(bridge)
+    assert bridge.pr_head_sha == sha1
+    assert len(client.created) == 1  # reused the PR, didn't duplicate
 
 
 def test_empty_queue_returns_nothing(session, origin):

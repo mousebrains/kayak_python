@@ -7,6 +7,7 @@ from argparse import Namespace
 from kayak.cli import editor_bridge as cli
 from kayak.config import KayakConfig
 from kayak.db.models import BridgeState, ChangeRequest, ChangeRequestBridge, ChangeTarget
+from kayak.editor_bridge.worker import RowOutcome
 
 
 def test_run_once_disabled_is_clean_noop(monkeypatch, capsys):
@@ -14,6 +15,20 @@ def test_run_once_disabled_is_clean_noop(monkeypatch, capsys):
     rc = cli.cmd_run_once(Namespace(limit=10))
     assert rc == 0
     assert "disabled" in capsys.readouterr().out
+
+
+def test_run_once_escalates_exit_code_on_infra_error(monkeypatch, session):
+    # The safety-critical wire: an escalating outcome (infra failure) must make
+    # cmd_run_once exit non-zero so the systemd OnFailure chain alerts.
+    monkeypatch.setattr(cli, "get_config", lambda: KayakConfig(editor_bridge_enabled=True))
+    monkeypatch.setattr(cli, "get_session", lambda: session)
+    monkeypatch.setattr(session, "close", lambda: None)
+    monkeypatch.setattr(
+        cli.worker,
+        "run_once",
+        lambda *a, **k: [RowOutcome(1, 1, "queued", "infra error", escalate=True)],
+    )
+    assert cli.cmd_run_once(Namespace(limit=10)) == 1
 
 
 def test_status_prints_counts_by_state(session, editor, monkeypatch, capsys):
