@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Wire the SW-Washington (lower Columbia) gauges, calcs, and AW reaches.
 
-Implements docs/PLAN_wa_kalama_coweeman_toutle_tilton.md against the LOCAL dev
+Implements docs/done/PLAN_wa_kalama_coweeman_toutle_tilton.md against the LOCAL dev
 DB; the canonical kayak_data CSVs are then produced by
 scripts/export_metadata.py (id_counters bumped by hand). Inserts:
 

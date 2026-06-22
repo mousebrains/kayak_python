@@ -4,7 +4,7 @@ Reads ``host.yaml`` and prints (or writes) one
 ``<unit>.service.d/cutover.conf`` per engine consumer — the drop-ins that
 re-point each ``levels``-running unit at the ``/opt/kayak/current`` release
 venv. Mirrors ``emit-config``: the tool emits text; the install runbook /
-deployer applies it. See ``docs/PLAN_4c_renderers.md``.
+deployer applies it. See ``docs/done/PLAN_4c_renderers.md``.
 """
 
 from __future__ import annotations

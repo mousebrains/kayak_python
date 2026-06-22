@@ -30,6 +30,10 @@ material rather than a deletable graveyard. For work *in flight*, see the
 | `PLAN_three_instance_layout.md` | Three-instance host layout (prod / test / tpw) |
 | `PLAN_tier3_closeout.md` | Typed-config spine (T3.3) + `KAYAK_HOME` (T3.4) + dormant-schema decision (T3.5) |
 | `PLAN_gradient_single_source.md` | Single-source `reach.gradient_profile` — snapshot out of `reach.csv` (R6.1, #42) |
+| `PLAN_4c_renderers.md` | Batch 4C: host-config renderers + the paired-release cutover; live 2026-06-15 |
+| `PLAN_b5_init_dataset.md` | Batch 5 / S5: `levels init-dataset` + new-region runbook; merged #206 |
+| `PLAN_kalama_licor_gauge.md` | Replace the Kalama Italian-Cr calc gauge with the real LI-COR sensor; engine #210 + kayak_data #67/#69 merged + deployed to prod 2026-06-21 (release 24ee70c) |
+| `PLAN_wa_kalama_coweeman_toutle_tilton.md` | SW-Washington inventory: Kalama/Coweeman/Toutle/Tilton gauges + reaches + calc strategy (calcs wired; Kalama since moved to LI-COR) |
 | `REVIEW_round2_2026-05-24.md` | Round-2 deep project review (graded B−); findings landed in #25, kept for trend + standing thesis |
 | `REVIEW_round3_2026-05-25.md` | Round-3 deep project review (graded B−); remediated across #34–#52, kept for trend |
 | `PLAN_round3_remediation.md` | Round-3 remediation plan (7 phases) — as-built: landed #34–#52; all deferrals but OSMB-dedup (R7.1) since shipped (#47–#52) |
