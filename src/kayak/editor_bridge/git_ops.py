@@ -137,14 +137,25 @@ def commit(
     *,
     author_name: str,
     author_email: str,
+    date: str | None = None,
 ) -> str:
-    """Commit the staged index with an explicit author/committer; return the SHA."""
+    """Commit the staged index with an explicit author/committer; return the SHA.
+
+    Pass *date* (a git-parseable timestamp, e.g. ``"2026-06-22 15:00:59 +0000"``)
+    to pin both the author and committer dates. A caller that wants a retry to
+    reproduce the *same commit SHA* for the same content must pass a stable date —
+    otherwise git stamps "now" and every retry yields a new SHA (which would churn
+    an open PR's head and dismiss human review approvals).
+    """
     env_extra = {
         "GIT_AUTHOR_NAME": author_name,
         "GIT_AUTHOR_EMAIL": author_email,
         "GIT_COMMITTER_NAME": author_name,
         "GIT_COMMITTER_EMAIL": author_email,
     }
+    if date is not None:
+        env_extra["GIT_AUTHOR_DATE"] = date
+        env_extra["GIT_COMMITTER_DATE"] = date
     _run(["git", "-C", str(repo), "commit", "-q", "-m", message], env_extra=env_extra)
     return head_sha(repo)
 
