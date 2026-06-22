@@ -383,6 +383,7 @@ def test_stale_resolved_parent_is_not_bridged(session, editor, origin):
     )
 
     assert outcome.state == "worker_error"
+    assert outcome.escalate is False  # a manually-resolved parent is routine, not an alert
     session.refresh(bridge)
     assert "not approved" in (bridge.last_error or "")
     assert client.created == []  # no PR for already-completed work
@@ -406,6 +407,7 @@ def test_applied_json_changed_since_queue_fails_closed(session, editor, origin):
     )
 
     assert outcome.state == "worker_error"
+    assert outcome.escalate is True  # tamper/integrity anomaly → alert
     session.refresh(bridge)
     assert "sha256" in (bridge.last_error or "")
     assert client.created == []
@@ -425,6 +427,7 @@ def test_missing_applied_json_sha_fails_closed(session, editor, origin):
     )
 
     assert outcome.state == "worker_error"
+    assert outcome.escalate is True
     session.refresh(bridge)
     assert "sha256" in (bridge.last_error or "")
     assert client.created == []

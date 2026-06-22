@@ -74,11 +74,13 @@ Clock = Callable[[], _dt.datetime]
 class RowOutcome:
     """What the worker did with one queued bridge row.
 
-    ``escalate`` marks an *infrastructure* failure (clone/push/REST/auth or an
-    unexpected exception) — as opposed to a per-proposal data outcome (conflict,
-    adapter rejection, no-op). The CLI exits non-zero when any outcome escalates,
-    so a systemic outage trips the systemd alert chain; a single bad proposal does
-    not.
+    ``escalate`` marks an outcome the operator should be *alerted* to — an
+    *infrastructure* failure (clone/push/REST/auth or an unexpected exception) or
+    a frozen-diff *integrity* anomaly (applied_json sha mismatch, which should
+    never happen on a legit row) — as opposed to a routine per-proposal data
+    outcome (conflict, adapter rejection, no-op, superseded parent). The CLI exits
+    non-zero when any outcome escalates, tripping the systemd alert chain; a single
+    bad/expected proposal does not.
     """
 
     bridge_id: int
@@ -236,11 +238,17 @@ def _prepare(session: Session, bridge: ChangeRequestBridge, clock: Clock) -> _Pr
     expected_sha = bridge.applied_json_sha256
     actual_sha = hashlib.sha256((cr.applied_json or "").encode("utf-8")).hexdigest()
     if not expected_sha or actual_sha != expected_sha:
+        # This should never happen on a legitimate row (applied_json is frozen at
+        # endorse, and Tier 2 pins its sha in the same transaction), so it's an
+        # anomaly — a post-queue mutation of the reviewed diff or a bug — not a
+        # routine data outcome. Escalate so it surfaces as an alert, not just in
+        # `status`.
         return _terminal(
             session,
             bridge,
             BridgeState.worker_error,
             "applied_json sha256 missing or changed since queueing — not bridging",
+            escalate=True,
         )
     tt = str(cr.target_type)
     try:

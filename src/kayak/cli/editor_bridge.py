@@ -102,8 +102,9 @@ def cmd_run_once(args: argparse.Namespace) -> int:
     escalated = sum(1 for o in outcomes if o.escalate)
     print(f"editor-bridge: processed {len(outcomes)} row(s), {pr_open} PR(s) opened/updated")
     if escalated:
-        # Infrastructure failure(s) — exit non-zero so the systemd OnFailure chain
-        # alerts. The affected rows stay queued (left for the next run to retry).
-        print(f"editor-bridge: {escalated} row(s) hit an infrastructure error — see logs")
+        # An infrastructure failure (row stays queued for retry) or a frozen-diff
+        # integrity anomaly (row parked worker_error) — exit non-zero so the
+        # systemd OnFailure chain alerts.
+        print(f"editor-bridge: {escalated} row(s) need attention (infra/integrity) — see logs")
         return 1
     return 0
