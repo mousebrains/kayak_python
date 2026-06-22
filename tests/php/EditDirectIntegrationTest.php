@@ -64,7 +64,7 @@ final class EditDirectIntegrationTest extends IntegrationTestCase
 
         // A self-endorsed change_request froze the diff.
         $cr = $db->query(
-            "SELECT status, editor_id, reviewed_by, subject, payload_json, applied_json
+            "SELECT id, status, editor_id, reviewed_by, subject, payload_json, applied_json
              FROM change_request
              WHERE target_type = 'reach' AND target_id = " . self::REACH_ID
         )->fetch();
@@ -74,6 +74,24 @@ final class EditDirectIntegrationTest extends IntegrationTestCase
         $this->assertStringContainsString('Direct edit:', (string)$cr['subject']);
         $frozen = json_decode((string)$cr['applied_json'], true);
         $this->assertSame('Directly edited description.', $frozen['reach']['description'] ?? null);
+
+        // Tier 2: the same transaction queued a bridge row for the worker, with
+        // the pre-edit value captured as the drift base and the frozen-diff hash.
+        $bridge = $db->query(
+            'SELECT state, queued_by, base_dataset_sha, reviewed_base_json, applied_json_sha256
+             FROM change_request_bridge WHERE change_request_id = ' . (int)$cr['id']
+        )->fetch();
+        $this->assertNotFalse($bridge, 'direct edit must queue a bridge row');
+        $this->assertSame('queued', $bridge['state']);
+        $this->assertSame((int)$cr['reviewed_by'], (int)$bridge['queued_by']);
+        $this->assertNull($bridge['base_dataset_sha'], 'PHP leaves the dataset SHA to the worker');
+        $this->assertSame(
+            hash('sha256', (string)$cr['applied_json']),
+            $bridge['applied_json_sha256'],
+            'bridge pins the frozen-diff hash',
+        );
+        $base = json_decode((string)$bridge['reviewed_base_json'], true);
+        $this->assertSame('Original direct description.', $base['reach']['description'] ?? null);
 
         // No audit rows: nothing was applied.
         $hist = (int)$db->query(

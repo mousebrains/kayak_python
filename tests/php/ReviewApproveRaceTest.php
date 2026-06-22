@@ -77,6 +77,22 @@ final class ReviewApproveRaceTest extends TestCase
                 changed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 changed_by TEXT NOT NULL
             );
+            -- Minimal shape for the bridge-row enqueue: UNIQUE(change_request_id)
+            -- is required for ON CONFLICT. The production FK/CASCADE invariants
+            -- (ON DELETE CASCADE, queued_by FK) are pinned by the real init-db
+            -- schema in EditorBridgeFunctionalTest + the integration suites, not
+            -- here (this hand-rolled schema doesn't enforce FKs).
+            CREATE TABLE change_request_bridge (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                change_request_id INTEGER NOT NULL UNIQUE,
+                state TEXT NOT NULL DEFAULT 'queued',
+                attempt INTEGER NOT NULL DEFAULT 1,
+                base_dataset_sha TEXT,
+                reviewed_base_json TEXT,
+                applied_json_sha256 TEXT,
+                queued_by INTEGER,
+                queued_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
         ");
         return $pdo;
     }
@@ -147,6 +163,19 @@ final class ReviewApproveRaceTest extends TestCase
         )->fetchColumn();
         $this->assertStringContainsString('lgtm', $note);
         $this->assertStringNotContainsString('me too', $note);
+
+        // Tier 2: the first endorse queued exactly ONE bridge row; the second
+        // (lost CAS) rolled back before reaching the queue insert, so no
+        // duplicate. The bridgeable reach diff captured its reviewed base.
+        $bridge = $db->query(
+            'SELECT change_request_id, state, queued_by, reviewed_base_json
+             FROM change_request_bridge WHERE change_request_id = ' . $seed['cr_id']
+        )->fetchAll();
+        $this->assertCount(1, $bridge, 'exactly one bridge row after a double-approve');
+        $this->assertSame('queued', $bridge[0]['state']);
+        $this->assertSame($seed['maint_id'], (int)$bridge[0]['queued_by']);
+        $base = json_decode((string)$bridge[0]['reviewed_base_json'], true);
+        $this->assertSame('old desc', $base['reach']['description'], 'captured the pre-edit base');
     }
 
     public function testRejectAfterApproveBails(): void

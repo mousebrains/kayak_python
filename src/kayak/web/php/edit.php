@@ -28,6 +28,7 @@ require_once __DIR__ . '/includes/pubhash_request.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
+require_once __DIR__ . '/includes/editor_bridge.php';
 
 $maintainer = require_maintainer();
 
@@ -122,7 +123,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ($changes as $field => $pair) {
             $frozen[$field] = $pair['new'];
         }
-        $payload = json_encode([$type => $frozen], JSON_UNESCAPED_SLASHES);
+        $applied = [$type => $frozen];
+        $payload = json_encode($applied, JSON_UNESCAPED_SLASHES);
+        $payload_str = $payload !== false ? $payload : '{}';
+        // Freeze the self-endorsed diff and queue its bridge row in ONE
+        // transaction (Tier 2, docs/PLAN_editor_pr_bridge.md): a direct edit is
+        // immediately 'approved', so it joins the same kayak_data-PR queue as an
+        // endorsed editor proposal.
+        $maint_id = (int)$maintainer['id'];
+        $db->beginTransaction();
         try {
             $db->prepare(
                 "INSERT INTO change_request
@@ -132,14 +141,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             )->execute([
                 $type,
                 $id,
-                (int)$maintainer['id'],
+                $maint_id,
                 'Direct edit: ' . (string)$name,
-                $payload !== false ? $payload : '{}',
-                (int)$maintainer['id'],
-                $payload !== false ? $payload : '{}',
+                $payload_str,
+                $maint_id,
+                $payload_str,
             ]);
             $cr_id = (int)$db->lastInsertId();
+            bridge_enqueue($db, $cr_id, $type, $id, $applied, $payload_str, $maint_id);
+            $db->commit();
         } catch (Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
             error_log('edit.php: freeze failed: ' . $e->getMessage());
             http_response_code(500);
             exit('Save failed — see server log.');
