@@ -565,21 +565,36 @@ bridge settings live in `KayakConfig`/env, deliberately not in
 2. **Install it** — App settings → Install App → on `mousebrains` → *Only select
    repositories* → `kayak_data` only. Note the **Installation ID** (in the
    install URL, or `GET /app/installations`).
-3. **Branch-protection prerequisite** — on `kayak_data` → main, ensure
-   *Require a pull request before merging* **and** *Require ≥1 approving review*
-   are on. That review requirement (not the token's scope) is the actual merge
-   gate; without it a contents-write credential could merge a green PR.
-4. **Place the key on the worker host** (as the worker user):
+3. **Merge gate — a ruleset with an admin bypass (NOT a blanket approval rule).**
+   The bot must not merge its own PRs, but a *blanket* "require ≥1 approving review"
+   on `kayak_data` would also block **your own** manual dataset PRs: with a single
+   maintainer you can't approve your own PR (GitHub forbids self-approval), so the
+   rule would deadlock your normal workflow. Instead, on `kayak_data` →
+   **Settings → Rules → Rulesets → New branch ruleset**, target `main`:
+   - *Require a pull request before merging* + *Require 1 approval* (optionally also
+     require the `validate` status check).
+   - **Bypass list: add the Repository admin role (you). Do NOT add the bridge App.**
+
+   Now *your* PRs merge unblocked (you're on the bypass), while the bot's PRs are
+   bound by the rule and it can't self-approve → it can't self-merge; you review +
+   merge them. (Defense-in-depth: the worker never calls the merge API anyway.)
+4. **Place the key on the WORKER user's host** — the user that runs
+   `levels editor-bridge` (the kayak service account, e.g. `pat`), **NOT**
+   `www-data`. `www-data` is PHP-FPM, the one user that must never read this key;
+   owning it `www-data` is the classic mistake (a `0400` file is readable by its
+   *owner*). Confirm the service user first if unsure
+   (`systemctl show -p User kayak-pipeline.service`; blank ⇒ root):
    ```bash
-   sudo install -o <worker-user> -g <worker-user> -m 0400 \
+   sudo install -o pat -g pat -m 0400 \
        /path/to/downloaded.pem /etc/kayak/editor-bridge-app.pem
-   # Confirm PHP-FPM cannot read it (must FAIL):
-   sudo -u www-data cat /etc/kayak/editor-bridge-app.pem && echo "LEAK — fix perms" || echo "ok: www-data denied"
+   # PHP-FPM must be DENIED; the worker user must be ALLOWED:
+   sudo -u www-data cat /etc/kayak/editor-bridge-app.pem >/dev/null 2>&1 && echo "LEAK — fix owner" || echo "ok: www-data denied"
+   sudo -u pat      cat /etc/kayak/editor-bridge-app.pem >/dev/null 2>&1 && echo "ok: worker can read" || echo "PROBLEM: worker cannot read"
    ```
-   It must be outside the repo (not under `DATASET_DIR`/`OUTPUT_DIR`) and
-   unreadable by `www-data`/PHP-FPM. The worker enforces this too:
-   `load_private_key` refuses a group/other-accessible key (`mode & 0o077 != 0`),
-   so a misdeploy as `0644` fails closed rather than signing with a leaky key.
+   It must be outside the repo (not under `DATASET_DIR`/`OUTPUT_DIR`). The worker
+   enforces this too: `load_private_key` refuses a group/other-accessible key
+   (`mode & 0o077 != 0`), so a misdeploy as `0644` fails closed rather than signing
+   with a leaky key.
 5. **Configure** in the worker's `~/.config/kayak/.env` (Python-only; never in the
    runtime-config JSON):
    ```
@@ -600,6 +615,36 @@ key*, install the new `.pem` over `/etc/kayak/editor-bridge-app.pem` (same
 App settings. Generating the new key before removing the old means zero downtime.
 If the key is ever leaked, delete it in App settings immediately — any
 installation token already minted from it dies within the hour on its own.
+
+### Running the worker
+
+```bash
+levels editor-bridge status        # queue counts by state
+levels editor-bridge run-once      # endorsed → open/update one kayak_data PR each
+levels editor-bridge reconcile     # pr_open → merged / pr_closed (reads PR state)
+levels editor-bridge mark-deployed --dataset-ref <sha>   # merged → deployed (+ resolve the request)
+```
+
+`run-once` + `reconcile` exit non-zero on an infrastructure failure (or a
+frozen-diff integrity anomaly) so the systemd `OnFailure` chain alerts; a routine
+per-proposal outcome (conflict / superseded / no-op) exits 0 and is visible via
+`status`. `mark-deployed` closes the SA-lite loop: it advances a merged bridge
+row to `deployed` and its parent `change_request` to `resolved` once the PR's
+merge commit is an ancestor of the deployed `--dataset-ref` (resolves several PRs
+from one deploy). It needs no GitHub token.
+
+**`--dataset-repo` must be a real git checkout** containing both the PR merge
+commits and `--dataset-ref` (it runs `git merge-base --is-ancestor`). The default
+is `DATASET_DIR`, which works for a manual run when that's a clone (e.g.
+`/home/pat/kayak_data`, after a `git fetch`). It is **not** the paired-release
+`$RELEASE_DIR/dataset` — that's a `git archive`/`tar` snapshot with no `.git`, so
+ancestry there silently resolves nothing (the command fails safe: rows stay
+`merged`, it never marks a request resolved that wasn't deployed, and it now
+prints `N merged row(s) but none resolvable in <repo>` so the misconfig is
+visible). The `kayak-deploy` post-activation hook + the `run-once`/`reconcile`
+systemd timer (and proposer email-on-deploy) land at enablement time — the hook
+must point `--dataset-repo` at a git source (a retained/fetched clone), not the
+release snapshot.
 
 ## Rollback (revert code to a previous SHA)
 
