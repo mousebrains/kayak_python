@@ -115,6 +115,16 @@ def build_config_data(cfg: KayakConfig, *, exclude_secrets: bool = False) -> dic
             else:
                 data[name] = raw.get_secret_value()
 
+    # The editor → kayak_data bridge worker (Tier 4) is Python-only. Its settings —
+    # the GitHub App identity and especially the private-key file PATH — must never
+    # reach the PHP-readable runtime JSON: PHP holds no git credential and has no
+    # use for them, and the whole design keeps the bridge surface off the web tier.
+    # model_dump() above is a blanket dump, so drop the group explicitly (by name —
+    # these are plain str/int/Path/bool, not SecretStr, so the type-based guard
+    # above does not catch them). Guarded by test_emit_config's bridge-exclusion test.
+    for name in [k for k in data if k.startswith("editor_bridge_")]:
+        del data[name]
+
     db_url = data.get("database_url")
     if isinstance(db_url, str) and db_url.startswith("sqlite:///"):
         data["database_path"] = db_url.removeprefix("sqlite:///")
