@@ -91,6 +91,24 @@ class ChangeStatus(enum.StrEnum):
     auto_applied = "auto_applied"
 
 
+class BridgeState(enum.StrEnum):
+    """Worker progress for turning an endorsed change_request into a kayak_data PR.
+
+    Distinct from ``ChangeStatus`` (moderation): the editor-PR bridge owns PR +
+    deploy progress here so worker operations never sprawl into
+    ``change_request.status`` (which stays coarse: pending/approved/rejected/
+    resolved). See ``docs/PLAN_editor_pr_bridge.md``.
+    """
+
+    queued = "queued"  # endorsed; awaiting the worker
+    pr_open = "pr_open"  # branch pushed + PR opened
+    merged = "merged"  # PR merged into dataset main
+    deployed = "deployed"  # merge commit deployed (advances the parent to resolved)
+    pr_closed = "pr_closed"  # PR closed without merging
+    conflict = "conflict"  # dataset main drifted from the reviewed base — needs re-review
+    worker_error = "worker_error"  # transient/unexpected worker failure
+
+
 # ---------------------------------------------------------------------------
 # Base
 # ---------------------------------------------------------------------------
@@ -897,6 +915,57 @@ class EditHistory(Base):
         Index("ix_edit_history_target", "target_type", "target_id"),
         Index("ix_edit_history_changed_at", "changed_at"),
         Index("ix_edit_history_cr_id", "change_request_id"),
+    )
+
+
+class ChangeRequestBridge(Base):
+    """Runtime worker-state for an endorsed change_request's ``kayak_data`` PR.
+
+    One row per endorsed (``approved``) change_request. This is engine **runtime**
+    state, not dataset metadata (absent from ``layout.CONTRACT_CSVS``, never
+    synced) and not moderation state — it CASCADE-deletes with its change_request
+    and keeps ``change_request.status`` coarse while owning PR + deploy progress.
+    Every transition is idempotent/compare-and-set so a worker crash between a
+    branch push and the DB update reuses the existing branch/PR rather than
+    creating a duplicate. See ``docs/PLAN_editor_pr_bridge.md``.
+    """
+
+    __tablename__ = "change_request_bridge"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    # One bridge row per change_request (UNIQUE); gone when the request is.
+    change_request_id: Mapped[int] = mapped_column(
+        ForeignKey("change_request.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    state: Mapped[BridgeState] = mapped_column(
+        nullable=False, default=BridgeState.queued, server_default="queued"
+    )
+    # Bumped on each maintainer requeue; part of the deterministic branch name.
+    attempt: Mapped[int] = mapped_column(nullable=False, default=1, server_default="1")
+    # Drift detection: the dataset SHA + per-field reviewed base values captured at
+    # queue time; the worker refuses (conflict) if dataset main moved them.
+    base_dataset_sha: Mapped[str | None] = mapped_column(String(40))
+    reviewed_base_json: Mapped[str | None] = mapped_column(Text)
+    # sha256 of the change_request.applied_json the bridge committed to (tamper/edit
+    # guard between queue and worker run).
+    applied_json_sha256: Mapped[str | None] = mapped_column(String(64))
+    branch_name: Mapped[str | None] = mapped_column(String(255))
+    pr_number: Mapped[int | None] = mapped_column()
+    pr_url: Mapped[str | None] = mapped_column(Text)
+    pr_head_sha: Mapped[str | None] = mapped_column(String(40))
+    pr_merge_sha: Mapped[str | None] = mapped_column(String(40))
+    queued_by: Mapped[int | None] = mapped_column(ForeignKey("editor.id", ondelete="SET NULL"))
+    queued_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+    last_error: Mapped[str | None] = mapped_column(Text)
+    conflict_json: Mapped[str | None] = mapped_column(Text)
+    # Single-worker lease so concurrent run-once invocations don't double-act a row.
+    lease_owner: Mapped[str | None] = mapped_column(String(128))
+    lease_expires_at: Mapped[datetime | None] = mapped_column()
+    heartbeat_at: Mapped[datetime | None] = mapped_column()
+
+    __table_args__ = (
+        Index("ix_change_request_bridge_state", "state"),
+        Index("ix_change_request_bridge_queued_by", "queued_by"),
     )
 
 
