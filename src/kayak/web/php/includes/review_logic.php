@@ -21,6 +21,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/mail.php';
 require_once __DIR__ . '/reach_propose_fields.php';
+require_once __DIR__ . '/editor_bridge.php';
 
 // ---------------------------------------------------------------------------
 // Apply helpers
@@ -128,10 +129,15 @@ function review_approve(PDO $db, array $cr, array $applied, int $maint_id, strin
     }
     $applied['reach'] = array_intersect_key($reach_payload, array_flip($allowed_fields));
 
-    // Claim the row: only succeeds if status is still 'pending', so two
-    // concurrent maintainers (e.g. two browser tabs) can't both endorse —
-    // the single CAS UPDATE is the whole transaction now.
+    // Claim the row + queue the bridge in ONE transaction: the CAS UPDATE only
+    // succeeds if status is still 'pending' (two concurrent maintainers can't
+    // both endorse), and the change_request_bridge insert rides the same commit
+    // (Tier 2) so an endorsed diff is never left un-queued and a rolled-back
+    // freeze leaves no orphan queue row. See docs/PLAN_editor_pr_bridge.md.
     $merged_note = merge_reviewer_note($cr['reviewer_note'] ?? '', $new_note);
+    $applied_json = json_encode($applied, JSON_UNESCAPED_SLASHES);
+    $applied_json = $applied_json !== false ? $applied_json : '{}';
+    $db->beginTransaction();
     try {
         $claim = $db->prepare(
             "UPDATE change_request
@@ -139,18 +145,22 @@ function review_approve(PDO $db, array $cr, array $applied, int $maint_id, strin
                  reviewed_by = ?, reviewer_note = ?, applied_json = ?
              WHERE id = ? AND status = 'pending'"
         );
-        $claim->execute([
-            $maint_id,
-            $merged_note,
-            json_encode($applied, JSON_UNESCAPED_SLASHES),
-            $cr['id'],
-        ]);
+        $claim->execute([$maint_id, $merged_note, $applied_json, $cr['id']]);
         if ($claim->rowCount() === 0) {
+            $db->rollBack();
             return ['ok' => false, 'err' => 'Already reviewed by another maintainer.'];
         }
+        // reach-only path (review.php only offers approve for reach); $tid is the
+        // existing reach id ($cur loaded above). bridge_enqueue no-ops unless the
+        // frozen diff is bridgeable (reach text/coord, no reach_class).
+        bridge_enqueue($db, $cr['id'], $type, $tid, $applied, $applied_json, $maint_id);
+        $db->commit();
     } catch (Throwable $e) {
         // Log the full message server-side; never echo it to the response
         // (raw PDOException text leaks schema details and paths).
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
         error_log('review_approve: ' . $e->getMessage());
         return ['ok' => false, 'err' => 'endorse failed (see server log for details)'];
     }

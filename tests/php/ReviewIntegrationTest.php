@@ -221,6 +221,19 @@ final class ReviewIntegrationTest extends IntegrationTestCase
         // The reach row did NOT pick up the description; no audit rows either.
         $reach = $db->query('SELECT description FROM reach WHERE id = ' . self::REACH_ID)->fetch();
         $this->assertNotSame('APPROVED DESCRIPTION VALUE', $reach['description']);
+
+        // Tier 2: endorsing this bridgeable reach diff queued a bridge row in the
+        // same transaction, capturing the unchanged reach value as the drift base.
+        $bridge = $db->query(
+            "SELECT state, queued_by, reviewed_base_json, applied_json_sha256
+             FROM change_request_bridge WHERE change_request_id = $cr_id"
+        )->fetch();
+        $this->assertNotFalse($bridge, 'endorsing a reach diff must queue a bridge row');
+        $this->assertSame('queued', $bridge['state']);
+        $this->assertSame($maint['editor_id'], (int)$bridge['queued_by']);
+        $this->assertSame(hash('sha256', (string)$cr['applied_json']), $bridge['applied_json_sha256']);
+        $base = json_decode((string)$bridge['reviewed_base_json'], true);
+        $this->assertSame($reach['description'], $base['reach']['description'] ?? '__missing__');
         $hist = (int)$db->query(
             "SELECT COUNT(*) FROM edit_history WHERE change_request_id = $cr_id"
         )->fetchColumn();
