@@ -164,6 +164,31 @@ def head_sha(repo: str | Path) -> str:
     return _run(["git", "-C", str(repo), "rev-parse", "HEAD"]).strip()
 
 
+def is_ancestor(repo: str | Path, ancestor: str, descendant: str) -> bool:
+    """True if commit *ancestor* is an ancestor of (or equal to) *descendant*.
+
+    Used by ``mark-deployed`` to tell whether a bridge PR's merge commit is part
+    of a deployed dataset ref (so several PRs merged since the last deploy all
+    resolve). ``git merge-base --is-ancestor`` exits 0 (yes) / 1 (no); any other
+    code — notably 128 when a SHA isn't present in *repo* — raises
+    :class:`GitOpError` so the caller can treat "can't determine" as "not yet".
+    """
+    # merge-base has no `--` end-of-options separator, so guard the operands.
+    _reject_option_like(ancestor=ancestor, descendant=descendant)
+    proc = subprocess.run(
+        ["git", "-C", str(repo), "merge-base", "--is-ancestor", ancestor, descendant],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode == 0:
+        return True
+    if proc.returncode == 1:
+        return False
+    raise GitOpError(
+        (proc.stderr or "").strip() or f"git merge-base --is-ancestor exited {proc.returncode}"
+    )
+
+
 def push(
     repo: str | Path,
     *,

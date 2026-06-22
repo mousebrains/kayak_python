@@ -16,9 +16,15 @@ from pathlib import Path
 import pytest
 
 from kayak.config import KayakConfig
-from kayak.db.models import BridgeState, ChangeRequest, ChangeRequestBridge, ChangeTarget
-from kayak.editor_bridge import worker
-from kayak.editor_bridge.github_client import PullRequest
+from kayak.db.models import (
+    BridgeState,
+    ChangeRequest,
+    ChangeRequestBridge,
+    ChangeStatus,
+    ChangeTarget,
+)
+from kayak.editor_bridge import git_ops, worker
+from kayak.editor_bridge.github_client import GitHubApiError, PullRequest
 
 _CLOCK = lambda: dt.datetime(2026, 6, 22, 12, 0, 0, tzinfo=dt.UTC)  # noqa: E731
 
@@ -37,6 +43,7 @@ class FakeGitHubClient:
         self.created: list[tuple[str, str]] = []
         self.updated: list[tuple[int, str | None]] = []
         self._next = 1
+        self.raise_get_pr = False  # reconcile error-path testing
 
     def seed_open_pr(self, head_branch: str) -> PullRequest:
         return self.create_pr(head_branch=head_branch, base_branch="main", title="seed", body="")
@@ -66,7 +73,19 @@ class FakeGitHubClient:
         return self.prs[number]
 
     def get_pr(self, number):
+        if self.raise_get_pr:
+            raise GitHubApiError("simulated PR read failure")
         return self.prs[number]
+
+    def set_pr(self, number, *, state, merged, merge_commit_sha=None):
+        self.prs[number] = PullRequest(
+            number=number,
+            html_url=f"https://github.com/testowner/testrepo/pull/{number}",
+            head_sha="0" * 40,
+            state=state,
+            merged=merged,
+            merge_commit_sha=merge_commit_sha,
+        )
 
     def get_branch_sha(self, branch):
         return None
@@ -466,3 +485,208 @@ def test_empty_queue_returns_nothing(session, origin):
     assert (
         worker.run_once(session, _cfg(), client=client, clone_url=str(origin), clock=_CLOCK) == []
     )
+
+
+# ---------------------------------------------------------------------------
+# reconcile (pr_open → merged / pr_closed)
+# ---------------------------------------------------------------------------
+
+
+def _seed_pr_open(session, editor_id, *, pr_number: int) -> ChangeRequestBridge:
+    bridge = _seed_request(
+        session,
+        editor_id,
+        applied='{"reach": {"description": "x"}}',
+        base='{"reach": {"description": "old desc"}}',
+    )
+    bridge.state = BridgeState.pr_open
+    bridge.pr_number = pr_number
+    bridge.branch_name = f"editor-proposal/{bridge.change_request_id}-1"
+    session.flush()
+    return bridge
+
+
+def test_reconcile_marks_merged(session, editor):
+    bridge = _seed_pr_open(session, editor.id, pr_number=5)
+    client = FakeGitHubClient()
+    client.set_pr(5, state="closed", merged=True, merge_commit_sha="abc123")
+    (outcome,) = worker.reconcile(session, _cfg(), client=client)
+
+    assert outcome.state == "merged"
+    session.refresh(bridge)
+    assert bridge.state == BridgeState.merged
+    assert bridge.pr_merge_sha == "abc123"
+
+
+def test_reconcile_marks_closed_unmerged(session, editor):
+    bridge = _seed_pr_open(session, editor.id, pr_number=6)
+    client = FakeGitHubClient()
+    client.set_pr(6, state="closed", merged=False)
+    (outcome,) = worker.reconcile(session, _cfg(), client=client)
+
+    assert outcome.state == "pr_closed"
+    session.refresh(bridge)
+    assert bridge.state == BridgeState.pr_closed
+
+
+def test_reconcile_leaves_open_pr_untouched(session, editor):
+    bridge = _seed_pr_open(session, editor.id, pr_number=7)
+    client = FakeGitHubClient()
+    client.set_pr(7, state="open", merged=False)
+    assert worker.reconcile(session, _cfg(), client=client) == []  # no change reported
+    session.refresh(bridge)
+    assert bridge.state == BridgeState.pr_open
+
+
+def test_reconcile_pr_read_failure_escalates(session, editor):
+    bridge = _seed_pr_open(session, editor.id, pr_number=8)
+    client = FakeGitHubClient()
+    client.raise_get_pr = True
+    (outcome,) = worker.reconcile(session, _cfg(), client=client)
+
+    assert outcome.escalate is True
+    session.refresh(bridge)
+    assert bridge.state == BridgeState.pr_open  # left for the next pass
+
+
+# ---------------------------------------------------------------------------
+# mark-deployed (merged → deployed + resolve parent)
+# ---------------------------------------------------------------------------
+
+
+def _commit_repo(tmp_path: Path) -> tuple[Path, str, str]:
+    """A repo with two commits A→B; returns (repo, sha_A, sha_B). A is B's ancestor."""
+    import os
+
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@e.com",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@e.com",
+    }
+    repo = tmp_path / "dataset"
+    subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
+    (repo / "f").write_text("a", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, env=env)
+    subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "A"], check=True, env=env)
+    sha_a = git_ops.head_sha(repo)
+    (repo / "f").write_text("b", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, env=env)
+    subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "B"], check=True, env=env)
+    sha_b = git_ops.head_sha(repo)
+    return repo, sha_a, sha_b
+
+
+def _seed_merged(session, editor_id, *, merge_sha: str) -> ChangeRequestBridge:
+    bridge = _seed_request(
+        session,
+        editor_id,
+        applied='{"reach": {"description": "x"}}',
+        base='{"reach": {"description": "old desc"}}',
+    )
+    bridge.state = BridgeState.merged
+    bridge.pr_merge_sha = merge_sha
+    session.flush()
+    return bridge
+
+
+def test_mark_deployed_exact_match_resolves_parent(session, editor, tmp_path):
+    repo, _sha_a, sha_b = _commit_repo(tmp_path)
+    bridge = _seed_merged(session, editor.id, merge_sha=sha_b)  # == dataset_ref
+    (outcome,) = worker.mark_deployed(session, _cfg(), dataset_ref=sha_b, repo=str(repo))
+
+    assert outcome.state == "deployed"
+    session.refresh(bridge)
+    assert bridge.state == BridgeState.deployed
+    cr = session.get(ChangeRequest, bridge.change_request_id)
+    assert cr.status == ChangeStatus.resolved
+    assert "editor-bridge" in (cr.reviewer_note or "")
+
+
+def test_mark_deployed_ancestor_merge_commit(session, editor, tmp_path):
+    repo, sha_a, sha_b = _commit_repo(tmp_path)
+    bridge = _seed_merged(session, editor.id, merge_sha=sha_a)  # A is an ancestor of B
+    (outcome,) = worker.mark_deployed(session, _cfg(), dataset_ref=sha_b, repo=str(repo))
+
+    assert outcome.state == "deployed"
+    session.refresh(bridge)
+    assert bridge.state == BridgeState.deployed
+
+
+def test_mark_deployed_unknown_sha_left_merged(session, editor, tmp_path):
+    repo, _sha_a, sha_b = _commit_repo(tmp_path)
+    bridge = _seed_merged(session, editor.id, merge_sha="f" * 40)  # not in the repo
+    assert worker.mark_deployed(session, _cfg(), dataset_ref=sha_b, repo=str(repo)) == []
+    session.refresh(bridge)
+    assert bridge.state == BridgeState.merged  # left for a later pass, not an error
+
+
+def test_reconcile_merged_without_sha_waits(session, editor):
+    # GitHub's async window: merged=true but merge_commit_sha not settled yet.
+    # The row must stay pr_open (a merged row is never re-read), then transition
+    # once the SHA appears.
+    bridge = _seed_pr_open(session, editor.id, pr_number=9)
+    client = FakeGitHubClient()
+    client.set_pr(9, state="closed", merged=True, merge_commit_sha=None)
+    assert worker.reconcile(session, _cfg(), client=client) == []
+    session.refresh(bridge)
+    assert bridge.state == BridgeState.pr_open  # not stranded
+
+    client.set_pr(9, state="closed", merged=True, merge_commit_sha="settled")
+    (outcome,) = worker.reconcile(session, _cfg(), client=client)
+    assert outcome.state == "merged"
+    session.refresh(bridge)
+    assert bridge.state == BridgeState.merged
+    assert bridge.pr_merge_sha == "settled"
+
+
+def test_reconcile_multiple_rows_mixed(session, editor):
+    b1 = _seed_pr_open(session, editor.id, pr_number=11)
+    b2 = _seed_pr_open(session, editor.id, pr_number=12)
+    client = FakeGitHubClient()
+    client.set_pr(11, state="closed", merged=True, merge_commit_sha="m11")
+    client.set_pr(12, state="closed", merged=False)
+    worker.reconcile(session, _cfg(), client=client)
+    session.refresh(b1)
+    session.refresh(b2)
+    assert b1.state == BridgeState.merged
+    assert b2.state == BridgeState.pr_closed
+
+
+def test_mark_deployed_skips_merged_without_sha(session, editor, tmp_path):
+    repo, _sha_a, sha_b = _commit_repo(tmp_path)
+    bridge = _seed_merged(session, editor.id, merge_sha=sha_b)
+    bridge.pr_merge_sha = None
+    session.flush()
+    assert worker.mark_deployed(session, _cfg(), dataset_ref=sha_b, repo=str(repo)) == []
+    session.refresh(bridge)
+    assert bridge.state == BridgeState.merged
+
+
+def test_mark_deployed_non_git_repo_degrades(session, editor, tmp_path):
+    # repo isn't a git checkout → is_ancestor raises → row left merged (no false deploy).
+    notrepo = tmp_path / "notgit"
+    notrepo.mkdir()
+    bridge = _seed_merged(session, editor.id, merge_sha="a" * 40)
+    assert worker.mark_deployed(session, _cfg(), dataset_ref="b" * 40, repo=str(notrepo)) == []
+    session.refresh(bridge)
+    assert bridge.state == BridgeState.merged
+
+
+def test_mark_deployed_idempotent_no_duplicate_note(session, editor, tmp_path):
+    repo, _sha_a, sha_b = _commit_repo(tmp_path)
+    bridge = _seed_merged(session, editor.id, merge_sha=sha_b)
+    worker.mark_deployed(session, _cfg(), dataset_ref=sha_b, repo=str(repo))
+    cr = session.get(ChangeRequest, bridge.change_request_id)
+    note_after_first = cr.reviewer_note
+    assert cr.status == ChangeStatus.resolved
+    assert (note_after_first or "").count("[editor-bridge] deployed") == 1
+
+    # A second pass (or a concurrent run) that re-sees the row as merged must not
+    # append the note again — the parent is already resolved.
+    bridge.state = BridgeState.merged
+    session.flush()
+    worker.mark_deployed(session, _cfg(), dataset_ref=sha_b, repo=str(repo))
+    cr = session.get(ChangeRequest, bridge.change_request_id)
+    assert cr.reviewer_note == note_after_first  # unchanged — no duplicate note

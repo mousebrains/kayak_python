@@ -148,6 +148,149 @@ def run_once(
     return outcomes
 
 
+def reconcile(
+    session: Session,
+    cfg: KayakConfig,
+    *,
+    client: github_client.GitHubClient | None = None,
+    limit: int = 50,
+) -> list[RowOutcome]:
+    """Advance ``pr_open`` rows by reading each PR's current state on GitHub.
+
+    ``pr_open`` → ``merged`` (recording ``pr_merge_sha``) when the PR merged, or
+    → ``pr_closed`` when it was closed unmerged. A still-open PR is left as is. A
+    REST error reading one PR is an infra failure: the row stays ``pr_open`` and
+    the outcome escalates (so the run exits non-zero), the rest still reconcile.
+    """
+    rows = list(
+        session.scalars(
+            select(ChangeRequestBridge)
+            .where(ChangeRequestBridge.state == BridgeState.pr_open)
+            .limit(limit)
+        )
+    )
+    if not rows:
+        return []
+    if client is None:
+        client = github_client.RestGitHubClient(
+            owner=cfg.editor_bridge_dataset_owner,
+            repo=cfg.editor_bridge_dataset_name,
+            token=_mint_token(cfg),
+        )
+    outcomes: list[RowOutcome] = []
+    for bridge in rows:
+        if bridge.pr_number is None:  # shouldn't happen for pr_open
+            outcomes.append(
+                _terminal(session, bridge, BridgeState.worker_error, "pr_open row has no pr_number")
+            )
+            continue
+        try:
+            pr = client.get_pr(bridge.pr_number)
+        except github_client.GitHubApiError as exc:
+            log.error("reconcile: PR #%s read failed: %s", bridge.pr_number, exc)
+            outcomes.append(
+                RowOutcome(
+                    bridge.id, bridge.change_request_id, bridge.state.value, str(exc), escalate=True
+                )
+            )
+            continue
+        if pr.merged and pr.merge_commit_sha:
+            bridge.state = BridgeState.merged
+            bridge.pr_merge_sha = pr.merge_commit_sha
+            session.commit()
+            outcomes.append(
+                RowOutcome(
+                    bridge.id, bridge.change_request_id, BridgeState.merged.value, "PR merged"
+                )
+            )
+        elif pr.merged:
+            # GitHub reports `merged` before `merge_commit_sha` settles (async merge
+            # window). Don't transition yet — a merged row is never re-read by
+            # reconcile, so capturing a null SHA here would strand it forever
+            # (mark-deployed needs the SHA). Leave it pr_open for the next pass.
+            log.info("reconcile: PR #%s merged but merge SHA not yet settled", bridge.pr_number)
+        elif pr.state == "closed":  # closed without merging
+            bridge.state = BridgeState.pr_closed
+            session.commit()
+            outcomes.append(
+                RowOutcome(
+                    bridge.id,
+                    bridge.change_request_id,
+                    BridgeState.pr_closed.value,
+                    "PR closed unmerged",
+                )
+            )
+        # else: still open — leave as pr_open, no outcome row
+    return outcomes
+
+
+def mark_deployed(
+    session: Session,
+    cfg: KayakConfig,
+    *,
+    dataset_ref: str,
+    repo: str | Path,
+    limit: int = 100,
+) -> list[RowOutcome]:
+    """Mark ``merged`` rows ``deployed`` once their merge commit is in *dataset_ref*.
+
+    A row's ``pr_merge_sha`` counts as deployed when it is *dataset_ref* itself or
+    an ancestor of it (so several PRs merged since the last deploy all resolve from
+    one deploy). *repo* must be a local **git checkout** of the dataset containing
+    both commits (the deploy syncs it). On ``deployed``, the parent
+    ``change_request`` advances to ``resolved`` with a note — closing the SA-lite
+    loop. A row whose merge commit isn't in *repo* (or whose SHA isn't recorded
+    yet) is left ``merged`` for the next pass — never marked deployed unverified.
+    """
+    rows = list(
+        session.scalars(
+            select(ChangeRequestBridge)
+            .where(ChangeRequestBridge.state == BridgeState.merged)
+            .limit(limit)
+        )
+    )
+    outcomes: list[RowOutcome] = []
+    for bridge in rows:
+        merge_sha = bridge.pr_merge_sha
+        if not merge_sha:  # merged without a recorded SHA (reconcile waits for it) — skip
+            continue
+        try:
+            # Always via is_ancestor (reflexive: a commit is its own ancestor) so the
+            # exact-match case still *proves the commit is present in repo* — a bare
+            # string `==` would mark a row deployed against a checkout that never
+            # contained the commit. is_ancestor raises (→ skip) on an absent SHA.
+            deployed = git_ops.is_ancestor(repo, merge_sha, dataset_ref)
+        except git_ops.GitOpError as exc:
+            # The merge commit isn't in this checkout yet (or git errored) — not
+            # deployed as far as we can tell; leave it merged for a later pass.
+            log.info("mark-deployed: %s not yet resolvable in repo: %s", merge_sha[:12], exc)
+            continue
+        if not deployed:
+            continue
+        bridge.state = BridgeState.deployed
+        _resolve_parent(session, bridge, dataset_ref)
+        session.commit()
+        outcomes.append(
+            RowOutcome(bridge.id, bridge.change_request_id, BridgeState.deployed.value, "deployed")
+        )
+    return outcomes
+
+
+def _resolve_parent(session: Session, bridge: ChangeRequestBridge, dataset_ref: str) -> None:
+    """Advance the parent change_request to resolved (the SA-lite loop closer).
+
+    Idempotent: a missing or already-``resolved`` parent is a no-op, so a second
+    pass (or two overlapping mark-deployed runs, until a lease lands) can't append
+    the deploy note twice.
+    """
+    cr = session.get(ChangeRequest, bridge.change_request_id)
+    if cr is None or cr.status == ChangeStatus.resolved:
+        return
+    cr.status = ChangeStatus.resolved
+    note = f"[editor-bridge] deployed in dataset {dataset_ref[:12]}"
+    cr.reviewer_note = f"{cr.reviewer_note}\n\n{note}" if cr.reviewer_note else note
+
+
 def _mint_token(cfg: KayakConfig) -> str:
     if (
         cfg.editor_bridge_app_id is None

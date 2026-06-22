@@ -158,3 +158,38 @@ def test_scrub_redacts_token_and_basic_form():
     assert secret not in scrubbed
     assert basic not in scrubbed
     assert "***" in scrubbed
+
+
+def test_is_ancestor(tmp_path):
+    work = tmp_path / "r"
+    subprocess.run(["git", "init", "-q", "-b", "main", str(work)], check=True)
+    env = {**_subprocess_env(), **_ENV}
+    (work / "f").write_text("a", encoding="utf-8")
+    subprocess.run(["git", "-C", str(work), "add", "-A"], check=True, env=env)
+    subprocess.run(["git", "-C", str(work), "commit", "-q", "-m", "a"], check=True, env=env)
+    a = git_ops.head_sha(work)
+    (work / "f").write_text("b", encoding="utf-8")
+    subprocess.run(["git", "-C", str(work), "add", "-A"], check=True, env=env)
+    subprocess.run(["git", "-C", str(work), "commit", "-q", "-m", "b"], check=True, env=env)
+    b = git_ops.head_sha(work)
+
+    assert git_ops.is_ancestor(work, a, b) is True  # a precedes b
+    assert git_ops.is_ancestor(work, a, a) is True  # reflexive
+    assert git_ops.is_ancestor(work, b, a) is False  # b does not precede a
+
+
+def test_is_ancestor_unknown_sha_raises(tmp_path):
+    work = tmp_path / "r"
+    subprocess.run(["git", "init", "-q", "-b", "main", str(work)], check=True)
+    env = {**_subprocess_env(), **_ENV}
+    (work / "f").write_text("a", encoding="utf-8")
+    subprocess.run(["git", "-C", str(work), "add", "-A"], check=True, env=env)
+    subprocess.run(["git", "-C", str(work), "commit", "-q", "-m", "a"], check=True, env=env)
+    head = git_ops.head_sha(work)
+    with pytest.raises(GitOpError):
+        git_ops.is_ancestor(work, "f" * 40, head)  # sha not in the repo
+
+
+def test_is_ancestor_rejects_option_like(tmp_path):
+    with pytest.raises(GitOpError, match="option-like"):
+        git_ops.is_ancestor(tmp_path, "--help", "HEAD")
