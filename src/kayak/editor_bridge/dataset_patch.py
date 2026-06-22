@@ -20,9 +20,13 @@ Design points (verified against the editor + dataset code):
 * **reach_class is intentionally unsupported** — its payload is a name/range set
   with no per-row ids, so it can't be applied to the id-bearing ``reach_class.csv``
   safely until the propose/review payload is made row-id-aware (see the plan).
-* **Minimal diff.** Only the target row's line is rewritten, in the dataset's own
-  csv dialect (LF + ``QUOTE_MINIMAL``, matching ``generate-sources`` /
-  ``recover-metadata``), so a bridge PR shows exactly the cells that changed.
+* **Minimal diff.** Only the target row's physical line span is rewritten, in the
+  dataset's own csv dialect (LF + ``QUOTE_MINIMAL``, matching ``generate-sources``
+  / ``recover-metadata``), so a bridge PR shows exactly the cells that changed.
+  Logical rows are mapped to their physical line spans via ``csv.reader.line_num``,
+  so an embedded-newline cell elsewhere in the file (e.g. a multi-line reach
+  ``description``) does not force a whole-file re-serialize — and an unrelated row
+  the source happens to over-quote is left byte-for-byte untouched.
 * **Drift / conflict.** If a changed cell's current value differs from the
   reviewed base captured at queue time, raise :class:`ConflictError` *before*
   writing — the worker turns that into the ``conflict`` state for re-review.
@@ -178,6 +182,7 @@ def _apply_reach(
         updates,
         expected_base=expected_base,
         stamp={_REACH_STAMP_COLUMN: updated_at},
+        label="reach",
     )
 
 
@@ -189,7 +194,9 @@ def _apply_gauge(
 ) -> PatchResult:
     path = dataset_dir / "gauge.csv"
     updates = _validate_diff(diff, allowed=GAUGE_ALLOWED_FIELDS, label="gauge")
-    return _patch_row(path, target_id, updates, expected_base=expected_base, stamp=None)
+    return _patch_row(
+        path, target_id, updates, expected_base=expected_base, stamp=None, label="gauge"
+    )
 
 
 def _validate_diff(
@@ -240,20 +247,21 @@ def _patch_row(
     *,
     expected_base: dict[str, str] | None,
     stamp: dict[str, str] | None,
+    label: str,
 ) -> PatchResult:
     """Overwrite ``updates`` (+ optional ``stamp``) on the row with ``id==target_id``.
 
-    Rewrites only that row's line when the file has one physical line per row (the
-    invariant for the dataset CSVs); falls back to a full re-serialize otherwise
-    (still correct, just a larger diff). Drift is checked on the ``updates`` fields
-    (not ``stamp``) against ``expected_base`` before any write.
+    Rewrites only the target row's physical line span (mapped via ``csv.reader``'s
+    ``line_num``), so an embedded-newline cell anywhere else in the file leaves the
+    rest of the CSV byte-for-byte unchanged. Drift is checked on the ``updates``
+    fields (not ``stamp``) against ``expected_base`` before any write.
     """
     text = csv_path.read_text(encoding="utf-8")
-    rows = list(csv.reader(io.StringIO(text)))
+    lines, rows, spans = _parse_with_spans(text)
     cols_used = set(updates) | (set(stamp) if stamp else set())
     header = _validated_header(csv_path, rows, cols_used)
     target_j, row = _locate_row(csv_path, rows, header, target_id)
-    _ensure_no_drift(csv_path, target_id, row, updates, expected_base)
+    _ensure_no_drift(csv_path, target_id, row, updates, expected_base, label)
 
     changed = _apply_updates(row, updates)
     if not changed:
@@ -261,8 +269,30 @@ def _patch_row(
     if stamp:
         changed.update(_apply_updates(row, stamp))
 
-    _rewrite_row(csv_path, text, rows, target_j, header, row)
+    _rewrite_row(csv_path, lines, spans, target_j, header, row)
     return PatchResult(csv_path.name, target_id, changed)
+
+
+def _parse_with_spans(text: str) -> tuple[list[str], list[list[str]], list[tuple[int, int]]]:
+    """Parse *text* into (physical lines, logical rows, per-row physical-line spans).
+
+    ``lines`` is ``text.splitlines(keepends=True)`` (LF, post read_text normalisation).
+    ``rows[j]`` is the j-th logical CSV record; ``spans[j] == (start, end)`` is its
+    half-open slice into ``lines`` — ``end - start > 1`` exactly when that row has an
+    embedded-newline cell. Built from ``csv.reader.line_num`` (cumulative physical
+    lines consumed), so the mapping is robust to quoted multi-line fields.
+    """
+    lines = text.splitlines(keepends=True)
+    reader = csv.reader(io.StringIO(text))
+    rows: list[list[str]] = []
+    spans: list[tuple[int, int]] = []
+    prev = 0
+    for cells in reader:
+        end = reader.line_num  # physical lines consumed through this record
+        spans.append((prev, end))
+        rows.append(cells)
+        prev = end
+    return lines, rows, spans
 
 
 def _validated_header(csv_path: Path, rows: list[list[str]], cols_used: set[str]) -> list[str]:
@@ -300,14 +330,31 @@ def _ensure_no_drift(
     row: dict[str, str],
     updates: dict[str, str],
     expected_base: dict[str, str] | None,
+    label: str,
 ) -> None:
+    """Fail-closed drift check: every updated field must match its reviewed base.
+
+    ``expected_base`` comes from the queued ``reviewed_base_json``; PHP/PDO can
+    store numeric cells as JSON numbers, so each base value is coerced through the
+    same :func:`_cell` rendering as the update before comparison — otherwise an
+    unchanged ``5.5`` (CSV text) vs ``5.5`` (JSON number) would false-conflict. A
+    field being changed with *no* reviewed base is itself a conflict: we can't
+    certify it hasn't drifted, so refuse rather than write blind.
+    """
     if expected_base is None:
         return
-    drifted = {
-        f: (expected_base[f], row.get(f, ""))
-        for f in updates
-        if f in expected_base and row.get(f, "") != expected_base[f]
-    }
+    missing = sorted(set(updates) - set(expected_base))
+    if missing:
+        raise ConflictError(
+            f"{csv_path.name} id {target_id}: no reviewed base for changed field(s) "
+            f"{missing} — cannot verify drift"
+        )
+    drifted = {}
+    for f in updates:
+        base = _cell(f, expected_base[f], label)
+        current = row.get(f, "")
+        if current != base:
+            drifted[f] = (base, current)
     if drifted:
         raise ConflictError(
             f"{csv_path.name} id {target_id} drifted from the reviewed base: {drifted}"
@@ -327,26 +374,21 @@ def _apply_updates(row: dict[str, str], updates: dict[str, str]) -> dict[str, tu
 
 def _rewrite_row(
     csv_path: Path,
-    text: str,
-    rows: list[list[str]],
+    lines: list[str],
+    spans: list[tuple[int, int]],
     target_j: int,
     header: list[str],
     row: dict[str, str],
 ) -> None:
-    # read_text() normalised newlines to LF; the dataset CSVs are LF (csv.writer
-    # via generate-sources/recover-metadata), so we re-emit LF and don't churn
-    # the whole file. (A CRLF dataset would be normalised to LF on first edit.)
+    # Replace only the target row's physical line span; every other byte of the
+    # file is preserved (no full re-serialize, so an unrelated over-quoted or
+    # embedded-newline row is never rewritten). read_text() normalised newlines to
+    # LF and the dataset CSVs are LF, so the re-emitted row is LF too.
     new_line = _serialize_row(header, row)
-    lines = text.splitlines(keepends=True)
-    if len(lines) == len(rows):  # one physical line per row → minimal diff
-        # Preserve the target line's trailing-newline state (the last row of a
-        # file without a final newline must not gain one).
-        if not lines[target_j].endswith("\n"):
-            new_line = new_line.rstrip("\n")
-        lines[target_j] = new_line
-        csv_path.write_text("".join(lines), encoding="utf-8")
-    else:  # multi-line rows present → correct full re-serialize (rare)
-        rows[target_j] = [row[c] for c in header]
-        buf = io.StringIO()
-        csv.writer(buf, lineterminator="\n").writerows(rows)
-        csv_path.write_text(buf.getvalue(), encoding="utf-8")
+    start, end = spans[target_j]
+    # Preserve the row's trailing-newline state: the last row of a file without a
+    # final newline (its last physical line) must not gain one.
+    if not lines[end - 1].endswith("\n"):
+        new_line = new_line.rstrip("\n")
+    new_lines = [*lines[:start], new_line, *lines[end:]]
+    csv_path.write_text("".join(new_lines), encoding="utf-8")

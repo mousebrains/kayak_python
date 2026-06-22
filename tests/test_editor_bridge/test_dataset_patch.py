@@ -342,3 +342,85 @@ def test_last_row_without_trailing_newline_preserved(tmp_path):
     assert not text.endswith("\n")  # trailing-newline state preserved
     assert text.startswith("id,updated_at,description\n1,2026-01-01,a\n")  # header + row 1 intact
     assert text.endswith("2,2026-06-21,B")
+
+
+# ---------------------------------------------------------------------------
+# minimal-diff fidelity on the real-world CSV shapes: an embedded-newline cell
+# and an over-quoted sibling (both present in the live reach.csv). Editing one
+# row must leave every other row's bytes untouched — no whole-file re-serialize.
+# ---------------------------------------------------------------------------
+
+# Row 1's description spans two physical lines (quoted embedded newline); row 2's
+# description is over-quoted ("overquoted" has no special char, so QUOTE_MINIMAL
+# would render it bare); row 3 is the plain target.
+_MIXED_QUOTING_CSV = (
+    "id,updated_at,description\n"
+    '1,2026-01-01,"line one\n'
+    'line two"\n'
+    '2,2026-01-01,"overquoted"\n'
+    "3,2026-01-01,target\n"
+)
+
+
+def test_editing_sibling_leaves_embedded_newline_and_overquoted_rows_byte_identical(tmp_path):
+    (tmp_path / "reach.csv").write_text(_MIXED_QUOTING_CSV, encoding="utf-8")
+    apply_change(tmp_path, "reach", 3, {"reach": {"description": "new"}}, updated_at="2026-06-21")
+
+    text = (tmp_path / "reach.csv").read_text(encoding="utf-8")
+    # The two untouched rows keep their exact original bytes (multi-line cell still
+    # spans two lines; the over-quoted cell is NOT minimised to bare).
+    assert '1,2026-01-01,"line one\nline two"\n' in text
+    assert '2,2026-01-01,"overquoted"\n' in text
+    # Only the target row changed (and its description is plain, so unquoted).
+    assert text.endswith("3,2026-06-21,new\n")
+    # The embedded newline still round-trips as one logical cell.
+    assert _row(tmp_path / "reach.csv", "1")["description"] == "line one\nline two"
+
+
+def test_editing_the_embedded_newline_row_itself_round_trips(tmp_path):
+    (tmp_path / "reach.csv").write_text(_MIXED_QUOTING_CSV, encoding="utf-8")
+    # Replace the multi-line description with a single-line value; the row collapses
+    # to one physical line and the siblings are untouched.
+    apply_change(
+        tmp_path, "reach", 1, {"reach": {"description": "single"}}, updated_at="2026-06-21"
+    )
+    text = (tmp_path / "reach.csv").read_text(encoding="utf-8")
+    assert text.startswith("id,updated_at,description\n1,2026-06-21,single\n")
+    assert '2,2026-01-01,"overquoted"\n' in text  # over-quoted sibling still intact
+    assert text.endswith("3,2026-01-01,target\n")
+    assert _row(tmp_path / "reach.csv", "1")["description"] == "single"
+
+
+# ---------------------------------------------------------------------------
+# drift: reviewed-base normalization + fail-closed on a missing base
+# ---------------------------------------------------------------------------
+
+
+def test_drift_numeric_base_does_not_false_conflict(dataset):
+    # reviewed_base_json can carry a JSON *number* for a coordinate; coercing it
+    # through the same cell rendering means an unchanged 5.5 matches CSV "5.5"
+    # rather than spuriously conflicting.
+    (res,) = apply_change(
+        dataset,
+        "reach",
+        2,
+        {"reach": {"latitude_start": 45.0}},
+        updated_at="2026-06-21",
+        expected_base={"latitude_start": 5.5},  # JSON number, == current CSV "5.5"
+    )
+    assert _row(dataset / "reach.csv", "2")["latitude_start"] == "45.0"
+    assert res.changed["latitude_start"] == ("5.5", "45.0")
+
+
+def test_drift_missing_base_for_updated_field_fails_closed(dataset):
+    before = dataset.joinpath("reach.csv").read_bytes()
+    with pytest.raises(ConflictError, match="no reviewed base"):
+        apply_change(
+            dataset,
+            "reach",
+            2,
+            {"reach": {"description": "x", "features": "y"}},
+            updated_at="2026-06-21",
+            expected_base={"description": "old desc 2"},  # 'features' base missing
+        )
+    assert dataset.joinpath("reach.csv").read_bytes() == before  # fail-closed, no write
