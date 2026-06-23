@@ -23,7 +23,7 @@ stays up); read the status page and this doc together.
 | # | SLO | Target | Measurement | Where the signal lives |
 |---|---|---|---|---|
 | **A** | Site availability | ≥ **99.5% / 30d** (~3.6 h/month error budget) | Better Stack uptime monitor on `https://levels.wkcc.org/`, 3-min interval, HTTP 2xx | Better Stack dashboard `Uptime / kayak` |
-| **F** | Pipeline freshness | Global: newest observation across all sources ≤ **3 h** old. Per-source: every active gauge-linked fetch-backed source has ≥ 1 observation and none silent > **14 d** (`STALE_SOURCE_DAYS`); OGC-fetched USGS sources are checked for going silent too, but never-fed ones are exempt | `scripts/health-check.sh` exits non-zero on either; surfaced via `kayak-healthcheck.service` heartbeat | `journalctl -u kayak-healthcheck` + healthchecks.io `kayak-healthcheck` check |
+| **F** | Pipeline freshness | Global: newest observation across all sources ≤ **3 h** old. Per-source: every active gauge-linked fetch-backed source has ≥ 1 observation and none silent > **14 d** (`STALE_SOURCE_DAYS`); OGC-fetched USGS sources are checked for going silent too, but never-fed ones are exempt | `scripts/health-check.sh` exits non-zero on either; surfaced via `kayak-healthcheck.service` heartbeat. The global check fires every run; **per-source** stale alerts are rate-limited to ≤ 1 per `HEALTHCHECK_SOURCE_ALERT_DAYS` (default 7) per source, and a source can be muted via `HEALTHCHECK_MUTE_SOURCES` | `journalctl -u kayak-healthcheck` + healthchecks.io `kayak-healthcheck` check |
 | **B** | Backup RPO | ≤ **1 h** confirmed by a successful hourly snapshot | `kayak-backup-hourly.service` (hourly `*:38`) pings healthchecks.io on success; backup files land at `/home/pat/backups/backup-<UTC>.db.gz` | healthchecks.io `kayak-backup-hourly` check + `ls -la /home/pat/backups/` |
 | **D** | Build-time freshness | New static HTML written within **75 min** of the hourly pipeline tick (`kayak-pipeline.timer` runs at `*:12`, ~30 min budget for fetch + calc + build, +headroom) | `kayak-pipeline.service` heartbeat ping fires only after the build step exits 0 | healthchecks.io `kayak-pipeline` check + `stat /home/pat/public_html/Oregon.html` |
 | **E** | Editor magic-link delivery | ≥ **95% / 30d** of magic-link emails reach the inbox within 60 s | `src/kayak/web/php/includes/mail.php` logs every send attempt; success measured by absence of msmtp error in `journalctl` and operator-noticed bounces | `journalctl -t magiclink` + `src/kayak/web/php/includes/mail.php` retry counters |
@@ -48,7 +48,16 @@ stays up); read the status page and this doc together.
   There is no
   per-source cadence model (feeds update anywhere from every 15 min to
   a few times a day), so the per-source window is deliberately coarse:
-  a dead-feed detector, not a lag detector. Healthchecks.io fires when
+  a dead-feed detector, not a lag detector. The **global** 3 h check fires
+  every run, but **per-source** stale alerts are rate-limited: any one
+  source pages at most once per `HEALTHCHECK_SOURCE_ALERT_DAYS` (default
+  7), tracked in a small state file, and a known-dead source can be muted
+  outright via `HEALTHCHECK_MUTE_SOURCES`. So healthchecks.io is **not** a
+  continuously-red signal for a known-stale source — a single dead feed
+  pages ~weekly (or never, if muted) and the heartbeat goes green between
+  pages; the stale source stays visible on the green `OK:` line meanwhile.
+  (A failure to persist that state is itself non-green, so a stale state
+  can never silently hide a fresh outage.) Healthchecks.io fires when
   the heartbeat doesn't ping
   on time *or* the service exits non-zero (`ExecStartPost=-/usr/bin/curl`
   only runs when `ExecStart` succeeds). So "stale" and "unit crashed"
