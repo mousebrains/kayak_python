@@ -6,6 +6,7 @@ declare(strict_types=1);
  * Usage: /source.php?id=<source_id> or /source.php?q=<search>
  */
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/agency_url.php';
 require_once __DIR__ . '/includes/pubhash_request.php';
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
@@ -185,9 +186,18 @@ if ($agency_url !== null) {
     $name_html = '<a href="' . htmlspecialchars($agency_url) . '" target="_blank" rel="noopener">' . $name_html . '</a>';
 }
 
+// A local operator (no per-station page) is attributed by linking its agency
+// name to its homepage; everything else shows the agency as plain text.
+$agency_html = htmlspecialchars($source['agency'] ?? '');
+$agency_attr_url = agency_attribution_url($source['agency'] ?? null);
+if ($agency_attr_url !== null && $agency_html !== '') {
+    $agency_html = '<a href="' . htmlspecialchars($agency_attr_url)
+        . '" target="_blank" rel="noopener">' . $agency_html . '</a>';
+}
+
 $fields = [
     'Name' => $name_html,
-    'Agency' => $source['agency'],
+    'Agency' => $agency_html,
 ];
 
 if ($source['fetch_url'] !== null) {
@@ -207,9 +217,9 @@ if ($source['fetch_url'] !== null) {
 }
 
 foreach ($fields as $label => $value) {
-    if ($value === null || trim($value) === '') continue;
+    if (trim($value) === '') continue;
     // These fields already contain HTML links
-    if ($label === 'Fetch URL' || $label === 'Name') {
+    if ($label === 'Fetch URL' || $label === 'Name' || $label === 'Agency') {
         echo "<tr><td>$label</td><td>$value</td></tr>\n";
     } else {
         $esc = htmlspecialchars($value);

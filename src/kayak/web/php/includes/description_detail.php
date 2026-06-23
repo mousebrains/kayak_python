@@ -15,6 +15,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/agency_url.php';
 require_once __DIR__ . '/header.php';
 require_once __DIR__ . '/pubhash_request.php';
 require_once __DIR__ . '/footer.php';
@@ -667,6 +668,13 @@ function _render_data_sources(PDO $db, ?array $gauge): void
         } else {
             $src_name = htmlspecialchars($src['name']);
             $agency = ($src['agency'] !== null && $src['agency'] !== '') ? htmlspecialchars($src['agency']) : '';
+            // A local operator (no per-station page) links its agency name to its
+            // homepage; everything else shows the agency as plain text.
+            $attr_url = agency_attribution_url($src['agency'] ?? null);
+            if ($agency !== '' && $attr_url !== null) {
+                $agency = '<a href="' . htmlspecialchars($attr_url)
+                    . '" target="_blank" rel="noopener">' . $agency . '</a>';
+            }
             $label = $agency !== '' ? "$agency — $src_name" : $src_name;
         }
 
