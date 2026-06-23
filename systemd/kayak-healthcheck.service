@@ -31,7 +31,13 @@ PrivateTmp=yes
 PrivateDevices=yes
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/home/pat/DB
+# /home/pat/DB: SQLite WAL -wal/-shm sidecars. /home/pat/var: the per-source
+# alert rate-limit state (HEALTHCHECK_STATE_FILE default
+# ${KAYAK_HOME}/var/healthcheck-source-alerts.tsv) — the dead-feed check pages any
+# one source at most once per HEALTHCHECK_SOURCE_ALERT_DAYS (default 7), tracked
+# there. (Set HEALTHCHECK_MUTE_SOURCES=<ids> in the .env to fully mute a known-dead
+# source.) Both knobs come via the EnvironmentFile above — no unit change to tune.
+ReadWritePaths=/home/pat/DB /home/pat/var
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes

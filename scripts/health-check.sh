@@ -33,6 +33,27 @@ case "$STALE_SOURCE_DAYS" in
         ;;
 esac
 
+# Per-source ALERT rate-limit. The check still runs as often as the timer fires
+# (fast detection), but any one silent source pages at most once per this many
+# days — the last-alert time per source is persisted in HEALTHCHECK_STATE_FILE
+# (source_id<TAB>epoch). 0 disables the limit (alert every run, the old behavior).
+SOURCE_ALERT_DAYS="${HEALTHCHECK_SOURCE_ALERT_DAYS:-7}"
+case "$SOURCE_ALERT_DAYS" in
+    ''|*[!0-9]*)
+        echo "CRITICAL: HEALTHCHECK_SOURCE_ALERT_DAYS must be a non-negative integer (got '${SOURCE_ALERT_DAYS}')"
+        exit 2
+        ;;
+esac
+STATE_FILE="${HEALTHCHECK_STATE_FILE:-${KAYAK_HOME:-$HOME}/var/healthcheck-source-alerts.tsv}"
+
+# Muted sources — comma-separated source ids known dead + acknowledged, fully
+# excluded from the per-source check (no alert, not even the weekly reminder).
+# Sanitize to a bare integer CSV so the value is safe to interpolate into SQL:
+# strip anything but digits/commas, then collapse stray/edge commas.
+MUTE_CLEAN="$(printf '%s' "${HEALTHCHECK_MUTE_SOURCES:-}" | tr -cd '0-9,' | sed 's/,\{2,\}/,/g; s/^,//; s/,$//')"
+MUTE_CLAUSE=""
+[ -n "$MUTE_CLEAN" ] && MUTE_CLAUSE="AND s.id NOT IN ($MUTE_CLEAN)"
+
 # Disk + swap warning thresholds. Override via env in the unit file or shell.
 # "Aggressive" defaults — disk WARN well before the recap heartbeat reports it,
 # swap WARN only when the swap _and_ free-RAM signals both fire (conjunction),
@@ -98,22 +119,73 @@ fi
 #     fetch_url row, so is_active is functionally dependent on s.id.
 #     Don't "fix" it to MAX(fu.is_active) or port to a stricter engine
 #     unexamined.
+# Tab-delimited (id<TAB>name<TAB>latest) so the rate-limit loop can read each
+# source. Muted sources are excluded outright; the OR pair is parenthesized so the
+# mute AND binds to the whole active-source predicate, not just the USGS arm.
 STALE_SOURCES=$(sqlite3 "$DB" "
-    SELECT s.id || ' ' || s.name || ' latest=' || COALESCE(MAX(lo.observed_at), 'NEVER')
+    SELECT s.id || char(9) || s.name || char(9) || COALESCE(MAX(lo.observed_at), 'NEVER')
     FROM source s
     JOIN gauge_source gs ON gs.source_id = s.id
     LEFT JOIN fetch_url fu ON fu.id = s.fetch_url_id
     LEFT JOIN latest_observation lo ON lo.source_id = s.id
-    WHERE fu.is_active = 1
-       OR (s.agency = 'USGS' AND fu.is_active IS NOT 1)
+    WHERE (fu.is_active = 1
+        OR (s.agency = 'USGS' AND fu.is_active IS NOT 1))
+      ${MUTE_CLAUSE}
     GROUP BY s.id
     HAVING MAX(lo.observed_at) < datetime('now', '-${STALE_SOURCE_DAYS} days')
         OR (fu.is_active = 1 AND MAX(lo.observed_at) IS NULL);
 ")
-if [ -n "$STALE_SOURCES" ]; then
-    STALE_COUNT=$(printf '%s\n' "$STALE_SOURCES" | wc -l | tr -d ' ')
-    echo "WARNING: ${STALE_COUNT} active source(s) with no observation in ${STALE_SOURCE_DAYS} days:"
-    printf '%s\n' "$STALE_SOURCES"
+
+# Per-source alert rate-limit. For each currently-silent source, alert only if it
+# hasn't alerted within SOURCE_ALERT_DAYS — so detection is as fast as the timer
+# but any one source pages at most once a week. The new state holds ONLY the
+# still-silent set, so a recovered source drops out (and re-alerts fresh if it
+# dies again). Fail toward alerting: if the state can't be written we still page
+# the due set rather than silently suppress.
+DUE=""
+SUPPRESSED=0
+NOW_EPOCH=$(date +%s)
+LIMIT_SECS=$((SOURCE_ALERT_DAYS * 86400))
+NEW_STATE=""
+while IFS=$'\t' read -r sid sname slatest; do
+    [ -z "$sid" ] && continue
+    last=0
+    if [ -f "$STATE_FILE" ]; then
+        last=$(awk -F'\t' -v s="$sid" '$1==s {print $2; exit}' "$STATE_FILE")
+        [ -z "$last" ] && last=0
+    fi
+    if [ "$((NOW_EPOCH - last))" -ge "$LIMIT_SECS" ]; then
+        DUE="${DUE}  ${sid} ${sname} latest=${slatest}
+"
+        NEW_STATE="${NEW_STATE}${sid}	${NOW_EPOCH}
+"
+    else
+        SUPPRESSED=$((SUPPRESSED + 1))
+        NEW_STATE="${NEW_STATE}${sid}	${last}
+"
+    fi
+done <<EOF
+$STALE_SOURCES
+EOF
+
+# ALWAYS rebuild the state to the current silent set — even when it's empty (all
+# sources recovered) — so a recovered source's old entry is pruned, not reused to
+# suppress a later re-death. Empty set → remove the file. Fail toward alerting:
+# a write failure leaves the due set to page rather than silently suppress.
+if [ -n "$NEW_STATE" ]; then
+    mkdir -p "$(dirname "$STATE_FILE")" 2>/dev/null || true
+    if ! { printf '%s' "$NEW_STATE" > "$STATE_FILE.tmp" 2>/dev/null \
+        && mv "$STATE_FILE.tmp" "$STATE_FILE" 2>/dev/null; }; then
+        echo "WARNING: could not write healthcheck state $STATE_FILE — per-source alert rate-limit not persisted"
+    fi
+else
+    rm -f "$STATE_FILE" 2>/dev/null || true
+fi
+
+if [ -n "$DUE" ]; then
+    DUE_COUNT=$(printf '%s' "$DUE" | grep -c .)
+    echo "WARNING: ${DUE_COUNT} active source(s) with no observation in ${STALE_SOURCE_DAYS} days (each alerts at most once per ${SOURCE_ALERT_DAYS}d):"
+    printf '%s' "$DUE"
     exit 1
 fi
 
@@ -162,5 +234,11 @@ if [ -r /proc/meminfo ]; then
     fi
 fi
 
-echo "OK: Latest observation ${AGE_HOURS}h ago ($LATEST), ${RECENT_COUNT} observations in last 2h, no active source silent >${STALE_SOURCE_DAYS}d, disk ${DISK_PCT}%"
+# Keep silenced-but-still-watched sources visible on the green line so a parked
+# feed never becomes an invisible blind spot: suppressed = silent within its
+# weekly alert window; muted = acknowledged-dead + fully excluded.
+OK_EXTRA=""
+[ "$SUPPRESSED" -gt 0 ] && OK_EXTRA="${OK_EXTRA}, ${SUPPRESSED} silent source(s) within their ${SOURCE_ALERT_DAYS}d alert window"
+[ -n "$MUTE_CLEAN" ] && OK_EXTRA="${OK_EXTRA}, muted sources: ${MUTE_CLEAN}"
+echo "OK: Latest observation ${AGE_HOURS}h ago ($LATEST), ${RECENT_COUNT} observations in last 2h, no source due to alert (>${STALE_SOURCE_DAYS}d silent)${OK_EXTRA}, disk ${DISK_PCT}%"
 exit 0

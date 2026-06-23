@@ -137,6 +137,10 @@ def _run_health_check(
             "DISK_FAIL_PCT": "101",
             "SWAP_USED_PCT_WARN": "101",
             "MEM_FREE_MB_WARN": "0",
+            # Per-test state file so the per-source alert rate-limit doesn't leak
+            # across tests (or write to the real $HOME). A fresh empty state means
+            # a first run alerts on a silent source, as the legacy tests expect.
+            "HEALTHCHECK_STATE_FILE": str(tmp_path / "hc-source-alerts.tsv"),
         }
     )
     if extra_env:
@@ -297,3 +301,95 @@ class TestGlobalFreshness:
         result = _run_health_check(db_path, tmp_path)
         assert result.returncode == 1, result.stdout + result.stderr
         assert "Latest observation" in result.stdout
+
+
+class TestSourceAlertThrottle:
+    """Per-source alert rate-limit + mute (the check still runs frequently)."""
+
+    def test_dead_source_alerts_once_then_suppressed_within_window(
+        self, db_session: tuple[Path, Session], tmp_path: Path
+    ):
+        db_path, session = db_session
+        _seed_source(session, "a", latest=_utcnow() - timedelta(minutes=30))
+        _seed_source(session, "dead", latest=_utcnow() - timedelta(days=20))
+        session.commit()
+
+        first = _run_health_check(db_path, tmp_path)
+        assert first.returncode == 1, first.stdout + first.stderr
+        assert "dead" in first.stdout
+
+        # Same tmp_path → same state file → the second run is inside the window.
+        second = _run_health_check(db_path, tmp_path)
+        assert second.returncode == 0, second.stdout + second.stderr
+        assert "OK" in second.stdout
+        assert "within their" in second.stdout
+        assert "dead" not in second.stdout
+
+    def test_dead_source_realerts_after_window(
+        self, db_session: tuple[Path, Session], tmp_path: Path
+    ):
+        db_path, session = db_session
+        dead = _seed_source(session, "dead", latest=_utcnow() - timedelta(days=20))
+        _seed_source(session, "a", latest=_utcnow() - timedelta(minutes=30))
+        session.commit()
+
+        assert _run_health_check(db_path, tmp_path).returncode == 1
+        # Age this source's last-alert past the 7-day window → it's due again.
+        state = tmp_path / "hc-source-alerts.tsv"
+        old = int((_utcnow() - timedelta(days=8)).timestamp())
+        state.write_text(f"{dead.id}\t{old}\n")
+
+        again = _run_health_check(db_path, tmp_path)
+        assert again.returncode == 1, again.stdout + again.stderr
+        assert "dead" in again.stdout
+
+    def test_muted_source_not_alerted_but_listed(
+        self, db_session: tuple[Path, Session], tmp_path: Path
+    ):
+        db_path, session = db_session
+        dead = _seed_source(session, "dead", latest=_utcnow() - timedelta(days=20))
+        _seed_source(session, "a", latest=_utcnow() - timedelta(minutes=30))
+        session.commit()
+
+        result = _run_health_check(
+            db_path, tmp_path, extra_env={"HEALTHCHECK_MUTE_SOURCES": str(dead.id)}
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "dead" not in result.stdout
+        assert f"muted sources: {dead.id}" in result.stdout
+
+    def test_mute_rejects_non_numeric_injection(
+        self, db_session: tuple[Path, Session], tmp_path: Path
+    ):
+        # A non-numeric mute value is sanitized to digits/commas, so it can't
+        # inject SQL; here it sanitizes to empty → the dead source still alerts.
+        db_path, session = db_session
+        _seed_source(session, "a", latest=_utcnow() - timedelta(minutes=30))  # keep global fresh
+        _seed_source(session, "dead", latest=_utcnow() - timedelta(days=20))
+        session.commit()
+        result = _run_health_check(
+            db_path, tmp_path, extra_env={"HEALTHCHECK_MUTE_SOURCES": "x); DROP TABLE source;--"}
+        )
+        assert result.returncode == 1, result.stdout + result.stderr
+        assert "dead" in result.stdout
+
+    def test_recovered_source_drops_from_state_and_realerts(
+        self, db_session: tuple[Path, Session], tmp_path: Path
+    ):
+        db_path, session = db_session
+        _seed_source(session, "a", latest=_utcnow() - timedelta(minutes=30))  # keep global fresh
+        dead = _seed_source(session, "dead", latest=_utcnow() - timedelta(days=20))
+        session.commit()
+        assert _run_health_check(db_path, tmp_path).returncode == 1  # dies → alert
+
+        obs = session.query(LatestObservation).filter_by(source_id=dead.id).one()
+        obs.observed_at = _utcnow() - timedelta(minutes=10)  # recovers
+        session.commit()
+        assert _run_health_check(db_path, tmp_path).returncode == 0  # not silent → OK
+
+        obs.observed_at = _utcnow() - timedelta(days=20)  # dies again
+        session.commit()
+        again = _run_health_check(db_path, tmp_path)
+        # Fresh alert — the pre-recovery state entry was pruned, not reused.
+        assert again.returncode == 1, again.stdout + again.stderr
+        assert "dead" in again.stdout
