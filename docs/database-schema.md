@@ -424,6 +424,7 @@ crash reuses the existing branch/PR. State machine: `queued` → `pr_open` → `
 | `change_request_id` | INTEGER | UNIQUE, FK → `change_request.id` ON DELETE CASCADE |
 | `state` | VARCHAR(12) | `BridgeState`; default `queued` |
 | `attempt` | INTEGER | Default 1; bumped on requeue; part of the branch name |
+| `retry_count` | INTEGER | Default 0; consecutive infra-error retries for the attempt; backs off then parks `worker_error` at the cap; reset on success/requeue |
 | `base_dataset_sha` | VARCHAR(40) | Dataset SHA captured at queue time (drift detection) |
 | `reviewed_base_json` | TEXT | Per-field reviewed base values (drift detection) |
 | `applied_json_sha256` | VARCHAR(64) | sha256 of the committed `applied_json` (edit guard) |

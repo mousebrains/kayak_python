@@ -2,8 +2,8 @@
 -- Snapshot of the live DB schema; checked in to gate schema/model parity.
 -- Regenerate after structural migrations land. Do not edit by hand.
 --
--- Source: /tmp/sa2.db
--- Generated: 2026-06-08T18:52:31Z
+-- Source: /tmp/kayak_snap_97509.db
+-- Generated: 2026-06-22T21:41:32Z
 
 CREATE TABLE calc_expression (
 	id INTEGER NOT NULL,
@@ -64,7 +64,7 @@ CREATE TABLE change_request_bridge (
 	conflict_json TEXT,
 	lease_owner VARCHAR(128),
 	lease_expires_at DATETIME,
-	heartbeat_at DATETIME,
+	heartbeat_at DATETIME, retry_count INTEGER NOT NULL DEFAULT '0',
 	PRIMARY KEY (id),
 	UNIQUE (change_request_id),
 	FOREIGN KEY(change_request_id) REFERENCES change_request (id) ON DELETE CASCADE,

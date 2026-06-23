@@ -28,6 +28,18 @@ from kayak.editor_bridge.github_client import GitHubApiError, PullRequest
 
 _CLOCK = lambda: dt.datetime(2026, 6, 22, 12, 0, 0, tzinfo=dt.UTC)  # noqa: E731
 
+# Captured before the autouse stub below rebinds it, so the dedicated email test
+# can exercise the real helper while every other test gets a no-op (so a
+# mark-deployed run never spawns `mail`).
+_REAL_NOTIFY = worker._notify_proposer_deployed
+
+
+@pytest.fixture(autouse=True)
+def _stub_deploy_email(monkeypatch):
+    """No worker test may spawn `mail`. Default the deploy-email to a no-op; the
+    email test calls _REAL_NOTIFY directly with a captured subprocess."""
+    monkeypatch.setattr(worker, "_notify_proposer_deployed", lambda *a, **k: None)
+
 
 # ---------------------------------------------------------------------------
 # fakes / fixtures
@@ -333,10 +345,11 @@ def test_processes_multiple_queued_rows(session, editor, origin):
     assert b1.branch_name != b2.branch_name
 
 
-def test_infrastructure_error_keeps_row_queued_and_escalates(session, editor, tmp_path):
-    # Clone target doesn't exist → git_ops.GitOpError (infra). The row must stay
-    # queued (retry next run) and the outcome must escalate (alert), not silently
-    # park as worker_error.
+def test_infra_error_backs_off_quietly_below_cap(session, editor, tmp_path):
+    # Clone target doesn't exist → git_ops.GitOpError (infra). Below the retry cap
+    # the row stays queued, increments retry_count, and backs off (lease_expires_at
+    # set to a future reclaim time) — but does NOT escalate: a transient blip that
+    # may self-heal on a later run shouldn't page. Only giving up (the cap) does.
     bridge = _seed_request(
         session,
         editor.id,
@@ -348,13 +361,64 @@ def test_infrastructure_error_keeps_row_queued_and_escalates(session, editor, tm
         session, _cfg(), client=client, clone_url=str(tmp_path / "nope.git"), clock=_CLOCK
     )
 
-    assert outcome.escalate is True
+    assert outcome.escalate is False  # quiet retry, not an alert
     assert outcome.state == "queued"
     session.refresh(bridge)
     assert bridge.state == BridgeState.queued  # left for retry
+    assert bridge.retry_count == 1
     assert "infrastructure error" in (bridge.last_error or "")
-    assert bridge.lease_owner is None and bridge.lease_expires_at is None  # lease released
+    assert bridge.lease_owner is None
+    assert bridge.lease_expires_at is not None  # backed off (was cleared pre-change)
     assert client.created == []
+
+
+def test_infra_error_parks_worker_error_at_cap_and_escalates(session, editor, tmp_path):
+    # The Nth consecutive infra error (retry_count hits the cap) parks the row
+    # worker_error and escalates ONCE, so a persistent outage stops retrying +
+    # re-alerting every tick.
+    bridge = _seed_request(
+        session,
+        editor.id,
+        applied='{"reach": {"description": "new"}}',
+        base='{"reach": {"description": "old desc"}}',
+    )
+    bridge.retry_count = worker._MAX_INFRA_RETRIES - 1  # one failure away from the cap
+    session.flush()
+    client = FakeGitHubClient()
+    (outcome,) = worker.run_once(
+        session, _cfg(), client=client, clone_url=str(tmp_path / "nope.git"), clock=_CLOCK
+    )
+
+    assert outcome.escalate is True
+    assert outcome.state == "worker_error"
+    session.refresh(bridge)
+    assert bridge.state == BridgeState.worker_error
+    assert bridge.retry_count == worker._MAX_INFRA_RETRIES
+    assert "after" in (bridge.last_error or "")
+
+
+def test_backed_off_row_is_skipped_until_window_passes(session, editor, tmp_path):
+    # A row inside its backoff window (lease_expires_at in the future) is not
+    # re-processed by a run at the same clock — run_once filters it out before it
+    # can consume a `limit` slot or burn another retry.
+    bridge = _seed_request(
+        session,
+        editor.id,
+        applied='{"reach": {"description": "new"}}',
+        base='{"reach": {"description": "old desc"}}',
+    )
+    client = FakeGitHubClient()
+    bad_url = str(tmp_path / "nope.git")
+
+    (first,) = worker.run_once(session, _cfg(), client=client, clone_url=bad_url, clock=_CLOCK)
+    assert first.state == "queued"
+    session.refresh(bridge)
+    assert bridge.retry_count == 1 and bridge.lease_expires_at is not None
+
+    # Second run at the SAME clock — still inside the backoff window → skipped.
+    assert worker.run_once(session, _cfg(), client=client, clone_url=bad_url, clock=_CLOCK) == []
+    session.refresh(bridge)
+    assert bridge.retry_count == 1  # not retried
 
 
 def test_missing_reviewed_base_fails_closed(session, editor, origin):
@@ -690,3 +754,190 @@ def test_mark_deployed_idempotent_no_duplicate_note(session, editor, tmp_path):
     worker.mark_deployed(session, _cfg(), dataset_ref=sha_b, repo=str(repo))
     cr = session.get(ChangeRequest, bridge.change_request_id)
     assert cr.reviewer_note == note_after_first  # unchanged — no duplicate note
+
+
+# ---------------------------------------------------------------------------
+# requeue — manual recovery of a worker_error / pr_closed row
+# ---------------------------------------------------------------------------
+
+
+def _requeue_seed(session, editor_id, state: BridgeState) -> ChangeRequestBridge:
+    bridge = _seed_request(
+        session,
+        editor_id,
+        applied='{"reach": {"description": "new"}}',
+        base='{"reach": {"description": "old desc"}}',
+    )
+    bridge.state = state
+    bridge.attempt = 2
+    bridge.retry_count = 5
+    bridge.last_error = "boom"
+    bridge.lease_owner = "host:1"
+    session.flush()
+    return bridge
+
+
+def test_requeue_resets_worker_error_to_queued(session, editor):
+    bridge = _requeue_seed(session, editor.id, BridgeState.worker_error)
+    status, detail = worker.requeue(session, bridge.change_request_id)
+    assert status == "requeued"
+    assert "attempt 3" in detail
+    session.refresh(bridge)
+    assert bridge.state == BridgeState.queued
+    assert bridge.attempt == 3  # bumped → fresh branch next run
+    assert bridge.retry_count == 0
+    assert bridge.last_error is None
+    assert bridge.lease_owner is None and bridge.lease_expires_at is None
+
+
+def test_requeue_recovers_pr_closed(session, editor):
+    bridge = _requeue_seed(session, editor.id, BridgeState.pr_closed)
+    assert worker.requeue(session, bridge.change_request_id)[0] == "requeued"
+    session.refresh(bridge)
+    assert bridge.state == BridgeState.queued
+
+
+def test_requeue_refuses_conflict(session, editor):
+    bridge = _requeue_seed(session, editor.id, BridgeState.conflict)
+    status, detail = worker.requeue(session, bridge.change_request_id)
+    assert status == "refused"
+    assert "conflict" in detail
+    session.refresh(bridge)
+    assert bridge.state == BridgeState.conflict  # untouched — needs re-review
+
+
+def test_requeue_refuses_active_queued_row(session, editor):
+    bridge = _requeue_seed(session, editor.id, BridgeState.queued)
+    status, _ = worker.requeue(session, bridge.change_request_id)
+    assert status == "refused"
+
+
+def test_requeue_refuses_done_row(session, editor):
+    bridge = _requeue_seed(session, editor.id, BridgeState.deployed)
+    assert worker.requeue(session, bridge.change_request_id)[0] == "refused"
+
+
+def test_requeue_not_found_for_missing_row(session, editor):
+    status, detail = worker.requeue(session, 999_999)
+    assert status == "not_found"
+    assert "999999" in detail
+
+
+def test_requeue_refuses_when_parent_not_approved(session, editor):
+    bridge = _requeue_seed(session, editor.id, BridgeState.worker_error)
+    cr = session.get(ChangeRequest, bridge.change_request_id)
+    cr.status = ChangeStatus.resolved  # manually closed since the failure
+    session.flush()
+    status, detail = worker.requeue(session, bridge.change_request_id)
+    assert status == "refused"
+    assert "not approved" in detail
+    session.refresh(bridge)
+    assert bridge.state == BridgeState.worker_error  # untouched
+
+
+# ---------------------------------------------------------------------------
+# email-on-deploy
+# ---------------------------------------------------------------------------
+
+
+def test_notify_proposer_deployed_emails_via_mail(session, editor, monkeypatch):
+    # The real helper (captured before the autouse stub) mails the proposer their
+    # change summary + review link via `mail`, and never raises.
+    cr = ChangeRequest(
+        target_type=ChangeTarget.reach,
+        target_id=42,
+        editor_id=editor.id,
+        subject="Proposed edit: Wilson Reach",
+        payload_json="{}",
+        status=ChangeStatus.resolved,
+    )
+    session.add(cr)
+    session.flush()
+
+    captured: dict = {}
+
+    def fake_run(cmd, **kw):
+        captured["cmd"] = cmd
+        captured["input"] = kw.get("input")
+        return None
+
+    monkeypatch.setattr(worker.shutil, "which", lambda _name: "/usr/bin/mail")
+    monkeypatch.setattr(worker.subprocess, "run", fake_run)
+
+    _REAL_NOTIFY(session, cr, "deadbeefcafe1234", _cfg("https://levels.example.org/"))
+
+    assert captured["cmd"][0] == "mail"
+    assert editor.email in captured["cmd"]  # alice@example.com
+    body = captured["input"].decode("utf-8")
+    assert "Wilson Reach" in body  # the proposer's own summary
+    assert "deadbeefcafe" in body  # dataset commit
+    assert f"/review.php?id={cr.id}" in body  # public review link, no trailing //
+    assert "//review.php" not in body  # review_url's trailing slash was trimmed
+
+
+def test_notify_proposer_deployed_skips_when_no_mail(session, editor, monkeypatch):
+    cr = ChangeRequest(
+        target_type=ChangeTarget.reach,
+        target_id=42,
+        editor_id=editor.id,
+        subject="x",
+        payload_json="{}",
+        status=ChangeStatus.resolved,
+    )
+    session.add(cr)
+    session.flush()
+    monkeypatch.setattr(worker.shutil, "which", lambda _name: None)  # `mail` absent
+
+    def boom(*a, **k):  # must NOT be called
+        raise AssertionError("subprocess.run should not run without `mail`")
+
+    monkeypatch.setattr(worker.subprocess, "run", boom)
+    _REAL_NOTIFY(session, cr, "abc123", _cfg())  # no raise, no send
+
+
+def test_notify_strips_control_chars_from_mail_subject(session, editor, monkeypatch):
+    # A newline in the (proposer-derived) subject would be a mail-header injection
+    # via `mail -s` — it must be stripped before the subprocess call.
+    cr = ChangeRequest(
+        target_type=ChangeTarget.reach,
+        target_id=42,
+        editor_id=editor.id,
+        subject="Proposed edit: Reach\nBcc: evil@example.com",
+        payload_json="{}",
+        status=ChangeStatus.resolved,
+    )
+    session.add(cr)
+    session.flush()
+    captured: dict = {}
+    monkeypatch.setattr(worker.shutil, "which", lambda _name: "/usr/bin/mail")
+    monkeypatch.setattr(worker.subprocess, "run", lambda cmd, **kw: captured.update(cmd=cmd))
+
+    _REAL_NOTIFY(session, cr, "abc123def456", _cfg())
+
+    subject = captured["cmd"][2]  # ["mail", "-s", <subject>, "--", addr]
+    assert "\n" not in subject and "Bcc:" in subject  # flattened, not a 2nd header
+    assert captured["cmd"][3] == "--"  # recipient guarded against a leading '-'
+
+
+def test_mark_deployed_emails_proposer_once_after_commit(session, editor, tmp_path, monkeypatch):
+    # The proposer email fires once, on the real resolution, and the cr is already
+    # committed-resolved when it does (post-commit); an idempotent re-run (row now
+    # 'deployed') does not re-email.
+    repo, _sha_a, sha_b = _commit_repo(tmp_path)
+    bridge = _seed_merged(session, editor.id, merge_sha=sha_b)
+
+    seen: list[int] = []
+
+    def capture(_session, cr, _ref, _cfg):
+        assert cr.status == ChangeStatus.resolved  # committed before we email
+        seen.append(cr.id)
+
+    # Override the autouse no-op stub (set after it in fixture order, so this wins).
+    monkeypatch.setattr(worker, "_notify_proposer_deployed", capture)
+
+    (outcome,) = worker.mark_deployed(session, _cfg(), dataset_ref=sha_b, repo=str(repo))
+    assert outcome.state == "deployed"
+    assert seen == [bridge.change_request_id]  # emailed once
+    # Re-run: the row is 'deployed' now → not re-selected → no second email.
+    assert worker.mark_deployed(session, _cfg(), dataset_ref=sha_b, repo=str(repo)) == []
+    assert seen == [bridge.change_request_id]

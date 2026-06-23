@@ -121,7 +121,11 @@ function _review_handle_post(PDO $db, ?int $cr_id, ?string $action, int $maint_i
                 return [null, $drift];
             }
             $approve_note = trim((string)($_POST['reviewer_note'] ?? ''));
-            $result = review_approve($db, $cr, $applied, $maint_id, $approve_note);
+            // Carry the render-time base into the freeze transaction so the
+            // worker's drift base is verified == what was reviewed atomically
+            // with the capture (closes the pre-check→capture window; PR #219).
+            $carried_base = _review_carried_reach_base($applied);
+            $result = review_approve($db, $cr, $applied, $maint_id, $approve_note, $carried_base);
             if ($result['ok']) {
                 review_notify_editor($db, $cr, 'approved', $approve_note);
                 return ['Endorsed — the diff is frozen below. Land it as a kayak_data PR, then Mark resolved once the deploy ships it.', null];
@@ -234,6 +238,33 @@ function _review_build_approve_payload(array $cr): array
 function _review_reach_field_str(?array $cur, string $f): string
 {
     return $cur !== null ? (string)($cur['reach'][$f] ?? '') : '';
+}
+
+/**
+ * The render-time base values the form carried back (hidden `base_reach_<field>`),
+ * keyed by reach field — passed into review_approve so bridge_capture_base can
+ * verify the live row still matches them inside the freeze transaction. A field
+ * whose base is absent/non-string is omitted, so the in-transaction check
+ * fail-closes on it (BridgeBaseDriftException). Mirrors the field set the
+ * pre-check (_review_check_base_drift) validates.
+ *
+ * @param array<string, mixed> $applied  the assembled approve payload
+ * @return array<string, string>
+ */
+function _review_carried_reach_base(array $applied): array
+{
+    $reach = $applied['reach'] ?? [];
+    if (!is_array($reach)) {
+        return [];
+    }
+    $base = [];
+    foreach (array_keys($reach) as $f) {
+        $key = 'base_reach_' . $f;
+        if (isset($_POST[$key]) && is_string($_POST[$key])) {
+            $base[(string)$f] = $_POST[$key];
+        }
+    }
+    return $base;
 }
 
 /**

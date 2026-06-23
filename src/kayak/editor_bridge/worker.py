@@ -30,8 +30,10 @@ import hashlib
 import json
 import logging
 import os
+import re
 import shutil
 import socket
+import subprocess
 import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -46,6 +48,7 @@ from kayak.db.models import (
     ChangeRequest,
     ChangeRequestBridge,
     ChangeStatus,
+    Editor,
 )
 from kayak.editor_bridge import dataset_patch, git_ops, github_app, github_client
 
@@ -62,6 +65,27 @@ _BOT_EMAIL = "editor-bridge@users.noreply.github.com"
 # successful process() — every path sets a terminal-ish state — so this only
 # matters for an interrupted run.
 _LEASE_TTL = _dt.timedelta(minutes=15)
+
+# Infra-error retry policy. A transient clone/push/REST/auth failure leaves the
+# row queued but backed off (lease_expires_at = now + backoff, which _claim/run-once
+# already honour as the earliest-reclaim time) instead of being hammered every
+# tick. After _MAX_INFRA_RETRIES consecutive failures the row is parked
+# worker_error and escalates ONCE — so a persistent outage alerts on give-up, not
+# on every transient retry. A maintainer requeues it once the cause is fixed.
+_MAX_INFRA_RETRIES = 5
+_RETRY_BACKOFF_BASE = _dt.timedelta(minutes=5)
+_RETRY_BACKOFF_CAP = _dt.timedelta(hours=1)
+
+
+def _retry_backoff(retry_count: int) -> _dt.timedelta:
+    """Exponential backoff for the *retry_count*-th (1-based) infra retry.
+
+    5, 10, 20, 40 min … capped at _RETRY_BACKOFF_CAP. The cap keeps a long outage
+    from pushing the next retry days out once retry_count grows.
+    """
+    secs = _RETRY_BACKOFF_BASE.total_seconds() * (2 ** max(0, retry_count - 1))
+    return min(_dt.timedelta(seconds=secs), _RETRY_BACKOFF_CAP)
+
 
 # The dataset's updated_at CSV format (e.g. "2026-04-22 23:33:10") — match it so
 # the reach stamp the adapter writes diffs cleanly against the existing column.
@@ -114,10 +138,21 @@ def run_once(
     *token* (``None`` — a local push needs no auth), which skips minting.
     """
     clk: Clock = clock or (lambda: _dt.datetime.now(_dt.UTC))
+    now = clk()
+    # Skip rows still inside their backoff/lease window (lease_expires_at in the
+    # future) — they'd fail _claim anyway, and excluding them keeps a backed-off
+    # row from consuming a `limit` slot that a ready row could use. Mirrors
+    # _claim's gate.
     rows = list(
         session.scalars(
             select(ChangeRequestBridge)
-            .where(ChangeRequestBridge.state == BridgeState.queued)
+            .where(
+                ChangeRequestBridge.state == BridgeState.queued,
+                or_(
+                    ChangeRequestBridge.lease_expires_at.is_(None),
+                    ChangeRequestBridge.lease_expires_at < now,
+                ),
+            )
             .order_by(ChangeRequestBridge.queued_at)
             .limit(limit)
         )
@@ -268,31 +303,137 @@ def mark_deployed(
         if not deployed:
             continue
         bridge.state = BridgeState.deployed
-        _resolve_parent(session, bridge, dataset_ref)
+        resolved = _resolve_parent(session, bridge, dataset_ref)
         session.commit()
+        # Email AFTER the commit: notifying inside the transaction would autoflush
+        # the deployed/resolved writes (taking SQLite's write lock) and then hold it
+        # for the mail subprocess (≤30 s) — contending with a resumed pipeline — and
+        # a commit failure after the send would double-email next run. Post-commit:
+        # no lock-hold, and the resolved->status guard is already persisted so a
+        # re-run is a no-op. Fail-soft (never raises).
+        if resolved is not None:
+            _notify_proposer_deployed(session, resolved, dataset_ref, cfg)
         outcomes.append(
             RowOutcome(bridge.id, bridge.change_request_id, BridgeState.deployed.value, "deployed")
         )
     return outcomes
 
 
-def _resolve_parent(session: Session, bridge: ChangeRequestBridge, dataset_ref: str) -> None:
+# States a requeue can recover: the worker either never opened a PR
+# (worker_error) or its PR was closed unmerged (pr_closed). conflict is excluded
+# — a drifted dataset needs a fresh review, not a blind re-attempt on a stale base.
+_REQUEUEABLE = frozenset({BridgeState.worker_error, BridgeState.pr_closed})
+
+
+def requeue(session: Session, cr_id: int) -> tuple[str, str]:
+    """Reset a recoverable bridge row to ``queued`` as a new attempt.
+
+    Returns ``(status, detail)``: ``"requeued"`` (reset to queued), ``"refused"``
+    (wrong state — already active/done, a conflict that needs re-review, or a
+    parent no longer approved), or ``"not_found"`` (no bridge row for this id).
+
+    Bumps ``attempt`` so the next run pushes a fresh branch / opens a fresh PR
+    (a closed PR can't be reopened on the same branch), clears retry_count + lease
+    + error + conflict, and REUSES the captured reviewed_base — still valid for the
+    recoverable states, since nothing the worker did changed the dataset.
+    """
+    bridge = session.scalar(
+        select(ChangeRequestBridge).where(ChangeRequestBridge.change_request_id == cr_id)
+    )
+    if bridge is None:
+        return ("not_found", f"no bridge row for change_request {cr_id}")
+
+    cr = session.get(ChangeRequest, cr_id)
+    if cr is None or cr.status != ChangeStatus.approved:
+        status = cr.status.value if cr is not None else "missing"
+        return ("refused", f"cr {cr_id} parent is {status}, not approved — not requeued")
+
+    if bridge.state == BridgeState.conflict:
+        return (
+            "refused",
+            f"cr {cr_id} is in conflict (dataset moved since review) — re-review the "
+            "change via the editor; requeue would reuse a now-stale base",
+        )
+    if bridge.state not in _REQUEUEABLE:
+        return (
+            "refused",
+            f"cr {cr_id} is {bridge.state.value}; only worker_error / pr_closed rows requeue",
+        )
+
+    bridge.attempt += 1
+    bridge.state = BridgeState.queued
+    bridge.retry_count = 0
+    bridge.last_error = None
+    bridge.conflict_json = None
+    bridge.lease_owner = None
+    bridge.lease_expires_at = None
+    session.commit()
+    log.info("bridge row %s (cr %s) requeued as attempt %s", bridge.id, cr_id, bridge.attempt)
+    return ("requeued", f"cr {cr_id} requeued as attempt {bridge.attempt}")
+
+
+def _resolve_parent(
+    session: Session, bridge: ChangeRequestBridge, dataset_ref: str
+) -> ChangeRequest | None:
     """Advance the parent change_request to resolved (the SA-lite loop closer).
 
-    Idempotent: a missing or already-``resolved`` parent is a no-op, so a second
-    pass (or two overlapping mark-deployed runs, until a lease lands) can't append
-    the deploy note twice.
-
-    NOTE: unlike the manual review.php close (which emails the proposer via
-    review_notify_editor), this records status + a machine note only — proposer
-    email-on-deploy is deferred to the enablement PR (the bridge ships dormant).
+    Returns the change_request it transitioned (for the caller to email AFTER the
+    commit), or None on a no-op. Idempotent: a missing or already-``resolved``
+    parent returns None, so a second pass (or two overlapping mark-deployed runs,
+    until a lease lands) can't append the deploy note twice or re-email.
     """
     cr = session.get(ChangeRequest, bridge.change_request_id)
     if cr is None or cr.status == ChangeStatus.resolved:
-        return
+        return None
     cr.status = ChangeStatus.resolved
     note = f"[editor-bridge] deployed in dataset {dataset_ref[:12]}"
     cr.reviewer_note = f"{cr.reviewer_note}\n\n{note}" if cr.reviewer_note else note
+    return cr
+
+
+def _notify_proposer_deployed(
+    session: Session, cr: ChangeRequest, dataset_ref: str, cfg: KayakConfig
+) -> None:
+    """Best-effort 'your change is live' email to the original proposer.
+
+    Never raises: mark-deployed runs as a post-activation deploy hook, and the
+    parent is already resolved in the same transaction — a mail failure must not
+    fail the deploy (the reconciler/state is unaffected). Carries only the
+    proposer's own change summary + the public review link; no maintainer private
+    notes or credentials (the PR-data exposure rule). Mirrors the audit digest's
+    ``mail`` subprocess path; a host without ``mail`` simply logs and skips.
+    """
+    editor = session.get(Editor, cr.editor_id) if cr.editor_id is not None else None
+    if editor is None or not editor.email:
+        return
+    if shutil.which("mail") is None:
+        log.warning("editor-bridge: 'mail' not on PATH; skipping deploy notice for cr %s", cr.id)
+        return
+    # Strip control chars from the (operator/proposer-derived) summary: it goes
+    # into `mail -s`, where an embedded newline would be a mail-header injection.
+    raw_summary = cr.subject or f"change request {cr.id}"
+    summary = re.sub(r"[\x00-\x1f\x7f]+", " ", raw_summary).strip() or f"change request {cr.id}"
+    subject = f"Your kayak change is live: {summary}"
+    lines = [
+        f"Your proposed change ({summary}) has been deployed to the live site.",
+        f"Dataset commit: {dataset_ref[:12]}",
+    ]
+    if cfg.editor_bridge_review_url:
+        base_url = str(cfg.editor_bridge_review_url).rstrip("/")
+        lines.append(f"Details: {base_url}/review.php?id={cr.id}")
+    body = "\n".join(lines) + "\n"
+    try:
+        # `--` so a (validated, but defense-in-depth) address starting with `-`
+        # can't be parsed as a flag; argv form already avoids shell injection.
+        subprocess.run(
+            ["mail", "-s", subject, "--", editor.email],
+            input=body.encode("utf-8"),
+            check=True,
+            timeout=30,
+        )
+        log.info("editor-bridge: emailed deploy notice to the proposer of cr %s", cr.id)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
+        log.warning("editor-bridge: failed to email deploy notice for cr %s: %s", cr.id, exc)
 
 
 def _mint_token(cfg: KayakConfig) -> str:
@@ -494,15 +635,38 @@ def _process_row(
         git_ops.push(workdir, branch=branch, remote_url=clone_url, token=token, force=True)
         pr = _open_or_update_pr(client, cfg, cr, branch)
     except (git_ops.GitOpError, github_client.GitHubApiError, github_app.GitHubAuthError) as exc:
-        # Infrastructure failure (transient or systemic): leave the row QUEUED so
-        # it retries on a later run, release the lease so it's promptly reclaimable,
-        # and escalate so the systemd OnFailure chain alerts on an outage.
-        bridge.last_error = f"infrastructure error (will retry): {exc}"
+        # Infrastructure failure (transient or systemic). Count it; once the count
+        # reaches the cap, park the row worker_error and escalate ONCE so a
+        # persistent outage stops retrying (and re-alerting) every tick — a
+        # maintainer requeues it after fixing the cause.
+        bridge.retry_count += 1
+        if bridge.retry_count >= _MAX_INFRA_RETRIES:
+            return _terminal(
+                session,
+                bridge,
+                BridgeState.worker_error,
+                f"infrastructure error after {bridge.retry_count} attempts: {exc}",
+                escalate=True,
+            )
+        # Below the cap: leave the row QUEUED but back off — set lease_expires_at to
+        # the earliest-reclaim time (the same field _claim/run-once gate on), so the
+        # row isn't hammered every tick. Quiet (no escalate): a transient blip that
+        # self-heals on a later run shouldn't page; only the give-up above does.
+        backoff = _retry_backoff(bridge.retry_count)
+        bridge.last_error = (
+            f"infrastructure error (retry {bridge.retry_count}, backoff {backoff}): {exc}"
+        )
         bridge.lease_owner = None
-        bridge.lease_expires_at = None
+        bridge.lease_expires_at = clock() + backoff
         session.commit()
-        log.error("bridge row %s infrastructure error (left queued): %s", bridge.id, exc)
-        return RowOutcome(bridge.id, cr.id, bridge.state.value, str(exc), escalate=True)
+        log.error(
+            "bridge row %s infra error (retry %s, backoff %s, left queued): %s",
+            bridge.id,
+            bridge.retry_count,
+            backoff,
+            exc,
+        )
+        return RowOutcome(bridge.id, cr.id, bridge.state.value, str(exc))
     except Exception as exc:  # last resort: never leave a silent poison pill
         # An unclassified error is a bug, not a transient: park it as worker_error
         # (so it isn't retried forever) but escalate so it's noticed.
@@ -519,6 +683,7 @@ def _process_row(
     bridge.pr_head_sha = head
     bridge.last_error = None
     bridge.conflict_json = None  # a prior attempt's conflict no longer applies
+    bridge.retry_count = 0  # cleared on success: count is per-uninterrupted-attempt
     bridge.lease_owner = None
     bridge.lease_expires_at = None
     session.commit()

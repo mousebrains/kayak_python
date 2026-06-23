@@ -1,0 +1,14 @@
+-- Migration 0079: change_request_bridge.retry_count (worker infra-retry cap)
+--
+-- Enablement (docs/PLAN_editor_pr_bridge.md): the worker counts consecutive
+-- infrastructure-error retries (clone/push/REST/auth) for the current attempt
+-- here. It backs off between retries via lease_expires_at and parks the row
+-- worker_error once retry_count hits the cap, so a persistent outage stops
+-- re-alerting on every timer tick. Reset on success or requeue.
+--
+-- change_request_bridge is engine runtime state, not dataset metadata (absent
+-- from layout.CONTRACT_CSVS); this is a schema-only column add (migrations > 0074
+-- are schema-only — no data written). DEFAULT '0' backfills any existing queued
+-- rows and mirrors the ORM's server_default="0" so the introspected default
+-- matches and tests/test_db/test_schema_parity.py stays green.
+ALTER TABLE change_request_bridge ADD COLUMN retry_count INTEGER NOT NULL DEFAULT '0';

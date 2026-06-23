@@ -143,8 +143,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $cr_id = null;
     if ($changes !== []) {
         $frozen = [];
+        $carried_base = [];
         foreach ($changes as $field => $pair) {
             $frozen[$field] = $pair['new'];
+            // Render-time base for the in-transaction TOCTOU verify (PR #219).
+            if (isset($_POST['base_' . $field]) && is_string($_POST['base_' . $field])) {
+                $carried_base[$field] = $_POST['base_' . $field];
+            }
         }
         $applied = [$type => $frozen];
         // JSON_PRESERVE_ZERO_FRACTION: numeric fields are floats, so a whole-number
@@ -174,8 +179,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $payload_str,
             ]);
             $cr_id = (int)$db->lastInsertId();
-            bridge_enqueue($db, $cr_id, $type, $id, $applied, $payload_str, $maint_id);
+            // $carried_base is verified == the live row inside this transaction;
+            // a row that drifted since the form loaded throws and rolls back.
+            bridge_enqueue($db, $cr_id, $type, $id, $applied, $payload_str, $maint_id, $carried_base);
             $db->commit();
+        } catch (BridgeBaseDriftException $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            error_log('edit.php: base drift — ' . $e->getMessage());
+            http_response_code(409);
+            exit("The $type changed since you opened this form — reload and redo your edit.");
         } catch (Throwable $e) {
             if ($db->inTransaction()) {
                 $db->rollBack();

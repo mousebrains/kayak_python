@@ -1,0 +1,50 @@
+[Unit]
+Description=Kayak editor→kayak_data bridge: open PRs for endorsed change_requests
+After=network-online.target
+Wants=network-online.target
+OnFailure=kayak-notify-failure@%n.service
+
+[Service]
+Type=oneshot
+User=pat
+WorkingDirectory=/home/pat/kayak
+# Paths in WorkingDirectory= / EnvironmentFile= / ReadWritePaths= AND the binary
+# in ExecStart= are LITERAL — systemd does not expand $VAR there. The .env file
+# supplies EDITOR_BRIDGE_* (enabled flag, App id/installation/key path); a host
+# without them set is a clean no-op (the CLI prints "disabled" and exits 0).
+Environment=KAYAK_HOME=/home/pat
+EnvironmentFile=-/etc/kayak/env
+EnvironmentFile=/home/pat/.config/kayak/.env
+ExecStart=/home/pat/.venv/bin/levels editor-bridge run-once
+TimeoutStartSec=600
+Nice=15
+
+# Sandboxing. Needs: outbound HTTPS (clone/push/PR REST to github.com), the
+# GitHub App key at /etc/kayak/editor-bridge-app.pem (read-only under
+# ProtectSystem=strict — readable, owner pat, mode 0400), kayak.db RW (lease +
+# state in change_request_bridge; SQLite WAL writes -wal/-shm beside it), and a
+# private /tmp for the throwaway dataset clone (tempfile.mkdtemp).
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/pat/DB
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+SystemCallFilter=@system-service
+SystemCallArchitectures=native
+SystemCallErrorNumber=EPERM
+UMask=0077

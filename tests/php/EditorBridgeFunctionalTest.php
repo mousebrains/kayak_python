@@ -209,4 +209,96 @@ final class EditorBridgeFunctionalTest extends FunctionalTestCase
         $this->expectException(InvalidArgumentException::class);
         bridge_capture_base($this->pdo(), 'source', 1, ['source' => ['name' => 'x']]);
     }
+
+    // -----------------------------------------------------------------------
+    // carried-base verification — the in-transaction TOCTOU closure (PR #219)
+    // -----------------------------------------------------------------------
+
+    public function testEnqueueWithMatchingCarriedBaseQueues(): void
+    {
+        // Carried base == the live row -> verification passes, row queues, and the
+        // stored base is the live value (provably == what was reviewed).
+        $db = $this->pdo();
+        $reach = Fixtures::reach($db, ['description' => 'reviewed desc', 'river' => 'R']);
+        [$crId, $maint] = $this->seedCr('reach', $reach);
+        $applied = ['reach' => ['description' => 'new desc']];
+
+        $inserted = bridge_enqueue(
+            $db, $crId, 'reach', $reach, $applied, (string)json_encode($applied), $maint,
+            ['description' => 'reviewed desc'],  // matches the live row
+        );
+        $this->assertTrue($inserted);
+        $base = json_decode((string)$this->bridgeRows($crId)[0]['reviewed_base_json'], true);
+        $this->assertSame('reviewed desc', $base['reach']['description']);
+    }
+
+    public function testEnqueueThrowsWhenCarriedBaseDrifted(): void
+    {
+        // The live row changed since render (carried base != current) -> the
+        // in-transaction verify throws and NO bridge row is written (the throw is
+        // before the INSERT, so the caller's transaction rolls the endorse back).
+        $db = $this->pdo();
+        $reach = Fixtures::reach($db, ['description' => 'the value NOW', 'river' => 'R']);
+        [$crId, $maint] = $this->seedCr('reach', $reach);
+        $applied = ['reach' => ['description' => 'new desc']];
+
+        try {
+            bridge_enqueue(
+                $db, $crId, 'reach', $reach, $applied, (string)json_encode($applied), $maint,
+                ['description' => 'what I saw earlier'],  // != the live 'the value NOW'
+            );
+            $this->fail('expected BridgeBaseDriftException on a drifted carried base');
+        } catch (BridgeBaseDriftException $e) {
+            $this->assertStringContainsString('reach.description', $e->getMessage());
+        }
+        $this->assertCount(0, $this->bridgeRows($crId), 'a drifted endorse queues nothing');
+    }
+
+    public function testEnqueueThrowsWhenCarriedBaseMissingAField(): void
+    {
+        // Fail-closed: a changed field with NO carried base (e.g. a stale form, or
+        // a crafted request) is treated as drift.
+        $db = $this->pdo();
+        $reach = Fixtures::reach($db, ['description' => 'd', 'features' => 'f', 'river' => 'R']);
+        [$crId, $maint] = $this->seedCr('reach', $reach);
+        $applied = ['reach' => ['description' => 'new d', 'features' => 'new f']];
+
+        $this->expectException(BridgeBaseDriftException::class);
+        bridge_enqueue(
+            $db, $crId, 'reach', $reach, $applied, (string)json_encode($applied), $maint,
+            ['description' => 'd'],  // 'features' base absent -> fail closed
+        );
+    }
+
+    public function testEnqueueCarriedBaseMatchesWholeNumberFloatCell(): void
+    {
+        // The form renders a numeric cell as (string)(float 800.0) == "800"; the
+        // live PDO cell is the float 800.0. The verify stringifies the cell the
+        // same way, so an unchanged whole-number float does NOT false-drift.
+        $db = $this->pdo();
+        $reach = Fixtures::reach($db, ['optimal_flow' => 800.0, 'river' => 'R']);
+        [$crId, $maint] = $this->seedCr('reach', $reach);
+        $applied = ['reach' => ['optimal_flow' => 900.0]];
+
+        $this->assertTrue(bridge_enqueue(
+            $db, $crId, 'reach', $reach, $applied, (string)json_encode($applied), $maint,
+            ['optimal_flow' => '800'],  // what the form carried for the 800.0 cell
+        ));
+    }
+
+    public function testEnqueueNullCarriedBaseSkipsVerify(): void
+    {
+        // The maintainer-driven requeue passes null: no verification, captures a
+        // fresh base against the current value (re-affirmation).
+        $db = $this->pdo();
+        $reach = Fixtures::reach($db, ['description' => 'current', 'river' => 'R']);
+        [$crId, $maint] = $this->seedCr('reach', $reach);
+        $applied = ['reach' => ['description' => 'new']];
+
+        $this->assertTrue(bridge_enqueue(
+            $db, $crId, 'reach', $reach, $applied, (string)json_encode($applied), $maint, null,
+        ));
+        $base = json_decode((string)$this->bridgeRows($crId)[0]['reviewed_base_json'], true);
+        $this->assertSame('current', $base['reach']['description'], 'fresh base = current value');
+    }
 }

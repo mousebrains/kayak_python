@@ -184,7 +184,7 @@ fi
 # live host (codex/claude live review) — include it. The 4C runbook owns the
 # COMPLETE enumeration (recap/heartbeat/config-drift run the old checkout too);
 # the robust fix — deriving the set from installed kayak-* timers — is a 4C item.
-: "${KAYAK_UNITS:=kayak-pipeline.timer kayak-backup-hourly.timer kayak-backup-weekly.timer kayak-decimate.timer kayak-status.timer kayak-fetch-osmb.timer kayak-editor-retention.timer kayak-audit-gauges.timer kayak-healthcheck.timer}"
+: "${KAYAK_UNITS:=kayak-pipeline.timer kayak-backup-hourly.timer kayak-backup-weekly.timer kayak-decimate.timer kayak-status.timer kayak-fetch-osmb.timer kayak-editor-retention.timer kayak-audit-gauges.timer kayak-healthcheck.timer kayak-editor-bridge-run.timer kayak-editor-bridge-reconcile.timer}"
 : "${HEALTH_URL:=}"
 ROOT="${KAYAK_DEPLOY_ROOT:-/opt/kayak}"
 # The served docroot is a regenerable CACHE OUTSIDE the immutable release: the
@@ -743,6 +743,12 @@ MUTATED=0
 SWITCHED=0
 CONFIG_INSTALLED=0
 DOCROOT_BUILT=0
+# Units that were ACTIVE before the quiesce — captured just before the stop loop.
+# Resume restarts only these (not all of KAYAK_UNITS), so a dormant-by-design
+# timer (e.g. the editor-bridge timers before go-live) is never auto-started by a
+# deploy, while an enabled one is paused + resumed. Empty until captured, so a
+# rollback firing before the quiesce resumes nothing (nothing was stopped yet).
+ACTIVE_UNITS=""
 rollback() {
     status=$?
     trap - ERR
@@ -808,7 +814,8 @@ rollback() {
             fi
         fi
     fi
-    for u in $KAYAK_UNITS; do "$SYSTEMCTL" start "$u" 2>/dev/null || true; done
+    # Resume only the previously-active units (see ACTIVE_UNITS above).
+    for u in $ACTIVE_UNITS; do "$SYSTEMCTL" start "$u" 2>/dev/null || true; done
     rm -f "$ROOT/maintenance"
     exit "$status"
 }
@@ -817,6 +824,17 @@ trap rollback ERR
 log "entering maintenance mode"
 mkdir -p "$ROOT"
 touch "$ROOT/maintenance"
+# Snapshot which units are ACTIVE before we stop anything — resume restarts only
+# these, so a dormant-by-design timer (the editor-bridge timers pre-go-live) is
+# never auto-started by a deploy, while an enabled one is paused + resumed. (Also
+# what the "derive the quiesce set from running state" 4C note above wanted: a
+# manually-stopped timer stays stopped rather than being force-resurrected.)
+# if-form, not `&&`, so an inactive unit's non-zero is not fatal under `set -e`.
+for u in $KAYAK_UNITS; do
+    if "$SYSTEMCTL" is-active --quiet "$u" 2>/dev/null; then
+        ACTIVE_UNITS="$ACTIVE_UNITS $u"
+    fi
+done
 # Stop timers AND their services: stopping a timer only prevents future
 # starts — an already-running oneshot keeps reading/writing the DB (PR #190
 # review P1). Then wait for the service set to drain before the backup.
@@ -848,7 +866,7 @@ for svc in $SERVICES; do
             # no-mutation state out by hand — otherwise a drain timeout leaves the
             # site down with consumers stopped until an operator clears it
             # (PR #192 review — the quiesce-timeout sibling of the errtrace gap).
-            for s in $KAYAK_UNITS; do "$SYSTEMCTL" start "$s" 2>/dev/null || true; done
+            for s in $ACTIVE_UNITS; do "$SYSTEMCTL" start "$s" 2>/dev/null || true; done
             rm -f "$ROOT/maintenance"
             exit 1
         fi
@@ -928,7 +946,9 @@ if [ -n "$HEALTH_URL" ]; then
 fi
 
 log "starting consumers + leaving maintenance mode"
-for u in $KAYAK_UNITS; do "$SYSTEMCTL" start "$u" 2>/dev/null || true; done
+# Resume only what was active before the quiesce (see ACTIVE_UNITS) so a dormant
+# editor-bridge timer is never auto-started by a deploy.
+for u in $ACTIVE_UNITS; do "$SYSTEMCTL" start "$u" 2>/dev/null || true; done
 rm -f "$ROOT/maintenance"
 trap - ERR
 
@@ -960,5 +980,26 @@ prune_releases() {
     done
 }
 prune_releases
+
+# Best-effort: close the editor→kayak_data bridge loop for this deploy. Any
+# 'merged' bridge row whose PR merge commit is an ancestor of the just-deployed
+# dataset ref advances to 'deployed' (resolving the parent change_request +
+# emailing the proposer). This is FULLY fail-soft and runs AFTER `trap - ERR`:
+# the deploy is already committed, so a bridge bookkeeping hiccup must never fail
+# it — the reconcile timer / a manual `levels editor-bridge mark-deployed` catches
+# any miss. Runs as the app user (owns the DB + WAL sidecars), against the
+# app-owned dataset clone — fetched first so its object DB holds the merge commits
+# + $DATASET_REF (git merge-base --is-ancestor reads objects, not the worktree;
+# NOT the release's tar snapshot, which has no .git). mark-deployed is DB-only
+# (no GitHub token), self-degrades to a clean no-op on an empty queue or an
+# unresolvable repo, so it's safe even before the bridge is enabled.
+if [ -n "${DATASET_DIR:-}" ] && [ -d "$DATASET_DIR/.git" ]; then
+    log "editor-bridge: marking deployed rows (best-effort)"
+    run_app git -C "$DATASET_DIR" fetch --quiet origin "$DATASET_BRANCH" 2>/dev/null \
+        || log "editor-bridge: dataset fetch failed (best-effort; mark-deployed may not resolve newest merges)"
+    run_app env DATABASE_URL="sqlite:///$DB_PATH" "$LEVELS" editor-bridge mark-deployed \
+        --dataset-ref "$DATASET_REF" --dataset-repo "$DATASET_DIR" \
+        || log "editor-bridge: mark-deployed failed (best-effort; reconcile/manual will catch it)"
+fi
 
 log "activated release $RELEASE_ID (engine $ENGINE_REF, dataset $DATASET_REF)"

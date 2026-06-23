@@ -118,3 +118,32 @@ def test_cmd_mark_deployed_reports_unresolvable_merged(
     out = capsys.readouterr().out
     assert "none resolvable" in out
     assert "1 merged row" in out
+
+
+def test_cmd_queue_requeues_recoverable_row(session, editor, monkeypatch, capsys):
+    cr = ChangeRequest(
+        target_type=ChangeTarget.reach,
+        target_id=1,
+        editor_id=editor.id,
+        payload_json="{}",
+        status="approved",
+    )
+    session.add(cr)
+    session.flush()
+    session.add(ChangeRequestBridge(change_request_id=cr.id, state=BridgeState.worker_error))
+    session.flush()
+
+    monkeypatch.setattr(cli, "get_session", lambda: session)
+    monkeypatch.setattr(session, "close", lambda: None)
+    rc = cli.cmd_queue(Namespace(cr=cr.id))
+
+    assert rc == 0
+    assert "requeued" in capsys.readouterr().out
+
+
+def test_cmd_queue_missing_row_exits_nonzero(session, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "get_session", lambda: session)
+    monkeypatch.setattr(session, "close", lambda: None)
+    rc = cli.cmd_queue(Namespace(cr=424242))
+    assert rc == 1
+    assert "no bridge row" in capsys.readouterr().out

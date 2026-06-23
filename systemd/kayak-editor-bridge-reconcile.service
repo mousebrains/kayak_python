@@ -1,0 +1,47 @@
+[Unit]
+Description=Kayak editor-bridge: reconcile open PRs (merged / closed) from PR state
+After=network-online.target
+Wants=network-online.target
+OnFailure=kayak-notify-failure@%n.service
+
+[Service]
+Type=oneshot
+User=pat
+WorkingDirectory=/home/pat/kayak
+# See kayak-editor-bridge-run.service for the literal-path / .env rationale.
+# reconcile only READS PR state (no clone/push); a host without EDITOR_BRIDGE_*
+# is a clean no-op.
+Environment=KAYAK_HOME=/home/pat
+EnvironmentFile=-/etc/kayak/env
+EnvironmentFile=/home/pat/.config/kayak/.env
+ExecStart=/home/pat/.venv/bin/levels editor-bridge reconcile
+TimeoutStartSec=300
+Nice=15
+
+# Sandboxing. Needs outbound HTTPS (PR-state REST), the App key (read-only), and
+# kayak.db RW (advances pr_open → merged / pr_closed). No clone, but PrivateTmp
+# is cheap + harmless.
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/pat/DB
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+SystemCallFilter=@system-service
+SystemCallArchitectures=native
+SystemCallErrorNumber=EPERM
+UMask=0077

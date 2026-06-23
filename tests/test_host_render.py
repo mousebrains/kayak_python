@@ -27,7 +27,7 @@ def _by_unit(h: HostConfig) -> dict[str, str]:
 
 
 class TestRenderCutoverDropins:
-    def test_exactly_the_six_engine_consumers(self) -> None:
+    def test_exactly_the_eight_engine_consumers(self) -> None:
         units = {d.unit for d in render_cutover_dropins(_cutover_host())}
         assert units == {
             "kayak-pipeline.service",
@@ -36,6 +36,8 @@ class TestRenderCutoverDropins:
             "kayak-fetch-osmb.service",
             "kayak-status.service",
             "kayak-audit-gauges.service",  # the 6th, via #191's promotion
+            "kayak-editor-bridge-run.service",  # 7th + 8th, at bridge enablement
+            "kayak-editor-bridge-reconcile.service",
         }
 
     def test_dropin_path_is_the_systemd_override(self) -> None:
@@ -140,6 +142,8 @@ class TestEngineUnitNames:
             "kayak-fetch-osmb.service",
             "kayak-status.service",
             "kayak-audit-gauges.service",
+            "kayak-editor-bridge-run.service",
+            "kayak-editor-bridge-reconcile.service",
         ]
 
     def test_includes_the_promoted_audit_gauges(self) -> None:
@@ -178,7 +182,8 @@ class TestRenderUnitsCli:
         assert rc == 0
         written = {p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob("*") if p.is_file()}
         assert "kayak-pipeline.service.d/cutover.conf" in written
-        assert len(written) == 6
+        assert "kayak-editor-bridge-run.service.d/cutover.conf" in written
+        assert len(written) == 8
         body = (tmp_path / "kayak-pipeline.service.d/cutover.conf").read_text()
         assert "[Service]" in body and "ExecStart=" in body
 

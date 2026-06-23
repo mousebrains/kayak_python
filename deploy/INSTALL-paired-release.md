@@ -327,7 +327,7 @@ authoritative "what moved / what didn't" for the live WKCC dirs:
 | Old (`/home/<svc>/…`) | New location | Disposition |
 |---|---|---|
 | `~/kayak` | engine → `/opt/kayak/current/venv`; **checkout stays** | The running *engine* moves into the immutable release. The `~/kayak` checkout **stays**: `kayak-deploy.sh` + the committed `conf/`/`deploy/` config run from it, and the shell-script consumers the cutover does **not** re-point live here — `kayak-recap`, `kayak-heartbeat`, `kayak-config-drift`, `kayak-healthcheck`, `kayak-cert-expiry`, `kayak-backup-*` all `ExecStart` from `~/kayak/{scripts,systemd}/`. Keep it on `main`. (Its two in-tree caches `var/osmb` + `Gauge-metadata-cache/` relocate to `/var/cache/kayak/{map-layers,gauge-metadata}` — see `host.yaml`.) |
-| `~/.venv` | engine → `/opt/kayak/current/venv`; **stays** | The cutover re-points all **6** engine units (`kayak-pipeline`, `kayak-decimate`, `kayak-editor-retention`, `kayak-status`, `kayak-fetch-osmb`, `kayak-audit-gauges` — all currently `ExecStart=~/.venv/bin/levels`, = `render-units --list-units`) at the release venv. `~/.venv` **stays** only because `kayak-recap.sh` still calls `~/.venv/bin/python3 ~/kayak/scripts/recap.py`; retire when the last shell consumer moves. |
+| `~/.venv` | engine → `/opt/kayak/current/venv`; **stays** | The cutover re-points the engine units (`render-units --list-units`) at the release venv: the 6 base consumers (`kayak-pipeline`, `kayak-decimate`, `kayak-editor-retention`, `kayak-status`, `kayak-fetch-osmb`, `kayak-audit-gauges` — all `ExecStart=~/.venv/bin/levels`), plus the 2 `kayak-editor-bridge-{run,reconcile}` units whose drop-ins are emitted too but stay inert until the bridge is installed + enabled. `~/.venv` **stays** only because `kayak-recap.sh` still calls `~/.venv/bin/python3 ~/kayak/scripts/recap.py`; retire when the last shell consumer moves. |
 | `~/kayak_data` | release snapshot → `/opt/kayak/current/dataset` (read-only); **clone stays** | Each release snapshots the dataset at its pinned commit; consumers read `DATASET_DIR=/opt/kayak/current/dataset`. The `~/kayak_data` clone **stays** as the working checkout the deployer snapshots from. |
 | `~/public_html` | `/var/cache/kayak/docroot` (#3); **old one retired** | Moved OUT of the home to a regenerable shared cache: nginx roots here, FPM `open_basedir` leads with it, rebuilt by both the deploy and the hourly pipeline. Old `~/public_html` becomes unused — leave as a fallback, clean up later. |
 | `~/DB/kayak.db` | **unchanged** | Mutable SQLite DB, OUTSIDE every release by design — survives cutover and rollback (the deployer backs it up pre-migrate). |
@@ -511,7 +511,8 @@ deploy's `.staging` leftover *after* you've confirmed the DB restored from it.
 - **Virgin-host failure path works** (step 7 note).
 - **Scratch must be real disk** — defaults to `$ROOT/.staging`, not `/tmp` (tmpfs).
 - **Renderers replace the hand-crafted step 5** (#193–#196): `render-units` for the
-  6 engine drop-ins (audit-gauges promoted to an engine consumer, #191),
+  engine drop-ins (the 6 base consumers + the 2 editor-bridge units, which are
+  inert until the bridge is installed/enabled — audit-gauges joined the set in #191),
   `render-serving` for the nginx root + FPM open_basedir, and the gate sources its
   must-run-from-current set from `render-units --list-units` (no `KAYAK_HOST_UNITS`).
 - **Docroot is the #3 shared cache** `/var/cache/kayak/docroot`, not inside the
