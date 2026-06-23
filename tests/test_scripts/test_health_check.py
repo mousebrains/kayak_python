@@ -434,3 +434,19 @@ class TestSourceAlertThrottle:
         result = _run_health_check(db_path, tmp_path)
         assert result.returncode == 1, result.stdout + result.stderr
         assert "dead" in result.stdout
+
+    def test_future_state_epoch_falls_back_to_alerting(
+        self, db_session: tuple[Path, Session], tmp_path: Path
+    ):
+        # A future last-alert epoch (clock jump-forward then correction, or a
+        # hand-edit) is clamped to "never alerted" → the stale source still pages,
+        # rather than being suppressed until that future time ages past the window.
+        db_path, session = db_session
+        _seed_source(session, "a", latest=_utcnow() - timedelta(minutes=30))
+        dead = _seed_source(session, "dead", latest=_utcnow() - timedelta(days=20))
+        session.commit()
+        state = tmp_path / "hc-source-alerts.tsv"  # the path the harness uses
+        state.write_text(f"{dead.id}\t9999999999\n")  # far-future epoch
+        result = _run_health_check(db_path, tmp_path)
+        assert result.returncode == 1, result.stdout + result.stderr
+        assert "dead" in result.stdout

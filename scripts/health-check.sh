@@ -155,6 +155,10 @@ while IFS=$'\t' read -r sid sname slatest; do
         last=${last//[!0-9]/}   # ignore a clobbered non-numeric epoch in a hand-edited file
         [ -z "$last" ] && last=0
     fi
+    # Clamp a FUTURE last-alert to "never alerted": a value ahead of now (a clock
+    # jump-forward then correction, or a hand-edit) would make the age negative →
+    # suppress the source forever. Treat it as due (fail toward alerting).
+    if [ "$((10#$last))" -gt "$NOW_EPOCH" ]; then last=0; fi
     # 10# forces base-10 so a value like "08" isn't parsed as invalid octal.
     if [ "$((NOW_EPOCH - 10#$last))" -ge "$LIMIT_SECS" ]; then
         DUE="${DUE}  ${sid} ${sname} latest=${slatest}
