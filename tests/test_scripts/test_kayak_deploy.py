@@ -423,13 +423,15 @@ def test_activation_rolls_back_db_symlink_and_config_on_failed_health(
     installer.write_text(f'#!/bin/sh\ncat > "{runtime_config}"\n')
     installer.chmod(0o755)
     systemctl = tmp_path / "systemctl.sh"
-    # Record every call; `is-active` reports inactive (exit 1) so the quiesce
-    # loop drains immediately; `show -p ExecStart` reports the consumer running
-    # from $ROOT/current so the cutover-verification gate passes.
+    # Record every call. `is-active` models a live host: timers report active
+    # (exit 0) so the pre-quiesce capture restarts them on resume, while services
+    # report drained (exit 1) so the quiesce drain loop completes immediately.
+    # `show -p ExecStart` reports the consumer running from $ROOT/current so the
+    # cutover-verification gate passes.
     systemctl.write_text(
         f'#!/bin/sh\necho "$@" >> "{systemctl_log}"\n'
         'case "$1" in\n'
-        "  is-active) exit 1 ;;\n"
+        '  is-active) case "$*" in *.timer) exit 0 ;; *) exit 1 ;; esac ;;\n'
         f'  show) echo "{{ path={root}/current/venv/bin/levels }}" ;;\n'
         "  *) exit 0 ;;\n"
         "esac\n"
@@ -568,7 +570,7 @@ def test_allow_deletes_flag_reaches_sync_metadata(
     systemctl.write_text(
         "#!/bin/sh\n"
         'case "$1" in\n'
-        "  is-active) exit 1 ;;\n"
+        '  is-active) case "$*" in *.timer) exit 0 ;; *) exit 1 ;; esac ;;\n'
         f'  show) echo "{{ path={root}/current/venv/bin/levels }}" ;;\n'
         "  *) exit 0 ;;\n"
         "esac\n"
@@ -626,7 +628,7 @@ def _activation_stubs(tmp_path: Path, root: Path, runtime_config: Path) -> dict[
     systemctl.write_text(
         "#!/bin/sh\n"
         'case "$1" in\n'
-        "  is-active) exit 1 ;;\n"
+        '  is-active) case "$*" in *.timer) exit 0 ;; *) exit 1 ;; esac ;;\n'
         f'  show) echo "{{ path={root}/current/venv/bin/levels }}" ;;\n'
         "  *) exit 0 ;;\n"
         "esac\n"
