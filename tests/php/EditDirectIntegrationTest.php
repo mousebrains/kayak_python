@@ -17,6 +17,7 @@ require_once __DIR__ . '/IntegrationTestCase.php';
 final class EditDirectIntegrationTest extends IntegrationTestCase
 {
     private const REACH_ID = 9101;
+    private const GAUGE_ID = 9201;
 
     protected static function seedDatabase(PDO $db): void
     {
@@ -33,6 +34,10 @@ final class EditDirectIntegrationTest extends IntegrationTestCase
             'direct edit reach',
             0,
         ]);
+        // A gauge with clean 6-dp coords, for the coordinate-precision test.
+        $db->prepare(
+            'INSERT INTO gauge (id, name, latitude, longitude) VALUES (?, ?, ?, ?)'
+        )->execute([self::GAUGE_ID, 'Direct Edit Gauge', 46.044836, -122.815384]);
     }
 
     public function testDirectEditFreezesSelfEndorsedChangeRequest(): void
@@ -211,5 +216,42 @@ final class EditDirectIntegrationTest extends IntegrationTestCase
             $resp['body'],
             'GET form must carry each field value as a TOCTOU drift base',
         );
+    }
+
+    public function testDirectGaugeEditRoundsCoordsToScale(): void
+    {
+        // The incident: a pasted full-precision lat/lon (14 dp) must be rounded to
+        // the gauge coord columns' Numeric(9,6) scale, or the bridge PR fails
+        // validate-dataset ("decimal places exceeds scale 6"). kayak_data PR #71.
+        $maint = self::seedEditorSession('gauge-coord-maint@example.com', 'maintainer');
+        $cookies = [
+            'ed_sess' => $maint['session_token'],
+            'ed_csrf' => $maint['csrf_token'],
+        ];
+        $post = [
+            'csrf_token' => $maint['csrf_token'],
+            'target_type' => 'gauge',
+            'gauge_id' => (string)self::GAUGE_ID,
+            'latitude' => '46.04494261852439',
+            'longitude' => '-122.83842532901959',
+            'base_latitude' => '46.044836',     // matches the seeded current (TOCTOU)
+            'base_longitude' => '-122.815384',
+        ];
+
+        $resp = $this->request('/edit.php', [], $cookies, 'POST', $post);
+
+        $this->assertSame(200, $resp['status'], $resp['body']);
+        $db = self::testDb();
+        $cr = $db->query(
+            "SELECT applied_json FROM change_request
+             WHERE target_type = 'gauge' AND target_id = " . self::GAUGE_ID
+        )->fetch();
+        $this->assertNotFalse($cr, 'gauge edit must freeze a change_request');
+        $applied = (string)$cr['applied_json'];
+        // Rounded to 6 dp in the frozen diff (what the worker writes verbatim).
+        $this->assertStringContainsString('"latitude":46.044943', $applied);
+        $this->assertStringContainsString('"longitude":-122.838425', $applied);
+        $this->assertStringNotContainsString('46.04494261852439', $applied);
+        $this->assertStringNotContainsString('-122.83842532901959', $applied);
     }
 }

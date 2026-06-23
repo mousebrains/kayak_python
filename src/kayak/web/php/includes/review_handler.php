@@ -204,7 +204,9 @@ function _review_build_approve_payload(array $cr): array
         // genuinely-numeric values (a blank stays "" verbatim).
         foreach (REVIEW_NUMERIC_REACH_FIELDS as $nf) {
             if (isset($applied['reach'][$nf]) && is_numeric($applied['reach'][$nf])) {
-                $applied['reach'][$nf] = (float)$applied['reach'][$nf];
+                // round to 6 dp: these coords are Numeric(9,6); validate-dataset
+                // rejects more, and the worker writes str(float) verbatim.
+                $applied['reach'][$nf] = round((float)$applied['reach'][$nf], 6);
             }
         }
     }

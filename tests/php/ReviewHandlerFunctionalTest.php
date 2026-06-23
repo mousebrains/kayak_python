@@ -411,6 +411,19 @@ final class ReviewHandlerFunctionalTest extends FunctionalTestCase
         $this->assertSame('gauge', $applied['reach_class']['range']['data_type']);
     }
 
+    public function testBuildApprovePayloadRoundsCoordsToNumericScale(): void
+    {
+        // A pasted full-precision lat/lon (14 dp) is rounded to the reach coord
+        // columns' Numeric(9,6) scale, else the bridge PR fails validate-dataset
+        // (kayak_data PR #71). The worker writes str(float) verbatim.
+        $cr = ['payload_json' => json_encode(['reach' => ['latitude_start' => 0]])];
+        $_POST = ['reach_latitude_start' => '46.04494261852439'];
+        $applied = _review_build_approve_payload($cr);
+        $json = (string)json_encode($applied, JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION);
+        $this->assertStringContainsString('"latitude_start":46.044943', $json);
+        $this->assertStringNotContainsString('46.04494261852439', $json);
+    }
+
     public function testBuildApprovePayloadMalformedJson(): void
     {
         // Non-array decode -> [] payload -> empty applied.reach, no class block.

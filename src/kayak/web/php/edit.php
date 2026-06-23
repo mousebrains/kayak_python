@@ -30,6 +30,14 @@ require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/footer.php';
 require_once __DIR__ . '/includes/editor_bridge.php';
 
+// Reach/gauge coordinate columns are Numeric(9,6) — values are rounded to this
+// 6-dp scale before freezing so a pasted full-precision lat/lon can't produce a
+// dataset PR that validate-dataset rejects ("decimal places exceeds scale 6").
+const COORD_FIELDS = [
+    'latitude', 'longitude',
+    'latitude_start', 'longitude_start', 'latitude_end', 'longitude_end',
+];
+
 $maintainer = require_maintainer();
 
 $type = $_GET['type'] ?? $_POST['target_type'] ?? 'reach';
@@ -102,6 +110,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (in_array($field, $numeric_fields, true)) {
             if (!is_numeric($val)) continue;
             $val = (float)$val;
+            // Coordinate columns are Numeric(9,6) — round to the 6-dp scale so a
+            // pasted full-precision lat/lon (e.g. 14 dp from a map) doesn't freeze
+            // a value validate-dataset rejects (the worker writes str(float)).
+            if (in_array($field, COORD_FIELDS, true)) {
+                $val = round($val, 6);
+            }
         }
 
         $old = $row[$field] ?? null;
