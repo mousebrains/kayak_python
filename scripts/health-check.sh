@@ -152,9 +152,11 @@ while IFS=$'\t' read -r sid sname slatest; do
     last=0
     if [ -f "$STATE_FILE" ]; then
         last=$(awk -F'\t' -v s="$sid" '$1==s {print $2; exit}' "$STATE_FILE")
+        last=${last//[!0-9]/}   # ignore a clobbered non-numeric epoch in a hand-edited file
         [ -z "$last" ] && last=0
     fi
-    if [ "$((NOW_EPOCH - last))" -ge "$LIMIT_SECS" ]; then
+    # 10# forces base-10 so a value like "08" isn't parsed as invalid octal.
+    if [ "$((NOW_EPOCH - 10#$last))" -ge "$LIMIT_SECS" ]; then
         DUE="${DUE}  ${sid} ${sname} latest=${slatest}
 "
         NEW_STATE="${NEW_STATE}${sid}	${NOW_EPOCH}
@@ -170,16 +172,19 @@ EOF
 
 # ALWAYS rebuild the state to the current silent set — even when it's empty (all
 # sources recovered) — so a recovered source's old entry is pruned, not reused to
-# suppress a later re-death. Empty set → remove the file. Fail toward alerting:
-# a write failure leaves the due set to page rather than silently suppress.
+# suppress a later re-death. Empty set → remove the file.
+STATE_PERSIST_FAILED=0
 if [ -n "$NEW_STATE" ]; then
     mkdir -p "$(dirname "$STATE_FILE")" 2>/dev/null || true
     if ! { printf '%s' "$NEW_STATE" > "$STATE_FILE.tmp" 2>/dev/null \
         && mv "$STATE_FILE.tmp" "$STATE_FILE" 2>/dev/null; }; then
-        echo "WARNING: could not write healthcheck state $STATE_FILE — per-source alert rate-limit not persisted"
+        STATE_PERSIST_FAILED=1
     fi
 else
     rm -f "$STATE_FILE" 2>/dev/null || true
+    # rm -f returns 0 for an absent file but non-zero when it exists and can't be
+    # removed (unwritable dir) — confirm the prune actually happened.
+    if [ -e "$STATE_FILE" ]; then STATE_PERSIST_FAILED=1; fi
 fi
 
 if [ -n "$DUE" ]; then
@@ -187,6 +192,16 @@ if [ -n "$DUE" ]; then
     echo "WARNING: ${DUE_COUNT} active source(s) with no observation in ${STALE_SOURCE_DAYS} days (each alerts at most once per ${SOURCE_ALERT_DAYS}d):"
     printf '%s' "$DUE"
     exit 1
+fi
+
+# Fail toward alerting: if the state could not be persisted, the rate-limit/prune
+# can't be trusted — a surviving stale entry could otherwise suppress a
+# recovered-then-dead source and exit green. Never do that. The SAME unwritable
+# state condition fails every run, so a stale entry can never coexist with a green
+# run; the alert points the operator at the perms to fix.
+if [ "$STATE_PERSIST_FAILED" = 1 ]; then
+    echo "CRITICAL: healthcheck alert state $STATE_FILE could not be persisted — per-source alert rate-limit unreliable; fix write perms on $(dirname "$STATE_FILE")"
+    exit 2
 fi
 
 # Check pipeline timer status (if systemd is available)

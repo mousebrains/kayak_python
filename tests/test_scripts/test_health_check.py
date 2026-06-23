@@ -393,3 +393,44 @@ class TestSourceAlertThrottle:
         # Fresh alert — the pre-recovery state entry was pruned, not reused.
         assert again.returncode == 1, again.stdout + again.stderr
         assert "dead" in again.stdout
+
+    def test_state_persist_failure_is_not_green(
+        self, db_session: tuple[Path, Session], tmp_path: Path
+    ):
+        # P2: a silent source that WOULD be suppressed by a stale entry must not
+        # exit green when the state can't be persisted (unwritable dir) — otherwise
+        # a recovered-then-dead source could be hidden. The same condition fails
+        # every run, so a stale entry can't coexist with a green run.
+        db_path, session = db_session
+        _seed_source(session, "a", latest=_utcnow() - timedelta(minutes=30))  # global fresh
+        dead = _seed_source(session, "dead", latest=_utcnow() - timedelta(days=20))
+        session.commit()
+        ro = tmp_path / "ro"
+        ro.mkdir()
+        state = ro / "hc.tsv"
+        # A recent alert → 'dead' would be suppressed (within the 7d window)...
+        state.write_text(f"{dead.id}\t{int(datetime.now(UTC).timestamp())}\n")
+        ro.chmod(0o500)  # ...but the state dir is unwritable → prune/write fails.
+        try:
+            result = _run_health_check(
+                db_path, tmp_path, extra_env={"HEALTHCHECK_STATE_FILE": str(state)}
+            )
+        finally:
+            ro.chmod(0o700)  # restore so pytest can clean tmp_path up
+        assert result.returncode == 2, result.stdout + result.stderr
+        assert "could not be persisted" in result.stdout
+
+    def test_corrupt_state_epoch_falls_back_to_alerting(
+        self, db_session: tuple[Path, Session], tmp_path: Path
+    ):
+        # A hand-clobbered non-numeric/leading-zero epoch must not crash the check
+        # (set -e) — it's sanitized + base-10 forced, treated as ancient → alerts.
+        db_path, session = db_session
+        _seed_source(session, "a", latest=_utcnow() - timedelta(minutes=30))
+        dead = _seed_source(session, "dead", latest=_utcnow() - timedelta(days=20))
+        session.commit()
+        state = tmp_path / "hc-source-alerts.tsv"  # the path the harness uses
+        state.write_text(f"{dead.id}\t08garbage\n")
+        result = _run_health_check(db_path, tmp_path)
+        assert result.returncode == 1, result.stdout + result.stderr
+        assert "dead" in result.stdout
