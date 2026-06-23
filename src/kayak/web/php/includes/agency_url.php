@@ -18,15 +18,19 @@ declare(strict_types=1);
  * Return the attribution homepage for a source's agency, or null when the
  * agency has no special-cased provider link.
  *
- * Matching is case-insensitive and substring-based so the stored agency may
- * carry a location suffix — e.g. "Cowlitz County Fire District 5, Kalama"
- * still matches. Uses stripos (not mb_*) — prod PHP-FPM lacks mbstring.
+ * Matching is case-insensitive and tolerates a trailing location suffix, so
+ * the stored "Cowlitz County Fire District 5, Kalama" still matches. The
+ * negative lookahead on a trailing digit keeps a hypothetical future sibling
+ * like "...Fire District 50" from accidentally inheriting FD5's link (the
+ * value carries a ", Kalama" suffix, so the end can't simply be anchored).
+ * PCRE without the /u modifier is ASCII-only — no mbstring dependency (prod
+ * PHP-FPM lacks mbstring).
  */
 function agency_attribution_url(?string $agency): ?string {
     if ($agency === null || $agency === '') {
         return null;
     }
-    if (stripos($agency, 'Cowlitz County Fire District 5') !== false) {
+    if (preg_match('/Cowlitz County Fire District 5(?![0-9])/i', $agency) === 1) {
         return 'https://www.cowlitzfd5.org';
     }
     return null;

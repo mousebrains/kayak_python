@@ -51,4 +51,17 @@ final class AgencyUrlTest extends TestCase
             agency_attribution_url('cowlitz county fire district 5'),
         );
     }
+
+    public function test_trailing_digit_does_not_over_match(): void
+    {
+        // A hypothetical future "...District 50" must NOT inherit FD5's link
+        // (the trailing-digit negative lookahead). "District 5" + a non-digit
+        // boundary (comma, space, end) still matches.
+        $this->assertNull(agency_attribution_url('Cowlitz County Fire District 50'));
+        $this->assertNull(agency_attribution_url('Cowlitz County Fire District 51, Woodland'));
+        $this->assertSame(
+            'https://www.cowlitzfd5.org',
+            agency_attribution_url('Cowlitz County Fire District 5'),
+        );
+    }
 }
