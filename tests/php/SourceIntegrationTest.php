@@ -20,11 +20,15 @@ final class SourceIntegrationTest extends IntegrationTestCase
 {
     private const SOURCE_ID = 8001;
     private const GAUGE_ID = 8501;
+    private const FD5_SOURCE_ID = 8002;
 
     protected static function seedDatabase(PDO $db): void
     {
         $db->prepare('INSERT INTO source (id, name, agency) VALUES (?, ?, ?)')
             ->execute([self::SOURCE_ID, 'SRCINT_TEST', 'USGS']);
+        // A local-operator source: its agency name links to the provider homepage.
+        $db->prepare('INSERT INTO source (id, name, agency) VALUES (?, ?, ?)')
+            ->execute([self::FD5_SOURCE_ID, 'SRCINT_FD5', 'Cowlitz County Fire District 5, Kalama']);
 
         $db->prepare('INSERT INTO gauge (id, name, location, usgs_id) VALUES (?, ?, ?, ?)')
             ->execute([self::GAUGE_ID, 'SRCINT_GAUGE', 'Marmot', '14128870']);
@@ -59,5 +63,18 @@ final class SourceIntegrationTest extends IntegrationTestCase
         // The linked gauge renders with its USGS id (the retained column's value).
         $this->assertStringContainsString('SRCINT_GAUGE', $resp['body']);
         $this->assertStringContainsString('14128870', $resp['body']);
+    }
+
+    public function testLocalOperatorAgencyLinksToHomepage(): void
+    {
+        $resp = $this->request('/source.php', ['h' => pubhash_encode(self::FD5_SOURCE_ID)]);
+
+        $this->assertSame(200, $resp['status']);
+        // The Agency meta cell renders the provider name as a link to its homepage.
+        $this->assertStringContainsString(
+            '<a href="https://www.cowlitzfd5.org" target="_blank" rel="noopener">'
+                . 'Cowlitz County Fire District 5, Kalama</a>',
+            $resp['body'],
+        );
     }
 }

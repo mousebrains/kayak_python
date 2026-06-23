@@ -125,7 +125,15 @@ final class DescriptionDetailFunctionalTest extends FunctionalTestCase
 
         $plainSrc = Fixtures::source($db, ['name' => 'santiam_plain']);
 
-        foreach ([$usgsSrc, $nwsSrc, $fetchSrc, $calcSrc, $plainSrc] as $sid) {
+        //   6. local operator → agency_attribution_url() links the agency name
+        //      to its homepage (no per-station page). The stored agency carries
+        //      a ", Kalama" suffix to exercise the substring match.
+        $fd5Src = Fixtures::source($db, [
+            'name' => 'santiam_fd5',
+            'agency' => 'Cowlitz County Fire District 5, Kalama',
+        ]);
+
+        foreach ([$usgsSrc, $nwsSrc, $fetchSrc, $calcSrc, $plainSrc, $fd5Src] as $sid) {
             Fixtures::linkGaugeSource($db, self::$fullGaugeId, $sid);
         }
 
@@ -357,6 +365,12 @@ final class DescriptionDetailFunctionalTest extends FunctionalTestCase
         // no matching gauge, so it stays verbatim.
         $this->assertStringContainsString('/description.php?h=' . pubhash_encode(self::$fullId) . '"', $html);
         $this->assertStringContainsString('flow::UNKNOWN_GAUGE::mean', $html);
+        // Local-operator attribution: the agency name links to its homepage.
+        $this->assertStringContainsString(
+            '<a href="https://www.cowlitzfd5.org" target="_blank" rel="noopener">'
+                . 'Cowlitz County Fire District 5, Kalama</a>',
+            $html,
+        );
 
         // Guidebooks: AW row + the seeded book.
         $this->assertStringContainsString('Guidebooks', $html);
