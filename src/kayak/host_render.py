@@ -58,8 +58,11 @@ def _parent_dir(file_path: str) -> str:
 def render_cutover_dropins(h: HostConfig) -> list[CutoverDropIn]:
     """Render the cutover drop-in for every engine consumer, in install order.
 
-    The six units that execute ``levels`` from the venv (the audit-gauges one
-    joined this set when #191 promoted the source script to a subcommand).
+    The eight units that execute ``levels`` from the venv (audit-gauges joined
+    when #191 promoted the source script to a subcommand; the two editor-bridge
+    units joined at bridge enablement). Every engine consumer that runs ``levels``
+    must be here so the cutover re-points it at the frozen release and the deployer
+    gate (``render-units --list-units`` = :func:`engine_unit_names`) covers it.
     """
     venv = f"{h.release_root}/current/venv/bin/levels"
     current = f"{h.release_root}/current"
@@ -110,6 +113,16 @@ def render_cutover_dropins(h: HostConfig) -> list[CutoverDropIn]:
             {"GAUGE_METADATA_CACHE": h.gauge_metadata_cache},
             [db, _parent_dir(h.gauge_metadata_cache)],
         ),
+        # The editor→kayak_data bridge worker + reconciler — the MOST privileged
+        # consumers (mint App tokens, push to kayak_data), so they especially must
+        # run the frozen release, not the editable /home/pat tree. They ship dormant
+        # (timers not auto-enabled), but the drop-in must exist so that whenever the
+        # operator does `enable --now` they already run from current. Both only
+        # write the DB (run-once clones kayak_data to a private tmp; reconcile reads
+        # the PR API); DATASET_DIR is pinned harmlessly — neither reads it, and the
+        # deploy hook's mark-deployed is a separate path against the live clone.
+        ("kayak-editor-bridge-run", ["editor-bridge", "run-once"], {}, [db]),
+        ("kayak-editor-bridge-reconcile", ["editor-bridge", "reconcile"], {}, [db]),
     ]
 
     dropins: list[CutoverDropIn] = []

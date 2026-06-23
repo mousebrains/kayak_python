@@ -30,6 +30,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -302,8 +303,16 @@ def mark_deployed(
         if not deployed:
             continue
         bridge.state = BridgeState.deployed
-        _resolve_parent(session, bridge, dataset_ref, cfg)
+        resolved = _resolve_parent(session, bridge, dataset_ref)
         session.commit()
+        # Email AFTER the commit: notifying inside the transaction would autoflush
+        # the deployed/resolved writes (taking SQLite's write lock) and then hold it
+        # for the mail subprocess (≤30 s) — contending with a resumed pipeline — and
+        # a commit failure after the send would double-email next run. Post-commit:
+        # no lock-hold, and the resolved->status guard is already persisted so a
+        # re-run is a no-op. Fail-soft (never raises).
+        if resolved is not None:
+            _notify_proposer_deployed(session, resolved, dataset_ref, cfg)
         outcomes.append(
             RowOutcome(bridge.id, bridge.change_request_id, BridgeState.deployed.value, "deployed")
         )
@@ -364,22 +373,22 @@ def requeue(session: Session, cr_id: int) -> tuple[str, str]:
 
 
 def _resolve_parent(
-    session: Session, bridge: ChangeRequestBridge, dataset_ref: str, cfg: KayakConfig
-) -> None:
+    session: Session, bridge: ChangeRequestBridge, dataset_ref: str
+) -> ChangeRequest | None:
     """Advance the parent change_request to resolved (the SA-lite loop closer).
 
-    Idempotent: a missing or already-``resolved`` parent is a no-op, so a second
-    pass (or two overlapping mark-deployed runs, until a lease lands) can't append
-    the deploy note twice — and the proposer is emailed exactly once, on the real
-    transition.
+    Returns the change_request it transitioned (for the caller to email AFTER the
+    commit), or None on a no-op. Idempotent: a missing or already-``resolved``
+    parent returns None, so a second pass (or two overlapping mark-deployed runs,
+    until a lease lands) can't append the deploy note twice or re-email.
     """
     cr = session.get(ChangeRequest, bridge.change_request_id)
     if cr is None or cr.status == ChangeStatus.resolved:
-        return
+        return None
     cr.status = ChangeStatus.resolved
     note = f"[editor-bridge] deployed in dataset {dataset_ref[:12]}"
     cr.reviewer_note = f"{cr.reviewer_note}\n\n{note}" if cr.reviewer_note else note
-    _notify_proposer_deployed(session, cr, dataset_ref, cfg)
+    return cr
 
 
 def _notify_proposer_deployed(
@@ -400,7 +409,10 @@ def _notify_proposer_deployed(
     if shutil.which("mail") is None:
         log.warning("editor-bridge: 'mail' not on PATH; skipping deploy notice for cr %s", cr.id)
         return
-    summary = cr.subject or f"change request {cr.id}"
+    # Strip control chars from the (operator/proposer-derived) summary: it goes
+    # into `mail -s`, where an embedded newline would be a mail-header injection.
+    raw_summary = cr.subject or f"change request {cr.id}"
+    summary = re.sub(r"[\x00-\x1f\x7f]+", " ", raw_summary).strip() or f"change request {cr.id}"
     subject = f"Your kayak change is live: {summary}"
     lines = [
         f"Your proposed change ({summary}) has been deployed to the live site.",
@@ -411,8 +423,10 @@ def _notify_proposer_deployed(
         lines.append(f"Details: {base_url}/review.php?id={cr.id}")
     body = "\n".join(lines) + "\n"
     try:
+        # `--` so a (validated, but defense-in-depth) address starting with `-`
+        # can't be parsed as a flag; argv form already avoids shell injection.
         subprocess.run(
-            ["mail", "-s", subject, editor.email],
+            ["mail", "-s", subject, "--", editor.email],
             input=body.encode("utf-8"),
             check=True,
             timeout=30,

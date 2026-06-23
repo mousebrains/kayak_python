@@ -652,7 +652,15 @@ is already committed; a miss is caught by the reconcile timer / a manual run).
 
 Everything above ships **dormant**: a routine `kayak-deploy` of `main` installs
 the code + migration `0079` (the worker's retry cap) but starts no bridge timer,
-so nothing drains the queue until you deliberately turn it on. To go live:
+so nothing drains the queue until you deliberately turn it on.
+
+The two bridge `.service` units are **cutover-managed** like every other engine
+consumer: `levels render-units` emits their `cutover.conf` (ExecStart →
+`/opt/kayak/current/venv`, WorkingDirectory → current), so the worker runs the
+**frozen release**, not the editable `/home/pat` tree — and a deploy quiesces the
+bridge timers (if enabled) around migration/activation, resuming only the ones
+that were already running. **Enable only after a `kayak-deploy` of `main`+#220**,
+so the cutover drop-ins are in place before the timers start. To go live:
 
 ```bash
 # 0. Preconditions (one-time, already done on prod): the GitHub App + key (above),

@@ -893,3 +893,51 @@ def test_notify_proposer_deployed_skips_when_no_mail(session, editor, monkeypatc
 
     monkeypatch.setattr(worker.subprocess, "run", boom)
     _REAL_NOTIFY(session, cr, "abc123", _cfg())  # no raise, no send
+
+
+def test_notify_strips_control_chars_from_mail_subject(session, editor, monkeypatch):
+    # A newline in the (proposer-derived) subject would be a mail-header injection
+    # via `mail -s` — it must be stripped before the subprocess call.
+    cr = ChangeRequest(
+        target_type=ChangeTarget.reach,
+        target_id=42,
+        editor_id=editor.id,
+        subject="Proposed edit: Reach\nBcc: evil@example.com",
+        payload_json="{}",
+        status=ChangeStatus.resolved,
+    )
+    session.add(cr)
+    session.flush()
+    captured: dict = {}
+    monkeypatch.setattr(worker.shutil, "which", lambda _name: "/usr/bin/mail")
+    monkeypatch.setattr(worker.subprocess, "run", lambda cmd, **kw: captured.update(cmd=cmd))
+
+    _REAL_NOTIFY(session, cr, "abc123def456", _cfg())
+
+    subject = captured["cmd"][2]  # ["mail", "-s", <subject>, "--", addr]
+    assert "\n" not in subject and "Bcc:" in subject  # flattened, not a 2nd header
+    assert captured["cmd"][3] == "--"  # recipient guarded against a leading '-'
+
+
+def test_mark_deployed_emails_proposer_once_after_commit(session, editor, tmp_path, monkeypatch):
+    # The proposer email fires once, on the real resolution, and the cr is already
+    # committed-resolved when it does (post-commit); an idempotent re-run (row now
+    # 'deployed') does not re-email.
+    repo, _sha_a, sha_b = _commit_repo(tmp_path)
+    bridge = _seed_merged(session, editor.id, merge_sha=sha_b)
+
+    seen: list[int] = []
+
+    def capture(_session, cr, _ref, _cfg):
+        assert cr.status == ChangeStatus.resolved  # committed before we email
+        seen.append(cr.id)
+
+    # Override the autouse no-op stub (set after it in fixture order, so this wins).
+    monkeypatch.setattr(worker, "_notify_proposer_deployed", capture)
+
+    (outcome,) = worker.mark_deployed(session, _cfg(), dataset_ref=sha_b, repo=str(repo))
+    assert outcome.state == "deployed"
+    assert seen == [bridge.change_request_id]  # emailed once
+    # Re-run: the row is 'deployed' now → not re-selected → no second email.
+    assert worker.mark_deployed(session, _cfg(), dataset_ref=sha_b, repo=str(repo)) == []
+    assert seen == [bridge.change_request_id]
