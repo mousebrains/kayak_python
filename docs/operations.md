@@ -656,28 +656,46 @@ so nothing drains the queue until you deliberately turn it on.
 
 The two bridge `.service` units are **cutover-managed** like every other engine
 consumer: `levels render-units` emits their `cutover.conf` (ExecStart →
-`/opt/kayak/current/venv`, WorkingDirectory → current), so the worker runs the
+`/opt/kayak/current/venv`, WorkingDirectory → current) so the worker runs the
 **frozen release**, not the editable `/home/pat` tree — and a deploy quiesces the
 bridge timers (if enabled) around migration/activation, resuming only the ones
-that were already running. **Enable only after a `kayak-deploy` of `main`+#220**,
-so the cutover drop-ins are in place before the timers start. To go live:
+that were already running.
+
+⚠️ **`install.service.sh` copies only the base unit files** (whose committed
+`ExecStart` points at `/home/pat/.venv`); it does **not** install the cutover
+drop-ins, and `kayak-deploy` only *verifies* them (the gate), never installs
+them. So you **must** render + install the drop-ins (step 2 below) before
+starting the timers — otherwise the privileged worker runs the editable tree
+until the next deploy's drift check forces a re-render. Do all of steps 1–3
+before `enable --now`. To go live (after deploying `main`+#220):
 
 ```bash
+R=/opt/kayak/current
+
 # 0. Preconditions (one-time, already done on prod): the GitHub App + key (above),
 #    the kayak_data approval ruleset with your admin bypass, and EDITOR_BRIDGE_*
 #    in the worker's ~/.config/kayak/.env (EDITOR_BRIDGE_ENABLED=true).
 levels editor-bridge status                     # sanity: table present, queue visible
 
-# 1. Install/refresh the unit files (copies the bridge units; does NOT start them —
-#    install.service.sh deliberately omits the bridge timers from its auto-start set).
+# 1. Install/refresh the base unit files (copies the bridge units; does NOT start
+#    them — install.service.sh deliberately omits the bridge timers from TIMERS).
 sudo ./systemd/install.service.sh
 
-# 2. GO LIVE — start the timers. With EDITOR_BRIDGE_ENABLED already true, THIS is
+# 2. Install the cutover drop-ins so the bridge units run the FROZEN release, not
+#    the editable tree. render-units now emits drop-ins for the two bridge units
+#    too; this re-renders ALL engine drop-ins (idempotent for the existing six).
+sudo "$R/venv/bin/levels" render-units --out-dir /etc/systemd/system
+sudo systemctl daemon-reload
+# Verify the worker will run from the release, not /home/pat/.venv:
+systemctl show -p ExecStart --value kayak-editor-bridge-run.service | grep -q "$R/venv" \
+    && echo "ok: bridge runs from $R" || echo "PROBLEM: drop-in not applied"
+
+# 3. GO LIVE — start the timers. With EDITOR_BRIDGE_ENABLED already true, THIS is
 #    the activation: run-once begins draining the queue every 15 min, reconcile
 #    polls PR state hourly.
 sudo systemctl enable --now kayak-editor-bridge-run.timer kayak-editor-bridge-reconcile.timer
 
-# 3. Smoke: endorse a small reach edit in /review.php, then force one run:
+# 4. Smoke: endorse a small reach edit in /review.php, then force one run:
 sudo systemctl start kayak-editor-bridge-run.service
 levels editor-bridge status                     # → pr_open; check the kayak_data PR
 ```

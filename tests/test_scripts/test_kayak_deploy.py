@@ -1125,3 +1125,74 @@ def test_quiesce_timeout_backs_out_maintenance(
     assert not (root / "maintenance").exists()
     assert "start kayak-pipeline.timer" in systemctl_log.read_text()
     assert not runuser_log.exists() or ".backup" not in runuser_log.read_text()
+
+
+@pytest.mark.slow
+def test_deploy_resumes_active_timers_not_dormant_ones(
+    tmp_path: Path, deploy_root: Path, engine_repo, dataset_repo
+) -> None:
+    """The ACTIVE_UNITS resume restarts only timers that were running before the
+    quiesce: an active timer (kayak-pipeline) is resumed, a dormant one (a
+    not-yet-enabled editor-bridge timer) is NOT auto-started by the deploy."""
+    ds_repo, ds_sha = dataset_repo
+    eng_repo, engine_sha = engine_repo
+    db = tmp_path / "kayak.db"
+    _init_db(db, resource_dir("data", "example_dataset"))
+    root = deploy_root
+    runtime_config = tmp_path / "runtime-config.json"
+    host_env = tmp_path / "host.env"
+    host_env.write_text(f"SITE_URL=https://x.example.org\nSQLITE_PATH={db}\n")
+    log = tmp_path / "systemctl.log"
+    installer = tmp_path / "install-config.sh"
+    installer.write_text(f'#!/bin/sh\ncat > "{runtime_config}"\n')
+    installer.chmod(0o755)
+    # Recording systemctl: pipeline.timer ACTIVE, the bridge run-timer DORMANT
+    # (inactive); services report drained so the quiesce drain completes.
+    systemctl = tmp_path / "systemctl.sh"
+    systemctl.write_text(
+        f'#!/bin/sh\necho "$@" >> "{log}"\n'
+        'case "$1" in\n'
+        "  is-active)\n"
+        '    case "$*" in\n'
+        "      *kayak-editor-bridge-run.timer) exit 1 ;;\n"  # dormant → not captured
+        "      *.timer) exit 0 ;;\n"  # active → captured + resumed
+        "      *) exit 1 ;;\n"  # services drained
+        "    esac ;;\n"
+        f'  show) echo "{{ path={root}/current/venv/bin/levels }}" ;;\n'
+        "  *) exit 0 ;;\n"
+        "esac\n"
+    )
+    systemctl.chmod(0o755)
+    runuser = tmp_path / "runuser.sh"
+    runuser.write_text('#!/bin/sh\nshift 3\nexec "$@"\n')
+    runuser.chmod(0o755)
+    me = subprocess.run(["id", "-un"], capture_output=True, text=True, check=True).stdout.strip()
+    conf = _write_conf(
+        tmp_path,
+        str(eng_repo),
+        str(ds_repo),
+        ENGINE_BRANCH="test-main",
+        DATASET_BRANCH="main",
+        SERVING_CUTOVER="yes",
+    )
+    env = {
+        "KAYAK_DEPLOY_CONF": str(conf),
+        "KAYAK_DEPLOY_ROOT": str(root),
+        "KAYAK_DOCROOT": str(tmp_path / "docroot"),
+        "KAYAK_HOST_ENV": str(host_env),
+        "KAYAK_RUNTIME_CONFIG": str(runtime_config),
+        "KAYAK_CONFIG_INSTALLER": str(installer),
+        "KAYAK_SYSTEMCTL": str(systemctl),
+        "KAYAK_PRIVILEGED": "yes",
+        "KAYAK_APP_USER": me,
+        "KAYAK_RUNUSER": str(runuser),
+        "HOME": str(tmp_path),
+        "SUDO_USER": "",
+        "KAYAK_UNITS": "kayak-pipeline.timer kayak-editor-bridge-run.timer",
+        **_serving_knobs(tmp_path, tmp_path / "docroot"),
+    }
+    p = _run(["--engine-ref", engine_sha, "--dataset-ref", ds_sha], env, timeout=900)
+    assert p.returncode == 0, p.stderr
+    text = log.read_text()
+    assert "start kayak-pipeline.timer" in text, text  # active → resumed
+    assert "start kayak-editor-bridge-run.timer" not in text, text  # dormant → NOT started
