@@ -28,7 +28,7 @@ jobs:
   lint:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
@@ -44,7 +44,7 @@ jobs:
     name: Lint PHP/JS/CSS/Shell
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up PHP 8.4 (with pdo_sqlite for unit tests)
         # Third-party actions are pinned to a commit SHA (supply-chain: a
@@ -52,7 +52,7 @@ jobs:
         # tracks the human-readable version for Dependabot, which bumps
         # SHA-pinned actions. GitHub-owned actions/* stay on major tags.
         # Re-resolve: gh api repos/<owner>/<repo>/commits/<tag> --jq .sha
-        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
         with:
           php-version: "8.4"
           # Prod PHP-FPM lacks mbstring (CLAUDE.md §PHP Tooling). CI installs only
@@ -208,7 +208,7 @@ jobs:
         # to all severities, but its advisory set is much smaller).
         run: npm audit --audit-level=high
       - name: Cache Playwright browsers
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
@@ -235,7 +235,7 @@ jobs:
   typecheck:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
@@ -265,8 +265,8 @@ jobs:
       matrix:
         python-version: ["3.13", "3.14"]
     steps:
-      - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
         with:
           enable-cache: true
       - uses: actions/setup-python@v6
@@ -354,7 +354,7 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
@@ -365,7 +365,7 @@ jobs:
     name: pip-audit
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
@@ -407,8 +407,8 @@ jobs:
     # repo-root BASE_DIR read, or a data file that stops shipping, fails CI.
     # No kayak_data / PHP / Node needed — it only exercises packaged resources.
     steps:
-      - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
         with:
           enable-cache: true
       - uses: actions/setup-python@v6
