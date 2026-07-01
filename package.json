@@ -7,7 +7,7 @@
     "test-install-browsers": "playwright install chromium"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.0",
-    "@playwright/test": "^1.51.0"
+    "@biomejs/biome": "2.5.1",
+    "@playwright/test": "^1.61.1"
   }
 }
