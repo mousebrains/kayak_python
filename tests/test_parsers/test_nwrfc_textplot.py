@@ -73,6 +73,44 @@ TEXTPLOT_HG_STAGE_DISCHARGE = """\
 </table></body></html>
 """
 
+# pe=TW response: water temperature (°F), observed-only — the page carries
+# no forecast half, so the header row has a single Date/Time cell and the
+# data rows trail empty spacer cells.
+# Captured live from LAPO3 (LITTLE DESCHUTES--NR LAPINE) on 2026-07-15.
+TEXTPLOT_TW_TEMPERATURE = """\
+<html><body>
+LITTLE DESCHUTES--NR LAPINE (LAPO3)<br><br><table border="0" cellspacing="5">
+<tr><td colspan="2" align="left">Observed</td></tr>
+<tr><td>Date/Time (PDT)</td><td align="right">Temperature</td></tr>
+<tr><td align="right">2024-06-15 08:15</td><td align="right">69.4</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+<tr><td align="right">2024-06-15 08:00</td><td align="right">69.6</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+</table></body></html>
+"""
+
+# pe=HP: reservoir pool elevation, a column we deliberately do not map.
+# Shape captured live from DETO3 (Detroit Lake) on 2026-07-15, where the
+# real page serves ~1031 rows of pool height in feet.
+TEXTPLOT_HP_POOL_HEIGHT = """\
+<html><body><table>
+<tr><td colspan="2" align="left">Observed</td></tr>
+<tr><td>Date/Time (PDT)</td><td align="right">Pool Height</td></tr>
+<tr><td align="right">2024-06-15 08:15</td><td align="right">1543.71</td></tr>
+<tr><td align="right">2024-06-15 08:00</td><td align="right">1543.702</td></tr>
+</table></body></html>
+"""
+
+# A known column (Stage) sitting next to an unmapped one. The 1-column
+# fallback used to re-capture Stage as flow, corrupting a column we do
+# understand — so an unmapped label has to void the whole page.
+TEXTPLOT_MIXED_KNOWN_AND_UNKNOWN = """\
+<html><body><table>
+<tr><td>Date/Time (PDT)</td><td>Stage</td><td>Pool Height</td>
+    <td>Date/Time (PDT)</td><td>Stage</td><td>Pool Height</td></tr>
+<tr><td>2024-06-15 15:45</td><td>9.73</td><td>1543.71</td>
+    <td>2024-06-15 17:00</td><td>9.71</td><td>1543.70</td></tr>
+</table></body></html>
+"""
+
 # pe=HG on a gage-only NWRFC station: only Stage appears in the observed
 # half. Captured live from OCUO3 (Willamette Upper Falls) on 2026-05-11.
 TEXTPLOT_HG_STAGE_ONLY = """\
@@ -231,3 +269,74 @@ class TestNWRFCTextPlotHG:
         obs = session.query(Observation).filter_by(source_id=src.id).all()
         assert all(o.data_type == DataType.gauge for o in obs)
         assert sorted(o.value for o in obs) == [54.08, 54.08]
+
+
+class TestNWRFCTextPlotTW:
+    def test_tw_emits_temperature(self, session):
+        """pe=TW yields temperature values in °F.
+
+        Regression guard: before ``Temperature`` was in ``_LABEL_TO_DTYPE``
+        the header lookup failed, the column-inference bailed to its
+        1-column ``flow`` fallback, and a 69.4 °F reading was stored as
+        69.4 cfs — silently publishing a temperature as a discharge.
+        """
+        src = _make_source(session, name="tw_temperature")
+        parser = NWRFCTextPlotParser(
+            url="https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=LAPO3&pe=TW",
+            session=session,
+            source_id=src.id,
+        )
+        count = parser.parse(TEXTPLOT_TW_TEMPERATURE)
+        assert count == 2
+        obs = session.query(Observation).filter_by(source_id=src.id).all()
+        assert all(o.data_type == DataType.temperature for o in obs)
+        assert sorted(o.value for o in obs) == [69.4, 69.6]
+
+    def test_tw_header_infers_temperature_column(self):
+        """The observed half of a pe=TW page is a single Temperature column."""
+        parser = NWRFCTextPlotParser.__new__(NWRFCTextPlotParser)
+        assert parser._infer_value_columns(TEXTPLOT_TW_TEMPERATURE) == [DataType.temperature]
+
+
+class TestNWRFCTextPlotUnmappedColumn:
+    """A parsed header naming a column we don't map must store nothing.
+
+    The old code fell through to a 1-column ``flow`` guess, which is how a
+    69.4 °F reading would have become 69.4 cfs. The same fallback still
+    reaches ``pe=HP``, which NWRFC serves today: Detroit Lake's pool
+    elevation of 1543.71 ft would post as 1543.71 cfs.
+    """
+
+    def test_pool_height_stores_nothing(self, session):
+        src = _make_source(session, name="hp_pool")
+        parser = NWRFCTextPlotParser(
+            url="https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=DETO3&pe=HP",
+            session=session,
+            source_id=src.id,
+        )
+        assert parser.parse(TEXTPLOT_HP_POOL_HEIGHT) == 0
+        assert session.query(Observation).filter_by(source_id=src.id).all() == []
+
+    def test_unmapped_column_does_not_corrupt_a_known_neighbour(self, session):
+        """Stage must not be re-emitted as flow just because a sibling is unknown."""
+        src = _make_source(session, name="hp_mixed")
+        parser = NWRFCTextPlotParser(
+            url="https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=DETO3&pe=HG",
+            session=session,
+            source_id=src.id,
+        )
+        assert parser.parse(TEXTPLOT_MIXED_KNOWN_AND_UNKNOWN) == 0
+        obs = session.query(Observation).filter_by(source_id=src.id).all()
+        assert obs == []
+        assert not any(o.value == 9.73 for o in obs), "stage leaked as another data type"
+
+    def test_infer_returns_empty_rather_than_guessing_flow(self):
+        parser = NWRFCTextPlotParser.__new__(NWRFCTextPlotParser)
+        assert parser._infer_value_columns(TEXTPLOT_HP_POOL_HEIGHT) == []
+        assert parser._infer_value_columns(TEXTPLOT_MIXED_KNOWN_AND_UNKNOWN) == []
+
+    def test_headerless_bodies_still_use_the_heuristic(self):
+        """The fallback survives for the case it was actually written for."""
+        parser = NWRFCTextPlotParser.__new__(NWRFCTextPlotParser)
+        assert parser._infer_value_columns(TEXTPLOT_FLOW) == [DataType.flow]
+        assert parser._infer_value_columns(TEXTPLOT_INFLOW) == [DataType.inflow]

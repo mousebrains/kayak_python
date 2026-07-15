@@ -10,12 +10,19 @@ per side depends on the station and ``pe`` (Physical Element) query:
 * ``pe=HG`` on a gage-only station — 1 value column (Stage).
 * ``pe=HG`` on a rated station — 2 value columns (Stage + Discharge),
   which we emit as gauge + flow for the same timestamp.
+* ``pe=TW`` (water temperature) — 1 value column (Temperature), already
+  in °F, which is the unit the rest of the pipeline stores.
 
 The schema is inferred from the column-header row at the top of the
-table; pages without a recognisable header fall back to a 1-column
-flow/inflow heuristic (covers truncated/error bodies and test fixtures).
+table. A page with *no* header row falls back to a 1-column flow/inflow
+heuristic (covers truncated/error bodies and test fixtures). A page whose
+header row *is* present but names a column we don't map — ``pe=HP``'s
+"Pool Height", say — yields nothing at all: the label is a known-unknown,
+and guessing "flow" there would republish a pool elevation or a
+temperature as a discharge. Stale is recoverable; wrong is not.
 """
 
+import logging
 import re
 from datetime import UTC, datetime
 
@@ -24,10 +31,13 @@ from kayak.parsers.base import BaseParser, ObservationRecord
 from kayak.parsers.registry import register
 from kayak.utils.conversions import parse_datetime, safe_float
 
+logger = logging.getLogger(__name__)
+
 _LABEL_TO_DTYPE = {
     "stage": DataType.gauge,
     "discharge": DataType.flow,
     "inflow": DataType.inflow,
+    "temperature": DataType.temperature,
 }
 
 
@@ -63,6 +73,10 @@ class NWRFCTextPlotParser(BaseParser):
         tz = "PDT" if "(pdt)" in header_lower else "PST" if "(pst)" in header_lower else None
 
         value_dtypes = self._infer_value_columns(text)
+        if not value_dtypes:
+            # Header named a column we don't map (already logged). Refuse the
+            # page rather than let a zero-width row regex quietly match nothing.
+            return []
 
         # Build the row regex: datetime + N value cells (one <td> each).
         value_re = r"\s*<td[^>]*>\s*([\d.]+)\s*</td>" * len(value_dtypes)
@@ -93,10 +107,19 @@ class NWRFCTextPlotParser(BaseParser):
                 <td>Date/Time (PDT)</td><td>Stage</td><td>Discharge</td></tr>
 
         The observed columns are everything up to the *second* Date/Time
-        cell (which begins the forecast half). If no such header is
-        present — truncated body, error page, or the simplified shape
-        used in unit tests — fall back to a 1-column schema and infer
-        flow vs. inflow from the surrounding text.
+        cell (which begins the forecast half).
+
+        Returns ``[]`` when that header is present but names a column
+        outside ``_LABEL_TO_DTYPE``. The heuristic below is only for
+        bodies with *no* header — truncated, error pages, or the
+        simplified shape used in unit tests — where a 1-column
+        flow/inflow guess is the best available. Once a header has
+        parsed, the page has told us its schema, and an unmapped label
+        means we don't understand it: emitting nothing (a visibly stale
+        gauge) beats relabelling the column as flow. Note this refusal is
+        per-page and total, because the 1-column fallback would otherwise
+        re-capture column 1 under the wrong type and corrupt an adjacent
+        *known* column too.
         """
         m = re.search(
             r"<tr>\s*<td[^>]*>\s*Date/Time[^<]*</td>"
@@ -110,16 +133,28 @@ class NWRFCTextPlotParser(BaseParser):
                 (i for i, c in enumerate(cells) if "date/time" in c.lower()),
                 len(cells),
             )
+            observed = [c.strip() for c in cells[:forecast_split]]
             dtypes: list[DataType] = []
-            for c in cells[:forecast_split]:
-                dt = _LABEL_TO_DTYPE.get(c.strip().lower())
+            for c in observed:
+                dt = _LABEL_TO_DTYPE.get(c.lower())
                 if dt is None:
-                    dtypes = []
-                    break
+                    logger.error(
+                        "unmapped textPlot column %r in header %r; storing nothing",
+                        c,
+                        observed,
+                    )
+                    return []
                 dtypes.append(dt)
-            if dtypes:
-                return dtypes
+            # Unconditional: a header that parsed is the page stating its
+            # schema, so the heuristic below must stay out of it. An empty
+            # observed half (forecast_split == 0) is still a statement — it
+            # says there are no observed columns — and returning [] here is
+            # what keeps `if dtypes:` from quietly handing it to the flow
+            # guess, the one shape this whole method argues against.
+            return dtypes
 
+        # Reached only when the body carries no header row at all: truncated
+        # responses, error pages, the simplified unit fixtures.
         if ">inflow<" in text.lower():
             return [DataType.inflow]
         return [DataType.flow]
