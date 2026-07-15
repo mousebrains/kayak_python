@@ -1,5 +1,28 @@
 [build-system]
-requires = ["hatchling"]
+# Pinned exactly, and it has to be exact to work.
+#
+# requirements-build.lock is `uv pip compile`d from this list, and CI's drift
+# check recompiles it against live PyPI every run and diffs. `uv pip compile`
+# resolves the NEWEST version a specifier admits, so any range re-resolves the
+# moment upstream publishes inside it and the committed lock goes stale on its
+# own — which is #228: `["hatchling"]` was unbounded, 1.31.0 shipped, and every
+# open PR went red for reasons unrelated to its diff. A range only narrows the
+# window; `>=1.27,<2` still resolves 1.32.0 the day it lands. Verified:
+#
+#     hatchling>=1.27,<2      -> 1.31.0   (newest in range, drifts again)
+#     hatchling>=1.27,<1.31   -> 1.30.1   (proves it takes the max, not the pin)
+#     hatchling==1.30.1       -> 1.30.1   (stable)
+#
+# Only `==` makes compile-then-diff idempotent. That suits the reproducible
+# build this feeds: kayak-deploy installs the backend from the hashed lock with
+# --no-build-isolation, so the backend version is part of the artifact, not an
+# implementation detail. Nothing watches this line (Dependabot's ecosystems
+# don't read [build-system].requires), so bump it deliberately and regenerate
+# the lock in the same commit:
+#     python3 -c "import tomllib; print(chr(10).join(
+#         tomllib.load(open('pyproject.toml','rb'))['build-system']['requires']))" \
+#         | uv pip compile --generate-hashes - > requirements-build.lock
+requires = ["hatchling==1.31.0"]
 build-backend = "hatchling.build"
 
 [project]
