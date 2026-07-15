@@ -10,6 +10,8 @@ per side depends on the station and ``pe`` (Physical Element) query:
 * ``pe=HG`` on a gage-only station — 1 value column (Stage).
 * ``pe=HG`` on a rated station — 2 value columns (Stage + Discharge),
   which we emit as gauge + flow for the same timestamp.
+* ``pe=TW`` (water temperature) — 1 value column (Temperature), already
+  in °F, which is the unit the rest of the pipeline stores.
 
 The schema is inferred from the column-header row at the top of the
 table; pages without a recognisable header fall back to a 1-column
@@ -28,6 +30,7 @@ _LABEL_TO_DTYPE = {
     "stage": DataType.gauge,
     "discharge": DataType.flow,
     "inflow": DataType.inflow,
+    "temperature": DataType.temperature,
 }
 
 

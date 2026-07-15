@@ -73,6 +73,20 @@ TEXTPLOT_HG_STAGE_DISCHARGE = """\
 </table></body></html>
 """
 
+# pe=TW response: water temperature (°F), observed-only — the page carries
+# no forecast half, so the header row has a single Date/Time cell and the
+# data rows trail empty spacer cells.
+# Captured live from LAPO3 (LITTLE DESCHUTES--NR LAPINE) on 2026-07-15.
+TEXTPLOT_TW_TEMPERATURE = """\
+<html><body>
+LITTLE DESCHUTES--NR LAPINE (LAPO3)<br><br><table border="0" cellspacing="5">
+<tr><td colspan="2" align="left">Observed</td></tr>
+<tr><td>Date/Time (PDT)</td><td align="right">Temperature</td></tr>
+<tr><td align="right">2024-06-15 08:15</td><td align="right">69.4</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+<tr><td align="right">2024-06-15 08:00</td><td align="right">69.6</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+</table></body></html>
+"""
+
 # pe=HG on a gage-only NWRFC station: only Stage appears in the observed
 # half. Captured live from OCUO3 (Willamette Upper Falls) on 2026-05-11.
 TEXTPLOT_HG_STAGE_ONLY = """\
@@ -231,3 +245,30 @@ class TestNWRFCTextPlotHG:
         obs = session.query(Observation).filter_by(source_id=src.id).all()
         assert all(o.data_type == DataType.gauge for o in obs)
         assert sorted(o.value for o in obs) == [54.08, 54.08]
+
+
+class TestNWRFCTextPlotTW:
+    def test_tw_emits_temperature(self, session):
+        """pe=TW yields temperature values in °F.
+
+        Regression guard: before ``Temperature`` was in ``_LABEL_TO_DTYPE``
+        the header lookup failed, the column-inference bailed to its
+        1-column ``flow`` fallback, and a 69.4 °F reading was stored as
+        69.4 cfs — silently publishing a temperature as a discharge.
+        """
+        src = _make_source(session, name="tw_temperature")
+        parser = NWRFCTextPlotParser(
+            url="https://www.nwrfc.noaa.gov/station/flowplot/textPlot.cgi?id=LAPO3&pe=TW",
+            session=session,
+            source_id=src.id,
+        )
+        count = parser.parse(TEXTPLOT_TW_TEMPERATURE)
+        assert count == 2
+        obs = session.query(Observation).filter_by(source_id=src.id).all()
+        assert all(o.data_type == DataType.temperature for o in obs)
+        assert sorted(o.value for o in obs) == [69.4, 69.6]
+
+    def test_tw_header_infers_temperature_column(self):
+        """The observed half of a pe=TW page is a single Temperature column."""
+        parser = NWRFCTextPlotParser.__new__(NWRFCTextPlotParser)
+        assert parser._infer_value_columns(TEXTPLOT_TW_TEMPERATURE) == [DataType.temperature]
