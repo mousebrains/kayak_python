@@ -13,8 +13,8 @@ so gauges.html's primary sort becomes plain alphabetical on ``sort_name``.
   - basin: river with any fork modifier stripped (``Umpqua`` for all
     N/S/mainstem rows in the Umpqua drainage)
   - fork_rank: ``0`` for fork rows, ``9`` for mainstem → forks sort first
-  - fork_label: ``north`` / ``south`` / ``east`` / ``west`` / ``middle``
-    (empty for mainstem) — distinguishes forks in the same basin
+  - fork_label: ``north`` / ``south`` / ``east`` / ``west`` / ``middle`` /
+    ``little`` (empty for mainstem) — distinguishes forks in the same basin
   - elev_key: ``10000 - elevation`` zero-padded so higher elevation sorts
     first (upstream ≈ higher); NULL → sentinel pushing row to end
   - da_key: drainage_area zero-padded so smaller catchment sorts first
@@ -50,6 +50,26 @@ from kayak.web.build.gauges import (
 DEFAULT_CACHE = str(GAUGE_METADATA_CACHE)
 
 _DIRECTIONS = ("North", "South", "East", "West", "Middle")
+# "Little X" rivers that feed the X they are named for, and so belong in X's
+# basin group — sorted ahead of the mainstem by fork_rank 0, the same as X's
+# directional forks.
+#
+# Membership is a reviewed domain claim, not something derivable from the name
+# or the HUC, and it does not generalize: the Little White Salmon shares HUC8
+# 17070105 with the White Salmon yet reaches the Columbia independently, while
+# the Little Salmon (17060210) and Little Deschutes (17070302) each sit in a
+# different HUC8 from the river they flow into. So the rule is an allowlist —
+# a "Little X" not named here keeps its own "little x" basin, which is the
+# status quo and the safe default for a river nobody has adjudicated yet.
+_LITTLE_TRIBUTARIES = frozenset(
+    {
+        "little deschutes",  # → Deschutes, joins near La Pine
+        "little north santiam",  # → North Santiam
+        "little salmon",  # → Salmon, joins at Riggins
+        "little sandy",  # → Sandy, via the Bull Run
+    }
+)
+_LITTLE_RE = re.compile(r"^Little\s+", re.IGNORECASE)
 _DIRECTION_LETTERS = {
     "N": "North",
     "S": "South",
@@ -192,9 +212,9 @@ def _collapse_whitespace(s: str) -> str:
 def basin_and_fork(river: str) -> tuple[str, str]:
     """Split a normalized river name into (basin, fork_label).
 
-    Iteratively peels off ``{direction} [Fork]`` and ``of [the] {direction}
+    Iteratively peels off ``{modifier} [Fork]`` and ``of [the] {modifier}
     [Fork]`` prefixes until what remains is the base river; the *first*
-    direction seen is returned as the primary fork label (so
+    modifier seen is returned as the primary fork label (so
     ``North Fork of Middle Fork Willamette`` → basin ``Willamette``, fork
     ``north``, which still groups with other Willamette tributaries).
 
@@ -203,6 +223,15 @@ def basin_and_fork(river: str) -> tuple[str, str]:
         ``Hood``                             → (``Hood``,       ``"")``   # mainstem
         ``East Fork of South Fork Salmon``   → (``Salmon``,     ``east``)
         ``North Fork of Middle Fork Willamette`` → (``Willamette``, ``north``)
+
+    A leading ``Little`` peels only for the rivers in ``_LITTLE_TRIBUTARIES``,
+    and peels *before* the directional pass so the remainder still reduces to
+    its basin::
+
+        ``Little Deschutes``                 → (``Deschutes``,  ``little``)
+        ``Little North Santiam``             → (``Santiam``,    ``little``)
+        ``Little White Salmon``  → (``Little White Salmon``, ``"")``  # own river
+        ``Little``               → (``Little``,               ``"")``  # own river
     """
     if not river:
         return "", ""
@@ -213,6 +242,11 @@ def basin_and_fork(river: str) -> tuple[str, str]:
     )
     s = river
     dirs_seen: list[str] = []
+    if s.strip().casefold() in _LITTLE_TRIBUTARIES:
+        m = _LITTLE_RE.match(s)
+        if m:
+            dirs_seen.append("little")
+            s = s[m.end() :]
     while True:
         m = peel_re.match(s)
         if not m:
