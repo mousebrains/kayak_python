@@ -145,9 +145,16 @@ class NWRFCTextPlotParser(BaseParser):
                     )
                     return []
                 dtypes.append(dt)
-            if dtypes:
-                return dtypes
+            # Unconditional: a header that parsed is the page stating its
+            # schema, so the heuristic below must stay out of it. An empty
+            # observed half (forecast_split == 0) is still a statement — it
+            # says there are no observed columns — and returning [] here is
+            # what keeps `if dtypes:` from quietly handing it to the flow
+            # guess, the one shape this whole method argues against.
+            return dtypes
 
+        # Reached only when the body carries no header row at all: truncated
+        # responses, error pages, the simplified unit fixtures.
         if ">inflow<" in text.lower():
             return [DataType.inflow]
         return [DataType.flow]

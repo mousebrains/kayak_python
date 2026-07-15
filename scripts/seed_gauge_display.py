@@ -16,7 +16,8 @@ so gauges.html's primary sort becomes plain alphabetical on ``sort_name``.
   - fork_label: ``north`` / ``south`` / ``east`` / ``west`` / ``middle`` /
     ``little`` / ``yankee`` (empty for mainstem) — distinguishes forks in the
     same basin. Alphabetical by default; a basin listed in ``_FORK_ORDER``
-    gets an ``a-``/``b-``… prefix instead, ordering its forks by confluence.
+    gets a ``00-``/``01-``… rank prefix instead, ordering its forks by
+    confluence (``99-`` for one the list doesn't name).
   - elev_key: ``10000 - elevation`` zero-padded so higher elevation sorts
     first (upstream ≈ higher); NULL → sentinel pushing row to end
   - da_key: drainage_area zero-padded so smaller catchment sorts first
@@ -111,6 +112,11 @@ _NAMED_FORKS = ("Yankee",)
 _FORK_ORDER = {
     "salmon": ("yankee", "middle", "east", "south", "little"),
 }
+# Rank given to a fork inside a ranked basin that the basin's list doesn't
+# name. Above any real index, so such a fork sorts after every curated one
+# regardless of its initial letter (and still ahead of the mainstem, which is
+# ranked by fork_rank 9 one field over).
+_UNRANKED_FORK = "99"
 _DIRECTION_LETTERS = {
     "N": "North",
     "S": "South",
@@ -311,16 +317,27 @@ def basin_and_fork(river: str) -> tuple[str, str]:
 def _rank_fork(basin: str, fork: str) -> str:
     """Prefix a curated basin's fork label so it sorts in confluence order.
 
-    ``east`` → ``a-east`` in the Salmon basin; elsewhere (and for a fork the
-    basin's list doesn't name) the label is returned unchanged and keeps
-    sorting alphabetically.
+    ``yankee`` → ``00-yankee`` in the Salmon basin. A basin with no entry in
+    ``_FORK_ORDER`` is returned untouched and keeps sorting alphabetically.
+
+    Inside a ranked basin, a fork the list doesn't name is prefixed too — with
+    a rank above every real one, so it lands at the end of the fork group *by
+    construction*. It used to be returned bare, which put it after the ranked
+    forks only when its own first letter happened to fall later: true for
+    ``north``/``west``, false the moment ``_NAMED_FORKS`` gains an early
+    letter. A "Coast Fork Salmon" would have led the basin.
+
+    The rank is numeric rather than ``chr(ord("a") + i)``, which would walk
+    past ``z`` — and then into ``|``, the field delimiter — at 26 forks.
     """
     if not fork:
         return fork
     order = _FORK_ORDER.get(basin.lower())
-    if order is None or fork not in order:
+    if order is None:
         return fork
-    return f"{chr(ord('a') + order.index(fork))}-{fork}"
+    if fork not in order:
+        return f"{_UNRANKED_FORK}-{fork}"
+    return f"{order.index(fork):02d}-{fork}"
 
 
 def build_sort_name(river: str, elevation: float | None, drainage_area: float | None) -> str:

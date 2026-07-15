@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 
 from seed_gauge_display import (
     _FORK_ORDER,
+    _rank_fork,
     basin_and_fork,
     build_display_name,
     build_sort_name,
@@ -156,12 +157,44 @@ class TestCuratedForkOrder:
             "willamette|0middle|"
         )
 
-    def test_unlisted_fork_in_curated_basin_falls_back_to_its_label(self):
-        """It keeps a bare label and lands after the ranked forks, before mainstem."""
+    @pytest.mark.parametrize("label", ["west", "north", "coast", "bear", "any"])
+    def test_unlisted_fork_in_ranked_basin_sorts_after_every_ranked_fork(self, label):
+        """Placement must be structural, not an accident of the initial letter.
+
+        The bare-label version of this passed only because the reachable
+        unlisted labels (`north`, `west`) happen to fall after the `a-`..`e-`
+        prefixes it was compared against. `coast` and `bear` are the cases
+        that exposed it: under that scheme a Coast Fork Salmon led the basin,
+        ahead of the curated order. Testing only `west` is how it survived.
+        """
+        unranked = _rank_fork("Salmon", label)
+        for ranked in _FORK_ORDER["salmon"]:
+            assert unranked > _rank_fork("Salmon", ranked), (
+                f"{label!r} must sort after ranked fork {ranked!r}"
+            )
+
+    def test_unlisted_fork_still_precedes_the_mainstem(self):
+        """End-to-end via a label that actually peels today ("West" is a direction).
+
+        `coast`/`bear` can only be reached through _rank_fork until someone
+        adds them to _NAMED_FORKS — which is exactly the edit that used to
+        break the ordering, hence the parametrized test above.
+        """
         west = build_sort_name("West Fork Salmon", 5000.0, 50.0)
-        assert west.startswith("salmon|0west|")
-        assert west > build_sort_name("Little Salmon", 1755.28, 576.0)  # after ranked forks
+        assert west.startswith("salmon|099-west|")
+        assert west > build_sort_name("Little Salmon", 1755.28, 576.0)  # after ranked
         assert west < build_sort_name("Salmon", 5900.0, 807.0)  # before mainstem
+
+    def test_unranked_basin_is_untouched(self):
+        """A basin with no _FORK_ORDER entry keeps bare, alphabetical labels."""
+        assert _rank_fork("Santiam", "north") == "north"
+        assert _rank_fork("Umpqua", "south") == "south"
+
+    def test_rank_prefix_cannot_reach_the_field_delimiter(self):
+        """Numeric ranks, so 26+ forks can't walk 'a'+i past 'z' into '|'."""
+        for i, fork in enumerate(_FORK_ORDER["salmon"]):
+            assert _rank_fork("Salmon", fork) == f"{i:02d}-{fork}"
+            assert "|" not in _rank_fork("Salmon", fork)
 
 
 class TestBuildSortName:
