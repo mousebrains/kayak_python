@@ -201,7 +201,8 @@ class TestBuildSortName:
     def test_little_deschutes_sorts_ahead_of_mainstem_deschutes(self):
         """The Little Deschutes must precede every mainstem Deschutes gauge.
 
-        Gauge 26 (Deschutes at Wickiup) is the first mainstem row by
+        Gauge 26 (display_name "Deschutes at La Pine"; its internal name
+        is Deschutes_Wickiup_merge) is the first mainstem row by
         elevation; fork_rank 0 puts the Little Deschutes ahead of it
         regardless of the fork's own elevation/DA.
         """
