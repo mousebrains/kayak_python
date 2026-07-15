@@ -1,9 +1,39 @@
 # Dependabot — automated dependency PRs. Monthly + grouped to keep noise low
-# on a single-maintainer project. Python deps are managed by uv (uv.lock); the
-# pip ecosystem is intentionally omitted because Dependabot doesn't update
-# uv.lock — bump those with `uv lock --upgrade`. The ruff version pinned in
-# ci.yml / .pre-commit-config.yaml is likewise a manual bump (keep the two in
-# sync). See docs review / PLAN_pre_release_followup.md.
+# on a single-maintainer project.
+#
+# Python rides the `uv` ecosystem, which reads pyproject.toml + uv.lock
+# directly. (This file previously omitted Python because Dependabot couldn't
+# update uv.lock; that stopped being true when uv version updates went GA on
+# 2025-03-13. Left unmanaged, the locks simply rot — a hatchling release aged
+# requirements-build.lock into a red CI on every open PR, see #228.)
+#
+# Two Python files Dependabot will NOT keep in step, both still manual:
+#
+#   * requirements-prod.lock — `uv export`ed from uv.lock, and CI diffs it
+#     (ci.yml "requirements-prod.lock drift check"). Dependabot rewrites
+#     uv.lock but not this export, so a grouped PR that bumps any *runtime*
+#     dep lands red. Fix in one command on the PR branch:
+#         uv export --no-dev --no-emit-project --format requirements-txt \
+#             > requirements-prod.lock
+#     Dev-only bumps (ruff, mypy, pytest…) don't touch it. Grouped + monthly
+#     means this is at most one export a month, not one per bump.
+#
+#     Don't leave a red export sitting: pip-audit (ci.yml) audits
+#     requirements-prod.lock, NOT uv.lock, so until the export is regenerated
+#     a security bump to a runtime dep is not actually being audited — the
+#     audit still reads the old pins. That, more than the red X, is the reason
+#     to regenerate promptly. Automating it away is not the five-minute job it
+#     looks like: workflows triggered by Dependabot get a read-only
+#     GITHUB_TOKEN, so pushing the export back needs pull_request_target or a
+#     PAT — real risk on an auto-generated branch.
+#
+#   * requirements-build.lock — `uv pip compile`d from the *unpinned*
+#     [build-system].requires, so it re-resolves against PyPI and drifts on
+#     each hatchling release. Outside any ecosystem Dependabot scans; pinning
+#     a floor in pyproject would retire it properly.
+#
+# The ruff version pinned in ci.yml / .pre-commit-config.yaml is likewise a
+# manual bump (keep the two in sync). See docs review / PLAN_pre_release_followup.md.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -30,5 +60,14 @@ updates:
       interval: monthly
     groups:
       composer:
+        patterns: ["*"]
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: uv
+    directory: "/"
+    schedule:
+      interval: monthly
+    groups:
+      python:
         patterns: ["*"]
     open-pull-requests-limit: 3
