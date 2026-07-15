@@ -14,7 +14,9 @@ so gauges.html's primary sort becomes plain alphabetical on ``sort_name``.
     N/S/mainstem rows in the Umpqua drainage)
   - fork_rank: ``0`` for fork rows, ``9`` for mainstem → forks sort first
   - fork_label: ``north`` / ``south`` / ``east`` / ``west`` / ``middle`` /
-    ``little`` (empty for mainstem) — distinguishes forks in the same basin
+    ``little`` / ``yankee`` (empty for mainstem) — distinguishes forks in the
+    same basin. Alphabetical by default; a basin listed in ``_FORK_ORDER``
+    gets an ``a-``/``b-``… prefix instead, ordering its forks by confluence.
   - elev_key: ``10000 - elevation`` zero-padded so higher elevation sorts
     first (upstream ≈ higher); NULL → sentinel pushing row to end
   - da_key: drainage_area zero-padded so smaller catchment sorts first
@@ -70,6 +72,45 @@ _LITTLE_TRIBUTARIES = frozenset(
     }
 )
 _LITTLE_RE = re.compile(r"^Little\s+", re.IGNORECASE)
+# Forks named for something other than a direction, peeled like one so the row
+# joins its parent's basin ("Yankee Fork Salmon" → Salmon/yankee).
+#
+# An allowlist rather than a general "{Word} Fork {Basin}" rule, which would
+# also reclassify "Coast Fork Willamette" — true of the river, but a page
+# reorder nobody asked for. ("Oak Grove Fork" and "Clark Fork" name no basin
+# after "Fork", so no rule would touch them either way.)
+#
+# Unlike a direction, a name only marks a fork when "Fork" actually follows:
+# "North Umpqua" is a fork, but "Yankee Creek" is a creek. The peel below
+# therefore requires the literal "Fork" after these, which also keeps the next
+# entry from misreading, say, "Bear Creek" as ("Creek", "bear").
+_NAMED_FORKS = ("Yankee",)
+# Basins whose forks are ordered explicitly instead of alphabetically, listed
+# upstream → downstream by where each fork's water joins the mainstem. The
+# default sort is the fork label itself, which carries no geography: it reads
+# well where the alphabet cooperates, but strands "yankee" behind "south".
+#
+# The Salmon sequence is the club's own, taken from reach.csv's curated
+# "Salmon ag NN": ag 01 Yankee Fork, ag 02 EF Salmon, ag 03 MF, ag 04 EF of SF,
+# ag 06-08 SF, ag 09-10 Little. Of those, the forks carrying a gauge give the
+# order below.
+#
+# Gauge elevation is NOT the authority, though it looks like one: EFSF's gauge
+# is the highest in the basin at 6466 ft, yet its water reaches the mainstem
+# last of the four — it is a fork of the *South* Fork, so it arrives at the SF
+# confluence, well downstream of the Middle Fork's.
+#
+# Caveat: basin_and_fork keeps only the first modifier, so EF Salmon (ag 02)
+# and EF of SF Salmon (ag 04) both reduce to "east" and cannot both be placed.
+# Only the latter has a gauge today; adding an EF Salmon gauge means splitting
+# the label, not reordering this list.
+#
+# Only the named basin is affected; everywhere else stays alphabetical. A fork
+# absent from its basin's list keeps its bare label, which sorts after the
+# ranked ones and so lands at the end of the fork group, ahead of the mainstem.
+_FORK_ORDER = {
+    "salmon": ("yankee", "middle", "east", "south", "little"),
+}
 _DIRECTION_LETTERS = {
     "N": "North",
     "S": "South",
@@ -232,12 +273,18 @@ def basin_and_fork(river: str) -> tuple[str, str]:
         ``Little North Santiam``             → (``Santiam``,    ``little``)
         ``Little White Salmon``  → (``Little White Salmon``, ``"")``  # own river
         ``Little``               → (``Little``,               ``"")``  # own river
+
+    A ``_NAMED_FORKS`` entry peels only with an explicit ``Fork`` after it,
+    so ``Yankee Fork Salmon`` → (``Salmon``, ``yankee``) while
+    ``Yankee Creek`` stays (``Yankee Creek``, ``""``).
     """
     if not river:
         return "", ""
-    dir_re = "|".join(_DIRECTIONS)
+    alts = [rf"(?P<dir>{'|'.join(_DIRECTIONS)})(?:\s+Fork)?"]
+    if _NAMED_FORKS:
+        alts.append(rf"(?P<named>{'|'.join(_NAMED_FORKS)})\s+Fork")
     peel_re = re.compile(
-        rf"^(?:of\s+(?:the\s+)?)?(?P<dir>{dir_re})(?:\s+Fork)?\s+",
+        rf"^(?:of\s+(?:the\s+)?)?(?:{'|'.join(alts)})\s+",
         re.IGNORECASE,
     )
     s = river
@@ -251,17 +298,36 @@ def basin_and_fork(river: str) -> tuple[str, str]:
         m = peel_re.match(s)
         if not m:
             break
-        dirs_seen.append(m.group("dir").lower())
+        # Exactly one of the two alternatives matched; "named" is absent
+        # entirely when _NAMED_FORKS is empty, hence groupdict().
+        token = m.group("dir") or m.groupdict().get("named") or ""
+        dirs_seen.append(token.lower())
         s = s[m.end() :]
     if dirs_seen and s.strip():
         return s.strip(), dirs_seen[0]
     return river, ""
 
 
+def _rank_fork(basin: str, fork: str) -> str:
+    """Prefix a curated basin's fork label so it sorts in confluence order.
+
+    ``east`` → ``a-east`` in the Salmon basin; elsewhere (and for a fork the
+    basin's list doesn't name) the label is returned unchanged and keeps
+    sorting alphabetically.
+    """
+    if not fork:
+        return fork
+    order = _FORK_ORDER.get(basin.lower())
+    if order is None or fork not in order:
+        return fork
+    return f"{chr(ord('a') + order.index(fork))}-{fork}"
+
+
 def build_sort_name(river: str, elevation: float | None, drainage_area: float | None) -> str:
     """Compose the single alphabetical key described in the module docstring."""
     basin, fork = basin_and_fork(river or "")
     fork_rank = "0" if fork else "9"
+    fork = _rank_fork(basin, fork)
     # Elevation DESC: invert so higher → smaller numeric. Sentinel 15000 for
     # NULL pushes rows without elevation to the end of their group.
     if elevation is not None:
