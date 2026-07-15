@@ -194,7 +194,7 @@ jobs:
       # `levels init-db` (schema) + `levels build` tmp setup, so no extra
       # PHP-server orchestration is needed in this job — Playwright
       # owns the lifecycle.
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '22' # Active LTS until Apr 2027; matches plan's recommendation.
           cache: 'npm'
@@ -266,7 +266,7 @@ jobs:
         python-version: ["3.13", "3.14"]
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
           enable-cache: true
       - uses: actions/setup-python@v6
@@ -408,7 +408,7 @@ jobs:
     # No kayak_data / PHP / Node needed — it only exercises packaged resources.
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
           enable-cache: true
       - uses: actions/setup-python@v6
