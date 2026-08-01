@@ -37,14 +37,14 @@ dependencies = [
     "lxml>=5.0",
     "python-dotenv>=1.0",
     "PyYAML>=6.0",
-    "aiohttp>=3.14.1",   # 3.14.1 fixes CVE-2026-34993/47265/50269 (3.14.0) + CVE-2026-54273..54280 (3.14.1)
-    "pydantic[email]>=2.7,<3",       # T3.3 typed config — 2.7 is first 3.13-supporting release; [email] pulls email-validator for EmailStr
+    "aiohttp>=3.14.3",   # 3.14.1 fixes CVE-2026-34993/47265/50269 (3.14.0) + CVE-2026-54273..54280 (3.14.1)
+    "pydantic[email]>=2.13.4,<3",       # T3.3 typed config — 2.7 is first 3.13-supporting release; [email] pulls email-validator for EmailStr
     "pydantic-settings>=2.14.2,<3",   # T3.3 typed config — env-driven BaseSettings; 2.14.2 fixes GHSA-4xgf-cpjx-pc3j
     "markdown>=3.5",                  # Renders DATASET_DIR/regression/*.md → /static/regression/*.html at build time; pure-Python, no transitive deps
-    "nh3>=0.2",                       # HTML sanitizer (Rust/ammonia) — allowlists the rendered regression HTML (S2); ships cp313 wheels
+    "nh3>=0.3.6",                       # HTML sanitizer (Rust/ammonia) — allowlists the rendered regression HTML (S2); ships cp313 wheels
     "defusedxml>=0.7",               # XXE-safe XML/SVG parsing — validates regression SVG against a strict allowlist before serving (S2)
     "maxminddb>=2.5",                 # GeoIP country lookup for the status page; reads DB-IP Lite mmdb lazily downloaded to var/geoip/
-    "pyjwt[crypto]>=2.10",            # GitHub App JWT (RS256) for the editor→kayak_data PR bridge worker (Tier 4); [crypto] pulls `cryptography` for RSA signing
+    "pyjwt[crypto]>=2.13.0",            # GitHub App JWT (RS256) for the editor→kayak_data PR bridge worker (Tier 4); [crypto] pulls `cryptography` for RSA signing
 ]
 
 [project.optional-dependencies]
@@ -52,19 +52,19 @@ dev = [
     "pytest>=9.0.3",     # CVE-2025-71176 fixed in 9.0.3
     "pytest-cov>=4.1",
     "pytest-xdist>=3.6",  # parallelize the slow wheel-building deploy tests in CI (-n auto)
-    "ruff>=0.5",
-    "mypy>=1.10",
+    "ruff>=0.16.0",
+    "mypy>=2.3.0",
     "types-PyYAML>=6.0",
-    "types-requests>=2.31",
+    "types-requests>=2.33.0.20260712",
     "lxml-stubs>=0.5",
-    "hypothesis>=6.150",  # Property-based testing for parsers (T2.2)
-    "numpy>=2.1",         # scripts/regression/gauge_pair_linear.py + its test; was only transitive via [geo]
+    "hypothesis>=6.163.0",  # Property-based testing for parsers (T2.2)
+    "numpy>=2.5.1",         # scripts/regression/gauge_pair_linear.py + its test; was only transitive via [geo]
     "httpx>=0.27",        # scripts/refresh_reach_elevations.py (async EPQS elevation fetch) — was an undeclared import
 ]
 geo = [
     "shapely>=2",
-    "geopandas>=1",
-    "pyogrio>=0.10",
+    "geopandas>=1.1.4",
+    "pyogrio>=0.13.0",
     "rasterio>=1.3",
 ]
 
