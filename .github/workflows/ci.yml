@@ -34,9 +34,16 @@ jobs:
           python-version: "3.13"
           cache: 'pip'
           cache-dependency-path: pyproject.toml
-      # Pin to the version in uv.lock / .pre-commit-config.yaml so the format
-      # gate can't drift when ruff ships a release (the churn behind df6e422).
-      - run: pip install ruff==0.15.18
+      # Install exactly the ruff that uv.lock pins, so this gate lints with the
+      # same version as the dev environment. The version is read from uv.lock
+      # rather than written here, so a Dependabot bump of ruff moves CI with
+      # it. A pin written here drifted to 0.15.18 while uv.lock moved to
+      # 0.16.9 (#242). An unpinned install would float instead, which caused
+      # the churn behind df6e422. tests/test_dependency_pins.py keeps
+      # .pre-commit-config.yaml in step with uv.lock.
+      - run: |
+          ruff_version=$(python3 -c "import tomllib; print(next(p['version'] for p in tomllib.load(open('uv.lock', 'rb'))['package'] if p['name'] == 'ruff'))")
+          pip install "ruff==${ruff_version}"
       - run: ruff check src/ tests/ scripts/ docs/one-offs/
       - run: ruff format --check src/ tests/ scripts/ docs/one-offs/
 

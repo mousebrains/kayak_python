@@ -16,13 +16,30 @@
 # Only `==` makes compile-then-diff idempotent. That suits the reproducible
 # build this feeds: kayak-deploy installs the backend from the hashed lock with
 # --no-build-isolation, so the backend version is part of the artifact, not an
-# implementation detail. Nothing watches this line (Dependabot's ecosystems
-# don't read [build-system].requires), so bump it deliberately and regenerate
-# the lock in the same commit:
+# implementation detail.
+#
+# The pin has to cover the backend's whole resolved closure, not just
+# hatchling. hatchling's own dependencies are unbounded, so pinning hatchling
+# alone (#230) still let the lock drift with no repo change at all whenever
+# packaging (26.3, 2026-08-04), trove-classifiers (2026-09-21) or pluggy
+# (1.7.0, 2026-10-15) released. Every package in requirements-build.lock is
+# therefore pinned here, and tests/test_dependency_pins.py fails if a bump
+# brings in a dependency that isn't.
+#
+# Dependabot's uv ecosystem does read this table (#242 bumped hatchling here),
+# so a bump PR needs the lock regenerated on its branch, with:
 #     python3 -c "import tomllib; print(chr(10).join(
 #         tomllib.load(open('pyproject.toml','rb'))['build-system']['requires']))" \
 #         | uv pip compile --generate-hashes - > requirements-build.lock
-requires = ["hatchling==1.32.4"]
+requires = [
+    "hatchling==1.32.4",
+    # hatchling's dependencies (the rest of requirements-build.lock):
+    "packaging==26.3",
+    "pathspec==1.1.1",
+    "pluggy==1.7.0",
+    "tomlkit==0.15.2",
+    "trove-classifiers==2026.9.21.13",
+]
 build-backend = "hatchling.build"
 
 [project]

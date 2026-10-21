@@ -22,18 +22,33 @@
 #     requirements-prod.lock, NOT uv.lock, so until the export is regenerated
 #     a security bump to a runtime dep is not actually being audited — the
 #     audit still reads the old pins. That, more than the red X, is the reason
-#     to regenerate promptly. Automating it away is not the five-minute job it
-#     looks like: workflows triggered by Dependabot get a read-only
-#     GITHUB_TOKEN, so pushing the export back needs pull_request_target or a
-#     PAT — real risk on an auto-generated branch.
+#     to regenerate promptly. The bump also leaves *transitive* runtime deps
+#     where they were: #242 bumped pyjwt but not cryptography (pulled in via
+#     pyjwt[crypto]), and advisories kept landing while the PR sat open. So
+#     run pip-audit on the regenerated export, and `uv lock --upgrade-package
+#     <name>` anything it flags.
 #
-#   * requirements-build.lock — `uv pip compile`d from the *unpinned*
-#     [build-system].requires, so it re-resolves against PyPI and drifts on
-#     each hatchling release. Outside any ecosystem Dependabot scans; pinning
-#     a floor in pyproject would retire it properly.
+#     Automating the export (checked against GitHub's docs, 2026-10-20):
+#     Dependabot-triggered workflows get a read-only GITHUB_TOKEN by default,
+#     but the workflow's `permissions:` key can raise it to contents: write.
+#     Pushing the export back therefore needs neither pull_request_target nor a
+#     PAT. Two costs remain. A GITHUB_TOKEN push to a PR only creates CI runs
+#     that wait for "Approve and run" (workflow_dispatch is the exception).
+#     And the job would run third-party actions with a write token on an
+#     auto-generated branch. Not automated yet; it is a deliberate decision.
 #
-# The ruff version pinned in ci.yml / .pre-commit-config.yaml is likewise a
-# manual bump (keep the two in sync). See docs review / PLAN_pre_release_followup.md.
+#   * requirements-build.lock — `uv pip compile`d from [build-system].requires.
+#     That list pins hatchling AND its whole resolved closure with `==` (see
+#     the pyproject comment): pinning hatchling alone still drifted whenever
+#     one of its own dependencies released. The uv ecosystem does bump these
+#     pins (#242 moved hatchling), so a bump PR needs this lock recompiled
+#     too. If a new hatchling pulls in a new dependency,
+#     tests/test_dependency_pins.py fails until it is pinned as well.
+#
+# Tool versions: CI's ruff lint job installs the ruff version uv.lock pins, so
+# a ruff bump here moves CI with it. .pre-commit-config.yaml pins its own ruff
+# and mypy revs. tests/test_dependency_pins.py fails when they differ from
+# uv.lock, so a bump PR touching ruff or mypy also bumps those two `rev:` lines.
 version: 2
 updates:
   - package-ecosystem: github-actions
