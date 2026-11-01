@@ -12,7 +12,7 @@
         "friendsofphp/php-cs-fixer": "^3.95",
         "phpstan/phpstan": "^2",
         "phpstan/phpstan-strict-rules": "^2.0",
-        "phpunit/phpunit": "^11.5",
+        "phpunit/phpunit": "^13.4",
         "roave/security-advisories": "dev-latest"
     },
     "config": {
